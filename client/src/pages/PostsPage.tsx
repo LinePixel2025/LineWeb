@@ -36,7 +36,7 @@ export default function PostsPage() {
             {data?.posts.map((post, i) => (
               <Link
                 key={post.id} to={`/posts/${post.slug}`}
-                className="lg-surface"
+                className="lg-surface lg-surface-blur"
                 style={{
                   display: 'block', padding: '24px',
                   textDecoration: 'none', color: 'inherit',

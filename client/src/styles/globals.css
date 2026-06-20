@@ -202,6 +202,18 @@ a:hover {
     0 2px 4px rgba(0,0,0,0.08);
 }
 
+/* === Strong glass — thicker blur variant for content-heavy surfaces === */
+.lg-surface-blur {
+  background: rgba(0,0,0,0.18);
+  backdrop-filter: url(#lg-core) blur(1.4px) saturate(120%) brightness(0.85);
+  -webkit-backdrop-filter: url(#lg-core) blur(1.4px) saturate(120%) brightness(0.85);
+}
+.lg-surface-strong-blur {
+  background: rgba(0,0,0,0.24);
+  backdrop-filter: url(#lg-core-strong) blur(1.6px) saturate(110%) brightness(0.78);
+  -webkit-backdrop-filter: url(#lg-core-strong) blur(1.6px) saturate(110%) brightness(0.78);
+}
+
 /* ============================================================
    Layout
    ============================================================ */
@@ -474,9 +486,9 @@ h4 { font-size: 1.15rem; }
 .lg-input {
   width: 100%;
   padding: 14px 18px;
-  background: rgba(255,255,255,0.07);
-  backdrop-filter: url(#lg-core) blur(0.4px) saturate(150%) brightness(1.04);
-  -webkit-backdrop-filter: url(#lg-core) blur(0.4px) saturate(150%) brightness(1.04);
+  background: rgba(255,255,255,0.10);
+  backdrop-filter: url(#lg-core) blur(1px) saturate(150%) brightness(1.04);
+  -webkit-backdrop-filter: url(#lg-core) blur(1px) saturate(150%) brightness(1.04);
   border: 1px solid var(--lg-glass-border);
   border-radius: var(--lg-radius-md);
   color: var(--lg-text-primary);

@@ -44,7 +44,7 @@ export default function PostPage() {
         <span className="text-tertiary">{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
       </div>
 
-      <div className="lg-surface" style={{ padding: '32px' }}>
+      <div className="lg-surface-strong lg-surface-strong-blur" style={{ padding: '32px' }}>
         <div className="markdown-content">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{post.content}</ReactMarkdown>
         </div>

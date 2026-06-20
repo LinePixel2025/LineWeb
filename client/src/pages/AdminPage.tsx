@@ -30,7 +30,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="page container" style={{ maxWidth: '800px' }}>
+    <div className="page container glass-rise" style={{ maxWidth: '800px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '12px' }}>
         <h1>管理面板</h1>
         <Link to="/admin/new" className="admin-new-btn" style={{
@@ -46,7 +46,7 @@ export default function AdminPage() {
       ) : (
         <>
           {/* Desktop table */}
-          <div className="admin-table-wrap lg-surface-strong" style={{ overflow: 'hidden' }}>
+          <div className="admin-table-wrap lg-surface-strong fade-in" style={{ overflow: 'hidden' }}>
             <table className="admin-table">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--lg-glass-border)' }}>
@@ -56,8 +56,8 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {data?.posts.map(post => (
-                  <tr key={post.id} style={{ borderBottom: '1px solid var(--lg-glass-border)' }}>
+                {data?.posts.map((post, i) => (
+                  <tr key={post.id} className="fade-in" style={{ borderBottom: '1px solid var(--lg-glass-border)', animationDelay: `${i * 0.04}s` }}>
                     <td className="admin-title-cell" style={{ padding: '12px 16px' }}>
                       <div style={{ fontWeight: 500 }}>{post.title}</div>
                       <div className="text-tertiary" style={{ fontSize: '0.78rem', marginTop: '2px' }}>{new Date(post.createdAt).toLocaleDateString('zh-CN')}</div>

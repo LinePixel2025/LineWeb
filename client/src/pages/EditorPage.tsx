@@ -40,7 +40,7 @@ export default function EditorPage() {
   if (fetching) return <div className="page container" style={{ display: 'flex', justifyContent: 'center' }}><div className="spinner" /></div>
 
   return (
-    <div className="page container" style={{ maxWidth: '720px' }}>
+    <div className="page container glass-rise" style={{ maxWidth: '720px' }}>
       <h1 style={{ marginBottom: '24px' }}>{isEdit ? '编辑文章' : '写文章'}</h1>
 
       {error && (
@@ -53,37 +53,40 @@ export default function EditorPage() {
       )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div>
-          <label className="text-tertiary" style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem' }}>标题</label>
-          <input className="lg-input" value={title} onChange={e => setTitle(e.target.value)} required placeholder="文章标题" />
+        <div className="lg-surface-strong lg-surface-strong-blur" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <label className="text-tertiary" style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem' }}>标题</label>
+            <input className="lg-input" value={title} onChange={e => setTitle(e.target.value)} required placeholder="文章标题" />
+          </div>
+          <div>
+            <label className="text-tertiary" style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem' }}>Slug</label>
+            <input className="lg-input" value={slug} onChange={e => setSlug(e.target.value)} placeholder="article-slug" />
+          </div>
+          <div>
+            <label className="text-tertiary" style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem' }}>摘要</label>
+            <input className="lg-input" value={summary} onChange={e => setSummary(e.target.value)} placeholder="文章摘要（可选）" />
+          </div>
+          <div>
+            <label className="text-tertiary" style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem' }}>内容（Markdown）</label>
+            <textarea
+              className="lg-input"
+              value={content} onChange={e => setContent(e.target.value)}
+              required placeholder="使用 Markdown 编写..."
+              style={{ minHeight: '300px', fontFamily: 'var(--lg-font-mono)', fontSize: '0.9rem', lineHeight: 1.6, resize: 'vertical' }}
+            />
+          </div>
+          <div className="lg-surface-blur" style={{ padding: '16px', maxHeight: '200px', overflowY: 'auto', borderRadius: 'var(--lg-radius-md)' }}>
+            <div className="text-tertiary" style={{ fontSize: '0.78rem', marginBottom: '8px' }}>预览</div>
+            <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--lg-font)' }}>{content.slice(0, 500)}{content.length > 500 ? '...' : ''}</pre>
+          </div>
         </div>
-        <div>
-          <label className="text-tertiary" style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem' }}>Slug</label>
-          <input className="lg-input" value={slug} onChange={e => setSlug(e.target.value)} placeholder="article-slug" />
-        </div>
-        <div>
-          <label className="text-tertiary" style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem' }}>摘要</label>
-          <input className="lg-input" value={summary} onChange={e => setSummary(e.target.value)} placeholder="文章摘要（可选）" />
-        </div>
-        <div>
-          <label className="text-tertiary" style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem' }}>内容（Markdown）</label>
-          <textarea
-            className="lg-input"
-            value={content} onChange={e => setContent(e.target.value)}
-            required placeholder="使用 Markdown 编写..."
-            style={{ minHeight: '300px', fontFamily: 'var(--lg-font-mono)', fontSize: '0.9rem', lineHeight: 1.6, resize: 'vertical' }}
-          />
-        </div>
-        <div className="lg-surface" style={{ padding: '16px', maxHeight: '200px', overflowY: 'auto' }}>
-          <div className="text-tertiary" style={{ fontSize: '0.78rem', marginBottom: '8px' }}>预览</div>
-          <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--lg-font)' }}>{content.slice(0, 500)}{content.length > 500 ? '...' : ''}</pre>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 4px' }}>
           <input type="checkbox" id="published" checked={published} onChange={e => setPublished(e.target.checked)}
             style={{ width: '18px', height: '18px', accentColor: 'var(--lg-accent)' }} />
           <label htmlFor="published" style={{ fontSize: '0.9rem' }}>发布</label>
         </div>
-        <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
           <button type="submit" disabled={loading}
             style={{
               padding: '14px 32px', borderRadius: '9999px', fontWeight: 500, fontSize: '1rem',
