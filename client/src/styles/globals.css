@@ -759,6 +759,49 @@ h4 { font-size: 1.15rem; }
 }
 
 /* ============================================================
+   Wallpaper Refresh Button — Floating bottom-right
+   ============================================================ */
+.wallpaper-refresh-btn {
+  position: fixed;
+  bottom: max(60px, calc(var(--lg-safe-bottom) + 24px));
+  right: max(16px, var(--lg-safe-right));
+  z-index: 50;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--lg-glass-border);
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  color: var(--lg-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+  box-shadow: 0 2px 8px var(--lg-glass-shadow);
+}
+
+.wallpaper-refresh-btn:hover {
+  background: rgba(255,255,255,0.14);
+  color: var(--lg-text-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px var(--lg-glass-shadow);
+}
+
+.wallpaper-refresh-btn:active {
+  transform: scale(0.92);
+}
+
+.wallpaper-refresh-btn svg {
+  transition: transform 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.wallpaper-refresh-btn:active svg {
+  transform: rotate(90deg);
+}
+
+/* ============================================================
    Admin — Responsive
    ============================================================ */
 @media (max-width: 640px) {

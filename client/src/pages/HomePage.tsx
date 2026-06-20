@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../lib/api'
+import { useWallpaper } from '../contexts/WallpaperContext'
 
 interface PostPreview {
   id: number
@@ -13,6 +14,7 @@ interface PostPreview {
 
 export default function HomePage() {
   const [recentPosts, setRecentPosts] = useState<PostPreview[]>([])
+  const { refresh, loading } = useWallpaper()
 
   useEffect(() => {
     api.get<{ posts: PostPreview[] }>('/posts?page=1&limit=3')
@@ -123,6 +125,23 @@ export default function HomePage() {
           </div>
         </section>
       )}
+
+      {/* Refresh wallpaper button — bottom right */}
+      <button
+        onClick={refresh}
+        className={`wallpaper-refresh-btn${loading ? ' refreshing' : ''}`}
+        disabled={loading}
+        aria-label="刷新壁纸"
+        title="刷新壁纸"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          style={loading ? { animation: 'spin 0.8s linear infinite' } : undefined}
+        >
+          <polyline points="23 4 23 10 17 10" />
+          <polyline points="1 20 1 14 7 14" />
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+        </svg>
+      </button>
     </>
   )
 }
