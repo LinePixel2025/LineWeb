@@ -1,0 +1,692 @@
+/* =============================================================
+   Line Web — Liquid Glass Design System
+   Inspired by Apple's Liquid Glass (WWDC 2025)
+
+   Core principles:
+   • Refraction — content behind glass is bent, not just blurred
+   • Specular highlights — dynamic light response
+   • Chromatic aberration — subtle color separation at edges
+   • Thickness — glass feels substantial via layered shadows
+   • Adaptive — responds to user interaction (light follows cursor)
+   ============================================================= */
+
+:root {
+  /* ===== Dark Mode (permanent) ===== */
+
+  /* Backgrounds */
+  --lg-bg: #0d0d0f;
+  --lg-bg-secondary: #1a1a1e;
+
+  /* Text */
+  --lg-text-primary: #f5f5f7;
+  --lg-text-secondary: #c7c7cd;
+  --lg-text-tertiary: #98989d;
+
+  /* Accent */
+  --lg-accent: #2997ff;
+  --lg-accent-hover: #40a9ff;
+  --lg-accent-soft: rgba(41, 151, 255, 0.18);
+  --lg-accent-glow: rgba(41, 151, 255, 0.3);
+
+  /* States */
+  --lg-danger: #ff3b30;
+  --lg-success: #34c759;
+  --lg-warning: #ff9500;
+
+  /* Glass surface */
+  --lg-glass-bg: rgba(255, 255, 255, 0.07);
+  --lg-glass-border: rgba(255, 255, 255, 0.14);
+  --lg-glass-shadow: rgba(0, 0, 0, 0.5);
+
+  /* Typography */
+  --lg-font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
+    'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --lg-font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+
+  /* Layout */
+  --lg-nav-height: 56px;
+  --lg-max-width: 1120px;
+
+  /* Safe area (iOS notch + Home Indicator) */
+  --lg-safe-top: env(safe-area-inset-top, 0px);
+  --lg-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --lg-safe-left: env(safe-area-inset-left, 0px);
+  --lg-safe-right: env(safe-area-inset-right, 0px);
+
+  /* Border radius scale */
+  --lg-radius-sm: 8px;
+  --lg-radius-md: 14px;
+  --lg-radius-lg: 20px;
+  --lg-radius-xl: 28px;
+  --lg-radius-full: 9999px;
+
+  /* Transitions */
+  --lg-transition: 0.35s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+/* ============================================================
+   Reset & Base
+   ============================================================ */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+html, body {
+  overflow-x: hidden;
+}
+
+body {
+  font-family: var(--lg-font);
+  background-color: var(--lg-bg);
+  color: var(--lg-text-primary);
+  line-height: 1.6;
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+body.menu-open {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+}
+
+a {
+  color: var(--lg-accent);
+  text-decoration: none;
+  transition: color var(--lg-transition);
+}
+
+a:hover {
+  color: var(--lg-accent-hover);
+}
+
+::selection {
+  background: var(--lg-accent-soft);
+  color: var(--lg-text-primary);
+}
+
+/* ============================================================
+   Liquid Glass Surfaces — Unified Design System
+
+   ┌──────────────────────────────┐
+   │  ::after        z-index: 1   │  Specular highlight (shared)
+   │  element        z-index: 0   │  SVG refraction + tint (2 tiers)
+   │  ::before       z-index: -1  │  Frosted underlay blur(14px) (shared)
+   └──────────────────────────────┘
+
+   Glass Tier 1 — Thin (lg-surface, lg-input, theme-toggle)
+     Self:  url(#lg-core)       blur(0.4px) saturate(150%) brightness(1.04)
+     Tint:  light rgba(255,255,255,0.07) / dark rgba(255,255,255,0.03)
+
+   Glass Tier 2 — Thick (lg-surface-strong, navbar)
+     Self:  url(#lg-core-strong) blur(0.5px) saturate(140%) brightness(1.06)
+     Tint:  light rgba(255,255,255,0.10) / dark rgba(255,255,255,0.04)
+   ============================================================ */
+
+/* === Frosted legibility underlay — SHARED ===
+   blur(14px) saturate(180%) applied to all glass surfaces via ::before.
+   No opaque fill — preserves background color and light. */
+.lg-underlay::before,
+.lg-surface::before,
+.lg-surface-strong::before,
+.navbar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+}
+
+/* navbars don't inherit border-radius from glass classes */
+.navbar::before {
+  border-radius: 0;
+}
+
+/* === Specular highlight — SHARED ===
+   Subtle radial gradient simulating environmental light on glass. */
+.lg-surface::after,
+.lg-surface-strong::after,
+.navbar .navbar-inner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(circle at 30% 20%, rgba(255,255,255,0.08) 0%, transparent 50%);
+}
+
+/* === Tier 1: Standard glass surface === */
+.lg-surface {
+  position: relative;
+  z-index: 0;
+  border-radius: var(--lg-radius-xl);
+  background: rgba(255,255,255,0.07);
+  backdrop-filter: url(#lg-core) blur(0.4px) saturate(150%) brightness(1.04);
+  -webkit-backdrop-filter: url(#lg-core) blur(0.4px) saturate(150%) brightness(1.04);
+  border: 1px solid var(--lg-glass-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.10),
+    0 2px 8px var(--lg-glass-shadow);
+}
+
+/* === Tier 2: Strong glass — thicker, deeper shadows === */
+.lg-surface-strong {
+  position: relative;
+  z-index: 0;
+  border-radius: var(--lg-radius-xl);
+  background: rgba(255,255,255,0.10);
+  backdrop-filter: url(#lg-core-strong) blur(0.5px) saturate(140%) brightness(1.06);
+  -webkit-backdrop-filter: url(#lg-core-strong) blur(0.5px) saturate(140%) brightness(1.06);
+  border: 1px solid var(--lg-glass-border);
+  border-right-color: rgba(255,255,255,0.06);
+  border-bottom-color: rgba(255,255,255,0.03);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    inset 0 0 0 0.5px rgba(255,255,255,0.05),
+    0 8px 24px var(--lg-glass-shadow),
+    0 2px 4px rgba(0,0,0,0.08);
+}
+
+/* ============================================================
+   Layout
+   ============================================================ */
+.container {
+  max-width: var(--lg-max-width);
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.page {
+  padding-top: calc(var(--lg-nav-height) + var(--lg-safe-top) + 32px);
+  padding-bottom: calc(64px + var(--lg-safe-bottom));
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* ============================================================
+   Navbar — Floating Pill Glass
+   ============================================================ */
+.navbar {
+  position: fixed;
+  top: max(12px, var(--lg-safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  height: var(--lg-nav-height);
+  width: calc(100% - 48px);
+  max-width: var(--lg-max-width);
+  border-radius: var(--lg-radius-xl);
+  background: rgba(255,255,255,0.07);
+  backdrop-filter: url(#lg-core) blur(2px) saturate(170%) brightness(1.08);
+  -webkit-backdrop-filter: url(#lg-core) blur(2px) saturate(170%) brightness(1.08);
+  border: 1px solid var(--lg-glass-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.10),
+    0 4px 20px rgba(0,0,0,0.3);
+}
+
+.navbar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+}
+
+.navbar-inner {
+  position: relative;
+  z-index: 2;
+  padding: 0 16px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.navbar-logo {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--lg-text-primary);
+  text-decoration: none;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.navbar-link {
+  position: relative;
+  padding: 8px 16px;
+  border-radius: var(--lg-radius-full);
+  color: var(--lg-text-secondary);
+  font-size: 0.88rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all var(--lg-transition);
+}
+
+.navbar-link:hover {
+  color: var(--lg-text-primary);
+  background: var(--lg-accent-soft);
+}
+
+.navbar-link.active {
+  color: var(--lg-accent);
+  background: var(--lg-accent-soft);
+}
+
+/* ============================================================
+   Typography
+   ============================================================ */
+h1, h2, h3, h4 {
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  color: var(--lg-text-primary);
+}
+
+h1 { font-size: 2.5rem; }
+h2 { font-size: 1.8rem; }
+h3 { font-size: 1.4rem; }
+h4 { font-size: 1.15rem; }
+
+.text-secondary {
+  color: var(--lg-text-secondary);
+}
+
+.text-tertiary {
+  color: var(--lg-text-tertiary);
+  font-size: 0.88rem;
+}
+
+/* Hero title — gradient text */
+.hero-title {
+  background: linear-gradient(135deg, var(--lg-text-primary) 0%, var(--lg-accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ============================================================
+   Loading Spinner
+   ============================================================ */
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--lg-glass-border);
+  border-top-color: var(--lg-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   Theme Toggle
+   ============================================================ */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.07);
+  backdrop-filter: url(#lg-core) blur(0.4px) saturate(150%) brightness(1.04);
+  -webkit-backdrop-filter: url(#lg-core) blur(0.4px) saturate(150%) brightness(1.04);
+  border: 1px solid var(--lg-glass-border);
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all var(--lg-transition);
+  color: var(--lg-text-primary);
+}
+
+.theme-toggle:hover {
+  background: rgba(255,255,255,0.12);
+  box-shadow: 0 2px 8px var(--lg-glass-shadow);
+}
+
+/* === Inputs — Liquid Glass (Tier 1) === */
+.lg-input {
+  width: 100%;
+  padding: 14px 18px;
+  background: rgba(255,255,255,0.07);
+  backdrop-filter: url(#lg-core) blur(0.4px) saturate(150%) brightness(1.04);
+  -webkit-backdrop-filter: url(#lg-core) blur(0.4px) saturate(150%) brightness(1.04);
+  border: 1px solid var(--lg-glass-border);
+  border-radius: var(--lg-radius-md);
+  color: var(--lg-text-primary);
+  font-family: var(--lg-font);
+  font-size: 0.95rem;
+  outline: none;
+  transition: all var(--lg-transition);
+}
+
+.lg-input:focus {
+  border-color: var(--lg-accent);
+  box-shadow: 0 0 0 3px var(--lg-accent-soft), 0 0 16px var(--lg-accent-glow);
+}
+
+.lg-input::placeholder {
+  color: var(--lg-text-tertiary);
+}
+
+/* ============================================================
+   Markdown Content
+   ============================================================ */
+.markdown-content {
+  line-height: 1.8;
+  color: var(--lg-text-primary);
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4 {
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+}
+
+.markdown-content h1:first-child,
+.markdown-content h2:first-child,
+.markdown-content h3:first-child {
+  margin-top: 0;
+}
+
+.markdown-content p {
+  margin-bottom: 1em;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin-bottom: 1em;
+  padding-left: 1.5em;
+}
+
+.markdown-content blockquote {
+  border-left: 3px solid var(--lg-accent);
+  padding: 8px 16px;
+  margin: 1em 0;
+  color: var(--lg-text-secondary);
+  background: var(--lg-accent-soft);
+  border-radius: 0 var(--lg-radius-md) var(--lg-radius-md) 0;
+}
+
+.markdown-content code {
+  font-family: var(--lg-font-mono);
+  background: var(--lg-accent-soft);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.markdown-content pre {
+  background: var(--lg-glass-bg);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--lg-glass-border);
+  border-radius: var(--lg-radius-md);
+  padding: 20px;
+  overflow-x: auto;
+  margin-bottom: 1em;
+}
+
+.markdown-content pre code {
+  background: none;
+  padding: 0;
+}
+
+.markdown-content img {
+  max-width: 100%;
+  border-radius: var(--lg-radius-md);
+}
+
+/* ============================================================
+   Animations
+   ============================================================ */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes glassRise {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-out both;
+}
+
+.glass-rise {
+  animation: glassRise 0.6s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+}
+
+/* ============================================================
+   Scrollbar
+   ============================================================ */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--lg-text-tertiary);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--lg-text-secondary);
+}
+
+/* ============================================================
+   Mobile
+   ============================================================ */
+.mobile-menu-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--lg-text-primary);
+  cursor: pointer;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-menu-btn:active {
+  opacity: 0.6;
+}
+
+/* Mobile menu open/close animation */
+@keyframes menuSlideIn {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes menuSlideOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-8px) scale(0.97); }
+}
+
+@media (max-width: 768px) {
+  .container { padding: 0 16px; }
+
+  h1 { font-size: 1.8rem; }
+  h2 { font-size: 1.4rem; }
+
+  .mobile-menu-btn { display: flex; }
+
+  .navbar-links {
+    position: absolute;
+    top: calc(var(--lg-nav-height) + 8px);
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    display: none;
+    background: transparent;
+    border: 1px solid var(--lg-glass-border);
+    border-radius: var(--lg-radius-md);
+    padding: 0;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    pointer-events: auto;
+    transform-origin: top center;
+  }
+
+  .navbar-links.open {
+    display: flex;
+    animation: menuSlideIn 0.3s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+  }
+
+  .navbar-links.closing {
+    display: flex;
+    animation: menuSlideOut 0.2s ease-in both;
+    pointer-events: none;
+  }
+
+  /* Frosted underlay + tint — the glass base */
+  .navbar-links::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    z-index: 0;
+    pointer-events: none;
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    background: rgba(25, 25, 30, 0.82);
+  }
+
+  /* Specular highlight */
+  .navbar-links::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    z-index: 1;
+    pointer-events: none;
+    background: radial-gradient(circle at 30% 20%, rgba(255,255,255,0.10) 0%, transparent 50%);
+  }
+
+  .navbar-link {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    padding: 14px 16px;
+    border-radius: 0;
+  }
+
+  .navbar-link:first-child {
+    border-radius: var(--lg-radius-md) var(--lg-radius-md) 0 0;
+  }
+
+  .navbar-link:last-child {
+    border-radius: 0 0 var(--lg-radius-md) var(--lg-radius-md);
+  }
+
+  .navbar-link:only-child {
+    border-radius: var(--lg-radius-md);
+  }
+
+  .lg-surface { padding: 16px; }
+  .lg-surface-strong { padding: 20px; }
+}
+
+/* Extra small devices */
+@media (max-width: 480px) {
+  .container { padding: 0 12px; }
+
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.2rem; }
+
+  .page { padding-top: calc(var(--lg-nav-height) + 24px); padding-bottom: 40px; }
+
+  .lg-surface { padding: 14px; }
+  .lg-surface-strong { padding: 16px; }
+}
+
+/* Larger touch targets for mobile */
+@media (hover: none) and (pointer: coarse) {
+  .navbar-link { padding: 14px 16px; }
+  .navbar-link, button, a, .liquid-btn { min-height: 44px; }
+  button, .liquid-btn { min-height: 44px; }
+  .theme-toggle { width: 44px; height: 44px; }
+}
+
+/* Home page responsive */
+@media (max-width: 480px) {
+  .home-section { padding: 120px 16px 80px !important; }
+  .home-section .lg-surface-strong { padding: 32px 20px !important; }
+}
+
+/* ============================================================
+   Admin — Responsive
+   ============================================================ */
+@media (max-width: 640px) {
+  .admin-table-wrap { overflow-x: auto; }
+
+  .admin-table { min-width: 500px; }
+
+  .admin-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .admin-btn {
+    width: 100%;
+    text-align: center;
+    padding: 10px 14px !important;
+    font-size: 0.88rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-title-cell {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .admin-new-btn {
+    width: 100%;
+    text-align: center;
+    padding: 14px 24px !important;
+  }
+}

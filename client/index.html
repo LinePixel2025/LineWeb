@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Line Web — 个人网站" />
+    <title>Line Web</title>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <!-- Liquid Glass SVG Filters — applied via backdrop-filter: url(...) -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="position:fixed;width:0;height:0;pointer-events:none">
+      <defs>
+        <!-- Core liquid refraction filter -->
+        <filter id="lg-core" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="0.006" numOctaves="3" seed="42" result="noise" />
+          <feGaussianBlur in="noise" stdDeviation="2" result="smooth-noise" />
+          <feDisplacementMap in="SourceGraphic" in2="smooth-noise" scale="35" xChannelSelector="R" yChannelSelector="G" result="displaced" />
+          <feGaussianBlur in="displaced" stdDeviation="0.4" result="blurred" />
+        </filter>
+
+        <!-- Thick glass — deeper refraction -->
+        <filter id="lg-core-strong" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="0.004" numOctaves="4" seed="42" result="noise" />
+          <feGaussianBlur in="noise" stdDeviation="3" result="smooth-noise" />
+          <feDisplacementMap in="SourceGraphic" in2="smooth-noise" scale="60" xChannelSelector="R" yChannelSelector="G" result="displaced" />
+          <feGaussianBlur in="displaced" stdDeviation="0.6" result="blurred" />
+        </filter>
+
+        <!-- Edge glow / light bloom -->
+        <filter id="lg-glow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="bloom" />
+        </filter>
+      </defs>
+    </svg>
+
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
