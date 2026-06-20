@@ -12,59 +12,32 @@ export default function Navbar() {
   const { user, isAdmin } = useAuth()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [closing, setClosing] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
 
-  const closeMenu = () => {
-    if (!mobileOpen) return
-    setClosing(true)
-    setTimeout(() => {
-      setMobileOpen(false)
-      setClosing(false)
-    }, 200)
-  }
-
-  const toggleMenu = () => {
-    if (mobileOpen) {
-      closeMenu()
-    } else {
-      setMobileOpen(true)
-    }
-  }
+  const closeMenu = () => setMobileOpen(false)
+  const toggleMenu = () => setMobileOpen(prev => !prev)
 
   // Lock body scroll when menu is open
   useEffect(() => {
     if (mobileOpen) {
       document.body.classList.add('menu-open')
     } else {
-      requestAnimationFrame(() => {
-        document.body.classList.remove('menu-open')
-      })
+      document.body.classList.remove('menu-open')
     }
     return () => document.body.classList.remove('menu-open')
   }, [mobileOpen])
 
-  // Close menu on outside tap
+  // Close menu on outside tap (no setTimeout — btnRef check prevents toggle self-fire)
   useEffect(() => {
     if (!mobileOpen) return
-    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as Node
-      if (!menuRef.current || !btnRef.current) return
-      if (!menuRef.current.contains(target) && !btnRef.current.contains(target)) {
-        closeMenu()
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node) && !btnRef.current?.contains(e.target as Node)) {
+        setMobileOpen(false)
       }
     }
-    // Delay to avoid closing from the toggle tap itself
-    const id = setTimeout(() => {
-      document.addEventListener('mousedown', handleClickOutside)
-      document.addEventListener('touchstart', handleClickOutside, { passive: true })
-    }, 100)
-    return () => {
-      clearTimeout(id)
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('touchstart', handleClickOutside)
-    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [mobileOpen])
 
   return (
@@ -74,14 +47,14 @@ export default function Navbar() {
 
         <div
           ref={menuRef}
-          className={`navbar-links ${mobileOpen ? 'open' : ''} ${closing ? 'closing' : ''}`}
+          className={`navbar-links ${mobileOpen ? 'open' : ''}`}
         >
           {navItems.map(item => (
             <Link
               key={item.path}
               to={item.path}
               className={`navbar-link ${location.pathname === item.path ? 'active' : ''}`}
-              onClick={() => closeMenu()}
+              onClick={closeMenu}
             >
               {item.label}
             </Link>
@@ -93,7 +66,7 @@ export default function Navbar() {
                 <Link
                   to="/admin"
                   className={`navbar-link ${location.pathname.startsWith('/admin') ? 'active' : ''}`}
-                  onClick={() => closeMenu()}
+                  onClick={closeMenu}
                 >
                   管理
                 </Link>
@@ -101,7 +74,7 @@ export default function Navbar() {
               <Link
                 to="/profile"
                 className={`navbar-link ${location.pathname === '/profile' ? 'active' : ''}`}
-                onClick={() => closeMenu()}
+                onClick={closeMenu}
               >
                 {user.username}
               </Link>
@@ -110,7 +83,7 @@ export default function Navbar() {
             <Link
               to="/login"
               className="navbar-link"
-              onClick={() => closeMenu()}
+              onClick={closeMenu}
             >
               登录
             </Link>

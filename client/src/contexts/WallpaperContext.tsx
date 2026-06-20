@@ -21,7 +21,7 @@ export function WallpaperProvider({ children }: { children: ReactNode }) {
         setCopyright(data.copyright)
         setLoaded(true)
       })
-      .catch(() => {})
+      .catch((err) => { console.error('Failed to fetch wallpaper:', err) })
   }, [])
 
   return (

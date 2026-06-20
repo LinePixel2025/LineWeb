@@ -7,6 +7,18 @@ import { authenticate } from '../middleware/auth.js'
 
 const router = Router()
 
+function generateTokenResponse(user: { id: number; username: string; email: string; role: string }) {
+  const token = jwt.sign(
+    { userId: user.id, role: user.role },
+    config.jwtSecret,
+    { expiresIn: config.jwtExpiresIn },
+  )
+  return {
+    token,
+    user: { id: user.id, username: user.username, email: user.email, role: user.role },
+  }
+}
+
 // 注册
 router.post('/register', async (req: Request, res: Response) => {
   const parsed = registerSchema.safeParse(req.body)
@@ -29,16 +41,7 @@ router.post('/register', async (req: Request, res: Response) => {
     data: { username, email, password: hashed },
   })
 
-  const token = jwt.sign(
-    { userId: user.id, role: user.role },
-    config.jwtSecret,
-    { expiresIn: config.jwtExpiresIn },
-  )
-
-  res.status(201).json({
-    token,
-    user: { id: user.id, username: user.username, email: user.email, role: user.role },
-  })
+  res.status(201).json(generateTokenResponse(user))
 })
 
 // 登录
@@ -62,16 +65,7 @@ router.post('/login', async (req: Request, res: Response) => {
     return
   }
 
-  const token = jwt.sign(
-    { userId: user.id, role: user.role },
-    config.jwtSecret,
-    { expiresIn: config.jwtExpiresIn },
-  )
-
-  res.json({
-    token,
-    user: { id: user.id, username: user.username, email: user.email, role: user.role },
-  })
+  res.json(generateTokenResponse(user))
 })
 
 // 获取当前用户信息

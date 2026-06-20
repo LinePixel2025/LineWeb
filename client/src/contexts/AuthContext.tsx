@@ -1,5 +1,7 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 import api from '../lib/api'
+
+const TOKEN_KEY = 'lineweb_token'
 
 interface User {
   id: number
@@ -23,38 +25,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const fetchUser = useCallback(async () => {
-    const token = localStorage.getItem('lineweb_token')
+  useEffect(() => {
+    const token = localStorage.getItem(TOKEN_KEY)
     if (!token) {
       setLoading(false)
       return
     }
-    try {
-      const data = await api.get<User>('/auth/me')
-      setUser(data)
-    } catch {
-      localStorage.removeItem('lineweb_token')
-    } finally {
-      setLoading(false)
-    }
+    api.get<User>('/auth/me')
+      .then(setUser)
+      .catch(() => localStorage.removeItem(TOKEN_KEY))
+      .finally(() => setLoading(false))
   }, [])
-
-  useEffect(() => { fetchUser() }, [fetchUser])
 
   const login = async (email: string, password: string) => {
     const data = await api.post<{ token: string; user: User }>('/auth/login', { email, password })
-    localStorage.setItem('lineweb_token', data.token)
+    localStorage.setItem(TOKEN_KEY, data.token)
     setUser(data.user)
   }
 
   const register = async (username: string, email: string, password: string) => {
     const data = await api.post<{ token: string; user: User }>('/auth/register', { username, email, password })
-    localStorage.setItem('lineweb_token', data.token)
+    localStorage.setItem(TOKEN_KEY, data.token)
     setUser(data.user)
   }
 
   const logout = () => {
-    localStorage.removeItem('lineweb_token')
+    localStorage.removeItem(TOKEN_KEY)
     setUser(null)
   }
 

@@ -1,4 +1,18 @@
-import React, { useRef, useState, useEffect } from 'react'
+import React, { useRef, useState, useEffect, useMemo } from 'react'
+
+const THICKNESS_MAP = {
+  thin: { refraction: '25', blur: '0.3px', glow: '8px', shadowOpacity: 0.2 },
+  medium: { refraction: '45', blur: '0.5px', glow: '12px', shadowOpacity: 0.35 },
+  thick: { refraction: '70', blur: '0.8px', glow: '18px', shadowOpacity: 0.5 },
+} as const
+
+function hexToRgb(hex: string): string {
+  const clean = hex.replace('#', '')
+  const r = parseInt(clean.substring(0, 2), 16)
+  const g = parseInt(clean.substring(2, 4), 16)
+  const b = parseInt(clean.substring(4, 6), 16)
+  return `${r}, ${g}, ${b}`
+}
 
 export interface LiquidGlassProps {
   children: React.ReactNode
@@ -60,13 +74,7 @@ export default function LiquidGlass({
     }
   }, [interactive])
 
-  const thicknessValues = {
-    thin: { refraction: '25', blur: '0.3px', glow: '8px', shadowOpacity: 0.2 },
-    medium: { refraction: '45', blur: '0.5px', glow: '12px', shadowOpacity: 0.35 },
-    thick: { refraction: '70', blur: '0.8px', glow: '18px', shadowOpacity: 0.5 },
-  }
-
-  const t = thicknessValues[thickness]
+  const t = THICKNESS_MAP[thickness]
 
   // Dynamic specular highlight — follows cursor
   const specularGradient = interactive
@@ -74,9 +82,10 @@ export default function LiquidGlass({
     : 'radial-gradient(circle at 30% 20%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.06) 40%, transparent 60%)'
 
   // Tint, if provided
-  const tintBg = tint
-    ? `rgba(${hexToRgb(tint)}, 0.15)`
-    : undefined
+  const tintBg = useMemo(
+    () => (tint ? `rgba(${hexToRgb(tint)}, 0.15)` : undefined),
+    [tint],
+  )
 
   return (
     <div
@@ -171,12 +180,4 @@ export default function LiquidGlass({
       </div>
     </div>
   )
-}
-
-function hexToRgb(hex: string): string {
-  const clean = hex.replace('#', '')
-  const r = parseInt(clean.substring(0, 2), 16)
-  const g = parseInt(clean.substring(2, 4), 16)
-  const b = parseInt(clean.substring(4, 6), 16)
-  return `${r}, ${g}, ${b}`
 }

@@ -3,7 +3,7 @@ import { z } from 'zod'
 export const config = {
   port: parseInt(process.env.PORT || '3001', 10),
   jwtSecret: process.env.JWT_SECRET || 'lineweb-dev-secret-change-in-production',
-  jwtExpiresIn: '7d',
+  jwtExpiresIn: '7d' as const,
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
 }
 
