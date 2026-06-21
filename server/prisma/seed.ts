@@ -7,8 +7,11 @@ async function main() {
   // 创建默认管理员
   const adminPassword = await bcrypt.hash('admin123', 12)
   await prisma.user.upsert({
-    where: { email: 'admin@lineweb.dev' },
-    update: {},
+    where: { username: 'admin' },
+    update: {
+      email: 'admin@lineweb.dev',
+      password: adminPassword,
+    },
     create: {
       username: 'admin',
       email: 'admin@lineweb.dev',
@@ -20,8 +23,11 @@ async function main() {
   // 创建第二个管理员：Line
   const linePassword = await bcrypt.hash('liang798119', 12)
   await prisma.user.upsert({
-    where: { email: 'line@lineweb.dev' },
-    update: {},
+    where: { username: 'Line' },
+    update: {
+      email: 'line@lineweb.dev',
+      password: linePassword,
+    },
     create: {
       username: 'Line',
       email: 'line@lineweb.dev',
