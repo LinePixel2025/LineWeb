@@ -59,7 +59,7 @@ export default function HomePage() {
           >
             Line Web
           </h1>
-          <p style={{ fontSize: 'clamp(0.95rem, 3vw, 1.1rem)', lineHeight: 1.6, marginTop: '16px', color: 'rgba(255,255,255,0.78)' }}>
+          <p style={{ fontSize: 'clamp(0.95rem, 3vw, 1.1rem)', lineHeight: 1.6, marginTop: '16px', color: 'var(--lg-text-secondary)' }}>
             一个融合 Liquid Glass 设计语言的个人空间
           </p>
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '36px' }}>
@@ -134,9 +134,7 @@ export default function HomePage() {
         aria-label="刷新壁纸"
         title="刷新壁纸"
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          style={loading ? { animation: 'spin 0.8s linear infinite' } : undefined}
-        >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="23 4 23 10 17 10" />
           <polyline points="1 20 1 14 7 14" />
           <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />

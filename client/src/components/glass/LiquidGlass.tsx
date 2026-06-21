@@ -1,9 +1,9 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react'
 
 const THICKNESS_MAP = {
-  thin: { refraction: '25', blur: '0.3px', glow: '8px', shadowOpacity: 0.2 },
-  medium: { refraction: '45', blur: '0.5px', glow: '12px', shadowOpacity: 0.35 },
-  thick: { refraction: '70', blur: '0.8px', glow: '18px', shadowOpacity: 0.5 },
+  thin: { refraction: '25', blur: '1.7px', glow: '8px', shadowOpacity: 0.2 },
+  medium: { refraction: '45', blur: '1.7px', glow: '12px', shadowOpacity: 0.35 },
+  thick: { refraction: '70', blur: '1.9px', glow: '18px', shadowOpacity: 0.5 },
 } as const
 
 function hexToRgb(hex: string): string {

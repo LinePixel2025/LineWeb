@@ -179,7 +179,7 @@ export default function CalculatorPage() {
 
   return (
     <div className="page calc-page">
-      <div className="calc-container lg-surface-strong">
+      <div className="calc-container lg-surface-strong lg-surface-strong-blur">
         {/* Display */}
         <div className="calc-display-wrap">
           <div className="calc-expression">

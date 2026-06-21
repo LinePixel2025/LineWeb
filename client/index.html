@@ -39,7 +39,7 @@
           <!-- Restore the original alpha to clip displaced content to the element's shape -->
           <feComposite in="displaced" in2="orig-alpha" operator="in" result="clipped" />
 
-          <feGaussianBlur in="clipped" stdDeviation="0.4" result="blurred" />
+          <feGaussianBlur in="clipped" stdDeviation="1.7" result="blurred" />
         </filter>
 
         <!-- Thick glass — deeper refraction -->
@@ -67,7 +67,7 @@
           <!-- Restore original alpha -->
           <feComposite in="displaced" in2="orig-alpha" operator="in" result="clipped" />
 
-          <feGaussianBlur in="clipped" stdDeviation="0.6" result="blurred" />
+          <feGaussianBlur in="clipped" stdDeviation="1.9" result="blurred" />
         </filter>
 
         <!-- Edge glow / light bloom -->

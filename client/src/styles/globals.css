@@ -11,7 +11,7 @@
    ============================================================= */
 
 :root {
-  /* ===== Dark Mode (permanent) ===== */
+  /* ===== Dark Mode (default) ===== */
 
   /* Backgrounds */
   --lg-bg: #0d0d0f;
@@ -21,6 +21,10 @@
   --lg-text-primary: #f5f5f7;
   --lg-text-secondary: #c7c7cd;
   --lg-text-tertiary: #98989d;
+
+  /* Article text — always dark-mode */
+  --lg-text-article: #f5f5f7;
+  --lg-text-article-secondary: #c7c7cd;
 
   /* Accent */
   --lg-accent: #2997ff;
@@ -88,6 +92,7 @@ body {
   font-family: var(--lg-font);
   background-color: var(--lg-bg);
   color: var(--lg-text-primary);
+  transition: color 0.4s ease;
   line-height: 1.6;
   min-height: 100vh;
   min-height: -webkit-fill-available;
@@ -122,7 +127,7 @@ a:hover {
    ┌──────────────────────────────┐
    │  ::after        z-index: 1   │  Specular highlight (shared)
    │  element        z-index: 0   │  SVG refraction + tint (2 tiers)
-   │  ::before       z-index: -1  │  Frosted underlay blur(14px) (shared)
+   │  ::before       z-index: -1  │  Frosted underlay blur(16.8px) (shared)
    └──────────────────────────────┘
 
    Glass Tier 1 — Thin (lg-surface, lg-input, theme-toggle)
@@ -135,7 +140,7 @@ a:hover {
    ============================================================ */
 
 /* === Frosted legibility underlay — SHARED ===
-   blur(14px) saturate(180%) applied to all glass surfaces via ::before.
+   blur(16.8px) saturate(180%) applied to all glass surfaces via ::before.
    No opaque fill — preserves background color and light. */
 .lg-underlay::before,
 .lg-surface::before,
@@ -147,8 +152,8 @@ a:hover {
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  backdrop-filter: blur(14px) saturate(180%);
-  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  backdrop-filter: blur(16.8px) saturate(180%);
+  -webkit-backdrop-filter: blur(16.8px) saturate(180%);
 }
 
 /* navbars don't inherit border-radius from glass classes */
@@ -176,8 +181,8 @@ a:hover {
   z-index: 0;
   border-radius: var(--lg-radius-xl);
   background: rgba(255,255,255,0.07);
-  backdrop-filter: url(#lg-core) blur(0.4px) saturate(150%) brightness(1.04);
-  -webkit-backdrop-filter: url(#lg-core) blur(0.4px) saturate(150%) brightness(1.04);
+  backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%) brightness(1.04);
+  -webkit-backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%) brightness(1.04);
   border: 1px solid var(--lg-glass-border);
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.10),
@@ -190,8 +195,8 @@ a:hover {
   z-index: 0;
   border-radius: var(--lg-radius-xl);
   background: rgba(255,255,255,0.10);
-  backdrop-filter: url(#lg-core-strong) blur(0.5px) saturate(140%) brightness(1.06);
-  -webkit-backdrop-filter: url(#lg-core-strong) blur(0.5px) saturate(140%) brightness(1.06);
+  backdrop-filter: url(#lg-core-strong) blur(1.9px) saturate(140%) brightness(1.06);
+  -webkit-backdrop-filter: url(#lg-core-strong) blur(1.9px) saturate(140%) brightness(1.06);
   border: 1px solid var(--lg-glass-border);
   border-right-color: rgba(255,255,255,0.06);
   border-bottom-color: rgba(255,255,255,0.03);
@@ -205,13 +210,13 @@ a:hover {
 /* === Strong glass — thicker blur variant for content-heavy surfaces === */
 .lg-surface-blur {
   background: rgba(0,0,0,0.18);
-  backdrop-filter: url(#lg-core) blur(1.4px) saturate(120%) brightness(0.85);
-  -webkit-backdrop-filter: url(#lg-core) blur(1.4px) saturate(120%) brightness(0.85);
+  backdrop-filter: url(#lg-core) blur(1.7px) saturate(120%) brightness(0.85);
+  -webkit-backdrop-filter: url(#lg-core) blur(1.7px) saturate(120%) brightness(0.85);
 }
 .lg-surface-strong-blur {
   background: rgba(0,0,0,0.24);
-  backdrop-filter: url(#lg-core-strong) blur(1.6px) saturate(110%) brightness(0.78);
-  -webkit-backdrop-filter: url(#lg-core-strong) blur(1.6px) saturate(110%) brightness(0.78);
+  backdrop-filter: url(#lg-core-strong) blur(1.9px) saturate(110%) brightness(0.78);
+  -webkit-backdrop-filter: url(#lg-core-strong) blur(1.9px) saturate(110%) brightness(0.78);
 }
 
 /* ============================================================
@@ -244,8 +249,8 @@ a:hover {
   max-width: var(--lg-max-width);
   border-radius: var(--lg-radius-xl);
   background: rgba(255,255,255,0.07);
-  backdrop-filter: url(#lg-core) blur(2px) saturate(170%) brightness(1.08);
-  -webkit-backdrop-filter: url(#lg-core) blur(2px) saturate(170%) brightness(1.08);
+  backdrop-filter: url(#lg-core) blur(1.7px) saturate(170%) brightness(1.08);
+  -webkit-backdrop-filter: url(#lg-core) blur(1.7px) saturate(170%) brightness(1.08);
   border: 1px solid var(--lg-glass-border);
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.10),
@@ -259,8 +264,8 @@ a:hover {
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  backdrop-filter: blur(14px) saturate(180%);
-  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  backdrop-filter: blur(16.8px) saturate(180%);
+  -webkit-backdrop-filter: blur(16.8px) saturate(180%);
 }
 
 .navbar-inner {
@@ -370,8 +375,8 @@ h4 { font-size: 1.15rem; }
   height: 36px;
   border-radius: 50%;
   background: rgba(255,255,255,0.07);
-  backdrop-filter: url(#lg-core) blur(0.4px) saturate(150%) brightness(1.04);
-  -webkit-backdrop-filter: url(#lg-core) blur(0.4px) saturate(150%) brightness(1.04);
+  backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%) brightness(1.04);
+  -webkit-backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%) brightness(1.04);
   border: 1px solid var(--lg-glass-border);
   cursor: pointer;
   font-size: 1rem;
@@ -432,8 +437,8 @@ h4 { font-size: 1.15rem; }
 .liquid-btn.glass {
   background-image: linear-gradient(180deg, rgba(255,255,255,0.10) 0%, transparent 50%),
     linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04));
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  backdrop-filter: blur(16.8px) saturate(180%);
+  -webkit-backdrop-filter: blur(16.8px) saturate(180%);
   border: 1px solid rgba(255,255,255,0.18);
   box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.2), 0 2px 8px rgba(0,0,0,0.15);
   color: var(--lg-text-primary);
@@ -487,8 +492,8 @@ h4 { font-size: 1.15rem; }
   width: 100%;
   padding: 14px 18px;
   background: rgba(255,255,255,0.10);
-  backdrop-filter: url(#lg-core) blur(1px) saturate(150%) brightness(1.04);
-  -webkit-backdrop-filter: url(#lg-core) blur(1px) saturate(150%) brightness(1.04);
+  backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%) brightness(1.04);
+  -webkit-backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%) brightness(1.04);
   border: 1px solid var(--lg-glass-border);
   border-radius: var(--lg-radius-md);
   color: var(--lg-text-primary);
@@ -512,7 +517,7 @@ h4 { font-size: 1.15rem; }
    ============================================================ */
 .markdown-content {
   line-height: 1.8;
-  color: var(--lg-text-primary);
+  color: var(--lg-text-article);
 }
 
 .markdown-content h1,
@@ -543,7 +548,7 @@ h4 { font-size: 1.15rem; }
   border-left: 3px solid var(--lg-accent);
   padding: 8px 16px;
   margin: 1em 0;
-  color: var(--lg-text-secondary);
+  color: var(--lg-text-article-secondary);
   background: var(--lg-accent-soft);
   border-radius: 0 var(--lg-radius-md) var(--lg-radius-md) 0;
 }
@@ -558,7 +563,7 @@ h4 { font-size: 1.15rem; }
 
 .markdown-content pre {
   background: var(--lg-glass-bg);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(16.8px);
   border: 1px solid var(--lg-glass-border);
   border-radius: var(--lg-radius-md);
   padding: 20px;
@@ -691,8 +696,8 @@ h4 { font-size: 1.15rem; }
     border-radius: inherit;
     z-index: 0;
     pointer-events: none;
-    backdrop-filter: blur(16px) saturate(180%);
-    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    backdrop-filter: blur(16.8px) saturate(180%);
+    -webkit-backdrop-filter: blur(16.8px) saturate(180%);
     background: rgba(25, 25, 30, 0.82);
   }
 
@@ -771,8 +776,8 @@ h4 { font-size: 1.15rem; }
   border-radius: 50%;
   border: 1px solid var(--lg-glass-border);
   background: rgba(255,255,255,0.08);
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  backdrop-filter: blur(16.8px) saturate(180%);
+  -webkit-backdrop-filter: blur(16.8px) saturate(180%);
   color: var(--lg-text-secondary);
   cursor: pointer;
   display: flex;
@@ -1181,4 +1186,76 @@ h4 { font-size: 1.15rem; }
   .calc-btn--eq:active {
     transform: scale(0.96);
   }
+}
+
+/* ============================================================
+   字体自动反色系统 — data-ac 属性驱动 (JS ContrastProvider)
+   ============================================================
+   JS 遍历采样壁纸亮度 → 为元素设置 data-ac="black|white"
+   CSS 属性选择器切换对应颜色。文章区 .markdown-content 排除。
+
+   放在 CSS 末尾确保 source order 不会使 data-ac 被
+   同优先级（0,1,0）的组件选择器意外覆盖。          */
+
+html { --_ac-white: #f5f5f7; --_ac-white-sec: #c7c7cd; --_ac-white-dim: #98989d; }
+html { --_ac-black: #111;   --_ac-black-sec: #48484a;  --_ac-black-dim: #8e8e93; }
+
+/* data-ac 通过 CSS 自定义属性切换，不需要 !important — 组件用 var(--_ac-c) 即可 */
+html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(--_ac-white-dim); }
+html[data-contrast="light"] { display: none; } /* preserve for future */
+[data-ac="black"] { --_ac-c: var(--_ac-black); --_ac-c2: var(--_ac-black-sec); --_ac-c3: var(--_ac-black-dim); }
+
+/* 基础 data-ac 切换 — 末尾放最后保障 */
+[data-ac="white"] { color: var(--_ac-white) !important; }
+[data-ac="black"] { color: var(--_ac-black) !important; }
+
+/* .text-secondary / .text-tertiary 的 data-ac 覆盖 */
+.text-secondary[data-ac="white"],
+[data-ac="white"] .text-secondary { color: var(--_ac-white-sec) !important; }
+.text-secondary[data-ac="black"],
+[data-ac="black"] .text-secondary { color: var(--_ac-black-sec) !important; }
+.text-tertiary[data-ac="white"],
+[data-ac="white"] .text-tertiary { color: var(--_ac-white-dim) !important; }
+.text-tertiary[data-ac="black"],
+[data-ac="black"] .text-tertiary { color: var(--_ac-black-dim) !important; }
+
+/* 渐变文字（首页 Hero）排除反色 */
+.hero-title, h1[style*="WebkitBackgroundClip"] {
+  color: revert;
+  -webkit-text-fill-color: transparent;
+}
+
+/* 文章区域 — 不受反色影响，始终暗色系 */
+.markdown-content,
+.markdown-content * {
+  color: revert;
+}
+.markdown-content h1, .markdown-content h2, .markdown-content h3, .markdown-content h4,
+.markdown-content p, .markdown-content li, .markdown-content blockquote,
+.markdown-content code, .markdown-content pre, .markdown-content span {
+  color: var(--lg-text-article);
+}
+.markdown-content .text-secondary,
+.markdown-content .text-tertiary {
+  color: var(--lg-text-article-secondary);
+}
+.markdown-content a {
+  color: var(--lg-accent);
+}
+
+/* 交互按钮 — 不被 data-ac 覆盖 */
+.liquid-btn:not(.glass):not(.ghost) {
+  color: white !important;
+}
+
+/* 计算器显示区 */
+.calc-expression { color: var(--lg-text-tertiary); }
+.calc-display { color: var(--lg-text-primary); }
+
+/* 平滑过渡 */
+[data-ac] { transition: color 0.3s ease; }
+
+/* 刷新按钮旋转动画 — CSS 内处理，不依赖 inline style */
+.wallpaper-refresh-btn.refreshing svg {
+  animation: spin 0.8s linear infinite;
 }

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { WallpaperProvider } from './contexts/WallpaperContext'
+import { ContrastProvider } from './contexts/ContrastContext'
 import Layout from './components/Layout'
 import { ProtectedRoute, AdminRoute } from './components/Guards'
 import HomePage from './pages/HomePage'
@@ -19,29 +20,31 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <WallpaperProvider>
-          <Routes>
-            <Route element={<Layout />}>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/posts" element={<PostsPage />} />
-              <Route path="/posts/:slug" element={<PostPage />} />
-              <Route path="/features" element={<FeaturesPage />} />
-              <Route path="/calculator" element={<CalculatorPage />} />
-              <Route path="/profile" element={
-                <ProtectedRoute><ProfilePage /></ProtectedRoute>
-              } />
-              <Route path="/admin" element={
-                <AdminRoute><AdminPage /></AdminRoute>
-              } />
-              <Route path="/admin/new" element={
-                <AdminRoute><EditorPage /></AdminRoute>
-              } />
-              <Route path="/admin/edit/:id" element={
-                <AdminRoute><EditorPage /></AdminRoute>
-              } />
-            </Route>
-          </Routes>
+          <ContrastProvider>
+            <Routes>
+              <Route element={<Layout />}>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/posts" element={<PostsPage />} />
+                <Route path="/posts/:slug" element={<PostPage />} />
+                <Route path="/features" element={<FeaturesPage />} />
+                <Route path="/calculator" element={<CalculatorPage />} />
+                <Route path="/profile" element={
+                  <ProtectedRoute><ProfilePage /></ProtectedRoute>
+                } />
+                <Route path="/admin" element={
+                  <AdminRoute><AdminPage /></AdminRoute>
+                } />
+                <Route path="/admin/new" element={
+                  <AdminRoute><EditorPage /></AdminRoute>
+                } />
+                <Route path="/admin/edit/:id" element={
+                  <AdminRoute><EditorPage /></AdminRoute>
+                } />
+              </Route>
+            </Routes>
+          </ContrastProvider>
         </WallpaperProvider>
       </AuthProvider>
     </BrowserRouter>

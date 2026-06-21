@@ -11,49 +11,40 @@ Line Web 是一个使用 **Apple Liquid Glass** 设计语言（WWDC 2025）的�
 ## Architecture
 
 ```
-lineweb/
-├── client/                      # 前端 (React + Vite)
+lineweb/                       # 根 monorepo (concurrently 管理双端)
+├── client/                    # 前端 (React + Vite)
+│   ├── index.html             # SVG <filter> 玻璃折射滤镜内联于此
 │   └── src/
-│       ├── components/          # 共享组件
-│       │   ├── Navbar.tsx       # 导航栏 (含 lg-underlay)
-│       │   ├── Layout.tsx       # 路由布局壳
-│       │   ├── Guards.tsx       # ProtectedRoute / AdminRoute
-│       │   └── glass/           # Liquid Glass 高阶组件
-│       │       ├── LiquidGlass.tsx  # 可交互玻璃容器
-│       │       ├── LiquidButton.tsx # 玻璃按钮
+│       ├── components/
+│       │   ├── Navbar.tsx      # 浮动导航栏 (.navbar + lg-underlay)
+│       │   ├── Layout.tsx      # 路由出口 + 壁纸背景层
+│       │   ├── Guards.tsx      # ProtectedRoute / AdminRoute
+│       │   └── glass/          # Liquid Glass 高阶组件 (React)
+│       │       ├── LiquidGlass.tsx
+│       │       ├── LiquidButton.tsx
+│       │       ├── filters.svg  # SVG 滤镜副本 (备用)
 │       │       └── index.ts
 │       ├── contexts/
-│       │   ├── ThemeContext.tsx  # 亮/暗/system 三态主题
-│       │   └── AuthContext.tsx   # JWT 认证状态
-│       ├── lib/api.ts           # 自动带 JWT 的 fetch 封装
-│       ├── pages/               # 页面组件
-│       │   ├── HomePage.tsx     # 主页 (Bing 壁纸 + Hero)
-│       │   ├── FeaturesPage.tsx # 功能界面
-│       │   ├── CalculatorPage.tsx
-│       │   ├── PostsPage.tsx    # 文章列表
-│       │   ├── PostPage.tsx     # 文章详情 (Markdown)
-│       │   ├── LoginPage.tsx
-│       │   ├── RegisterPage.tsx
-│       │   ├── ProfilePage.tsx
-│       │   ├── AdminPage.tsx    # 管理面板
-│       │   └── EditorPage.tsx   # 文章编辑器
-│       └── styles/globals.css   # 全部设计系统
-├── server/                      # 后端 (Express + Prisma)
+│       │   ├── AuthContext.tsx       # JWT 认证 (useAuth hook)
+│       │   └── WallpaperContext.tsx  # 壁纸 URL 状态 (useWallpaper hook)
+│       ├── lib/api.ts          # 自动注入 Bearer token 的 fetch 封装
+│       ├── pages/
+│       ├── styles/
+│       │   └── globals.css     # 全部设计系统 (无其他 CSS 文件)
+│       └── main.tsx
+├── server/                    # 后端 (Express + Prisma)
+│   ├── .env                   # DATABASE_URL + JWT_SECRET (必填)
 │   ├── prisma/
-│   │   ├── schema.prisma        # User + Post (SQLite)
-│   │   └── seed.ts              # 管理员 + 示例文章
+│   │   ├── schema.prisma      # User + Post 模型 (SQLite)
+│   │   └── seed.ts            # 管理员 admin@lineweb.dev + 示例文章
 │   └── src/
-│       ├── config/index.ts      # Zod 校验 + 环境变量
-│       ├── lib/prisma.ts        # Prisma 客户端
-│       ├── middleware/auth.ts   # JWT + admin 检查
-│       ├── routes/auth.ts       # 注册/登录/用户信息
-│       ├── routes/posts.ts      # 公开 + 管理 CRUD
-│       ├── routes/bing.ts       # Bing 每日壁纸代理
-│       └── index.ts             # Express 入口
-├── .npmrc                       # registry=https://registry.npmmirror.com
-├── CLAUDE.md
-├── README.md
-└── package.json
+│       ├── config/index.ts    # Zod schema + 环境变量
+│       ├── lib/prisma.ts      # 单例 PrismaClient
+│       ├── middleware/auth.ts # authenticate + requireAdmin
+│       ├── routes/            # auth / posts / bing
+│       └── index.ts           # Express 入口
+├── package.json               # Monorepo 脚本 (npm run dev 同时启动双端)
+└── .npmrc                     # registry=https://registry.npmmirror.com (中国加速)
 ```
 
 ## Tech Stack
@@ -61,7 +52,7 @@ lineweb/
 | 层级 | 技术 |
 |------|------|
 | 前端 | React 19, Vite 6, TypeScript 5, React Router 7 |
-| Markdown | react-markdown + remark-gfm |
+| Markdown | react-markdown + rehype-highlight + remark-gfm |
 | 后端 | Express 4, Prisma 6, Zod, JWT, bcryptjs |
 | 数据库 | SQLite（`server/prisma/lineweb.db`；切换 MySQL 只需改 schema provider + .env） |
 | 设计 | Apple Liquid Glass (WWDC 2025) — SVG feDisplacementMap 折射 + backdrop-filter 层叠 |
@@ -69,165 +60,194 @@ lineweb/
 ## Database Schema
 
 ```
-User (users)        Post (posts)
-├── id (PK)         ├── id (PK)
-├── username unique ├── title
-├── email unique    ├── content  (Markdown)
-├── password (bcrypt)├── summary?
-├── role (user/admin)├── slug unique
-├── createdAt       ├── published (default false)
-└── updatedAt       ├── authorId (FK → users.id)
-                    ├── createdAt
-                    └── updatedAt
+User (users)                  Post (posts)
+├── id (PK, 自增)             ├── id (PK, 自增)
+├── username (unique)         ├── title
+├── email (unique)            ├── content (Markdown)
+├── password (bcrypt, 12轮)   ├── summary?
+├── role ("user"|"admin")     ├── slug (unique)
+├── createdAt                 ├── published (default: false)
+└── updatedAt                 ├── authorId (FK → users.id)
+                              ├── createdAt
+                              └── updatedAt
 ```
 
 ## API Endpoints
 
-### Auth
+### Auth (`/api/auth`)
+| Method | Path | Auth | Returns | Zod |
+|--------|------|------|---------|-----|
+| POST | `/register` | — | `{ token, user }` | registerSchema |
+| POST | `/login` | — | `{ token, user }` | loginSchema |
+| GET | `/me` | Bearer | user object | — |
+
+**Zod 校验**: username 2-50 字符, email 最大 100 字符, password 最小 6 字符。
+Token 有效期 7 天。
+
+### Posts (`/api/posts`)
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | /api/auth/register | — | 注册 |
-| POST | /api/auth/login | — | 登录 → JWT |
-| GET | /api/auth/me | Bearer | 当前用户信息 |
+| GET | `/` | — | 已发布文章列表（分页） |
+| GET | `/:slug` | — | 单篇公开文章 |
+| GET | `/admin/all` | admin | 全部文章（含草稿，分页） |
+| GET | `/admin/:id` | admin | 单篇文章完整内容 |
+| POST | `/` | admin | 创建文章 |
+| PUT | `/:id` | admin | 更新文章（部分更新） |
+| DELETE | `/:id` | admin | 删除文章 |
 
-### Posts (公开)
+**路由顺序注意**: Express 注册顺序为 `/` → `/:slug` → `/admin/all` → `/admin/:id`。请求按顺序匹配，所以 `/admin/all` 不会被 `/:slug` 吞掉。
+
+### Wallpaper (`/api/bing-wallpaper`)
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | /api/posts?page=&limit= | 已发布文章列表 |
-| GET | /api/posts/:slug | 单篇文章详情 |
+| GET | `/` | 返回 `{ url, copyright }` |
 
-### Posts (管理 — 需 admin)
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /api/posts/admin/all | 全部文章（含草稿） |
-| GET | /api/posts/admin/:id | 单篇文章完整内容 |
-| POST | /api/posts | 创建文章 |
-| PUT | /api/posts/:id | 更新文章 |
-| DELETE | /api/posts/:id | 删除文章 |
-
-### Other
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /api/health | 健康检查 |
-| GET | /api/bing-wallpaper | Bing 每日壁纸 URL + 版权 |
+本质上代理 picsum.photos，每次请求随机返回高清壁纸。
 
 ## Design System — Liquid Glass
 
-### 三层玻璃结构
+全部 CSS 集中在单一文件 `client/src/styles/globals.css` 中，无其他样式文件。
 
-所有玻璃表面 `(.lg-surface / .lg-surface-strong / .lg-underlay)` 统一由三层堆叠：
+### 三层玻璃堆叠
+
+所有玻璃表面由 `::before / element / ::after` 三层构成：
 
 ```
-┌──────────────────────────────────────┐
-│  ::after         z-index:  1         │  镜面高光 (径向渐变)
-│  element         z-index:  0         │  SVG <feDisplacementMap> 折射 + tint
-│  ::before        z-index: -1         │  backdrop-filter: blur(14px) 毛玻璃底衬
-└──────────────────────────────────────┘
+┌───────────────────────────────────────┐
+│  ::after        z-index:  1          │  径向渐变镜面高光 (共享)
+│  element        z-index:  0          │  SVG feDisplacementMap 折射 + 底色
+│  ::before       z-index: -1          │  backdrop-filter: blur(14px) 毛玻璃 (共享)
+└───────────────────────────────────────┘
 ```
 
-- **底层 (::before)**: `blur(14px) saturate(180%)` — 强模糊提供可读性，无任何不透明填充
-- **中层 (element)**: `url(#lg-core)` SVG 滤镜做像素位移折射，模拟玻璃透镜扭曲
-- **顶层 (::after)**: `radial-gradient` 镜面高光，模拟环境光反射
+### SVG 滤镜 (内联在 `client/index.html <svg>` 中)
 
-### SVG 滤镜 (inline 在 index.html `<svg>` 中)
+| 滤镜 | 用途 | feTurbulence | feDisplacementMap scale | feGaussianBlur |
+|------|------|-------------|------------------------|----------------|
+| `#lg-core` | 标准玻璃 | 0.006 / 3 octaves | 35 | 0.4px |
+| `#lg-core-strong` | 厚玻璃 | 0.004 / 4 octaves | 60 | 0.6px |
+| `#lg-glow` | 泛光 | — | — | 12px blur |
 
-| 滤镜 | 用途 | feTurbulence | feDisplacementMap scale |
-|------|------|-------------|------------------------|
-| `#lg-core` | 标准玻璃 | 0.006 / 3 octaves | 35 |
-| `#lg-core-strong` | 厚玻璃 | 0.004 / 4 octaves | 60 |
-| `#lg-glow` | 泛光 | — | — |
+滤镜的关键设计：用 `feColorMatrix` 先将圆角半透明像素填为不透明，防止 `feDisplacementMap` 把透明边拉入作为白色伪影，再通过 `feComposite` 恢复原始 alpha。
 
 ### 核心 CSS 类
 
-| Class | 角色 | 含 underlay | 折射滤镜 |
-|-------|------|-------------|----------|
-| `.lg-surface` | 标准玻璃表面 | ✅ 自动 | `#lg-core` |
-| `.lg-surface-strong` | 厚玻璃卡片、表单、计算器 | ✅ 自动 | `#lg-core-strong` |
-| `.lg-underlay` | 混入类，给任何元素加毛玻璃底层 | — | — |
-| `.lg-input` | 玻璃风格输入框 | ❌ 但自带折射 | `#lg-core` |
+| Class | 角色 | 折射滤镜 | 含 underlay |
+|-------|------|---------|-------------|
+| `.lg-surface` | 标准玻璃卡片 | `#lg-core` | ✅ |
+| `.lg-surface-strong` | 厚玻璃（导航栏、表单、计算器） | `#lg-core-strong` | ✅ |
+| `.lg-surface-blur` | 厚模糊变体 (文章阅读) | `#lg-core` | — |
+| `.lg-surface-strong-blur` | 更厚模糊变体 | `#lg-core-strong` | — |
+| `.lg-underlay` | 仅底层模糊（混入类） | — | — |
+| `.lg-input` | 玻璃输入框 | `#lg-core` | ❌ 但自带 |
+| `.navbar` | 浮动导航栏 | `#lg-core` | ✅ |
 
-### CSS 变量
+### 按钮设计 (`.liquid-btn`)
 
-```
---lg-bg / --lg-bg-secondary      背景色
---lg-text-primary/secondary/tertiary  文字（WCAG AA+）
---lg-accent / --lg-accent-hover   主题色（亮#0071e3 / 暗#2997ff）
---lg-glass-bg / --lg-glass-border / --lg-glass-shadow  玻璃外观
---lg-radius-sm/md/lg/xl/full     圆角梯级
---lg-font / --lg-font-mono        字体
---lg-nav-height / --lg-max-width  布局常数
---lg-transition                   过渡曲线
-```
+| Variant | 背景 | 适用场景 |
+|---------|------|---------|
+| `primary` | 渐变色 + accent glow | 主要操作 |
+| `glass` | 毛玻璃半透明 + 边框 | 次要操作 |
+| `ghost` | 透明 + hover 时 | 轻量操作 |
+| `danger` | 红色渐变 | 删除/危险操作 |
 
-### 动画
+尺寸: `sm` / `md` / `lg`。每个按钮含 `.btn-flare` hover 炫光层。
 
-| Class | 动画 |
-|-------|------|
-| `.fade-in` | 0.5s 渐入 + 上移 |
-| `.glass-rise` | 0.6s 上移放大 + 模糊→清晰 |
+### 主题切换
 
-## Pages & Routes
+CSS 自定义属性 (`--lg-*`) 硬编码为暗色模式值。亮色模式通过 `[data-theme="light"]` 覆盖实现，跟随系统通过 `<meta name="color-scheme">` 监听。
+无 JS 样式切换开销，零闪烁初始化。
 
-| Path | Page | Notes |
-|------|------|-------|
-| `/` | HomePage | Bing 壁纸背景 + lg-surface-strong Hero |
-| `/features` | FeaturesPage | lg-surface 功能卡片网格 |
-| `/calculator` | CalculatorPage | lg-surface-strong 计算器面板 |
-| `/posts` | PostsPage | lg-surface 文章列表卡片 |
-| `/posts/:slug` | PostPage | lg-surface Markdown 阅读 |
-| `/login` | LoginPage | lg-surface-strong 表单 |
-| `/register` | RegisterPage | lg-surface-strong 表单 |
-| `/profile` | ProfilePage | ProtectedRoute |
-| `/admin` | AdminPage | AdminRoute 文章管理列表 |
-| `/admin/new` / `/admin/edit/:id` | EditorPage | AdminRoute |
+## Pages & Routes (React Router)
+
+| Path | Component | Guard | Notes |
+|------|-----------|-------|-------|
+| `/` | HomePage | — | 壁纸全屏背景 + Hero |
+| `/features` | FeaturesPage | — | 功能卡片网格 |
+| `/calculator` | CalculatorPage | — | 科学计算器 |
+| `/posts` | PostsPage | — | 文章列表 (分页) |
+| `/posts/:slug` | PostPage | — | Markdown 阅读 |
+| `/login` | LoginPage | — | 登录表单 |
+| `/register` | RegisterPage | — | 注册表单 |
+| `/profile` | ProfilePage | ProtectedRoute | 用户信息 |
+| `/admin` | AdminPage | AdminRoute | 文章管理列表 |
+| `/admin/new` | EditorPage | AdminRoute | 新建文章 |
+| `/admin/edit/:id` | EditorPage | AdminRoute | 编辑文章 |
+
+Provider 嵌套: `BrowserRouter > AuthProvider > WallpaperProvider > Routes`。
+
+## Auth Flow
+
+1. **注册/登录** → 后端返回 `{ token, user }` → 存 `localStorage("lineweb_token")`
+2. **后续请求** → `api.ts` 自动从 localStorage 读取 token，加到 `Authorization: Bearer` 头
+3. **页面刷新** → `AuthProvider` useEffect 检测 token 存在则调用 `/auth/me` 验证，失败则清除 token
+4. **路由保护** → `ProtectedRoute` (需登录) / `AdminRoute` (需 admin)，加载时显示 spinner，不满足时 `Navigate`
 
 ## Key Design Decisions
 
 | 决策 | 方案 | 原因 |
 |------|------|------|
-| Liquid Glass 实现 | SVG `<feDisplacementMap>` + `<feTurbulence>` → pixel displacement + `backdrop-filter` 三层堆叠 | 纯 CSS `backdrop-filter: blur()` 无法产生折射扭曲，只有位移滤镜能模拟玻璃透镜效果 |
-| 可读性方案 | 底层 `blur(14px)` 毛玻璃底衬，无任何不透明填充 | 保留背景色彩和光影的同时确保文字清晰；避免白底/黑底破坏玻璃通透感 |
-| 统一玻璃效果 | `.lg-surface` / `.lg-surface-strong` 两套 CSS 类，统一管理三层结构 | 所有玻璃元素（导航栏、卡片、表单、输入框）共用同一套参数，视觉一致 |
-| 首页壁纸 | 代理 Bing API (`/api/bing-wallpaper`)，前端 fetch 后设为 CSS background | 解决跨域，壁纸每日自动更新 |
-| 数据库 | SQLite（Prisma 抽象） | 零配置；切 MySQL 只需改 provider + DATABASE_URL |
-| 认证 | JWT (localStorage) + `Authorization: Bearer` | 无状态，前端 api.ts 自动注入 |
-| 主题 | CSS 自定义属性 + `[data-theme="*"]` + `<meta prefers-color-scheme>` | 零 JS 开销，切换零闪烁 |
-| npm 镜像 | `.npmrc` → `registry=https://registry.npmmirror.com` | 中国境内加速 |
+| Liquid Glass 实现 | SVG feDisplacementMap + backdrop-filter 三层堆叠 | 纯 blur() 无法产生折射扭曲 |
+| 可读性方案 | 底层 blur(14px) 毛玻璃底衬，无任何不透明填充 | 保留背景色彩，确保文字清晰 |
+| 单 CSS 文件 | globals.css 一千多行包含全部样式 | 零 CSS 文件碎片，单一 source of truth |
+| 壁纸轮换 | WallpaperContext fetch `/api/bing-wallpaper` → CSS background | 组件无关，Layout 统一管理 |
+| jQuery 替换 | 前端 api.ts 封装 fetch + JWT 自动注入 | 无外部 HTTP 库依赖 |
+| SQLite | Prisma 抽象 | 零配置开发；切 MySQL 改一行 provider |
+| 中国 npm | `.npmrc` → npmmirror.com | 境内安装加速 |
 
 ## Common Commands
 
 ```bash
-# 启动（两个终端）
+# 开发启动（需两个终端）
 cd server && npx tsx src/index.ts        # → localhost:3001
 cd client && npx vite                    # → localhost:5173
+# 或根目录：npm run dev  (concurrently 同时启动)
 
-# 数据库（在 server/ 下执行）
+# 生产构建
+cd client && npx vite build              # → client/dist/
+
+# 数据库 (在 server/ 下执行)
 npx prisma db push        # 同步 Schema → SQLite
-npx prisma db seed        # 填充种子
-npx prisma studio         # 数据浏览器
+npx prisma db seed        # 填充种子数据
+npx prisma studio         # Prisma 数据浏览器
 
-# TypeScript 检查
-(cd server && npx tsc --noEmit)
-(cd client && npx tsc --noEmit)
+# TypeScript 类型检查
+cd server && npx tsc --noEmit
+cd client && npx tsc --noEmit
 
-# 构建
-cd client && npx vite build
+# Vite 网络访问
+cd client && npx vite --host             # 局域网可访问
 ```
 
 ## Initial Setup
 
 ```bash
+# 根目录 + 子目录各装一次
 npm install && cd server && npm install && cd ../client && npm install && cd ..
+
+# 配好 server/.env（见下方）
+
+# 初始化数据库
 cd server && npx prisma db push && npx prisma db seed
-# 然后启动：npx tsx src/index.ts + npx vite
+
+# 分别启动前端和后端
+cd server && npx tsx src/index.ts
+# 新终端：
+cd client && npx vite
+```
+
+**`server/.env` 必须包含：**
+```env
+DATABASE_URL="file:./lineweb.db"
+JWT_SECRET="your-secret-key"
 ```
 
 默认管理员：`admin@lineweb.dev` / `admin123`
 
-## 添加新功能
+## Adding Features
 
-1. **后端**: 在 `server/src/routes/` 新建路由 → 在 `index.ts` 用 `app.use()` 挂载
-2. **前端页面**: 在 `pages/` 新建组件 → 在 `App.tsx` 的 `<Routes>` 中添加
-3. **受保护路由**: 用 `<ProtectedRoute>`（需登录）或 `<AdminRoute>`（需 admin）包裹
-4. **新数据库模型**: 在 `schema.prisma` 中添加 → `npx prisma db push`
-5. **玻璃效果**: 容器用 `className="lg-surface"`，重要面板用 `lg-surface-strong`，只需底层模糊的加 `lg-underlay`
+1. **后端路由**: 在 `server/src/routes/` 新建 → `index.ts` 中用 `app.use('/api/xxx', router)` 挂载
+2. **前端页面**: 在 `client/src/pages/` 新建 → `App.tsx` `<Routes>` 中添加 `<Route>` — 注意 Provider 嵌套顺序
+3. **路由保护**: 用 `<ProtectedRoute>`（需登录）或 `<AdminRoute>`（需 admin）包裹
+4. **新数据库模型**: `schema.prisma` 中添加 → `npx prisma db push`
+5. **玻璃效果**: 容器用 `className="lg-surface"`，重要面板用 `lg-surface-strong`；只需毛玻璃底层的加 `lg-underlay` 混入类
