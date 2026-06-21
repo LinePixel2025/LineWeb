@@ -1,13 +1,16 @@
 {
   "name": "lineweb",
   "private": true,
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
-    "build": "npm run build:server && npm run build:client",
-    "build:server": "cd server && npm run build",
-    "build:client": "cd client && npm run build",
+    "postinstall": "cd server && npm install && cd ../client && npm install",
+    "start": "cd server && npx prisma db push --accept-data-loss && npx prisma db seed && npx tsx src/index.ts",
+    "build": "cd client && npx vite build",
     "db:migrate": "cd server && npx prisma migrate dev",
     "db:push": "cd server && npx prisma db push",
     "db:seed": "cd server && npx prisma db seed",
