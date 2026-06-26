@@ -16,6 +16,7 @@ const EXCLUDE_CLASSES = [
   '.theme-toggle', '.admin-page-btn', '.wallpaper-refresh-btn',
   '.admin-header h1', '.admin-layout',
   '.post-title', '.profile-page',
+  '.comment-section', '.reply-form',
 ]
 
 // 防抖：N 个动画帧中只扫描一次

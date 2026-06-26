@@ -6,6 +6,7 @@ import { useWallpaper } from '../contexts/WallpaperContext'
 const navItems = [
   { path: '/admin', label: '文章管理', icon: '📝' },
   { path: '/admin/new', label: '写文章', icon: '✏️' },
+  { path: '/admin/comments', label: '评论管理', icon: '📬' },
   { path: '/admin/pages', label: '页面管理', icon: '📄' },
 ]
 

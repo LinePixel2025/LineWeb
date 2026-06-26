@@ -43,3 +43,13 @@ export const pageUpdateSchema = pageSchema.partial()
 export const updateSettingsSchema = z.object({
   settings: z.string().min(1, '设置不能为空'),
 })
+
+export const commentSchema = z.object({
+  content: z.string().min(1, '评论不能为空').max(2000, '评论过长'),
+  postId: z.number().int().positive(),
+  parentId: z.number().int().positive().optional(),
+})
+
+export const commentUpdateSchema = z.object({
+  content: z.string().min(1, '评论内容不能为空').max(2000, '评论过长'),
+})

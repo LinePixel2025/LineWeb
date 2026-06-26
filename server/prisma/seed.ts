@@ -55,6 +55,23 @@ async function main() {
     console.log('✓ 示例文章已创建')
   }
 
+  // 创建示例评论（仅首次，需要文章存在）
+  const existingComments = await prisma.comment.count()
+  if (existingComments === 0) {
+    const post = await prisma.post.findFirst({ where: { published: true } })
+    const adminUser = await prisma.user.findFirst({ where: { role: 'admin' } })
+    if (post && adminUser) {
+      await prisma.comment.create({
+        data: {
+          content: '欢迎来到 Line Web！这是一个示例评论，由系统自动创建。',
+          postId: post.id,
+          authorId: adminUser.id,
+        },
+      })
+      console.log('✓ 示例评论已创建')
+    }
+  }
+
   console.log('✓ 数据库已初始化')
 }
 
