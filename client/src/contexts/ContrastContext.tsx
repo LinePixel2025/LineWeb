@@ -4,10 +4,9 @@ import { useWallpaper } from './WallpaperContext'
 
 const ContrastContext = createContext(null)
 
-/* 需要反色的文本元素 — 包括管理界面和文章组件的所有文本 */
+/* 需要反色的文本元素 */
 const SCAN_SELECTOR = [
   'h1, h2, h3, h4, h5, h6, p, span, a, button, li, blockquote, label, th, td, small, strong, em, code, pre',
-  '.admin-post-title, .admin-post-date, .admin-badge, .admin-ellipsis',
   '.calc-expression, .calc-display',
 ].join(', ')
 
@@ -15,7 +14,7 @@ const SCAN_SELECTOR = [
 const EXCLUDE_CLASSES = [
   '.article-content', '.liquid-btn', '.lg-input', '.calc-btn',
   '.theme-toggle', '.admin-page-btn', '.wallpaper-refresh-btn',
-  '.admin-header h1',
+  '.admin-header h1', '.admin-layout',
   '.post-title',
 ]
 

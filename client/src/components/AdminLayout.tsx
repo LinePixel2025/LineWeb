@@ -109,7 +109,7 @@ export default function AdminLayout() {
               position: 'fixed',
               inset: 0,
               zIndex: 1,
-              background: 'linear-gradient(180deg, rgba(0,0,0,0.50) 0%, rgba(0,0,0,0.25) 50%, rgba(0,0,0,0.55) 100%)',
+              background: 'linear-gradient(180deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.40) 50%, rgba(0,0,0,0.70) 100%)',
               opacity: loaded ? 1 : 0,
               transition: 'opacity 0.8s ease',
             }}
