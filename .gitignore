@@ -8,4 +8,5 @@ coverage/
 .claude/
 *.db
 server/prisma/lineweb.db
+server/prisma/schema.generated.prisma
 

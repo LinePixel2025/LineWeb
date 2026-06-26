@@ -36,8 +36,10 @@ lineweb/                       # 根 monorepo (concurrently 管理双端)
 ├── server/                    # 后端 (Express + Prisma)
 │   ├── .env                   # DATABASE_URL + JWT_SECRET (必填)
 │   ├── prisma/
-│   │   ├── schema.prisma      # User + Post + Page 模型 (PostgreSQL)
+│   │   ├── schema.prisma      # User + Post + Page 模型（SQLite 本地开发）
 │   │   └── seed.ts            # 管理员 admin@lineweb.dev + 示例文章
+│   ├── scripts/               # Railway 部署脚本
+│   │   └── generate-pg-schema.js  # schema.prisma → PostgreSQL 版本
 │   └── src/
 │       ├── config/index.ts    # Zod schema + 环境变量
 │       ├── lib/prisma.ts      # 单例 PrismaClient
@@ -54,7 +56,7 @@ lineweb/                       # 根 monorepo (concurrently 管理双端)
 |------|------|
 | 前端 | React 19, Vite 6, TypeScript 5, React Router 7 |
 | 后端 | Express 4, Prisma 6, Zod, JWT, bcryptjs |
-| 数据库 | PostgreSQL（部署 Railway 自动注入 `DATABASE_URL`；本地开发改 `.env` 即可） |
+| 数据库 | PostgreSQL（部署） / SQLite（本地） — 见 `schema.prisma` 注释 |
 | 设计 | Apple Liquid Glass (WWDC 2025) — SVG feDisplacementMap 折射 + backdrop-filter 层叠 |
 
 ## Database Schema
@@ -260,15 +262,13 @@ JWT_SECRET="your-secret-key"
 
 ## Deployment (Railway)
 
-根 `package.json` 的 `start` 脚本是 Railway 入口。部署使用 PostgreSQL schema 文件（`schema.pg.prisma`）：
+根 `package.json` 的 `start` 脚本是 Railway 入口。部署时会从 `schema.prisma` 自动生成 PostgreSQL 版本：
 
 ```bash
 # Railway 执行流程：
-npm run build                                    # → client/dist/（Vite 构建前端）
-cd server && npx prisma generate --schema ...    # 用 PostgreSQL schema 生成客户端
-cd server && npx prisma db push --schema ...     # 同步数据库 Schema → PostgreSQL
-cd server && npx prisma db seed --schema ...     # 填充种子数据
-NODE_ENV=production npx tsx ...                  # 启动 Express（同时 serve 前端）
+npm run build                              # → client/dist/（Vite 构建前端）
+cd server && node scripts/generate-pg-schema.js  # 生成临时 PG schema + 执行 db push + seed
+NODE_ENV=production npx tsx src/index.ts   # 启动 Express（同时 serve 前端）
 ```
 
 ### 首次部署步骤
@@ -288,9 +288,13 @@ NODE_ENV=production npx tsx ...                  # 启动 Express（同时 serve
 
 > **注意**：不再需要 Volume。PostgreSQL 由 Railway 托管，数据自动持久化。
 
-### `DATABASE_URL`
+### `DATABASE_URL`（部署）
 
 由 Railway 自动注入，格式为 `postgresql://user:pass@host:5432/railway`。不需要手动在 Variables 中设置。
+
+### `DATABASE_URL`（本地）
+
+直接改 `server/.env`：
 
 ### 注意点
 
@@ -303,7 +307,7 @@ NODE_ENV=production npx tsx ...                  # 启动 Express（同时 serve
 1. **后端路由**: 在 `server/src/routes/` 新建 → `index.ts` 中用 `app.use('/api/xxx', router)` 挂载
 2. **前端页面**: 在 `client/src/pages/` 新建 → `App.tsx` `<Routes>` 中添加 `<Route>` — 注意 Provider 嵌套顺序
 3. **路由保护**: 用 `<ProtectedRoute>`（需登录）或 `<AdminRoute>`（需 admin）包裹
-4. **新数据库模型**: `schema.prisma` 中添加 → `npx prisma db push`
+4. **新数据库模型**: 只改 `schema.prisma`（一个文件）。部署时自动生成 PG 版本
 5. **玻璃效果**: 容器用 `className="lg-surface"`，重要面板用 `lg-surface-strong`；只需毛玻璃底层的加 `lg-underlay` 混入类
 
 ## Important Patterns & Gotchas

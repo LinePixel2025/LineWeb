@@ -4,41 +4,28 @@ import bcrypt from 'bcryptjs'
 const prisma = new PrismaClient()
 
 async function main() {
-  // 创建默认管理员
-  const adminPassword = await bcrypt.hash('admin123', 12)
-  await prisma.user.upsert({
-    where: { username: 'admin' },
-    update: {
-      email: 'admin@lineweb.dev',
-      password: adminPassword,
-    },
-    create: {
-      username: 'admin',
-      email: 'admin@lineweb.dev',
-      password: adminPassword,
-      role: 'admin',
-    },
-  })
+  // 检查用户是否已存在，避免每次部署都跑 bcrypt（~700ms 浪费）
+  const existingAdmin = await prisma.user.findUnique({ where: { username: 'admin' } })
+  const existingLine = await prisma.user.findUnique({ where: { username: 'Line' } })
 
-  // 创建第二个管理员：Line
-  const linePassword = await bcrypt.hash('liang798119', 12)
-  await prisma.user.upsert({
-    where: { username: 'Line' },
-    update: {
-      email: 'line@lineweb.dev',
-      password: linePassword,
-    },
-    create: {
-      username: 'Line',
-      email: 'line@lineweb.dev',
-      password: linePassword,
-      role: 'admin',
-    },
-  })
+  if (!existingAdmin) {
+    const password = await bcrypt.hash('admin123', 12)
+    await prisma.user.create({
+      data: { username: 'admin', email: 'admin@lineweb.dev', password, role: 'admin' },
+    })
+    console.log('✓ 管理员 admin 已创建')
+  }
+  if (!existingLine) {
+    const password = await bcrypt.hash('liang798119', 12)
+    await prisma.user.create({
+      data: { username: 'Line', email: 'line@lineweb.dev', password, role: 'admin' },
+    })
+    console.log('✓ 管理员 Line 已创建')
+  }
 
-  // 创建示例文章
-  const existing = await prisma.post.count()
-  if (existing === 0) {
+  // 创建示例文章（仅首次）
+  const existingPosts = await prisma.post.count()
+  if (existingPosts === 0) {
     await prisma.post.create({
       data: {
         title: '欢迎来到 Line Web',
@@ -65,6 +52,7 @@ async function main() {
         authorId: 1,
       },
     })
+    console.log('✓ 示例文章已创建')
   }
 
   console.log('✓ 数据库已初始化')
