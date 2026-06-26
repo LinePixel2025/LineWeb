@@ -1,6 +1,32 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../lib/api'
+import LiquidButton from '../components/glass/LiquidButton'
+import LiquidGlass from '../components/glass/LiquidGlass'
+
+/* ---------- helpers ---------- */
+
+function toSlug(t: string) {
+  return t
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .trim()
+}
+
+/* ---------- types ---------- */
+
+interface PostData {
+  id: number
+  title: string
+  content: string
+  summary: string | null
+  slug: string
+  published: boolean
+}
+
+/* ---------- component ---------- */
 
 export default function EditorPage() {
   const { id } = useParams<{ id: string }>()
@@ -12,103 +38,165 @@ export default function EditorPage() {
   const [summary, setSummary] = useState('')
   const [content, setContent] = useState('')
   const [published, setPublished] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [fetching, setFetching] = useState(isEdit)
   const [error, setError] = useState('')
 
+  /* load existing post */
   useEffect(() => {
     if (!id) return
-    api.get<{ id: number; title: string; content: string; summary: string | null; slug: string; published: boolean }>(`/posts/admin/${id}`)
-      .then(d => { setTitle(d.title); setSlug(d.slug); setSummary(d.summary || ''); setContent(d.content); setPublished(d.published) })
+    api.get<PostData>(`/posts/admin/${id}`)
+      .then(d => {
+        setTitle(d.title)
+        setSlug(d.slug)
+        setSummary(d.summary ?? '')
+        setContent(d.content)
+        setPublished(d.published)
+      })
       .catch(err => setError(err.message))
       .finally(() => setFetching(false))
   }, [id])
 
-  const genSlug = (t: string) => t.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').trim()
-
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setError(''); setLoading(true)
-    const finalSlug = slug || genSlug(title)
-    if (!finalSlug) { setError('请输入标题或 Slug'); setLoading(false); return }
+    e.preventDefault()
+    setError('')
+    setSaving(true)
+
+    const finalSlug = slug || toSlug(title)
+    if (!finalSlug) {
+      setError('请输入标题或 Slug')
+      setSaving(false)
+      return
+    }
+
+    const payload = {
+      title,
+      slug: finalSlug,
+      summary: summary || title.substring(0, 200),
+      content,
+      published,
+    }
+
     try {
-      if (isEdit) await api.put(`/posts/${id}`, { title, slug: finalSlug, summary: summary || title.substring(0, 200), content, published })
-      else await api.post('/posts', { title, slug: finalSlug, summary: summary || title.substring(0, 200), content, published })
+      if (isEdit) {
+        await api.put(`/posts/${id}`, payload)
+      } else {
+        await api.post('/posts', payload)
+      }
       navigate('/admin')
-    } catch (err: any) { setError(err.message || '保存失败') } finally { setLoading(false) }
+    } catch (err: any) {
+      setError(err.message || '保存失败')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  if (fetching) return <div className="page container" style={{ display: 'flex', justifyContent: 'center' }}><div className="spinner" /></div>
+  /* ------- loading state ------- */
+  if (fetching) {
+    return (
+      <div className="page container" style={{ display: 'flex', justifyContent: 'center' }}>
+        <div className="spinner" />
+      </div>
+    )
+  }
 
   return (
-    <div className="page container glass-rise" style={{ maxWidth: '720px' }}>
-      <h1 style={{ marginBottom: '24px' }}>{isEdit ? '编辑文章' : '写文章'}</h1>
+    <div className="page container" style={{ maxWidth: 720, margin: '0 auto', paddingTop: 'calc(var(--lg-nav-height) + var(--lg-safe-top) + 24px)' }}>
+      <LiquidGlass
+        variant="blur"
+        chromatic={false}
+        className="glass-rise editor-page-glass"
+      >
+      <h1 style={{ marginBottom: 16, fontSize: '1.5rem' }}>{isEdit ? '编辑文章' : '写文章'}</h1>
 
-      {error && (
-        <div style={{
-          background: 'rgba(255,59,48,0.12)', color: 'var(--lg-danger)',
-          padding: '10px 14px', borderRadius: 'var(--lg-radius-md)', marginBottom: '16px', fontSize: '0.88rem',
-        }}>
-          {error}
+      {/* error banner */}
+      {error && <div className="editor-error">{error}</div>}
+
+      <form onSubmit={handleSubmit} className="editor-form">
+        <div className="editor-field">
+          <label className="editor-label">标题</label>
+          <input
+            className="lg-input"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            required
+            placeholder="文章标题"
+          />
         </div>
-      )}
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div className="lg-surface-strong lg-surface-strong-blur" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div>
-            <label className="text-tertiary" style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem' }}>标题</label>
-            <input className="lg-input" value={title} onChange={e => setTitle(e.target.value)} required placeholder="文章标题" />
-          </div>
-          <div>
-            <label className="text-tertiary" style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem' }}>Slug</label>
-            <input className="lg-input" value={slug} onChange={e => setSlug(e.target.value)} placeholder="article-slug" />
-          </div>
-          <div>
-            <label className="text-tertiary" style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem' }}>摘要</label>
-            <input className="lg-input" value={summary} onChange={e => setSummary(e.target.value)} placeholder="文章摘要（可选）" />
-          </div>
-          <div>
-            <label className="text-tertiary" style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem' }}>内容（Markdown）</label>
-            <textarea
-              className="lg-input"
-              value={content} onChange={e => setContent(e.target.value)}
-              required placeholder="使用 Markdown 编写..."
-              style={{ minHeight: '300px', fontFamily: 'var(--lg-font-mono)', fontSize: '0.9rem', lineHeight: 1.6, resize: 'vertical' }}
+        <div className="editor-field">
+          <label className="editor-label">Slug</label>
+          <input
+            className="lg-input"
+            value={slug}
+            onChange={e => setSlug(e.target.value)}
+            placeholder={title ? toSlug(title) : 'article-slug'}
+          />
+        </div>
+
+        <div className="editor-field">
+          <label className="editor-label">摘要</label>
+          <input
+            className="lg-input"
+            value={summary}
+            onChange={e => setSummary(e.target.value)}
+            placeholder="文章摘要（可选）"
+          />
+        </div>
+
+        <div className="editor-field">
+          <label className="editor-label">
+            内容 <span className="text-tertiary" style={{ fontWeight: 400 }}>— HTML</span>
+          </label>
+          <textarea
+            className="lg-input editor-textarea"
+            value={content}
+            onChange={e => setContent(e.target.value)}
+            required
+            placeholder="使用 HTML 编写..."
+          />
+        </div>
+
+        {/* preview */}
+        <LiquidGlass variant="regular" chromatic={false} className="editor-preview">
+          <div className="text-tertiary editor-preview-label">预览</div>
+          {content ? (
+            content.length > 1500 ? (
+              <div className="article-content" dangerouslySetInnerHTML={{
+                __html: content.slice(0, 1500) + '\n\n<hr>\n<p><em>（预览截断 — 继续输入可看到更多）</em></p>'
+              }} />
+            ) : (
+              <div className="article-content" dangerouslySetInnerHTML={{ __html: content }} />
+            )
+          ) : (
+            <p className="text-secondary" style={{ fontSize: '0.85rem' }}>
+              输入 HTML 内容后预览将显示在此处
+            </p>
+          )}
+        </LiquidGlass>
+
+        {/* controls */}
+        <div className="editor-controls">
+          <label className="editor-checkbox">
+            <input
+              type="checkbox"
+              checked={published}
+              onChange={e => setPublished(e.target.checked)}
             />
-          </div>
-          <div className="lg-surface-blur" style={{ padding: '16px', maxHeight: '200px', overflowY: 'auto', borderRadius: 'var(--lg-radius-md)' }}>
-            <div className="text-tertiary" style={{ fontSize: '0.78rem', marginBottom: '8px' }}>预览</div>
-            <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--lg-font)' }}>{content.slice(0, 500)}{content.length > 500 ? '...' : ''}</pre>
-          </div>
-        </div>
+            发布
+          </label>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 4px' }}>
-          <input type="checkbox" id="published" checked={published} onChange={e => setPublished(e.target.checked)}
-            style={{ width: '18px', height: '18px', accentColor: 'var(--lg-accent)' }} />
-          <label htmlFor="published" style={{ fontSize: '0.9rem' }}>发布</label>
-        </div>
-        <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
-          <button type="submit" disabled={loading}
-            style={{
-              padding: '14px 32px', borderRadius: '9999px', fontWeight: 500, fontSize: '1rem',
-              background: 'linear-gradient(135deg, var(--lg-accent), #40a9ff)', color: 'white', border: 'none',
-              cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.5 : 1,
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 12px var(--lg-accent-glow)',
-              fontFamily: 'var(--lg-font)',
-            }}
-          >
-            {loading ? '保存中...' : (isEdit ? '更新文章' : '发布文章')}
-          </button>
-          <button type="button" onClick={() => navigate('/admin')}
-            style={{
-              padding: '14px 32px', borderRadius: '9999px', fontWeight: 500, fontSize: '1rem',
-              background: 'var(--lg-glass-bg)', color: 'var(--lg-text-primary)', border: '1px solid var(--lg-glass-border)',
-              cursor: 'pointer', fontFamily: 'var(--lg-font)',
-            }}
-          >
-            取消
-          </button>
+          <div className="editor-actions">
+            <LiquidButton type="submit" variant="primary" size="lg" disabled={saving}>
+              {saving ? '保存中…' : isEdit ? '更新文章' : '发布文章'}
+            </LiquidButton>
+            <LiquidButton type="button" variant="glass" size="lg" onClick={() => navigate('/admin')}>
+              取消
+            </LiquidButton>
+          </div>
         </div>
       </form>
+      </LiquidGlass>
     </div>
   )
 }

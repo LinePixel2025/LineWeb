@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import LiquidGlass from '../components/glass/LiquidGlass'
 
 type Operator = '+' | '-' | '*' | '/' | null
 
@@ -179,7 +180,7 @@ export default function CalculatorPage() {
 
   return (
     <div className="page calc-page">
-      <div className="calc-container lg-surface-strong lg-surface-strong-blur">
+      <LiquidGlass variant="blur" chromatic={false} className="calc-container" style={{ padding: '20px' }}>
         {/* Display */}
         <div className="calc-display-wrap">
           <div className="calc-expression">
@@ -217,12 +218,10 @@ export default function CalculatorPage() {
           <CalcBtn label="." onClick={inputDecimal} />
           <CalcBtn label="=" onClick={equals} variant="eq" />
         </div>
-      </div>
+      </LiquidGlass>
     </div>
   )
 }
-
-/* ====================== Button Component ====================== */
 
 function CalcBtn({ label, onClick, variant = 'num' }: {
   label: string

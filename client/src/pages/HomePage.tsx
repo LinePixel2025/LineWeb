@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../lib/api'
 import { useWallpaper } from '../contexts/WallpaperContext'
+import LiquidGlass from '../components/glass/LiquidGlass'
 
 interface PostPreview {
   id: number
@@ -37,8 +38,9 @@ export default function HomePage() {
         }}
         className="home-section"
       >
-        <div
-          className="lg-surface-strong glass-rise"
+        <LiquidGlass
+          variant="strong"
+          chromatic={false}
           style={{
             padding: '56px 48px',
             maxWidth: '520px',
@@ -70,7 +72,7 @@ export default function HomePage() {
               探索功能
             </Link>
           </div>
-        </div>
+        </LiquidGlass>
       </section>
 
       {/* Latest Posts Preview */}
@@ -89,32 +91,27 @@ export default function HomePage() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {recentPosts.map((post, i) => (
-              <Link
-                key={post.id}
-                to={`/posts/${post.slug}`}
-                className="lg-surface"
-                style={{
-                  display: 'block',
-                  padding: '24px',
-                  textDecoration: 'none',
-                  color: 'inherit',
-                  animation: `fadeIn 0.4s ease-out ${i * 0.08}s both`,
-                  transition: 'transform 0.25s ease',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)' }}
-                onMouseLeave={e => { e.currentTarget.style.transform = 'none' }}
-              >
-                <h3 style={{ marginBottom: '4px' }}>{post.title}</h3>
-                {post.summary && (
-                  <p className="text-secondary" style={{ marginTop: '8px', fontSize: '0.92rem' }}>
-                    {post.summary}
-                  </p>
-                )}
-                <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
-                  <span className="text-tertiary">{post.author.username}</span>
-                  <span className="text-tertiary">{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
-                </div>
-              </Link>
+              <LiquidGlass key={post.id} variant="blur" chromatic={false} style={{ padding: '24px', animation: `fadeIn 0.4s ease-out ${i * 0.08}s both` }}>
+                <Link
+                  to={`/posts/${post.slug}`}
+                  style={{
+                    display: 'block',
+                    textDecoration: 'none',
+                    color: 'inherit',
+                  }}
+                >
+                  <h3 style={{ marginBottom: '4px' }}>{post.title}</h3>
+                  {post.summary && (
+                    <p className="text-secondary" style={{ marginTop: '8px', fontSize: '0.92rem' }}>
+                      {post.summary}
+                    </p>
+                  )}
+                  <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
+                    <span className="text-tertiary">{post.author.username}</span>
+                    <span className="text-tertiary">{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
+                  </div>
+                </Link>
+              </LiquidGlass>
             ))}
           </div>
 

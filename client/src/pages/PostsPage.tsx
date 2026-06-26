@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../lib/api'
+import LiquidGlass from '../components/glass/LiquidGlass'
 
 interface PostSummary {
   id: number; title: string; summary: string | null
@@ -27,32 +28,29 @@ export default function PostsPage() {
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}><div className="spinner" /></div>
       ) : data?.posts.length === 0 ? (
-        <div className="lg-surface" style={{ textAlign: 'center', padding: '60px 24px' }}>
+        <LiquidGlass variant="regular" chromatic={false} style={{ textAlign: 'center', padding: '60px 24px' }}>
           <p className="text-secondary">暂无文章</p>
-        </div>
+        </LiquidGlass>
       ) : (
         <>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {data?.posts.map((post, i) => (
-              <Link
-                key={post.id} to={`/posts/${post.slug}`}
-                className="lg-surface lg-surface-blur"
-                style={{
-                  display: 'block', padding: '24px',
-                  textDecoration: 'none', color: 'inherit',
-                  animation: `fadeIn 0.4s ease-out ${i * 0.05}s both`,
-                  transition: 'transform 0.25s ease',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)' }}
-                onMouseLeave={e => { e.currentTarget.style.transform = 'none' }}
-              >
-                <h3>{post.title}</h3>
-                {post.summary && <p className="text-secondary" style={{ marginTop: '8px', fontSize: '0.92rem' }}>{post.summary}</p>}
-                <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
-                  <span className="text-tertiary">{post.author.username}</span>
-                  <span className="text-tertiary">{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
-                </div>
-              </Link>
+              <LiquidGlass key={post.id} variant="blur" chromatic={false} style={{ padding: '24px', animation: `fadeIn 0.4s ease-out ${i * 0.05}s both` }}>
+            <Link
+              to={`/posts/${post.slug}`}
+              style={{
+                display: 'block',
+                textDecoration: 'none', color: 'inherit',
+              }}
+            >
+              <h3>{post.title}</h3>
+              {post.summary && <p className="text-secondary" style={{ marginTop: '8px', fontSize: '0.92rem' }}>{post.summary}</p>}
+              <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
+                <span className="text-tertiary">{post.author.username}</span>
+                <span className="text-tertiary">{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
+              </div>
+            </Link>
+          </LiquidGlass>
             ))}
           </div>
 

@@ -1,51 +1,46 @@
-import React, { useRef, useState, useEffect, useMemo } from 'react'
-
-const THICKNESS_MAP = {
-  thin: { refraction: '25', blur: '1.7px', glow: '8px', shadowOpacity: 0.2 },
-  medium: { refraction: '45', blur: '1.7px', glow: '12px', shadowOpacity: 0.35 },
-  thick: { refraction: '70', blur: '1.9px', glow: '18px', shadowOpacity: 0.5 },
-} as const
-
-function hexToRgb(hex: string): string {
-  const clean = hex.replace('#', '')
-  const r = parseInt(clean.substring(0, 2), 16)
-  const g = parseInt(clean.substring(2, 4), 16)
-  const b = parseInt(clean.substring(4, 6), 16)
-  return `${r}, ${g}, ${b}`
-}
+import React, { useRef, useState, useEffect } from 'react'
 
 export interface LiquidGlassProps {
   children: React.ReactNode
-  variant?: 'regular' | 'strong' | 'clear'
-  thickness?: 'thin' | 'medium' | 'thick'
-  tint?: string
+  /** strong — 对应 lg-surface-strong；regular — 对应 lg-surface；blur — 对应 lg-surface-strong-blur */
+  variant?: 'regular' | 'strong' | 'blur'
   className?: string
   style?: React.CSSProperties
-  /** Enable interactive light follow (mouse/touch) */
+  /** Enable interactive specular highlight (mouse/touch follow) */
   interactive?: boolean
-  /** Show chromatic aberration edge effect */
+  /** Show chromatic aberration edge refraction */
   chromatic?: boolean
 }
 
 /**
- * Liquid Glass component
- * Refracts background content, applies specular highlights,
- * and simulates real glass optical properties.
+ * Liquid Glass component — 利用已有的 CSS 类实现玻璃效果，
+ * 同时叠加交互式镜面高光和色差边缘。
+ *
+ * 折射和毛玻璃由 CSS lg-surface / lg-surface-strong 类的
+ * backdrop-filter + ::before 驱动，保证与纯 CSS 用法效果完全一致。
+ *
+ * 结构：
+ *   ┌──────────────────────────────┐
+ *   │  interactive highlight (z:3)  │  鼠标跟随镜面高光
+ *   │  content (z:2)                │  子内容
+ *   │  rim glow (z:1)               │  上边缘泛光
+ *   │  CSS element (z:0)            │  SVG refr + blur + tint + shadow
+ *   │  CSS ::before (z:-1)          │  heavy blur(16.8px) frosted underlay
+ *   │  CSS ::after (z:1)            │  static specular (被 interactive 覆盖)
+ *   └──────────────────────────────┘
  */
 export default function LiquidGlass({
   children,
   variant = 'regular',
-  thickness = 'medium',
-  tint,
   className = '',
   style,
   interactive = true,
   chromatic = true,
 }: LiquidGlassProps) {
   const ref = useRef<HTMLDivElement>(null)
-  const [lightPos, setLightPos] = useState({ x: 50, y: 50 })
+  const [lightPos, setLightPos] = useState({ x: 30, y: 20 })
 
-  // Mouse-following light effect
+  // Mouse-following specular highlight
   useEffect(() => {
     if (!interactive) return
     const el = ref.current
@@ -61,9 +56,10 @@ export default function LiquidGlass({
         cx = e.clientX - rect.left
         cy = e.clientY - rect.top
       }
-      const x = (cx / rect.width) * 100
-      const y = (cy / rect.height) * 100
-      setLightPos({ x: Math.max(5, Math.min(95, x)), y: Math.max(5, Math.min(95, y)) })
+      setLightPos({
+        x: Math.max(5, Math.min(95, (cx / rect.width) * 100)),
+        y: Math.max(5, Math.min(95, (cy / rect.height) * 100)),
+      })
     }
 
     el.addEventListener('mousemove', onMove)
@@ -74,98 +70,79 @@ export default function LiquidGlass({
     }
   }, [interactive])
 
-  const t = THICKNESS_MAP[thickness]
+  const isStrong = variant === 'strong' || variant === 'blur'
+  const isBlur = variant === 'blur'
 
-  // Dynamic specular highlight — follows cursor
-  const specularGradient = interactive
-    ? `radial-gradient(circle at ${lightPos.x}% ${lightPos.y}%, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.08) 30%, transparent 60%)`
-    : 'radial-gradient(circle at 30% 20%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.06) 40%, transparent 60%)'
+  // 使用 CSS class 驱动玻璃效果 — 确保与全局样式 100% 一致
+  const glassClass = isBlur
+    ? 'lg-surface-strong lg-surface-strong-blur'
+    : isStrong
+      ? 'lg-surface-strong'
+      : 'lg-surface'
 
-  // Tint, if provided
-  const tintBg = useMemo(
-    () => (tint ? `rgba(${hexToRgb(tint)}, 0.15)` : undefined),
-    [tint],
-  )
+  // 交互式镜面高光 — 替代 CSS ::after 静态高光
+  const specularGrad = interactive
+    ? `radial-gradient(circle at ${lightPos.x}% ${lightPos.y}%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.08) 30%, transparent 60%)`
+    : 'transparent'
+
+  const allClass = `${glassClass}${interactive ? '' : ' lg-surface-no-specular'} ${className}`.trim()
 
   return (
     <div
       ref={ref}
-      className={`liquid-glass ${variant} ${className}`}
+      className={allClass}
       style={{
-        position: 'relative',
-        borderRadius: 'var(--lg-radius-xl)',
-        overflow: 'hidden',
-
-        // === Core glass surface ===
-        background: tintBg || 'rgba(255,255,255,0.06)',
-        backdropFilter: `url(#lg-core) blur(${t.blur}) saturate(160%) brightness(1.05)`,
-        WebkitBackdropFilter: `url(#lg-core) blur(${t.blur}) saturate(160%) brightness(1.05)`,
-
-        // === Border — glass edge ===
-        border: '1px solid rgba(255,255,255,0.20)',
-        borderRightColor: 'rgba(255,255,255,0.12)',
-        borderBottomColor: 'rgba(255,255,255,0.08)',
-
-        // === Box shadow — dynamic lens shadow ===
-        boxShadow: `
-          inset 0 0 0 0.5px rgba(255,255,255,0.15),
-          inset 0 2px ${t.glow} rgba(255,255,255,0.08),
-          0 ${4 + (thickness === 'thick' ? 8 : 0)}px ${16 + (thickness === 'thick' ? 16 : 0)}px rgba(0,0,0,${t.shadowOpacity}),
-          0 2px 4px rgba(0,0,0,${t.shadowOpacity * 0.6})
-        `,
-
+        // 仅覆盖必要的结构样式，背景/滤镜/阴影均由 CSS 类控制
         ...style,
       }}
     >
-      {/* Specular highlight overlay — follows cursor */}
+      {/* Interactive specular highlight — 鼠标跟随高光，覆盖 CSS ::after */}
       <div
-        className="lg-specular"
         style={{
           position: 'absolute',
           inset: 0,
           borderRadius: 'inherit',
-          background: specularGradient,
           pointerEvents: 'none',
-          zIndex: 2,
-          transition: 'background 0.15s ease-out',
+          zIndex: 3,
+          background: specularGrad,
+          transition: interactive ? 'background 0.15s ease-out' : 'none',
         }}
       />
 
-      {/* Top edge rim light */}
-      <div
-        className="lg-rim"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          borderRadius: 'inherit',
-          background: 'linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 40%, transparent 80%, rgba(0,0,0,0.04) 100%)',
-          pointerEvents: 'none',
-          zIndex: 1,
-        }}
-      />
+      {/* Top edge rim glow */}
+      {interactive && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: 'inherit',
+            pointerEvents: 'none',
+            zIndex: 1,
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.10) 0%, transparent 40%)',
+          }}
+        />
+      )}
 
       {/* Chromatic aberration edge refraction */}
       {chromatic && (
         <>
           <div
-            className="lg-chromatic-r"
             style={{
               position: 'absolute',
               inset: -2,
               borderRadius: 'inherit',
-              border: '1.5px solid rgba(255, 50, 50, 0.08)',
+              border: '1.5px solid rgba(255,50,50,0.06)',
               pointerEvents: 'none',
               zIndex: 0,
               transform: 'translateX(1.5px)',
             }}
           />
           <div
-            className="lg-chromatic-b"
             style={{
               position: 'absolute',
               inset: -2,
               borderRadius: 'inherit',
-              border: '1.5px solid rgba(50, 100, 255, 0.08)',
+              border: '1.5px solid rgba(50,100,255,0.06)',
               pointerEvents: 'none',
               zIndex: 0,
               transform: 'translateX(-1.5px)',
@@ -175,7 +152,7 @@ export default function LiquidGlass({
       )}
 
       {/* Content */}
-      <div style={{ position: 'relative', zIndex: 3, isolation: 'isolate' }}>
+      <div style={{ position: 'relative', zIndex: 2 }}>
         {children}
       </div>
     </div>

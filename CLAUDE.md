@@ -17,7 +17,7 @@ lineweb/                       # 根 monorepo (concurrently 管理双端)
 │   └── src/
 │       ├── components/
 │       │   ├── Navbar.tsx      # 浮动导航栏 (.navbar + lg-underlay)
-│       │   ├── Layout.tsx      # 路由出口 + 壁纸背景层
+│       │   ├── Layout.tsx      # 路由出口 + 壁纸背景层 + 渐变叠加 + 版权
 │       │   ├── Guards.tsx      # ProtectedRoute / AdminRoute
 │       │   └── glass/          # Liquid Glass 高阶组件 (React)
 │       │       ├── LiquidGlass.tsx
@@ -26,10 +26,11 @@ lineweb/                       # 根 monorepo (concurrently 管理双端)
 │       │       └── index.ts
 │       ├── contexts/
 │       │   ├── AuthContext.tsx       # JWT 认证 (useAuth hook)
-│       │   └── WallpaperContext.tsx  # 壁纸 URL 状态 (useWallpaper hook)
-│       ├── lib/api.ts          # 自动注入 Bearer token 的 fetch 封装
-│       ├── pages/
-│       ├── styles/
+│       │   ├── WallpaperContext.tsx  # 壁纸 URL + 版权 + loading/loaded/refresh (useWallpaper hook)
+│       │   └── ContrastContext.tsx   # 逐像素位置感知字体反色 (data-ac 属性扫描)
+│       ├── lib/api.ts          # 自动注入 Bearer token 的 fetch 封装 (get/post/put/delete)
+│       ├── pages/              # 每页一个文件，EditorPage 使用 HTML textarea 编辑器
+│       └── styles/
 │       │   └── globals.css     # 全部设计系统 (无其他 CSS 文件)
 │       └── main.tsx
 ├── server/                    # 后端 (Express + Prisma)
@@ -52,7 +53,6 @@ lineweb/                       # 根 monorepo (concurrently 管理双端)
 | 层级 | 技术 |
 |------|------|
 | 前端 | React 19, Vite 6, TypeScript 5, React Router 7 |
-| Markdown | react-markdown + rehype-highlight + remark-gfm |
 | 后端 | Express 4, Prisma 6, Zod, JWT, bcryptjs |
 | 数据库 | SQLite（`server/prisma/lineweb.db`；切换 MySQL 只需改 schema provider + .env） |
 | 设计 | Apple Liquid Glass (WWDC 2025) — SVG feDisplacementMap 折射 + backdrop-filter 层叠 |
@@ -63,7 +63,7 @@ lineweb/                       # 根 monorepo (concurrently 管理双端)
 User (users)                  Post (posts)
 ├── id (PK, 自增)             ├── id (PK, 自增)
 ├── username (unique)         ├── title
-├── email (unique)            ├── content (Markdown)
+├── email (unique)            ├── content (HTML)
 ├── password (bcrypt, 12轮)   ├── summary?
 ├── role ("user"|"admin")     ├── slug (unique)
 ├── createdAt                 ├── published (default: false)
@@ -166,7 +166,7 @@ CSS 自定义属性 (`--lg-*`) 硬编码为暗色模式值。亮色模式通过 
 | `/features` | FeaturesPage | — | 功能卡片网格 |
 | `/calculator` | CalculatorPage | — | 科学计算器 |
 | `/posts` | PostsPage | — | 文章列表 (分页) |
-| `/posts/:slug` | PostPage | — | Markdown 阅读 |
+| `/posts/:slug` | PostPage | — | 文章阅读 |
 | `/login` | LoginPage | — | 登录表单 |
 | `/register` | RegisterPage | — | 注册表单 |
 | `/profile` | ProfilePage | ProtectedRoute | 用户信息 |
@@ -174,7 +174,7 @@ CSS 自定义属性 (`--lg-*`) 硬编码为暗色模式值。亮色模式通过 
 | `/admin/new` | EditorPage | AdminRoute | 新建文章 |
 | `/admin/edit/:id` | EditorPage | AdminRoute | 编辑文章 |
 
-Provider 嵌套: `BrowserRouter > AuthProvider > WallpaperProvider > Routes`。
+Provider 嵌套: `BrowserRouter > AuthProvider > WallpaperProvider > ContrastProvider > Routes`。
 
 ## Auth Flow
 
@@ -183,17 +183,31 @@ Provider 嵌套: `BrowserRouter > AuthProvider > WallpaperProvider > Routes`。
 3. **页面刷新** → `AuthProvider` useEffect 检测 token 存在则调用 `/auth/me` 验证，失败则清除 token
 4. **路由保护** → `ProtectedRoute` (需登录) / `AdminRoute` (需 admin)，加载时显示 spinner，不满足时 `Navigate`
 
+## ContrastContext — 逐像素位置感知字体反色
+
+`ContrastContext.tsx` 在壁纸之上实现自动文字颜色反色，确保玻璃表面文字在任何壁纸下都清晰可读：
+
+1. **壁纸采样** — 壁纸加载后用 200px 宽 canvas 绘制缩略图 + 叠加渐变层（匹配 Layout 的 `linear-gradient` 参数）
+2. **像素位置匹配** — 扫描 `SCAN_SELECTOR`（h1~h6、p、span、a、button 等）中每个元素的中心位置在壁纸上的对应像素亮度，排除 `EXCLUDE_CLASSES`（按钮、输入框、主题切换等自带固定配色的元素）
+3. **设置 `data-ac` 属性** — 明亮背景 → `data-ac="black"`，深色背景 → `data-ac="white"`
+4. **CSS 响应** — `globals.css` 中 `[data-ac="black"]` 设置黑色文字，`[data-ac="white"]` 设置白色文字，覆盖 `.lg-surface` 的默认颜色
+5. **触发场景** — 页面切换、滚动、resize 时重新扫描（3 帧防抖）
+
+关键设计：使用 CanvasGradient API 替代逐像素叠加渐变，批量读取全 canvas 的 ImageData 而非逐元素 getImageData，性能开销极低。
+
 ## Key Design Decisions
 
 | 决策 | 方案 | 原因 |
 |------|------|------|
 | Liquid Glass 实现 | SVG feDisplacementMap + backdrop-filter 三层堆叠 | 纯 blur() 无法产生折射扭曲 |
-| 可读性方案 | 底层 blur(14px) 毛玻璃底衬，无任何不透明填充 | 保留背景色彩，确保文字清晰 |
+| 可读性方案 | 底层 blur(14px) 毛玻璃底衬 + ContrastContext 像素级反色 | 在任何壁纸上文字均清晰，无需固定背景色 |
 | 单 CSS 文件 | globals.css 一千多行包含全部样式 | 零 CSS 文件碎片，单一 source of truth |
-| 壁纸轮换 | WallpaperContext fetch `/api/bing-wallpaper` → CSS background | 组件无关，Layout 统一管理 |
-| jQuery 替换 | 前端 api.ts 封装 fetch + JWT 自动注入 | 无外部 HTTP 库依赖 |
+| 壁纸轮换 | WallpaperContext fetch `/api/bing-wallpaper` → CSS background | 组件无关，Layout 统一管理；提供 refresh() 用于手动切换 |
+| 主题切换 | CSS 自定义属性 `[data-theme]` + `<meta name="color-scheme">` 跟随系统 | 零 JS 切换开销，原生元素（滚动条、表单）自动适配系统主题 |
+| HTTP 客户端 | 前端 api.ts 封装 fetch + JWT 自动注入 | 无外部 HTTP 库依赖 |
 | SQLite | Prisma 抽象 | 零配置开发；切 MySQL 改一行 provider |
 | 中国 npm | `.npmrc` → npmmirror.com | 境内安装加速 |
+| 文章编辑器 | EditorPage 直接使用 HTML textarea + 实时预览 | 无富文本编辑器依赖；内容为纯 HTML，可在预览区直接检查渲染效果 |
 
 ## Common Commands
 
@@ -242,7 +256,24 @@ DATABASE_URL="file:./lineweb.db"
 JWT_SECRET="your-secret-key"
 ```
 
-默认管理员：`admin@lineweb.dev` / `admin123`
+默认管理员：`admin@lineweb.dev` / `admin123`；第二个管理员 `line@lineweb.dev` / `liang798119`
+
+## Deployment (Railway)
+
+根 `package.json` 的 `start` 脚本是 Railway 入口：
+
+```bash
+# Railway 执行流程：
+cd server && npx prisma db push --accept-data-loss  # 自动同步数据库
+npx prisma db seed                                    # 填充种子数据
+npx tsx src/index.ts                                  # 启动 Express
+# 生产模式下 Express 同时 serve client/dist（见 index.ts 第 33-41 行）
+```
+
+**关键说明**：
+- **Vite 构建**需在部署前完成（`npm run build` → `client/dist/`），或部署后手动触发
+- `start` 脚本在 `server/` 中执行，因为它 `cd server && ...`
+- seed 失败会导致容器重启（Railway 会重试），常见原因见下方的数据库故障排除
 
 ## Adding Features
 
@@ -251,3 +282,22 @@ JWT_SECRET="your-secret-key"
 3. **路由保护**: 用 `<ProtectedRoute>`（需登录）或 `<AdminRoute>`（需 admin）包裹
 4. **新数据库模型**: `schema.prisma` 中添加 → `npx prisma db push`
 5. **玻璃效果**: 容器用 `className="lg-surface"`，重要面板用 `lg-surface-strong`；只需毛玻璃底层的加 `lg-underlay` 混入类
+
+## Important Patterns & Gotchas
+
+### 后端模式
+- `res.json(...)` 后必须 `return`（Express 4 无返回值检查），否则会继续执行并报 `Cannot set headers after they are sent`
+- Zod 校验一律用 `.safeParse`，失败时返回 `400` + `parsed.error.flatten()`
+- auth 路由的 `upsert` 用 `username` 做 `where` 条件，而非 `email`（历史原因：本地可能已有同名不同 email 的用户）
+
+### 前端模式
+- `api.ts` 导出一个 `api` 对象，所有请求自动注 token，使用方式 `api.get<T>(url)` / `api.post<T>(url, body)`
+- 所有页面放在 `pages/`，组件在 `components/`，contexts 在 `contexts/`
+- CSS 修改只改 `globals.css` 一个文件，不要新建 CSS 文件
+- `LiquidButton` 支持 `to` / `href` / `onClick` 三种交互模式；`variant` 默认为 `glass`
+- `LiquidGlass` 组件默认开启交互镜面高光和色差边缘
+
+### 数据库故障排除
+- **seed 失败 "Unique constraint failed on `username`"**：用户已存在但 `upsert` 的 `where` 条件用的是 `email` 而非 `username`（两次 seed 的 email 可能不同）。修复：确保 seed 中每个用户的 `upsert` 用 `username` 做唯一匹配
+- **数据库重置**：删 `server/prisma/lineweb.db` 再 `prisma db push && prisma db seed`
+- **开发中普适性建议**：不要用 `prisma migrate`（容易与 SQLite 文件冲突），直接用 `prisma db push`

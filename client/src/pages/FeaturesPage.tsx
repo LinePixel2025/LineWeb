@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import LiquidGlass from '../components/glass/LiquidGlass'
 
 const features = [
   {
@@ -36,10 +37,10 @@ export default function FeaturesPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
         {features.map((item, i) => (
-          <Link
+          <LiquidGlass
             key={item.path}
-            to={item.path}
-            className="lg-surface-strong"
+            variant="strong"
+            chromatic={false}
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -47,38 +48,40 @@ export default function FeaturesPage() {
               justifyContent: 'center',
               textAlign: 'center',
               padding: '40px 24px',
-              textDecoration: 'none',
-              color: 'inherit',
-              cursor: 'pointer',
               gap: '16px',
               animation: `fadeIn 0.5s ease-out ${i * 0.1}s both`,
-              transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.transform = 'translateY(-4px) scale(1.02)'
-              e.currentTarget.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.15), 0 12px 32px var(--lg-glass-shadow), 0 4px 8px rgba(0,0,0,0.1)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.transform = 'none'
-              e.currentTarget.style.boxShadow = ''
             }}
           >
-            <div style={{ fontSize: '2.8rem', lineHeight: 1 }}>{item.emoji}</div>
-            <div>
-              <h3 style={{ fontSize: '1.2rem', marginBottom: '6px' }}>{item.title}</h3>
-              <p className="text-secondary" style={{ fontSize: '0.88rem', margin: 0 }}>{item.desc}</p>
-            </div>
-            {item.badge && (
-              <span style={{
-                fontSize: '0.72rem', padding: '2px 12px',
-                borderRadius: '9999px',
-                background: 'var(--lg-accent-soft)',
-                color: 'var(--lg-accent)',
-              }}>
-                {item.badge}
-              </span>
-            )}
-          </Link>
+            <Link
+              to={item.path}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+                textDecoration: 'none',
+                color: 'inherit',
+                gap: '16px',
+              }}
+            >
+              <div style={{ fontSize: '2.8rem', lineHeight: 1 }}>{item.emoji}</div>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '6px' }}>{item.title}</h3>
+                <p className="text-secondary" style={{ fontSize: '0.88rem', margin: 0 }}>{item.desc}</p>
+              </div>
+              {item.badge && (
+                <span style={{
+                  fontSize: '0.72rem', padding: '2px 12px',
+                  borderRadius: '9999px',
+                  background: 'var(--lg-accent-soft)',
+                  color: 'var(--lg-accent)',
+                }}>
+                  {item.badge}
+                </span>
+              )}
+            </Link>
+          </LiquidGlass>
         ))}
       </div>
     </div>

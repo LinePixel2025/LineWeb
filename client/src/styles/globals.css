@@ -175,6 +175,11 @@ a:hover {
   background: radial-gradient(circle at 30% 20%, rgba(255,255,255,0.08) 0%, transparent 50%);
 }
 
+/* 配合 LiquidGlass interactive={false} 隐藏静态光斑 */
+.lg-surface-no-specular::after {
+  display: none !important;
+}
+
 /* === Tier 1: Standard glass surface === */
 .lg-surface {
   position: relative;
@@ -435,8 +440,10 @@ h4 { font-size: 1.15rem; }
 }
 
 .liquid-btn.glass {
-  background-image: linear-gradient(180deg, rgba(255,255,255,0.10) 0%, transparent 50%),
-    linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04));
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.10) 0%, transparent 50%),
+    linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04)),
+    rgba(0,0,0,0.15);
   backdrop-filter: blur(16.8px) saturate(180%);
   -webkit-backdrop-filter: blur(16.8px) saturate(180%);
   border: 1px solid rgba(255,255,255,0.18);
@@ -445,8 +452,10 @@ h4 { font-size: 1.15rem; }
 }
 .liquid-btn.glass:hover {
   transform: translateY(-1px);
-  background-image: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 50%),
-    linear-gradient(135deg, rgba(255,255,255,0.14), rgba(255,255,255,0.08));
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 50%),
+    linear-gradient(135deg, rgba(255,255,255,0.14), rgba(255,255,255,0.08)),
+    rgba(0,0,0,0.15);
 }
 
 .liquid-btn.ghost {
@@ -515,36 +524,37 @@ h4 { font-size: 1.15rem; }
 /* ============================================================
    Markdown Content
    ============================================================ */
-.markdown-content {
+.article-content {
   line-height: 1.8;
   color: var(--lg-text-article);
+  white-space: pre-wrap;
 }
 
-.markdown-content h1,
-.markdown-content h2,
-.markdown-content h3,
-.markdown-content h4 {
+.article-content h1,
+.article-content h2,
+.article-content h3,
+.article-content h4 {
   margin-top: 1.8em;
   margin-bottom: 0.6em;
 }
 
-.markdown-content h1:first-child,
-.markdown-content h2:first-child,
-.markdown-content h3:first-child {
+.article-content h1:first-child,
+.article-content h2:first-child,
+.article-content h3:first-child {
   margin-top: 0;
 }
 
-.markdown-content p {
+.article-content p {
   margin-bottom: 1em;
 }
 
-.markdown-content ul,
-.markdown-content ol {
+.article-content ul,
+.article-content ol {
   margin-bottom: 1em;
   padding-left: 1.5em;
 }
 
-.markdown-content blockquote {
+.article-content blockquote {
   border-left: 3px solid var(--lg-accent);
   padding: 8px 16px;
   margin: 1em 0;
@@ -553,7 +563,7 @@ h4 { font-size: 1.15rem; }
   border-radius: 0 var(--lg-radius-md) var(--lg-radius-md) 0;
 }
 
-.markdown-content code {
+.article-content code {
   font-family: var(--lg-font-mono);
   background: var(--lg-accent-soft);
   padding: 2px 8px;
@@ -561,7 +571,7 @@ h4 { font-size: 1.15rem; }
   font-size: 0.9em;
 }
 
-.markdown-content pre {
+.article-content pre {
   background: var(--lg-glass-bg);
   backdrop-filter: blur(16.8px);
   border: 1px solid var(--lg-glass-border);
@@ -569,14 +579,15 @@ h4 { font-size: 1.15rem; }
   padding: 20px;
   overflow-x: auto;
   margin-bottom: 1em;
+  white-space: pre;
 }
 
-.markdown-content pre code {
+.article-content pre code {
   background: none;
   padding: 0;
 }
 
-.markdown-content img {
+.article-content img {
   max-width: 100%;
   border-radius: var(--lg-radius-md);
 }
@@ -624,8 +635,93 @@ h4 { font-size: 1.15rem; }
   border-radius: 3px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--lg-text-secondary);
+/* ============================================================
+   Editor Page
+   ============================================================ */
+.editor-page-glass {
+  border-radius: var(--lg-radius-md) !important;
+  padding: 20px 20px !important;
+}
+
+.editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.editor-label {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--lg-text-tertiary);
+  font-weight: 500;
+}
+
+.editor-textarea {
+  min-height: 200px;
+  font-family: var(--lg-font-mono);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.editor-error {
+  background: linear-gradient(180deg, rgba(255,255,255,0.10) 0%, transparent 50%), rgba(255,59,48,0.12);
+  color: var(--lg-danger);
+  padding: 8px 12px;
+  border-radius: var(--lg-radius-sm);
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+  border: 1px solid rgba(255,59,48,0.2);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.editor-preview {
+  padding: 14px;
+  max-height: 200px;
+  overflow-y: auto;
+  border-radius: var(--lg-radius-md) !important;
+}
+
+.editor-preview-label {
+  font-size: 0.78rem;
+  margin-bottom: 8px;
+}
+
+.editor-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.editor-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.editor-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--lg-accent);
+  cursor: pointer;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 12px;
 }
 
 /* ============================================================
@@ -807,39 +903,183 @@ h4 { font-size: 1.15rem; }
 }
 
 /* ============================================================
-   Admin — Responsive
+   Admin — Liquid Glass Design
    ============================================================ */
+
+/* Layout */
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.admin-spinner {
+  display: flex;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+/* Table */
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 500px;
+}
+
+.admin-th {
+  text-align: left;
+  padding: 14px 16px;
+  font-weight: 500;
+  font-size: 0.85rem;
+  color: var(--lg-text-secondary);
+  border-bottom: 1px solid var(--lg-glass-border);
+}
+
+.admin-th--status { text-align: center; width: 110px; }
+.admin-cell--status { text-align: center; }
+.admin-th--actions { text-align: right; width: 220px; }
+
+.admin-row {
+  border-bottom: 1px solid var(--lg-glass-border);
+}
+
+.admin-row:last-child {
+  border-bottom: none;
+}
+
+.admin-cell {
+  padding: 12px 16px;
+  vertical-align: middle;
+}
+
+.admin-cell--title {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-post-title {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-post-date {
+  color: var(--lg-text-tertiary);
+  font-size: 0.78rem;
+  margin-top: 2px;
+}
+
+/* Status badge */
+.admin-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.admin-badge--published {
+  background: rgba(52,199,89,0.15);
+  color: var(--lg-success);
+  border: 1px solid rgba(52,199,89,0.15);
+}
+
+.admin-badge--draft {
+  background: rgba(255,255,255,0.06);
+  color: var(--lg-text-tertiary);
+  border: 1px solid var(--lg-glass-border);
+}
+
+/* Action buttons */
+.admin-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* Pagination */
+.admin-pagination {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+
+.admin-ellipsis {
+  color: var(--lg-text-tertiary);
+  align-self: center;
+}
+
+.admin-page-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.18);
+  cursor: pointer;
+  font-weight: 500;
+  font-family: var(--lg-font);
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.10) 0%, transparent 50%),
+    linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04)),
+    rgba(0,0,0,0.15);
+  color: var(--lg-text-primary);
+  backdrop-filter: blur(16.8px) saturate(180%);
+  -webkit-backdrop-filter: blur(16.8px) saturate(180%);
+  box-shadow:
+    inset 0 0.5px 0 rgba(255,255,255,0.2),
+    0 2px 8px rgba(0,0,0,0.15);
+}
+
+.admin-page-btn:hover {
+  transform: translateY(-1px);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 50%),
+    linear-gradient(135deg, rgba(255,255,255,0.14), rgba(255,255,255,0.08)),
+    rgba(0,0,0,0.15);
+}
+
+.admin-page-btn--active {
+  background: linear-gradient(135deg, var(--lg-accent), #40a9ff);
+  color: white;
+  border: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.3),
+    0 4px 12px var(--lg-accent-glow);
+}
+
+/* Responsive */
 @media (max-width: 640px) {
   .admin-table-wrap { overflow-x: auto; }
 
-  .admin-table { min-width: 500px; }
-
   .admin-actions {
-    display: flex;
     flex-direction: column;
     gap: 6px;
   }
 
-  .admin-btn {
+  .admin-actions .liquid-btn {
     width: 100%;
-    text-align: center;
-    padding: 10px 14px !important;
-    font-size: 0.88rem !important;
   }
 }
 
 @media (max-width: 480px) {
-  .admin-title-cell {
-    max-width: 180px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .admin-new-btn {
-    width: 100%;
-    text-align: center;
-    padding: 14px 24px !important;
+  .admin-cell--title {
+    max-width: 160px;
   }
 }
 
@@ -1192,7 +1432,7 @@ h4 { font-size: 1.15rem; }
    字体自动反色系统 — data-ac 属性驱动 (JS ContrastProvider)
    ============================================================
    JS 遍历采样壁纸亮度 → 为元素设置 data-ac="black|white"
-   CSS 属性选择器切换对应颜色。文章区 .markdown-content 排除。
+   CSS 属性选择器切换对应颜色。文章区 .article-content 排除。
 
    放在 CSS 末尾确保 source order 不会使 data-ac 被
    同优先级（0,1,0）的组件选择器意外覆盖。          */
@@ -1226,20 +1466,20 @@ html[data-contrast="light"] { display: none; } /* preserve for future */
 }
 
 /* 文章区域 — 不受反色影响，始终暗色系 */
-.markdown-content,
-.markdown-content * {
+.article-content,
+.article-content * {
   color: revert;
 }
-.markdown-content h1, .markdown-content h2, .markdown-content h3, .markdown-content h4,
-.markdown-content p, .markdown-content li, .markdown-content blockquote,
-.markdown-content code, .markdown-content pre, .markdown-content span {
+.article-content h1, .article-content h2, .article-content h3, .article-content h4,
+.article-content p, .article-content li, .article-content blockquote,
+.article-content code, .article-content pre, .article-content span {
   color: var(--lg-text-article);
 }
-.markdown-content .text-secondary,
-.markdown-content .text-tertiary {
+.article-content .text-secondary,
+.article-content .text-tertiary {
   color: var(--lg-text-article-secondary);
 }
-.markdown-content a {
+.article-content a {
   color: var(--lg-accent);
 }
 

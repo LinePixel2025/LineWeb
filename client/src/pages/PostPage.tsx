@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import api from '../lib/api'
+import LiquidGlass from '../components/glass/LiquidGlass'
 
 interface PostDetail {
   id: number; title: string; content: string; summary: string | null
@@ -38,17 +37,15 @@ export default function PostPage() {
     <article className="page container" style={{ maxWidth: '720px' }}>
       <Link to="/posts" style={{ display: 'inline-block', marginBottom: '24px', fontSize: '0.9rem' }}>&larr; 返回文章列表</Link>
 
-      <h1>{post.title}</h1>
-      <div style={{ display: 'flex', gap: '16px', marginTop: '12px', marginBottom: '32px' }}>
-        <span className="text-tertiary">{post.author.username}</span>
-        <span className="text-tertiary">{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
-      </div>
-
-      <div className="lg-surface-strong lg-surface-strong-blur" style={{ padding: '32px' }}>
-        <div className="markdown-content">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{post.content}</ReactMarkdown>
+      <LiquidGlass variant="blur" interactive={false} style={{ padding: '32px' }}>
+        <h1 className="post-title">{post.title}</h1>
+        <div style={{ display: 'flex', gap: '16px', marginTop: '12px', marginBottom: '32px' }}>
+          <span className="text-tertiary">{post.author.username}</span>
+          <span className="text-tertiary">{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
         </div>
-      </div>
+
+        <div className="article-content" dangerouslySetInnerHTML={{ __html: post.content }} />
+      </LiquidGlass>
     </article>
   )
 }

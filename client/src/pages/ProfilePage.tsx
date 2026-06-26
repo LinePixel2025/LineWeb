@@ -1,5 +1,6 @@
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
+import LiquidGlass from '../components/glass/LiquidGlass'
 
 export default function ProfilePage() {
   const { user, logout } = useAuth()
@@ -10,7 +11,7 @@ export default function ProfilePage() {
   return (
     <div className="page container" style={{ maxWidth: '500px' }}>
       <h1 style={{ marginBottom: '24px' }}>个人资料</h1>
-      <div className="lg-surface-strong" style={{ padding: '32px', animation: 'glassRise 0.5s ease-out' }}>
+      <LiquidGlass variant="strong" chromatic={false} style={{ padding: '32px' }}>
         <div style={{ marginBottom: '20px' }}>
           <span className="text-tertiary" style={{ fontSize: '0.82rem', display: 'block' }}>用户名</span>
           <span style={{ fontSize: '1.1rem', fontWeight: 500 }}>{user?.username}</span>
@@ -33,7 +34,7 @@ export default function ProfilePage() {
         >
           退出登录
         </button>
-      </div>
+      </LiquidGlass>
     </div>
   )
 }

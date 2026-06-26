@@ -4,16 +4,19 @@ import { useWallpaper } from './WallpaperContext'
 
 const ContrastContext = createContext(null)
 
-/* 需要反色的文本元素 — 默认标签 + 计算器显示区（非标准 div） */
+/* 需要反色的文本元素 — 包括管理界面和文章组件的所有文本 */
 const SCAN_SELECTOR = [
   'h1, h2, h3, h4, h5, h6, p, span, a, button, li, blockquote, label, th, td, small, strong, em, code, pre',
+  '.admin-post-title, .admin-post-date, .admin-badge, .admin-ellipsis',
   '.calc-expression, .calc-display',
 ].join(', ')
 
+/* 不需要反色的元素 — 按钮、输入框、主题切换等自身有固定配色 */
 const EXCLUDE_CLASSES = [
-  '.markdown-content', '.liquid-btn', '.lg-input', '.calc-btn',
-  '.theme-toggle', '.pagination-btn', '.wallpaper-refresh-btn',
-  '.admin-btn', '.admin-new-btn',  // .admin-btn-danger 被 .admin-btn 覆盖
+  '.article-content', '.liquid-btn', '.lg-input', '.calc-btn',
+  '.theme-toggle', '.admin-page-btn', '.wallpaper-refresh-btn',
+  '.admin-header h1',
+  '.post-title',
 ]
 
 // 防抖：N 个动画帧中只扫描一次

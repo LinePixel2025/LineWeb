@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import LiquidGlass from '../components/glass/LiquidGlass'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -23,7 +24,7 @@ export default function LoginPage() {
 
   return (
     <div className="page container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
-      <div className="lg-surface-strong glass-rise" style={{ width: '100%', maxWidth: '400px', padding: '40px 32px' }}>
+      <LiquidGlass variant="strong" chromatic={false} style={{ width: '100%', maxWidth: '400px', padding: '40px 32px' }}>
         <h2 style={{ textAlign: 'center', marginBottom: '8px' }}>登录</h2>
         <p className="text-secondary" style={{ textAlign: 'center', marginBottom: '28px', fontSize: '0.88rem' }}>
           欢迎回到 Line Web
@@ -60,7 +61,7 @@ export default function LoginPage() {
         <p className="text-tertiary" style={{ textAlign: 'center', marginTop: '20px' }}>
           还没有账号？ <Link to="/register">注册</Link>
         </p>
-      </div>
+      </LiquidGlass>
     </div>
   )
 }
