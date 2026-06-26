@@ -94,20 +94,22 @@ export default function EditorPage() {
   /* ------- loading state ------- */
   if (fetching) {
     return (
-      <div className="page container" style={{ display: 'flex', justifyContent: 'center' }}>
+      <div className="admin-spinner">
         <div className="spinner" />
       </div>
     )
   }
 
   return (
-    <div className="page container" style={{ maxWidth: 720, margin: '0 auto', paddingTop: 'calc(var(--lg-nav-height) + var(--lg-safe-top) + 24px)' }}>
+    <div className="admin-page" style={{ maxWidth: 720 }}>
+      <div className="admin-page-header">
+        <h1 className="admin-page-title">{isEdit ? '编辑文章' : '写文章'}</h1>
+      </div>
       <LiquidGlass
         variant="blur"
         chromatic={false}
         className="glass-rise editor-page-glass"
       >
-      <h1 style={{ marginBottom: 16, fontSize: '1.5rem' }}>{isEdit ? '编辑文章' : '写文章'}</h1>
 
       {/* error banner */}
       {error && <div className="editor-error">{error}</div>}

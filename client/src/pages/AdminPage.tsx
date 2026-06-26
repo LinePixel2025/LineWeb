@@ -43,93 +43,89 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="page container" style={{ maxWidth: '800px' }}>
-      <LiquidGlass variant="blur" className="fade-in" style={{ padding: '32px' }}>
-        <div className="admin-header">
-          <h1>管理面板</h1>
-          <LiquidButton to="/admin/new" variant="primary" size="md">写文章</LiquidButton>
+    <div className="admin-page">
+      <div className="admin-page-header">
+        <h1 className="admin-page-title">文章管理</h1>
+        <LiquidButton to="/admin/new" variant="primary" size="md">写文章</LiquidButton>
+      </div>
+
+      {loading ? (
+        <div className="admin-spinner">
+          <div className="spinner" />
         </div>
-
-        {loading ? (
-          <div className="admin-spinner">
-            <div className="spinner" />
-          </div>
-        ) : (
-          <>
-            <div className="admin-table-wrap">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th className="admin-th admin-th--title">标题</th>
-                  <th className="admin-th admin-th--status">状态</th>
-                  <th className="admin-th admin-th--actions">操作</th>
+      ) : (
+        <LiquidGlass variant="blur" className="admin-page-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th className="admin-th admin-th--title">标题</th>
+                <th className="admin-th admin-th--status">状态</th>
+                <th className="admin-th admin-th--actions">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data?.posts.map((post, i) => (
+                <tr key={post.id} className="admin-row fade-in" style={{ animationDelay: `${i * 0.04}s` }}>
+                  <td className="admin-cell admin-cell--title">
+                    <div className="admin-post-title">{post.title}</div>
+                    <div className="admin-post-date">
+                      {new Date(post.createdAt).toLocaleDateString('zh-CN')}
+                    </div>
+                  </td>
+                  <td className="admin-cell admin-cell--status">
+                    <span className={`admin-badge ${post.published ? 'admin-badge--published' : 'admin-badge--draft'}`}>
+                      {post.published ? '已发布' : '草稿'}
+                    </span>
+                  </td>
+                  <td className="admin-cell admin-cell--actions">
+                    <div className="admin-actions">
+                      <LiquidButton size="sm" variant="glass" onClick={() => handleToggle(post)}>
+                        {post.published ? '下架' : '发布'}
+                      </LiquidButton>
+                      <LiquidButton size="sm" variant="glass" to={`/admin/edit/${post.id}`}>
+                        编辑
+                      </LiquidButton>
+                      <LiquidButton size="sm" variant="danger" onClick={() => handleDelete(post.id)}>
+                        删除
+                      </LiquidButton>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {data?.posts.map((post, i) => (
-                  <tr key={post.id} className="admin-row fade-in" style={{ animationDelay: `${i * 0.04}s` }}>
-                    <td className="admin-cell admin-cell--title">
-                      <div className="admin-post-title">{post.title}</div>
-                      <div className="admin-post-date">
-                        {new Date(post.createdAt).toLocaleDateString('zh-CN')}
-                      </div>
-                    </td>
-                    <td className="admin-cell admin-cell--status">
-                      <span className={`admin-badge ${post.published ? 'admin-badge--published' : 'admin-badge--draft'}`}>
-                        {post.published ? '已发布' : '草稿'}
-                      </span>
-                    </td>
-                    <td className="admin-cell admin-cell--actions">
-                      <div className="admin-actions">
-                        <LiquidButton size="sm" variant="glass" onClick={() => handleToggle(post)}>
-                          {post.published ? '下架' : '发布'}
-                        </LiquidButton>
-                        <LiquidButton size="sm" variant="glass" to={`/admin/edit/${post.id}`}>
-                          编辑
-                        </LiquidButton>
-                        <LiquidButton size="sm" variant="danger" onClick={() => handleDelete(post.id)}>
-                          删除
-                        </LiquidButton>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
+              ))}
+            </tbody>
+          </table>
+        </LiquidGlass>
+      )}
 
-            {data && data.totalPages > 1 && (
-              <div className="admin-pagination">
-                {(() => {
-                  const total = data.totalPages
-                  const current = page
-                  const pages: (number | 0)[] = []
-                  const start = Math.max(1, current - 2)
-                  const end = Math.min(total, current + 2)
-                  if (start > 1) pages.push(1)
-                  if (start > 2) pages.push(0)
-                  for (let i = start; i <= end; i++) pages.push(i)
-                  if (end < total - 1) pages.push(0)
-                  if (end < total) pages.push(total)
-                  return pages.map((p, i) =>
-                    p === 0 ? (
-                      <span key={`ellipsis-${i}`} className="admin-ellipsis">...</span>
-                    ) : (
-                      <button
-                        key={p}
-                        onClick={() => setPage(p)}
-                        className={`admin-page-btn ${p === page ? 'admin-page-btn--active' : ''}`}
-                      >
-                        {p}
-                      </button>
-                    )
-                  )
-                })()}
-              </div>
-            )}
-          </>
-        )}
-      </LiquidGlass>
+      {data && data.totalPages > 1 && (
+        <div className="admin-pagination">
+          {(() => {
+            const total = data.totalPages
+            const current = page
+            const pages: (number | 0)[] = []
+            const start = Math.max(1, current - 2)
+            const end = Math.min(total, current + 2)
+            if (start > 1) pages.push(1)
+            if (start > 2) pages.push(0)
+            for (let i = start; i <= end; i++) pages.push(i)
+            if (end < total - 1) pages.push(0)
+            if (end < total) pages.push(total)
+            return pages.map((p, i) =>
+              p === 0 ? (
+                <span key={`ellipsis-${i}`} className="admin-ellipsis">...</span>
+              ) : (
+                <button
+                  key={p}
+                  onClick={() => setPage(p)}
+                  className={`admin-page-btn ${p === page ? 'admin-page-btn--active' : ''}`}
+                >
+                  {p}
+                </button>
+              )
+            )
+          })()}
+        </div>
+      )}
     </div>
   )
 }

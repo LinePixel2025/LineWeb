@@ -3,6 +3,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import { WallpaperProvider } from './contexts/WallpaperContext'
 import { ContrastProvider } from './contexts/ContrastContext'
 import Layout from './components/Layout'
+import AdminLayout from './components/AdminLayout'
 import { ProtectedRoute, AdminRoute } from './components/Guards'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/LoginPage'
@@ -22,6 +23,7 @@ export default function App() {
         <WallpaperProvider>
           <ContrastProvider>
             <Routes>
+              {/* Main site layout */}
               <Route element={<Layout />}>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/login" element={<LoginPage />} />
@@ -33,15 +35,13 @@ export default function App() {
                 <Route path="/profile" element={
                   <ProtectedRoute><ProfilePage /></ProtectedRoute>
                 } />
-                <Route path="/admin" element={
-                  <AdminRoute><AdminPage /></AdminRoute>
-                } />
-                <Route path="/admin/new" element={
-                  <AdminRoute><EditorPage /></AdminRoute>
-                } />
-                <Route path="/admin/edit/:id" element={
-                  <AdminRoute><EditorPage /></AdminRoute>
-                } />
+              </Route>
+
+              {/* Admin layout — separate from main site */}
+              <Route element={<AdminRoute><AdminLayout /></AdminRoute>}>
+                <Route path="/admin" element={<AdminPage />} />
+                <Route path="/admin/new" element={<EditorPage />} />
+                <Route path="/admin/edit/:id" element={<EditorPage />} />
               </Route>
             </Routes>
           </ContrastProvider>
