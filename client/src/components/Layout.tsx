@@ -48,15 +48,13 @@ export default function Layout() {
           display: 'flex', justifyContent: 'center', pointerEvents: 'none',
           padding: '0 16px',
         }}>
-          <span style={{
+          <span className="lg-surface" style={{
             fontSize: '0.7rem', padding: '3px 14px',
             borderRadius: '9999px',
-            background: 'rgba(0,0,0,0.35)',
-            backdropFilter: 'blur(6px)',
             color: 'rgba(255,255,255,0.5)',
-            WebkitBackdropFilter: 'blur(6px)',
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             maxWidth: '100%',
+            background: 'rgba(255,255,255,0.05)',
           }}>
             {copyright}
           </span>
