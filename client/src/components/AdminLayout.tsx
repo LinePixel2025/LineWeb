@@ -13,7 +13,7 @@ const SIDEBAR_COLLAPSED_KEY = 'lineweb_admin_sidebar_collapsed'
 
 export default function AdminLayout() {
   const { user, logout } = useAuth()
-  const { bgUrl, loaded, refresh } = useWallpaper()
+  const { bgUrl, bgType, solidColor, loaded, refresh } = useWallpaper()
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -120,8 +120,8 @@ export default function AdminLayout() {
         </div>
       </aside>
 
-      {/* Wallpaper background */}
-      {bgUrl && (
+      {/* Background */}
+      {bgType === 'wallpaper' && bgUrl ? (
         <>
           <div
             style={{
@@ -145,6 +145,8 @@ export default function AdminLayout() {
             }}
           />
         </>
+      ) : (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 0, background: solidColor }} />
       )}
 
       {/* Main content area */}

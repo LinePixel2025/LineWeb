@@ -8,6 +8,7 @@ interface User {
   username: string
   email: string
   role: string
+  settings?: string  // JSON: 用户个性化设置
 }
 
 interface AuthContextType {
@@ -17,6 +18,7 @@ interface AuthContextType {
   register: (username: string, email: string, password: string) => Promise<void>
   logout: () => void
   isAdmin: boolean
+  updateSettings: (settings: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -54,8 +56,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }
 
+  const updateSettings = async (settings: string) => {
+    const data = await api.put<{ user: User }>('/auth/settings', { settings })
+    setUser(data.user)
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, isAdmin: user?.role === 'admin' }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, isAdmin: user?.role === 'admin', updateSettings }}>
       {children}
     </AuthContext.Provider>
   )

@@ -521,6 +521,31 @@ h4 { font-size: 1.15rem; }
   color: var(--lg-text-tertiary);
 }
 
+/* Select / Option 下拉列表样式修正 — 防止选项文字与背景重合 */
+select.lg-input {
+  appearance: auto;
+  -webkit-appearance: auto;
+  background-color: rgba(0,0,0,0.40);
+  background-image: none;
+}
+
+select.lg-input option {
+  background-color: #2a2a2e;
+  color: var(--lg-text-primary);
+  padding: 6px 10px;
+}
+
+select.lg-input optgroup {
+  background-color: #2a2a2e;
+  color: var(--lg-text-secondary);
+}
+
+/* PropsEditor 内 select 紧凑适配 */
+.pe-field select.lg-input {
+  padding: 10px 12px;
+  font-size: 0.85rem;
+}
+
 /* ============================================================
    Markdown Content
    ============================================================ */
@@ -1907,6 +1932,23 @@ html[data-contrast="light"] { display: none; } /* preserve for future */
 }
 .article-content a {
   color: var(--lg-accent);
+}
+
+/* 个人资料页 — 始终白色文字，不参与背景反色 */
+.profile-page,
+.profile-page [data-ac] {
+  color: #fff !important;
+}
+.profile-page .text-tertiary,
+.profile-page [data-ac] .text-tertiary {
+  color: rgba(255,255,255,0.45) !important;
+}
+.profile-page .text-secondary,
+.profile-page [data-ac] .text-secondary {
+  color: rgba(255,255,255,0.65) !important;
+}
+.profile-page a {
+  color: var(--lg-accent) !important;
 }
 
 /* 交互按钮 — 不被 data-ac 覆盖 */

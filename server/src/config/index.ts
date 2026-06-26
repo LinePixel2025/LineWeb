@@ -39,3 +39,7 @@ export const pageSchema = z.object({
 })
 
 export const pageUpdateSchema = pageSchema.partial()
+
+export const updateSettingsSchema = z.object({
+  settings: z.string().min(1, '设置不能为空'),
+})

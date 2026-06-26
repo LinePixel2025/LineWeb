@@ -3,12 +3,12 @@ import Navbar from './Navbar'
 import { useWallpaper } from '../contexts/WallpaperContext'
 
 export default function Layout() {
-  const { bgUrl, copyright, loaded } = useWallpaper()
+  const { bgUrl, bgType, solidColor, copyright, loaded } = useWallpaper()
 
   return (
     <div style={{ position: 'relative', minHeight: '100vh' }}>
-      {/* Global Bing wallpaper background */}
-      {bgUrl ? (
+      {/* Background */}
+      {bgType === 'wallpaper' && bgUrl ? (
         <>
           <div
             style={{
@@ -33,7 +33,7 @@ export default function Layout() {
           />
         </>
       ) : (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 0, background: 'var(--lg-bg)' }} />
+        <div style={{ position: 'fixed', inset: 0, zIndex: 0, background: solidColor }} />
       )}
 
       <Navbar />

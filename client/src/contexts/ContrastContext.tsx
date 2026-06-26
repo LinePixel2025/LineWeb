@@ -15,7 +15,7 @@ const EXCLUDE_CLASSES = [
   '.article-content', '.liquid-btn', '.lg-input', '.calc-btn',
   '.theme-toggle', '.admin-page-btn', '.wallpaper-refresh-btn',
   '.admin-header h1', '.admin-layout',
-  '.post-title',
+  '.post-title', '.profile-page',
 ]
 
 // 防抖：N 个动画帧中只扫描一次
@@ -69,7 +69,12 @@ export function ContrastProvider({ children }: { children: ReactNode }) {
 
   /* 1. 壁纸变化 → 重建合成 canvas */
   useEffect(() => {
-    if (!bgUrl) return
+    if (!bgUrl) {
+      // 无壁纸时清理所有 data-ac
+      canvasRef.current = null
+      document.querySelectorAll('[data-ac]').forEach(el => el.removeAttribute('data-ac'))
+      return
+    }
     let cancelled = false
 
     const img = new Image()
@@ -98,7 +103,10 @@ export function ContrastProvider({ children }: { children: ReactNode }) {
     const fullData = ctx.getImageData(0, 0, W, H).data
 
     const scanEl = (el: Element) => {
-      if (isExcluded(el)) return
+      if (isExcluded(el)) {
+        el.removeAttribute('data-ac')
+        return
+      }
 
       const rect = el.getBoundingClientRect()
       if (rect.width < 1 || rect.height < 1) return
