@@ -36,7 +36,7 @@ lineweb/                       # 根 monorepo (concurrently 管理双端)
 ├── server/                    # 后端 (Express + Prisma)
 │   ├── .env                   # DATABASE_URL + JWT_SECRET (必填)
 │   ├── prisma/
-│   │   ├── schema.prisma      # User + Post 模型 (SQLite)
+│   │   ├── schema.prisma      # User + Post + Page 模型 (PostgreSQL)
 │   │   └── seed.ts            # 管理员 admin@lineweb.dev + 示例文章
 │   └── src/
 │       ├── config/index.ts    # Zod schema + 环境变量
@@ -54,7 +54,7 @@ lineweb/                       # 根 monorepo (concurrently 管理双端)
 |------|------|
 | 前端 | React 19, Vite 6, TypeScript 5, React Router 7 |
 | 后端 | Express 4, Prisma 6, Zod, JWT, bcryptjs |
-| 数据库 | SQLite（`server/prisma/lineweb.db`；切换 MySQL 只需改 schema provider + .env） |
+| 数据库 | PostgreSQL（部署 Railway 自动注入 `DATABASE_URL`；本地开发改 `.env` 即可） |
 | 设计 | Apple Liquid Glass (WWDC 2025) — SVG feDisplacementMap 折射 + backdrop-filter 层叠 |
 
 ## Database Schema
@@ -265,35 +265,37 @@ JWT_SECRET="your-secret-key"
 ```bash
 # Railway 执行流程：
 npm run build                          # → client/dist/（Vite 构建前端）
-cd server && npx prisma db push ...    # 自动同步数据库
+cd server && npx prisma db push        # 同步数据库 Schema → PostgreSQL
 npx prisma db seed                     # 填充种子数据
 NODE_ENV=production npx tsx ...        # 启动 Express（同时 serve 前端）
 ```
 
-### Railway Dashboard 必设环境变量
+### 首次部署步骤
 
-| 变量 | 示例值 | 说明 |
-|------|--------|------|
-| `JWT_SECRET` | `(随机字符串)` | **必须**，生产环境密钥，不可用开发默认值 |
-| `NPM_CONFIG_REGISTRY` | `https://registry.npmjs.org` | **必须**，覆盖 `.npmrc` 的中国镜像，海外部署必须设置 |
-| `NODE_ENV` | `production` | Railway 默认会设，无需手动 |
+1. **New Project** → **Deploy from GitHub repo** → 选 `LinePixel2025/LineWeb`
+2. **添加 PostgreSQL 数据库**：
+   - 在项目 Canvas 上点 **New** → **Database** → **Add PostgreSQL**
+   - Railway 会自动注入 `DATABASE_URL` 环境变量，无需手动设置
+3. **设置环境变量**（在 Variables 中）：
 
-### SQLite 持久化（Volume）
+| Key | Value | 说明 |
+|-----|-------|------|
+| `JWT_SECRET` | `(随机字符串)` | **必须**，生产环境密钥 |
+| `NPM_CONFIG_REGISTRY` | `https://registry.npmjs.org` | **必须**，覆盖 `.npmrc` 中国镜像 |
 
-SQLite 数据库文件在 `server/prisma/lineweb.db`。Railway 容器重启后会清空文件系统，**必须添加 Volume**：
+4. 等待部署完成即可。
 
-1. Railway Dashboard → Variables → **Volumes**
-2. 新建 Volume，挂载路径设为 `server/prisma`（或其他你放 `.db` 的路径）
-3. 同时修改 `DATABASE_URL` 为 `file:./lineweb.db`（注意路径相对于 server 目录）
+> **注意**：不再需要 Volume。PostgreSQL 由 Railway 托管，数据自动持久化。
 
-> 不设 Volume 的话，每次部署或容器重启都会丢失全部用户和文章数据。
+### `DATABASE_URL`
+
+由 Railway 自动注入，格式为 `postgresql://user:pass@host:5432/railway`。不需要手动在 Variables 中设置。
 
 ### 注意点
 
 - `start` 脚本包含 `npm run build` 前置步骤，自动构建前端
-- Railway 使用 `NPM_CONFIG_REGISTRY` 环境变量覆盖 `.npmrc` 镜像源，无需改文件
-- `NODE_ENV=production` 已嵌入 `start` 脚本，确保 Express 正确 serve 前端
-- seed 失败会导致容器重启（Railway 会重试），常见原因见下方的数据库故障排除
+- `prisma db push` 已移除 `--accept-data-loss`（PostgreSQL 不需要）
+- 如果 seed 失败，检查容器日志，常见原因见下方的数据库故障排除
 
 ## Adding Features
 

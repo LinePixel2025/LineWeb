@@ -9,7 +9,7 @@
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
     "postinstall": "cd server && npm install && cd ../client && npm install",
-    "start": "npm run build && cd server && NODE_ENV=production npx prisma db push --accept-data-loss && NODE_ENV=production npx prisma db seed && NODE_ENV=production npx tsx src/index.ts",
+    "start": "npm run build && cd server && NODE_ENV=production npx prisma db push && NODE_ENV=production npx prisma db seed && NODE_ENV=production npx tsx src/index.ts",
     "build": "cd client && npx vite build",
     "db:migrate": "cd server && npx prisma migrate dev",
     "db:push": "cd server && npx prisma db push",
