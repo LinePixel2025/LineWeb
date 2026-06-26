@@ -1,1 +1,2 @@
 - [字体反色策略](font-contrast-policy.md) — 只在明确要求时添加字体反色
+- [Git 推送策略](git-push-policy.md) — 不要自动推送 GitHub，只在用户要求后推送
