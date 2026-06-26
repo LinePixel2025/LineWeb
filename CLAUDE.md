@@ -260,14 +260,15 @@ JWT_SECRET="your-secret-key"
 
 ## Deployment (Railway)
 
-根 `package.json` 的 `start` 脚本是 Railway 入口：
+根 `package.json` 的 `start` 脚本是 Railway 入口。部署使用 PostgreSQL schema 文件（`schema.pg.prisma`）：
 
 ```bash
 # Railway 执行流程：
-npm run build                          # → client/dist/（Vite 构建前端）
-cd server && npx prisma db push        # 同步数据库 Schema → PostgreSQL
-npx prisma db seed                     # 填充种子数据
-NODE_ENV=production npx tsx ...        # 启动 Express（同时 serve 前端）
+npm run build                                    # → client/dist/（Vite 构建前端）
+cd server && npx prisma generate --schema ...    # 用 PostgreSQL schema 生成客户端
+cd server && npx prisma db push --schema ...     # 同步数据库 Schema → PostgreSQL
+cd server && npx prisma db seed --schema ...     # 填充种子数据
+NODE_ENV=production npx tsx ...                  # 启动 Express（同时 serve 前端）
 ```
 
 ### 首次部署步骤

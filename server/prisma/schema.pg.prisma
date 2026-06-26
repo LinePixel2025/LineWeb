@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -13,7 +13,7 @@ model User {
   email     String   @unique
   password  String
   role      String   @default("user")
-  settings  String?  // JSON：用户个性化设置（背景类型、颜色等）
+  settings  String?
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   posts     Post[]
@@ -40,11 +40,11 @@ model Page {
   id           Int      @id @default(autoincrement())
   slug         String   @unique
   title        String
-  schema       String   // JSON string，存储控件树结构
+  schema       String
   published    Boolean  @default(false)
   featured     Boolean  @default(false)
-  featureEmoji String?  // 功能界面显示的图标 emoji
-  featureDesc  String?  // 功能界面显示的简介
+  featureEmoji String?
+  featureDesc  String?
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
