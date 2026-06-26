@@ -264,15 +264,35 @@ JWT_SECRET="your-secret-key"
 
 ```bash
 # Railway 执行流程：
-cd server && npx prisma db push --accept-data-loss  # 自动同步数据库
-npx prisma db seed                                    # 填充种子数据
-npx tsx src/index.ts                                  # 启动 Express
-# 生产模式下 Express 同时 serve client/dist（见 index.ts 第 33-41 行）
+npm run build                          # → client/dist/（Vite 构建前端）
+cd server && npx prisma db push ...    # 自动同步数据库
+npx prisma db seed                     # 填充种子数据
+NODE_ENV=production npx tsx ...        # 启动 Express（同时 serve 前端）
 ```
 
-**关键说明**：
-- **Vite 构建**需在部署前完成（`npm run build` → `client/dist/`），或部署后手动触发
-- `start` 脚本在 `server/` 中执行，因为它 `cd server && ...`
+### Railway Dashboard 必设环境变量
+
+| 变量 | 示例值 | 说明 |
+|------|--------|------|
+| `JWT_SECRET` | `(随机字符串)` | **必须**，生产环境密钥，不可用开发默认值 |
+| `NPM_CONFIG_REGISTRY` | `https://registry.npmjs.org` | **必须**，覆盖 `.npmrc` 的中国镜像，海外部署必须设置 |
+| `NODE_ENV` | `production` | Railway 默认会设，无需手动 |
+
+### SQLite 持久化（Volume）
+
+SQLite 数据库文件在 `server/prisma/lineweb.db`。Railway 容器重启后会清空文件系统，**必须添加 Volume**：
+
+1. Railway Dashboard → Variables → **Volumes**
+2. 新建 Volume，挂载路径设为 `server/prisma`（或其他你放 `.db` 的路径）
+3. 同时修改 `DATABASE_URL` 为 `file:./lineweb.db`（注意路径相对于 server 目录）
+
+> 不设 Volume 的话，每次部署或容器重启都会丢失全部用户和文章数据。
+
+### 注意点
+
+- `start` 脚本包含 `npm run build` 前置步骤，自动构建前端
+- Railway 使用 `NPM_CONFIG_REGISTRY` 环境变量覆盖 `.npmrc` 镜像源，无需改文件
+- `NODE_ENV=production` 已嵌入 `start` 脚本，确保 Express 正确 serve 前端
 - seed 失败会导致容器重启（Railway 会重试），常见原因见下方的数据库故障排除
 
 ## Adding Features
