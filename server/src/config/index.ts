@@ -27,3 +27,15 @@ export const postSchema = z.object({
 })
 
 export const postUpdateSchema = postSchema.partial()
+
+export const pageSchema = z.object({
+  title: z.string().min(1).max(200),
+  slug: z.string().min(1).max(255),
+  schema: z.string().min(1, '页面 Schema 不能为空'),
+  published: z.boolean().optional().default(false),
+  featured: z.boolean().optional().default(false),
+  featureEmoji: z.string().max(10).optional(),
+  featureDesc: z.string().max(200).optional(),
+})
+
+export const pageUpdateSchema = pageSchema.partial()

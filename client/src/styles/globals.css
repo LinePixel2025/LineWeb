@@ -926,6 +926,10 @@ h4 { font-size: 1.15rem; }
   transition: margin-left 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
+.admin-main--collapsed {
+  margin-left: 58px;
+}
+
 .admin-content {
   flex: 1;
   padding: 24px 32px 48px;
@@ -946,7 +950,9 @@ h4 { font-size: 1.15rem; }
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   border-right: 1px solid rgba(255, 255, 255, 0.06);
-  transition: transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+  transition: width 0.3s cubic-bezier(0.25, 0.1, 0.25, 1),
+              transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+  overflow: hidden;
 }
 
 .admin-sidebar-header {
@@ -982,6 +988,58 @@ h4 { font-size: 1.15rem; }
   color: var(--lg-accent);
   letter-spacing: 0.02em;
   margin-left: auto;
+}
+
+/* --- Sidebar collapsed state (desktop) --- */
+.admin-sidebar--collapsed {
+  width: 58px;
+}
+
+.admin-sidebar--collapsed .admin-sidebar-logo-text,
+.admin-sidebar--collapsed .admin-sidebar-logo-badge,
+.admin-sidebar--collapsed .admin-sidebar-link-label,
+.admin-sidebar--collapsed .admin-sidebar-link--back .admin-sidebar-link-icon {
+  display: none;
+}
+
+.admin-sidebar--collapsed .admin-sidebar-logo {
+  justify-content: center;
+}
+
+.admin-sidebar--collapsed .admin-sidebar-link {
+  justify-content: center;
+  padding: 10px 8px;
+}
+
+.admin-sidebar--collapsed .admin-sidebar-header {
+  padding: 14px 8px 10px;
+}
+
+.admin-sidebar--collapsed .admin-sidebar-nav {
+  padding: 8px 6px;
+}
+
+/* --- Sidebar link icon --- */
+.admin-sidebar-link-icon {
+  font-size: 0.95rem;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* --- Sidebar collapse button --- */
+.admin-sidebar-collapse-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--lg-font);
+  width: 100%;
+  text-align: left;
+}
+
+.admin-sidebar-collapse-btn:hover {
+  color: var(--lg-accent) !important;
+  background: var(--lg-accent-soft);
 }
 
 /* Sidebar nav */
@@ -1866,4 +1924,762 @@ html[data-contrast="light"] { display: none; } /* preserve for future */
 /* 刷新按钮旋转动画 — CSS 内处理，不依赖 inline style */
 .wallpaper-refresh-btn.refreshing svg {
   animation: spin 0.8s linear infinite;
+}
+
+/* ============================================================
+   可视化页面编辑器 — Page Editor
+   ============================================================ */
+
+/* --- Main container --- */
+.page-editor {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 56px);
+  position: relative;
+  overflow: hidden;
+}
+
+/* --- Top bar --- */
+.page-editor-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: rgba(10, 10, 14, 0.65);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+  gap: 8px;
+  z-index: 10;
+  min-height: 48px;
+}
+
+.page-editor-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.page-editor-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.page-editor-back-btn {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.10);
+  color: var(--lg-text-secondary);
+  cursor: pointer;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-family: var(--lg-font);
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.page-editor-back-btn:hover {
+  color: var(--lg-text-primary);
+  background: rgba(255,255,255,0.06);
+}
+
+.page-editor-topbar-divider {
+  width: 1px;
+  height: 24px;
+  background: rgba(255,255,255,0.10);
+  flex-shrink: 0;
+}
+
+.page-editor-title-input {
+  background: transparent;
+  border: none;
+  color: var(--lg-text-primary);
+  font-family: var(--lg-font);
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 6px 8px;
+  border-radius: var(--lg-radius-sm);
+  outline: none;
+  min-width: 0;
+  flex: 1;
+  max-width: 400px;
+  transition: background 0.2s ease;
+}
+
+.page-editor-title-input:focus {
+  background: rgba(255,255,255,0.06);
+}
+
+.page-editor-title-input::placeholder {
+  color: var(--lg-text-tertiary);
+}
+
+.page-editor-error-inline {
+  color: var(--lg-danger);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+/* --- Body (three-column layout) --- */
+.page-editor-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* --- Left: Palette --- */
+.page-editor-palette {
+  width: 200px;
+  flex-shrink: 0;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  background: rgba(10,10,14,0.50);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-editor-palette-header {
+  padding: 14px 14px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--lg-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.page-editor-palette-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 10px;
+}
+
+.page-editor-palette-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border-radius: var(--lg-radius-md);
+  cursor: grab;
+  transition: all 0.2s ease;
+  user-select: none;
+  border: 1px solid transparent;
+}
+
+.page-editor-palette-item:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: var(--lg-glass-border);
+}
+
+.page-editor-palette-item:active {
+  cursor: grabbing;
+  transform: scale(0.95);
+  background: rgba(255,255,255,0.10);
+}
+
+.page-editor-palette-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.page-editor-palette-label {
+  font-size: 0.72rem;
+  color: var(--lg-text-secondary);
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* --- Center: Canvas --- */
+.page-editor-canvas {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(41,151,255,0.03) 0%, transparent 50%),
+    rgba(0,0,0,0.30);
+  min-width: 0;
+}
+
+.page-editor-canvas-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 300px;
+  gap: 8px;
+}
+
+.page-editor-canvas-empty-icon {
+  font-size: 2.5rem;
+  color: var(--lg-text-tertiary);
+  opacity: 0.4;
+}
+
+.page-editor-canvas-empty-text {
+  color: var(--lg-text-secondary);
+  font-size: 1rem;
+}
+
+.page-editor-canvas-empty-hint {
+  color: var(--lg-text-tertiary);
+  font-size: 0.85rem;
+}
+
+.page-editor-canvas-components {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+/* --- Canvas item --- */
+.page-editor-canvas-item-wrap {
+  position: relative;
+}
+
+.page-editor-canvas-item {
+  position: relative;
+  border-radius: var(--lg-radius-md);
+  padding: 12px;
+  min-height: 40px;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.page-editor-canvas-item:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+.page-editor-canvas-item--selected {
+  border-color: var(--lg-accent);
+  background: rgba(41,151,255,0.05);
+  box-shadow: 0 0 0 1px rgba(41,151,255,0.15), 0 0 20px rgba(41,151,255,0.06);
+}
+
+.page-editor-canvas-component {
+  position: relative;
+}
+
+.page-editor-canvas-component--selected {
+  outline: 1.5px solid var(--lg-accent);
+  border-radius: var(--lg-radius-sm);
+  background: rgba(41,151,255,0.04);
+}
+
+/* Selected container (card / columns outer div) */
+.page-editor-container-selected {
+  outline: 1.5px solid var(--lg-accent) !important;
+  outline-offset: -1px;
+  border-radius: var(--lg-radius-md);
+  background: rgba(41,151,255,0.04) !important;
+}
+
+/* --- Item toolbar (hover) --- */
+.page-editor-canvas-item-tools {
+  display: none;
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  z-index: 5;
+  align-items: center;
+  gap: 2px;
+  background: rgba(20,20,26,0.90);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 0 var(--lg-radius-md) 0 var(--lg-radius-sm);
+  padding: 3px 4px;
+  font-size: 0.75rem;
+}
+
+.page-editor-canvas-item:hover .page-editor-canvas-item-tools {
+  display: flex;
+}
+
+.page-editor-canvas-item--selected .page-editor-canvas-item-tools {
+  display: flex;
+  border-color: var(--lg-accent);
+}
+
+.page-editor-canvas-item-type {
+  font-size: 0.65rem;
+  color: var(--lg-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0 6px;
+  font-weight: 500;
+}
+
+.page-editor-canvas-item-tool-btn {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--lg-text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  transition: all 0.15s ease;
+}
+
+.page-editor-canvas-item-tool-btn:hover {
+  background: rgba(255,255,255,0.10);
+  color: var(--lg-text-primary);
+}
+
+.page-editor-canvas-item-tool-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.page-editor-canvas-item-tool-btn--danger:hover {
+  color: var(--lg-danger);
+  background: rgba(255,59,48,0.15);
+}
+
+/* --- Drop zone indicator --- */
+.page-editor-drop-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  margin: 2px 0;
+}
+
+.page-editor-drop-indicator span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--lg-accent);
+  opacity: 0.6;
+  font-size: 0.72rem;
+  color: white;
+  text-indent: -9999px;
+  transition: all 0.15s ease;
+}
+
+.page-editor-drop-indicator:hover span {
+  opacity: 1;
+}
+
+/* --- Footer drop zone --- */
+.page-editor-canvas-footer {
+  max-width: 700px;
+  margin: 8px auto 0;
+  padding: 16px;
+  text-align: center;
+  border: 1.5px dashed rgba(255,255,255,0.10);
+  border-radius: var(--lg-radius-md);
+  transition: all 0.2s ease;
+  cursor: default;
+}
+
+.page-editor-canvas-footer:hover {
+  border-color: rgba(255,255,255,0.20);
+  background: rgba(255,255,255,0.03);
+}
+
+.page-editor-canvas-footer-text {
+  font-size: 0.82rem;
+  color: var(--lg-text-tertiary);
+}
+
+/* --- Right: Props Panel --- */
+.page-editor-props {
+  width: 260px;
+  flex-shrink: 0;
+  border-left: 1px solid rgba(255,255,255,0.06);
+  background: rgba(10,10,14,0.50);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-editor-props-header {
+  padding: 14px 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--lg-text-secondary);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.page-editor-props-type {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--lg-accent);
+  background: var(--lg-accent-soft);
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-weight: 500;
+}
+
+.page-editor-props-body {
+  padding: 12px 16px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* --- Props fields --- */
+.pe-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pe-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pe-field-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--lg-text-tertiary);
+}
+
+.pe-field .lg-input {
+  padding: 10px 12px;
+  font-size: 0.85rem;
+}
+
+.pe-field-hint {
+  font-size: 0.7rem;
+  color: var(--lg-text-tertiary);
+  margin-top: 2px;
+}
+
+.pe-hint {
+  font-size: 0.78rem;
+  color: var(--lg-text-tertiary);
+  font-style: italic;
+  padding: 8px 0;
+}
+
+.pe-add-item-btn {
+  background: none;
+  border: 1px dashed rgba(255,255,255,0.15);
+  color: var(--lg-accent);
+  padding: 6px 12px;
+  border-radius: var(--lg-radius-sm);
+  cursor: pointer;
+  font-family: var(--lg-font);
+  font-size: 0.8rem;
+  transition: all 0.2s ease;
+}
+
+.pe-add-item-btn:hover {
+  background: var(--lg-accent-soft);
+  border-color: var(--lg-accent);
+}
+
+/* --- Context Menu --- */
+.page-editor-context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 140px;
+  background: rgba(16,16,22,0.95);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: var(--lg-radius-md);
+  padding: 4px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  animation: fadeIn 0.12s ease both;
+}
+
+.page-editor-context-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 14px;
+  border: none;
+  background: none;
+  color: var(--lg-text-primary);
+  font-family: var(--lg-font);
+  font-size: 0.85rem;
+  border-radius: var(--lg-radius-sm);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.page-editor-context-item:hover {
+  background: var(--lg-accent-soft);
+}
+
+.page-editor-context-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.08);
+  margin: 4px 0;
+}
+
+/* --- Responsive --- */
+@media (max-width: 1024px) {
+  .page-editor-palette {
+    width: 160px;
+  }
+
+  .page-editor-props {
+    width: 220px;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-editor-palette {
+    width: 140px;
+  }
+
+  .page-editor-props {
+    display: none;
+  }
+
+  .page-editor-canvas {
+    padding: 12px;
+  }
+
+  .page-editor-topbar-title-input {
+    max-width: 200px;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-editor-body {
+    flex-direction: column;
+  }
+
+  .page-editor-palette {
+    width: 100%;
+    max-height: 120px;
+    border-right: none;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .page-editor-palette-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    padding: 6px;
+  }
+
+  .page-editor-palette-item {
+    padding: 6px 4px;
+  }
+
+  .page-editor-palette-label {
+    font-size: 0.65rem;
+  }
+
+  .page-editor-palette-icon {
+    font-size: 1rem;
+  }
+
+  .page-editor-topbar-right .liquid-btn {
+    padding: 6px 14px;
+    font-size: 0.8rem;
+  }
+}
+
+/* ============================================================
+   页面编辑器 — 嵌套拖拽 & 验证增强
+   ============================================================ */
+
+.page-editor-drop-active {
+  outline: 2px dashed var(--lg-accent) !important;
+  outline-offset: -2px;
+  background: rgba(41, 151, 255, 0.06) !important;
+}
+
+.page-editor-inner-drop-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(41, 151, 255, 0.08);
+  color: var(--lg-accent);
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
+  animation: fadeIn 0.15s ease both;
+}
+
+.page-editor-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: rgba(255, 59, 48, 0.10);
+  border-bottom: 1px solid rgba(255, 59, 48, 0.20);
+  color: var(--lg-danger);
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.page-editor-err-badge {
+  font-size: 0.7rem;
+  color: var(--lg-danger);
+  background: rgba(255, 59, 48, 0.12);
+  padding: 2px 8px;
+  border-radius: 9999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pe-field-err {
+  font-size: 0.72rem;
+  color: var(--lg-danger);
+  margin-top: 2px;
+}
+
+.pe-add-child-btn-wrap {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ============================================================
+   页面编辑器 — 两步流程（模块设定 → 内容编辑）
+   ============================================================ */
+
+.page-editor-step-label {
+  font-size: 0.85rem;
+  color: var(--lg-text-tertiary);
+  font-weight: 500;
+}
+
+.page-editor-module-setup {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 24px;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(41,151,255,0.03) 0%, transparent 50%),
+    rgba(0,0,0,0.30);
+}
+
+.page-editor-module-setup-card {
+  width: 100%;
+  max-width: 480px;
+  background: rgba(10,10,14,0.60);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--lg-glass-border);
+  border-radius: var(--lg-radius-xl);
+  padding: 36px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: glassRise 0.4s ease both;
+}
+
+.page-editor-module-setup-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--lg-text-primary);
+}
+
+.page-editor-module-setup-desc {
+  font-size: 0.88rem;
+  color: var(--lg-text-secondary);
+  margin-bottom: 4px;
+}
+
+.page-editor-module-badge {
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  background: rgba(52,199,89,0.15);
+  color: var(--lg-success);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Toggle switch */
+.pe-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.pe-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.pe-toggle-slider {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: rgba(255,255,255,0.10);
+  border-radius: 11px;
+  transition: background 0.3s ease;
+  flex-shrink: 0;
+}
+
+.pe-toggle-slider::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--lg-text-secondary);
+  transition: all 0.3s ease;
+}
+
+.pe-toggle input:checked + .pe-toggle-slider {
+  background: var(--lg-accent);
+}
+
+.pe-toggle input:checked + .pe-toggle-slider::after {
+  left: 20px;
+  background: white;
+}
+
+.pe-toggle-label {
+  font-size: 0.9rem;
+  color: var(--lg-text-primary);
+}
+
+.pe-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.06);
+  margin: 4px 0;
+}
+
+.pe-featured-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-left: 50px;
 }

@@ -15,6 +15,9 @@ import FeaturesPage from './pages/FeaturesPage'
 import ProfilePage from './pages/ProfilePage'
 import AdminPage from './pages/AdminPage'
 import EditorPage from './pages/EditorPage'
+import PageList from './pages/admin/PageList'
+import PageEditor from './pages/admin/PageEditor'
+import DynamicPage from './pages/DynamicPage'
 
 export default function App() {
   return (
@@ -35,6 +38,7 @@ export default function App() {
                 <Route path="/profile" element={
                   <ProtectedRoute><ProfilePage /></ProtectedRoute>
                 } />
+                <Route path="/page/:slug" element={<DynamicPage />} />
               </Route>
 
               {/* Admin layout — separate from main site */}
@@ -42,6 +46,9 @@ export default function App() {
                 <Route path="/admin" element={<AdminPage />} />
                 <Route path="/admin/new" element={<EditorPage />} />
                 <Route path="/admin/edit/:id" element={<EditorPage />} />
+                <Route path="/admin/pages" element={<PageList />} />
+                <Route path="/admin/pages/new" element={<PageEditor />} />
+                <Route path="/admin/pages/:id/edit" element={<PageEditor />} />
               </Route>
             </Routes>
           </ContrastProvider>

@@ -6,6 +6,7 @@ import { config } from './config/index.js'
 import authRoutes from './routes/auth.js'
 import postRoutes from './routes/posts.js'
 import bingRoutes from './routes/bing.js'
+import pageRoutes from './routes/pages.js'
 
 const app = express()
 const __filename = fileURLToPath(import.meta.url)
@@ -23,6 +24,7 @@ app.use(express.json())
 app.use('/api/auth', authRoutes)
 app.use('/api/posts', postRoutes)
 app.use('/api/bing-wallpaper', bingRoutes)
+app.use('/api/pages', pageRoutes)
 
 // Health check
 app.get('/api/health', (_req, res) => {

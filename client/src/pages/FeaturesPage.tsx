@@ -1,5 +1,15 @@
 import { Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import LiquidGlass from '../components/glass/LiquidGlass'
+import api from '../lib/api'
+
+interface FeaturedPage {
+  id: number
+  title: string
+  slug: string
+  featureEmoji: string | null
+  featureDesc: string | null
+}
 
 const features = [
   {
@@ -24,6 +34,16 @@ const features = [
 ]
 
 export default function FeaturesPage() {
+  const [customPages, setCustomPages] = useState<FeaturedPage[]>([])
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    api.get<{ pages: FeaturedPage[] }>('/pages/featured')
+      .then(data => setCustomPages(data.pages))
+      .catch(() => {})
+      .finally(() => setLoaded(true))
+  }, [])
+
   return (
     <div className="page container" style={{ maxWidth: '800px', paddingTop: 'calc(var(--lg-nav-height) + 60px)' }}>
       <div style={{ textAlign: 'center', marginBottom: '48px' }}>
@@ -36,6 +56,7 @@ export default function FeaturesPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+        {/* 内置功能卡片 */}
         {features.map((item, i) => (
           <LiquidGlass
             key={item.path}
@@ -59,7 +80,6 @@ export default function FeaturesPage() {
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                textAlign: 'center',
                 textDecoration: 'none',
                 color: 'inherit',
                 gap: '16px',
@@ -83,7 +103,57 @@ export default function FeaturesPage() {
             </Link>
           </LiquidGlass>
         ))}
+
+        {/* 自定义页面卡片 */}
+        {customPages.map((item, i) => (
+          <LiquidGlass
+            key={item.slug}
+            variant="strong"
+            chromatic={false}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              textAlign: 'center',
+              padding: '40px 24px',
+              gap: '16px',
+              animation: `fadeIn 0.5s ease-out ${(i + features.length) * 0.1}s both`,
+            }}
+          >
+            <Link
+              to={`/page/${item.slug}`}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textDecoration: 'none',
+                color: 'inherit',
+                gap: '16px',
+              }}
+            >
+              <div style={{ fontSize: '2.8rem', lineHeight: 1 }}>
+                {item.featureEmoji || '📄'}
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '6px' }}>{item.title}</h3>
+                {item.featureDesc && (
+                  <p className="text-secondary" style={{ fontSize: '0.88rem', margin: 0 }}>
+                    {item.featureDesc}
+                  </p>
+                )}
+              </div>
+            </Link>
+          </LiquidGlass>
+        ))}
       </div>
+
+      {loaded && customPages.length === 0 && (
+        <p className="text-tertiary" style={{ textAlign: 'center', marginTop: '24px' }}>
+          管理员尚未添加自定义模块
+        </p>
+      )}
     </div>
   )
 }

@@ -34,3 +34,18 @@ model Post {
 
   @@map("posts")
 }
+
+model Page {
+  id           Int      @id @default(autoincrement())
+  slug         String   @unique
+  title        String
+  schema       String   // JSON string，存储控件树结构
+  published    Boolean  @default(false)
+  featured     Boolean  @default(false)
+  featureEmoji String?  // 功能界面显示的图标 emoji
+  featureDesc  String?  // 功能界面显示的简介
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("pages")
+}
