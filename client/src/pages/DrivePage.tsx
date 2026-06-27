@@ -230,24 +230,37 @@ function NewFolderDialog({ parentId, onCreated }: { parentId: number | null; onC
   )
 }
 
-/* ---------- Rename Dialog ---------- */
+/* ---------- Rename Trigger (only the clickable name) ---------- */
 
-function RenameDialog({ item, onRenamed }: { item: DriveItem; onRenamed: () => void }) {
-  const [open, setOpen] = useState(false)
+function RenameTrigger({ item, onRename }: { item: DriveItem; onRename: (item: DriveItem) => void }) {
+  return (
+    <span
+      className="drive-name-link"
+      onClick={() => onRename(item)}
+      title="点击重命名"
+    >
+      {item.isFolder ? '📁 ' : getFileIcon(item) + ' '}
+      {item.name}
+    </span>
+  )
+}
+
+/* ---------- Rename Dialog (rendered as portal at top level) ---------- */
+
+function RenameDialog({ item, onRenamed, onClose }: { item: DriveItem; onRenamed: () => void; onClose: () => void }) {
   const [name, setName] = useState(item.name)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const handleRename = async () => {
     if (!name.trim() || name.trim() === item.name) {
-      setOpen(false)
+      onClose()
       return
     }
     setLoading(true)
     setError('')
     try {
       await api.put(`/drive/files/${item.id}`, { name: name.trim() })
-      setOpen(false)
       onRenamed()
     } catch (err: any) {
       setError(err.message || '重命名失败')
@@ -257,38 +270,26 @@ function RenameDialog({ item, onRenamed }: { item: DriveItem; onRenamed: () => v
   }
 
   return (
-    <>
-      <span
-        className="drive-name-link"
-        onClick={() => { setName(item.name); setOpen(true) }}
-        title="点击重命名"
-      >
-        {item.isFolder ? '📁 ' : getFileIcon(item) + ' '}
-        {item.name}
-      </span>
-      {open && (
-        <div className="dialog-overlay" onClick={() => setOpen(false)}>
-          <div className="lg-surface-strong drive-dialog" onClick={e => e.stopPropagation()}>
-            <h3>重命名</h3>
-            {error && <div className="editor-error">{error}</div>}
-            <input
-              className="lg-input drive-dialog-input"
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleRename()}
-              autoFocus
-            />
-            <div className="drive-dialog-actions">
-              <LiquidButton size="sm" variant="ghost" onClick={() => setOpen(false)}>取消</LiquidButton>
-              <LiquidButton size="sm" variant="primary" onClick={handleRename} disabled={loading || !name.trim()}>
-                {loading ? '保存中...' : '保存'}
-              </LiquidButton>
-            </div>
-          </div>
+    <div className="dialog-overlay" onClick={onClose}>
+      <div className="lg-surface-strong drive-dialog" onClick={e => e.stopPropagation()}>
+        <h3>重命名</h3>
+        {error && <div className="editor-error">{error}</div>}
+        <input
+          className="lg-input drive-dialog-input"
+          type="text"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleRename()}
+          autoFocus
+        />
+        <div className="drive-dialog-actions">
+          <LiquidButton size="sm" variant="ghost" onClick={onClose}>取消</LiquidButton>
+          <LiquidButton size="sm" variant="primary" onClick={handleRename} disabled={loading || !name.trim()}>
+            {loading ? '保存中...' : '保存'}
+          </LiquidButton>
         </div>
-      )}
-    </>
+      </div>
+    </div>
   )
 }
 
@@ -445,6 +446,7 @@ export default function DrivePage() {
 
   const [previewItem, setPreviewItem] = useState<DriveItem | null>(null)
   const [deleteItem, setDeleteItem] = useState<DriveItem | null>(null)
+  const [renameItem, setRenameItem] = useState<DriveItem | null>(null)
 
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -642,7 +644,7 @@ export default function DrivePage() {
                           📁 {item.name}
                         </span>
                       ) : (
-                        <RenameDialog item={item} onRenamed={() => fetchItems(currentParentId)} />
+                        <RenameTrigger item={item} onRename={setRenameItem} />
                       )}
                     </td>
                     <td className="drive-cell drive-cell--size">{formatFileSize(Number(item.size))}</td>
@@ -676,6 +678,16 @@ export default function DrivePage() {
 
       {/* Modal overlays */}
       {renderPreview()}
+      {renameItem && (
+        <RenameDialog
+          item={renameItem}
+          onClose={() => setRenameItem(null)}
+          onRenamed={() => {
+            setRenameItem(null)
+            fetchItems(currentParentId)
+          }}
+        />
+      )}
       {deleteItem && (
         <DeleteDialog
           item={deleteItem}

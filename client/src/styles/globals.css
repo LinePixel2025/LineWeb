@@ -218,14 +218,14 @@ a:hover {
 
 /* === Strong glass — thicker blur variant for content-heavy surfaces === */
 .lg-surface-blur {
-  background: rgba(0,0,0,0.18);
-  backdrop-filter: url(#lg-core) blur(1.7px) saturate(120%) brightness(0.85);
-  -webkit-backdrop-filter: url(#lg-core) blur(1.7px) saturate(120%) brightness(0.85);
+  background: rgba(0,0,0,0.28);
+  backdrop-filter: url(#lg-core) blur(1.7px) saturate(120%);
+  -webkit-backdrop-filter: url(#lg-core) blur(1.7px) saturate(120%);
 }
 .lg-surface-strong-blur {
-  background: rgba(0,0,0,0.24);
-  backdrop-filter: url(#lg-core-strong) blur(1.9px) saturate(110%) brightness(0.78);
-  -webkit-backdrop-filter: url(#lg-core-strong) blur(1.9px) saturate(110%) brightness(0.78);
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: url(#lg-core-strong) blur(1.9px) saturate(110%);
+  -webkit-backdrop-filter: url(#lg-core-strong) blur(1.9px) saturate(110%);
 }
 
 /* ============================================================
