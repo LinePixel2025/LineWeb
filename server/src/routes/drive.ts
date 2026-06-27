@@ -3,7 +3,7 @@ import multer from 'multer'
 import prisma from '../lib/prisma.js'
 import { parseId, parsePagination } from '../lib/utils.js'
 import { authenticate } from '../middleware/auth.js'
-import { sendCommand, isNodeConnected } from '../services/storageTunnel.js'
+import { sendCommand, sendChunkedWrite, sendChunkedRead, isNodeConnected } from '../services/storageTunnel.js'
 import { config } from '../config/index.js'
 
 // JSON 序列化 BigInt
@@ -263,15 +263,10 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
     }
 
     const fileBuffer = req.file.buffer
-    const base64Data = fileBuffer.toString('base64')
 
     let writeResult
     try {
-      writeResult = await sendCommand({
-        type: 'write_file',
-        path: storagePath,
-        data: base64Data,
-      })
+      writeResult = await sendChunkedWrite(storagePath, fileBuffer)
     } catch (wsErr: any) {
       console.error('存储节点写入失败:', wsErr)
       res.status(502).json({ error: `存储节点写入失败: ${wsErr.message}` })
@@ -332,10 +327,7 @@ router.get('/download/:id', async (req: Request, res: Response) => {
 
     let readResult
     try {
-      readResult = await sendCommand({
-        type: 'read_file',
-        path: file.storagePath,
-      })
+      readResult = await sendChunkedRead(file.storagePath)
     } catch (wsErr: any) {
       console.error('存储节点读取失败:', wsErr)
       res.status(502).json({ error: `存储节点读取失败: ${wsErr.message}` })

@@ -9,4 +9,4 @@ coverage/
 *.db
 server/prisma/lineweb.db
 server/prisma/schema.generated.prisma
-storage-node/
+__pycache__/

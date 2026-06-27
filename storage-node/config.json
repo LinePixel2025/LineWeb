@@ -1,0 +1,7 @@
+{
+  "serverUrl": "ws://localhost:3001/ws/storage",
+  "token": "lineweb-storage-node-secret-change-in-production",
+  "storagePath": "D:/LineWebDrive",
+  "logFile": "storage-node.log",
+  "maxReconnectDelay": 60
+}
