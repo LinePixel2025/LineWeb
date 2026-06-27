@@ -5,6 +5,8 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'lineweb-dev-secret-change-in-production',
   jwtExpiresIn: '7d' as const,
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  storageNodeToken: process.env.STORAGE_NODE_TOKEN || 'lineweb-storage-node-secret-change-in-production',
+  maxFileSizeMB: parseInt(process.env.MAX_FILE_SIZE_MB || '500', 10),
 }
 
 export const registerSchema = z.object({

@@ -23,6 +23,7 @@ router.get('/', async (req: Request, res: Response) => {
         username: true,
         email: true,
         role: true,
+        canAccessDrive: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
@@ -54,6 +55,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       username: true,
       email: true,
       role: true,
+      canAccessDrive: true,
       createdAt: true,
     },
   })
@@ -106,7 +108,43 @@ router.put('/:id', async (req: Request, res: Response) => {
       username: true,
       email: true,
       role: true,
+      canAccessDrive: true,
       createdAt: true,
+    },
+  })
+
+  res.json(updated)
+})
+
+// 切换用户的网盘访问权限
+router.put('/:id/drive-access', async (req: Request, res: Response) => {
+  const id = parseId(req.params.id)
+  if (id === null) {
+    res.status(400).json({ error: '无效的用户 ID' })
+    return
+  }
+
+  const { canAccessDrive } = req.body as { canAccessDrive?: boolean }
+  if (typeof canAccessDrive !== 'boolean') {
+    res.status(400).json({ error: '请提供 canAccessDrive 布尔值' })
+    return
+  }
+
+  const user = await prisma.user.findUnique({ where: { id } })
+  if (!user) {
+    res.status(404).json({ error: '用户不存在' })
+    return
+  }
+
+  const updated = await prisma.user.update({
+    where: { id },
+    data: { canAccessDrive },
+    select: {
+      id: true,
+      username: true,
+      email: true,
+      role: true,
+      canAccessDrive: true,
     },
   })
 

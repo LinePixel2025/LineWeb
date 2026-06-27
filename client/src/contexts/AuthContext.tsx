@@ -9,6 +9,7 @@ interface User {
   email: string
   role: string
   settings?: string  // JSON: 用户个性化设置
+  canAccessDrive?: boolean
 }
 
 interface AuthContextType {

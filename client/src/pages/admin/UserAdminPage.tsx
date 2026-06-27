@@ -11,6 +11,7 @@ interface UserItem {
   username: string
   email: string
   role: string
+  canAccessDrive?: boolean
   createdAt: string
 }
 
@@ -90,6 +91,7 @@ export default function UserAdminPage() {
                 <th className="admin-th admin-th--title">用户名</th>
                 <th className="admin-th" style={{ width: '25%' }}>邮箱</th>
                 <th className="admin-th admin-th--status">角色</th>
+                <th className="admin-th" style={{ width: '90px' }}>网盘</th>
                 <th className="admin-th admin-cell--date">注册时间</th>
                 <th className="admin-th admin-th--actions">操作</th>
               </tr>
@@ -122,6 +124,22 @@ export default function UserAdminPage() {
                         </span>
                       )}
                     </td>
+                    <td className="admin-cell" style={{ textAlign: 'center' }}>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await api.put(`/users/${u.id}/drive-access`, { canAccessDrive: !u.canAccessDrive })
+                            fetchUsers()
+                          } catch (err: any) {
+                            alert(err.message || '操作失败')
+                          }
+                        }}
+                        className={`drive-toggle ${u.canAccessDrive ? 'drive-toggle--on' : ''}`}
+                        title={u.canAccessDrive ? '点击关闭网盘访问' : '点击开启网盘访问'}
+                      >
+                        {u.canAccessDrive ? '✅' : '❌'}
+                      </button>
+                    </td>
                     <td className="admin-cell admin-cell--date">
                       {new Date(u.createdAt).toLocaleString('zh-CN')}
                     </td>
@@ -143,7 +161,7 @@ export default function UserAdminPage() {
                         <div className="admin-actions">
                           <LiquidButton size="sm" variant="glass" onClick={() => startEdit(u)}>编辑</LiquidButton>
                           {u.id === authUser?.id ? (
-                            <LiquidButton size="sm" variant="glass" disabled title="不能删除自己">删除</LiquidButton>
+                            <span className="liquid-btn glass sm" style={{ opacity: 0.5, cursor: 'not-allowed' }} title="不能删除自己">删除</span>
                           ) : (
                             <LiquidButton size="sm" variant="danger" onClick={() => handleDelete(u.id, u.username)}>删除</LiquidButton>
                           )}

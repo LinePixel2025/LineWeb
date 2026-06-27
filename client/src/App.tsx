@@ -20,6 +20,7 @@ import PageList from './pages/admin/PageList'
 import PageEditor from './pages/admin/PageEditor'
 import UserAdminPage from './pages/admin/UserAdminPage'
 import DynamicPage from './pages/DynamicPage'
+import DrivePage from './pages/DrivePage'
 
 export default function App() {
   return (
@@ -41,6 +42,9 @@ export default function App() {
                   <ProtectedRoute><ProfilePage /></ProtectedRoute>
                 } />
                 <Route path="/page/:slug" element={<DynamicPage />} />
+                <Route path="/drive" element={
+                  <ProtectedRoute><DrivePage /></ProtectedRoute>
+                } />
               </Route>
 
               {/* Admin layout — separate from main site */}

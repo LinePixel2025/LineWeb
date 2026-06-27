@@ -1,5 +1,6 @@
 import express from 'express'
 import cors from 'cors'
+import http from 'http'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { config } from './config/index.js'
@@ -9,6 +10,8 @@ import bingRoutes from './routes/bing.js'
 import pageRoutes from './routes/pages.js'
 import commentRoutes from './routes/comments.js'
 import userRoutes from './routes/users.js'
+import driveRoutes from './routes/drive.js'
+import { initStorageTunnel } from './services/storageTunnel.js'
 
 const app = express()
 const __filename = fileURLToPath(import.meta.url)
@@ -20,7 +23,8 @@ app.use(cors({
     : config.corsOrigin,
   credentials: true,
 }))
-app.use(express.json())
+app.use(express.json({ limit: '600mb' }))  // 提升请求体大小限制以支持大文件上传
+app.use(express.urlencoded({ limit: '600mb', extended: true }))
 
 // Routes
 app.use('/api/auth', authRoutes)
@@ -29,6 +33,7 @@ app.use('/api/bing-wallpaper', bingRoutes)
 app.use('/api/pages', pageRoutes)
 app.use('/api/comments', commentRoutes)
 app.use('/api/users', userRoutes)
+app.use('/api/drive', driveRoutes)
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -40,13 +45,19 @@ if (process.env.NODE_ENV === 'production') {
   const clientDist = path.join(__dirname, '../../client/dist')
   app.use(express.static(clientDist))
   app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api')) {
+    if (!req.path.startsWith('/api') && !req.path.startsWith('/ws')) {
       res.sendFile(path.join(clientDist, 'index.html'))
     }
   })
 }
 
+// 创建 HTTP Server（用于同时支持 Express + WebSocket）
+const server = http.createServer(app)
+
+// 初始化 WebSocket 隧道
+initStorageTunnel(server)
+
 const port = config.port
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`✦ LineWeb Server running on port ${port}`)
 })

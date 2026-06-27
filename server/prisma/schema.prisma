@@ -8,16 +8,18 @@ datasource db {
 }
 
 model User {
-  id        Int       @id @default(autoincrement())
-  username  String    @unique
-  email     String    @unique
-  password  String
-  role      String    @default("user")
-  settings  String?   // JSON：用户个性化设置（背景类型、颜色等）
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  posts     Post[]
-  comments  Comment[]
+  id              Int       @id @default(autoincrement())
+  username        String    @unique
+  email           String    @unique
+  password        String
+  role            String    @default("user")
+  settings        String?   // JSON：用户个性化设置（背景类型、颜色等）
+  canAccessDrive  Boolean   @default(false) // 是否有网盘访问权限
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  posts           Post[]
+  comments        Comment[]
+  driveFiles      DriveFile[] // 上传的文件
 
   @@map("users")
 }
@@ -67,4 +69,22 @@ model Page {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("pages")
+}
+
+model DriveFile {
+  id           Int         @id @default(autoincrement())
+  name         String                              // 文件名或文件夹名
+  isFolder     Boolean     @default(false)         // true = 文件夹
+  parentId     Int?                                // 父文件夹ID（null=根目录）
+  parent       DriveFile?  @relation("DriveHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children     DriveFile[] @relation("DriveHierarchy")
+  size         BigInt      @default(0)             // 文件大小（字节）
+  mimeType     String?                             // MIME 类型（文件才有）
+  storagePath  String                              // 存储节点上的相对路径
+  uploadedById Int                                 // 上传者 ID
+  uploadedBy   User        @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  @@map("drive_files")
 }

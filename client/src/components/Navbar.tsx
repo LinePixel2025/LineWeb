@@ -62,6 +62,15 @@ export default function Navbar() {
 
           {user ? (
             <>
+              {user.canAccessDrive && (
+                <Link
+                  to="/drive"
+                  className={`navbar-link ${location.pathname === '/drive' ? 'active' : ''}`}
+                  onClick={closeMenu}
+                >
+                  ☁️ 网盘
+                </Link>
+              )}
               {isAdmin && (
                 <Link
                   to="/admin"

@@ -7,7 +7,7 @@ import { authenticate } from '../middleware/auth.js'
 
 const router = Router()
 
-function generateTokenResponse(user: { id: number; username: string; email: string; role: string; settings: string | null }) {
+function generateTokenResponse(user: { id: number; username: string; email: string; role: string; settings: string | null; canAccessDrive: boolean }) {
   const token = jwt.sign(
     { userId: user.id, role: user.role },
     config.jwtSecret,
@@ -15,7 +15,14 @@ function generateTokenResponse(user: { id: number; username: string; email: stri
   )
   return {
     token,
-    user: { id: user.id, username: user.username, email: user.email, role: user.role, settings: user.settings },
+    user: {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      settings: user.settings,
+      canAccessDrive: user.canAccessDrive,
+    },
   }
 }
 
@@ -72,7 +79,7 @@ router.post('/login', async (req: Request, res: Response) => {
 router.get('/me', authenticate, async (req: Request, res: Response) => {
   const user = await prisma.user.findUnique({
     where: { id: req.user!.userId },
-    select: { id: true, username: true, email: true, role: true, settings: true, createdAt: true },
+    select: { id: true, username: true, email: true, role: true, settings: true, canAccessDrive: true, createdAt: true },
   })
   if (!user) {
     res.status(404).json({ error: '用户不存在' })
