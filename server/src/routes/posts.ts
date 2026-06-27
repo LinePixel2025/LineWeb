@@ -1,21 +1,10 @@
 import { Router, Request, Response } from 'express'
 import prisma from '../lib/prisma.js'
+import { parsePagination, parseId } from '../lib/utils.js'
 import { postSchema, postUpdateSchema } from '../config/index.js'
 import { authenticate, requireAdmin } from '../middleware/auth.js'
 
 const router = Router()
-
-function parsePagination(query: qs.ParsedQs) {
-  const page = Math.max(1, parseInt(query.page as string) || 1)
-  const limit = Math.min(50, Math.max(1, parseInt(query.limit as string) || 10))
-  const skip = (page - 1) * limit
-  return { page, limit, skip }
-}
-
-function parseId(idStr: string): number | null {
-  const id = parseInt(idStr)
-  return isNaN(id) ? null : id
-}
 
 // 获取公开文章列表
 router.get('/', async (req: Request, res: Response) => {

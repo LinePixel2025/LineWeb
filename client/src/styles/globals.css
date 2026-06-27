@@ -2912,10 +2912,6 @@ html[data-contrast="light"] { display: none; } /* preserve for future */
 
 /* Admin comment styles */
 
-.admin-cell--comment {
-  max-width: 280px;
-}
-
 .comment-preview {
   font-size: 0.9rem;
   color: var(--lg-text-secondary);

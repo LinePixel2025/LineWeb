@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import LiquidButton from '../../components/glass/LiquidButton'
 import LiquidGlass from '../../components/glass/LiquidGlass'
 import api from '../../lib/api'
+import type { CommentData } from '../../types/comment'
 
 /* ---------- types ---------- */
 
@@ -13,23 +14,93 @@ interface PostGroup {
   latestAt: string
 }
 
-interface CommentItem {
-  id: number
-  content: string
-  createdAt: string
-  updatedAt: string
-  parentId: number | null
-  author: { id: number; username: string }
+/* ---------- helpers ---------- */
+
+const truncate = (text: string, max: number) =>
+  text.length > max ? text.slice(0, max) + '…' : text
+
+/* ---------- sub-components ---------- */
+
+function CommentRow({
+  comment,
+  isReply,
+  indent,
+  editingId,
+  editText,
+  setEditText,
+  onSave,
+  onStartEdit,
+  onDelete,
+  cancelEdit,
+}: {
+  comment: CommentData
+  isReply: boolean
+  indent?: boolean
+  editingId: number | null
+  editText: string
+  setEditText: (v: string) => void
+  onSave: (id: number) => void
+  onStartEdit: (c: CommentData) => void
+  onDelete: (id: number) => void
+  cancelEdit: () => void
+}) {
+  const isEditing = editingId === comment.id
+
+  return (
+    <tr className="admin-row fade-in">
+      <td className="admin-cell admin-cell--comment" style={indent ? { paddingLeft: '40px' } : undefined}>
+        {isEditing ? (
+          <div className="comment-edit-form">
+            <textarea
+              className="lg-input"
+              value={editText}
+              onChange={e => setEditText(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              style={{ width: '100%', marginBottom: '8px' }}
+            />
+            <div className="comment-edit-actions">
+              <LiquidButton size="sm" variant="primary" onClick={() => onSave(comment.id)}>保存</LiquidButton>
+              <LiquidButton size="sm" variant="ghost" onClick={cancelEdit}>取消</LiquidButton>
+            </div>
+          </div>
+        ) : (
+          <div className="comment-preview" style={isReply ? { color: 'var(--lg-text-tertiary)' } : undefined}>
+            {isReply ? '└ ' : ''}{truncate(comment.content, isReply ? 100 : 120)}
+          </div>
+        )}
+      </td>
+      <td className="admin-cell">{comment.author.username}</td>
+      <td className="admin-cell">
+        <span className={`admin-badge ${isReply ? 'admin-badge--draft' : 'admin-badge--published'}`} style={{ fontSize: '0.75rem' }}>
+          {isReply ? '回复' : '主评论'}
+        </span>
+      </td>
+      <td className="admin-cell admin-cell--date">
+        {new Date(comment.createdAt).toLocaleString('zh-CN')}
+      </td>
+      <td className="admin-cell admin-cell--actions">
+        <div className="admin-actions">
+          {isEditing ? null : (
+            <>
+              <LiquidButton size="sm" variant="glass" onClick={() => onStartEdit(comment)}>编辑</LiquidButton>
+              <LiquidButton size="sm" variant="danger" onClick={() => onDelete(comment.id)}>删除</LiquidButton>
+            </>
+          )}
+        </div>
+      </td>
+    </tr>
+  )
 }
 
-/* ---------- component ---------- */
+/* ---------- main component ---------- */
 
 export default function CommentAdminPage() {
   const [groups, setGroups] = useState<PostGroup[]>([])
   const [groupsLoading, setGroupsLoading] = useState(true)
   const [selectedPost, setSelectedPost] = useState<{ postId: number; title: string } | null>(null)
 
-  const [comments, setComments] = useState<CommentItem[]>([])
+  const [comments, setComments] = useState<CommentData[]>([])
   const [commentsLoading, setCommentsLoading] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editText, setEditText] = useState('')
@@ -47,7 +118,7 @@ export default function CommentAdminPage() {
   const fetchComments = (postId: number) => {
     setCommentsLoading(true)
     setEditingId(null)
-    api.get<{ comments: CommentItem[]; total: number }>(`/comments/admin/post/${postId}`)
+    api.get<{ comments: CommentData[]; total: number }>(`/comments/admin/post/${postId}`)
       .then(d => setComments(d.comments))
       .catch(console.error)
       .finally(() => setCommentsLoading(false))
@@ -75,7 +146,7 @@ export default function CommentAdminPage() {
     }
   }
 
-  const startEdit = (comment: CommentItem) => {
+  const startEdit = (comment: CommentData) => {
     setEditingId(comment.id)
     setEditText(comment.content)
   }
@@ -97,19 +168,11 @@ export default function CommentAdminPage() {
     }
   }
 
-  const truncate = (text: string, max: number) =>
-    text.length > max ? text.slice(0, max) + '…' : text
-
-  // Build hierarchy: top level comments and their children
-  const topLevel = comments.filter(c => !c.parentId)
-  const childMap = new Map<number, CommentItem[]>()
-  for (const c of comments) {
-    if (c.parentId) {
-      const children = childMap.get(c.parentId) || []
-      children.push(c)
-      childMap.set(c.parentId, children)
-    }
-  }
+  // 评论计数
+  const totalComments = useMemo(
+    () => comments.reduce((sum, c) => sum + 1 + c.replies.length, 0),
+    [comments]
+  )
 
   /* ---- Level 1: Post list ---- */
   if (!selectedPost) {
@@ -163,7 +226,7 @@ export default function CommentAdminPage() {
     )
   }
 
-  /* ---- Level 2: Comments for selected post ---- */
+  /* ---- Level 2: Comments for selected post (tree-based) ---- */
   return (
     <div className="admin-page">
       <div className="admin-page-header">
@@ -174,7 +237,7 @@ export default function CommentAdminPage() {
           {truncate(selectedPost.title, 30)}
         </h1>
         <span className="comment-group-badge" style={{ marginLeft: '10px', position: 'static', alignSelf: 'center' }}>
-          {comments.length}
+          {totalComments}
         </span>
       </div>
 
@@ -197,97 +260,37 @@ export default function CommentAdminPage() {
               </tr>
             </thead>
             <tbody>
-              {topLevel.map((comment, i) => {
-                const replies = childMap.get(comment.id) || []
-                return (
-                  <tr key={comment.id} className="admin-row fade-in" style={{ animationDelay: `${i * 0.04}s` }}>
-                    <td className="admin-cell admin-cell--comment">
-                      {editingId === comment.id ? (
-                        <div className="comment-edit-form">
-                          <textarea
-                            className="lg-input"
-                            value={editText}
-                            onChange={e => setEditText(e.target.value)}
-                            rows={3}
-                            maxLength={2000}
-                            style={{ width: '100%', marginBottom: '8px' }}
-                          />
-                          <div className="comment-edit-actions">
-                            <LiquidButton size="sm" variant="primary" onClick={() => handleUpdate(comment.id)}>保存</LiquidButton>
-                            <LiquidButton size="sm" variant="ghost" onClick={cancelEdit}>取消</LiquidButton>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="comment-preview">{truncate(comment.content, 120)}</div>
-                      )}
-                    </td>
-                    <td className="admin-cell">{comment.author.username}</td>
-                    <td className="admin-cell">
-                      <span className="admin-badge admin-badge--published" style={{ fontSize: '0.75rem' }}>主评论</span>
-                    </td>
-                    <td className="admin-cell admin-cell--date">
-                      {new Date(comment.createdAt).toLocaleString('zh-CN')}
-                    </td>
-                    <td className="admin-cell admin-cell--actions">
-                      <div className="admin-actions">
-                        {editingId === comment.id ? null : (
-                          <>
-                            <LiquidButton size="sm" variant="glass" onClick={() => startEdit(comment)}>编辑</LiquidButton>
-                            <LiquidButton size="sm" variant="danger" onClick={() => handleDelete(comment.id)}>删除</LiquidButton>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-              {/* Render replies indented under their parent */}
-              {topLevel.map(comment => {
-                const replies = childMap.get(comment.id) || []
-                return replies.map((reply, ri) => (
-                  <tr key={reply.id} className="admin-row fade-in" style={{ animationDelay: `${(topLevel.indexOf(comment) + 0.1 + ri * 0.03).toFixed(2)}s` }}>
-                    <td className="admin-cell admin-cell--comment" style={{ paddingLeft: '40px' }}>
-                      {editingId === reply.id ? (
-                        <div className="comment-edit-form">
-                          <textarea
-                            className="lg-input"
-                            value={editText}
-                            onChange={e => setEditText(e.target.value)}
-                            rows={3}
-                            maxLength={2000}
-                            style={{ width: '100%', marginBottom: '8px' }}
-                          />
-                          <div className="comment-edit-actions">
-                            <LiquidButton size="sm" variant="primary" onClick={() => handleUpdate(reply.id)}>保存</LiquidButton>
-                            <LiquidButton size="sm" variant="ghost" onClick={cancelEdit}>取消</LiquidButton>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="comment-preview" style={{ color: 'var(--lg-text-tertiary)' }}>
-                          └ {truncate(reply.content, 100)}
-                        </div>
-                      )}
-                    </td>
-                    <td className="admin-cell">{reply.author.username}</td>
-                    <td className="admin-cell">
-                      <span className="admin-badge admin-badge--draft" style={{ fontSize: '0.75rem' }}>回复</span>
-                    </td>
-                    <td className="admin-cell admin-cell--date">
-                      {new Date(reply.createdAt).toLocaleString('zh-CN')}
-                    </td>
-                    <td className="admin-cell admin-cell--actions">
-                      <div className="admin-actions">
-                        {editingId === reply.id ? null : (
-                          <>
-                            <LiquidButton size="sm" variant="glass" onClick={() => startEdit(reply)}>编辑</LiquidButton>
-                            <LiquidButton size="sm" variant="danger" onClick={() => handleDelete(reply.id)}>删除</LiquidButton>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
+              {comments.map((comment, i) => (
+                <CommentRow
+                  key={comment.id}
+                  comment={comment}
+                  isReply={false}
+                  editingId={editingId}
+                  editText={editText}
+                  setEditText={setEditText}
+                  onSave={handleUpdate}
+                  onStartEdit={startEdit}
+                  onDelete={handleDelete}
+                  cancelEdit={cancelEdit}
+                />
+              ))}
+              {comments.map((comment, ci) =>
+                comment.replies.map((reply, ri) => (
+                  <CommentRow
+                    key={reply.id}
+                    comment={reply}
+                    isReply
+                    indent
+                    editingId={editingId}
+                    editText={editText}
+                    setEditText={setEditText}
+                    onSave={handleUpdate}
+                    onStartEdit={startEdit}
+                    onDelete={handleDelete}
+                    cancelEdit={cancelEdit}
+                  />
                 ))
-              })}
+              )}
             </tbody>
           </table>
         </LiquidGlass>

@@ -1,20 +1,26 @@
 import { Router, Request, Response } from 'express'
 import prisma from '../lib/prisma.js'
+import { parsePagination, parseId } from '../lib/utils.js'
 import { commentSchema, commentUpdateSchema } from '../config/index.js'
 import { authenticate, requireAdmin } from '../middleware/auth.js'
 
 const router = Router()
 
-function parsePagination(query: qs.ParsedQs) {
-  const page = Math.max(1, parseInt(query.page as string) || 1)
-  const limit = Math.min(50, Math.max(1, parseInt(query.limit as string) || 10))
-  const skip = (page - 1) * limit
-  return { page, limit, skip }
-}
-
-function parseId(idStr: string): number | null {
-  const id = parseInt(idStr)
-  return isNaN(id) ? null : id
+// 将扁平评论列表构建为树状结构
+function buildCommentTree<T extends { id: number; parentId: number | null }>(comments: T[]) {
+  const topLevel = comments.filter(c => !c.parentId)
+  const childMap = new Map<number, T[]>()
+  for (const c of comments) {
+    if (c.parentId) {
+      const children = childMap.get(c.parentId) || []
+      children.push(c)
+      childMap.set(c.parentId, children)
+    }
+  }
+  return topLevel.map(c => ({
+    ...c,
+    replies: childMap.get(c.id) || [],
+  }))
 }
 
 // 获取某篇文章的全部评论（公开）— 按树状结构返回
@@ -37,23 +43,7 @@ router.get('/post/:postId', async (req: Request, res: Response) => {
     orderBy: { createdAt: 'asc' },
   })
 
-  // 构建树：顶级评论 + 它们的子评论
-  const topLevel = allComments.filter(c => !c.parentId)
-  const childMap = new Map<number, typeof allComments>()
-  for (const c of allComments) {
-    if (c.parentId) {
-      const children = childMap.get(c.parentId) || []
-      children.push(c)
-      childMap.set(c.parentId, children)
-    }
-  }
-
-  const result = topLevel.map(c => ({
-    ...c,
-    replies: childMap.get(c.id) || [],
-  }))
-
-  res.json(result)
+  res.json(buildCommentTree(allComments))
 })
 
 // 发表评论（需登录）
@@ -135,7 +125,7 @@ router.get('/admin/posts', authenticate, requireAdmin, async (req: Request, res:
   res.json(result)
 })
 
-// 管理面板：获取某篇文章的全部评论
+// 管理面板：获取某篇文章的全部评论（树状结构）
 router.get('/admin/post/:postId', authenticate, requireAdmin, async (req: Request, res: Response) => {
   const postId = parseId(req.params.postId)
   if (postId === null) {
@@ -143,7 +133,7 @@ router.get('/admin/post/:postId', authenticate, requireAdmin, async (req: Reques
     return
   }
 
-  const [comments, total] = await Promise.all([
+  const [allComments, total] = await Promise.all([
     prisma.comment.findMany({
       where: { postId },
       select: {
@@ -159,7 +149,7 @@ router.get('/admin/post/:postId', authenticate, requireAdmin, async (req: Reques
     prisma.comment.count({ where: { postId } }),
   ])
 
-  res.json({ comments, total, postId })
+  res.json({ comments: buildCommentTree(allComments), total, postId })
 })
 
 // 编辑评论（管理员）
