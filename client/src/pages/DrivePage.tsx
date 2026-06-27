@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import LiquidGlass from '../components/glass/LiquidGlass'
 import LiquidButton from '../components/glass/LiquidButton'
-import api from '../lib/api'
+import api, { ApiError } from '../lib/api'
 
 /* ---------- Types ---------- */
 
@@ -55,6 +55,13 @@ function getFileIcon(item: DriveItem): string {
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr)
   return d.toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function getMimeDisplay(mimeType: string | null, isFolder: boolean): string {
+  if (isFolder) return '文件夹'
+  if (!mimeType) return '文件'
+  const parts = mimeType.split('/')
+  return parts[1]?.toUpperCase() || '文件'
 }
 
 /* ---------- Upload Zone Component ---------- */
@@ -136,45 +143,23 @@ function UploadZone({ parentId, onUploaded }: { parentId: number | null; onUploa
       </div>
       {!uploading && (
         <div
+          className={`drive-upload-zone ${dragOver ? 'drive-upload-zone--drag' : ''}`}
           onDragOver={e => { e.preventDefault(); setDragOver(true) }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          style={{
-            border: `2px dashed ${dragOver ? 'var(--lg-accent)' : 'var(--lg-border)'}`,
-            borderRadius: '10px',
-            padding: '24px',
-            textAlign: 'center',
-            cursor: 'pointer',
-            transition: 'border-color 0.2s',
-            background: dragOver ? 'var(--lg-accent-alpha, rgba(0,122,255,0.05))' : 'transparent',
-            color: 'var(--lg-text-secondary)',
-            fontSize: '0.875rem',
-          }}
         >
           📂 拖拽文件到此处或点击选择
-          <div style={{ fontSize: '0.75rem', marginTop: '4px', opacity: 0.7 }}>
-            支持多文件上传，单个文件最大 {Math.round(parseInt(import.meta.env.VITE_MAX_FILE_SIZE_MB || '500') / 1000 * 10) / 10}GB
+          <div className="drive-upload-zone-hint">
+            支持多文件上传，单个文件最大 500MB
           </div>
         </div>
       )}
       {uploading && progress && (
-        <div style={{ fontSize: '0.875rem', color: 'var(--lg-text-secondary)' }}>
+        <div className="drive-progress">
           ⏳ 上传中... {progress.current}/{progress.total}
-          <div style={{
-            marginTop: '4px',
-            height: '4px',
-            borderRadius: '2px',
-            background: 'var(--lg-border)',
-            overflow: 'hidden',
-          }}>
-            <div style={{
-              height: '100%',
-              width: `${(progress.current / progress.total) * 100}%`,
-              background: 'var(--lg-accent)',
-              borderRadius: '2px',
-              transition: 'width 0.3s',
-            }} />
+          <div className="drive-progress-bar">
+            <div className="drive-progress-fill" style={{ width: `${(progress.current / progress.total) * 100}%` }} />
           </div>
         </div>
       )}
@@ -195,17 +180,19 @@ function NewFolderDialog({ parentId, onCreated }: { parentId: number | null; onC
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const handleCreate = async () => {
     if (!name.trim()) return
     setLoading(true)
+    setError('')
     try {
       await api.post('/drive/folders', { name: name.trim(), parentId })
       setOpen(false)
       setName('')
       onCreated()
     } catch (err: any) {
-      alert(err.message || '创建失败')
+      setError(err.message || '创建失败')
     } finally {
       setLoading(false)
     }
@@ -218,20 +205,19 @@ function NewFolderDialog({ parentId, onCreated }: { parentId: number | null; onC
       </LiquidButton>
       {open && (
         <div className="dialog-overlay" onClick={() => setOpen(false)}>
-          <div className="lg-surface-strong dialog" onClick={(e: React.MouseEvent) => e.stopPropagation()}
-            style={{ padding: '24px', borderRadius: '16px', maxWidth: '400px', margin: 'auto', position: 'relative' }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: '1.125rem' }}>新建文件夹</h3>
+          <div className="lg-surface-strong drive-dialog" onClick={e => e.stopPropagation()}>
+            <h3>新建文件夹</h3>
+            {error && <div className="editor-error">{error}</div>}
             <input
-              className="lg-input"
+              className="lg-input drive-dialog-input"
               type="text"
               placeholder="文件夹名称"
               value={name}
               onChange={e => setName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleCreate()}
               autoFocus
-              style={{ width: '100%', marginBottom: '16px', boxSizing: 'border-box' }}
             />
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <div className="drive-dialog-actions">
               <LiquidButton size="sm" variant="ghost" onClick={() => setOpen(false)}>取消</LiquidButton>
               <LiquidButton size="sm" variant="primary" onClick={handleCreate} disabled={loading || !name.trim()}>
                 {loading ? '创建中...' : '创建'}
@@ -250,6 +236,7 @@ function RenameDialog({ item, onRenamed }: { item: DriveItem; onRenamed: () => v
   const [open, setOpen] = useState(false)
   const [name, setName] = useState(item.name)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const handleRename = async () => {
     if (!name.trim() || name.trim() === item.name) {
@@ -257,12 +244,13 @@ function RenameDialog({ item, onRenamed }: { item: DriveItem; onRenamed: () => v
       return
     }
     setLoading(true)
+    setError('')
     try {
       await api.put(`/drive/files/${item.id}`, { name: name.trim() })
       setOpen(false)
       onRenamed()
     } catch (err: any) {
-      alert(err.message || '重命名失败')
+      setError(err.message || '重命名失败')
     } finally {
       setLoading(false)
     }
@@ -270,26 +258,28 @@ function RenameDialog({ item, onRenamed }: { item: DriveItem; onRenamed: () => v
 
   return (
     <>
-      <span className="drive-link" onClick={() => { setName(item.name); setOpen(true) }}
-        title="点击重命名" style={{ cursor: 'pointer' }}>
+      <span
+        className="drive-name-link"
+        onClick={() => { setName(item.name); setOpen(true) }}
+        title="点击重命名"
+      >
         {item.isFolder ? '📁 ' : getFileIcon(item) + ' '}
         {item.name}
       </span>
       {open && (
         <div className="dialog-overlay" onClick={() => setOpen(false)}>
-          <div className="lg-surface-strong dialog" onClick={(e: React.MouseEvent) => e.stopPropagation()}
-            style={{ padding: '24px', borderRadius: '16px', maxWidth: '400px', margin: 'auto', position: 'relative' }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: '1.125rem' }}>重命名</h3>
+          <div className="lg-surface-strong drive-dialog" onClick={e => e.stopPropagation()}>
+            <h3>重命名</h3>
+            {error && <div className="editor-error">{error}</div>}
             <input
-              className="lg-input"
+              className="lg-input drive-dialog-input"
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleRename()}
               autoFocus
-              style={{ width: '100%', marginBottom: '16px', boxSizing: 'border-box' }}
             />
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <div className="drive-dialog-actions">
               <LiquidButton size="sm" variant="ghost" onClick={() => setOpen(false)}>取消</LiquidButton>
               <LiquidButton size="sm" variant="primary" onClick={handleRename} disabled={loading || !name.trim()}>
                 {loading ? '保存中...' : '保存'}
@@ -306,31 +296,31 @@ function RenameDialog({ item, onRenamed }: { item: DriveItem; onRenamed: () => v
 
 function DeleteDialog({ item, onDeleted, onClose }: { item: DriveItem; onDeleted: () => void; onClose: () => void }) {
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const handleDelete = async () => {
     setLoading(true)
+    setError('')
     try {
       await api.delete(`/drive/files/${item.id}`)
       onDeleted()
     } catch (err: any) {
-      alert(err.message || '删除失败')
+      setError(err.message || '删除失败')
       setLoading(false)
     }
   }
 
   return (
     <div className="dialog-overlay" onClick={onClose}>
-      <div className="lg-surface-strong dialog" onClick={(e: React.MouseEvent) => e.stopPropagation()}
-        style={{ padding: '24px', borderRadius: '16px', maxWidth: '400px', margin: 'auto', position: 'relative' }}>
-        <h3 style={{ margin: '0 0 12px', fontSize: '1.125rem' }}>确认删除</h3>
-        <p style={{ margin: '0 0 16px', color: 'var(--lg-text-secondary)', fontSize: '0.9rem' }}>
+      <div className="lg-surface-strong drive-dialog" onClick={e => e.stopPropagation()}>
+        <h3>确认删除</h3>
+        {error && <div className="editor-error">{error}</div>}
+        <p className="drive-dialog-desc">
           确定要删除 {item.isFolder ? '文件夹' : '文件'} <strong>{item.name}</strong> 吗？
           {item.isFolder && <><br/>文件夹内的所有内容将一并删除。</>}
         </p>
-        <p style={{ margin: '0 0 16px', color: 'var(--lg-text-tertiary, #999)', fontSize: '0.8rem' }}>
-          此操作不可撤销。
-        </p>
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+        <p className="drive-dialog-warn">此操作不可撤销。</p>
+        <div className="drive-dialog-actions">
           <LiquidButton size="sm" variant="ghost" onClick={onClose}>取消</LiquidButton>
           <LiquidButton size="sm" variant="danger" onClick={handleDelete} disabled={loading}>
             {loading ? '删除中...' : '确认删除'}
@@ -349,6 +339,7 @@ function ImagePreview({ item, onClose }: { item: DriveItem; onClose: () => void 
   const [error, setError] = useState('')
 
   useEffect(() => {
+    let objectUrl: string | null = null
     const fetchImage = async () => {
       try {
         const token = localStorage.getItem('lineweb_token')
@@ -357,7 +348,8 @@ function ImagePreview({ item, onClose }: { item: DriveItem; onClose: () => void 
         })
         if (!res.ok) throw new Error('加载失败')
         const blob = await res.blob()
-        setSrc(URL.createObjectURL(blob))
+        objectUrl = URL.createObjectURL(blob)
+        setSrc(objectUrl)
       } catch (err: any) {
         setError(err.message)
       } finally {
@@ -365,25 +357,25 @@ function ImagePreview({ item, onClose }: { item: DriveItem; onClose: () => void 
       }
     }
     fetchImage()
-    return () => { if (src) URL.revokeObjectURL(src) }
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl) }
   }, [item.id])
 
   return (
     <div className="dialog-overlay" onClick={onClose}
       style={{ background: 'rgba(0,0,0,0.85)', cursor: 'zoom-out' }}>
       <div onClick={e => e.stopPropagation()} style={{
-        maxWidth: '90vw', maxHeight: '90vh',
+        maxWidth: '90vw', maxHeight: '85vh',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         position: 'relative',
       }}>
         {loading && <div className="spinner" />}
         {error && <p style={{ color: '#fff' }}>{error}</p>}
         {src && <img src={src} alt={item.name}
-          style={{ maxWidth: '100%', maxHeight: '90vh', borderRadius: '12px', objectFit: 'contain' }} />}
+          style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: '12px', objectFit: 'contain' }} />}
         <button onClick={onClose} style={{
           position: 'absolute', top: '-40px', right: '0',
           background: 'none', border: 'none', color: '#fff',
-          fontSize: '1.5rem', cursor: 'pointer',
+          fontSize: '1.5rem', cursor: 'pointer', padding: '4px 8px',
         }} aria-label="关闭预览">✕</button>
       </div>
     </div>
@@ -397,6 +389,7 @@ function VideoPreview({ item, onClose }: { item: DriveItem; onClose: () => void 
   const [error, setError] = useState('')
 
   useEffect(() => {
+    let objectUrl: string | null = null
     const loadVideo = async () => {
       try {
         const token = localStorage.getItem('lineweb_token')
@@ -405,33 +398,33 @@ function VideoPreview({ item, onClose }: { item: DriveItem; onClose: () => void 
         })
         if (!res.ok) throw new Error('加载失败')
         const blob = await res.blob()
-        setSrc(URL.createObjectURL(blob))
+        objectUrl = URL.createObjectURL(blob)
+        setSrc(objectUrl)
       } catch (err: any) {
         setError(err.message)
       }
     }
     loadVideo()
-    return () => { if (src) URL.revokeObjectURL(src) }
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl) }
   }, [item.id])
 
   return (
     <div className="dialog-overlay" onClick={onClose} style={{ background: 'rgba(0,0,0,0.85)' }}>
       <div onClick={e => e.stopPropagation()} style={{
-        maxWidth: '80vw', maxHeight: '80vh',
+        maxWidth: '85vw', maxHeight: '85vh',
         position: 'relative',
       }}>
         {error ? (
           <p style={{ color: '#fff' }}>{error}</p>
         ) : src ? (
-          <video controls autoPlay style={{ maxWidth: '100%', maxHeight: '80vh', borderRadius: '12px' }}
-            src={src} />
+          <video controls autoPlay style={{ maxWidth: '100%', maxHeight: '80vh', borderRadius: '12px' }} src={src} />
         ) : (
           <div className="spinner" />
         )}
         <button onClick={onClose} style={{
           position: 'absolute', top: '-40px', right: '0',
           background: 'none', border: 'none', color: '#fff',
-          fontSize: '1.5rem', cursor: 'pointer',
+          fontSize: '1.5rem', cursor: 'pointer', padding: '4px 8px',
         }} aria-label="关闭预览">✕</button>
       </div>
     </div>
@@ -450,11 +443,9 @@ export default function DrivePage() {
   const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([{ id: null, name: '根目录' }])
   const currentParentId = breadcrumbs[breadcrumbs.length - 1]?.id ?? null
 
-  // 预览/删除状态
   const [previewItem, setPreviewItem] = useState<DriveItem | null>(null)
   const [deleteItem, setDeleteItem] = useState<DriveItem | null>(null)
 
-  // 搜索防抖
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const fetchItems = useCallback(async (parentId: number | null) => {
@@ -465,7 +456,7 @@ export default function DrivePage() {
       const data = await api.get<DriveItem[]>(`/drive/files${params}`)
       setItems(data)
     } catch (err: any) {
-      setError(err.message || '加载失败')
+      setError(err instanceof ApiError ? err.message : '加载失败')
       setItems([])
     } finally {
       setLoading(false)
@@ -476,7 +467,7 @@ export default function DrivePage() {
     fetchItems(currentParentId)
   }, [currentParentId, fetchItems])
 
-  // 搜索
+  // Search with debounce
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults(null)
@@ -504,14 +495,13 @@ export default function DrivePage() {
 
   const navigateToFolder = (item: DriveItem) => {
     if (!item.isFolder) return
-    const newBreadcrumbs = [...breadcrumbs, { id: item.id, name: item.name }]
-    setBreadcrumbs(newBreadcrumbs)
+    setBreadcrumbs(prev => [...prev, { id: item.id, name: item.name }])
     setSearchQuery('')
     setSearchResults(null)
   }
 
   const navigateToBreadcrumb = (index: number) => {
-    setBreadcrumbs(breadcrumbs.slice(0, index + 1))
+    setBreadcrumbs(prev => prev.slice(0, index + 1))
     setSearchQuery('')
     setSearchResults(null)
   }
@@ -523,7 +513,10 @@ export default function DrivePage() {
       const res = await fetch(`/api/drive/download/${item.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (!res.ok) throw new Error('下载失败')
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || '下载失败')
+      }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -566,57 +559,42 @@ export default function DrivePage() {
   const isSearching = searchResults !== null
 
   return (
-    <div className="page container">
+    <div className="page container drive-page">
       <LiquidGlass variant="blur" className="page-card" style={{ padding: '24px' }}>
         {/* Header */}
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          flexWrap: 'wrap', gap: '12px', marginBottom: '16px',
-        }}>
-          <h1 style={{ margin: 0, fontSize: '1.5rem' }}>☁️ 网盘</h1>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <div className="drive-header">
+          <h1>☁️ 网盘</h1>
+          <div className="drive-header-actions">
             <NewFolderDialog parentId={currentParentId} onCreated={() => fetchItems(currentParentId)} />
             <UploadZone parentId={currentParentId} onUploaded={() => fetchItems(currentParentId)} />
           </div>
         </div>
 
         {/* Search */}
-        <div style={{ marginBottom: '16px' }}>
+        <div className="drive-search">
           <input
-            className="lg-input"
+            className="lg-input drive-search-input"
             type="text"
             placeholder="🔍 搜索文件..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            style={{ width: '100%', maxWidth: '400px', boxSizing: 'border-box' }}
           />
-          <span style={{ marginLeft: '8px', fontSize: '0.8rem', color: 'var(--lg-text-tertiary)' }}>
+          <span className="drive-search-hint">
             {searching ? '搜索中...' : searchResults !== null ? `找到 ${searchResults.length} 项` : ''}
           </span>
         </div>
 
         {/* Breadcrumbs */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '4px',
-          marginBottom: '12px', fontSize: '0.875rem',
-          color: 'var(--lg-text-secondary)',
-          flexWrap: 'wrap',
-        }}>
+        <div className="drive-breadcrumbs">
           {breadcrumbs.map((crumb, i) => (
-            <span key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              {i > 0 && <span style={{ opacity: 0.5 }}>›</span>}
+            <span key={i} style={{ display: 'flex', alignItems: 'center', gap: '0' }}>
+              {i > 0 && <span className="drive-breadcrumb-sep">›</span>}
               {i === breadcrumbs.length - 1 ? (
-                <span style={{ color: 'var(--lg-text)', fontWeight: 500 }}>{crumb.name}</span>
+                <span className="drive-breadcrumb-current">{crumb.name}</span>
               ) : (
                 <button
                   onClick={() => navigateToBreadcrumb(i)}
-                  style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    color: 'var(--lg-text-secondary)',
-                    padding: 0, fontSize: 'inherit',
-                    textDecoration: 'none',
-                  }}
-                  className="drive-link-hover"
+                  className="drive-breadcrumb-btn"
                 >
                   {crumb.name}
                 </button>
@@ -625,93 +603,64 @@ export default function DrivePage() {
           ))}
         </div>
 
-        {/* File list */}
+        {/* Content */}
         {loading ? (
-          <div style={{ padding: '40px', textAlign: 'center' }}>
-            <div className="spinner" />
-          </div>
+          <div className="drive-loading"><div className="spinner" /></div>
         ) : error ? (
-          <LiquidGlass variant="blur" style={{ padding: '20px', textAlign: 'center' }}>
-            <p style={{ color: 'var(--lg-text-tertiary)' }}>⚠️ {error}</p>
+          <LiquidGlass variant="blur" className="drive-error">
+            <p className="drive-error-text">⚠️ {error}</p>
             <LiquidButton size="sm" variant="glass" onClick={() => fetchItems(currentParentId)}>
               重试
             </LiquidButton>
           </LiquidGlass>
         ) : displayItems.length === 0 ? (
-          <LiquidGlass variant="blur" style={{ padding: '40px', textAlign: 'center' }}>
-            <p style={{ color: 'var(--lg-text-tertiary)' }}>
+          <div className="drive-empty">
+            <span className="drive-empty-icon">☁️</span>
+            <p className="drive-empty-text">
               {isSearching ? '未找到匹配的文件' : '网盘为空，点击上方按钮上传文件'}
             </p>
-          </LiquidGlass>
+          </div>
         ) : (
-          <div style={{ overflowX: 'auto', margin: '0 -24px', padding: '0 24px' }}>
-            <table className="drive-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="drive-table-wrap">
+            <table className="drive-table">
               <thead>
-                <tr style={{
-                  borderBottom: '1px solid var(--lg-border)',
-                  fontSize: '0.8rem',
-                  color: 'var(--lg-text-tertiary)',
-                }}>
-                  <th style={{ textAlign: 'left', padding: '8px 12px', fontWeight: 500, width: '40%' }}>名称</th>
-                  <th style={{ textAlign: 'right', padding: '8px 12px', fontWeight: 500, width: '100px' }}>大小</th>
-                  <th style={{ textAlign: 'left', padding: '8px 12px', fontWeight: 500, width: '80px' }}>类型</th>
-                  <th style={{ textAlign: 'left', padding: '8px 12px', fontWeight: 500, width: '120px' }}>修改时间</th>
-                  <th style={{ textAlign: 'right', padding: '8px 12px', fontWeight: 500, width: '110px' }}>操作</th>
+                <tr>
+                  <th className="col-name">名称</th>
+                  <th className="col-size">大小</th>
+                  <th className="col-type">类型</th>
+                  <th className="col-date">修改时间</th>
+                  <th className="col-actions">操作</th>
                 </tr>
               </thead>
               <tbody>
                 {displayItems.map((item, i) => (
-                  <tr key={item.id} className="drive-row"
-                    style={{
-                      borderBottom: '1px solid var(--lg-border-alpha, rgba(255,255,255,0.05))',
-                      transition: 'background 0.15s',
-                    }}>
-                    <td className="drive-cell" style={{ padding: '10px 12px' }}>
+                  <tr key={item.id} className="drive-row fade-in" style={{ animationDelay: `${i * 0.04}s` }}>
+                    <td className="drive-cell drive-cell--name">
                       {item.isFolder ? (
                         <span onClick={() => navigateToFolder(item)}
-                          style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                          className="drive-name-link drive-name-link--folder">
                           📁 {item.name}
                         </span>
                       ) : (
                         <RenameDialog item={item} onRenamed={() => fetchItems(currentParentId)} />
                       )}
                     </td>
-                    <td className="drive-cell" style={{
-                      padding: '10px 12px', textAlign: 'right',
-                      color: 'var(--lg-text-secondary)', fontSize: '0.85rem',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {formatFileSize(Number(item.size))}
-                    </td>
-                    <td className="drive-cell" style={{
-                      padding: '10px 12px',
-                      color: 'var(--lg-text-secondary)', fontSize: '0.85rem',
-                    }}>
-                      {item.isFolder ? '文件夹' : (item.mimeType?.split('/')[1]?.toUpperCase() || '文件')}
-                    </td>
-                    <td className="drive-cell" style={{
-                      padding: '10px 12px',
-                      color: 'var(--lg-text-secondary)', fontSize: '0.85rem',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {formatDate(item.updatedAt)}
-                    </td>
-                    <td className="drive-cell" style={{ padding: '10px 12px', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                    <td className="drive-cell drive-cell--size">{formatFileSize(Number(item.size))}</td>
+                    <td className="drive-cell drive-cell--type">{getMimeDisplay(item.mimeType, item.isFolder)}</td>
+                    <td className="drive-cell drive-cell--date">{formatDate(item.updatedAt)}</td>
+                    <td className="drive-cell drive-cell--actions">
+                      <div className="drive-actions">
                         {!item.isFolder && (
                           <>
-                            <LiquidButton size="sm" variant="ghost"
-                              onClick={() => handlePreview(item)}>
+                            <LiquidButton size="sm" variant="ghost" onClick={() => handlePreview(item)}>
                               预览
                             </LiquidButton>
-                            <LiquidButton size="sm" variant="ghost"
-                              onClick={() => handleDownload(item)}>
+                            <LiquidButton size="sm" variant="ghost" onClick={() => handleDownload(item)}>
                               下载
                             </LiquidButton>
                           </>
                         )}
-                        <LiquidButton size="sm" variant="danger"
-                          onClick={() => setDeleteItem(item)}>
+                        <LiquidButton size="sm" variant="danger" onClick={() => setDeleteItem(item)}>
                           删除
                         </LiquidButton>
                       </div>
@@ -720,12 +669,7 @@ export default function DrivePage() {
                 ))}
               </tbody>
             </table>
-            <div style={{
-              padding: '8px 12px', fontSize: '0.8rem',
-              color: 'var(--lg-text-tertiary)',
-            }}>
-              共 {displayItems.length} 项
-            </div>
+            <div className="drive-count">共 {displayItems.length} 项</div>
           </div>
         )}
       </LiquidGlass>
