@@ -53,3 +53,8 @@ export const commentSchema = z.object({
 export const commentUpdateSchema = z.object({
   content: z.string().min(1, '评论内容不能为空').max(2000, '评论过长'),
 })
+
+export const updateUserSchema = z.object({
+  role: z.enum(['user', 'admin']).optional(),
+  password: z.string().min(6).max(100).optional(),
+})

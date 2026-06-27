@@ -18,6 +18,7 @@ import EditorPage from './pages/EditorPage'
 import CommentAdminPage from './pages/admin/CommentAdminPage'
 import PageList from './pages/admin/PageList'
 import PageEditor from './pages/admin/PageEditor'
+import UserAdminPage from './pages/admin/UserAdminPage'
 import DynamicPage from './pages/DynamicPage'
 
 export default function App() {
@@ -51,6 +52,7 @@ export default function App() {
                 <Route path="/admin/pages" element={<PageList />} />
                 <Route path="/admin/pages/new" element={<PageEditor />} />
                 <Route path="/admin/pages/:id/edit" element={<PageEditor />} />
+                <Route path="/admin/users" element={<UserAdminPage />} />
               </Route>
             </Routes>
           </ContrastProvider>
