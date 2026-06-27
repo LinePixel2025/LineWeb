@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../lib/api'
 import LiquidButton from '../components/glass/LiquidButton'
-import LiquidGlass from '../components/glass/LiquidGlass'
+import LexicalEditor from '../components/editor/LexicalEditor'
 
 /* ---------- helpers ---------- */
 
@@ -101,20 +101,15 @@ export default function EditorPage() {
   }
 
   return (
-    <div className="admin-page" style={{ maxWidth: 720 }}>
+    <div className="admin-page" style={{ maxWidth: 820 }}>
       <div className="admin-page-header">
         <h1 className="admin-page-title">{isEdit ? '编辑文章' : '写文章'}</h1>
       </div>
-      <LiquidGlass
-        variant="blur"
-        chromatic={false}
-        className="glass-rise editor-page-glass"
-      >
 
       {/* error banner */}
       {error && <div className="editor-error">{error}</div>}
 
-      <form onSubmit={handleSubmit} className="editor-form">
+      <form onSubmit={handleSubmit}>
         <div className="editor-field">
           <label className="editor-label">标题</label>
           <input
@@ -126,56 +121,37 @@ export default function EditorPage() {
           />
         </div>
 
-        <div className="editor-field">
-          <label className="editor-label">Slug</label>
-          <input
-            className="lg-input"
-            value={slug}
-            onChange={e => setSlug(e.target.value)}
-            placeholder={title ? toSlug(title) : 'article-slug'}
-          />
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div className="editor-field" style={{ flex: 1, minWidth: 180 }}>
+            <label className="editor-label">Slug</label>
+            <input
+              className="lg-input"
+              value={slug}
+              onChange={e => setSlug(e.target.value)}
+              placeholder={title ? toSlug(title) : 'article-slug'}
+            />
+          </div>
+
+          <div className="editor-field" style={{ flex: 2, minWidth: 240 }}>
+            <label className="editor-label">摘要</label>
+            <input
+              className="lg-input"
+              value={summary}
+              onChange={e => setSummary(e.target.value)}
+              placeholder="文章摘要（可选）"
+            />
+          </div>
         </div>
 
         <div className="editor-field">
-          <label className="editor-label">摘要</label>
-          <input
-            className="lg-input"
-            value={summary}
-            onChange={e => setSummary(e.target.value)}
-            placeholder="文章摘要（可选）"
+          <label className="editor-label">内容</label>
+          <LexicalEditor
+            initialHtml={content}
+            onChange={html => setContent(html)}
+            placeholder="开始写作..."
+            height={480}
           />
         </div>
-
-        <div className="editor-field">
-          <label className="editor-label">
-            内容 <span className="text-tertiary" style={{ fontWeight: 400 }}>— HTML</span>
-          </label>
-          <textarea
-            className="lg-input editor-textarea"
-            value={content}
-            onChange={e => setContent(e.target.value)}
-            required
-            placeholder="使用 HTML 编写..."
-          />
-        </div>
-
-        {/* preview */}
-        <LiquidGlass variant="regular" chromatic={false} className="editor-preview">
-          <div className="text-tertiary editor-preview-label">预览</div>
-          {content ? (
-            content.length > 1500 ? (
-              <div className="article-content" dangerouslySetInnerHTML={{
-                __html: content.slice(0, 1500) + '\n\n<hr>\n<p><em>（预览截断 — 继续输入可看到更多）</em></p>'
-              }} />
-            ) : (
-              <div className="article-content" dangerouslySetInnerHTML={{ __html: content }} />
-            )
-          ) : (
-            <p className="text-secondary" style={{ fontSize: '0.85rem' }}>
-              输入 HTML 内容后预览将显示在此处
-            </p>
-          )}
-        </LiquidGlass>
 
         {/* controls */}
         <div className="editor-controls">
@@ -198,7 +174,6 @@ export default function EditorPage() {
           </div>
         </div>
       </form>
-      </LiquidGlass>
     </div>
   )
 }
