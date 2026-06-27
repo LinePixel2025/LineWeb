@@ -3278,6 +3278,7 @@ html[data-contrast="light"] { display: none; } /* preserve for future */
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: flex-start;
 }
 
 /* Search */

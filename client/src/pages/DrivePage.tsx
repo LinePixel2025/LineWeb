@@ -614,12 +614,12 @@ export default function DrivePage() {
             </LiquidButton>
           </LiquidGlass>
         ) : displayItems.length === 0 ? (
-          <div className="drive-empty">
+          <LiquidGlass variant="blur" className="drive-empty">
             <span className="drive-empty-icon">☁️</span>
             <p className="drive-empty-text">
               {isSearching ? '未找到匹配的文件' : '网盘为空，点击上方按钮上传文件'}
             </p>
-          </div>
+          </LiquidGlass>
         ) : (
           <div className="drive-table-wrap">
             <table className="drive-table">
