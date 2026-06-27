@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useWallpaper } from './WallpaperContext'
 
@@ -19,8 +19,8 @@ const EXCLUDE_CLASSES = [
   '.comment-section', '.reply-form',
 ]
 
-// 防抖：N 个动画帧中只扫描一次
-const SCAN_FRAME_INTERVAL = 3
+// 节流间隔（毫秒）
+const SCAN_THROTTLE_MS = 150
 
 function luminance(r: number, g: number, b: number): number {
   return 0.299 * r + 0.587 * g + 0.114 * b
@@ -65,33 +65,11 @@ export function ContrastProvider({ children }: { children: ReactNode }) {
   const { bgUrl } = useWallpaper()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const rafRef = useRef(0)
-  const frameCountRef = useRef(0)
+  const lastScanTime = useRef(0)
   const location = useLocation()
 
-  /* 1. 壁纸变化 → 重建合成 canvas */
-  useEffect(() => {
-    if (!bgUrl) {
-      // 无壁纸时清理所有 data-ac
-      canvasRef.current = null
-      document.querySelectorAll('[data-ac]').forEach(el => el.removeAttribute('data-ac'))
-      return
-    }
-    let cancelled = false
-
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => {
-      if (cancelled) return
-      canvasRef.current = buildWallpaperCanvas(img)
-      scheduleScan()
-    }
-    img.onerror = () => { canvasRef.current = null }
-    img.src = bgUrl
-    return () => { cancelled = true }
-  }, [bgUrl])
-
-  /* 2. 核心扫描函数 — 批量读取像素，避免逐元素 getImageData */
-  const doScan = () => {
+  /* 2. 核心扫描函数 — 批量读取像素，先读 rect 再批量写 data-ac */
+  const doScan = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
@@ -103,14 +81,18 @@ export function ContrastProvider({ children }: { children: ReactNode }) {
     // 一次读取全 canvas 像素
     const fullData = ctx.getImageData(0, 0, W, H).data
 
-    const scanEl = (el: Element) => {
+    // 批量收集所有需要更新的元素和目标值
+    const elements = document.querySelectorAll(SCAN_SELECTOR)
+    const updates: Array<{ el: Element; value: string | null }> = []
+
+    for (const el of elements) {
       if (isExcluded(el)) {
-        el.removeAttribute('data-ac')
-        return
+        updates.push({ el, value: null })
+        continue
       }
 
       const rect = el.getBoundingClientRect()
-      if (rect.width < 1 || rect.height < 1) return
+      if (rect.width < 1 || rect.height < 1) continue
 
       const cx = (rect.left + rect.width / 2) / vw * W
       const cy = (rect.top + rect.height / 2) / vh * H
@@ -119,38 +101,86 @@ export function ContrastProvider({ children }: { children: ReactNode }) {
       const i = (iy * W + ix) * 4
 
       const lum = luminance(fullData[i], fullData[i + 1], fullData[i + 2])
-      el.setAttribute('data-ac', lum > 120 ? 'black' : 'white')
+      updates.push({ el, value: lum > 120 ? 'black' : 'white' })
     }
 
-    const elements = document.querySelectorAll(SCAN_SELECTOR)
-    for (const el of elements) scanEl(el)
-  }
-
-  const scheduleScan = () => {
-    cancelAnimationFrame(rafRef.current)
-    frameCountRef.current = 0
-    rafRef.current = requestAnimationFrame(function tick() {
-      if (frameCountRef.current % SCAN_FRAME_INTERVAL === 0) {
-        doScan()
+    // 批量写入 — 读写分离避免 layout thrashing
+    for (const { el, value } of updates) {
+      if (value === null) {
+        el.removeAttribute('data-ac')
+      } else {
+        el.setAttribute('data-ac', value)
       }
-      frameCountRef.current++
-    })
-  }
+    }
+  }, [])
+
+  /* 150ms 时间节流调度 */
+  const scheduleScan = useCallback(() => {
+    cancelAnimationFrame(rafRef.current)
+    const now = performance.now()
+    const elapsed = now - lastScanTime.current
+
+    if (elapsed >= SCAN_THROTTLE_MS) {
+      // 已过节流窗口，下一帧立即执行
+      lastScanTime.current = now
+      rafRef.current = requestAnimationFrame(doScan)
+    } else {
+      // 延迟到节流窗口结束
+      const delay = SCAN_THROTTLE_MS - elapsed
+      rafRef.current = requestAnimationFrame(() => {
+        lastScanTime.current = performance.now()
+        doScan()
+      })
+    }
+  }, [doScan])
+
+  /* 1. 壁纸变化 → 重建合成 canvas */
+  useEffect(() => {
+    if (!bgUrl) {
+      // 无壁纸时释放 canvas 并清理所有 data-ac
+      if (canvasRef.current) {
+        canvasRef.current.width = 0
+        canvasRef.current = null
+      }
+      document.querySelectorAll('[data-ac]').forEach(el => el.removeAttribute('data-ac'))
+      return
+    }
+    let cancelled = false
+
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      if (cancelled) return
+      // 释放旧 canvas
+      if (canvasRef.current) canvasRef.current.width = 0
+      canvasRef.current = buildWallpaperCanvas(img)
+      img.src = '' // 释放 Image 内存
+      scheduleScan()
+    }
+    img.onerror = () => {
+      canvasRef.current = null
+      img.src = ''
+    }
+    img.src = bgUrl
+    return () => {
+      cancelled = true
+    }
+  }, [bgUrl, scheduleScan])
 
   /* 3. 触发场景 */
-  useEffect(() => { scheduleScan() }, [location.pathname])
+  useEffect(() => { scheduleScan() }, [location.pathname, scheduleScan])
 
   useEffect(() => {
     const onScroll = () => scheduleScan()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
-  }, [])
+  }, [scheduleScan])
 
   useEffect(() => {
     const onResize = () => scheduleScan()
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
-  }, [])
+  }, [scheduleScan])
 
   // 首次挂载后扫（用 rAF 链避免 300ms 脆皮定时器）
   useEffect(() => {
@@ -159,6 +189,18 @@ export function ContrastProvider({ children }: { children: ReactNode }) {
       id = requestAnimationFrame(check)
     })
     return () => cancelAnimationFrame(id)
+  }, [scheduleScan])
+
+  // 卸载时释放资源
+  useEffect(() => {
+    return () => {
+      cancelAnimationFrame(rafRef.current)
+      if (canvasRef.current) {
+        canvasRef.current.width = 0
+        canvasRef.current = null
+      }
+      document.querySelectorAll('[data-ac]').forEach(el => el.removeAttribute('data-ac'))
+    }
   }, [])
 
   return <ContrastContext.Provider value={null}>{children}</ContrastContext.Provider>

@@ -6,7 +6,7 @@
          ============================================================ -->
     <filter id="lg-core" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
       <!-- 1. Generate organic noise for liquid flow -->
-      <feTurbulence type="fractalNoise" baseFrequency="0.006" numOctaves="3" seed="42" result="noise" />
+      <feTurbulence type="fractalNoise" baseFrequency="0.006" numOctaves="2" seed="42" result="noise" />
       <!-- 2. Soften into smooth waves -->
       <feGaussianBlur in="noise" stdDeviation="2" result="smooth-noise" />
       <!-- 3. Pixel displacement = refraction through glass -->
@@ -19,7 +19,7 @@
          Liquid Glass Strong — thicker glass, more refraction
          ============================================================ -->
     <filter id="lg-core-strong" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency="0.004" numOctaves="4" seed="42" result="noise" />
+      <feTurbulence type="fractalNoise" baseFrequency="0.004" numOctaves="3" seed="42" result="noise" />
       <feGaussianBlur in="noise" stdDeviation="3" result="smooth-noise" />
       <feDisplacementMap in="SourceGraphic" in2="smooth-noise" scale="80" xChannelSelector="R" yChannelSelector="G" result="displaced" />
       <feGaussianBlur in="displaced" stdDeviation="1.9" result="blurred" />

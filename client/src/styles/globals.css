@@ -66,6 +66,10 @@
 
   /* Transitions */
   --lg-transition: 0.35s cubic-bezier(0.25, 0.1, 0.25, 1);
+
+  /* Glass frost presets (backdrop-filter shorthand) */
+  --lg-frost: blur(16.8px) saturate(180%);
+  --lg-frost-heavy: blur(24px) saturate(180%);
 }
 
 /* ============================================================
@@ -131,11 +135,11 @@ a:hover {
    └──────────────────────────────┘
 
    Glass Tier 1 — Thin (lg-surface, lg-input, theme-toggle)
-     Self:  url(#lg-core)       blur(0.4px) saturate(150%) brightness(1.04)
+     Self:  url(#lg-core)       blur(1.7px) saturate(150%)
      Tint:  light rgba(255,255,255,0.07) / dark rgba(255,255,255,0.03)
 
    Glass Tier 2 — Thick (lg-surface-strong, navbar)
-     Self:  url(#lg-core-strong) blur(0.5px) saturate(140%) brightness(1.06)
+     Self:  url(#lg-core-strong) blur(1.9px) saturate(140%)
      Tint:  light rgba(255,255,255,0.10) / dark rgba(255,255,255,0.04)
    ============================================================ */
 
@@ -152,8 +156,8 @@ a:hover {
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  backdrop-filter: blur(16.8px) saturate(180%);
-  -webkit-backdrop-filter: blur(16.8px) saturate(180%);
+  backdrop-filter: var(--lg-frost);
+  -webkit-backdrop-filter: var(--lg-frost);
 }
 
 /* navbars don't inherit border-radius from glass classes */
@@ -186,8 +190,8 @@ a:hover {
   z-index: 0;
   border-radius: var(--lg-radius-xl);
   background: rgba(255,255,255,0.07);
-  backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%) brightness(1.04);
-  -webkit-backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%) brightness(1.04);
+  backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%);
+  -webkit-backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%);
   border: 1px solid var(--lg-glass-border);
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.10),
@@ -200,8 +204,8 @@ a:hover {
   z-index: 0;
   border-radius: var(--lg-radius-xl);
   background: rgba(255,255,255,0.10);
-  backdrop-filter: url(#lg-core-strong) blur(1.9px) saturate(140%) brightness(1.06);
-  -webkit-backdrop-filter: url(#lg-core-strong) blur(1.9px) saturate(140%) brightness(1.06);
+  backdrop-filter: url(#lg-core-strong) blur(1.9px) saturate(140%);
+  -webkit-backdrop-filter: url(#lg-core-strong) blur(1.9px) saturate(140%);
   border: 1px solid var(--lg-glass-border);
   border-right-color: rgba(255,255,255,0.06);
   border-bottom-color: rgba(255,255,255,0.03);
@@ -254,8 +258,8 @@ a:hover {
   max-width: var(--lg-max-width);
   border-radius: var(--lg-radius-xl);
   background: rgba(255,255,255,0.07);
-  backdrop-filter: url(#lg-core) blur(1.7px) saturate(170%) brightness(1.08);
-  -webkit-backdrop-filter: url(#lg-core) blur(1.7px) saturate(170%) brightness(1.08);
+  backdrop-filter: url(#lg-core) blur(1.7px) saturate(170%);
+  -webkit-backdrop-filter: url(#lg-core) blur(1.7px) saturate(170%);
   border: 1px solid var(--lg-glass-border);
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.10),
@@ -269,8 +273,8 @@ a:hover {
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  backdrop-filter: blur(16.8px) saturate(180%);
-  -webkit-backdrop-filter: blur(16.8px) saturate(180%);
+  backdrop-filter: var(--lg-frost);
+  -webkit-backdrop-filter: var(--lg-frost);
 }
 
 .navbar-inner {
@@ -308,7 +312,7 @@ a:hover {
   font-size: 0.88rem;
   font-weight: 500;
   text-decoration: none;
-  transition: all var(--lg-transition);
+  transition: color var(--lg-transition), background-color var(--lg-transition);
 }
 
 .navbar-link:hover {
@@ -380,12 +384,12 @@ h4 { font-size: 1.15rem; }
   height: 36px;
   border-radius: 50%;
   background: rgba(255,255,255,0.07);
-  backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%) brightness(1.04);
-  -webkit-backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%) brightness(1.04);
+  backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%);
+  -webkit-backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%);
   border: 1px solid var(--lg-glass-border);
   cursor: pointer;
   font-size: 1rem;
-  transition: all var(--lg-transition);
+  transition: background-color var(--lg-transition), box-shadow var(--lg-transition), color var(--lg-transition);
   color: var(--lg-text-primary);
 }
 
@@ -407,7 +411,10 @@ h4 { font-size: 1.15rem; }
   font-family: var(--lg-font);
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+  transition: transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
   user-select: none;
   text-decoration: none;
   white-space: nowrap;
@@ -444,8 +451,8 @@ h4 { font-size: 1.15rem; }
     linear-gradient(180deg, rgba(255,255,255,0.10) 0%, transparent 50%),
     linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04)),
     rgba(0,0,0,0.15);
-  backdrop-filter: blur(16.8px) saturate(180%);
-  -webkit-backdrop-filter: blur(16.8px) saturate(180%);
+  backdrop-filter: var(--lg-frost);
+  -webkit-backdrop-filter: var(--lg-frost);
   border: 1px solid rgba(255,255,255,0.18);
   box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.2), 0 2px 8px rgba(0,0,0,0.15);
   color: var(--lg-text-primary);
@@ -501,15 +508,15 @@ h4 { font-size: 1.15rem; }
   width: 100%;
   padding: 14px 18px;
   background: rgba(255,255,255,0.10);
-  backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%) brightness(1.04);
-  -webkit-backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%) brightness(1.04);
+  backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%);
+  -webkit-backdrop-filter: url(#lg-core) blur(1.7px) saturate(150%);
   border: 1px solid var(--lg-glass-border);
   border-radius: var(--lg-radius-md);
   color: var(--lg-text-primary);
   font-family: var(--lg-font);
   font-size: 0.95rem;
   outline: none;
-  transition: all var(--lg-transition);
+  transition: border-color var(--lg-transition), box-shadow var(--lg-transition);
 }
 
 .lg-input:focus {
@@ -772,7 +779,7 @@ select.lg-input optgroup {
   color: var(--lg-text-secondary);
   font-size: 0.78rem;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease;
 }
 
 .lex-btn:hover {
@@ -1078,8 +1085,8 @@ select.lg-input optgroup {
     border-radius: inherit;
     z-index: 0;
     pointer-events: none;
-    backdrop-filter: blur(16.8px) saturate(180%);
-    -webkit-backdrop-filter: blur(16.8px) saturate(180%);
+    backdrop-filter: var(--lg-frost);
+    -webkit-backdrop-filter: var(--lg-frost);
     background: rgba(25, 25, 30, 0.82);
   }
 
@@ -1158,14 +1165,17 @@ select.lg-input optgroup {
   border-radius: 50%;
   border: 1px solid var(--lg-glass-border);
   background: rgba(255,255,255,0.08);
-  backdrop-filter: blur(16.8px) saturate(180%);
-  -webkit-backdrop-filter: blur(16.8px) saturate(180%);
+  backdrop-filter: var(--lg-frost);
+  -webkit-backdrop-filter: var(--lg-frost);
   color: var(--lg-text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+  transition: transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
   box-shadow: 0 2px 8px var(--lg-glass-shadow);
 }
 
@@ -1233,8 +1243,8 @@ select.lg-input optgroup {
   display: flex;
   flex-direction: column;
   background: rgba(10, 10, 14, 0.78);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: var(--lg-frost-heavy);
+  -webkit-backdrop-filter: var(--lg-frost-heavy);
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   transition: width 0.3s cubic-bezier(0.25, 0.1, 0.25, 1),
               transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
@@ -1348,7 +1358,7 @@ select.lg-input optgroup {
   text-decoration: none;
   font-size: 0.9rem;
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease, background-color 0.2s ease;
 }
 
 .admin-sidebar-link:hover {
@@ -1404,7 +1414,7 @@ select.lg-input optgroup {
   cursor: pointer;
   padding: 8px;
   border-radius: 8px;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease, background-color 0.2s ease;
 }
 
 .admin-topbar-toggle:hover {
@@ -1450,7 +1460,7 @@ select.lg-input optgroup {
   background: transparent;
   color: var(--lg-text-tertiary);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
   font-family: var(--lg-font);
 }
 
@@ -1522,14 +1532,17 @@ body.admin-menu-open {
   border-radius: 50%;
   border: 1px solid var(--lg-glass-border);
   background: rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(16.8px) saturate(180%);
-  -webkit-backdrop-filter: blur(16.8px) saturate(180%);
+  backdrop-filter: var(--lg-frost);
+  -webkit-backdrop-filter: var(--lg-frost);
   color: var(--lg-text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+  transition: transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
@@ -1744,15 +1757,15 @@ body.admin-menu-open {
   font-weight: 500;
   font-family: var(--lg-font);
   font-size: 0.95rem;
-  transition: all 0.2s ease;
+  transition: transform 0.2s ease, background 0.2s ease;
   -webkit-tap-highlight-color: transparent;
   background:
     linear-gradient(180deg, rgba(255,255,255,0.10) 0%, transparent 50%),
     linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04)),
     rgba(0,0,0,0.15);
   color: var(--lg-text-primary);
-  backdrop-filter: blur(16.8px) saturate(180%);
-  -webkit-backdrop-filter: blur(16.8px) saturate(180%);
+  backdrop-filter: var(--lg-frost);
+  -webkit-backdrop-filter: var(--lg-frost);
   box-shadow:
     inset 0 0.5px 0 rgba(255,255,255,0.2),
     0 2px 8px rgba(0,0,0,0.15);
@@ -1880,7 +1893,7 @@ body.admin-menu-open {
   font-size: 1.25rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s cubic-bezier(0.25, 0.1, 0.25, 1);
+  transition: transform 0.15s cubic-bezier(0.25, 0.1, 0.25, 1), box-shadow 0.15s cubic-bezier(0.25, 0.1, 0.25, 1);
   -webkit-tap-highlight-color: transparent;
   display: flex;
   align-items: center;
@@ -2282,7 +2295,7 @@ html[data-contrast="light"] { display: none; } /* preserve for future */
   border-radius: 9999px;
   font-family: var(--lg-font);
   font-size: 0.85rem;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
   flex-shrink: 0;
 }
 
@@ -2371,7 +2384,7 @@ html[data-contrast="light"] { display: none; } /* preserve for future */
   padding: 10px 6px;
   border-radius: var(--lg-radius-md);
   cursor: grab;
-  transition: all 0.2s ease;
+  transition: transform 0.2s ease, opacity 0.2s ease;
   user-select: none;
   border: 1px solid transparent;
 }
@@ -2456,7 +2469,7 @@ html[data-contrast="light"] { display: none; } /* preserve for future */
   min-height: 40px;
   cursor: pointer;
   border: 1.5px solid transparent;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .page-editor-canvas-item:hover {
@@ -2535,7 +2548,7 @@ html[data-contrast="light"] { display: none; } /* preserve for future */
   cursor: pointer;
   border-radius: 4px;
   font-size: 0.8rem;
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 
 .page-editor-canvas-item-tool-btn:hover {
@@ -2574,7 +2587,7 @@ html[data-contrast="light"] { display: none; } /* preserve for future */
   font-size: 0.72rem;
   color: white;
   text-indent: -9999px;
-  transition: all 0.15s ease;
+  transition: opacity 0.15s ease;
 }
 
 .page-editor-drop-indicator:hover span {
@@ -2589,7 +2602,7 @@ html[data-contrast="light"] { display: none; } /* preserve for future */
   text-align: center;
   border: 1.5px dashed rgba(255,255,255,0.10);
   border-radius: var(--lg-radius-md);
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
   cursor: default;
 }
 
@@ -2689,7 +2702,7 @@ html[data-contrast="light"] { display: none; } /* preserve for future */
   cursor: pointer;
   font-family: var(--lg-font);
   font-size: 0.8rem;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .pe-add-item-btn:hover {
@@ -2703,8 +2716,8 @@ html[data-contrast="light"] { display: none; } /* preserve for future */
   z-index: 1000;
   min-width: 140px;
   background: rgba(16,16,22,0.95);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: var(--lg-frost-heavy);
+  -webkit-backdrop-filter: var(--lg-frost-heavy);
   border: 1px solid rgba(255,255,255,0.10);
   border-radius: var(--lg-radius-md);
   padding: 4px;
@@ -2888,8 +2901,8 @@ html[data-contrast="light"] { display: none; } /* preserve for future */
   width: 100%;
   max-width: 480px;
   background: rgba(10,10,14,0.60);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: var(--lg-frost-heavy);
+  -webkit-backdrop-filter: var(--lg-frost-heavy);
   border: 1px solid var(--lg-glass-border);
   border-radius: var(--lg-radius-xl);
   padding: 36px 32px;
@@ -2957,7 +2970,7 @@ html[data-contrast="light"] { display: none; } /* preserve for future */
   height: 18px;
   border-radius: 50%;
   background: var(--lg-text-secondary);
-  transition: all 0.3s ease;
+  transition: transform 0.3s ease, background-color 0.3s ease;
 }
 
 .pe-toggle input:checked + .pe-toggle-slider {
@@ -3235,4 +3248,15 @@ html[data-contrast="light"] { display: none; } /* preserve for future */
 
 .admin-cell--comment {
   max-width: 320px;
+}
+
+/* ============================================================
+   Accessibility — Reduced Motion
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

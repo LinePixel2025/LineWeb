@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useRef, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useRef, useCallback, useMemo, type ReactNode } from 'react'
 import { useAuth } from './AuthContext'
 import api from '../lib/api'
 
@@ -73,11 +73,17 @@ export function WallpaperProvider({ children }: { children: ReactNode }) {
   const [historyLoading, setHistoryLoading] = useState(false)
 
   const fetchedOnce = useRef(false)
+  const abortRef = useRef<AbortController | null>(null)
 
   /** 核心抓取方法 */
   const fetchWallpaper = useCallback(async (opts?: { mode?: WallpaperMode; date?: string }) => {
     const mode = opts?.mode || wallpaperMode
     const date = opts?.date
+
+    // 取消上一次未完成的请求
+    if (abortRef.current) abortRef.current.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
 
     setLoading(true)
     setLoaded(false)
@@ -88,19 +94,26 @@ export function WallpaperProvider({ children }: { children: ReactNode }) {
     const qs = params.toString()
 
     try {
-      const data = await api.get<WallpaperData>(`/bing-wallpaper${qs ? `?${qs}` : ''}`)
+      const data = await api.get<WallpaperData>(`/bing-wallpaper${qs ? `?${qs}` : ''}`, { signal: controller.signal })
       const sep = data.url.includes('?') ? '&' : '?'
       setBgUrl(`${data.url}${sep}_t=${Date.now()}`)
       setCopyright(data.copyright)
       setWallpaperTitle(data.title || '')
       setWallpaperDate(data.date || '')
       setLoaded(true)
-    } catch (err) {
+    } catch (err: unknown) {
+      // 忽略 abort 导致的取消
+      if (err instanceof DOMException && err.name === 'AbortError') return
       console.error('Failed to fetch wallpaper:', err)
     } finally {
       setLoading(false)
     }
   }, [wallpaperMode])
+
+  // 组件卸载时取消未完成的请求
+  useEffect(() => {
+    return () => { abortRef.current?.abort() }
+  }, [])
 
   /** 首次挂载抓取一次 */
   useEffect(() => {
@@ -171,14 +184,17 @@ export function WallpaperProvider({ children }: { children: ReactNode }) {
       .finally(() => setHistoryLoading(false))
   }, [])
 
+  // 记忆化 Provider value — 避免每次渲染创建新对象导致消费者无谓重渲染
+  const value = useMemo<WallpaperContextType>(() => ({
+    bgUrl, bgType, solidColor, copyright,
+    wallpaperTitle, wallpaperDate, wallpaperMode,
+    loaded, loading, refresh,
+    previewWallpaper,
+    history, loadHistory, historyLoading,
+  }), [bgUrl, bgType, solidColor, copyright, wallpaperTitle, wallpaperDate, wallpaperMode, loaded, loading, refresh, previewWallpaper, history, loadHistory, historyLoading])
+
   return (
-    <WallpaperContext.Provider value={{
-      bgUrl, bgType, solidColor, copyright,
-      wallpaperTitle, wallpaperDate, wallpaperMode,
-      loaded, loading, refresh,
-      previewWallpaper,
-      history, loadHistory, historyLoading,
-    }}>
+    <WallpaperContext.Provider value={value}>
       {children}
     </WallpaperContext.Provider>
   )

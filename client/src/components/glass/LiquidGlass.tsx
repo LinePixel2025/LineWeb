@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react'
+import React, { useRef, useEffect, memo } from 'react'
 
 export interface LiquidGlassProps {
   children: React.ReactNode
@@ -29,7 +29,7 @@ export interface LiquidGlassProps {
  *   │  CSS ::after (z:1)            │  static specular (被 interactive 覆盖)
  *   └──────────────────────────────┘
  */
-export default function LiquidGlass({
+const LiquidGlass = memo(function LiquidGlass({
   children,
   variant = 'regular',
   className = '',
@@ -38,28 +38,37 @@ export default function LiquidGlass({
   chromatic = true,
 }: LiquidGlassProps) {
   const ref = useRef<HTMLDivElement>(null)
-  const [lightPos, setLightPos] = useState({ x: 30, y: 20 })
+  const specularRef = useRef<HTMLDivElement>(null)
 
-  // Mouse-following specular highlight
+  // Mouse-following specular highlight — 直接操作 DOM 避免重渲染
   useEffect(() => {
     if (!interactive) return
     const el = ref.current
-    if (!el) return
+    const specular = specularRef.current
+    if (!el || !specular) return
+
+    let cachedRect: DOMRect | null = null
+    let rectFrame = 0
 
     const onMove = (e: MouseEvent | TouchEvent) => {
-      const rect = el.getBoundingClientRect()
+      // 每帧只读一次 getBoundingClientRect
+      if (!cachedRect) {
+        cachedRect = el.getBoundingClientRect()
+        rectFrame = requestAnimationFrame(() => { cachedRect = null })
+      }
+
       let cx = 0, cy = 0
       if ('touches' in e && e.touches.length > 0) {
-        cx = e.touches[0].clientX - rect.left
-        cy = e.touches[0].clientY - rect.top
+        cx = e.touches[0].clientX - cachedRect.left
+        cy = e.touches[0].clientY - cachedRect.top
       } else if ('clientX' in e) {
-        cx = e.clientX - rect.left
-        cy = e.clientY - rect.top
+        cx = e.clientX - cachedRect.left
+        cy = e.clientY - cachedRect.top
       }
-      setLightPos({
-        x: Math.max(5, Math.min(95, (cx / rect.width) * 100)),
-        y: Math.max(5, Math.min(95, (cy / rect.height) * 100)),
-      })
+
+      const x = Math.max(5, Math.min(95, (cx / cachedRect.width) * 100))
+      const y = Math.max(5, Math.min(95, (cy / cachedRect.height) * 100))
+      specular.style.background = `radial-gradient(circle at ${x}% ${y}%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.08) 30%, transparent 60%)`
     }
 
     el.addEventListener('mousemove', onMove)
@@ -67,6 +76,7 @@ export default function LiquidGlass({
     return () => {
       el.removeEventListener('mousemove', onMove)
       el.removeEventListener('touchmove', onMove)
+      cancelAnimationFrame(rectFrame)
     }
   }, [interactive])
 
@@ -80,31 +90,26 @@ export default function LiquidGlass({
       ? 'lg-surface-strong'
       : 'lg-surface'
 
-  // 交互式镜面高光 — 替代 CSS ::after 静态高光
-  const specularGrad = interactive
-    ? `radial-gradient(circle at ${lightPos.x}% ${lightPos.y}%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.08) 30%, transparent 60%)`
-    : 'transparent'
-
   const allClass = `${glassClass}${interactive ? '' : ' lg-surface-no-specular'} ${className}`.trim()
 
   return (
     <div
       ref={ref}
       className={allClass}
-      style={{
-        // 仅覆盖必要的结构样式，背景/滤镜/阴影均由 CSS 类控制
-        ...style,
-      }}
+      style={style}
     >
       {/* Interactive specular highlight — 鼠标跟随高光，覆盖 CSS ::after */}
       <div
+        ref={specularRef}
         style={{
           position: 'absolute',
           inset: 0,
           borderRadius: 'inherit',
           pointerEvents: 'none',
           zIndex: 3,
-          background: specularGrad,
+          background: interactive
+            ? 'radial-gradient(circle at 30% 20%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.08) 30%, transparent 60%)'
+            : 'transparent',
           transition: interactive ? 'background 0.15s ease-out' : 'none',
         }}
       />
@@ -157,4 +162,6 @@ export default function LiquidGlass({
       </div>
     </div>
   )
-}
+})
+
+export default LiquidGlass

@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { memo } from 'react'
 import { Link } from 'react-router-dom'
 
 export interface LiquidButtonProps {
@@ -18,7 +18,7 @@ export interface LiquidButtonProps {
  * Liquid Glass Button
  * Apple-inspired capsule button with glass refraction effects
  */
-export default function LiquidButton({
+const LiquidButton = memo(function LiquidButton({
   children,
   variant = 'glass',
   size = 'md',
@@ -60,4 +60,6 @@ export default function LiquidButton({
       {content}
     </button>
   )
-}
+})
+
+export default LiquidButton
