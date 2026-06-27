@@ -87,46 +87,74 @@ export function sendCommand(command: Omit<NodeCommand, 'id'> & { id?: string }):
 }
 
 /**
- * 分块写入文件 — 将大文件拆分成多个小消息发送
+ * 流式分块写入 — 第一块初始化 + 中间块连续喷射 + 最后一块等待确认
  */
 export async function sendChunkedWrite(path: string, rawData: Buffer): Promise<NodeResponse> {
   const base64Data = rawData.toString('base64')
   const totalChunks = Math.ceil(base64Data.length / CHUNK_SIZE)
   const batchId = 'w-' + generateId()
 
-  // 第一步：发送 start（不含数据，仅元信息）
-  await sendCommand({
-    id: batchId,
-    type: 'write_file' as any,
-    path,
-    totalSize: rawData.length,
-    totalChunks,
-  })
-
-  // 第二步：逐块发送数据
-  for (let i = 0; i < totalChunks; i++) {
-    const chunk = base64Data.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
-    const isLast = i === totalChunks - 1
-
-    const result = await sendCommand({
+  if (totalChunks === 1) {
+    // 小文件，单块发送
+    return sendCommand({
       id: batchId,
-      type: 'write_file_data' as any,
+      type: 'write_file' as any,
       path,
-      data: chunk,
-      chunkIndex: i,
-      totalChunks,
-      isLast,
+      totalSize: rawData.length,
+      totalChunks: 1,
+      data: base64Data,
+      chunkIndex: 0,
+      isLast: true,
     })
-
-    if (!isLast && !result.success) {
-      return result
-    }
-    if (isLast) {
-      return result
-    }
   }
 
-  return { id: batchId, success: true, data: { size: rawData.length } }
+  if (!activeNode || !nodeConnected) {
+    throw new Error('存储节点未连接')
+  }
+
+  // 第一步：发送 start（仅元信息，无数据）
+  const initCmd: NodeCommand = {
+    id: batchId, type: 'write_file', path,
+    totalSize: rawData.length, totalChunks, chunkIndex: -1, isLast: false,
+  }
+  activeNode.send(JSON.stringify(initCmd))
+
+  // 等待一小段时间确保节点初始化缓冲区
+  await new Promise(r => setTimeout(r, 50))
+
+  // 第二步：喷射发送中间块（不等待确认）
+  for (let i = 0; i < totalChunks - 1; i++) {
+    const chunk = base64Data.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
+    const dCmd: NodeCommand = {
+      id: batchId, type: 'write_file_data', path,
+      data: chunk, chunkIndex: i, totalChunks, isLast: false,
+    }
+    activeNode.send(JSON.stringify(dCmd))
+  }
+
+  // 第三步：最后一块 — 等待确认
+  const lastChunk = base64Data.slice((totalChunks - 1) * CHUNK_SIZE)
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingCommands.delete(batchId)
+      reject(new Error(`写入超时: ${path}`))
+    }, 120000)
+
+    pendingCommands.set(batchId, { resolve, reject, timer })
+
+    const lastCmd: NodeCommand = {
+      id: batchId, type: 'write_file_data', path,
+      data: lastChunk, chunkIndex: totalChunks - 1, totalChunks, isLast: true,
+    }
+    try {
+      activeNode!.send(JSON.stringify(lastCmd))
+    } catch (err) {
+      pendingCommands.delete(batchId)
+      clearTimeout(timer)
+      reject(new Error(`发送最后一块失败: ${err}`))
+    }
+  })
 }
 
 /**
