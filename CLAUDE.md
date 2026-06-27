@@ -19,6 +19,9 @@ lineweb/                       # 根 monorepo (concurrently 管理双端)
 │       │   ├── Navbar.tsx      # 浮动导航栏 (.navbar + lg-underlay)
 │       │   ├── Layout.tsx      # 路由出口 + 壁纸背景层 + 渐变叠加 + 版权
 │       │   ├── Guards.tsx      # ProtectedRoute / AdminRoute
+│       │   ├── AdminLayout.tsx # 管理后台侧栏布局
+│       │   ├── comments/
+│       │   │   └── CommentSection.tsx  # 评论区（含 CollapsibleContent / ReplyForm / CommentCard）
 │       │   └── glass/          # Liquid Glass 高阶组件 (React)
 │       │       ├── LiquidGlass.tsx
 │       │       ├── LiquidButton.tsx
@@ -28,23 +31,28 @@ lineweb/                       # 根 monorepo (concurrently 管理双端)
 │       │   ├── AuthContext.tsx       # JWT 认证 (useAuth hook)
 │       │   ├── WallpaperContext.tsx  # 壁纸 URL + 版权 + loading/loaded/refresh (useWallpaper hook)
 │       │   └── ContrastContext.tsx   # 逐像素位置感知字体反色 (data-ac 属性扫描)
-│       ├── lib/api.ts          # 自动注入 Bearer token 的 fetch 封装 (get/post/put/delete)
-│       ├── pages/              # 每页一个文件，EditorPage 使用 HTML textarea 编辑器
+│       ├── lib/
+│       │   └── api.ts          # 自动注入 Bearer token 的 fetch 封装 (get/post/put/delete)
+│       ├── types/
+│       │   └── comment.ts      # CommentData / CommentAuthor 共享类型
+│       ├── pages/              # 每页一个文件
 │       └── styles/
 │       │   └── globals.css     # 全部设计系统 (无其他 CSS 文件)
 │       └── main.tsx
 ├── server/                    # 后端 (Express + Prisma)
 │   ├── .env                   # DATABASE_URL + JWT_SECRET (必填)
 │   ├── prisma/
-│   │   ├── schema.prisma      # User + Post + Page 模型（SQLite 本地开发）
-│   │   └── seed.ts            # 管理员 admin@lineweb.dev + 示例文章
+│   │   ├── schema.prisma      # User + Post + Comment + Page 模型（SQLite 本地开发）
+│   │   └── seed.ts            # 管理员 admin@lineweb.dev + 示例文章 + 示例评论
 │   ├── scripts/               # Railway 部署脚本
 │   │   └── generate-pg-schema.js  # schema.prisma → PostgreSQL 版本
 │   └── src/
 │       ├── config/index.ts    # Zod schema + 环境变量
-│       ├── lib/prisma.ts      # 单例 PrismaClient
+│       ├── lib/
+│       │   ├── prisma.ts      # 单例 PrismaClient
+│       │   └── utils.ts       # parsePagination / parseId (路由共用)
 │       ├── middleware/auth.ts # authenticate + requireAdmin
-│       ├── routes/            # auth / posts / bing
+│       ├── routes/            # auth / posts / comments / pages / bing
 │       └── index.ts           # Express 入口
 ├── package.json               # Monorepo 脚本 (npm run dev 同时启动双端)
 └── .npmrc                     # registry=https://registry.npmmirror.com (中国加速)
@@ -72,7 +80,19 @@ User (users)                  Post (posts)
 └── updatedAt                 ├── authorId (FK → users.id)
                               ├── createdAt
                               └── updatedAt
+
+Comment (comments)            Page (pages)
+├── id (PK, 自增)             ├── id (PK, 自增)
+├── content                   ├── slug (unique)
+├── createdAt                 ├── title
+├── updatedAt                 ├── content (HTML)
+├── postId (FK → posts.id)    ├── published
+├── authorId (FK → users.id)  ├── createdAt
+├── parentId? (FK → self)     └── updatedAt
+└── replies[] (self-relation)
 ```
+
+评论仅支持一级嵌套：parentId 非 null 的评论不能再有子评论。删除父评论级联删除子评论。
 
 ## API Endpoints
 
@@ -105,6 +125,16 @@ Token 有效期 7 天。
 | GET | `/` | 返回 `{ url, copyright }` |
 
 本质上代理 picsum.photos，每次请求随机返回高清壁纸。
+
+### Comments (`/api/comments`)
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/post/:postId` | — | 某篇文章的全部评论（树状） |
+| POST | `/` | Bearer | 发表评论（支持 parentId 回复） |
+| GET | `/admin/posts` | admin | 有评论的文章列表（按文章分组） |
+| GET | `/admin/post/:postId` | admin | 某篇文章的全部评论（树状） |
+| PUT | `/:id` | admin | 编辑评论 |
+| DELETE | `/:id` | admin | 删除评论（级联删除子评论） |
 
 ## Design System — Liquid Glass
 
@@ -168,13 +198,17 @@ CSS 自定义属性 (`--lg-*`) 硬编码为暗色模式值。亮色模式通过 
 | `/features` | FeaturesPage | — | 功能卡片网格 |
 | `/calculator` | CalculatorPage | — | 科学计算器 |
 | `/posts` | PostsPage | — | 文章列表 (分页) |
-| `/posts/:slug` | PostPage | — | 文章阅读 |
+| `/posts/:slug` | PostPage | — | 文章阅读 + 评论区 |
 | `/login` | LoginPage | — | 登录表单 |
 | `/register` | RegisterPage | — | 注册表单 |
 | `/profile` | ProfilePage | ProtectedRoute | 用户信息 |
 | `/admin` | AdminPage | AdminRoute | 文章管理列表 |
 | `/admin/new` | EditorPage | AdminRoute | 新建文章 |
 | `/admin/edit/:id` | EditorPage | AdminRoute | 编辑文章 |
+| `/admin/comments` | CommentAdminPage | AdminRoute | 评论管理（按文章分组） |
+| `/admin/pages` | PageList | AdminRoute | 页面管理 |
+| `/admin/pages/new` | PageEditor | AdminRoute | 新建页面 |
+| `/admin/pages/:id/edit` | PageEditor | AdminRoute | 编辑页面 |
 
 Provider 嵌套: `BrowserRouter > AuthProvider > WallpaperProvider > ContrastProvider > Routes`。
 
@@ -319,10 +353,15 @@ NODE_ENV=production npx tsx src/index.ts   # 启动 Express（同时 serve 前�
 
 ### 前端模式
 - `api.ts` 导出一个 `api` 对象，所有请求自动注 token，使用方式 `api.get<T>(url)` / `api.post<T>(url, body)`
-- 所有页面放在 `pages/`，组件在 `components/`，contexts 在 `contexts/`
+- 所有页面放在 `pages/`，组件在 `components/`，contexts 在 `contexts/`，共享类型在 `types/`
 - CSS 修改只改 `globals.css` 一个文件，不要新建 CSS 文件
 - `LiquidButton` 支持 `to` / `href` / `onClick` 三种交互模式；`variant` 默认为 `glass`
 - `LiquidGlass` 组件默认开启交互镜面高光和色差边缘
+- 评论相关组件在 `components/comments/CommentSection.tsx`，类型在 `types/comment.ts`
+
+### 后端模式（续）
+- `parsePagination` 和 `parseId` 位于 `server/src/lib/utils.ts`，所有路由共用，不要重复定义
+- 评论树构建用 `buildCommentTree()`（`routes/comments.ts` 内部），将扁平列表转为 `{ ...comment, replies[] }` 树状结构
 
 ### 数据库故障排除
 - **seed 失败 "Unique constraint failed on `username`"**：用户已存在但 `upsert` 的 `where` 条件用的是 `email` 而非 `username`（两次 seed 的 email 可能不同）。修复：确保 seed 中每个用户的 `upsert` 用 `username` 做唯一匹配
