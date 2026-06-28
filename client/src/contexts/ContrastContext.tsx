@@ -15,7 +15,7 @@ const EXCLUDE_CLASSES = [
   '.article-content', '.liquid-btn', '.lg-input', '.calc-btn',
   '.theme-toggle', '.admin-page-btn', '.wallpaper-refresh-btn',
   '.admin-header h1', '.admin-layout',
-  '.post-title', '.profile-page',
+  '.post-title', '.profile-page', '.drive-page',
   '.comment-section', '.reply-form',
 ]
 
