@@ -1,0 +1,157 @@
+import prisma from '../lib/prisma.js'
+import { listDirRecursive, sendCommand, isNodeConnected } from './storageTunnel.js'
+
+export interface SyncReport {
+  scanned: number
+  dbRecords: number
+  orphansRemoved: number
+  missingCreated: number
+  errors: string[]
+  durationMs: number
+}
+
+/**
+ * 执行一次网盘文件同步：
+ * 1. 检查存储节点连接
+ * 2. 递归列出节点上的所有文件
+ * 3. 对比数据库记录
+ * 4. 清理孤立的数据库记录（节点上已不存在的文件）
+ * 5. 为节点上存在但数据库缺失的文件创建记录
+ */
+export async function syncDriveFiles(): Promise<SyncReport> {
+  const start = Date.now()
+  const report: SyncReport = {
+    scanned: 0,
+    dbRecords: 0,
+    orphansRemoved: 0,
+    missingCreated: 0,
+    errors: [],
+    durationMs: 0,
+  }
+
+  if (!isNodeConnected()) {
+    report.errors.push('存储节点未连接，跳过同步')
+    report.durationMs = Date.now() - start
+    return report
+  }
+
+  try {
+    // 1. 递归列出存储节点所有文件路径
+    const nodePaths = await listDirRecursive('')
+    report.scanned = nodePaths.length
+
+    // 2. 获取数据库所有非文件夹记录
+    const dbFiles = await prisma.driveFile.findMany({
+      where: { isFolder: false },
+      select: { id: true, storagePath: true, name: true },
+    })
+    report.dbRecords = dbFiles.length
+
+    // 建立 storagePath → dbFile 映射
+    const dbPathMap = new Map(dbFiles.map(f => [f.storagePath, f]))
+
+    // 3. 找出节点上已有的路径集合
+    const nodePathSet = new Set(nodePaths)
+
+    // 4. 清理孤立记录：DB 有但节点上没有的文件
+    const orphans = dbFiles.filter(f => !nodePathSet.has(f.storagePath))
+    for (const orphan of orphans) {
+      try {
+        await prisma.driveFile.delete({ where: { id: orphan.id } })
+        report.orphansRemoved++
+        console.log(`[Sync] 删除孤立记录: ${orphan.name} (${orphan.storagePath})`)
+      } catch (err: any) {
+        report.errors.push(`删除孤立记录失败: ${orphan.storagePath} — ${err.message}`)
+      }
+    }
+
+    // 5. 修复缺失记录：节点上有但 DB 中没有的文件
+    for (const nodePath of nodePaths) {
+      if (dbPathMap.has(nodePath)) continue
+
+      try {
+        const statResp = await sendCommand({ type: 'stat', path: nodePath })
+        if (!statResp.success || !statResp.data) continue
+
+        const info = statResp.data
+        const parts = nodePath.split('/')
+        const fileName = parts.pop() || nodePath
+
+        // 查找或创建父文件夹路径对应的 DB parentId
+        let parentId: number | null = null
+        if (parts.length > 0) {
+          const parentPath = parts.join('/')
+          const parentFolder = await prisma.driveFile.findFirst({
+            where: { storagePath: parentPath, isFolder: true },
+          })
+          if (parentFolder) {
+            parentId = parentFolder.id
+          } else {
+            report.errors.push(`跳过 ${nodePath}: 父文件夹在数据库中不存在`)
+            continue
+          }
+        }
+
+        // 用第一个有网盘权限的用户作为上传者
+        const uploader = await prisma.user.findFirst({
+          where: { canAccessDrive: true },
+          orderBy: { id: 'asc' },
+          select: { id: true },
+        })
+        if (!uploader) {
+          report.errors.push(`跳过 ${nodePath}: 未找到可用的上传者`)
+          continue
+        }
+
+        await prisma.driveFile.create({
+          data: {
+            name: fileName,
+            isFolder: false,
+            parentId,
+            size: BigInt(info.size || 0),
+            mimeType: guessMimeType(fileName),
+            storagePath: nodePath,
+            uploadedById: uploader.id,
+          },
+        })
+        report.missingCreated++
+        console.log(`[Sync] 创建缺失记录: ${fileName} (${nodePath})`)
+      } catch (err: any) {
+        report.errors.push(`修复缺失记录失败: ${nodePath} — ${err.message}`)
+      }
+    }
+  } catch (err: any) {
+    report.errors.push(`同步失败: ${err.message}`)
+  }
+
+  report.durationMs = Date.now() - start
+  console.log(`[Sync] 完成: 扫描 ${report.scanned} 项, `
+    + `删除 ${report.orphansRemoved} 孤立记录, `
+    + `创建 ${report.missingCreated} 缺失记录, `
+    + `${report.errors.length} 错误, 耗时 ${report.durationMs}ms`)
+
+  return report
+}
+
+function guessMimeType(name: string): string {
+  const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : ''
+  const mimeMap: Record<string, string> = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+    gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+    bmp: 'image/bmp', mp4: 'video/mp4', webm: 'video/webm',
+    avi: 'video/x-msvideo', mov: 'video/quicktime', mkv: 'video/x-matroska',
+    mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg',
+    flac: 'audio/flac', pdf: 'application/pdf',
+    doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    zip: 'application/zip', rar: 'application/vnd.rar',
+    '7z': 'application/x-7z-compressed', tar: 'application/x-tar',
+    gz: 'application/gzip', js: 'text/javascript',
+    ts: 'text/typescript', py: 'text/x-python',
+    html: 'text/html', css: 'text/css',
+    json: 'application/json', txt: 'text/plain',
+    md: 'text/markdown',
+  }
+  return mimeMap[ext] || 'application/octet-stream'
+}
