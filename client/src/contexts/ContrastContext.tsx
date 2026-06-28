@@ -27,8 +27,8 @@ function luminance(r: number, g: number, b: number): number {
 }
 
 /**
- * 将壁纸 + 渐变叠加层合成到一个 canvas
- * 使用 CanvasGradient API 替代逐像素循环
+ * 将壁纸绘制到 canvas（不叠加渐变 — 渐变在 doScan 中数学计算，
+ * 避免 cover 裁剪导致的渐变位置偏移）
  */
 function buildWallpaperCanvas(img: HTMLImageElement): HTMLCanvasElement | null {
   const W = 200
@@ -40,16 +40,17 @@ function buildWallpaperCanvas(img: HTMLImageElement): HTMLCanvasElement | null {
   if (!ctx) return null
 
   ctx.drawImage(img, 0, 0, W, H)
-
-  // 用 CanvasGradient 叠加渐变层（匹配 Layout 的 linear-gradient 参数）
-  const grad = ctx.createLinearGradient(0, 0, 0, H)
-  grad.addColorStop(0, 'rgba(0,0,0,0.35)')
-  grad.addColorStop(0.5, 'rgba(0,0,0,0.15)')
-  grad.addColorStop(1, 'rgba(0,0,0,0.40)')
-  ctx.fillStyle = grad
-  ctx.fillRect(0, 0, W, H)
-
   return c
+}
+
+/**
+ * Layout 中 linear-gradient 的 alpha 计算
+ * 渐变: 0% → 0.35, 50% → 0.15, 100% → 0.40（黑色叠加）
+ * t: 0 视口顶部, 1 视口底部
+ */
+function gradientOverlayAlpha(t: number): number {
+  if (t <= 0.5) return 0.35 - (0.35 - 0.15) * (t / 0.5)    // 0.35 → 0.15
+  return 0.15 + (0.40 - 0.15) * ((t - 0.5) / 0.5)          // 0.15 → 0.40
 }
 
 function isExcluded(el: Element): boolean {
@@ -78,8 +79,25 @@ export function ContrastProvider({ children }: { children: ReactNode }) {
     const W = canvas.width, H = canvas.height
     const vw = window.innerWidth, vh = window.innerHeight
 
-    // 一次读取全 canvas 像素
-    const fullData = ctx.getImageData(0, 0, W, H).data
+    /* 模拟 background-size: cover 的坐标映射
+     *
+     * cover 将 canvas 放大到完全覆盖视口，较短边居中裁剪。
+     * coverScale = max(vw/W, vh/H) — 渲染缩放倍数
+     * cropOff = (dim * coverScale - viewport) / 2 — 被裁剪的像素（屏幕空间）
+     * 逆变换：canvasCoord = (screenCoord + cropOff) / coverScale
+     */
+    const coverScale = Math.max(vw / W, vh / H)
+    const cropOffX = Math.max(0, (W * coverScale - vw) / 2)
+    const cropOffY = Math.max(0, (H * coverScale - vh) / 2)
+
+    // 一次读取全 canvas 像素（无渐变叠加，渐变在下方数学计算）
+    let fullData: Uint8ClampedArray
+    try {
+      fullData = ctx.getImageData(0, 0, W, H).data
+    } catch (e) {
+      console.warn('[Contrast] getImageData failed (canvas tainted?)', e)
+      return
+    }
 
     // 批量收集所有需要更新的元素和目标值
     const elements = document.querySelectorAll(SCAN_SELECTOR)
@@ -94,14 +112,34 @@ export function ContrastProvider({ children }: { children: ReactNode }) {
       const rect = el.getBoundingClientRect()
       if (rect.width < 1 || rect.height < 1) continue
 
-      const cx = (rect.left + rect.width / 2) / vw * W
-      const cy = (rect.top + rect.height / 2) / vh * H
+      const sx = rect.left + rect.width / 2
+      const sy = rect.top + rect.height / 2
+      const cx = (sx + cropOffX) / coverScale
+      const cy = (sy + cropOffY) / coverScale
       const ix = Math.round(Math.max(0, Math.min(W - 1, cx)))
       const iy = Math.round(Math.max(0, Math.min(H - 1, cy)))
       const i = (iy * W + ix) * 4
 
-      const lum = luminance(fullData[i], fullData[i + 1], fullData[i + 2])
-      updates.push({ el, value: lum > 120 ? 'black' : 'white' })
+      // 3×3 区域平均亮度，避免单像素抖动
+      let totalLum = 0, count = 0
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const px = Math.max(0, Math.min(W - 1, ix + dx))
+          const py = Math.max(0, Math.min(H - 1, iy + dy))
+          const pi = (py * W + px) * 4
+          totalLum += luminance(fullData[pi], fullData[pi + 1], fullData[pi + 2])
+          count++
+        }
+      }
+      let avgLum = totalLum / count
+
+      // 数学叠加渐变层 α，匹配 Layout 的 linear-gradient
+      const t = sy / vh  // 0=视口顶, 1=视口底
+      const alpha = gradientOverlayAlpha(t)
+      avgLum *= (1 - alpha)
+
+      // 亮度阈值 128（全范围 0-255，叠加黑色渐变后合理）
+      updates.push({ el, value: avgLum > 128 ? 'black' : 'white' })
     }
 
     // 批量写入 — 读写分离避免 layout thrashing
@@ -147,21 +185,38 @@ export function ContrastProvider({ children }: { children: ReactNode }) {
     }
     let cancelled = false
 
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => {
-      if (cancelled) return
-      // 释放旧 canvas
-      if (canvasRef.current) canvasRef.current.width = 0
-      canvasRef.current = buildWallpaperCanvas(img)
-      img.src = '' // 释放 Image 内存
-      scheduleScan()
+    // 使用后端代理加载壁纸，避免 canvas 被跨域图片污损导致 getImageData 抛出 SecurityError
+    const queryUrl = bgUrl.replace(/[?&]_t=\d+$/, '')
+
+    const loadViaProxy = async () => {
+      try {
+        const resp = await fetch(`/api/bing-wallpaper/proxy?url=${encodeURIComponent(queryUrl)}`)
+        if (!resp.ok) throw new Error(`Proxy returned ${resp.status}`)
+        const blob = await resp.blob()
+        if (cancelled) return
+        const blobUrl = URL.createObjectURL(blob)
+
+        const img = new Image()
+        // 同源的 blob URL，无需 crossOrigin 属性
+        img.onload = () => {
+          if (cancelled) { URL.revokeObjectURL(blobUrl); return }
+          // 释放旧 canvas
+          if (canvasRef.current) canvasRef.current.width = 0
+          canvasRef.current = buildWallpaperCanvas(img)
+          URL.revokeObjectURL(blobUrl) // 加载到 canvas 后可释放 blob URL
+          scheduleScan()
+        }
+        img.onerror = () => {
+          URL.revokeObjectURL(blobUrl)
+          canvasRef.current = null
+        }
+        img.src = blobUrl
+      } catch {
+        canvasRef.current = null
+      }
     }
-    img.onerror = () => {
-      canvasRef.current = null
-      img.src = ''
-    }
-    img.src = bgUrl
+    loadViaProxy()
+
     return () => {
       cancelled = true
     }

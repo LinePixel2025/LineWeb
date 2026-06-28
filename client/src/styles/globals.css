@@ -2167,7 +2167,7 @@ html { --_ac-black: #111;   --_ac-black-sec: #48484a;  --_ac-black-dim: #8e8e93;
 
 /* data-ac 通过 CSS 自定义属性切换，不需要 !important — 组件用 var(--_ac-c) 即可 */
 html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(--_ac-white-dim); }
-html[data-contrast="light"] { display: none; } /* preserve for future */
+/* data-contrast 已移除 — 见 ContrastContext 修复 */
 [data-ac="black"] { --_ac-c: var(--_ac-black); --_ac-c2: var(--_ac-black-sec); --_ac-c3: var(--_ac-black-dim); }
 
 /* 基础 data-ac 切换 — 末尾放最后保障 */

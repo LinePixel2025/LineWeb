@@ -5,6 +5,40 @@ const router = Router()
 const UAPIS_BASE = 'https://uapis.cn/api/v1/image/bing-daily'
 
 /**
+ * GET /api/bing-wallpaper/proxy
+ *
+ * 代理壁纸图片文件，解决前端 Canvas getImageData CORS 限制。
+ * 前端直接使用 CDN URL 时可能因跨域限制导致 canvas 被污损，
+ * 通过后端代理图片流保证同源访问。
+ */
+router.get('/proxy', async (req: Request, res: Response) => {
+  const imageUrl = req.query.url as string
+  if (!imageUrl) {
+    res.status(400).json({ error: 'Missing url query param' })
+    return
+  }
+
+  try {
+    const response = await fetch(imageUrl)
+    if (!response.ok) {
+      res.status(502).json({ error: '上游图片服务暂时不可用' })
+      return
+    }
+
+    // 透传 Content-Type
+    const contentType = response.headers.get('content-type') || 'image/jpeg'
+    res.setHeader('Content-Type', contentType)
+    res.setHeader('Cache-Control', 'public, max-age=86400')
+
+    // 以流的形式 pipe 图片数据
+    const buffer = await response.arrayBuffer()
+    res.send(Buffer.from(buffer))
+  } catch {
+    res.status(502).json({ error: '图片代理请求失败' })
+  }
+})
+
+/**
  * GET /api/bing-wallpaper
  *
  * Query params (all optional):
