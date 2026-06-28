@@ -8,12 +8,15 @@ import UploadZone from '../components/drive/UploadZone'
 import DrivePreview from '../components/drive/DrivePreview'
 import { NewFolderDialog, RenameDialog, DeleteDialog } from '../components/drive/DriveDialogs'
 import api, { ApiError } from '../lib/api'
-import type { DriveItem, Breadcrumb } from '../types/drive'
+import type { DriveItem, Breadcrumb, DriveListResponse } from '../types/drive'
 
 export default function DrivePage() {
   const [items, setItems] = useState<DriveItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total, setTotal] = useState(0)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<DriveItem[] | null>(null)
   const [searching, setSearching] = useState(false)
@@ -31,13 +34,20 @@ export default function DrivePage() {
 
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
-  const fetchItems = useCallback(async (parentId: number | null) => {
+  const fetchItems = useCallback(async (parentId: number | null, targetPage?: number) => {
     setLoading(true)
     setError('')
     try {
-      const params = parentId !== null ? `?parentId=${parentId}` : ''
-      const data = await api.get<DriveItem[]>(`/drive/files${params}`)
-      setItems(data)
+      const p = targetPage ?? 1
+      const params = new URLSearchParams()
+      if (parentId !== null) params.set('parentId', String(parentId))
+      params.set('page', String(p))
+      params.set('limit', '15')
+      const res = await api.get<DriveListResponse>(`/drive/files?${params}`)
+      setItems(res.data)
+      setTotal(res.total)
+      setPage(res.page)
+      setTotalPages(res.pageCount)
     } catch (err: any) {
       setError(err instanceof ApiError ? err.message : '加载失败')
       setItems([])
@@ -47,7 +57,7 @@ export default function DrivePage() {
   }, [])
 
   useEffect(() => {
-    fetchItems(currentParentId)
+    fetchItems(currentParentId, 1)
   }, [currentParentId, fetchItems])
 
   // Search with debounce
@@ -127,8 +137,8 @@ export default function DrivePage() {
   const displayItems = searchResults !== null ? searchResults : items
   const isSearching = searchResults !== null
   const refresh = useCallback(() => {
-    fetchItems(currentParentId)
-  }, [currentParentId, fetchItems])
+    fetchItems(currentParentId, page)
+  }, [currentParentId, page])
 
   const handleSync = useCallback(async () => {
     setSyncing(true)
@@ -219,6 +229,50 @@ export default function DrivePage() {
             onRename={setRenameItem}
             onDelete={setDeleteItem}
           />
+        )}
+
+        {/* 翻页控件 */}
+        {!isSearching && totalPages > 1 && (
+          <div className="admin-pagination">
+            {(() => {
+              const total = totalPages
+              const current = page
+              const pages: (number | 0)[] = []
+              const start = Math.max(1, current - 2)
+              const end = Math.min(total, current + 2)
+
+              if (start > 1) {
+                pages.push(1)
+                if (start > 2) pages.push(0)
+              }
+              for (let i = start; i <= end; i++) pages.push(i)
+              if (end < total) {
+                if (end < total - 1) pages.push(0)
+                pages.push(total)
+              }
+
+              return pages.map((p, i) =>
+                p === 0 ? (
+                  <span key={`ellipsis-${i}`} className="admin-ellipsis">…</span>
+                ) : (
+                  <button
+                    key={p}
+                    className={`admin-page-btn${p === current ? ' admin-page-btn--active' : ''}`}
+                    onClick={() => fetchItems(currentParentId, p)}
+                  >
+                    {p}
+                  </button>
+                )
+              )
+            })()}
+          </div>
+        )}
+
+        {/* 总数显示 */}
+        {!isSearching && (
+          <div style={{ textAlign: 'center', marginTop: '12px', color: 'var(--lg-text-tertiary)', fontSize: '0.85rem' }}>
+            第 {page}/{totalPages} 页，共 {total} 项
+          </div>
         )}
       </LiquidGlass>
 

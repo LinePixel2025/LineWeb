@@ -43,32 +43,37 @@ router.use(authenticate, (req: Request, res: Response, next) => {
   })
 })
 
-/* ---------- 获取文件列表 ---------- */
+/* ---------- 获取文件列表（支持分页） ---------- */
 router.get('/files', async (req: Request, res: Response) => {
   try {
     const parentIdStr = req.query.parentId as string | undefined
     const parentId = parentIdStr ? parseId(parentIdStr) : null
+    const { page, limit, skip } = parsePagination(req.query)
 
     const where: any = { parentId }
-    // parentId = null 时查询根目录，parentId = undefined 时查所有（不需要这个情况）
 
-    const files = await prisma.driveFile.findMany({
-      where,
-      select: {
-        id: true,
-        name: true,
-        isFolder: true,
-        parentId: true,
-        size: true,
-        mimeType: true,
-        createdAt: true,
-        updatedAt: true,
-        uploadedBy: { select: { id: true, username: true } },
-      },
-      orderBy: [{ isFolder: 'desc' }, { name: 'asc' }],
-    })
+    const [data, total] = await Promise.all([
+      prisma.driveFile.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          isFolder: true,
+          parentId: true,
+          size: true,
+          mimeType: true,
+          createdAt: true,
+          updatedAt: true,
+          uploadedBy: { select: { id: true, username: true } },
+        },
+        orderBy: [{ isFolder: 'desc' }, { name: 'asc' }],
+        skip,
+        take: limit,
+      }),
+      prisma.driveFile.count({ where }),
+    ])
 
-    res.json(files)
+    res.json({ data, total, page, pageCount: Math.ceil(total / limit) })
   } catch (err) {
     console.error('获取文件列表失败:', err)
     res.status(500).json({ error: '获取文件列表失败' })

@@ -54,3 +54,10 @@ export function getMimeDisplay(mimeType: string | null, isFolder: boolean): stri
   const parts = mimeType.split('/')
   return parts[1]?.toUpperCase() || '文件'
 }
+
+export interface DriveListResponse {
+  data: DriveItem[]
+  total: number
+  page: number
+  pageCount: number
+}
