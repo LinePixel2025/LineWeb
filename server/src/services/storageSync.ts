@@ -13,10 +13,10 @@ export interface SyncReport {
 /**
  * 执行一次网盘文件同步：
  * 1. 检查存储节点连接
- * 2. 递归列出节点上的所有文件
+ * 2. 递归列出节点上的所有路径（文件 + 文件夹）
  * 3. 对比数据库记录
- * 4. 清理孤立的数据库记录（节点上已不存在的文件）
- * 5. 为节点上存在但数据库缺失的文件创建记录
+ * 4. 清理孤立的数据库记录（节点上已不存在的文件或文件夹）
+ * 5. 为节点上存在但数据库缺失的路径创建记录
  */
 export async function syncDriveFiles(): Promise<SyncReport> {
   const start = Date.now()
@@ -36,25 +36,24 @@ export async function syncDriveFiles(): Promise<SyncReport> {
   }
 
   try {
-    // 1. 递归列出存储节点所有文件路径
+    // 1. 递归列出存储节点所有路径（文件 + 文件夹）
     const nodePaths = await listDirRecursive('')
     report.scanned = nodePaths.length
 
-    // 2. 获取数据库所有非文件夹记录
-    const dbFiles = await prisma.driveFile.findMany({
-      where: { isFolder: false },
-      select: { id: true, storagePath: true, name: true },
+    // 2. 获取数据库全部记录
+    const dbRecords = await prisma.driveFile.findMany({
+      select: { id: true, storagePath: true, name: true, isFolder: true },
     })
-    report.dbRecords = dbFiles.length
+    report.dbRecords = dbRecords.length
 
-    // 建立 storagePath → dbFile 映射
-    const dbPathMap = new Map(dbFiles.map(f => [f.storagePath, f]))
+    // 建立 storagePath → dbRecord 映射
+    const dbPathMap = new Map(dbRecords.map(f => [f.storagePath, f]))
 
-    // 3. 找出节点上已有的路径集合
+    // 3. 节点上的路径集合
     const nodePathSet = new Set(nodePaths)
 
-    // 4. 清理孤立记录：DB 有但节点上没有的文件
-    const orphans = dbFiles.filter(f => !nodePathSet.has(f.storagePath))
+    // 4. 清理孤立记录：DB 有但节点上已经不存在的
+    const orphans = dbRecords.filter(f => !nodePathSet.has(f.storagePath))
     for (const orphan of orphans) {
       try {
         await prisma.driveFile.delete({ where: { id: orphan.id } })
@@ -65,7 +64,7 @@ export async function syncDriveFiles(): Promise<SyncReport> {
       }
     }
 
-    // 5. 修复缺失记录：节点上有但 DB 中没有的文件
+    // 5. 修复缺失记录：节点上有但 DB 中没有的路径（文件或文件夹）
     for (const nodePath of nodePaths) {
       if (dbPathMap.has(nodePath)) continue
 
@@ -75,9 +74,10 @@ export async function syncDriveFiles(): Promise<SyncReport> {
 
         const info = statResp.data
         const parts = nodePath.split('/')
-        const fileName = parts.pop() || nodePath
+        const entryName = parts.pop() || nodePath
+        const isFolder = !!info.isFolder
 
-        // 查找或创建父文件夹路径对应的 DB parentId
+        // 查找父文件夹
         let parentId: number | null = null
         if (parts.length > 0) {
           const parentPath = parts.join('/')
@@ -92,7 +92,6 @@ export async function syncDriveFiles(): Promise<SyncReport> {
           }
         }
 
-        // 用第一个有网盘权限的用户作为上传者
         const uploader = await prisma.user.findFirst({
           where: { canAccessDrive: true },
           orderBy: { id: 'asc' },
@@ -105,17 +104,17 @@ export async function syncDriveFiles(): Promise<SyncReport> {
 
         await prisma.driveFile.create({
           data: {
-            name: fileName,
-            isFolder: false,
+            name: entryName,
+            isFolder,
             parentId,
             size: BigInt(info.size || 0),
-            mimeType: guessMimeType(fileName),
+            mimeType: isFolder ? null : guessMimeType(entryName),
             storagePath: nodePath,
             uploadedById: uploader.id,
           },
         })
         report.missingCreated++
-        console.log(`[Sync] 创建缺失记录: ${fileName} (${nodePath})`)
+        console.log(`[Sync] 创建缺失记录: ${entryName} (${nodePath})`)
       } catch (err: any) {
         report.errors.push(`修复缺失记录失败: ${nodePath} — ${err.message}`)
       }

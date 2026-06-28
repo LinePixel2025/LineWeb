@@ -332,7 +332,7 @@ export function initStorageTunnel(server: HttpServer) {
 }
 
 /**
- * 递归列出存储节点上所有文件路径（不包含文件夹路径）
+ * 递归列出存储节点上所有路径（文件 + 文件夹）
  * 通过逐层调用 list_dir 实现
  */
 export async function listDirRecursive(rootPath: string = ''): Promise<string[]> {
@@ -350,10 +350,9 @@ export async function listDirRecursive(rootPath: string = ''): Promise<string[]>
 
     for (const item of resp.data) {
       const itemPath = dir ? `${dir}/${item.name}` : item.name
+      result.push(itemPath)
       if (item.isFolder) {
         pending.push(itemPath)
-      } else {
-        result.push(itemPath)
       }
     }
   }
