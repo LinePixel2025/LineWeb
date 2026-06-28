@@ -76,20 +76,20 @@ export default function DrivePage() {
     }
   }, [searchQuery])
 
-  const navigateToFolder = (item: DriveItem) => {
+  const navigateToFolder = useCallback((item: DriveItem) => {
     if (!item.isFolder) return
     setBreadcrumbs(prev => [...prev, { id: item.id, name: item.name }])
     setSearchQuery('')
     setSearchResults(null)
-  }
+  }, [])
 
-  const navigateToBreadcrumb = (index: number) => {
+  const navigateToBreadcrumb = useCallback((index: number) => {
     setBreadcrumbs(prev => prev.slice(0, index + 1))
     setSearchQuery('')
     setSearchResults(null)
-  }
+  }, [])
 
-  const handleDownload = async (item: DriveItem) => {
+  const handleDownload = useCallback(async (item: DriveItem) => {
     if (item.isFolder) return
     try {
       const token = localStorage.getItem('lineweb_token')
@@ -110,9 +110,9 @@ export default function DrivePage() {
     } catch (err: any) {
       alert(err.message || '下载失败')
     }
-  }
+  }, [])
 
-  const handlePreview = (item: DriveItem) => {
+  const handlePreview = useCallback((item: DriveItem) => {
     if (item.isFolder) return
     const mime = (item.mimeType || '').toLowerCase()
     const ext = item.name.includes('.') ? item.name.split('.').pop()!.toLowerCase() : ''
@@ -122,13 +122,15 @@ export default function DrivePage() {
     } else {
       handleDownload(item)
     }
-  }
+  }, [handleDownload])
 
   const displayItems = searchResults !== null ? searchResults : items
   const isSearching = searchResults !== null
-  const refresh = () => fetchItems(currentParentId)
+  const refresh = useCallback(() => {
+    fetchItems(currentParentId)
+  }, [currentParentId, fetchItems])
 
-  const handleSync = async () => {
+  const handleSync = useCallback(async () => {
     setSyncing(true)
     try {
       await api.post('/drive/sync')
@@ -138,7 +140,7 @@ export default function DrivePage() {
     } finally {
       setSyncing(false)
     }
-  }
+  }, [refresh])
 
   return (
     <div className="page container drive-page">
@@ -151,7 +153,7 @@ export default function DrivePage() {
           viewMode={viewMode}
           onSearch={setSearchQuery}
           onNavigate={navigateToBreadcrumb}
-          onToggleView={() => setViewMode(v => v === 'list' ? 'grid' : 'list')}
+          onToggleView={useCallback(() => setViewMode(v => v === 'list' ? 'grid' : 'list'), [])}
           onNewFolder={() => setShowNewFolder(true)}
           onUpload={() => setShowUpload(true)}
           onSync={handleSync}
