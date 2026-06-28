@@ -38,7 +38,7 @@ const DriveGridView = memo(function DriveGridView({
             <span className="drive-grid-card-icon">
               {getFileIcon(item)}
             </span>
-            <span className="drive-grid-card-name">{item.name}</span>
+            <span className="drive-grid-card-name" title={item.name}>{item.name}</span>
             <span className="drive-grid-card-meta">
               {formatFileSize(Number(item.size))}
             </span>

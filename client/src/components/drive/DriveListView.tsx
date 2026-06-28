@@ -38,6 +38,7 @@ function DriveRow({
             <button
               className="drive-name-btn drive-name-btn--folder"
               onClick={() => onFolderClick(item)}
+              title={item.name}
             >
               {item.name}
             </button>
@@ -45,7 +46,7 @@ function DriveRow({
             <button
               className="drive-name-btn"
               onClick={() => onRename(item)}
-              title="点击重命名"
+              title={`${item.name} — 点击重命名`}
             >
               {item.name}
             </button>

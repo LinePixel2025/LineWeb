@@ -183,7 +183,12 @@ export default function DrivePage() {
 
         {/* Content */}
         {loading ? (
-          <div className="drive-loading"><div className="spinner" /></div>
+          <div className="drive-loading">
+            <div className="spinner" />
+            <p style={{ marginTop: '12px', color: 'var(--lg-text-tertiary)', fontSize: '0.85rem' }}>
+              正在加载...
+            </p>
+          </div>
         ) : error ? (
           <LiquidGlass variant="blur" className="drive-state-card">
             <p className="drive-state-text">⚠️ {error}</p>
