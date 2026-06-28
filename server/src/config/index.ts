@@ -7,6 +7,7 @@ export const config = {
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   storageNodeToken: process.env.STORAGE_NODE_TOKEN || 'lineweb-storage-node-secret-change-in-production',
   maxFileSizeMB: parseInt(process.env.MAX_FILE_SIZE_MB || '500', 10),
+  driveSyncIntervalMs: parseInt(process.env.DRIVE_SYNC_INTERVAL_MS || '300000', 10), // 默认 5 分钟
 }
 
 export const registerSchema = z.object({

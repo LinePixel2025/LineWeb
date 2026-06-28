@@ -12,6 +12,7 @@ import commentRoutes from './routes/comments.js'
 import userRoutes from './routes/users.js'
 import driveRoutes from './routes/drive.js'
 import { initStorageTunnel } from './services/storageTunnel.js'
+import { syncDriveFiles } from './services/storageSync.js'
 
 const app = express()
 const __filename = fileURLToPath(import.meta.url)
@@ -56,6 +57,21 @@ const server = http.createServer(app)
 
 // 初始化 WebSocket 隧道
 initStorageTunnel(server)
+
+// 网盘文件定期同步
+const syncInterval = setInterval(() => {
+  syncDriveFiles().catch(err => console.error('[Sync] 定时同步失败:', err))
+}, config.driveSyncIntervalMs)
+
+// 启动后延迟 10 秒执行首次同步（等待节点连接）
+setTimeout(() => {
+  console.log(`[Sync] 首次同步 (间隔: ${config.driveSyncIntervalMs}ms)`)
+  syncDriveFiles().catch(err => console.error('[Sync] 首次同步失败:', err))
+}, 10000)
+
+// 进程退出时清理定时器
+process.on('SIGTERM', () => clearInterval(syncInterval))
+process.on('SIGINT', () => clearInterval(syncInterval))
 
 const port = config.port
 server.listen(port, () => {
