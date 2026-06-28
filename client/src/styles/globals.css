@@ -3644,15 +3644,12 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   animation: fadeIn 0.15s ease-out;
 }
 .dialog {
-  background: var(--lg-glass-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--lg-glass-border);
-  border-radius: var(--lg-radius-md);
-  padding: 28px;
   width: 90%;
   max-width: 400px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+.dialog-inner {
+  padding: 28px;
+  border-radius: var(--lg-radius-md) !important;
 }
 .dialog-title {
   margin: 0 0 16px;
