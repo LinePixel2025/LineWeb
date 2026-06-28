@@ -332,6 +332,36 @@ export function initStorageTunnel(server: HttpServer) {
 }
 
 /**
+ * 递归列出存储节点上所有文件路径（不包含文件夹路径）
+ * 通过逐层调用 list_dir 实现
+ */
+export async function listDirRecursive(rootPath: string = ''): Promise<string[]> {
+  const result: string[] = []
+  const pending = [rootPath]
+
+  while (pending.length > 0) {
+    const dir = pending.pop()!
+    const resp = await sendCommand({ type: 'list_dir', path: dir || '.' })
+
+    if (!resp.success || !Array.isArray(resp.data)) {
+      console.warn(`listDirRecursive: 无法列出 ${dir}: ${resp.error}`)
+      continue
+    }
+
+    for (const item of resp.data) {
+      const itemPath = dir ? `${dir}/${item.name}` : item.name
+      if (item.isFolder) {
+        pending.push(itemPath)
+      } else {
+        result.push(itemPath)
+      }
+    }
+  }
+
+  return result
+}
+
+/**
  * 检查存储节点是否已连接
  */
 export function isNodeConnected(): boolean {
