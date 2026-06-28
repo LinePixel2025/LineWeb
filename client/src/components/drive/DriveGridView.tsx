@@ -29,7 +29,6 @@ const DriveGridView = memo(function DriveGridView({
           variant="strong"
           chromatic={false}
           className="drive-grid-card"
-          style={{ animation: `fadeIn 0.35s ease-out ${i * 0.04}s both` }}
         >
           {/* Main click area */}
           <button

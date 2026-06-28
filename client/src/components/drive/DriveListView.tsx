@@ -30,10 +30,7 @@ function DriveRow({
   onDelete: (item: DriveItem) => void
 }) {
   return (
-    <tr
-      className="drive-row fade-in"
-      style={{ animationDelay: `${index * 0.04}s` }}
-    >
+    <tr className="drive-row">
       <td className="drive-cell drive-cell--name">
         <span className="drive-cell-file">
           <span className="drive-cell-icon">{getFileIcon(item)}</span>
@@ -116,7 +113,7 @@ const DriveListView = memo(function DriveListView({
           ))}
         </tbody>
       </table>
-      <div className="drive-count">共 {items.length} 项</div>
+      {/* 总数已移到 DrivePage 中 */}
     </div>
   )
 })
