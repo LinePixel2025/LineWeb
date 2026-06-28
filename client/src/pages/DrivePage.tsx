@@ -142,6 +142,18 @@ export default function DrivePage() {
     }
   }, [refresh])
 
+  const toggleView = useCallback(() => {
+    setViewMode(v => v === 'list' ? 'grid' : 'list')
+  }, [])
+
+  const openNewFolder = useCallback(() => setShowNewFolder(true), [])
+  const openUpload = useCallback(() => setShowUpload(true), [])
+
+  const handleUploaded = useCallback(() => {
+    refresh()
+    setShowUpload(false)
+  }, [refresh])
+
   return (
     <div className="page container drive-page">
       <LiquidGlass variant="blur" className="page-card" style={{ padding: '24px' }}>
@@ -153,9 +165,9 @@ export default function DrivePage() {
           viewMode={viewMode}
           onSearch={setSearchQuery}
           onNavigate={navigateToBreadcrumb}
-          onToggleView={useCallback(() => setViewMode(v => v === 'list' ? 'grid' : 'list'), [])}
-          onNewFolder={() => setShowNewFolder(true)}
-          onUpload={() => setShowUpload(true)}
+          onToggleView={toggleView}
+          onNewFolder={openNewFolder}
+          onUpload={openUpload}
           onSync={handleSync}
           syncing={syncing}
         />
@@ -164,7 +176,7 @@ export default function DrivePage() {
         {showUpload && (
           <UploadZone
             parentId={currentParentId}
-            onUploaded={() => { refresh(); setShowUpload(false) }}
+            onUploaded={handleUploaded}
             onClose={() => setShowUpload(false)}
           />
         )}
