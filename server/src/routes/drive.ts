@@ -4,6 +4,7 @@ import prisma from '../lib/prisma.js'
 import { parseId, parsePagination } from '../lib/utils.js'
 import { authenticate } from '../middleware/auth.js'
 import { sendCommand, sendChunkedWrite, sendChunkedRead, isNodeConnected } from '../services/storageTunnel.js'
+import { syncDriveFiles } from '../services/storageSync.js'
 import { config } from '../config/index.js'
 
 // JSON 序列化 BigInt
@@ -593,6 +594,17 @@ router.delete('/files/:id', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('删除文件失败:', err)
     res.status(500).json({ error: '删除文件失败' })
+  }
+})
+
+/* ---------- 手动触发文件同步 ---------- */
+router.post('/sync', async (_req: Request, res: Response) => {
+  try {
+    const report = await syncDriveFiles()
+    res.json(report)
+  } catch (err: any) {
+    console.error('手动同步失败:', err)
+    res.status(500).json({ error: `同步失败: ${err.message}` })
   }
 })
 

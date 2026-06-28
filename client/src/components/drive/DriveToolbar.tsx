@@ -13,6 +13,8 @@ export interface DriveToolbarProps {
   onToggleView: () => void
   onNewFolder: () => void
   onUpload: () => void
+  onSync: () => void
+  syncing: boolean
 }
 
 const DriveToolbar = memo(function DriveToolbar({
@@ -26,6 +28,8 @@ const DriveToolbar = memo(function DriveToolbar({
   onToggleView,
   onNewFolder,
   onUpload,
+  onSync,
+  syncing,
 }: DriveToolbarProps) {
   return (
     <div className="drive-toolbar">
@@ -38,6 +42,9 @@ const DriveToolbar = memo(function DriveToolbar({
           </LiquidButton>
           <LiquidButton size="sm" variant="primary" onClick={onUpload}>
             ⬆ 上传文件
+          </LiquidButton>
+          <LiquidButton size="sm" variant="ghost" onClick={onSync} disabled={syncing}>
+            {syncing ? '🔄 同步中...' : '🔄 同步'}
           </LiquidButton>
         </div>
       </div>

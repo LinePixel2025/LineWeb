@@ -27,6 +27,7 @@ export default function DrivePage() {
   const [previewItem, setPreviewItem] = useState<DriveItem | null>(null)
   const [deleteItem, setDeleteItem] = useState<DriveItem | null>(null)
   const [renameItem, setRenameItem] = useState<DriveItem | null>(null)
+  const [syncing, setSyncing] = useState(false)
 
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -127,6 +128,18 @@ export default function DrivePage() {
   const isSearching = searchResults !== null
   const refresh = () => fetchItems(currentParentId)
 
+  const handleSync = async () => {
+    setSyncing(true)
+    try {
+      await api.post('/drive/sync')
+      refresh()
+    } catch (err: any) {
+      console.error('同步失败:', err)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   return (
     <div className="page container drive-page">
       <LiquidGlass variant="blur" className="page-card" style={{ padding: '24px' }}>
@@ -141,6 +154,8 @@ export default function DrivePage() {
           onToggleView={() => setViewMode(v => v === 'list' ? 'grid' : 'list')}
           onNewFolder={() => setShowNewFolder(true)}
           onUpload={() => setShowUpload(true)}
+          onSync={handleSync}
+          syncing={syncing}
         />
 
         {/* Upload Zone */}
