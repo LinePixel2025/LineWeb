@@ -49,6 +49,8 @@ const LiquidGlass = memo(function LiquidGlass({
 
     let cachedRect: DOMRect | null = null
     let rectFrame = 0
+    let lastMove = 0
+    const throttleMs = window.innerWidth <= 768 ? 50 : 16
 
     const onMove = (e: MouseEvent | TouchEvent) => {
       // 每帧只读一次 getBoundingClientRect
@@ -56,6 +58,10 @@ const LiquidGlass = memo(function LiquidGlass({
         cachedRect = el.getBoundingClientRect()
         rectFrame = requestAnimationFrame(() => { cachedRect = null })
       }
+
+      const now = Date.now()
+      if (now - lastMove < throttleMs) return
+      lastMove = now
 
       let cx = 0, cy = 0
       if ('touches' in e && e.touches.length > 0) {

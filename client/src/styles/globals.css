@@ -3838,6 +3838,13 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   }
 }
 
+/* Mobile blur downscale for performance */
+@media (max-width: 480px) {
+  .lg-surface, .lg-surface-strong {
+    backdrop-filter: blur(8px) saturate(140%);
+  }
+}
+
 /* ============================================================
    Accessibility — Reduced Motion
    ============================================================ */
