@@ -356,6 +356,7 @@ router.get('/download/:id', async (req: Request, res: Response) => {
     res.setHeader('Content-Length', contentLength)
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('X-Content-Length', String(contentLength))  // 前端获取总大小
+    res.setHeader('X-Chunk-Size', String(config.downloadChunkKB * 1024))  // 下载块大小提示
 
     try {
       // 从存储节点流式读取，逐块直接写入 HTTP 响应
