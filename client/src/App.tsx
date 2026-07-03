@@ -23,7 +23,6 @@ import PageEditor from './pages/admin/PageEditor'
 import UserAdminPage from './pages/admin/UserAdminPage'
 import DynamicPage from './pages/DynamicPage'
 import DrivePage from './pages/DrivePage'
-import { useDownload } from './contexts/DownloadContext'
 
 export default function App() {
   return (
@@ -65,17 +64,11 @@ export default function App() {
               </Routes>
 
               {/* 下载进度弹窗 — 放在 Routes 外层，不随页面切换卸载 */}
-              <DownloadToastWrapper />
+              <DownloadToast />
             </DownloadProvider>
           </ContrastProvider>
         </WallpaperProvider>
       </AuthProvider>
     </BrowserRouter>
   )
-}
-
-/** 从 DownloadContext 读取 tasks 并渲染 DownloadToast */
-function DownloadToastWrapper() {
-  const { tasks, cancelDownload } = useDownload()
-  return <DownloadToast tasks={tasks} onCancel={cancelDownload} />
 }

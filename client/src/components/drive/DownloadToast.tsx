@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import { createPortal } from 'react-dom'
-import type { DownloadTask } from '../../types/drive'
+import { useDownload } from '../../contexts/DownloadContext'
+import { formatFileSize } from '../../types/drive'
 
 const portalRoot = document.body
 
@@ -20,26 +21,17 @@ function formatETA(seconds: number): string {
   return `${(seconds / 3600).toFixed(1)}h`
 }
 
-export interface DownloadToastProps {
-  tasks: DownloadTask[]
-  onCancel: (id: string) => void
-  /** 点击后是否只保留最快的 x 个任务 */
-  maxVisible?: number
-}
+const DownloadToast = memo(function DownloadToast() {
+  const { tasks, cancelDownload } = useDownload()
 
-const DownloadToast = memo(function DownloadToast({
-  tasks,
-  onCancel,
-  maxVisible = 3,
-}: DownloadToastProps) {
   if (tasks.length === 0) return null
 
   // 只显示进行中的任务
   const activeTasks = tasks.filter(t => t.status === 'downloading')
   const activeCount = activeTasks.length
   const displayTasks = activeTasks.length > 0 ? activeTasks : tasks.slice(-3)
-  const visibleTasks = displayTasks.slice(0, maxVisible)
-  const overflow = displayTasks.length - maxVisible
+  const visibleTasks = displayTasks.slice(0, 3)
+  const overflow = displayTasks.length - 3
 
   return createPortal(
     <div className="download-toast">
@@ -61,7 +53,7 @@ const DownloadToast = memo(function DownloadToast({
               {task.status === 'downloading' && (
                 <button
                   className="download-toast-cancel"
-                  onClick={() => onCancel(task.id)}
+                  onClick={() => cancelDownload(task.id)}
                   aria-label="取消下载"
                 >
                   ✕
@@ -81,7 +73,7 @@ const DownloadToast = memo(function DownloadToast({
                 <div className="download-toast-stats">
                   <span>⬇ {formatSpeed(task.speed)}</span>
                   <span>
-                    {(task.loaded / 1024 / 1024).toFixed(1)}MB / {(task.total / 1024 / 1024).toFixed(1)}MB
+                    {formatFileSize(task.loaded)} / {formatFileSize(task.total)}
                   </span>
                   <span>⏱ {formatETA((task.total - task.loaded) / (task.speed || 1))}</span>
                 </div>
