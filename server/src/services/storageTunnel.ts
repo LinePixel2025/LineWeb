@@ -19,6 +19,7 @@ interface NodeCommand {
   totalChunks?: number
   totalSize?: number
   isLast?: boolean
+  chunkSize?: number
 }
 
 interface NodeResponse {
@@ -272,6 +273,7 @@ export async function* streamRead(path: string): AsyncGenerator<Buffer> {
   }
 
   const id = 'r-' + generateId()
+  const READ_BUFFER_SIZE = config.downloadChunkKB * 1024
 
   const readState: PendingReadState = {
     chunks: new Map<number, string>(),
@@ -293,7 +295,7 @@ export async function* streamRead(path: string): AsyncGenerator<Buffer> {
 
   pendingReads.set(id, readState)
 
-  const cmd = { id, type: 'read_file' as const, path }
+  const cmd = { id, type: 'read_file' as const, path, chunkSize: READ_BUFFER_SIZE }
   try {
     activeNode.send(JSON.stringify(cmd))
   } catch (err) {
@@ -303,9 +305,17 @@ export async function* streamRead(path: string): AsyncGenerator<Buffer> {
   }
 
   try {
+    let buffer: Buffer | null = null
+
     for (let i = 0; ; i++) {
       const chunk = await waitForChunk(id, i)
-      if (chunk === null) break  // 流结束
+      if (chunk === null) {
+        // 流结束，flush 剩余 buffer
+        if (buffer && buffer.length > 0) {
+          yield buffer
+        }
+        break
+      }
 
       // 重置超时计时器（每次收到 chunk 续期）
       if (readState.timer) clearTimeout(readState.timer)
@@ -317,7 +327,19 @@ export async function* streamRead(path: string): AsyncGenerator<Buffer> {
         }
       }, 120000)
 
-      yield Buffer.from(chunk, 'base64')
+      const decoded = Buffer.from(chunk, 'base64')
+
+      if (buffer === null) {
+        buffer = decoded
+      } else {
+        buffer = Buffer.concat([buffer, decoded])
+      }
+
+      // 当累积到目标大小时 yield
+      if (buffer.length >= READ_BUFFER_SIZE) {
+        yield buffer
+        buffer = null
+      }
     }
 
     // 正常结束
