@@ -3,7 +3,7 @@ import busboy from 'busboy'
 import prisma from '../lib/prisma.js'
 import { parseId, parsePagination } from '../lib/utils.js'
 import { authenticate } from '../middleware/auth.js'
-import { sendCommand, sendChunkedWrite, streamRead, isNodeConnected } from '../services/storageTunnel.js'
+import { sendCommand, streamRead, streamWrite, isNodeConnected } from '../services/storageTunnel.js'
 import { syncDriveFiles } from '../services/storageSync.js'
 import { config } from '../config/index.js'
 
@@ -270,19 +270,17 @@ router.post('/upload', async (req: Request, res: Response) => {
         const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`
         const storagePath = `${parentPath}${uniqueName}`
 
-        // 流式收集所有块，然后通过 sendChunkedWrite 分块转发到存储节点
-        // 内存峰值约为文件大小（busboy 流式解析避免了 multer 全量缓冲后才处理的问题）
+        // 流式转发到存储节点 — 边收边发，无需全量缓冲
         let totalSize = 0
-        const chunkBuffers: Buffer[] = []
 
-        for await (const chunk of stream) {
-          chunkBuffers.push(chunk)
-          totalSize += chunk.length
+        async function* streamToAsyncIterable(stream: AsyncIterable<Buffer>) {
+          for await (const chunk of stream) {
+            totalSize += chunk.length
+            yield chunk
+          }
         }
 
-        // 合并并转发到存储节点
-        const fileBuffer = Buffer.concat(chunkBuffers)
-        const writeResult = await sendChunkedWrite(storagePath, fileBuffer)
+        const writeResult = await streamWrite(storagePath, streamToAsyncIterable(stream), 0)
         if (!writeResult.success) {
           throw new Error(`存储节点写入失败: ${writeResult.error}`)
         }

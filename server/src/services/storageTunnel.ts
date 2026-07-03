@@ -3,7 +3,7 @@ import { IncomingMessage } from 'http'
 import { Server as HttpServer } from 'http'
 import { config } from '../config/index.js'
 
-const CHUNK_SIZE = 32768  // 32KB raw data per chunk (~43KB base64)
+const CHUNK_SIZE = config.uploadChunkKB * 1024 || 32768
 
 interface NodeCommand {
   id: string
@@ -323,6 +323,7 @@ export async function* streamRead(path: string): AsyncGenerator<Buffer> {
     // 正常结束
     if (readState.timer) clearTimeout(readState.timer)
   } finally {
+    if (readState.reject) readState.reject = null
     pendingReads.delete(id)
   }
 }
