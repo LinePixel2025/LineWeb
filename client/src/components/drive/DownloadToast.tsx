@@ -2,6 +2,8 @@ import { memo } from 'react'
 import { createPortal } from 'react-dom'
 import type { DownloadTask } from '../../types/drive'
 
+const portalRoot = document.body
+
 function formatSpeed(bytesPerSec: number): string {
   if (bytesPerSec <= 0) return '—'
   const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
@@ -34,6 +36,7 @@ const DownloadToast = memo(function DownloadToast({
 
   // 只显示进行中的任务
   const activeTasks = tasks.filter(t => t.status === 'downloading')
+  const activeCount = activeTasks.length
   const displayTasks = activeTasks.length > 0 ? activeTasks : tasks.slice(-3)
   const visibleTasks = displayTasks.slice(0, maxVisible)
   const overflow = displayTasks.length - maxVisible
@@ -42,11 +45,9 @@ const DownloadToast = memo(function DownloadToast({
     <div className="download-toast">
       <div className="download-toast-header">
         <span className="download-toast-title">
-          ⬇ 下载 {tasks.filter(t => t.status === 'downloading').length > 0
-            ? `${tasks.filter(t => t.status === 'downloading').length} 个文件`
-            : '已完成'}
+          ⬇ 下载 {activeCount > 0 ? `${activeCount} 个文件` : '已完成'}
         </span>
-        {tasks.some(t => t.status === 'downloading') && (
+        {activeCount > 0 && (
           <span className="download-toast-hint">点击 × 取消单个</span>
         )}
       </div>
@@ -99,7 +100,7 @@ const DownloadToast = memo(function DownloadToast({
         )}
       </div>
     </div>,
-    document.body
+    portalRoot
   )
 })
 

@@ -4236,7 +4236,7 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
 .download-toast {
   position: fixed;
   top: calc(max(12px, var(--lg-safe-top)) + var(--lg-nav-height) + 10px);
-  right: max(16px, calc(var(--lg-safe-right) + 16px));
+  right: max(16px, var(--lg-safe-right));
   z-index: 900;
   width: 360px;
   max-width: calc(100vw - 32px);
