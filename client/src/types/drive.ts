@@ -78,3 +78,13 @@ export interface TransferProgress {
   /** 总文件数 */
   totalFiles: number
 }
+
+export interface DownloadTask {
+  id: string
+  fileName: string
+  loaded: number
+  total: number
+  speed: number
+  status: 'downloading' | 'complete' | 'cancelled' | 'error'
+  error?: string
+}

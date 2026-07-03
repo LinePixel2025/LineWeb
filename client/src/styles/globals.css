@@ -4229,3 +4229,148 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ============================================================
+   Download Toast — 下载进度弹窗
+   ============================================================ */
+.download-toast {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 900;
+  width: 360px;
+  max-width: calc(100vw - 24px);
+  background: var(--lg-glass-bg, rgba(255,255,255,0.08));
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--lg-glass-border, rgba(255,255,255,0.15));
+  border-radius: var(--lg-radius-md, 12px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  padding: 12px 16px;
+  animation: toastSlideIn 0.3s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+  overflow: hidden;
+}
+
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateY(-24px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Dark mode fallback for non-CSS-var */
+[data-theme="dark"] .download-toast {
+  background: rgba(30, 30, 35, 0.85);
+}
+[data-theme="light"] .download-toast {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(0,0,0,0.1);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.10);
+}
+
+.download-toast-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--lg-glass-border, rgba(255,255,255,0.1));
+}
+.download-toast-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--lg-text, #fff);
+}
+.download-toast-hint {
+  font-size: 0.7rem;
+  color: var(--lg-text-tertiary, rgba(255,255,255,0.45));
+}
+
+.download-toast-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.download-toast-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.download-toast-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.download-toast-item-name {
+  font-size: 0.8rem;
+  color: var(--lg-text-secondary, rgba(255,255,255,0.7));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.download-toast-cancel {
+  background: none;
+  border: none;
+  color: var(--lg-text-tertiary, rgba(255,255,255,0.45));
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+.download-toast-cancel:hover {
+  color: var(--lg-danger, #ff3b3b);
+}
+.download-toast-badge {
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.download-toast-progress-bar {
+  height: 4px;
+  background: var(--lg-glass-bg, rgba(255,255,255,0.08));
+  border-radius: 9999px;
+  overflow: hidden;
+}
+.download-toast-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--lg-accent, #5e9cff), var(--lg-accent-soft, #7ab3ff));
+  border-radius: 9999px;
+  transition: width 0.25s ease-out;
+}
+
+.download-toast-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--lg-text-tertiary, rgba(255,255,255,0.45));
+}
+
+.download-toast-done-text {
+  font-size: 0.75rem;
+  color: var(--lg-success, #4caf50);
+}
+.download-toast-error-text {
+  font-size: 0.75rem;
+  color: var(--lg-danger, #ff3b3b);
+}
+.download-toast-overflow {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--lg-text-tertiary, rgba(255,255,255,0.45));
+  padding: 4px 0;
+}
+
+/* 移动端 toast 全宽 */
+@media (max-width: 480px) {
+  .download-toast {
+    left: 8px;
+    right: 8px;
+    top: 8px;
+    width: auto;
+    max-width: none;
+  }
+}
+
