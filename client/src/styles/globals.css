@@ -102,7 +102,7 @@ body {
   color: var(--lg-text-primary);
   transition: color 0.4s ease;
   line-height: 1.6;
-  min-height: 100vh;
+  min-height: 100dvh;
   min-height: -webkit-fill-available;
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;

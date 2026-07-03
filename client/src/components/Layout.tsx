@@ -6,7 +6,7 @@ export default function Layout() {
   const { bgUrl, bgType, solidColor, copyright, loaded } = useWallpaper()
 
   return (
-    <div style={{ position: 'relative', minHeight: '100vh' }}>
+    <div style={{ position: 'relative', minHeight: '100dvh' }}>
       {/* Background */}
       {bgType === 'wallpaper' && bgUrl ? (
         <>
