@@ -42,17 +42,53 @@ const pendingCommands = new Map<string, {
   timer: ReturnType<typeof setTimeout>
 }>()
 
-// 等待收集的分块读取数据
-const pendingReads = new Map<string, {
+interface PendingReadState {
   chunks: Map<number, string>
   totalChunks: number
-  resolve: (value: NodeResponse) => void
-  reject: (reason: Error) => void
-  timer: ReturnType<typeof setTimeout>
-}>()
+  /** 当有数据到达时 resolve(index) — 供 streamRead 的 AsyncGenerator 使用 */
+  notify: ((index: number) => void) | null
+  /** 旧版兼容: 全量收集完成后的 resolve */
+  resolve: ((value: NodeResponse) => void) | null
+  reject: ((reason: Error) => void) | null
+  timer: ReturnType<typeof setTimeout> | null
+}
+
+// 等待收集的分块读取数据（同时支持旧版 sendChunkedRead 和 新版 streamRead）
+const pendingReads = new Map<string, PendingReadState>()
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
+}
+
+/**
+ * 判断是否为可重试的瞬时错误
+ */
+function isTransientError(err: Error): boolean {
+  const msg = err.message || ''
+  return msg.includes('超时') || msg.includes('断开') || msg.includes('发送')
+}
+
+/**
+ * 带指数退避重试的命令发送
+ * 对超时、断开等瞬时错误自动重试，最多 retries 次
+ */
+export async function sendCommandWithRetry(
+  command: Omit<NodeCommand, 'id'> & { id?: string },
+  retries = 3,
+): Promise<NodeResponse> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await sendCommand(command)
+    } catch (err: any) {
+      if (attempt === retries || !isTransientError(err)) throw err
+      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000)
+      console.warn(
+        `[StorageTunnel] Command ${command.type} failed (${attempt}/${retries}), retrying in ${delay}ms: ${err.message}`,
+      )
+      await new Promise(r => setTimeout(r, delay))
+    }
+  }
+  throw new Error('unreachable')
 }
 
 /**
@@ -87,65 +123,77 @@ export function sendCommand(command: Omit<NodeCommand, 'id'> & { id?: string }):
 }
 
 /**
- * 流式分块写入 — 第一块初始化 + 中间块连续喷射 + 最后一块等待确认
+ * 流式分块写入 — 接收 AsyncIterable<Buffer>，边收边转发
+ * 相比旧版等整个 Buffer 再 base64 分块，此版本将内存峰值从
+ * "文件大小 + base64 膨胀 33%" 降为 "单个 chunk base64"
  */
-export async function sendChunkedWrite(path: string, rawData: Buffer): Promise<NodeResponse> {
-  const base64Data = rawData.toString('base64')
-  const totalChunks = Math.ceil(base64Data.length / CHUNK_SIZE)
+export async function streamWrite(
+  path: string,
+  chunks: AsyncIterable<Buffer>,
+  totalSize?: number,
+): Promise<NodeResponse> {
   const batchId = 'w-' + generateId()
-
-  if (totalChunks === 1) {
-    // 小文件，单块发送
-    return sendCommand({
-      id: batchId,
-      type: 'write_file' as any,
-      path,
-      totalSize: rawData.length,
-      totalChunks: 1,
-      data: base64Data,
-      chunkIndex: 0,
-      isLast: true,
-    })
-  }
 
   if (!activeNode || !nodeConnected) {
     throw new Error('存储节点未连接')
   }
 
-  // 第一步：发送 start（仅元信息，无数据）
+  // 先发 init 告知节点总大小（可选）
   const initCmd: NodeCommand = {
     id: batchId, type: 'write_file', path,
-    totalSize: rawData.length, totalChunks, chunkIndex: -1, isLast: false,
+    totalSize: totalSize ?? 0, chunkIndex: -1, isLast: false,
   }
   activeNode.send(JSON.stringify(initCmd))
 
-  // 等待一小段时间确保节点初始化缓冲区
+  // 等待 50ms 确保节点初始化缓冲区
   await new Promise(r => setTimeout(r, 50))
 
-  // 第二步：喷射发送中间块（不等待确认）
-  for (let i = 0; i < totalChunks - 1; i++) {
-    const chunk = base64Data.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
-    const dCmd: NodeCommand = {
-      id: batchId, type: 'write_file_data', path,
-      data: chunk, chunkIndex: i, totalChunks, isLast: false,
+  let chunkIndex = 0
+  let lastChunk: Buffer | null = null
+
+  for await (const rawChunk of chunks) {
+    if (lastChunk) {
+      // 发送上一个非最终块（fire-and-forget）
+      const base64Data = lastChunk.toString('base64')
+      const dCmd: NodeCommand = {
+        id: batchId, type: 'write_file_data', path,
+        data: base64Data, chunkIndex: chunkIndex - 1, isLast: false,
+      }
+      activeNode.send(JSON.stringify(dCmd))
     }
-    activeNode.send(JSON.stringify(dCmd))
+    lastChunk = rawChunk
+    chunkIndex++
   }
 
-  // 第三步：最后一块 — 等待确认
-  const lastChunk = base64Data.slice((totalChunks - 1) * CHUNK_SIZE)
+  // 最后一块 — 等待确认
+  if (!lastChunk) throw new Error('空流')
+
+  // 如果只有一个 chunk，直接用 sendCommand 发送（单块模式）
+  if (chunkIndex === 1) {
+    return sendCommand({
+      id: batchId,
+      type: 'write_file' as any,
+      path,
+      totalSize: totalSize ?? lastChunk.length,
+      totalChunks: 1,
+      data: lastChunk.toString('base64'),
+      chunkIndex: 0,
+      isLast: true,
+    })
+  }
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       pendingCommands.delete(batchId)
       reject(new Error(`写入超时: ${path}`))
-    }, 120000)
+    }, 120000)  // 大文件写超时 2 分钟
 
     pendingCommands.set(batchId, { resolve, reject, timer })
 
+    const finalBase64 = lastChunk!.toString('base64')
     const lastCmd: NodeCommand = {
       id: batchId, type: 'write_file_data', path,
-      data: lastChunk, chunkIndex: totalChunks - 1, totalChunks, isLast: true,
+      data: finalBase64, chunkIndex: chunkIndex - 1, isLast: true,
     }
     try {
       activeNode!.send(JSON.stringify(lastCmd))
@@ -158,41 +206,141 @@ export async function sendChunkedWrite(path: string, rawData: Buffer): Promise<N
 }
 
 /**
- * 分块读取文件 — 节点分块返回数据
+ * 流式分块写入 — 第一块初始化 + 中间块连续喷射 + 最后一块等待确认
+ * @deprecated 请使用 streamWrite(path, asyncIterable, totalSize?) 以获得更低内存占用
  */
-export async function sendChunkedRead(path: string): Promise<NodeResponse> {
+export async function sendChunkedWrite(path: string, rawData: Buffer): Promise<NodeResponse> {
+  // 简单的包装：将 Buffer 转为单元素 AsyncIterable
+  async function* bufferToAsyncIterable(buf: Buffer): AsyncIterable<Buffer> {
+    yield buf
+  }
+  return streamWrite(path, bufferToAsyncIterable(rawData), rawData.length)
+}
+
+/**
+ * 等待指定 index 的 chunk 到达
+ */
+function waitForChunk(readId: string, index: number): Promise<string | null> {
+  const state = pendingReads.get(readId)
+  if (!state) {
+    throw new Error('读取状态丢失（节点可能已断开）')
+  }
+
+  return new Promise((resolve, reject) => {
+    // 检查 chunk 是否已到达
+    if (state.chunks.has(index)) {
+      resolve(state.chunks.get(index)!)
+      return
+    }
+
+    // 如果 totalChunks 已知且 index >= totalChunks 则流结束
+    if (state.totalChunks > 0 && index >= state.totalChunks) {
+      resolve(null)
+      return
+    }
+
+    // 注册 notify 回调，等待数据到达
+    state.notify = (arrivedIndex: number) => {
+      if (arrivedIndex === index) {
+        // 清除 notify 以免重复触发
+        state.notify = null
+        resolve(state.chunks.get(index) ?? null)
+      }
+    }
+
+    // 如果 reject 已被调用，cleanup
+    const originalReject = state.reject
+    state.reject = (err: Error) => {
+      state.notify = null
+      if (originalReject) originalReject(err)
+      reject(err)
+    }
+  })
+}
+
+/**
+ * 流式读取文件 — 通过 AsyncGenerator 逐块吐出 Buffer
+ * 节点分块推送，边收边 yield，无需等全量数据到达
+ */
+export async function* streamRead(path: string): AsyncGenerator<Buffer> {
   if (!activeNode || !nodeConnected) {
     throw new Error('存储节点未连接')
   }
 
   const id = 'r-' + generateId()
 
-  // 发送读取请求
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      pendingCommands.delete(id)
-      pendingReads.delete(id)
-      reject(new Error(`读取超时 (60s): ${path}`))
-    }, 60000)
+  const readState: PendingReadState = {
+    chunks: new Map<number, string>(),
+    totalChunks: 0,
+    notify: null,
+    resolve: null,
+    reject: null,
+    timer: null,
+  }
 
-    const readState = {
-      chunks: new Map<number, string>(),
-      totalChunks: 0,
-      resolve,
-      reject,
-      timer,
-    }
-    pendingReads.set(id, readState)
-
-    const cmd = { id, type: 'read_file' as const, path }
-    try {
-      activeNode!.send(JSON.stringify(cmd))
-    } catch (err) {
+  // 超时计时器：如果长时间没有数据到达则拒绝
+  readState.timer = setTimeout(() => {
+    const s = pendingReads.get(id)
+    if (s) {
       pendingReads.delete(id)
-      clearTimeout(timer)
-      reject(new Error(`发送读取命令失败: ${err}`))
+      if (s.reject) s.reject(new Error(`流式读取超时 (120s): ${path}`))
     }
-  })
+  }, 120000)
+
+  pendingReads.set(id, readState)
+
+  const cmd = { id, type: 'read_file' as const, path }
+  try {
+    activeNode.send(JSON.stringify(cmd))
+  } catch (err) {
+    pendingReads.delete(id)
+    if (readState.timer) clearTimeout(readState.timer)
+    throw new Error(`发送读取命令失败: ${err}`)
+  }
+
+  try {
+    let lastYielded = -1
+
+    for (let i = 0; ; i++) {
+      const chunk = await waitForChunk(id, i)
+      if (chunk === null) break  // 流结束
+
+      // 重置超时计时器（每次收到 chunk 续期）
+      if (readState.timer) clearTimeout(readState.timer)
+      readState.timer = setTimeout(() => {
+        const s = pendingReads.get(id)
+        if (s) {
+          pendingReads.delete(id)
+          if (s.reject) s.reject(new Error(`流式读取超时 (120s): ${path}`))
+        }
+      }, 120000)
+
+      lastYielded = i
+      yield Buffer.from(chunk, 'base64')
+    }
+
+    // 正常结束
+    if (readState.timer) clearTimeout(readState.timer)
+  } finally {
+    pendingReads.delete(id)
+  }
+}
+
+/**
+ * 分块读取文件 — 节点分块返回数据，全量收集后返回
+ * @deprecated 请使用 streamRead(path) 以获得流式输出和更低的内存占用
+ */
+export async function sendChunkedRead(path: string): Promise<NodeResponse> {
+  // 内部消费 streamRead 并拼接全量结果
+  let fullBase64 = ''
+  for await (const chunk of streamRead(path)) {
+    fullBase64 += chunk.toString('base64')
+  }
+  return {
+    id: '',
+    success: true,
+    data: fullBase64,
+  }
 }
 
 /**
@@ -244,7 +392,7 @@ export function initStorageTunnel(server: HttpServer) {
           return
         }
 
-        // 处理分块读取的数据
+        // 处理分块读取的数据（read_file_data）
         if (msg.type === 'read_file_data' && pendingReads.has(msg.id)) {
           const pending = pendingReads.get(msg.id)!
           if (msg.chunkIndex !== undefined && msg.data) {
@@ -254,9 +402,16 @@ export function initStorageTunnel(server: HttpServer) {
             pending.totalChunks = msg.totalChunks
           }
 
-          // 收集完所有块
-          if (pending.totalChunks > 0 && pending.chunks.size >= pending.totalChunks) {
-            clearTimeout(pending.timer)
+          // 新版 streamRead: 通知等待者该 index 已到达
+          if (pending.notify && msg.chunkIndex !== undefined) {
+            pending.notify(msg.chunkIndex)
+          }
+
+          // 旧版 sendChunkedRead: 全量收集完所有块后 resolve
+          if (pending.resolve && pending.totalChunks > 0 && pending.chunks.size >= pending.totalChunks) {
+            const timer = pending.timer
+            if (timer) clearTimeout(timer)
+            const localResolve = pending.resolve
             pendingReads.delete(msg.id)
 
             // 按顺序拼接
@@ -265,7 +420,7 @@ export function initStorageTunnel(server: HttpServer) {
               fullBase64 += pending.chunks.get(i) || ''
             }
 
-            pending.resolve({
+            localResolve({
               id: msg.id,
               success: true,
               data: fullBase64,
@@ -301,8 +456,11 @@ export function initStorageTunnel(server: HttpServer) {
           pendingCommands.delete(id)
         }
         for (const [id, pending] of pendingReads) {
-          clearTimeout(pending.timer)
-          pending.reject(new Error('存储节点已断开'))
+          if (pending.timer) clearTimeout(pending.timer)
+          // streamRead: 通过 reject 通知 generator
+          if (pending.reject) {
+            pending.reject(new Error('存储节点已断开'))
+          }
           pendingReads.delete(id)
         }
       }
