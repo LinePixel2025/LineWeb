@@ -31,13 +31,17 @@ export default function Navbar() {
   // Close menu on outside tap (no setTimeout — btnRef check prevents toggle self-fire)
   useEffect(() => {
     if (!mobileOpen) return
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       if (!menuRef.current?.contains(e.target as Node) && !btnRef.current?.contains(e.target as Node)) {
         setMobileOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('touchstart', handleClickOutside, { passive: true })
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('touchstart', handleClickOutside)
+    }
   }, [mobileOpen])
 
   return (

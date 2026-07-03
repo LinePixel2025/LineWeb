@@ -1156,6 +1156,13 @@ select.lg-input optgroup {
 
 /* Extra small devices — iPhone SE */
 @media (max-width: 360px) {
+  .navbar {
+    width: calc(100% - 24px);
+    height: 48px;
+  }
+  .navbar-inner { padding: 0 12px; }
+  .navbar-logo { font-size: 1rem; }
+
   .container { padding: 0 8px; }
   .lg-surface { padding: 12px; }
   .lg-surface-strong { padding: 14px; }
