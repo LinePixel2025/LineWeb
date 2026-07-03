@@ -6,10 +6,10 @@ import DriveListView from '../components/drive/DriveListView'
 import DriveGridView from '../components/drive/DriveGridView'
 import UploadZone from '../components/drive/UploadZone'
 import DrivePreview from '../components/drive/DrivePreview'
-import DownloadToast from '../components/drive/DownloadToast'
 import { NewFolderDialog, RenameDialog, DeleteDialog } from '../components/drive/DriveDialogs'
 import api, { ApiError } from '../lib/api'
-import type { DriveItem, Breadcrumb, DriveListResponse, DownloadTask } from '../types/drive'
+import { useDownload } from '../contexts/DownloadContext'
+import type { DriveItem, Breadcrumb, DriveListResponse } from '../types/drive'
 
 export default function DrivePage() {
   const [items, setItems] = useState<DriveItem[]>([])
@@ -32,9 +32,9 @@ export default function DrivePage() {
   const [deleteItem, setDeleteItem] = useState<DriveItem | null>(null)
   const [renameItem, setRenameItem] = useState<DriveItem | null>(null)
   const [syncing, setSyncing] = useState(false)
-  const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([])
-  const downloadIdRef = useRef(0)
-  const abortControllersRef = useRef<Map<string, AbortController>>(new Map())
+
+  // 下载 — 通过持久化 Context
+  const { startDownload } = useDownload()
 
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -103,87 +103,6 @@ export default function DrivePage() {
     setSearchResults(null)
   }, [])
 
-  const handleDownload = useCallback(async (item: DriveItem) => {
-    if (item.isFolder) return
-
-    const id = `dl-${++downloadIdRef.current}`
-    const abortController = new AbortController()
-    abortControllersRef.current.set(id, abortController)
-
-    setDownloadTasks(prev => [...prev, {
-      id, fileName: item.name, loaded: 0, total: 0, speed: 0, status: 'downloading',
-    }])
-
-    try {
-      const token = localStorage.getItem('lineweb_token')
-      const res = await fetch(`/api/drive/download/${item.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: abortController.signal,
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || '下载失败')
-      }
-
-      const contentLength = parseInt(res.headers.get('X-Content-Length') || '0', 10)
-      const reader = res.body!.getReader()
-      const chunks: Uint8Array[] = []
-      let loaded = 0
-      const startTime = Date.now()
-      let lastUpdate = startTime
-      let lastLoaded = 0
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        chunks.push(value)
-        loaded += value.length
-        const now = Date.now()
-
-        if (now - lastUpdate > 200) {
-          const windowSpeed = (loaded - lastLoaded) / ((now - lastUpdate) / 1000)
-          lastUpdate = now
-          lastLoaded = loaded
-
-          setDownloadTasks(prev =>
-            prev.map(t => t.id === id ? {
-              ...t, loaded, total: contentLength || loaded,
-              speed: windowSpeed,
-            } : t)
-          )
-        }
-      }
-
-      const blob = new Blob(chunks as BlobPart[], { type: item.mimeType || undefined })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = item.name
-      a.click()
-      URL.revokeObjectURL(url)
-
-      setDownloadTasks(prev =>
-        prev.map(t => t.id === id ? { ...t, status: 'complete' as const, loaded, total: contentLength || loaded } : t)
-      )
-      setTimeout(() => setDownloadTasks(prev => prev.filter(t => t.id !== id)), 3000)
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        setDownloadTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'cancelled' as const } : t))
-      } else {
-        setDownloadTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'error' as const, error: err.message } : t))
-      }
-      setTimeout(() => setDownloadTasks(prev => prev.filter(t => t.id !== id)), 5000)
-    } finally {
-      abortControllersRef.current.delete(id)
-    }
-  }, [])
-
-  const handleCancelDownload = useCallback((id: string) => {
-    abortControllersRef.current.get(id)?.abort()
-    abortControllersRef.current.delete(id)
-  }, [])
-
   const handlePreview = useCallback((item: DriveItem) => {
     if (item.isFolder) return
     const mime = (item.mimeType || '').toLowerCase()
@@ -192,9 +111,9 @@ export default function DrivePage() {
         mime.startsWith('video/') || ['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext)) {
       setPreviewItem(item)
     } else {
-      handleDownload(item)
+      startDownload(item)
     }
-  }, [handleDownload])
+  }, [startDownload])
 
   const displayItems = searchResults !== null ? searchResults : items
   const isSearching = searchResults !== null
@@ -278,7 +197,7 @@ export default function DrivePage() {
             items={displayItems}
             onFolderClick={navigateToFolder}
             onPreview={handlePreview}
-            onDownload={handleDownload}
+            onDownload={startDownload}
             onRename={setRenameItem}
             onDelete={setDeleteItem}
           />
@@ -287,7 +206,7 @@ export default function DrivePage() {
             items={displayItems}
             onFolderClick={navigateToFolder}
             onPreview={handlePreview}
-            onDownload={handleDownload}
+            onDownload={startDownload}
             onRename={setRenameItem}
             onDelete={setDeleteItem}
           />
@@ -363,12 +282,6 @@ export default function DrivePage() {
           onClose={() => setDeleteItem(null)}
         />
       )}
-
-      {/* 下载进度弹窗 */}
-      <DownloadToast
-        tasks={downloadTasks}
-        onCancel={handleCancelDownload}
-      />
     </div>
   )
 }
