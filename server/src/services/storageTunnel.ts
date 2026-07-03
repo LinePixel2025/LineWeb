@@ -138,10 +138,13 @@ export async function streamWrite(
     throw new Error('存储节点未连接')
   }
 
-  // 先发 init 告知节点总大小（可选）
+  // 先发 init 告知节点总大小和总块数（可选）
+  const knownSize = totalSize && totalSize > 0 ? totalSize : undefined
   const initCmd: NodeCommand = {
     id: batchId, type: 'write_file', path,
-    totalSize: totalSize ?? 0, chunkIndex: -1, isLast: false,
+    totalSize: knownSize ?? 0,
+    totalChunks: knownSize ? Math.ceil(knownSize / CHUNK_SIZE) : -1,
+    chunkIndex: -1, isLast: false,
   }
   activeNode.send(JSON.stringify(initCmd))
 
@@ -206,15 +209,16 @@ export async function streamWrite(
 }
 
 /**
- * 流式分块写入 — 第一块初始化 + 中间块连续喷射 + 最后一块等待确认
+ * 流式分块写入 — 将 Buffer 切分为 32KB 块后委托 streamWrite
  * @deprecated 请使用 streamWrite(path, asyncIterable, totalSize?) 以获得更低内存占用
  */
 export async function sendChunkedWrite(path: string, rawData: Buffer): Promise<NodeResponse> {
-  // 简单的包装：将 Buffer 转为单元素 AsyncIterable
-  async function* bufferToAsyncIterable(buf: Buffer): AsyncIterable<Buffer> {
-    yield buf
+  async function* bufferChunkIterator(buf: Buffer): AsyncIterable<Buffer> {
+    for (let offset = 0; offset < buf.length; offset += CHUNK_SIZE) {
+      yield buf.subarray(offset, Math.min(offset + CHUNK_SIZE, buf.length))
+    }
   }
-  return streamWrite(path, bufferToAsyncIterable(rawData), rawData.length)
+  return streamWrite(path, bufferChunkIterator(rawData), rawData.length)
 }
 
 /**
@@ -299,8 +303,6 @@ export async function* streamRead(path: string): AsyncGenerator<Buffer> {
   }
 
   try {
-    let lastYielded = -1
-
     for (let i = 0; ; i++) {
       const chunk = await waitForChunk(id, i)
       if (chunk === null) break  // 流结束
@@ -315,7 +317,6 @@ export async function* streamRead(path: string): AsyncGenerator<Buffer> {
         }
       }, 120000)
 
-      lastYielded = i
       yield Buffer.from(chunk, 'base64')
     }
 
