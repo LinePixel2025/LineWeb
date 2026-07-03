@@ -241,6 +241,13 @@ a:hover {
   padding: 0 24px;
 }
 
+/* Layout root — fills viewport so content pushes sticky footer, with dvh support */
+.layout-root {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
 .page {
   padding-top: calc(var(--lg-nav-height) + var(--lg-safe-top) + 32px);
   padding-bottom: calc(64px + var(--lg-safe-bottom));
