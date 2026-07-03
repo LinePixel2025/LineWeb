@@ -31,7 +31,7 @@ function DriveRow({
 }) {
   return (
     <tr className="drive-row">
-      <td className="drive-cell drive-cell--name">
+      <td className="drive-cell drive-cell--name" data-label="名称">
         <span className="drive-cell-file">
           <span className="drive-cell-icon">{getFileIcon(item)}</span>
           {item.isFolder ? (
@@ -53,13 +53,13 @@ function DriveRow({
           )}
         </span>
       </td>
-      <td className="drive-cell drive-cell--size">
+      <td className="drive-cell drive-cell--size" data-label="大小">
         {formatFileSize(Number(item.size))}
       </td>
-      <td className="drive-cell drive-cell--date">
+      <td className="drive-cell drive-cell--date" data-label="修改时间">
         {formatDate(item.updatedAt)}
       </td>
-      <td className="drive-cell drive-cell--actions">
+      <td className="drive-cell drive-cell--actions" data-label="操作">
         <div className="drive-row-actions">
           {!item.isFolder && (
             <>
