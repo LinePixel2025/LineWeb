@@ -73,16 +73,10 @@ export default function PostsPage() {
                     <span key={`ellipsis-${i}`} style={{ color: 'var(--lg-text-tertiary)', alignSelf: 'center' }}>...</span>
                   ) : (
                     <button key={p} onClick={() => setPage(p)}
-                      className="pagination-btn"
+                      className={`pagination-btn${p === page ? ' pagination-btn--active' : ''}`}
                       style={{
-                        width: '40px', height: '40px', borderRadius: '50%',
                         background: p === page ? 'var(--lg-accent)' : 'var(--lg-glass-bg)',
                         color: p === page ? 'white' : 'var(--lg-text-primary)',
-                        border: '1px solid var(--lg-glass-border)', cursor: 'pointer',
-                        fontWeight: 500, fontFamily: 'var(--lg-font)',
-                        fontSize: '0.95rem',
-                        transition: 'all 0.2s ease',
-                        WebkitTapHighlightColor: 'transparent',
                       }}
                     >
                       {p}

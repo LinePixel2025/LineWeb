@@ -62,13 +62,13 @@ export default function FeaturesPage() {
             key={item.path}
             variant="strong"
             chromatic={false}
+            className="features-card"
             style={{
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
               textAlign: 'center',
-              padding: '40px 24px',
               gap: '16px',
               animation: `fadeIn 0.5s ease-out ${i * 0.1}s both`,
             }}
@@ -85,7 +85,7 @@ export default function FeaturesPage() {
                 gap: '16px',
               }}
             >
-              <div style={{ fontSize: '2.8rem', lineHeight: 1 }}>{item.emoji}</div>
+              <div className="features-emoji" style={{ lineHeight: 1 }}>{item.emoji}</div>
               <div>
                 <h3 style={{ fontSize: '1.2rem', marginBottom: '6px' }}>{item.title}</h3>
                 <p className="text-secondary" style={{ fontSize: '0.88rem', margin: 0 }}>{item.desc}</p>
@@ -110,13 +110,13 @@ export default function FeaturesPage() {
             key={item.slug}
             variant="strong"
             chromatic={false}
+            className="features-card"
             style={{
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
               textAlign: 'center',
-              padding: '40px 24px',
               gap: '16px',
               animation: `fadeIn 0.5s ease-out ${(i + features.length) * 0.1}s both`,
             }}
@@ -133,7 +133,7 @@ export default function FeaturesPage() {
                 gap: '16px',
               }}
             >
-              <div style={{ fontSize: '2.8rem', lineHeight: 1 }}>
+              <div className="features-emoji" style={{ lineHeight: 1 }}>
                 {item.featureEmoji || '📄'}
               </div>
               <div>
