@@ -74,8 +74,6 @@ export default function ProfilePage() {
 
   const isSelected = (date: string) => wallpaperMode === 'date' && selectedDate === date
 
-  const labelStyle: React.CSSProperties = { fontSize: '0.75rem', display: 'block', marginBottom: '8px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase' as const, letterSpacing: '0.05em' }
-
   return (
     <div className="page container profile-page" style={{ maxWidth: '520px', position: 'relative' }}>
       {/* Page-level dark backdrop */}
@@ -84,17 +82,17 @@ export default function ProfilePage() {
       <h1 style={{ marginBottom: '28px', color: '#fff', fontSize: '1.6rem', fontWeight: 600, letterSpacing: '-0.01em' }}>个人资料</h1>
 
       {/* 资料卡片 */}
-      <LiquidGlass variant="strong" chromatic={false} style={{ padding: '32px', marginBottom: '24px' }}>
+      <LiquidGlass variant="strong" chromatic={false} style={{ marginBottom: '24px' }} className="profile-card">
         <div style={{ marginBottom: '22px' }}>
-          <span style={labelStyle}>用户名</span>
+          <span className="profile-label">用户名</span>
           <span style={{ fontSize: '1.1rem', fontWeight: 500, color: '#fff' }}>{user?.username}</span>
         </div>
         <div style={{ marginBottom: '22px' }}>
-          <span style={labelStyle}>邮箱</span>
+          <span className="profile-label">邮箱</span>
           <span style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.8)' }}>{user?.email}</span>
         </div>
         <div style={{ marginBottom: '28px' }}>
-          <span style={labelStyle}>角色</span>
+          <span className="profile-label">角色</span>
           <span style={{ fontSize: '1rem', color: user?.role === 'admin' ? '#40a9ff' : 'rgba(255,255,255,0.8)' }}>
             {user?.role === 'admin' ? '管理员' : '用户'}
           </span>
@@ -112,12 +110,12 @@ export default function ProfilePage() {
       </LiquidGlass>
 
       {/* 网站个性化设置 */}
-      <LiquidGlass variant="strong" chromatic={false} style={{ padding: '32px' }}>
+      <LiquidGlass variant="strong" chromatic={false} className="profile-card">
         <h2 style={{ margin: '0 0 22px', fontSize: '1.1rem', fontWeight: 600, color: '#fff' }}>网站个性化设置</h2>
 
         {/* 背景类型切换 */}
         <div style={{ marginBottom: '22px' }}>
-          <span style={labelStyle}>背景样式</span>
+          <span className="profile-label">背景样式</span>
           <div style={{ display: 'flex', gap: '10px' }}>
             {(['wallpaper', 'solid'] as const).map(t => (
               <button key={t}
@@ -140,7 +138,7 @@ export default function ProfilePage() {
         {/* 纯色背景选项 */}
         {bgType === 'solid' && (
           <div style={{ marginBottom: '22px' }}>
-            <span style={labelStyle}>选择颜色</span>
+            <span className="profile-label">选择颜色</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <input type="color" value={solidColor}
                 onChange={(e) => setSolidColor(e.target.value)}
@@ -160,7 +158,7 @@ export default function ProfilePage() {
         {bgType === 'wallpaper' && (
           <>
             <div style={{ marginBottom: '18px' }}>
-              <span style={labelStyle}>壁纸来源</span>
+              <span className="profile-label">壁纸来源</span>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 {([
                   { key: 'latest' as const, label: '每日更新', icon: '🔄' },
@@ -185,7 +183,7 @@ export default function ProfilePage() {
             {/* 历史壁纸选择 */}
             {wallpaperMode === 'date' && (
               <div style={{ marginBottom: '22px' }}>
-                <span style={labelStyle}>
+                <span className="profile-label">
                   挑选一张历史壁纸
                   <span style={{ color: 'rgba(255,255,255,0.25)', marginLeft: 6, textTransform: 'none', letterSpacing: 0 }}>（点击预览）</span>
                 </span>
@@ -229,7 +227,7 @@ export default function ProfilePage() {
         )}
 
         {/* 保存 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginTop: '6px' }}>
+        <div className="profile-btn-row" style={{ marginTop: '6px' }}>
           <button onClick={handleSave} disabled={saving}
             style={{
               padding: '10px 28px', borderRadius: '9999px', fontWeight: 500, fontSize: '0.9rem',

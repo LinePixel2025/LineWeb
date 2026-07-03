@@ -1193,6 +1193,56 @@ select.lg-input optgroup {
 }
 
 /* ============================================================
+   Pagination — 分页控件
+   ============================================================ */
+.pagination-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--lg-glass-border);
+  cursor: pointer;
+  font-weight: 500;
+  font-family: var(--lg-font);
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pagination-btn:active {
+  transform: scale(0.92);
+}
+
+.pagination-btn--active {
+  background: var(--lg-accent) !important;
+  color: white !important;
+}
+
+@media (max-width: 480px) {
+  .pagination-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 0.85rem;
+  }
+}
+
+/* ============================================================
+   FeaturesPage — 功能卡片
+   ============================================================ */
+.features-card {
+  padding: 40px 24px;
+}
+
+.features-card .features-emoji {
+  font-size: 2.8rem;
+}
+
+@media (max-width: 480px) {
+  .features-card { padding: 28px 20px !important; }
+  .features-card .features-emoji { font-size: 2.2rem; }
+  .features-card h3 { font-size: 1.05rem; }
+}
+
+/* ============================================================
    Post Page — 文章详情
    ============================================================ */
 .post-page {
