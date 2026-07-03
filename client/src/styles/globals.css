@@ -70,6 +70,10 @@
   /* Glass frost presets (backdrop-filter shorthand) */
   --lg-frost: blur(16.8px) saturate(180%);
   --lg-frost-heavy: blur(24px) saturate(180%);
+
+  /* Touch targets */
+  --lg-touch-target-min: 44px;
+  --lg-touch-target-min-sm: 36px;
 }
 
 /* ============================================================
@@ -1136,6 +1140,32 @@ select.lg-input optgroup {
 
   .lg-surface { padding: 14px; }
   .lg-surface-strong { padding: 16px; }
+}
+
+/* h3/h4 responsive */
+@media (max-width: 768px) {
+  h3 { font-size: 1.2rem; }
+  h4 { font-size: 1rem; }
+}
+
+@media (max-width: 480px) {
+  h3 { font-size: 1.1rem; }
+  h4 { font-size: 0.95rem; }
+  body { font-size: 0.92rem; }
+}
+
+/* Extra small devices — iPhone SE */
+@media (max-width: 360px) {
+  .container { padding: 0 8px; }
+  .lg-surface { padding: 12px; }
+  .lg-surface-strong { padding: 14px; }
+  .page { padding-top: calc(var(--lg-nav-height) + 16px); padding-bottom: 32px; }
+}
+
+/* Mobile animation downgrade */
+@media (max-width: 768px) {
+  * { --lg-transition: 0.15s ease; }
+  .fade-in { animation-duration: 0.25s !important; }
 }
 
 /* Larger touch targets for mobile */
