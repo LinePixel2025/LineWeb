@@ -12,9 +12,12 @@ const ImagePreview = memo(function ImagePreview({ item, onClose }: DrivePreviewP
   const [loading, setLoading] = useState(true)
   const [src, setSrc] = useState('')
   const [error, setError] = useState('')
+  const [loadProgress, setLoadProgress] = useState(0)
 
   useEffect(() => {
     let objectUrl: string | null = null
+    let cancelled = false
+
     const fetchImage = async () => {
       try {
         const token = localStorage.getItem('lineweb_token')
@@ -22,31 +25,54 @@ const ImagePreview = memo(function ImagePreview({ item, onClose }: DrivePreviewP
           headers: { Authorization: `Bearer ${token}` },
         })
         if (!res.ok) throw new Error('加载失败')
-        const blob = await res.blob()
+        if (cancelled) return
+
+        const contentLength = parseInt(res.headers.get('X-Content-Length') || '0', 10)
+        const reader = res.body!.getReader()
+        const chunks: Uint8Array[] = []
+        let loaded = 0
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          chunks.push(value)
+          loaded += value.length
+          if (contentLength > 0 && !cancelled) {
+            setLoadProgress(Math.round((loaded / contentLength) * 100))
+          }
+        }
+
+        if (cancelled) return
+        const blob = new Blob(chunks as BlobPart[], { type: item.mimeType || undefined })
         objectUrl = URL.createObjectURL(blob)
         setSrc(objectUrl)
       } catch (err: any) {
-        setError(err.message)
+        if (!cancelled) setError(err.message)
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
+
     fetchImage()
-    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl) }
-  }, [item.id])
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [item.id, item.mimeType])
 
   return (
     <div className="preview-overlay" onClick={onClose}>
       <div className="preview-container" onClick={e => e.stopPropagation()}>
-        {loading && <div className="spinner" />}
-        {error && <p className="preview-error">{error}</p>}
-        {src && (
-          <img
-            src={src}
-            alt={item.name}
-            className="preview-image"
-          />
+        {loading && (
+          <div className="preview-loading">
+            <div className="spinner" />
+            {loadProgress > 0 && (
+              <p className="preview-loading-text">加载中 {loadProgress}%</p>
+            )}
+          </div>
         )}
+        {error && <p className="preview-error">{error}</p>}
+        {src && <img src={src} alt={item.name} className="preview-image" />}
         <button className="preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
       </div>
     </div>

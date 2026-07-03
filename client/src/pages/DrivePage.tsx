@@ -110,7 +110,39 @@ export default function DrivePage() {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.error || '下载失败')
       }
-      const blob = await res.blob()
+
+      // 流式读取下载，显示速度/进度（console 日志）
+      const contentLength = parseInt(res.headers.get('X-Content-Length') || '0', 10)
+      const reader = res.body!.getReader()
+      const chunks: Uint8Array[] = []
+      let loaded = 0
+      const startTime = Date.now()
+      let lastUpdate = startTime
+      let lastLoaded = 0
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        chunks.push(value)
+        loaded += value.length
+        const now = Date.now()
+
+        if (now - lastUpdate > 200 && contentLength > 0) {
+          const windowSpeed = (loaded - lastLoaded) / ((now - lastUpdate) / 1000)
+          lastUpdate = now
+          lastLoaded = loaded
+          const pct = Math.round((loaded / contentLength) * 100)
+          const remaining = contentLength - loaded
+          const eta = windowSpeed > 0 ? Math.ceil(remaining / windowSpeed) : 0
+          const speedStr = windowSpeed >= 1024 * 1024
+            ? `${(windowSpeed / 1024 / 1024).toFixed(1)} MB/s`
+            : `${(windowSpeed / 1024).toFixed(0)} KB/s`
+          console.log(`📥 ${item.name}: ${pct}% · ⬇ ${speedStr} · ⏱ ${eta}s`)
+        }
+      }
+
+      const blob = new Blob(chunks as BlobPart[], { type: item.mimeType || undefined })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
