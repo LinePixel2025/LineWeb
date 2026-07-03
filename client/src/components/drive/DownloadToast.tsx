@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { createPortal } from 'react-dom'
 import type { DownloadTask } from '../../types/drive'
 
 function formatSpeed(bytesPerSec: number): string {
@@ -37,7 +38,7 @@ const DownloadToast = memo(function DownloadToast({
   const visibleTasks = displayTasks.slice(0, maxVisible)
   const overflow = displayTasks.length - maxVisible
 
-  return (
+  return createPortal(
     <div className="download-toast">
       <div className="download-toast-header">
         <span className="download-toast-title">
@@ -97,7 +98,8 @@ const DownloadToast = memo(function DownloadToast({
           <div className="download-toast-overflow">还有 {overflow} 个文件...</div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 })
 
