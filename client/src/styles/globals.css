@@ -1174,6 +1174,9 @@ select.lg-input optgroup {
   .navbar-link, button, a, .liquid-btn { min-height: 44px; }
   button, .liquid-btn { min-height: 44px; }
   .theme-toggle { width: 44px; height: 44px; }
+  .liquid-btn:hover {
+    transform: none !important;
+  }
 }
 
 /* Home page responsive */
