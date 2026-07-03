@@ -3,7 +3,7 @@ import busboy from 'busboy'
 import prisma from '../lib/prisma.js'
 import { parseId, parsePagination } from '../lib/utils.js'
 import { authenticate } from '../middleware/auth.js'
-import { sendCommand, sendChunkedWrite, sendChunkedRead, isNodeConnected } from '../services/storageTunnel.js'
+import { sendCommand, sendChunkedWrite, streamRead, isNodeConnected } from '../services/storageTunnel.js'
 import { syncDriveFiles } from '../services/storageSync.js'
 import { config } from '../config/index.js'
 
@@ -328,7 +328,7 @@ router.post('/upload', async (req: Request, res: Response) => {
   }
 })
 
-/* ---------- 下载文件 ---------- */
+/* ---------- 下载文件（流式分块推送） ---------- */
 router.get('/download/:id', async (req: Request, res: Response) => {
   try {
     const id = parseId(req.params.id)
@@ -348,31 +348,34 @@ router.get('/download/:id', async (req: Request, res: Response) => {
       return
     }
 
-    let readResult
-    try {
-      readResult = await sendChunkedRead(file.storagePath)
-    } catch (wsErr: any) {
-      console.error('存储节点读取失败:', wsErr)
-      res.status(502).json({ error: `存储节点读取失败: ${wsErr.message}` })
-      return
-    }
-
-    if (!readResult.success) {
-      res.status(502).json({ error: `存储节点读取失败: ${readResult.error}` })
-      return
-    }
-
-    const fileBuffer = Buffer.from(readResult.data as string, 'base64')
     const mimeType = file.mimeType || 'application/octet-stream'
     const encodedName = encodeURIComponent(file.name)
+    const contentLength = Number(file.size)
 
+    // 设置响应头
     res.setHeader('Content-Type', mimeType)
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedName}`)
-    res.setHeader('Content-Length', fileBuffer.length)
-    res.send(fileBuffer)
+    res.setHeader('Content-Length', contentLength)
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('X-Content-Length', String(contentLength))  // 前端获取总大小
+
+    try {
+      // 从存储节点流式读取，逐块直接写入 HTTP 响应
+      for await (const chunk of streamRead(file.storagePath)) {
+        res.write(chunk)
+      }
+      res.end()
+    } catch (streamErr: any) {
+      console.error('下载流中断:', streamErr)
+      if (!res.writableEnded) {
+        res.end()  // 优雅关闭，前端已收到部分数据
+      }
+    }
   } catch (err) {
     console.error('下载文件失败:', err)
-    res.status(500).json({ error: '下载文件失败' })
+    if (!res.headersSent) {
+      res.status(500).json({ error: '下载文件失败' })
+    }
   }
 })
 
