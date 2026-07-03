@@ -1236,6 +1236,34 @@ select.lg-input optgroup {
 }
 
 /* ============================================================
+   Profile Page — 个人中心
+   ============================================================ */
+.profile-card {
+  padding: 32px;
+}
+
+.profile-label {
+  font-size: 0.75rem;
+  display: block;
+  margin-bottom: 8px;
+  color: rgba(255,255,255,0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.profile-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+@media (max-width: 480px) {
+  .profile-card { padding: 20px; }
+  .profile-page h1 { font-size: 1.3rem; }
+  .profile-btn-row { flex-direction: column; align-items: stretch; }
+}
+
+/* ============================================================
    Wallpaper Refresh Button — Floating bottom-right
    ============================================================ */
 .wallpaper-refresh-btn {
@@ -3895,6 +3923,79 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
 @media (max-width: 480px) {
   .lg-surface, .lg-surface-strong {
     backdrop-filter: blur(8px) saturate(140%);
+  }
+}
+
+/* Comment section responsive */
+@media (max-width: 480px) {
+  .comment-item {
+    font-size: 0.9rem;
+  }
+
+  .comment-meta {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .comment-time {
+    font-size: 0.78rem;
+  }
+
+  .comment-actions {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .comment-actions .liquid-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .reply-form textarea {
+    font-size: 0.9rem;
+  }
+
+  .reply-form-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .reply-form-actions > div {
+    justify-content: stretch;
+  }
+
+  .reply-form-actions .liquid-btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .replies-section {
+    margin-left: 0;
+    padding-left: 8px;
+  }
+
+  .reply-item {
+    margin-top: 8px;
+  }
+
+  .comment-heading {
+    font-size: 1.1rem;
+  }
+
+  .comment-form-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .comment-form-actions .liquid-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .comment-input {
+    font-size: 0.9rem;
   }
 }
 
