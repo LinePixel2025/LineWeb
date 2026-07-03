@@ -36,11 +36,11 @@ export default function PostPage() {
 
   return (
     <article className="page container" style={{ maxWidth: '720px' }}>
-      <Link to="/posts" style={{ display: 'inline-block', marginBottom: '24px', fontSize: '0.9rem' }}>&larr; 返回文章列表</Link>
+      <Link to="/posts" className="post-back-link">&larr; 返回文章列表</Link>
 
-      <LiquidGlass variant="blur" interactive={false} style={{ padding: '32px' }}>
+      <LiquidGlass variant="blur" interactive={false} className="post-content-card">
         <h1 className="post-title">{post.title}</h1>
-        <div style={{ display: 'flex', gap: '16px', marginTop: '12px', marginBottom: '32px' }}>
+        <div className="post-meta">
           <span className="text-tertiary">{post.author.username}</span>
           <span className="text-tertiary">{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
         </div>
