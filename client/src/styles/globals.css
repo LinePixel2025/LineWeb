@@ -4235,11 +4235,11 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
    ============================================================ */
 .download-toast {
   position: fixed;
-  top: max(12px, calc(var(--lg-nav-height) + var(--lg-safe-top) + 8px));
-  right: max(12px, calc((100% - var(--lg-max-width)) / 2 + 12px));
+  top: calc(max(12px, var(--lg-safe-top)) + var(--lg-nav-height) + 10px);
+  right: max(16px, calc(var(--lg-safe-right) + 16px));
   z-index: 900;
   width: 360px;
-  max-width: calc(100vw - 24px);
+  max-width: calc(100vw - 32px);
   background: rgba(255,255,255,0.10);
   backdrop-filter: url(#lg-core-strong) blur(1.9px) saturate(140%);
   -webkit-backdrop-filter: url(#lg-core-strong) blur(1.9px) saturate(140%);
