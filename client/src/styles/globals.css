@@ -3854,6 +3854,38 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   display: none;
 }
 
+/* upload progress info */
+.upload-zone-progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+  font-size: 0.85rem;
+  color: var(--lg-text-primary);
+}
+.upload-zone-progress-count {
+  color: var(--lg-text-tertiary);
+  font-size: 0.8rem;
+}
+.upload-zone-progress-stats {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+  color: var(--lg-text-secondary);
+}
+.upload-zone-failed {
+  padding: 16px;
+  border: 1px solid var(--lg-danger);
+  border-radius: var(--lg-radius-md);
+  background: rgba(255, 60, 60, 0.06);
+}
+.upload-zone-failed ul {
+  margin: 8px 0;
+  padding-left: 20px;
+  font-size: 0.85rem;
+}
+
 /* Dialogs */
 .dialog-overlay {
   position: fixed;

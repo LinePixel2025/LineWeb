@@ -61,3 +61,20 @@ export interface DriveListResponse {
   page: number
   pageCount: number
 }
+
+export interface TransferProgress {
+  /** 当前文件已传输字节 */
+  loaded: number
+  /** 当前文件总字节 */
+  total: number
+  /** 实时速度 bytes/s */
+  speed: number
+  /** 预估剩余时间秒 */
+  eta: number
+  /** 当前文件名 */
+  fileName: string
+  /** 文件队列中的索引 */
+  fileIndex: number
+  /** 总文件数 */
+  totalFiles: number
+}
