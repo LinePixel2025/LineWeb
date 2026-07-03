@@ -1899,6 +1899,11 @@ body.admin-menu-open {
     0 4px 12px var(--lg-accent-glow);
 }
 
+/* Touch feedback for buttons */
+.admin-page-btn:active {
+  transform: scale(0.92);
+}
+
 /* Responsive */
 @media (max-width: 640px) {
   .admin-table-wrap { overflow-x: auto; }
@@ -3617,6 +3622,9 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   color: inherit;
   cursor: pointer;
   font-family: var(--lg-font);
+}
+.drive-grid-card-body:active {
+  transform: scale(0.98);
 }
 .drive-grid-card-icon {
   font-size: 2.5rem;
