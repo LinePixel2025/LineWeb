@@ -24,8 +24,8 @@ app.use(cors({
     : config.corsOrigin,
   credentials: true,
 }))
-app.use(express.json({ limit: '600mb' }))  // 提升请求体大小限制以支持大文件上传
-app.use(express.urlencoded({ limit: '600mb', extended: true }))
+app.use(express.json({ limit: '10mb' }))
+app.use(express.urlencoded({ limit: '10mb', extended: true }))
 
 // Routes
 app.use('/api/auth', authRoutes)

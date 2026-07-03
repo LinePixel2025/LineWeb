@@ -7,6 +7,7 @@ export const config = {
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   storageNodeToken: process.env.STORAGE_NODE_TOKEN || 'lineweb-storage-node-secret-change-in-production',
   maxFileSizeMB: parseInt(process.env.MAX_FILE_SIZE_MB || '500', 10),
+  uploadChunkKB: parseInt(process.env.UPLOAD_CHUNK_KB || '64', 10), // 上传转发块大小 (KB)
   driveSyncIntervalMs: parseInt(process.env.DRIVE_SYNC_INTERVAL_MS || '300000', 10), // 默认 5 分钟
 }
 

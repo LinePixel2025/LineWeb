@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express'
-import multer from 'multer'
+import busboy from 'busboy'
 import prisma from '../lib/prisma.js'
 import { parseId, parsePagination } from '../lib/utils.js'
 import { authenticate } from '../middleware/auth.js'
@@ -21,10 +21,6 @@ declare global {
 }
 
 const router = Router()
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: config.maxFileSizeMB * 1024 * 1024 },
-})
 
 // 所有路由需要登录 + canAccessDrive
 router.use(authenticate, (req: Request, res: Response, next) => {
@@ -231,80 +227,101 @@ router.post('/folders', async (req: Request, res: Response) => {
   }
 })
 
-/* ---------- 上传文件 ---------- */
-router.post('/upload', upload.single('file'), async (req: Request, res: Response) => {
+/* ---------- 上传文件 (busboy 流式解析) ---------- */
+router.post('/upload', async (req: Request, res: Response) => {
   try {
-    if (!req.file) {
-      res.status(400).json({ error: '请选择文件' })
-      return
-    }
-
-    const parentIdStr = req.body.parentId as string | undefined
-    const parentId = parentIdStr ? parseId(parentIdStr) : null
-
-    let parentPath = ''
-    if (parentId) {
-      const parent = await prisma.driveFile.findUnique({ where: { id: parentId } })
-      if (!parent || !parent.isFolder) {
-        res.status(404).json({ error: '父文件夹不存在' })
-        return
-      }
-      parentPath = parent.storagePath + '/'
-    }
-
-    // 生成唯一文件名
-    const ext = req.file.originalname.includes('.')
-      ? req.file.originalname.slice(req.file.originalname.lastIndexOf('.'))
-      : ''
-    const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`
-    const storagePath = `${parentPath}${uniqueName}`
-
-    // 同级同名检查（可选：保留原始文件名时启用）
-    // 这里存储路径用唯一名，所以不会冲突
-
-    // 通知存储节点写入文件
     if (!isNodeConnected()) {
       res.status(503).json({ error: '存储节点未连接，请稍后再试' })
       return
     }
 
-    const fileBuffer = req.file.buffer
+    const bb = busboy({ headers: req.headers, limits: { fileSize: config.maxFileSizeMB * 1024 * 1024 } })
+    let fileProcessed = false
+    let fileError: Error | null = null
+    let originalName = ''
+    let mimeType = ''
+    let parentId: number | null = null
 
-    let writeResult
-    try {
-      writeResult = await sendChunkedWrite(storagePath, fileBuffer)
-    } catch (wsErr: any) {
-      console.error('存储节点写入失败:', wsErr)
-      res.status(502).json({ error: `存储节点写入失败: ${wsErr.message}` })
-      return
-    }
-
-    if (!writeResult.success) {
-      res.status(502).json({ error: `存储节点写入失败: ${writeResult.error}` })
-      return
-    }
-
-    // DB 记录
-    const file = await prisma.driveFile.create({
-      data: {
-        name: req.file.originalname,
-        isFolder: false,
-        parentId: parentId || null,
-        size: BigInt(fileBuffer.length),
-        mimeType: req.file.mimetype,
-        storagePath,
-        uploadedById: req.user!.userId,
-      },
-      select: {
-        id: true,
-        name: true,
-        size: true,
-        mimeType: true,
-        createdAt: true,
-      },
+    bb.on('field', (name, val) => {
+      if (name === 'parentId') parentId = val ? parseInt(val, 10) || null : null
     })
 
-    res.status(201).json(file)
+    bb.on('file', async (_fieldname, stream, info) => {
+      if (fileProcessed) return
+      fileProcessed = true
+      originalName = info.filename
+      mimeType = info.mimeType
+
+      try {
+        // 解析父文件夹路径
+        let parentPath = ''
+        if (parentId) {
+          const parent = await prisma.driveFile.findUnique({ where: { id: parentId } })
+          if (!parent || !parent.isFolder) {
+            throw new Error('父文件夹不存在')
+          }
+          parentPath = parent.storagePath + '/'
+        }
+
+        // 生成唯一存储路径
+        const ext = originalName.includes('.')
+          ? originalName.slice(originalName.lastIndexOf('.'))
+          : ''
+        const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`
+        const storagePath = `${parentPath}${uniqueName}`
+
+        // 流式收集所有块，然后通过 sendChunkedWrite 分块转发到存储节点
+        // 内存峰值约为文件大小（busboy 流式解析避免了 multer 全量缓冲后才处理的问题）
+        let totalSize = 0
+        const chunkBuffers: Buffer[] = []
+
+        for await (const chunk of stream) {
+          chunkBuffers.push(chunk)
+          totalSize += chunk.length
+        }
+
+        // 合并并转发到存储节点
+        const fileBuffer = Buffer.concat(chunkBuffers)
+        const writeResult = await sendChunkedWrite(storagePath, fileBuffer)
+        if (!writeResult.success) {
+          throw new Error(`存储节点写入失败: ${writeResult.error}`)
+        }
+
+        // DB 记录
+        const file = await prisma.driveFile.create({
+          data: {
+            name: originalName,
+            isFolder: false,
+            parentId: parentId || null,
+            size: BigInt(totalSize),
+            mimeType,
+            storagePath,
+            uploadedById: req.user!.userId,
+          },
+          select: {
+            id: true, name: true, size: true, mimeType: true, createdAt: true,
+          },
+        })
+
+        res.status(201).json(file)
+      } catch (err: any) {
+        fileError = err
+        // 耗尽流防止内存泄漏
+        stream.resume()
+      }
+    })
+
+    bb.on('close', () => {
+      if (fileError) {
+        if (!res.headersSent) {
+          res.status(502).json({ error: fileError.message })
+        }
+      } else if (!fileProcessed) {
+        res.status(400).json({ error: '请选择文件' })
+      }
+    })
+
+    req.pipe(bb)
   } catch (err) {
     console.error('上传文件失败:', err)
     res.status(500).json({ error: '上传文件失败' })
