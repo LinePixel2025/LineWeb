@@ -206,7 +206,7 @@ const UploadZone = memo(function UploadZone({
         >
           <span className="upload-zone-drop-icon">📂</span>
           <span className="upload-zone-drop-text">拖拽文件到此处或点击选择</span>
-          <span className="upload-zone-drop-hint">支持多文件上传，单个文件最大 500MB</span>
+          <span className="upload-zone-drop-hint">支持多文件上传，单个文件最大 10GB</span>
         </div>
       )}
 
