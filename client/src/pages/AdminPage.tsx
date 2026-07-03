@@ -66,18 +66,18 @@ export default function AdminPage() {
             <tbody>
               {data?.posts.map((post, i) => (
                 <tr key={post.id} className="admin-row fade-in" style={{ animationDelay: `${i * 0.04}s` }}>
-                  <td className="admin-cell admin-cell--title">
+                  <td className="admin-cell admin-cell--title" data-label="标题">
                     <div className="admin-post-title">{post.title}</div>
                     <div className="admin-post-date">
                       {new Date(post.createdAt).toLocaleDateString('zh-CN')}
                     </div>
                   </td>
-                  <td className="admin-cell admin-cell--status">
+                  <td className="admin-cell admin-cell--status" data-label="状态">
                     <span className={`admin-badge ${post.published ? 'admin-badge--published' : 'admin-badge--draft'}`}>
                       {post.published ? '已发布' : '草稿'}
                     </span>
                   </td>
-                  <td className="admin-cell admin-cell--actions">
+                  <td className="admin-cell admin-cell--actions" data-label="操作">
                     <div className="admin-actions">
                       <LiquidButton size="sm" variant="glass" onClick={() => handleToggle(post)}>
                         {post.published ? '下架' : '发布'}

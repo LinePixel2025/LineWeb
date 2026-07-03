@@ -48,7 +48,7 @@ function CommentRow({
 
   return (
     <tr className="admin-row fade-in">
-      <td className="admin-cell admin-cell--comment" style={indent ? { paddingLeft: '40px' } : undefined}>
+      <td className="admin-cell admin-cell--comment" style={indent ? { paddingLeft: '40px' } : undefined} data-label="评论内容">
         {isEditing ? (
           <div className="comment-edit-form">
             <textarea
@@ -70,16 +70,16 @@ function CommentRow({
           </div>
         )}
       </td>
-      <td className="admin-cell">{comment.author.username}</td>
-      <td className="admin-cell">
+      <td className="admin-cell" data-label="作者">{comment.author.username}</td>
+      <td className="admin-cell" data-label="类型">
         <span className={`admin-badge ${isReply ? 'admin-badge--draft' : 'admin-badge--published'}`} style={{ fontSize: '0.75rem' }}>
           {isReply ? '回复' : '主评论'}
         </span>
       </td>
-      <td className="admin-cell admin-cell--date">
+      <td className="admin-cell admin-cell--date" data-label="时间">
         {new Date(comment.createdAt).toLocaleString('zh-CN')}
       </td>
-      <td className="admin-cell admin-cell--actions">
+      <td className="admin-cell admin-cell--actions" data-label="操作">
         <div className="admin-actions">
           {isEditing ? null : (
             <>
@@ -202,16 +202,16 @@ export default function CommentAdminPage() {
               <tbody>
                 {groups.map((g, i) => (
                   <tr key={g.postId} className="admin-row fade-in admin-row--clickable" style={{ animationDelay: `${i * 0.04}s` }}>
-                    <td className="admin-cell" onClick={() => selectPost(g.postId, g.title)}>
+                    <td className="admin-cell" data-label="文章标题" onClick={() => selectPost(g.postId, g.title)}>
                       <div className="admin-post-title">{g.title}</div>
                     </td>
-                    <td className="admin-cell" onClick={() => selectPost(g.postId, g.title)}>
+                    <td className="admin-cell" data-label="评论数" onClick={() => selectPost(g.postId, g.title)}>
                       <span className="comment-group-badge">{g.commentCount}</span>
                     </td>
-                    <td className="admin-cell admin-cell--date" onClick={() => selectPost(g.postId, g.title)}>
+                    <td className="admin-cell admin-cell--date" data-label="最新评论" onClick={() => selectPost(g.postId, g.title)}>
                       {new Date(g.latestAt).toLocaleString('zh-CN')}
                     </td>
-                    <td className="admin-cell admin-cell--actions">
+                    <td className="admin-cell admin-cell--actions" data-label="操作">
                       <LiquidButton size="sm" variant="glass" onClick={() => selectPost(g.postId, g.title)}>
                         管理
                       </LiquidButton>

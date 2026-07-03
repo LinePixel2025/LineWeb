@@ -1666,6 +1666,53 @@ select.lg-input optgroup {
   max-width: unset;
 }
 
+/* Admin table — mobile card layout */
+@media (max-width: 580px) {
+  .admin-table { min-width: unset; }
+  .admin-table thead { display: none; }
+
+  .admin-table tbody,
+  .admin-table tr,
+  .admin-table td { display: block; }
+
+  .admin-row {
+    display: block;
+    padding: 14px;
+    border-bottom: 1px solid var(--lg-glass-border);
+  }
+
+  .admin-cell {
+    padding: 4px 0;
+    border: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .admin-cell--title {
+    max-width: unset;
+    white-space: normal;
+  }
+
+  .admin-cell::before {
+    content: attr(data-label);
+    font-weight: 500;
+    color: var(--lg-text-tertiary);
+    font-size: 0.78rem;
+    flex-shrink: 0;
+    margin-right: 8px;
+  }
+
+  .admin-actions {
+    justify-content: flex-start;
+    margin-top: 8px;
+  }
+
+  .admin-cell--actions {
+    justify-content: flex-start;
+  }
+}
+
 /* --- Mobile sidebar --- */
 .admin-layout-overlay {
   display: none;

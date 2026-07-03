@@ -101,13 +101,13 @@ export default function UserAdminPage() {
                 const isEditing = editingId === u.id
                 return (
                   <tr key={u.id} className="admin-row fade-in" style={{ animationDelay: `${i * 0.04}s` }}>
-                    <td className="admin-cell admin-cell--title">
+                    <td className="admin-cell admin-cell--title" data-label="用户名">
                       <div className="admin-post-title">{u.username}</div>
                     </td>
-                    <td className="admin-cell">
+                    <td className="admin-cell" data-label="邮箱">
                       <code style={{ fontSize: '0.8125rem', color: 'var(--lg-text-secondary)' }}>{u.email}</code>
                     </td>
-                    <td className="admin-cell admin-cell--status">
+                    <td className="admin-cell admin-cell--status" data-label="角色">
                       {isEditing ? (
                         <select
                           className="lg-input"
@@ -124,7 +124,7 @@ export default function UserAdminPage() {
                         </span>
                       )}
                     </td>
-                    <td className="admin-cell" style={{ textAlign: 'center' }}>
+                    <td className="admin-cell" data-label="网盘" style={{ textAlign: 'center' }}>
                       <button
                         onClick={async () => {
                           try {
@@ -140,10 +140,10 @@ export default function UserAdminPage() {
                         {u.canAccessDrive ? '✅' : '❌'}
                       </button>
                     </td>
-                    <td className="admin-cell admin-cell--date">
+                    <td className="admin-cell admin-cell--date" data-label="注册时间">
                       {new Date(u.createdAt).toLocaleString('zh-CN')}
                     </td>
-                    <td className="admin-cell admin-cell--actions">
+                    <td className="admin-cell admin-cell--actions" data-label="操作">
                       {isEditing ? (
                         <div className="admin-actions" style={{ flexWrap: 'wrap', gap: '6px' }}>
                           <input
