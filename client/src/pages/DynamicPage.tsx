@@ -123,9 +123,9 @@ function RenderComponent({ comp }: { comp: ComponentData }) {
       )
     case 'columns': {
       return (
-        <div style={{ display: 'flex', gap: 16 }}>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           {comp.children.map(child => (
-            <div key={child.id} style={{ flex: 1, minWidth: 0 }}>
+            <div key={child.id} style={{ flex: '1 1 200px', minWidth: 0 }}>
               <RenderComponent comp={child} />
             </div>
           ))}
