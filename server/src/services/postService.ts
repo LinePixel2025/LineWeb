@@ -54,14 +54,19 @@ export async function getPublishedPosts(
   page: number,
   limit: number,
   skip: number,
+  sort: 'asc' | 'desc' = 'desc',
+  search?: string,
 ): Promise<PaginatedPosts> {
-  const where = { published: true }
+  const where: Prisma.PostWhereInput = {
+    published: true,
+    ...(search ? { title: { contains: search } } : {}),
+  }
 
   const [posts, total] = await Promise.all([
     prisma.post.findMany({
       where,
       select: postSelectPublic,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: sort },
       skip,
       take: limit,
     }),

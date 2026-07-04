@@ -15,7 +15,11 @@ const router = Router()
 // 获取公开文章列表
 router.get('/', async (req: Request, res: Response) => {
   const { page, limit, skip } = parsePagination(req.query)
-  const result = await getPublishedPosts(page, limit, skip)
+  const sort = req.query.sort === 'asc' ? 'asc' : 'desc'
+  const search = typeof req.query.search === 'string' && req.query.search.trim()
+    ? req.query.search.trim()
+    : undefined
+  const result = await getPublishedPosts(page, limit, skip, sort, search)
   res.json(result)
 })
 
