@@ -337,6 +337,7 @@ router.post('/upload', async (req: Request, res: Response) => {
         // 生成存储路径 — 使用原始文件名，冲突时自动追加计数器后缀
         const safeName = originalName.replace(/[<>:"/\\|?*]/g, '_')
         let storagePath = `${parentPath}${safeName}`
+        let finalName = safeName  // 最终的显示用文件名
         // 同级同名检查 + 自动去重
         const existing = await prisma.driveFile.findFirst({
           where: { storagePath },
@@ -352,7 +353,11 @@ router.post('/upload', async (req: Request, res: Response) => {
               where: { storagePath: candidate },
               select: { id: true },
             })
-            if (!dup) { storagePath = candidate; break }
+            if (!dup) {
+              storagePath = candidate
+              finalName = `${base}(${i})${ext}`
+              break
+            }
           }
         }
 
@@ -370,7 +375,7 @@ router.post('/upload', async (req: Request, res: Response) => {
         // 这样即使后续写入失败，也不会出现「节点有文件但 DB 缺失」的不一致状态
         const file = await prisma.driveFile.create({
           data: {
-            name: originalName,
+            name: finalName,
             isFolder: false,
             parentId: parentId || null,
             size: BigInt(totalSize),
