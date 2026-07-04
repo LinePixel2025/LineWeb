@@ -580,7 +580,7 @@ export default function PageEditor() {
               <span className="pe-toggle-slider" /> <span className="pe-toggle-label">在功能界面展示此页面</span>
             </label>
             {state.featured && (
-              <div className="pe-featured-fields" style={{ animation: 'fadeIn 0.3s ease both' }}>
+              <div className="pe-featured-fields fade-in-stagger" style={{ animationDuration: '0.3s' }}>
                 <div className="pe-field">
                   <label className="pe-field-label">图标（Emoji）</label>
                   <input className="lg-input" type="text" value={state.featureEmoji} onChange={e => dispatch({ type: 'SET_META', featureEmoji: e.target.value })}
