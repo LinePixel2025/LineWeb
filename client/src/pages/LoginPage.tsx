@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import LiquidGlass from '../components/glass/LiquidGlass'
+import LiquidButton from '../components/glass/LiquidButton'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -43,19 +44,15 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <input className="lg-input" type="email" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} required />
           <input className="lg-input" type="password" placeholder="密码" value={password} onChange={e => setPassword(e.target.value)} required />
-          <button className="liquid-btn primary lg" type="submit" disabled={loading}
-            style={{
-              width: '100%', marginTop: '4px', padding: '14px', borderRadius: '9999px', fontWeight: 500, fontSize: '1rem',
-              background: 'linear-gradient(135deg, var(--lg-accent), #40a9ff)', color: 'white', border: 'none', cursor: 'pointer',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 16px var(--lg-accent-glow)',
-              transition: 'all 0.2s ease',
-              WebkitTapHighlightColor: 'transparent',
-            }}
-            onTouchStart={e => { if (!loading) e.currentTarget.style.transform = 'scale(0.97)' }}
-            onTouchEnd={e => { e.currentTarget.style.transform = 'scale(1)' }}
+          <LiquidButton
+            type="submit"
+            variant="primary"
+            size="lg"
+            disabled={loading}
+            style={{ width: '100%', marginTop: '4px' }}
           >
             {loading ? '登录中...' : '登录'}
-          </button>
+          </LiquidButton>
         </form>
 
         <p className="text-tertiary" style={{ textAlign: 'center', marginTop: '20px' }}>
