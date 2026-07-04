@@ -37,7 +37,8 @@ def handle_write_file(cmd: dict) -> dict:
 
     # 单块模式（兼容现有上传逻辑）
     data_b64 = cmd.get("data", "")
-    if data_b64:
+    total_chunks = cmd.get("totalChunks", 0)
+    if data_b64 and total_chunks == 1:
         data = base64.b64decode(data_b64)
         abs_path = ROOT / path
         abs_path.parent.mkdir(parents=True, exist_ok=True)
