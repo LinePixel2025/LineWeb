@@ -27,9 +27,6 @@ ROOT.mkdir(parents=True, exist_ok=True)
 # 分块写入缓冲区 — keyed by command id (batchId)
 CHUNK_WRITE_BUFFERS: dict[str, dict] = {}
 
-# 分块大小（base64 字符数，~48KB raw data）
-CHUNK_SIZE = 65536
-
 
 # === 文件操作函数 ===
 
@@ -124,31 +121,31 @@ def handle_write_file_data(cmd: dict) -> dict:
     return {"success": True}
 
 
-def handle_read_file(path: str) -> dict:
-    """
-    读取文件并分块返回。
-    第一块（chunkIndex=0）由 read_file 命令的响应直接携带。
-    后续块通过 read_file_data 消息发送。
-    注意：此函数在同步上下文中运行，但 websocket.send 需要异步。
-    因此我们将分块逻辑放到 handle_command 中异步处理。
-    """
+def handle_read_file(cmd: dict) -> dict:
+    """按 offset + length 读取文件的一个分块。"""
+    path = cmd.get("path", "")
+    offset = cmd.get("offset", 0)
+    length = cmd.get("length", 0)
+
     abs_path = ROOT / path
     if not abs_path.exists():
         return {"success": False, "error": "文件不存在"}
 
-    data = abs_path.read_bytes()
-    b64 = base64.b64encode(data).decode()
-    log.info(f"Read {len(data)} bytes from {path}")
+    fd = os.open(str(abs_path), os.O_RDONLY)
+    try:
+        raw = os.pread(fd, length, offset)
+    finally:
+        os.close(fd)
 
-    # 计算分块
-    total_chunks = max(1, (len(b64) + CHUNK_SIZE - 1) // CHUNK_SIZE)
+    b64 = base64.b64encode(raw).decode()
+    bytes_read = len(raw)
+    is_eof = bytes_read < length
 
     return {
         "success": True,
         "data": b64,
-        "total_size": len(data),
-        "total_chunks": total_chunks,
-        "chunk_data": b64,  # 由 handle_command 拆分成块发送
+        "bytesRead": bytes_read,
+        "isEOF": is_eof,
     }
 
 
@@ -250,41 +247,17 @@ async def handle_command(cmd: dict, ws) -> dict | None:
         elif cmd_type == "write_file_data":
             result = handler(cmd)
         elif cmd_type == "read_file":
-            result = handler(path)
-            # 如果是分块读取，异步发送后续块
-            if result.get("success") and result.get("total_chunks", 1) > 1:
-                b64_data = result.get("chunk_data", "")
-                total_chunks = result["total_chunks"]
-                chunk_size = CHUNK_SIZE
-
-                # 先发第一块的响应（携带 chunkIndex=0 的数据）
-                first_chunk = b64_data[:chunk_size]
-                # 从第二块开始异步发送
-                asyncio.create_task(send_remaining_chunks(
-                    ws, cmd_id, b64_data, total_chunks, chunk_size
-                ))
+            result = handle_read_file(cmd)
+            if result.get("success"):
                 return {
                     "id": cmd_id,
-                    "success": True,
                     "type": "read_file_data",
-                    "data": first_chunk,
-                    "chunkIndex": 0,
-                    "totalChunks": total_chunks,
-                    "totalSize": result.get("total_size", 0),
+                    "success": True,
+                    "data": result.get("data", ""),
+                    "bytesRead": result.get("bytesRead", 0),
+                    "isEOF": result.get("isEOF", True),
                 }
-            else:
-                # 小文件，单块返回
-                if result.get("success") and result.get("data"):
-                    total_chunks = 1
-                    return {
-                        "id": cmd_id,
-                        "type": "read_file_data",
-                        "success": True,
-                        "data": result.get("data", ""),
-                        "chunkIndex": 0,
-                        "totalChunks": 1,
-                    }
-                return {"id": cmd_id, **result}
+            return {"id": cmd_id, "success": False, "error": result.get("error", "读取失败")}
         elif cmd_type == "move":
             new_path = Path(cmd.get("newPath", "")).as_posix()
             result = handler(path, new_path)
@@ -297,30 +270,6 @@ async def handle_command(cmd: dict, ws) -> dict | None:
     except Exception as e:
         log.error(f"命令 {cmd_type} 失败: {e}")
         return {"id": cmd_id, "success": False, "error": str(e)}
-
-
-async def send_remaining_chunks(ws, cmd_id: str, b64_data: str,
-                                 total_chunks: int, chunk_size: int):
-    """异步发送第 1 块之后的所有分块"""
-    try:
-        for i in range(1, total_chunks):
-            start = i * chunk_size
-            end = start + chunk_size
-            chunk = b64_data[start:end]
-            msg = json.dumps({
-                "id": cmd_id,
-                "type": "read_file_data",
-                "success": True,
-                "data": chunk,
-                "chunkIndex": i,
-                "totalChunks": total_chunks,
-            })
-            await ws.send(msg)
-            # 小块间加微小延迟避免背压
-            if i % 10 == 0:
-                await asyncio.sleep(0.001)
-    except Exception as e:
-        log.error(f"发送分块失败: {e}")
 
 
 async def connect():
