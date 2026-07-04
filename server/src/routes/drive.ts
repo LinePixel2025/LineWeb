@@ -9,6 +9,26 @@ import { config } from '../config/index.js'
 
 const router = Router()
 
+/**
+ * 修复 busboy 对中文文件名的 mojibake 损坏。
+ * busboy v1.6.0 在解析 Content-Disposition 时，可能将 UTF-8 字节
+ * 逐字节当作 Latin-1 字符解码，导致中文变成如 "ä¸åäº" 的乱码。
+ * 此函数将每个 Latin-1 字符转回其原始字节值，再重新用 UTF-8 解码。
+ */
+function fixMojibake(name: string): string {
+  // 仅对包含高字节（>0x7F）的字符串尝试修复
+  if (!/[^\0-\x7f]/.test(name)) return name
+  try {
+    const bytes = new Uint8Array(name.length)
+    for (let i = 0; i < name.length; i++) {
+      bytes[i] = name.charCodeAt(i) & 0xff
+    }
+    return new TextDecoder('utf-8').decode(bytes)
+  } catch {
+    return name // 解码失败则返回原值
+  }
+}
+
 // 所有路由需要登录 + canAccessDrive
 router.use(authenticate, (req: Request, res: Response, next) => {
   // 从数据库检查 canAccessDrive（每请求校验，确保权限变更即时生效）
@@ -320,7 +340,7 @@ router.post('/upload', async (req: Request, res: Response) => {
     bb.on('file', async (_fieldname, stream, info) => {
       if (fileProcessed) return
       fileProcessed = true
-      originalName = info.filename
+      originalName = fixMojibake(info.filename)
       mimeType = info.mimeType
 
       try {
