@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import DOMPurify from 'dompurify'
 import api from '../lib/api'
+import LiquidButton from '../components/glass/LiquidButton'
 
 interface PageSchema {
   id: number
@@ -96,16 +97,13 @@ function RenderComponent({ comp }: { comp: ComponentData }) {
         : null
     }
     case 'button': {
-      const variant = (comp.props.variant as string) || 'primary'
+      const variant = ((comp.props.variant as string) || 'primary') as 'primary' | 'glass' | 'ghost' | 'danger'
       const link = comp.props.link as string
       const text = (comp.props.text as string) || '按钮'
-      const btn = (
-        <span className={`liquid-btn ${variant} md`}>
-          {text}<span className="btn-flare" />
-        </span>
-      )
-      if (link) return <a href={link} style={{ textDecoration: 'none' }}>{btn}</a>
-      return <div className="page-editor-btn-wrap">{btn}</div>
+      if (link) {
+        return <LiquidButton href={link} variant={variant} size="md">{text}</LiquidButton>
+      }
+      return <LiquidButton variant={variant} size="md">{text}</LiquidButton>
     }
     case 'divider':
       return <hr style={{ border: 'none', borderTop: '1px solid var(--lg-glass-border)', margin: 0 }} />
