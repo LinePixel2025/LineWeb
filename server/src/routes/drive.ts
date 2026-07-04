@@ -7,19 +7,6 @@ import { sendCommand, streamRead, streamWrite, isNodeConnected } from '../servic
 import { syncDriveFiles } from '../services/storageSync.js'
 import { config } from '../config/index.js'
 
-// JSON 序列化 BigInt
-BigInt.prototype.toJSON = function () {
-  return Number(this)
-}
-
-export {} // 确保模块导出使上述 BigInt.prototype 生效
-
-declare global {
-  interface BigInt {
-    toJSON(): number
-  }
-}
-
 const router = Router()
 
 // 所有路由需要登录 + canAccessDrive
@@ -46,7 +33,7 @@ router.get('/files', async (req: Request, res: Response) => {
     const parentId = parentIdStr ? parseId(parentIdStr) : null
     const { page, limit, skip } = parsePagination(req.query)
 
-    const where: any = { parentId }
+    const where: { parentId: number | null } = { parentId }
 
     const [data, total] = await Promise.all([
       prisma.driveFile.findMany({
@@ -302,8 +289,8 @@ router.post('/upload', async (req: Request, res: Response) => {
         })
 
         res.status(201).json(file)
-      } catch (err: any) {
-        fileError = err
+      } catch (err: unknown) {
+        fileError = err instanceof Error ? err : new Error(String(err))
         // 耗尽流防止内存泄漏
         stream.resume()
       }
@@ -364,7 +351,7 @@ router.get('/download/:id', async (req: Request, res: Response) => {
         res.write(chunk)
       }
       res.end()
-    } catch (streamErr: any) {
+    } catch (streamErr: unknown) {
       console.error('下载流中断:', streamErr)
       if (!res.writableEnded) {
         res.end()  // 优雅关闭，前端已收到部分数据
@@ -626,9 +613,10 @@ router.post('/sync', async (_req: Request, res: Response) => {
   try {
     const report = await syncDriveFiles()
     res.json(report)
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : '同步失败'
     console.error('手动同步失败:', err)
-    res.status(500).json({ error: `同步失败: ${err.message}` })
+    res.status(500).json({ error: `同步失败: ${message}` })
   }
 })
 

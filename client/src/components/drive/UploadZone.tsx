@@ -1,31 +1,12 @@
 import { useState, useRef, useCallback, memo } from 'react'
 import LiquidButton from '../glass/LiquidButton'
+import { formatSpeed, formatMB } from '../../lib/format'
 import type { TransferProgress } from '../../types/drive'
 
 export interface UploadZoneProps {
   parentId: number | null
   onUploaded: () => void
   onClose: () => void
-}
-
-function formatSpeed(bytesPerSec: number): string {
-  if (bytesPerSec === 0) return '—'
-  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
-  let i = 0
-  let speed = bytesPerSec
-  while (speed >= 1024 && i < units.length - 1) { speed /= 1024; i++ }
-  return `${speed.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
-}
-
-function formatETA(seconds: number): string {
-  if (!isFinite(seconds) || seconds <= 0) return '—'
-  if (seconds < 60) return `约 ${Math.ceil(seconds)} 秒`
-  if (seconds < 3600) return `约 ${Math.ceil(seconds / 60)} 分钟`
-  return `约 ${(seconds / 3600).toFixed(1)} 小时`
-}
-
-function formatMB(bytes: number): string {
-  return `${Math.round((bytes / 1024 / 1024) * 10) / 10}MB`
 }
 
 const UploadZone = memo(function UploadZone({
@@ -129,9 +110,9 @@ const UploadZone = memo(function UploadZone({
         try {
           const success = await uploadFileViaXHR(file, i + 1, fileArray.length)
           if (!success) break
-        } catch (err: any) {
+        } catch {
           failed.push(file.name)
-          console.error(`上传失败: ${file.name}`, err)
+          console.error(`上传失败: ${file.name}`)
         }
       }
 

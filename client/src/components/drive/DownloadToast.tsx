@@ -1,25 +1,9 @@
 import { memo } from 'react'
 import { createPortal } from 'react-dom'
 import { useDownload } from '../../contexts/DownloadContext'
-import { formatFileSize } from '../../types/drive'
+import { formatFileSize, formatSpeed, formatETA } from '../../lib/format'
 
 const portalRoot = document.body
-
-function formatSpeed(bytesPerSec: number): string {
-  if (bytesPerSec <= 0) return '—'
-  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
-  let i = 0
-  let speed = bytesPerSec
-  while (speed >= 1024 && i < units.length - 1) { speed /= 1024; i++ }
-  return `${speed.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
-}
-
-function formatETA(seconds: number): string {
-  if (!isFinite(seconds) || seconds <= 0) return '—'
-  if (seconds < 60) return `${Math.ceil(seconds)}s`
-  if (seconds < 3600) return `${Math.ceil(seconds / 60)}m`
-  return `${(seconds / 3600).toFixed(1)}h`
-}
 
 const DownloadToast = memo(function DownloadToast() {
   const { tasks, cancelDownload } = useDownload()

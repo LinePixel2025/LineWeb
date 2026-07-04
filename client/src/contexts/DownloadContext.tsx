@@ -78,11 +78,13 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         prev.map(t => t.id === id ? { ...t, status: 'complete' as const, loaded, total: contentLength || loaded } : t)
       )
       setTimeout(() => setTasks(prev => prev.filter(t => t.id !== id)), 3000)
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
+    } catch (err: unknown) {
+      const aborted = err instanceof DOMException && err.name === 'AbortError'
+      if (aborted) {
         setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'cancelled' as const } : t))
       } else {
-        setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'error' as const, error: err.message } : t))
+        const message = err instanceof Error ? err.message : '下载失败'
+        setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'error' as const, error: message } : t))
       }
       setTimeout(() => setTasks(prev => prev.filter(t => t.id !== id)), 5000)
     } finally {

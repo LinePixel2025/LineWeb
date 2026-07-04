@@ -46,8 +46,8 @@ const ImagePreview = memo(function ImagePreview({ item, onClose }: DrivePreviewP
         const blob = new Blob(chunks as BlobPart[], { type: item.mimeType || undefined })
         objectUrl = URL.createObjectURL(blob)
         setSrc(objectUrl)
-      } catch (err: any) {
-        if (!cancelled) setError(err.message)
+      } catch (err: unknown) {
+        if (!cancelled) setError(err instanceof Error ? err.message : '加载失败')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -97,8 +97,8 @@ const VideoPreview = memo(function VideoPreview({ item, onClose }: DrivePreviewP
         const blob = await res.blob()
         objectUrl = URL.createObjectURL(blob)
         setSrc(objectUrl)
-      } catch (err: any) {
-        setError(err.message)
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : '加载失败')
       }
     }
     loadVideo()

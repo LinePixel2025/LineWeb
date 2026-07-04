@@ -59,8 +59,8 @@ export async function syncDriveFiles(): Promise<SyncReport> {
         await prisma.driveFile.delete({ where: { id: orphan.id } })
         report.orphansRemoved++
         console.log(`[Sync] 删除孤立记录: ${orphan.name} (${orphan.storagePath})`)
-      } catch (err: any) {
-        report.errors.push(`删除孤立记录失败: ${orphan.storagePath} — ${err.message}`)
+      } catch (err: unknown) {
+        report.errors.push(`删除孤立记录失败: ${orphan.storagePath} — ${err instanceof Error ? err.message : String(err)}`)
       }
     }
 
@@ -72,7 +72,9 @@ export async function syncDriveFiles(): Promise<SyncReport> {
         const statResp = await sendCommand({ type: 'stat', path: nodePath })
         if (!statResp.success || !statResp.data) continue
 
-        const info = statResp.data
+        const info = statResp.data as { isFolder?: boolean; size?: number } | undefined
+        if (!info) continue
+
         const parts = nodePath.split('/')
         const entryName = parts.pop() || nodePath
         const isFolder = !!info.isFolder
@@ -115,12 +117,12 @@ export async function syncDriveFiles(): Promise<SyncReport> {
         })
         report.missingCreated++
         console.log(`[Sync] 创建缺失记录: ${entryName} (${nodePath})`)
-      } catch (err: any) {
-        report.errors.push(`修复缺失记录失败: ${nodePath} — ${err.message}`)
+      } catch (err: unknown) {
+        report.errors.push(`修复缺失记录失败: ${nodePath} — ${err instanceof Error ? err.message : String(err)}`)
       }
     }
-  } catch (err: any) {
-    report.errors.push(`同步失败: ${err.message}`)
+  } catch (err: unknown) {
+    report.errors.push(`同步失败: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   report.durationMs = Date.now() - start

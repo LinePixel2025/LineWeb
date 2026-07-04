@@ -142,7 +142,7 @@ function readState(editor: LexicalEditor, setBlockType: (b: BlockType) => void, 
 
   // Single ancestor walk for link + block type
   const firstNode = selection.anchor.getNode()
-  let node: any = firstNode
+  let node: import('lexical').LexicalNode = firstNode
   let isLink = false
   let blockFound: BlockType = 'paragraph'
   let doneLink = false

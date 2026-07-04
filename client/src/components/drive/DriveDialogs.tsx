@@ -28,8 +28,8 @@ export const NewFolderDialog = memo(function NewFolderDialog({
     try {
       await api.post('/drive/folders', { name: name.trim(), parentId })
       onCreated()
-    } catch (err: any) {
-      setError(err.message || '创建失败')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '创建失败')
       setLoading(false)
     }
   }
@@ -88,8 +88,8 @@ export const RenameDialog = memo(function RenameDialog({
     try {
       await api.put(`/drive/files/${item.id}`, { name: name.trim() })
       onRenamed()
-    } catch (err: any) {
-      setError(err.message || '重命名失败')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '重命名失败')
       setLoading(false)
     }
   }
@@ -142,8 +142,8 @@ export const DeleteDialog = memo(function DeleteDialog({
     try {
       await api.delete(`/drive/files/${item.id}`)
       onDeleted()
-    } catch (err: any) {
-      setError(err.message || '删除失败')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '删除失败')
       setLoading(false)
     }
   }

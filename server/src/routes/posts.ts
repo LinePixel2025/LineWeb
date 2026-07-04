@@ -1,38 +1,29 @@
 import { Router, Request, Response } from 'express'
-import prisma from '../lib/prisma.js'
-import { parsePagination, parseId } from '../lib/utils.js'
-import { postSchema, postUpdateSchema } from '../config/index.js'
+import { AppError } from '../middleware/errorHandler.js'
 import { authenticate, requireAdmin } from '../middleware/auth.js'
+import { postSchema, postUpdateSchema } from '../config/index.js'
+import { parsePagination } from '../lib/utils.js'
+import {
+  getPublishedPosts, getPublishedPostBySlug,
+  getAllPosts, getPostById,
+  createPost, updatePost, deletePost,
+  isSlugTaken,
+} from '../services/postService.js'
 
 const router = Router()
 
 // 获取公开文章列表
 router.get('/', async (req: Request, res: Response) => {
   const { page, limit, skip } = parsePagination(req.query)
-
-  const [posts, total] = await Promise.all([
-    prisma.post.findMany({
-      where: { published: true },
-      select: { id: true, title: true, summary: true, slug: true, createdAt: true, updatedAt: true, author: { select: { username: true } } },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-    }),
-    prisma.post.count({ where: { published: true } }),
-  ])
-
-  res.json({ posts, total, page, limit, totalPages: Math.ceil(total / limit) })
+  const result = await getPublishedPosts(page, limit, skip)
+  res.json(result)
 })
 
 // 获取单篇文章（公开）
 router.get('/:slug', async (req: Request, res: Response) => {
-  const post = await prisma.post.findUnique({
-    where: { slug: req.params.slug, published: true },
-    select: { id: true, title: true, content: true, summary: true, slug: true, createdAt: true, updatedAt: true, author: { select: { username: true } } },
-  })
+  const post = await getPublishedPostBySlug(req.params.slug)
   if (!post) {
-    res.status(404).json({ error: '文章不存在' })
-    return
+    throw new AppError('文章不存在', 404)
   }
   res.json(post)
 })
@@ -40,36 +31,20 @@ router.get('/:slug', async (req: Request, res: Response) => {
 // 管理面板：获取所有文章（含未发布）
 router.get('/admin/all', authenticate, requireAdmin, async (req: Request, res: Response) => {
   const { page, limit, skip } = parsePagination(req.query)
-
-  const [posts, total] = await Promise.all([
-    prisma.post.findMany({
-      select: { id: true, title: true, summary: true, slug: true, published: true, createdAt: true, updatedAt: true },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-    }),
-    prisma.post.count(),
-  ])
-
-  res.json({ posts, total, page, limit, totalPages: Math.ceil(total / limit) })
+  const result = await getAllPosts(page, limit, skip)
+  res.json(result)
 })
 
 // 管理面板：获取单篇文章
 router.get('/admin/:id', authenticate, requireAdmin, async (req: Request, res: Response) => {
-  const id = parseId(req.params.id)
-  if (id === null) {
-    res.status(400).json({ error: '无效 ID' })
-    return
+  const id = parseInt(req.params.id)
+  if (isNaN(id)) {
+    throw new AppError('无效 ID', 400)
   }
 
-  const post = await prisma.post.findUnique({
-    where: { id },
-    select: { id: true, title: true, content: true, summary: true, slug: true, published: true, createdAt: true, updatedAt: true },
-  })
-
+  const post = await getPostById(id)
   if (!post) {
-    res.status(404).json({ error: '文章不存在' })
-    return
+    throw new AppError('文章不存在', 404)
   }
 
   res.json(post)
@@ -83,24 +58,20 @@ router.post('/', authenticate, requireAdmin, async (req: Request, res: Response)
     return
   }
 
-  const slugExists = await prisma.post.findUnique({ where: { slug: parsed.data.slug } })
-  if (slugExists) {
-    res.status(409).json({ error: '该 slug 已被使用' })
-    return
+  const slugTaken = await isSlugTaken(parsed.data.slug)
+  if (slugTaken) {
+    throw new AppError('该 slug 已被使用', 409)
   }
 
-  const post = await prisma.post.create({
-    data: { ...parsed.data, authorId: req.user!.userId },
-  })
+  const post = await createPost(parsed.data, req.user!.userId)
   res.status(201).json(post)
 })
 
 // 更新文章
 router.put('/:id', authenticate, requireAdmin, async (req: Request, res: Response) => {
-  const id = parseId(req.params.id)
-  if (id === null) {
-    res.status(400).json({ error: '无效 ID' })
-    return
+  const id = parseInt(req.params.id)
+  if (isNaN(id)) {
+    throw new AppError('无效 ID', 400)
   }
 
   const parsed = postUpdateSchema.safeParse(req.body)
@@ -110,31 +81,24 @@ router.put('/:id', authenticate, requireAdmin, async (req: Request, res: Respons
   }
 
   if (parsed.data.slug) {
-    const existing = await prisma.post.findFirst({
-      where: { slug: parsed.data.slug, NOT: { id } },
-    })
-    if (existing) {
-      res.status(409).json({ error: '该 slug 已被使用' })
-      return
+    const slugTaken = await isSlugTaken(parsed.data.slug, id)
+    if (slugTaken) {
+      throw new AppError('该 slug 已被使用', 409)
     }
   }
 
-  const post = await prisma.post.update({
-    where: { id },
-    data: parsed.data,
-  })
+  const post = await updatePost(id, parsed.data)
   res.json(post)
 })
 
 // 删除文章
 router.delete('/:id', authenticate, requireAdmin, async (req: Request, res: Response) => {
-  const id = parseId(req.params.id)
-  if (id === null) {
-    res.status(400).json({ error: '无效 ID' })
-    return
+  const id = parseInt(req.params.id)
+  if (isNaN(id)) {
+    throw new AppError('无效 ID', 400)
   }
 
-  await prisma.post.delete({ where: { id } })
+  await deletePost(id)
   res.json({ message: '已删除' })
 })
 

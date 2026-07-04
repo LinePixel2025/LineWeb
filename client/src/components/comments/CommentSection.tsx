@@ -48,8 +48,8 @@ function ReplyForm({
     try {
       const reply = await api.post<CommentData>('/comments', { content: text, postId, parentId })
       onReply(reply)
-    } catch (err: any) {
-      setError(err.message || '回复失败')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '回复失败')
       setSending(false)
     }
   }

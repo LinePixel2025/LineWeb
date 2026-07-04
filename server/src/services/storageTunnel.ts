@@ -25,7 +25,7 @@ interface NodeCommand {
 interface NodeResponse {
   id: string
   success: boolean
-  data?: any
+  data?: unknown
   error?: string
   chunkIndex?: number
   totalChunks?: number
@@ -80,8 +80,8 @@ export async function sendCommandWithRetry(
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       return await sendCommand(command)
-    } catch (err: any) {
-      if (attempt === retries || !isTransientError(err)) throw err
+    } catch (err: unknown) {
+      if (attempt === retries || !(err instanceof Error) || !isTransientError(err)) throw err
       const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000)
       console.warn(
         `[StorageTunnel] Command ${command.type} failed (${attempt}/${retries}), retrying in ${delay}ms: ${err.message}`,
@@ -115,10 +115,10 @@ export function sendCommand(command: Omit<NodeCommand, 'id'> & { id?: string }):
 
     try {
       activeNode.send(JSON.stringify(cmd))
-    } catch (err) {
+    } catch (err: unknown) {
       pendingCommands.delete(id)
       clearTimeout(timer)
-      reject(new Error(`发送命令失败: ${err}`))
+      reject(new Error(`发送命令失败: ${err instanceof Error ? err.message : String(err)}`))
     }
   })
 }
@@ -176,7 +176,7 @@ export async function streamWrite(
   if (chunkIndex === 1) {
     return sendCommand({
       id: batchId,
-      type: 'write_file' as any,
+      type: 'write_file' as const,
       path,
       totalSize: totalSize ?? lastChunk.length,
       totalChunks: 1,
@@ -201,10 +201,10 @@ export async function streamWrite(
     }
     try {
       activeNode!.send(JSON.stringify(lastCmd))
-    } catch (err) {
+    } catch (err: unknown) {
       pendingCommands.delete(batchId)
       clearTimeout(timer)
-      reject(new Error(`发送最后一块失败: ${err}`))
+      reject(new Error(`发送最后一块失败: ${err instanceof Error ? err.message : String(err)}`))
     }
   })
 }
@@ -298,10 +298,10 @@ export async function* streamRead(path: string): AsyncGenerator<Buffer> {
   const cmd = { id, type: 'read_file' as const, path, chunkSize: READ_BUFFER_SIZE }
   try {
     activeNode.send(JSON.stringify(cmd))
-  } catch (err) {
+  } catch (err: unknown) {
     pendingReads.delete(id)
     if (readState.timer) clearTimeout(readState.timer)
-    throw new Error(`发送读取命令失败: ${err}`)
+    throw new Error(`发送读取命令失败: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   try {

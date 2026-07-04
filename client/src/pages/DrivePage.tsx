@@ -7,6 +7,7 @@ import DriveGridView from '../components/drive/DriveGridView'
 import UploadZone from '../components/drive/UploadZone'
 import DrivePreview from '../components/drive/DrivePreview'
 import { NewFolderDialog, RenameDialog, DeleteDialog } from '../components/drive/DriveDialogs'
+import Pagination from '../components/Pagination'
 import api, { ApiError } from '../lib/api'
 import { useDownload } from '../contexts/DownloadContext'
 import type { DriveItem, Breadcrumb, DriveListResponse } from '../types/drive'
@@ -52,7 +53,7 @@ export default function DrivePage() {
       setTotal(res.total)
       setPage(res.page)
       setTotalPages(res.pageCount)
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(err instanceof ApiError ? err.message : '加载失败')
       setItems([])
     } finally {
@@ -126,8 +127,8 @@ export default function DrivePage() {
     try {
       await api.post('/drive/sync')
       refresh()
-    } catch (err: any) {
-      console.error('同步失败:', err)
+    } catch {
+      // ignore sync errors silently
     } finally {
       setSyncing(false)
     }
@@ -213,47 +214,13 @@ export default function DrivePage() {
         )}
 
         {/* 翻页控件 */}
-        {!isSearching && totalPages > 1 && (
-          <div className="admin-pagination">
-            {(() => {
-              const total = totalPages
-              const current = page
-              const pages: (number | 0)[] = []
-              const start = Math.max(1, current - 2)
-              const end = Math.min(total, current + 2)
-
-              if (start > 1) {
-                pages.push(1)
-                if (start > 2) pages.push(0)
-              }
-              for (let i = start; i <= end; i++) pages.push(i)
-              if (end < total) {
-                if (end < total - 1) pages.push(0)
-                pages.push(total)
-              }
-
-              return pages.map((p, i) =>
-                p === 0 ? (
-                  <span key={`ellipsis-${i}`} className="admin-ellipsis">…</span>
-                ) : (
-                  <button
-                    key={p}
-                    className={`admin-page-btn${p === current ? ' admin-page-btn--active' : ''}`}
-                    onClick={() => fetchItems(currentParentId, p)}
-                  >
-                    {p}
-                  </button>
-                )
-              )
-            })()}
-          </div>
-        )}
-
-        {/* 总数显示 */}
         {!isSearching && (
-          <div style={{ textAlign: 'center', marginTop: '12px', color: 'var(--lg-text-tertiary)', fontSize: '0.85rem' }}>
-            第 {page}/{totalPages} 页，共 {total} 项
-          </div>
+          <>
+            <Pagination page={page} totalPages={totalPages} onPageChange={(p) => fetchItems(currentParentId, p)} />
+            <div style={{ textAlign: 'center', marginTop: '12px', color: 'var(--lg-text-tertiary)', fontSize: '0.85rem' }}>
+              第 {page}/{totalPages} 页，共 {total} 项
+            </div>
+          </>
         )}
       </LiquidGlass>
 

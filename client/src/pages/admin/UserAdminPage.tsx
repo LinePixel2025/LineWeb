@@ -60,8 +60,8 @@ export default function UserAdminPage() {
       setEditingId(null)
       setEditPassword('')
       fetchUsers()
-    } catch (err: any) {
-      alert(err.message || '更新失败')
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : '更新失败')
     }
   }
 
@@ -130,8 +130,8 @@ export default function UserAdminPage() {
                           try {
                             await api.put(`/users/${u.id}/drive-access`, { canAccessDrive: !u.canAccessDrive })
                             fetchUsers()
-                          } catch (err: any) {
-                            alert(err.message || '操作失败')
+                          } catch (err: unknown) {
+                            alert(err instanceof Error ? err.message : '操作失败')
                           }
                         }}
                         className={`drive-toggle ${u.canAccessDrive ? 'drive-toggle--on' : ''}`}

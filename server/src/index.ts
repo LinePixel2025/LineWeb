@@ -11,6 +11,7 @@ import pageRoutes from './routes/pages.js'
 import commentRoutes from './routes/comments.js'
 import userRoutes from './routes/users.js'
 import driveRoutes from './routes/drive.js'
+import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel } from './services/storageTunnel.js'
 import { syncDriveFiles } from './services/storageSync.js'
 
@@ -35,6 +36,9 @@ app.use('/api/pages', pageRoutes)
 app.use('/api/comments', commentRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/drive', driveRoutes)
+
+// Global error handler
+app.use(errorHandler)
 
 // Health check
 app.get('/api/health', (_req, res) => {

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import DOMPurify from 'dompurify'
 import api from '../lib/api'
 
 interface PageSchema {
@@ -139,7 +140,7 @@ function RenderComponent({ comp }: { comp: ComponentData }) {
       return <Tag style={{ margin: 0, paddingLeft: 20 }}>{items.map((item, ii) => <li key={ii}>{item}</li>)}</Tag>
     }
     case 'html':
-      return <div dangerouslySetInnerHTML={{ __html: (comp.props.html as string) || '' }} />
+      return <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize((comp.props.html as string) || '') }} />
     default:
       return null
   }

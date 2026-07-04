@@ -15,18 +15,6 @@ export interface Breadcrumb {
   name: string
 }
 
-export function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '—'
-  const units = ['B', 'KB', 'MB', 'GB']
-  let i = 0
-  let size = bytes
-  while (size >= 1024 && i < units.length - 1) {
-    size /= 1024
-    i++
-  }
-  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
-}
-
 export function getFileIcon(item: DriveItem): string {
   if (item.isFolder) return '📁'
   const ext = item.name.includes('.') ? item.name.split('.').pop()!.toLowerCase() : ''
@@ -41,18 +29,6 @@ export function getFileIcon(item: DriveItem): string {
   if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return '🗜️'
   if (['js', 'ts', 'py', 'java', 'go', 'rs', 'c', 'cpp', 'html', 'css'].includes(ext)) return '💻'
   return '📄'
-}
-
-export function formatDate(dateStr: string): string {
-  const d = new Date(dateStr)
-  return d.toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
-
-export function getMimeDisplay(mimeType: string | null, isFolder: boolean): string {
-  if (isFolder) return '文件夹'
-  if (!mimeType) return '文件'
-  const parts = mimeType.split('/')
-  return parts[1]?.toUpperCase() || '文件'
 }
 
 export interface DriveListResponse {

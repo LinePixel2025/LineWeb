@@ -1,7 +1,8 @@
 import { memo } from 'react'
 import LiquidButton from '../glass/LiquidButton'
 import type { DriveItem } from '../../types/drive'
-import { getFileIcon, formatFileSize, formatDate } from '../../types/drive'
+import { getFileIcon } from '../../types/drive'
+import { formatFileSize, formatDate } from '../../lib/format'
 
 export interface DriveListViewProps {
   items: DriveItem[]

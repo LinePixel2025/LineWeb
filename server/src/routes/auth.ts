@@ -1,30 +1,23 @@
 import { Router, Request, Response } from 'express'
-import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
-import prisma from '../lib/prisma.js'
-import { config, registerSchema, loginSchema, updateSettingsSchema } from '../config/index.js'
+import rateLimit from 'express-rate-limit'
+import { AppError } from '../middleware/errorHandler.js'
 import { authenticate } from '../middleware/auth.js'
+import { registerUser, loginUser, getUserById, updateUserSettings } from '../services/authService.js'
+import { registerSchema, loginSchema, updateSettingsSchema } from '../config/index.js'
+import { getErrorMessage, getErrorStatus } from '../lib/utils.js'
 
 const router = Router()
 
-function generateTokenResponse(user: { id: number; username: string; email: string; role: string; settings: string | null; canAccessDrive: boolean }) {
-  const token = jwt.sign(
-    { userId: user.id, role: user.role },
-    config.jwtSecret,
-    { expiresIn: config.jwtExpiresIn },
-  )
-  return {
-    token,
-    user: {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      role: user.role,
-      settings: user.settings,
-      canAccessDrive: user.canAccessDrive,
-    },
-  }
-}
+// 速率限制：登录/注册每 IP 每 15 分钟最多 20 次
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: '请求过于频繁，请 15 分钟后再试' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+router.use(authLimiter)
 
 // 注册
 router.post('/register', async (req: Request, res: Response) => {
@@ -35,20 +28,16 @@ router.post('/register', async (req: Request, res: Response) => {
   }
 
   const { username, email, password } = parsed.data
-  const exists = await prisma.user.findFirst({
-    where: { OR: [{ email }, { username }] },
-  })
-  if (exists) {
-    res.status(409).json({ error: '用户名或邮箱已被注册' })
-    return
+  try {
+    const data = await registerUser(username, email, password)
+    res.status(201).json(data)
+  } catch (err: unknown) {
+    if (getErrorStatus(err) === 409) {
+      res.status(409).json({ error: getErrorMessage(err) })
+      return
+    }
+    throw err
   }
-
-  const hashed = await bcrypt.hash(password, 12)
-  const user = await prisma.user.create({
-    data: { username, email, password: hashed },
-  })
-
-  res.status(201).json(generateTokenResponse(user))
 })
 
 // 登录
@@ -60,30 +49,23 @@ router.post('/login', async (req: Request, res: Response) => {
   }
 
   const { email, password } = parsed.data
-  const user = await prisma.user.findUnique({ where: { email } })
-  if (!user) {
-    res.status(401).json({ error: '邮箱或密码错误' })
-    return
+  try {
+    const data = await loginUser(email, password)
+    res.json(data)
+  } catch (err: unknown) {
+    if (getErrorStatus(err) === 401) {
+      res.status(401).json({ error: getErrorMessage(err) })
+      return
+    }
+    throw err
   }
-
-  const valid = await bcrypt.compare(password, user.password)
-  if (!valid) {
-    res.status(401).json({ error: '邮箱或密码错误' })
-    return
-  }
-
-  res.json(generateTokenResponse(user))
 })
 
 // 获取当前用户信息
 router.get('/me', authenticate, async (req: Request, res: Response) => {
-  const user = await prisma.user.findUnique({
-    where: { id: req.user!.userId },
-    select: { id: true, username: true, email: true, role: true, settings: true, canAccessDrive: true, createdAt: true },
-  })
+  const user = await getUserById(req.user!.userId)
   if (!user) {
-    res.status(404).json({ error: '用户不存在' })
-    return
+    throw new AppError('用户不存在', 404)
   }
   res.json(user)
 })
@@ -98,7 +80,6 @@ router.put('/settings', authenticate, async (req: Request, res: Response) => {
 
   const { settings } = parsed.data
 
-  // 验证 settings 是合法的 JSON
   try {
     JSON.parse(settings)
   } catch {
@@ -106,12 +87,7 @@ router.put('/settings', authenticate, async (req: Request, res: Response) => {
     return
   }
 
-  const user = await prisma.user.update({
-    where: { id: req.user!.userId },
-    data: { settings },
-    select: { id: true, username: true, email: true, role: true, settings: true },
-  })
-
+  const user = await updateUserSettings(req.user!.userId, settings)
   res.json({ user })
 })
 
