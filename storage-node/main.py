@@ -35,19 +35,7 @@ def handle_write_file(cmd: dict) -> dict:
     path = cmd.get("path", "")
     total_size = cmd.get("totalSize", 0)
 
-    # 单块模式（兼容现有上传逻辑）
-    data_b64 = cmd.get("data", "")
-    total_chunks = cmd.get("totalChunks", 0)
-    if data_b64 and total_chunks == 1:
-        data = base64.b64decode(data_b64)
-        abs_path = ROOT / path
-        abs_path.parent.mkdir(parents=True, exist_ok=True)
-        # 直接写最终文件，无需 .tmp（单块即已完成）
-        abs_path.write_bytes(data)
-        log.info(f"Wrote {len(data)} bytes to {path} (single chunk)")
-        return {"success": True, "data": {"size": len(data)}}
-
-    # 多块模式 — 打开 .tmp
+    # 打开 .tmp 文件准备接收分块数据
     tmp_path = ROOT / (path + ".tmp")
     tmp_path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC)

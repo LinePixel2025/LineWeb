@@ -306,10 +306,15 @@ router.post('/upload', async (req: Request, res: Response) => {
     let fileError: Error | null = null
     let originalName = ''
     let mimeType = ''
-    let parentId: number | null = null
+    // 优先从 URL 查询参数读取（可靠），回退到 multipart field（兼容旧客户端）
+    let parentId: number | null = (req.query.parentId as string | undefined)
+      ? parseInt(req.query.parentId as string, 10) || null
+      : null
 
     bb.on('field', (name, val) => {
-      if (name === 'parentId') parentId = val ? parseInt(val, 10) || null : null
+      if (name === 'parentId' && parentId === null) {
+        parentId = val ? parseInt(val, 10) || null : null
+      }
     })
 
     bb.on('file', async (_fieldname, stream, info) => {

@@ -28,8 +28,9 @@ const UploadZone = memo(function UploadZone({
         const xhr = new XMLHttpRequest()
         xhrRef.current = xhr
         const formData = new FormData()
-        formData.append('file', file)
+        // parentId 必须在 file 之前追加，否则 busboy 先解析 file 事件时 parentId 仍为 null
         if (parentId !== null) formData.append('parentId', String(parentId))
+        formData.append('file', file)
 
         const startTime = Date.now()
         let lastUpdate = startTime
