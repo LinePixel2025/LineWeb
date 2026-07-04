@@ -16,7 +16,7 @@ export default function Layout() {
               inset: 0,
               zIndex: 0,
               background: `url(${bgUrl}) center/cover no-repeat`,
-              transition: 'opacity 0.8s ease',
+              transition: 'opacity var(--lg-transition)',
               opacity: loaded ? 1 : 0,
               transform: 'scale(1.02)',
             }}
@@ -28,7 +28,7 @@ export default function Layout() {
               zIndex: 1,
               background: 'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.15) 50%, rgba(0,0,0,0.40) 100%)',
               opacity: loaded ? 1 : 0,
-              transition: 'opacity 0.8s ease',
+              transition: 'opacity var(--lg-transition)',
             }}
           />
         </>
