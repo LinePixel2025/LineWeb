@@ -59,7 +59,8 @@ export default function PostsPage() {
 
       {/* 工具栏：搜索 + 排序 */}
       <LiquidGlass variant="blur" chromatic={false} className="posts-toolbar">
-        <form onSubmit={handleSearch} className="posts-search-form">
+        <div className="posts-search-wrap">
+          <span className="posts-search-icon">🔍</span>
           <input
             className="lg-input posts-search-input"
             type="text"
@@ -67,21 +68,17 @@ export default function PostsPage() {
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
           />
-          <button type="submit" className="liquid-btn glass sm">
-            🔍 搜索
-            <span className="btn-flare" />
+          <button type="button" className="posts-search-submit" onClick={handleSearch} aria-label="搜索">→</button>
+          <div className="posts-toolbar-divider" />
+          <button className="posts-sort-btn-inline" onClick={toggleSort}>
+            {sort === 'desc' ? '🕐 最新' : '🕐 最早'}
           </button>
-          {search && (
-            <button type="button" className="liquid-btn ghost sm" onClick={handleClearSearch}>
-              ✕ 清除
-              <span className="btn-flare" />
-            </button>
-          )}
-        </form>
-        <button className="liquid-btn glass sm posts-sort-btn" onClick={toggleSort}>
-          {sort === 'desc' ? '🕐 最新优先' : '🕐 最早优先'}
-          <span className="btn-flare" />
-        </button>
+        </div>
+        {search && (
+          <button type="button" className="liquid-btn ghost sm" onClick={handleClearSearch}>
+            ✕ 清除
+          </button>
+        )}
       </LiquidGlass>
 
       {/* 搜索结果提示 */}
