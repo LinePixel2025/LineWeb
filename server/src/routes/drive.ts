@@ -337,7 +337,7 @@ router.post('/upload', async (req: Request, res: Response) => {
         // 生成存储路径 — 使用原始文件名，冲突时自动追加计数器后缀
         const safeName = originalName.replace(/[<>:"/\\|?*]/g, '_')
         let storagePath = `${parentPath}${safeName}`
-        let finalName = safeName  // 最终的显示用文件名
+        let finalName = originalName  // 显示名保留原始文件名
         // 同级同名检查 + 自动去重
         const existing = await prisma.driveFile.findFirst({
           where: { storagePath },
@@ -347,6 +347,9 @@ router.post('/upload', async (req: Request, res: Response) => {
           const dotIdx = safeName.lastIndexOf('.')
           const base = dotIdx > 0 ? safeName.slice(0, dotIdx) : safeName
           const ext = dotIdx > 0 ? safeName.slice(dotIdx) : ''
+          const origDotIdx = originalName.lastIndexOf('.')
+          const origBase = origDotIdx > 0 ? originalName.slice(0, origDotIdx) : originalName
+          const origExt = origDotIdx > 0 ? originalName.slice(origDotIdx) : ''
           for (let i = 1; i < 100; i++) {
             const candidate = `${parentPath}${base}(${i})${ext}`
             const dup = await prisma.driveFile.findFirst({
@@ -355,7 +358,7 @@ router.post('/upload', async (req: Request, res: Response) => {
             })
             if (!dup) {
               storagePath = candidate
-              finalName = `${base}(${i})${ext}`
+              finalName = `${origBase}(${i})${origExt}`
               break
             }
           }
