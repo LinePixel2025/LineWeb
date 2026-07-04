@@ -1,6 +1,6 @@
 {
-  "serverUrl": "ws://localhost:3001/ws/storage",
-  "token": "lineweb-storage-node-secret-change-in-production",
+  "serverUrl": "wss://lineweb-production.up.railway.app/ws/storage",
+  "token": "b23532be42b6e7425db211cdb82403853096c3bb0356effe5f6f9f9c9f196e54",
   "storagePath": "D:/LineWebDrive",
   "logFile": "storage-node.log",
   "maxReconnectDelay": 60

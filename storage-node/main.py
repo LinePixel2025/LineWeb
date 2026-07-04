@@ -118,11 +118,9 @@ def handle_read_file(cmd: dict) -> dict:
     if not abs_path.exists():
         return {"success": False, "error": "文件不存在"}
 
-    fd = os.open(str(abs_path), os.O_RDONLY)
-    try:
-        raw = os.pread(fd, length, offset)
-    finally:
-        os.close(fd)
+    with open(str(abs_path), 'rb') as f:
+        f.seek(offset)
+        raw = f.read(length)
 
     b64 = base64.b64encode(raw).decode()
     bytes_read = len(raw)

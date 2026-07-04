@@ -93,6 +93,6 @@ export async function updateUserSettings(userId: number, settings: string) {
   return prisma.user.update({
     where: { id: userId },
     data: { settings },
-    select: { id: true, username: true, email: true, role: true, settings: true },
+    select: { id: true, username: true, email: true, role: true, settings: true, canAccessDrive: true },
   })
 }

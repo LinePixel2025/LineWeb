@@ -23,6 +23,37 @@ function buildCommentTree<T extends { id: number; parentId: number | null }>(com
   }))
 }
 
+// 获取某篇文章的全部评论（公开）— 分页扁平结构，供 HarmonyOS 客户端使用
+router.get('/', async (req: Request, res: Response) => {
+  const postIdStr = req.query.postId as string | undefined
+  const postId = postIdStr ? parseId(postIdStr) : null
+  if (postId === null) {
+    res.status(400).json({ error: '缺少有效的 postId 参数' })
+    return
+  }
+
+  const { page, limit, skip } = parsePagination(req.query)
+
+  const [comments, total] = await Promise.all([
+    prisma.comment.findMany({
+      where: { postId },
+      select: {
+        id: true,
+        content: true,
+        createdAt: true,
+        postId: true,
+        author: { select: { username: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    }),
+    prisma.comment.count({ where: { postId } }),
+  ])
+
+  res.json({ comments, total, page, totalPages: Math.ceil(total / limit) })
+})
+
 // 获取某篇文章的全部评论（公开）— 按树状结构返回
 router.get('/post/:postId', async (req: Request, res: Response) => {
   const postId = parseId(req.params.postId)
@@ -86,6 +117,7 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
       id: true,
       content: true,
       createdAt: true,
+      postId: true,
       parentId: true,
       author: { select: { id: true, username: true } },
     },
