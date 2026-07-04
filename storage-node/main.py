@@ -24,101 +24,87 @@ log = logging.getLogger("storage-node")
 ROOT = Path(config["storagePath"])
 ROOT.mkdir(parents=True, exist_ok=True)
 
-# 分块写入缓冲区 — keyed by command id (batchId)
-CHUNK_WRITE_BUFFERS: dict[str, dict] = {}
-
+# 当前活跃的写入临时文件（单线程缓存，同一时间只处理一个上传）
+_active_write_file: dict = {}  # { "path": ..., "fd": ..., "tmp_path": ... }
 
 # === 文件操作函数 ===
 
 def handle_write_file(cmd: dict) -> dict:
-    """开始分块写入，初始化缓冲区。单块文件直接写盘。"""
+    """初始化分块写入 — 打开 .tmp 文件准备接收数据。"""
+    global _active_write_file
     path = cmd.get("path", "")
-    total_chunks = cmd.get("totalChunks", 0)
     total_size = cmd.get("totalSize", 0)
-    cmd_id = cmd.get("id", "")
 
-    # 单块文件 —— 直接写，不进缓冲区
+    # 单块模式（兼容现有上传逻辑）
     data_b64 = cmd.get("data", "")
-    if data_b64 and total_chunks == 1:
+    if data_b64:
         data = base64.b64decode(data_b64)
         abs_path = ROOT / path
         abs_path.parent.mkdir(parents=True, exist_ok=True)
+        # 直接写最终文件，无需 .tmp（单块即已完成）
         abs_path.write_bytes(data)
         log.info(f"Wrote {len(data)} bytes to {path} (single chunk)")
         return {"success": True, "data": {"size": len(data)}}
 
-    # 多块文件 —— 初始化缓冲区
-    log.info(f"Start chunked write: {path} ({total_size} bytes, {total_chunks} chunks)")
-    # 如果缓冲区已有同名 path 的数据（上次残留），清理
-    for k in list(CHUNK_WRITE_BUFFERS.keys()):
-        if CHUNK_WRITE_BUFFERS[k].get("path") == path:
-            del CHUNK_WRITE_BUFFERS[k]
+    # 多块模式 — 打开 .tmp
+    tmp_path = ROOT / (path + ".tmp")
+    tmp_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
 
-    CHUNK_WRITE_BUFFERS[cmd_id] = {
+    # 关闭之前的活跃句柄（异常情况保护）
+    if _active_write_file.get("fd") is not None:
+        try:
+            os.close(_active_write_file["fd"])
+        except OSError:
+            pass
+
+    _active_write_file = {
         "path": path,
-        "chunks": {},
-        "total_chunks": total_chunks,
-        "total_size": total_size,
+        "fd": fd,
+        "tmp_path": tmp_path,
     }
+
+    log.info(f"Start chunked write: {path} ({total_size} bytes)")
     return {"success": True}
 
 
 def handle_write_file_data(cmd: dict) -> dict:
-    """接收一个分块数据并写入缓冲区。最后一块时写盘。"""
-    cmd_id = cmd.get("id", "")
+    """每个分块到达时立即追加写入 .tmp 文件。"""
+    global _active_write_file
     path = cmd.get("path", "")
     data_b64 = cmd.get("data", "")
-    chunk_index = cmd.get("chunkIndex", 0)
-    total_chunks = cmd.get("totalChunks", 0)
     is_last = cmd.get("isLast", False)
 
-    # 用 cmd_id 查找缓冲区
-    buf = CHUNK_WRITE_BUFFERS.get(cmd_id)
-    if not buf:
-        # 尝试用 path 查找（兼容旧版/乱序到达）
-        for k, v in CHUNK_WRITE_BUFFERS.items():
-            if v.get("path") == path:
-                buf = v
-                break
-    if not buf:
-        log.warning(f"write_file_data: 未找到缓冲区 (cmd_id={cmd_id}, path={path}, idx={chunk_index})")
-        # 可能 start 消息丢失，尝试直接写入（单块容错）
+    # 检查活跃文件是否匹配
+    if _active_write_file.get("path") != path or _active_write_file.get("fd") is None:
+        log.warning(f"write_file_data: 未找到活跃写入文件 (path={path})")
+        return {"success": False, "error": "未找到活跃写入文件"}
+
+    fd = _active_write_file["fd"]
+    try:
+        data = base64.b64decode(data_b64)
+        os.write(fd, data)
+        os.fsync(fd)  # 强制落盘，确保每次 chunk 确认时数据已持久化
+
         if is_last:
-            data = base64.b64decode(data_b64)
-            abs_path = ROOT / path
-            abs_path.parent.mkdir(parents=True, exist_ok=True)
-            abs_path.write_bytes(data)
-            log.info(f"Wrote {len(data)} bytes to {path} (fallback)")
-            return {"success": True, "data": {"size": len(data)}}
-        return {"success": False, "error": "未找到写入缓冲区"}
+            os.close(fd)
+            final_path = ROOT / path
+            os.rename(str(_active_write_file["tmp_path"]), str(final_path))
+            _active_write_file = {}
+            log.info(f"Wrote {len(data)} bytes final chunk to {path}, file complete")
+        else:
+            log.info(f"Wrote {len(data)} bytes chunk to {path}.tmp")
 
-    # 如果 total_chunks 比声明的大，更新（边缘情况）
-    if total_chunks > buf.get("total_chunks", 0):
-        buf["total_chunks"] = total_chunks
-
-    buf["chunks"][chunk_index] = data_b64
-
-    # 判断是否收齐
-    if buf["chunks"].get(buf["total_chunks"] - 1) is not None or len(buf["chunks"]) >= buf["total_chunks"]:
-        # 所有分块收齐，拼接并写入磁盘
-        full_b64 = ""
-        for i in range(buf["total_chunks"]):
-            c = buf["chunks"].get(i)
-            if c is None:
-                log.error(f"写入 {path}: 缺少分块 {i}/{buf['total_chunks']}")
-                return {"success": False, "error": f"缺少分块 {i}"}
-            full_b64 += c
-
-        data = base64.b64decode(full_b64)
-        abs_path = ROOT / path
-        abs_path.parent.mkdir(parents=True, exist_ok=True)
-        abs_path.write_bytes(data)
-
-        del CHUNK_WRITE_BUFFERS[cmd_id]
-        log.info(f"Wrote {len(data)} bytes to {path} ({buf['total_chunks']} chunks)")
-        return {"success": True, "data": {"size": len(data)}}
-
-    return {"success": True}
+        return {"success": True}
+    except Exception as e:
+        log.error(f"写入分块失败: {e}")
+        # 异常时尝试关闭句柄
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        _active_write_file = {}
+        return {"success": False, "error": str(e)}
 
 
 def handle_read_file(cmd: dict) -> dict:
