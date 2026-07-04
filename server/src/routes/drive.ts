@@ -334,12 +334,10 @@ router.post('/upload', async (req: Request, res: Response) => {
           parentPath = parent.storagePath + '/'
         }
 
-        // 生成唯一存储路径
-        const ext = originalName.includes('.')
-          ? originalName.slice(originalName.lastIndexOf('.'))
-          : ''
-        const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`
-        const storagePath = `${parentPath}${uniqueName}`
+        // 生成唯一存储路径（保留原始文件名，添加时间戳前缀防冲突）
+        const safeName = originalName.replace(/[<>:"/\\|?*]/g, '_')
+        const uniquePrefix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        const storagePath = `${parentPath}${uniquePrefix}_${safeName}`
 
         // 流式转发到存储节点 — 边收边发，无需全量缓冲
         let totalSize = 0
