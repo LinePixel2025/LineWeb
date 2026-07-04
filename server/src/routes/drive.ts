@@ -267,12 +267,8 @@ router.post('/upload', async (req: Request, res: Response) => {
           }
         }
 
-        const writeResult = await streamWrite(storagePath, streamToAsyncIterable(stream), 0)
-        if (!writeResult.success) {
-          throw new Error(`存储节点写入失败: ${writeResult.error}`)
-        }
-
-        // DB 记录
+        // === 先创建 DB 记录（唯一约束可防止重复），再写入存储节点 ===
+        // 这样即使后续写入失败，也不会出现「节点有文件但 DB 缺失」的不一致状态
         const file = await prisma.driveFile.create({
           data: {
             name: originalName,
@@ -288,7 +284,31 @@ router.post('/upload', async (req: Request, res: Response) => {
           },
         })
 
-        res.status(201).json(file)
+        try {
+          const writeResult = await streamWrite(storagePath, streamToAsyncIterable(stream), 0)
+          if (!writeResult.success) {
+            throw new Error(`存储节点写入失败: ${writeResult.error}`)
+          }
+
+          // 写入节点成功后更新实际大小
+          if (totalSize > 0) {
+            await prisma.driveFile.update({
+              where: { id: file.id },
+              data: { size: BigInt(totalSize) },
+            })
+          }
+
+          res.status(201).json(file)
+        } catch (writeErr) {
+          // 存储节点写入失败 → 回滚：删除 DB 记录 + 清理节点残片
+          await prisma.driveFile.delete({ where: { id: file.id } }).catch(() => {})
+          try {
+            if (isNodeConnected()) {
+              await sendCommand({ type: 'delete_file', path: storagePath })
+            }
+          } catch { /* 节点清理失败则留待后续处理 */ }
+          throw writeErr
+        }
       } catch (err: unknown) {
         fileError = err instanceof Error ? err : new Error(String(err))
         // 耗尽流防止内存泄漏
@@ -393,19 +413,6 @@ router.put('/files/:id', async (req: Request, res: Response) => {
         return
       }
 
-      // 同级同名检查
-      const existing = await prisma.driveFile.findFirst({
-        where: {
-          name: name.trim(),
-          parentId: file.parentId,
-          id: { not: id },
-        },
-      })
-      if (existing) {
-        res.status(409).json({ error: '同级已存在同名文件或文件夹' })
-        return
-      }
-
       // 通知存储节点重命名
       if (isNodeConnected()) {
         try {
@@ -458,9 +465,8 @@ router.put('/files/:id', async (req: Request, res: Response) => {
     // 移动（更改父文件夹）
     if (parentId !== undefined) {
       const newParentId = parentId
-      const oldParentId = file.parentId
 
-      if (newParentId === oldParentId) {
+      if (newParentId === file.parentId) {
         res.json({ message: '无需移动' })
         return
       }
@@ -555,35 +561,39 @@ router.put('/files/:id', async (req: Request, res: Response) => {
   }
 })
 
-/* ---------- 删除文件 ---------- */
+/* ---------- 删除文件（先删 DB 再删节点，防止同步复活） ---------- */
 async function deleteFileRecursive(id: number): Promise<void> {
   const file = await prisma.driveFile.findUnique({ where: { id } })
-
   if (!file) return
 
-  if (file.isFolder) {
-    // 递归删除子文件
-    const children = await prisma.driveFile.findMany({
-      where: { parentId: id },
-    })
-    for (const child of children) {
-      await deleteFileRecursive(child.id)
-    }
-  }
-
-  // 通知存储节点删除
-  if (isNodeConnected()) {
-    try {
-      await sendCommand({
-        type: file.isFolder ? 'delete_file' : 'delete_file',
-        path: file.storagePath,
+  // 先收集所有子文件的 storagePath（递归）
+  const pathsToDelete: string[] = []
+  async function collectPaths(f: NonNullable<typeof file>) {
+    pathsToDelete.push(f.storagePath)
+    if (f.isFolder) {
+      const children = await prisma.driveFile.findMany({
+        where: { parentId: f.id },
       })
-    } catch (wsErr) {
-      console.error(`存储节点删除 ${file.storagePath} 失败:`, wsErr)
+      for (const child of children) {
+        await collectPaths(child)
+      }
     }
   }
+  await collectPaths(file)
 
+  // 先删除 DB 记录（级联 CASCADE 会自动处理子记录）
   await prisma.driveFile.delete({ where: { id } })
+
+  // 再通知存储节点删除实际文件（删除失败不影响 DB 一致性）
+  if (isNodeConnected()) {
+    for (const sp of pathsToDelete) {
+      try {
+        await sendCommand({ type: 'delete_file', path: sp })
+      } catch (wsErr) {
+        console.error(`存储节点删除 ${sp} 失败:`, wsErr)
+      }
+    }
+  }
 }
 
 router.delete('/files/:id', async (req: Request, res: Response) => {

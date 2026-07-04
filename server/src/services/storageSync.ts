@@ -16,7 +16,7 @@ export interface SyncReport {
  * 2. 递归列出节点上的所有路径（文件 + 文件夹）
  * 3. 对比数据库记录
  * 4. 清理孤立的数据库记录（节点上已不存在的文件或文件夹）
- * 5. 为节点上存在但数据库缺失的路径创建记录
+ * 5. 为节点上存在但数据库缺失的路径创建记录（upsert 幂等）
  */
 export async function syncDriveFiles(): Promise<SyncReport> {
   const start = Date.now()
@@ -53,6 +53,7 @@ export async function syncDriveFiles(): Promise<SyncReport> {
     const nodePathSet = new Set(nodePaths)
 
     // 4. 清理孤立记录：DB 有但节点上已经不存在的
+    //    只有在 unique 约束下，每个 storagePath 才保证只有一条记录
     const orphans = dbRecords.filter(f => !nodePathSet.has(f.storagePath))
     for (const orphan of orphans) {
       try {
@@ -104,8 +105,19 @@ export async function syncDriveFiles(): Promise<SyncReport> {
           continue
         }
 
-        await prisma.driveFile.create({
-          data: {
+        // 使用 upsert 保证幂等：即使并发重复调用也不会创建重复记录
+        // 由于 storagePath 已加 @unique 约束，create 本身也会在冲突时抛错
+        // upsert 比 try-create + catch 更优雅
+        await prisma.driveFile.upsert({
+          where: { storagePath: nodePath },
+          update: {
+            // 节点上已有的文件，更新大小和类型（名称不变）
+            size: BigInt(info.size || 0),
+            mimeType: isFolder ? null : guessMimeType(entryName),
+            isFolder,
+            // 不更新 parentId — 可能在同步时已手工修复
+          },
+          create: {
             name: entryName,
             isFolder,
             parentId,
@@ -116,7 +128,7 @@ export async function syncDriveFiles(): Promise<SyncReport> {
           },
         })
         report.missingCreated++
-        console.log(`[Sync] 创建缺失记录: ${entryName} (${nodePath})`)
+        console.log(`[Sync] 创建/更新缺失记录: ${entryName} (${nodePath})`)
       } catch (err: unknown) {
         report.errors.push(`修复缺失记录失败: ${nodePath} — ${err instanceof Error ? err.message : String(err)}`)
       }
@@ -145,7 +157,7 @@ function guessMimeType(name: string): string {
     flac: 'audio/flac', pdf: 'application/pdf',
     doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    ppt: 'application/vnd-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     zip: 'application/zip', rar: 'application/vnd.rar',
     '7z': 'application/x-7z-compressed', tar: 'application/x-tar',
     gz: 'application/gzip', js: 'text/javascript',

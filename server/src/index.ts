@@ -14,6 +14,7 @@ import driveRoutes from './routes/drive.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel } from './services/storageTunnel.js'
 import { syncDriveFiles } from './services/storageSync.js'
+import { deduplicateDriveFiles } from './services/dedupDriveFiles.js'
 
 const app = express()
 const __filename = fileURLToPath(import.meta.url)
@@ -67,8 +68,16 @@ const syncInterval = setInterval(() => {
   syncDriveFiles().catch(err => console.error('[Sync] 定时同步失败:', err))
 }, config.driveSyncIntervalMs)
 
-// 启动后延迟 10 秒执行首次同步（等待节点连接）
-setTimeout(() => {
+// 启动后延迟 10 秒执行去重 + 首次同步（等待节点连接）
+setTimeout(async () => {
+  try {
+    const removed = await deduplicateDriveFiles()
+    if (removed > 0) {
+      console.log(`[Dedup] 已清理 ${removed} 条重复的 DriveFile 记录`)
+    }
+  } catch (err) {
+    console.error('[Dedup] 去重失败:', err)
+  }
   console.log(`[Sync] 首次同步 (间隔: ${config.driveSyncIntervalMs}ms)`)
   syncDriveFiles().catch(err => console.error('[Sync] 首次同步失败:', err))
 }, 10000)

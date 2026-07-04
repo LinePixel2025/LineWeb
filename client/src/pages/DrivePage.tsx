@@ -49,7 +49,14 @@ export default function DrivePage() {
       params.set('page', String(p))
       params.set('limit', '15')
       const res = await api.get<DriveListResponse>(`/drive/files?${params}`)
-      setItems(res.data)
+      // 基于 id 去重（防御性 — 确保不会因后端数据问题导致重复渲染）
+      const seen = new Set<number>()
+      const deduped = res.data.filter(item => {
+        if (seen.has(item.id)) return false
+        seen.add(item.id)
+        return true
+      })
+      setItems(deduped)
       setTotal(res.total)
       setPage(res.page)
       setTotalPages(res.pageCount)

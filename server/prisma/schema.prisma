@@ -80,7 +80,7 @@ model DriveFile {
   children     DriveFile[] @relation("DriveHierarchy")
   size         BigInt      @default(0)             // 文件大小（字节）
   mimeType     String?                             // MIME 类型（文件才有）
-  storagePath  String                              // 存储节点上的相对路径
+  storagePath  String   @unique                     // 存储节点上的相对路径
   uploadedById Int                                 // 上传者 ID
   uploadedBy   User        @relation(fields: [uploadedById], references: [id])
   createdAt    DateTime    @default(now()) @map("created_at")
