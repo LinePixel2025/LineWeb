@@ -43,10 +43,11 @@ app.use('/api', (req, _res, next) => {
   next()
 })
 
-// 全局认证中间件 — 除登录/注册/健康检查外，所有 API 请求必须携带 JWT 或 API Key
-const publicApiPaths = ['/api/auth/login', '/api/auth/register', '/api/health']
+// 全局认证中间件 — 除公开路径外，所有 API 请求必须携带 JWT 或 API Key
+// 注意：req.path 在 /api 中间件中不含 /api 前缀（如 /auth/login 而非 /api/auth/login）
+const publicApiPaths = ['/auth/login', '/auth/register', '/health', '/posts', '/pages/featured', '/pages/slug', '/bing-wallpaper']
 app.use('/api', (req, res, next) => {
-  if (publicApiPaths.includes(req.path)) {
+  if (publicApiPaths.some(p => req.path === p || req.path.startsWith(p + '/'))) {
     next()
     return
   }
