@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useWallpaper } from '../contexts/WallpaperContext'
 import { useNavigate } from 'react-router-dom'
 import LiquidGlass from '../components/glass/LiquidGlass'
+import LiquidButton from '../components/glass/LiquidButton'
 
 const DEFAULT_COLOR = '#0d0d0f'
 
@@ -79,39 +80,32 @@ export default function ProfilePage() {
       {/* Page-level dark backdrop */}
       <div style={{ position: 'fixed', inset: 0, zIndex: -1, background: 'rgba(0,0,0,0.45)', pointerEvents: 'none' }} />
 
-      <h1 style={{ marginBottom: '28px', color: '#fff', fontSize: '1.6rem', fontWeight: 600, letterSpacing: '-0.01em' }}>个人资料</h1>
+      <h1 style={{ marginBottom: '28px', color: 'var(--lg-text-primary)', fontSize: '1.6rem', fontWeight: 600, letterSpacing: '-0.01em' }}>个人资料</h1>
 
       {/* 资料卡片 */}
       <LiquidGlass variant="strong" chromatic={false} style={{ marginBottom: '24px' }} className="profile-card">
         <div style={{ marginBottom: '22px' }}>
           <span className="profile-label">用户名</span>
-          <span style={{ fontSize: '1.1rem', fontWeight: 500, color: '#fff' }}>{user?.username}</span>
+          <span style={{ fontSize: '1.1rem', fontWeight: 500, color: 'var(--lg-text-primary)' }}>{user?.username}</span>
         </div>
         <div style={{ marginBottom: '22px' }}>
           <span className="profile-label">邮箱</span>
-          <span style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.8)' }}>{user?.email}</span>
+          <span style={{ fontSize: '1rem', color: 'var(--lg-text-secondary)' }}>{user?.email}</span>
         </div>
         <div style={{ marginBottom: '28px' }}>
           <span className="profile-label">角色</span>
-          <span style={{ fontSize: '1rem', color: user?.role === 'admin' ? '#40a9ff' : 'rgba(255,255,255,0.8)' }}>
+          <span style={{ fontSize: '1rem', color: user?.role === 'admin' ? 'var(--lg-accent)' : 'var(--lg-text-secondary)' }}>
             {user?.role === 'admin' ? '管理员' : '用户'}
           </span>
         </div>
-        <button onClick={handleLogout}
-          style={{
-            padding: '10px 24px', borderRadius: '9999px', fontWeight: 500, fontSize: '0.85rem',
-            background: 'linear-gradient(135deg, #ff3b30, #ff6b6b)', color: '#fff', border: 'none',
-            cursor: 'pointer', boxShadow: '0 4px 12px rgba(255,59,48,0.3)',
-            fontFamily: 'var(--lg-font)',
-          }}
-        >
+        <LiquidButton variant="danger" size="md" onClick={handleLogout}>
           退出登录
-        </button>
+        </LiquidButton>
       </LiquidGlass>
 
       {/* 网站个性化设置 */}
       <LiquidGlass variant="strong" chromatic={false} className="profile-card">
-        <h2 style={{ margin: '0 0 22px', fontSize: '1.1rem', fontWeight: 600, color: '#fff' }}>网站个性化设置</h2>
+        <h2 style={{ margin: '0 0 22px', fontSize: '1.1rem', fontWeight: 600, color: 'var(--lg-text-primary)' }}>网站个性化设置</h2>
 
         {/* 背景类型切换 */}
         <div style={{ marginBottom: '22px' }}>
@@ -124,9 +118,9 @@ export default function ProfilePage() {
                   flex: 1, padding: '10px 16px', borderRadius: '12px', border: '1px solid',
                   borderColor: bgType === t ? 'var(--lg-accent)' : 'rgba(255,255,255,0.10)',
                   background: bgType === t ? 'rgba(41,151,255,0.10)' : 'rgba(255,255,255,0.04)',
-                  color: bgType === t ? 'var(--lg-accent)' : 'rgba(255,255,255,0.7)',
+                  color: bgType === t ? 'var(--lg-accent)' : 'var(--lg-text-secondary)',
                   cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500,
-                  fontFamily: 'var(--lg-font)', transition: 'all 0.2s',
+                  fontFamily: 'var(--lg-font)', transition: 'all 0.2s ease',
                 }}
               >
                 {t === 'wallpaper' ? '🖼 每日壁纸' : '🎨 纯色背景'}
@@ -171,9 +165,9 @@ export default function ProfilePage() {
                       padding: '8px 16px', borderRadius: '9999px', border: '1px solid',
                       borderColor: wallpaperMode === key ? 'var(--lg-accent)' : 'rgba(255,255,255,0.10)',
                       background: wallpaperMode === key ? 'rgba(41,151,255,0.10)' : 'rgba(255,255,255,0.04)',
-                      color: wallpaperMode === key ? 'var(--lg-accent)' : 'rgba(255,255,255,0.7)',
+                      color: wallpaperMode === key ? 'var(--lg-accent)' : 'var(--lg-text-secondary)',
                       cursor: 'pointer', fontSize: '0.82rem', fontWeight: 500,
-                      fontFamily: 'var(--lg-font)', transition: 'all 0.2s',
+                      fontFamily: 'var(--lg-font)', transition: 'all 0.2s ease',
                     }}
                   >{icon} {label}</button>
                 ))}
@@ -204,7 +198,7 @@ export default function ProfilePage() {
                             padding: '6px', borderRadius: '10px',
                             border: sel ? '2px solid var(--lg-accent)' : '1px solid rgba(255,255,255,0.08)',
                             background: sel ? 'rgba(41,151,255,0.08)' : 'rgba(255,255,255,0.02)',
-                            cursor: 'pointer', transition: 'all 0.2s', fontFamily: 'var(--lg-font)',
+                            cursor: 'pointer', transition: 'all 0.2s ease', fontFamily: 'var(--lg-font)',
                           }}
                         >
                           <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: '6px', background: item.image_url_4k ? `url(${item.image_url_4k}) center/cover no-repeat` : 'rgba(255,255,255,0.04)' }} />
@@ -237,8 +231,8 @@ export default function ProfilePage() {
               fontFamily: 'var(--lg-font)',
             }}
           >{saving ? '保存中…' : '保存设置'}</button>
-          {saved && <span style={{ color: '#4cd964', fontSize: '0.85rem', fontWeight: 500 }}>✓ 已保存</span>}
-          {error && <span style={{ color: '#ff3b30', fontSize: '0.85rem' }}>{error}</span>}
+          {saved && <span style={{ color: 'var(--lg-success)', fontSize: '0.85rem', fontWeight: 500 }}>✓ 已保存</span>}
+          {error && <span style={{ color: 'var(--lg-danger)', fontSize: '0.85rem' }}>{error}</span>}
         </div>
       </LiquidGlass>
     </div>
