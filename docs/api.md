@@ -29,10 +29,12 @@ LineWeb API 提供个人网站/CMS 的全部功能，包括 **认证、文章、
 |---|---|
 | 基础 URL | `http://localhost:3001/api`（开发）/ 部署域名（生产） |
 | 数据格式 | JSON（请求 `Content-Type: application/json`，响应 `application/json`） |
-| 认证方式 | JWT Bearer Token（登录后获取，有效期 7 天） |
+| 认证方式 | JWT Bearer Token 或 API Key（`X-API-Key` 请求头） |
 | 分页 | 统一 `page` + `limit` 参数，响应含 `total` / `page` / `pageCount` |
 
-**API 自描述端点**：访问 `GET /api` 可直接获取所有可用路由的完整清单。
+> **安全策略**：除 `POST /api/auth/login`（登录）、`POST /api/auth/register`（注册）和 `GET /api/health`（健康检查）外，**所有 API 端点均需身份认证**。每次请求必须携带有效的 JWT Token 或 API Key，否则返回 `401`。
+
+**API 自描述端点**：访问 `GET /api`（需携带认证凭证）可获取所有可用路由的完整清单。
 
 ---
 
@@ -53,8 +55,9 @@ curl -X POST http://localhost:3001/api/auth/login \
 curl http://localhost:3001/api/auth/me \
   -H "Authorization: Bearer YOUR_TOKEN"
 
-# 4. 获取公开文章列表
-curl http://localhost:3001/api/posts?page=1&limit=10
+# 4. 获取文章列表（需认证）
+curl http://localhost:3001/api/posts?page=1&limit=10 \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ### 2.2 使用 JavaScript/TypeScript（浏览器环境）
@@ -181,6 +184,10 @@ Content-Type: application/json
 > ```
 > Authorization: Bearer <token>
 > ```
+> 或
+> ```
+> X-API-Key: <api_key>
+> ```
 
 ### 3.3 获取当前用户
 
@@ -234,9 +241,9 @@ settings 支持的格式（示例）：
 
 ---
 
-## 4. 公共 API
+## 4. 公用 API
 
-### 4.1 健康检查
+### 4.1 健康检查（无需认证）
 
 ```
 GET /api/health
@@ -251,10 +258,11 @@ GET /api/health
 }
 ```
 
-### 4.2 API 端点列表
+### 4.2 API 端点列表（需认证）
 
 ```
 GET /api
+Authorization: Bearer <token> 或 X-API-Key: <key>
 ```
 
 返回完整 API 路由清单，包含每个端点的 `method`、`path`、`auth` 级别和 `description`。
@@ -263,12 +271,13 @@ GET /api
 
 ## 5. 文章
 
-文章（Post）模块提供博客内容管理，包含公开接口和管理接口。
+文章（Post）模块提供博客内容管理，包含需认证的读取接口和管理接口。
 
-### 5.1 获取公开文章列表（分页）
+### 5.1 获取文章列表（分页）
 
 ```
 GET /api/posts?page=1&limit=10
+Authorization: Bearer <token> 或 X-API-Key: <key>
 ```
 
 **查询参数：**
@@ -299,10 +308,11 @@ GET /api/posts?page=1&limit=10
 }
 ```
 
-### 5.2 按 slug 获取公开文章
+### 5.2 按 slug 获取文章
 
 ```
 GET /api/posts/:slug
+Authorization: Bearer <token> 或 X-API-Key: <key>
 ```
 
 **路径参数：**
@@ -417,6 +427,7 @@ Authorization: Bearer <admin_token>
 
 ```
 GET /api/comments/post/:postId
+Authorization: Bearer <token> 或 X-API-Key: <key>
 ```
 
 **路径参数：**
@@ -501,10 +512,11 @@ Content-Type: application/json
 
 Page 模块提供动态页面管理（基于 Schema 的控件树）。
 
-### 7.1 获取 Featured 页面列表（公开）
+### 7.1 获取 Featured 页面列表
 
 ```
 GET /api/pages/featured
+Authorization: Bearer <token> 或 X-API-Key: <key>
 ```
 
 返回所有标记为 featured 的已发布页面：
@@ -521,10 +533,11 @@ GET /api/pages/featured
 ]
 ```
 
-### 7.2 按 slug 获取页面（公开）
+### 7.2 按 slug 获取页面
 
 ```
 GET /api/pages/slug/:slug
+Authorization: Bearer <token> 或 X-API-Key: <key>
 ```
 
 返回已发布页面的完整内容（含 schema）：
@@ -568,6 +581,7 @@ GET /api/pages/slug/:slug
 
 ```
 GET /api/bing-wallpaper?mode=latest&date=2026-07-01&history=true
+Authorization: Bearer <token> 或 X-API-Key: <key>
 ```
 
 **查询参数（全部可选）：**
@@ -1045,7 +1059,7 @@ Authorization: Bearer <admin_token>
 
 | 值 | 说明 | 如何访问 |
 |---|---|---|
-| 无（公开） | 无需认证 | 直接请求 |
+| `public` | 无需认证 | 直接请求（仅限 `login`、`register`、`health`） |
 | `auth: true` | 需登录 | 请求头加 `Authorization: Bearer <token>` 或 `X-API-Key: <key>` |
 | `auth: admin` | 需管理员权限 | 同上，且用户 role 必须为 `admin` |
 | `auth: drive` | 需登录 + 网盘权限 | 同上，且用户 `canAccessDrive` 必须为 `true` |
@@ -1364,11 +1378,13 @@ curl -s -X POST http://localhost:3001/api/posts \
     "published": true
   }' | python3 -m json.tool
 
-# === 4. 查看文章 ===
-curl -s http://localhost:3001/api/posts/api-post | python3 -m json.tool
+# === 4. 查看文章（需认证） ===
+curl -s http://localhost:3001/api/posts/api-post \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 
-# === 5. 获取今日壁纸 ===
-curl -s http://localhost:3001/api/bing-wallpaper | python3 -m json.tool
+# === 5. 获取今日壁纸（需认证） ===
+curl -s http://localhost:3001/api/bing-wallpaper \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 
 # === 6. 获取文件列表 ===
 curl -s "http://localhost:3001/api/drive/files?page=1&limit=10" \
@@ -1383,17 +1399,19 @@ curl -s -X DELETE http://localhost:3001/api/posts/1 \
 
 ## 附录：端点快速索引
 
-| 模块 | 端点数 | 公开 | 需登录 | 需管理员 | 需网盘权限 |
+| 模块 | 端点数 | 公开 | 需认证 | 需管理员 | 需网盘权限 |
 |---|---|---|---|---|---|
-| 系统 | 2 | 2 | 0 | 0 | 0 |
+| 系统 | 2 | 1 | 1 | 0 | 0 |
 | 认证 | 4 | 2 | 2 | 0 | 0 |
-| 文章 | 7 | 2 | 0 | 5 | 0 |
-| 评论 | 7 | 2 | 1 | 4 | 0 |
-| 页面 | 7 | 2 | 0 | 5 | 0 |
-| 壁纸 | 2 | 2 | 0 | 0 | 0 |
+| 文章 | 7 | 0 | 2 | 5 | 0 |
+| 评论 | 7 | 0 | 3 | 4 | 0 |
+| 页面 | 7 | 0 | 2 | 5 | 0 |
+| 壁纸 | 2 | 0 | 2 | 0 | 0 |
 | 网盘 | 11 | 0 | 0 | 0 | 11 |
 | 用户 | 5 | 0 | 0 | 5 | 0 |
 | 设备 | 1 | 0 | 0 | 1 | 0 |
 | 统计 | 1 | 0 | 0 | 1 | 0 |
 | API 密钥 | 5 | 0 | 0 | 5 | 0 |
-| **总计** | **52** | **12** | **3** | **26** | **11** |
+| **总计** | **52** | **3** | **10** | **26** | **11** |
+
+> **认证说明**：「需认证」= 登录或 API Key 任一即可；「需管理员」= 需管理员权限；「需网盘权限」= 需登录 + canAccessDrive。只有 health / login / register 三个端点为公开（无需任何凭证）。

@@ -14,6 +14,7 @@ import driveRoutes from './routes/drive.js'
 import deviceRoutes from './routes/devices.js'
 import statsRoutes from './routes/stats.js'
 import apiKeyRoutes from './routes/apiKeys.js'
+import { authenticate } from './middleware/auth.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel } from './services/storageTunnel.js'
 import { syncDriveFiles } from './services/storageSync.js'
@@ -42,6 +43,16 @@ app.use('/api', (req, _res, next) => {
   next()
 })
 
+// 全局认证中间件 — 除登录/注册/健康检查外，所有 API 请求必须携带 JWT 或 API Key
+const publicApiPaths = ['/api/auth/login', '/api/auth/register', '/api/health']
+app.use('/api', (req, res, next) => {
+  if (publicApiPaths.includes(req.path)) {
+    next()
+    return
+  }
+  authenticate(req, res, next)
+})
+
 // Routes
 app.use('/api/auth', authRoutes)
 app.use('/api/posts', postRoutes)
@@ -61,14 +72,14 @@ app.get('/api', (_req, res) => {
     version: '1.0.0',
     baseUrl: '/api',
     auth: {
-      login: { method: 'POST', path: '/api/auth/login', auth: false, description: '用户登录' },
-      register: { method: 'POST', path: '/api/auth/register', auth: false, description: '用户注册' },
+      login: { method: 'POST', path: '/api/auth/login', auth: 'public', description: '用户登录（唯一公开端点之一）' },
+      register: { method: 'POST', path: '/api/auth/register', auth: 'public', description: '用户注册（唯一公开端点之一）' },
       me: { method: 'GET', path: '/api/auth/me', auth: true, description: '获取当前用户信息' },
       settings: { method: 'PUT', path: '/api/auth/settings', auth: true, description: '更新用户设置' },
     },
     posts: {
-      list: { method: 'GET', path: '/api/posts?page=&limit=', auth: false, description: '公开文章列表（分页）' },
-      detail: { method: 'GET', path: '/api/posts/:slug', auth: false, description: '按 slug 获取公开文章' },
+      list: { method: 'GET', path: '/api/posts?page=&limit=', auth: true, description: '文章列表（需认证）' },
+      detail: { method: 'GET', path: '/api/posts/:slug', auth: true, description: '按 slug 获取文章（需认证）' },
       adminAll: { method: 'GET', path: '/api/posts/admin/all?page=&limit=', auth: 'admin', description: '管理：所有文章列表' },
       adminDetail: { method: 'GET', path: '/api/posts/admin/:id', auth: 'admin', description: '管理：按 ID 获取文章' },
       create: { method: 'POST', path: '/api/posts', auth: 'admin', description: '创建文章' },
@@ -76,8 +87,8 @@ app.get('/api', (_req, res) => {
       delete: { method: 'DELETE', path: '/api/posts/:id', auth: 'admin', description: '删除文章' },
     },
     comments: {
-      listByPost: { method: 'GET', path: '/api/comments?postId=', auth: false, description: '按文章获取评论列表（扁平分页）' },
-      treeByPost: { method: 'GET', path: '/api/comments/post/:postId', auth: false, description: '按文章获取评论（树状结构）' },
+      listByPost: { method: 'GET', path: '/api/comments?postId=', auth: true, description: '按文章获取评论列表（需认证）' },
+      treeByPost: { method: 'GET', path: '/api/comments/post/:postId', auth: true, description: '按文章获取评论树（需认证）' },
       create: { method: 'POST', path: '/api/comments', auth: true, description: '发表评论' },
       adminPosts: { method: 'GET', path: '/api/comments/admin/posts', auth: 'admin', description: '管理：有评论的文章列表' },
       adminPostDetail: { method: 'GET', path: '/api/comments/admin/post/:postId', auth: 'admin', description: '管理：文章全部评论' },
@@ -85,8 +96,8 @@ app.get('/api', (_req, res) => {
       delete: { method: 'DELETE', path: '/api/comments/:id', auth: 'admin', description: '删除评论' },
     },
     pages: {
-      featured: { method: 'GET', path: '/api/pages/featured', auth: false, description: '获取所有 featured 页面' },
-      bySlug: { method: 'GET', path: '/api/pages/slug/:slug', auth: false, description: '按 slug 获取公开页面' },
+      featured: { method: 'GET', path: '/api/pages/featured', auth: true, description: '获取所有 featured 页面（需认证）' },
+      bySlug: { method: 'GET', path: '/api/pages/slug/:slug', auth: true, description: '按 slug 获取页面（需认证）' },
       list: { method: 'GET', path: '/api/pages?page=&limit=', auth: 'admin', description: '管理：页面列表（分页）' },
       create: { method: 'POST', path: '/api/pages', auth: 'admin', description: '创建页面' },
       detail: { method: 'GET', path: '/api/pages/:id', auth: 'admin', description: '管理：按 ID 获取页面' },
@@ -94,8 +105,8 @@ app.get('/api', (_req, res) => {
       delete: { method: 'DELETE', path: '/api/pages/:id', auth: 'admin', description: '删除页面' },
     },
     bingWallpaper: {
-      get: { method: 'GET', path: '/api/bing-wallpaper?mode=&date=&history=', auth: false, description: '获取 Bing 每日壁纸' },
-      proxy: { method: 'GET', path: '/api/bing-wallpaper/proxy?url=', auth: false, description: '代理壁纸图片（解决 CORS）' },
+      get: { method: 'GET', path: '/api/bing-wallpaper?mode=&date=&history=', auth: true, description: '获取 Bing 每日壁纸（需认证）' },
+      proxy: { method: 'GET', path: '/api/bing-wallpaper/proxy?url=', auth: true, description: '代理壁纸图片（需认证）' },
     },
     drive: {
       list: { method: 'GET', path: '/api/drive/files?parentId=&page=&limit=', auth: 'drive', description: '文件列表（分页，文件夹优先）' },
@@ -131,9 +142,9 @@ app.get('/api', (_req, res) => {
       delete: { method: 'DELETE', path: '/api/api-keys/:id', auth: 'admin', description: '删除 API Key' },
     },
     system: {
-      health: { method: 'GET', path: '/api/health', auth: false, description: '服务健康检查' },
-      apiIndex: { method: 'GET', path: '/api', auth: false, description: 'API 端点列表（当前页面）' },
-      authMethods: '支持 JWT (Authorization: Bearer <token>) 和 API Key (X-API-Key: <key>) 两种认证方式',
+      health: { method: 'GET', path: '/api/health', auth: 'public', description: '服务健康检查（唯一公开端点之一）' },
+      apiIndex: { method: 'GET', path: '/api', auth: true, description: 'API 端点列表（需认证）' },
+      authMethods: '支持 JWT (Authorization: Bearer <token>) 和 API Key (X-API-Key: <key>) 两种认证方式。所有端点（除 login/register/health 外）均需认证。',
     },
   })
 })
