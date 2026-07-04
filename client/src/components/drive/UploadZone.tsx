@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, memo } from 'react'
+import LiquidGlass from '../glass/LiquidGlass'
 import LiquidButton from '../glass/LiquidButton'
 import { formatSpeed, formatMB, formatETA } from '../../lib/format'
 import type { TransferProgress } from '../../types/drive'
@@ -179,60 +180,66 @@ const UploadZone = memo(function UploadZone({
       </div>
 
       {!uploading && failedFiles.length === 0 && (
-        <div
-          className={`upload-zone-drop ${dragOver ? 'upload-zone-drop--drag' : ''}`}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <span className="upload-zone-drop-icon">📂</span>
-          <span className="upload-zone-drop-text">拖拽文件到此处或点击选择</span>
-          <span className="upload-zone-drop-hint">支持多文件上传，单个文件最大 10GB</span>
-        </div>
+        <LiquidGlass variant="blur" chromatic={false} className="upload-zone-drop-glass">
+          <div
+            className={`upload-zone-drop ${dragOver ? 'upload-zone-drop--drag' : ''}`}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <span className="upload-zone-drop-icon">📂</span>
+            <span className="upload-zone-drop-text">拖拽文件到此处或点击选择</span>
+            <span className="upload-zone-drop-hint">支持多文件上传，单个文件最大 10GB</span>
+          </div>
+        </LiquidGlass>
       )}
 
       {uploading && progress && (
-        <div className="upload-zone-progress">
-          <div className="upload-zone-progress-info">
-            <span>📄 {progress.fileName}</span>
-            <span className="upload-zone-progress-count">
-              {progress.fileIndex}/{progress.totalFiles}
-            </span>
+        <LiquidGlass variant="blur" chromatic={false} style={{ padding: '16px' }}>
+          <div className="upload-zone-progress">
+            <div className="upload-zone-progress-info">
+              <span>📄 {progress.fileName}</span>
+              <span className="upload-zone-progress-count">
+                {progress.fileIndex}/{progress.totalFiles}
+              </span>
+            </div>
+            <div className="upload-zone-progress-stats">
+              <span>⬆ {formatSpeed(progress.speed)}</span>
+              <span>⏱ {formatETA(progress.eta)}</span>
+              <span>{formatMB(progress.loaded)} / {formatMB(progress.total)}</span>
+            </div>
+            <div className="upload-zone-progress-bar">
+              <div
+                className="upload-zone-progress-fill"
+                style={{ width: `${(progress.loaded / progress.total) * 100}%` }}
+              />
+            </div>
           </div>
-          <div className="upload-zone-progress-stats">
-            <span>⬆ {formatSpeed(progress.speed)}</span>
-            <span>⏱ {formatETA(progress.eta)}</span>
-            <span>{formatMB(progress.loaded)} / {formatMB(progress.total)}</span>
-          </div>
-          <div className="upload-zone-progress-bar">
-            <div
-              className="upload-zone-progress-fill"
-              style={{ width: `${(progress.loaded / progress.total) * 100}%` }}
-            />
-          </div>
-        </div>
+        </LiquidGlass>
       )}
 
       {failedFiles.length > 0 && (
-        <div className="upload-zone-failed">
-          <p>⚠️ 以下文件上传失败：</p>
-          <ul>
-            {failedFiles.map((f, i) => (
-              <li key={i}>{f}</li>
-            ))}
-          </ul>
-          <LiquidButton
-            size="sm"
-            variant="glass"
-            onClick={() => {
-              setFailedFiles([])
-              onUploaded()
-            }}
-          >
-            关闭
-          </LiquidButton>
-        </div>
+        <LiquidGlass variant="blur" chromatic={false} className="upload-zone-failed-glass">
+          <div className="upload-zone-failed">
+            <p>⚠️ 以下文件上传失败：</p>
+            <ul>
+              {failedFiles.map((f, i) => (
+                <li key={i}>{f}</li>
+              ))}
+            </ul>
+            <LiquidButton
+              size="sm"
+              variant="glass"
+              onClick={() => {
+                setFailedFiles([])
+                onUploaded()
+              }}
+            >
+              关闭
+            </LiquidButton>
+          </div>
+        </LiquidGlass>
       )}
 
       <input

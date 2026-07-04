@@ -3786,7 +3786,9 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
 
 /* Toolbar */
 .drive-toolbar {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+  padding: 20px 24px;
+  border-radius: var(--lg-radius-md) !important;
 }
 .drive-toolbar-top {
   display: flex;
@@ -3896,9 +3898,9 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
 
 /* Table view */
 .drive-table-wrap {
-  margin: 0 -24px;
-  padding: 0 24px;
   overflow-x: auto;
+  border-radius: var(--lg-radius-md) !important;
+  padding: 4px 0;
 }
 .drive-table {
   width: 100%;
@@ -4105,7 +4107,7 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
 .upload-zone-drop {
   border: 2px dashed var(--lg-glass-border);
   border-radius: var(--lg-radius-md);
-  padding: 36px 24px;
+  padding: 28px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -4113,6 +4115,7 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   cursor: pointer;
   transition: all 0.2s;
   color: var(--lg-text-tertiary);
+  background: transparent;
 }
 .upload-zone-drop:hover {
   border-color: var(--lg-accent);
@@ -4136,7 +4139,6 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 16px;
 }
 .upload-zone-progress-text {
   font-size: 0.85rem;
@@ -4153,6 +4155,13 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   background: var(--lg-accent);
   border-radius: 9999px;
   transition: width 0.3s;
+}
+.upload-zone-drop-glass {
+  border-radius: var(--lg-radius-md) !important;
+}
+.upload-zone-failed-glass {
+  border-radius: var(--lg-radius-md) !important;
+  padding: 12px;
 }
 .upload-zone-hidden-input {
   display: none;
@@ -4179,10 +4188,7 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   color: var(--lg-text-secondary);
 }
 .upload-zone-failed {
-  padding: 16px;
-  border: 1px solid var(--lg-danger);
-  border-radius: var(--lg-radius-md);
-  background: rgba(255, 60, 60, 0.06);
+  color: var(--lg-text-secondary);
 }
 .upload-zone-failed ul {
   margin: 8px 0;

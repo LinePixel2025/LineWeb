@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import LiquidGlass from '../glass/LiquidGlass'
 import LiquidButton from '../glass/LiquidButton'
 import type { DriveItem } from '../../types/drive'
 import { getFileIcon } from '../../types/drive'
@@ -90,7 +91,7 @@ const DriveListView = memo(function DriveListView({
   onDelete,
 }: DriveListViewProps) {
   return (
-    <div className="drive-table-wrap">
+    <LiquidGlass variant="blur" chromatic={false} className="drive-table-wrap">
       <table className="drive-table">
         <thead>
           <tr>
@@ -115,8 +116,7 @@ const DriveListView = memo(function DriveListView({
           ))}
         </tbody>
       </table>
-      {/* 总数已移到 DrivePage 中 */}
-    </div>
+    </LiquidGlass>
   )
 })
 

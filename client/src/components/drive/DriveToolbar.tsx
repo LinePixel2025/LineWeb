@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import LiquidGlass from '../glass/LiquidGlass'
 import LiquidButton from '../glass/LiquidButton'
 import type { Breadcrumb } from '../../types/drive'
 
@@ -32,7 +33,7 @@ const DriveToolbar = memo(function DriveToolbar({
   syncing,
 }: DriveToolbarProps) {
   return (
-    <div className="drive-toolbar">
+    <LiquidGlass variant="blur" chromatic={false} className="drive-toolbar">
       {/* Row 1: Title + Action buttons */}
       <div className="drive-toolbar-top">
         <h1 className="drive-toolbar-title">☁️ 网盘</h1>
@@ -96,7 +97,7 @@ const DriveToolbar = memo(function DriveToolbar({
           </span>
         ))}
       </nav>
-    </div>
+    </LiquidGlass>
   )
 })
 
