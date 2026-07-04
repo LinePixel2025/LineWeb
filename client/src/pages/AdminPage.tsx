@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import LiquidButton from '../components/glass/LiquidButton'
 import LiquidGlass from '../components/glass/LiquidGlass'
 import api from '../lib/api'
+import Pagination from '../components/Pagination'
 
 interface PostSummary {
   id: number
@@ -98,33 +99,11 @@ export default function AdminPage() {
       )}
 
       {data && data.totalPages > 1 && (
-        <div className="admin-pagination">
-          {(() => {
-            const total = data.totalPages
-            const current = page
-            const pages: (number | 0)[] = []
-            const start = Math.max(1, current - 2)
-            const end = Math.min(total, current + 2)
-            if (start > 1) pages.push(1)
-            if (start > 2) pages.push(0)
-            for (let i = start; i <= end; i++) pages.push(i)
-            if (end < total - 1) pages.push(0)
-            if (end < total) pages.push(total)
-            return pages.map((p, i) =>
-              p === 0 ? (
-                <span key={`ellipsis-${i}`} className="admin-ellipsis">...</span>
-              ) : (
-                <button
-                  key={p}
-                  onClick={() => setPage(p)}
-                  className={`admin-page-btn ${p === page ? 'admin-page-btn--active' : ''}`}
-                >
-                  {p}
-                </button>
-              )
-            )
-          })()}
-        </div>
+        <Pagination
+          page={page}
+          totalPages={data.totalPages}
+          onPageChange={setPage}
+        />
       )}
     </div>
   )

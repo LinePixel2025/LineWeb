@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../lib/api'
 import LiquidGlass from '../components/glass/LiquidGlass'
+import Pagination from '../components/Pagination'
 
 interface PostSummary {
   id: number; title: string; summary: string | null
@@ -55,36 +56,11 @@ export default function PostsPage() {
           </div>
 
           {data && data.totalPages > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '28px', flexWrap: 'wrap' }}>
-              {(() => {
-                // Show limited pages on mobile
-                const total = data.totalPages
-                const current = page
-                const pages: number[] = []
-                const start = Math.max(1, current - 2)
-                const end = Math.min(total, current + 2)
-                if (start > 1) pages.push(1)
-                if (start > 2) pages.push(0) // ellipsis marker
-                for (let i = start; i <= end; i++) pages.push(i)
-                if (end < total - 1) pages.push(0)
-                if (end < total) pages.push(total)
-                return pages.map((p, i) =>
-                  p === 0 ? (
-                    <span key={`ellipsis-${i}`} style={{ color: 'var(--lg-text-tertiary)', alignSelf: 'center' }}>...</span>
-                  ) : (
-                    <button key={p} onClick={() => setPage(p)}
-                      className={`pagination-btn${p === page ? ' pagination-btn--active' : ''}`}
-                      style={{
-                        background: p === page ? 'var(--lg-accent)' : 'var(--lg-glass-bg)',
-                        color: p === page ? 'white' : 'var(--lg-text-primary)',
-                      }}
-                    >
-                      {p}
-                    </button>
-                  )
-                )
-              })()}
-            </div>
+            <Pagination
+              page={page}
+              totalPages={data.totalPages}
+              onPageChange={setPage}
+            />
           )}
         </>
       )}
