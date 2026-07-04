@@ -26,6 +26,7 @@ app.use(cors({
     : config.corsOrigin,
   credentials: true,
 }))
+app.set('trust proxy', 1)  // 信任反向代理（Railway），用于 rate-limiter 正确获取客户端 IP
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ limit: '10mb', extended: true }))
 
