@@ -155,13 +155,12 @@ export async function streamWrite(
   // 最后一块 — 等待确认
   if (!lastChunk) throw new Error('空流')
 
-  // 如果只有一个 chunk，直接用 sendCommand 发送（单块模式）
+  // 如果只有一个 chunk，用 write_file_data 追加到 init 已打开的 .tmp 文件
   if (chunkIndex === 1) {
     return sendCommand({
       id: batchId,
-      type: 'write_file' as const,
+      type: 'write_file_data' as const,
       path,
-      totalSize: totalSize ?? lastChunk.length,
       data: lastChunk.toString('base64'),
       isLast: true,
     })

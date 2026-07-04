@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, memo } from 'react'
 import LiquidButton from '../glass/LiquidButton'
-import { formatSpeed, formatMB } from '../../lib/format'
+import { formatSpeed, formatMB, formatETA } from '../../lib/format'
 import type { TransferProgress } from '../../types/drive'
 
 export interface UploadZoneProps {
