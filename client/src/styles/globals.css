@@ -1775,40 +1775,74 @@ select.lg-input optgroup {
   .admin-table td { display: block; }
 
   .admin-row {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
     padding: 14px;
     border-bottom: 1px solid var(--lg-glass-border);
   }
 
+  /* 隐藏 data-label 伪元素 — 卡片布局不需要标签 */
+  .admin-cell::before { display: none !important; }
+
   .admin-cell {
-    padding: 4px 0;
+    padding: 0;
     border: none;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
   }
 
+  /* 标题行：标题居左，状态徽章居右 */
   .admin-cell--title {
     max-width: unset;
     white-space: normal;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
   }
 
-  .admin-cell::before {
-    content: attr(data-label);
-    font-weight: 500;
-    color: var(--lg-text-tertiary);
+  .admin-post-title {
+    font-size: 1rem;
+    font-weight: 600;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .admin-post-date {
+    margin-top: 0;
     font-size: 0.78rem;
-    flex-shrink: 0;
-    margin-right: 8px;
   }
 
+  /* 状态徽章：在标题行右侧 */
+  .admin-cell--status {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+  }
+
+  .admin-row {
+    position: relative;
+  }
+
+  /* 操作按钮：横向紧凑排列 */
   .admin-actions {
-    justify-content: flex-start;
-    margin-top: 8px;
+    flex-direction: row;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+
+  .admin-actions .liquid-btn {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 0;
+    font-size: 0.82rem;
+    justify-content: center;
   }
 
   .admin-cell--actions {
-    justify-content: flex-start;
+    justify-content: stretch;
   }
 }
 
@@ -2100,8 +2134,8 @@ body.admin-menu-open {
   transform: scale(0.92);
 }
 
-/* Responsive */
-@media (max-width: 640px) {
+/* Responsive — 581-640px: table still visible, stack actions vertically */
+@media (min-width: 581px) and (max-width: 640px) {
   .admin-table-wrap { overflow-x: auto; }
 
   .admin-actions {
