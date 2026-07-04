@@ -21,6 +21,7 @@ import CommentAdminPage from './pages/admin/CommentAdminPage'
 import PageList from './pages/admin/PageList'
 import PageEditor from './pages/admin/PageEditor'
 import UserAdminPage from './pages/admin/UserAdminPage'
+import ApiAdminPage from './pages/admin/ApiAdminPage'
 import DynamicPage from './pages/DynamicPage'
 import DrivePage from './pages/DrivePage'
 
@@ -60,6 +61,7 @@ export default function App() {
                   <Route path="/admin/pages/new" element={<PageEditor />} />
                   <Route path="/admin/pages/:id/edit" element={<PageEditor />} />
                   <Route path="/admin/users" element={<UserAdminPage />} />
+                  <Route path="/admin/api" element={<ApiAdminPage />} />
                 </Route>
               </Routes>
 

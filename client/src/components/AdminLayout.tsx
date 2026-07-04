@@ -9,6 +9,7 @@ const navItems = [
   { path: '/admin/comments', label: '评论管理', icon: '📬' },
   { path: '/admin/pages', label: '页面管理', icon: '📄' },
   { path: '/admin/users', label: '用户管理', icon: '👤' },
+  { path: '/admin/api', label: 'API 管理', icon: '🔌' },
 ]
 
 const SIDEBAR_COLLAPSED_KEY = 'lineweb_admin_sidebar_collapsed'

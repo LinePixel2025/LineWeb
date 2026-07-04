@@ -11,10 +11,12 @@ import pageRoutes from './routes/pages.js'
 import commentRoutes from './routes/comments.js'
 import userRoutes from './routes/users.js'
 import driveRoutes from './routes/drive.js'
+import deviceRoutes from './routes/devices.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel } from './services/storageTunnel.js'
 import { syncDriveFiles } from './services/storageSync.js'
 import { deduplicateDriveFiles } from './services/dedupDriveFiles.js'
+import { recordRequest, startTracking } from './services/deviceTracker.js'
 
 const app = express()
 const __filename = fileURLToPath(import.meta.url)
@@ -30,6 +32,12 @@ app.set('trust proxy', 1)  // 信任反向代理（Railway），用于 rate-limi
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ limit: '10mb', extended: true }))
 
+// 设备追踪中间件 — 记录所有 API 请求来源
+app.use('/api', (req, _res, next) => {
+  recordRequest(req)
+  next()
+})
+
 // Routes
 app.use('/api/auth', authRoutes)
 app.use('/api/posts', postRoutes)
@@ -38,6 +46,7 @@ app.use('/api/pages', pageRoutes)
 app.use('/api/comments', commentRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/drive', driveRoutes)
+app.use('/api/devices', deviceRoutes)
 
 // Global error handler
 app.use(errorHandler)
@@ -86,6 +95,8 @@ setTimeout(async () => {
 // 进程退出时清理定时器
 process.on('SIGTERM', () => clearInterval(syncInterval))
 process.on('SIGINT', () => clearInterval(syncInterval))
+
+startTracking()
 
 const port = config.port
 server.listen(port, () => {
