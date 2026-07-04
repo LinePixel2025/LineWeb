@@ -334,10 +334,27 @@ router.post('/upload', async (req: Request, res: Response) => {
           parentPath = parent.storagePath + '/'
         }
 
-        // 生成唯一存储路径（保留原始文件名，添加时间戳前缀防冲突）
+        // 生成存储路径 — 使用原始文件名，冲突时自动追加计数器后缀
         const safeName = originalName.replace(/[<>:"/\\|?*]/g, '_')
-        const uniquePrefix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-        const storagePath = `${parentPath}${uniquePrefix}_${safeName}`
+        let storagePath = `${parentPath}${safeName}`
+        // 同级同名检查 + 自动去重
+        const existing = await prisma.driveFile.findFirst({
+          where: { storagePath },
+          select: { id: true },
+        })
+        if (existing) {
+          const dotIdx = safeName.lastIndexOf('.')
+          const base = dotIdx > 0 ? safeName.slice(0, dotIdx) : safeName
+          const ext = dotIdx > 0 ? safeName.slice(dotIdx) : ''
+          for (let i = 1; i < 100; i++) {
+            const candidate = `${parentPath}${base}(${i})${ext}`
+            const dup = await prisma.driveFile.findFirst({
+              where: { storagePath: candidate },
+              select: { id: true },
+            })
+            if (!dup) { storagePath = candidate; break }
+          }
+        }
 
         // 流式转发到存储节点 — 边收边发，无需全量缓冲
         let totalSize = 0
