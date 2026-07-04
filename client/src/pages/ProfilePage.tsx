@@ -110,7 +110,7 @@ export default function ProfilePage() {
         {/* 背景类型切换 */}
         <div style={{ marginBottom: '22px' }}>
           <span className="profile-label">背景样式</span>
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             {(['wallpaper', 'solid'] as const).map(t => (
               <button key={t}
                 onClick={() => setBgType(t)}
@@ -133,7 +133,7 @@ export default function ProfilePage() {
         {bgType === 'solid' && (
           <div style={{ marginBottom: '22px' }}>
             <span className="profile-label">选择颜色</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
               <input type="color" value={solidColor}
                 onChange={(e) => setSolidColor(e.target.value)}
                 style={{ width: '44px', height: '44px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.10)', padding: 0, cursor: 'pointer', background: 'none' }}
@@ -186,7 +186,7 @@ export default function ProfilePage() {
                 ) : history.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '28px', color: 'rgba(255,255,255,0.3)', fontSize: '0.85rem' }}>暂无历史壁纸</div>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: '10px', maxHeight: '300px', overflowY: 'auto', padding: '2px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: '10px', maxHeight: '300px', overflowY: 'auto', padding: '2px' }}>
                     {history.map((item) => {
                       const sel = isSelected(item.date)
                       return (

@@ -576,6 +576,8 @@ select.lg-input optgroup {
   line-height: 1.8;
   color: var(--lg-text-article);
   white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .article-content h1,
@@ -1151,6 +1153,12 @@ select.lg-input optgroup {
 
   .lg-surface { padding: 14px; }
   .lg-surface-strong { padding: 16px; }
+
+  /* 移动端溢出修复 */
+  .pe-featured-fields { padding-left: 0; }
+  .lex-content { padding: 12px 14px; }
+  .post-content-card { overflow-wrap: break-word; word-break: break-word; }
+  .upload-zone-progress-stats { gap: 8px; font-size: 0.75rem; }
 }
 
 /* h3/h4 responsive */
@@ -1198,9 +1206,14 @@ select.lg-input optgroup {
 }
 
 /* Home page responsive */
+.home-posts-section {
+  padding: 80px 24px 120px;
+}
+
 @media (max-width: 480px) {
   .home-section { padding: 120px 16px 80px !important; }
   .home-section .lg-surface-strong { padding: 32px 20px !important; }
+  .home-posts-section { padding: 48px 12px 80px !important; }
 }
 
 /* ============================================================
@@ -2023,6 +2036,10 @@ body.admin-menu-open {
 
   .admin-actions .liquid-btn {
     width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
@@ -3299,6 +3316,10 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
 
   .page-editor-topbar-title-input {
     max-width: 200px;
+  }
+
+  .page-editor-title-input {
+    max-width: 160px;
   }
 }
 

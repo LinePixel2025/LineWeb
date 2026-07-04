@@ -78,8 +78,8 @@ export default function HomePage() {
       {/* Latest Posts Preview */}
       {recentPosts.length > 0 && (
         <section
+          className="home-posts-section"
           style={{
-            padding: '80px 24px 120px',
             maxWidth: '720px',
             margin: '0 auto',
           }}
