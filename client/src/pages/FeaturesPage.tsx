@@ -62,7 +62,7 @@ export default function FeaturesPage() {
             key={item.path}
             variant="strong"
             chromatic={false}
-            className="features-card"
+            className="features-card fade-in-stagger"
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -70,7 +70,7 @@ export default function FeaturesPage() {
               justifyContent: 'center',
               textAlign: 'center',
               gap: '16px',
-              animation: `fadeIn 0.5s ease-out ${i * 0.1}s both`,
+              animationDelay: `${i * 0.1}s`,
             }}
           >
             <Link
@@ -110,7 +110,7 @@ export default function FeaturesPage() {
             key={item.slug}
             variant="strong"
             chromatic={false}
-            className="features-card"
+            className="features-card fade-in-stagger"
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -118,7 +118,7 @@ export default function FeaturesPage() {
               justifyContent: 'center',
               textAlign: 'center',
               gap: '16px',
-              animation: `fadeIn 0.5s ease-out ${(i + features.length) * 0.1}s both`,
+              animationDelay: `${(i + features.length) * 0.1}s`,
             }}
           >
             <Link
