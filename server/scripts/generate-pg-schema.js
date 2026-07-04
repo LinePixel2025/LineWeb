@@ -17,7 +17,7 @@ const cwd = path.join(__dirname, '..')
 const env = { ...process.env, NODE_ENV: 'production' }
 
 // db push 自动触发 generate，无需单独调用
-execSync(`npx prisma db push --schema prisma/schema.generated.prisma`, { cwd, env, stdio: 'inherit' })
+execSync(`npx prisma db push --schema prisma/schema.generated.prisma --accept-data-loss`, { cwd, env, stdio: 'inherit' })
 execSync(`npx prisma db seed --schema prisma/schema.generated.prisma`, { cwd, env, stdio: 'inherit' })
 
 // 清理临时文件

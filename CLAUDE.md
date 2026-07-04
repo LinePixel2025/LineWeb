@@ -49,10 +49,15 @@ lineweb/                       # 根 monorepo (concurrently 管理双端)
 │       ├── lib/
 │       │   ├── prisma.ts      # 单例 PrismaClient
 │       │   └── utils.ts       # parsePagination / parseId (路由共用)
-│       ├── middleware/auth.ts # authenticate + requireAdmin
-│       ├── routes/            # auth / posts / comments / pages / bing / drive / users
-│       └── services/
-│           └── storageTunnel.ts  # WebSocket 存储节点通信 (分布式文件传输)
+│       ├── middleware/
+│       │   ├── auth.ts           # authenticate + requireAdmin
+│       │   └── errorHandler.ts   # 全局错误处理中间件
+│       ├── routes/               # auth / posts / comments / pages / bing / drive / users
+│       ├── services/
+│       │   ├── storageTunnel.ts  # WebSocket 存储节点通信
+│       │   ├── storageSync.ts    # 定时同步 DB 与存储节点文件 (upsert 幂等)
+│       │   └── dedupDriveFiles.ts # 启动时清理重复 storagePath 记录
+│       └── scripts/              # 部署 & 工具脚本
 ├── package.json               # Monorepo 脚本
 └── .npmrc                     # registry=https://registry.npmmirror.com (中国加速)
 ```
@@ -154,7 +159,7 @@ Express 注册顺序: `/featured` → `/slug/:slug` → `/` → `/:id`。
 | GET | `/files/:id` | 获取单个文件/文件夹详情 |
 | GET | `/search` | 搜索文件（`?q=keyword`） |
 | POST | `/folders` | 创建文件夹 |
-| POST | `/upload` | 上传文件 (multer, multipart/form-data) |
+| POST | `/upload` | 上传文件 (busboy 流式解析, multipart/form-data) |
 | GET | `/download/:id` | 下载文件（重定向到存储节点 URL） |
 | PUT | `/files/:id` | 重命名文件/文件夹 |
 | DELETE | `/files/:id` | 删除文件/文件夹 |
@@ -340,7 +345,8 @@ cd server && npx prisma db push && npx prisma db seed
 - `parsePagination` 和 `parseId` 位于 `server/src/lib/utils.ts`，各路由共用
 - 评论树构建用 `buildCommentTree()`（`routes/comments.ts` 内部）
 - DriveFile 的 BigInt 字段扩展了 `BigInt.prototype.toJSON` 转为 Number（在 `routes/drive.ts` 顶部）
-- 路由注册顺序重要：`/featured` 必须在 `/:id` 之前注册
+- 路由注册顺序重要：`/featured` 必须在 `/:id` 之前注册；`/admin/all` 必须在 `/:slug` 之前注册
+- Drive upload 使用 busboy（非 multer）流式解析，支持大文件边收边发到存储节点
 
 ### 前端
 - `api.get<T>(url)` / `api.post<T>(url, body)` — 自动注 token
@@ -353,3 +359,4 @@ cd server && npx prisma db push && npx prisma db seed
 - **seed 失败 "Unique constraint"**：upsert 的 where 条件用 `username` 而非 `email`
 - **数据库重置**：删 `server/prisma/lineweb.db` 再 `prisma db push && prisma db seed`
 - **不要用 `prisma migrate`**，直接用 `prisma db push`
+- **添加约束时数据丢失警告**：如果已有数据与新增的 `@unique` 或 `@default` 冲突，`prisma db push` 会要求 `--accept-data-loss` 标志。先运行对应的一次性清理脚本再执行
