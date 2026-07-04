@@ -38,7 +38,7 @@ def handle_write_file(cmd: dict) -> dict:
     # 打开 .tmp 文件准备接收分块数据
     tmp_path = ROOT / (path + ".tmp")
     tmp_path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+    fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_BINARY)
 
     # 关闭之前的活跃句柄（异常情况保护）
     if _active_write_file.get("fd") is not None:
