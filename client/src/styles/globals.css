@@ -2169,6 +2169,170 @@ body.admin-menu-open {
 }
 
 /* ============================================================
+   Admin — Modal / Action Buttons
+   ============================================================ */
+.admin-action-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.06);
+  color: var(--lg-text-primary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-family: var(--lg-font);
+  white-space: nowrap;
+}
+
+.admin-action-btn:hover {
+  background: rgba(255,255,255,0.14);
+}
+
+.admin-action-btn--danger {
+  border-color: rgba(255, 59, 48, 0.25);
+  color: var(--lg-danger);
+}
+
+.admin-action-btn--danger:hover {
+  background: rgba(255, 59, 48, 0.12);
+}
+
+.admin-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.admin-modal {
+  width: 100%;
+  max-width: 440px;
+  border-radius: var(--lg-radius-md) !important;
+  padding: 0;
+  overflow: hidden;
+}
+
+.admin-modal-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  padding: 20px 24px 0;
+  margin: 0 0 16px;
+}
+
+.admin-modal-body {
+  padding: 0 24px 16px;
+}
+
+.admin-modal-label {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--lg-text-secondary);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.admin-modal-input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--lg-glass-border);
+  background: rgba(255,255,255,0.05);
+  color: var(--lg-text-primary);
+  font-size: 0.9rem;
+  font-family: var(--lg-font);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.admin-modal-input:focus {
+  border-color: var(--lg-accent);
+}
+
+.admin-modal-error {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 59, 48, 0.1);
+  color: var(--lg-danger);
+  font-size: 0.8125rem;
+}
+
+.admin-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 24px 20px;
+}
+
+.admin-modal-btn {
+  padding: 8px 20px;
+  border-radius: 9999px;
+  border: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--lg-font);
+  transition: opacity 0.2s;
+}
+
+.admin-modal-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.admin-modal-btn--cancel {
+  background: rgba(255,255,255,0.08);
+  color: var(--lg-text-primary);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+.admin-modal-btn--confirm {
+  background: linear-gradient(135deg, var(--lg-accent), #40a9ff);
+  color: #fff;
+  box-shadow: 0 2px 8px var(--lg-accent-glow);
+}
+
+.admin-modal-key-display {
+  background: rgba(0,0,0,0.2);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+}
+
+.admin-modal-key-text {
+  font-family: var(--lg-font-mono, 'SF Mono', 'Fira Code', monospace);
+  font-size: 0.85rem;
+  word-break: break-all;
+  color: var(--lg-accent);
+  line-height: 1.6;
+}
+
+.admin-modal-copy-btn {
+  width: 100%;
+  padding: 10px;
+  border-radius: 9999px;
+  border: 1px solid var(--lg-glass-border);
+  background: rgba(255,255,255,0.06);
+  color: var(--lg-text-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-family: var(--lg-font);
+  transition: background 0.2s;
+}
+
+.admin-modal-copy-btn:hover {
+  background: rgba(255,255,255,0.14);
+}
+
+/* ============================================================
    Calculator — Liquid Glass Design
    ============================================================ */
 .calc-page {

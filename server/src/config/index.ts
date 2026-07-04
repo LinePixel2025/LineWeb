@@ -1,15 +1,24 @@
 import { z } from 'zod'
 
+function parseCorsOrigins(raw: string | undefined): string | string[] | boolean {
+  if (!raw) return 'http://localhost:5173'
+  if (raw === '*') return true  // 允许任意源（生产环境慎用）
+  const origins = raw.split(',').map(s => s.trim()).filter(Boolean)
+  return origins.length === 1 ? origins[0] : origins
+}
+
 export const config = {
   port: parseInt(process.env.PORT || '3001', 10),
   jwtSecret: process.env.JWT_SECRET || 'lineweb-dev-secret-change-in-production',
   jwtExpiresIn: '7d' as const,
-  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  corsOrigin: parseCorsOrigins(process.env.CORS_ORIGIN),
   storageNodeToken: process.env.STORAGE_NODE_TOKEN || 'lineweb-storage-node-secret-change-in-production',
   maxFileSizeMB: parseInt(process.env.MAX_FILE_SIZE_MB || '500', 10),
-  uploadChunkKB: parseInt(process.env.UPLOAD_CHUNK_KB || '64', 10), // 上传转发块大小 (KB)
-  downloadChunkKB: parseInt(process.env.DOWNLOAD_CHUNK_KB || '256', 10), // 下载合并块大小 (KB)
-  driveSyncIntervalMs: parseInt(process.env.DRIVE_SYNC_INTERVAL_MS || '300000', 10), // 默认 5 分钟
+  uploadChunkKB: parseInt(process.env.UPLOAD_CHUNK_KB || '64', 10),
+  downloadChunkKB: parseInt(process.env.DOWNLOAD_CHUNK_KB || '256', 10),
+  driveSyncIntervalMs: parseInt(process.env.DRIVE_SYNC_INTERVAL_MS || '300000', 10),
+  apiKeyPrefix: 'lw_',
+  apiKeyLength: 48,
 }
 
 export const registerSchema = z.object({
@@ -62,4 +71,15 @@ export const commentUpdateSchema = z.object({
 export const updateUserSchema = z.object({
   role: z.enum(['user', 'admin']).optional(),
   password: z.string().min(6).max(100).optional(),
+})
+
+export const createApiKeySchema = z.object({
+  name: z.string().min(1, '名称不能为空').max(100),
+  expiresAt: z.string().optional(),
+})
+
+export const updateApiKeySchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  active: z.boolean().optional(),
+  expiresAt: z.string().nullable().optional(),
 })
