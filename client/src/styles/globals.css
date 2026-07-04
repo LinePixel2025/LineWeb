@@ -3437,7 +3437,7 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   display: flex;
   flex-direction: column;
   gap: 16px;
-  animation: glassRise 0.4s ease both;
+  animation: glassRise 0.6s cubic-bezier(0.25, 0.1, 0.25, 1) both;
 }
 
 .page-editor-module-setup-title {
