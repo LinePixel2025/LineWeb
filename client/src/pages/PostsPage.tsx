@@ -35,7 +35,7 @@ export default function PostsPage() {
         <>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {data?.posts.map((post, i) => (
-              <LiquidGlass key={post.id} variant="blur" chromatic={false} style={{ padding: '24px', animation: `fadeIn 0.4s ease-out ${i * 0.05}s both` }}>
+              <LiquidGlass key={post.id} variant="blur" chromatic={false} className="fade-in-stagger" style={{ padding: '24px', animationDelay: `${i * 0.05}s` }}>
             <Link
               to={`/posts/${post.slug}`}
               style={{
