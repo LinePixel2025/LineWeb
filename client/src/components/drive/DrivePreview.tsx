@@ -1,4 +1,5 @@
 import { useState, useEffect, memo } from 'react'
+import { createPortal } from 'react-dom'
 import type { DriveItem } from '../../types/drive'
 
 export interface DrivePreviewProps {
@@ -60,7 +61,7 @@ const ImagePreview = memo(function ImagePreview({ item, onClose }: DrivePreviewP
     }
   }, [item.id, item.mimeType])
 
-  return (
+  return createPortal(
     <div className="preview-overlay" onClick={onClose}>
       <div className="preview-container" onClick={e => e.stopPropagation()}>
         {loading && (
@@ -75,7 +76,8 @@ const ImagePreview = memo(function ImagePreview({ item, onClose }: DrivePreviewP
         {src && <img src={src} alt={item.name} className="preview-image" />}
         <button className="preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 })
 
@@ -105,7 +107,7 @@ const VideoPreview = memo(function VideoPreview({ item, onClose }: DrivePreviewP
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl) }
   }, [item.id])
 
-  return (
+  return createPortal(
     <div className="preview-overlay" onClick={onClose}>
       <div className="preview-container preview-container--video" onClick={e => e.stopPropagation()}>
         {error ? (
@@ -117,7 +119,8 @@ const VideoPreview = memo(function VideoPreview({ item, onClose }: DrivePreviewP
         )}
         <button className="preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 })
 

@@ -1,4 +1,5 @@
 import { useState, memo } from 'react'
+import { createPortal } from 'react-dom'
 import LiquidGlass from '../glass/LiquidGlass'
 import LiquidButton from '../glass/LiquidButton'
 import api from '../../lib/api'
@@ -34,7 +35,7 @@ export const NewFolderDialog = memo(function NewFolderDialog({
     }
   }
 
-  return (
+  return createPortal(
     <div className="dialog-overlay" onClick={onClose}>
       <div className="dialog" onClick={e => e.stopPropagation()}>
         <LiquidGlass variant="strong" chromatic={false} className="dialog-inner">
@@ -57,7 +58,8 @@ export const NewFolderDialog = memo(function NewFolderDialog({
           </div>
         </LiquidGlass>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 })
 
@@ -94,7 +96,7 @@ export const RenameDialog = memo(function RenameDialog({
     }
   }
 
-  return (
+  return createPortal(
     <div className="dialog-overlay" onClick={onClose}>
       <div className="dialog" onClick={e => e.stopPropagation()}>
         <LiquidGlass variant="strong" chromatic={false} className="dialog-inner">
@@ -116,7 +118,8 @@ export const RenameDialog = memo(function RenameDialog({
           </div>
         </LiquidGlass>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 })
 
@@ -148,7 +151,7 @@ export const DeleteDialog = memo(function DeleteDialog({
     }
   }
 
-  return (
+  return createPortal(
     <div className="dialog-overlay" onClick={onClose}>
       <div className="dialog" onClick={e => e.stopPropagation()}>
         <LiquidGlass variant="strong" chromatic={false} className="dialog-inner">
@@ -167,6 +170,7 @@ export const DeleteDialog = memo(function DeleteDialog({
           </div>
         </LiquidGlass>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 })
