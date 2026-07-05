@@ -115,7 +115,9 @@ body.menu-open {
 }
 
 /* --- 触摸/滚动优化 --- */
-body {
+/* 注：body 上不加 overscroll-behavior: none，因为 html, body { overflow-x: hidden }
+   会让 body 成为滚动容器，overscroll-behavior: none 在 body 上可能影响滚动链传播 */
+html {
   overscroll-behavior: none;
 }
 
@@ -136,16 +138,8 @@ button,
 
 .preview-container,
 .drive-dialog,
-.reply-form,
-.admin-layout-overlay {
+.reply-form {
   overscroll-behavior: contain;
-}
-
-.admin-sidebar,
-.lex-content,
-.drive-table-wrap,
-.comment-list {
-  will-change: scroll-position;
 }
 
 a {
