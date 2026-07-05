@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import DOMPurify from 'dompurify'
 import api from '../lib/api'
 import LiquidGlass from '../components/glass/LiquidGlass'
 import CommentSection from '../components/comments/CommentSection'
@@ -45,7 +46,7 @@ export default function PostPage() {
           <span className="text-tertiary">{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
         </div>
 
-        <div className="article-content" dangerouslySetInnerHTML={{ __html: post.content }} />
+        <div className="article-content" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(post.content, { USE_PROFILES: { html: true } }) }} />
       </LiquidGlass>
 
       <div className="post-section-divider" />

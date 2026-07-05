@@ -16,6 +16,8 @@ interface DeviceInfo {
 const INACTIVE_TIMEOUT_MS = 30 * 60 * 1000
 const CLEANUP_INTERVAL_MS = 60 * 1000
 const UPDATE_THROTTLE_MS = 60 * 1000
+const MAX_PATHS_PER_DEVICE = 100
+const MAX_DEVICES = 1000
 
 const devices = new Map<string, DeviceInfo>()
 let nextId = 1
@@ -75,6 +77,7 @@ export function recordRequest(req: Request): void {
     if (Date.now() - new Date(existing.lastSeen).getTime() < UPDATE_THROTTLE_MS) {
       existing.requestCount++
       if (!existing.pathsAccessed.includes(path)) {
+        if (existing.pathsAccessed.length >= MAX_PATHS_PER_DEVICE) existing.pathsAccessed.shift()
         existing.pathsAccessed.push(path)
       }
       return
@@ -82,9 +85,20 @@ export function recordRequest(req: Request): void {
     existing.lastSeen = now
     existing.requestCount++
     if (!existing.pathsAccessed.includes(path)) {
+      if (existing.pathsAccessed.length >= MAX_PATHS_PER_DEVICE) existing.pathsAccessed.shift()
       existing.pathsAccessed.push(path)
     }
   } else {
+    // 容量上限：超过 MAX_DEVICES 时淘汰 lastSeen 最旧的设备
+    if (devices.size >= MAX_DEVICES) {
+      let oldestKey: string | null = null
+      let oldestTime = Infinity
+      for (const [k, d] of devices.entries()) {
+        const t = new Date(d.lastSeen).getTime()
+        if (t < oldestTime) { oldestTime = t; oldestKey = k }
+      }
+      if (oldestKey) devices.delete(oldestKey)
+    }
     devices.set(key, {
       id: nextId++,
       ip,
@@ -135,6 +149,10 @@ function cleanup() {
 export function startTracking(): void {
   if (cleanupTimer) return
   cleanupTimer = setInterval(cleanup, CLEANUP_INTERVAL_MS)
+  // unref 让定时器不阻止 Node 进程退出
+  if (cleanupTimer && typeof cleanupTimer.unref === 'function') {
+    cleanupTimer.unref()
+  }
 }
 
 export function stopTracking(): void {

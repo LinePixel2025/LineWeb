@@ -96,3 +96,14 @@ export async function updateUserSettings(userId: number, settings: string) {
     select: { id: true, username: true, email: true, role: true, settings: true, canAccessDrive: true },
   })
 }
+
+/**
+ * 使指定用户的所有 JWT 失效 — 更新 tokenValidAfter 为当前时间
+ * 用于登出/改密码场景：使该用户之前签发的所有 token 立即失效
+ */
+export async function invalidateUserTokens(userId: number): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { tokenValidAfter: new Date() },
+  })
+}

@@ -1,8 +1,11 @@
 import express from 'express'
 import cors from 'cors'
+import helmet from 'helmet'
+import compression from 'compression'
 import http from 'http'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import rateLimit from 'express-rate-limit'
 import { config } from './config/index.js'
 import authRoutes from './routes/auth.js'
 import postRoutes from './routes/posts.js'
@@ -16,26 +19,65 @@ import statsRoutes from './routes/stats.js'
 import apiKeyRoutes from './routes/apiKeys.js'
 import { authenticate } from './middleware/auth.js'
 import { errorHandler } from './middleware/errorHandler.js'
-import { initStorageTunnel } from './services/storageTunnel.js'
+import { initStorageTunnel, isNodeConnected } from './services/storageTunnel.js'
 import { syncDriveFiles } from './services/storageSync.js'
 import { deduplicateDriveFiles } from './services/dedupDriveFiles.js'
 import { recordRequest, startTracking } from './services/deviceTracker.js'
+import prisma from './lib/prisma.js'
 
 const app = express()
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// === 安全中间件 ===
+// helmet 设置安全 HTTP 头：CSP、X-Content-Type-Options、X-Frame-Options、HSTS 等
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: process.env.NODE_ENV === 'production'
+        ? ["'self'"]
+        : ["'self'", "'unsafe-inline'", "'unsafe-eval'", "'blob:'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+      connectSrc: ["'self'", 'https:'],
+      fontSrc: ["'self'", 'data:'],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,  // 避免阻塞壁纸代理跨域资源
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}))
+
+// CORS — 生产环境同源（不反射任意源），开发环境允许 Vite dev server
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
-    ? true  // allow same-origin when Express serves the frontend
+    ? false  // 同源：Express 直接 serve 前端，无需 CORS
     : config.corsOrigin,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
 }))
+
+// 压缩响应 — gzip/deflate
+app.use(compression())
+
 app.set('trust proxy', 1)  // 信任反向代理（Railway），用于 rate-limiter 正确获取客户端 IP
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ limit: '10mb', extended: true }))
+
+// === 全局速率限制 ===
+// 所有 /api 端点每 IP 每 15 分钟最多 200 次请求
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: '请求过于频繁，请稍后再试' },
+})
+app.use('/api', apiLimiter)
 
 // 设备追踪中间件 — 记录所有 API 请求来源
 app.use('/api', (req, _res, next) => {
@@ -150,24 +192,52 @@ app.get('/api', (_req, res) => {
   })
 })
 
-// Global error handler
-app.use(errorHandler)
-
-// Health check
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() })
+// 健康检查 — 异步检查 DB 连通性 + 存储节点状态（必须在 errorHandler 之前注册）
+app.get('/api/health', async (_req, res) => {
+  const timestamp = new Date().toISOString()
+  try {
+    // 检查 DB 连通性
+    await prisma.$queryRaw`SELECT 1`
+    res.json({
+      status: 'ok',
+      db: 'connected',
+      storageNode: isNodeConnected() ? 'connected' : 'disconnected',
+      timestamp,
+    })
+  } catch (err) {
+    res.status(503).json({
+      status: 'degraded',
+      db: 'disconnected',
+      storageNode: isNodeConnected() ? 'connected' : 'disconnected',
+      error: err instanceof Error ? err.message : 'Unknown DB error',
+      timestamp,
+    })
+  }
 })
 
-// Production: serve built frontend + SPA fallback
+// 生产环境：serve 构建后的前端 + SPA fallback（必须在 errorHandler 之前）
 if (process.env.NODE_ENV === 'production') {
   const clientDist = path.join(__dirname, '../../client/dist')
-  app.use(express.static(clientDist))
+  // 静态资源缓存 1 年（带 immutable），HTML 不缓存
+  app.use(express.static(clientDist, {
+    maxAge: '1y',
+    etag: true,
+    immutable: true,
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+      }
+    },
+  }))
   app.get('*', (req, res) => {
     if (!req.path.startsWith('/api') && !req.path.startsWith('/ws')) {
       res.sendFile(path.join(clientDist, 'index.html'))
     }
   })
 }
+
+// Global error handler — 必须是最后一个 app.use
+app.use(errorHandler)
 
 // 创建 HTTP Server（用于同时支持 Express + WebSocket）
 const server = http.createServer(app)
@@ -179,9 +249,10 @@ initStorageTunnel(server)
 const syncInterval = setInterval(() => {
   syncDriveFiles().catch(err => console.error('[Sync] 定时同步失败:', err))
 }, config.driveSyncIntervalMs)
+syncInterval.unref()  // 不阻止进程退出
 
 // 启动后延迟 10 秒执行去重 + 首次同步（等待节点连接）
-setTimeout(async () => {
+const startupTimer = setTimeout(async () => {
   try {
     const removed = await deduplicateDriveFiles()
     if (removed > 0) {
@@ -193,10 +264,56 @@ setTimeout(async () => {
   console.log(`[Sync] 首次同步 (间隔: ${config.driveSyncIntervalMs}ms)`)
   syncDriveFiles().catch(err => console.error('[Sync] 首次同步失败:', err))
 }, 10000)
+startupTimer.unref()
 
-// 进程退出时清理定时器
-process.on('SIGTERM', () => clearInterval(syncInterval))
-process.on('SIGINT', () => clearInterval(syncInterval))
+// === 进程级错误处理 ===
+process.on('unhandledRejection', (reason) => {
+  console.error('[Unhandled Rejection]', reason)
+})
+
+process.on('uncaughtException', (err) => {
+  console.error('[Uncaught Exception]', err)
+  // 不立即退出，记录后让现有请求完成；下次出错再退出
+  // 生产环境应由进程管理器（PM2/Railway）自动重启
+})
+
+// === 优雅停机 ===
+let isShuttingDown = false
+const shutdown = (signal: string) => {
+  if (isShuttingDown) return
+  isShuttingDown = true
+  console.log(`\n[${signal}] 正在关闭服务器...`)
+
+  clearInterval(syncInterval)
+  clearTimeout(startupTimer)
+
+  server.close((err) => {
+    if (err) {
+      console.error('[Shutdown] HTTP server 关闭失败:', err)
+      process.exit(1)
+    }
+    console.log('[Shutdown] HTTP server 已关闭')
+
+    prisma.$disconnect()
+      .then(() => {
+        console.log('[Shutdown] Prisma 已断开')
+        process.exit(0)
+      })
+      .catch((e) => {
+        console.error('[Shutdown] Prisma 断开失败:', e)
+        process.exit(1)
+      })
+  })
+
+  // 10 秒后强制退出
+  setTimeout(() => {
+    console.error('[Shutdown] 强制退出（超时）')
+    process.exit(1)
+  }, 10000).unref()
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))
 
 startTracking()
 

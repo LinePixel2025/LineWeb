@@ -113,11 +113,14 @@ const LiquidGlass = memo(function LiquidGlass({
           borderRadius: 'inherit',
           pointerEvents: 'none',
           zIndex: 3,
+          // CSS 变量驱动 — 由 onMove 中 setProperty 更新，避免重拼字符串
+          '--lg-specular-x': '30%',
+          '--lg-specular-y': '20%',
           background: interactive
-            ? 'radial-gradient(circle at 30% 20%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.08) 30%, transparent 60%)'
+            ? 'radial-gradient(circle at var(--lg-specular-x, 30%) var(--lg-specular-y, 20%), rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.08) 30%, transparent 60%)'
             : 'transparent',
           transition: interactive ? 'background 0.15s ease-out' : 'none',
-        }}
+        } as React.CSSProperties}
       />
 
       {/* Top edge rim glow */}

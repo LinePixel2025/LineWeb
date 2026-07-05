@@ -4,6 +4,7 @@ import prisma from '../lib/prisma.js'
 import { parsePagination, parseId } from '../lib/utils.js'
 import { updateUserSchema } from '../config/index.js'
 import { authenticate, requireAdmin } from '../middleware/auth.js'
+import { clearDriveAccessCache } from './drive.js'
 
 const router = Router()
 
@@ -147,6 +148,9 @@ router.put('/:id/drive-access', async (req: Request, res: Response) => {
       canAccessDrive: true,
     },
   })
+
+  // 清除该用户的 drive 访问缓存，使权限变更即时生效
+  clearDriveAccessCache(id)
 
   res.json(updated)
 })

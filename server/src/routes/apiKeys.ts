@@ -3,7 +3,7 @@ import crypto from 'crypto'
 import prisma from '../lib/prisma.js'
 import { parseId } from '../lib/utils.js'
 import { config, createApiKeySchema, updateApiKeySchema } from '../config/index.js'
-import { authenticate, requireAdmin } from '../middleware/auth.js'
+import { authenticate, requireAdmin, hashApiKey } from '../middleware/auth.js'
 
 const router = Router()
 
@@ -30,10 +30,13 @@ router.post('/', async (req: Request, res: Response) => {
     const { name, expiresAt } = parsed.data
     const { fullKey, prefix } = generateApiKey()
 
+    // 安全存储：DB 只存 sha256 哈希 + 掩码，不存完整 key
+    // fullKey 仅本次响应返回给用户，之后无法再次查看
     const keyRecord = await prisma.apiKey.create({
       data: {
         name,
-        key: fullKey,
+        key: prefix,         // 掩码（如 lw_abc...），仅用于展示
+        keyHash: hashApiKey(fullKey),  // sha256 哈希，用于认证查询
         prefix,
         userId: req.user!.userId,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
@@ -41,7 +44,6 @@ router.post('/', async (req: Request, res: Response) => {
       select: {
         id: true,
         name: true,
-        key: true,
         prefix: true,
         active: true,
         expiresAt: true,
@@ -50,7 +52,8 @@ router.post('/', async (req: Request, res: Response) => {
       },
     })
 
-    res.status(201).json(keyRecord)
+    // 一次性返回完整 key 给用户
+    res.status(201).json({ ...keyRecord, key: fullKey })
   } catch (err) {
     console.error('创建 API Key 失败:', err)
     res.status(500).json({ error: '创建 API Key 失败' })

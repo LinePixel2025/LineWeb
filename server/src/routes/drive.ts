@@ -29,21 +29,92 @@ function fixMojibake(name: string): string {
   }
 }
 
-// 所有路由需要登录 + canAccessDrive
-router.use(authenticate, (req: Request, res: Response, next) => {
-  // 从数据库检查 canAccessDrive（每请求校验，确保权限变更即时生效）
-  prisma.user.findUnique({
-    where: { id: req.user!.userId },
+// === BigInt 序列化 — 显式转换 size 为字符串，避免全局原型污染 ===
+type WithSize<T extends { size: bigint }> = Omit<T, 'size'> & { size: string }
+
+function transformSize<T extends { size: bigint }>(file: T): WithSize<T> {
+  return { ...file, size: file.size.toString() }
+}
+
+function transformSizeList<T extends { size: bigint }>(files: T[]): WithSize<T>[] {
+  return files.map(transformSize)
+}
+
+// === canAccessDrive 内存缓存（60s TTL，避免每请求查 DB） ===
+const driveAccessCache = new Map<number, { value: boolean; expireAt: number }>()
+const DRIVE_ACCESS_TTL_MS = 60 * 1000
+
+/** 清除指定用户的 canAccessDrive 缓存（权限变更时调用） */
+export function clearDriveAccessCache(userId: number): void {
+  driveAccessCache.delete(userId)
+}
+
+async function checkDriveAccess(userId: number): Promise<boolean> {
+  const cached = driveAccessCache.get(userId)
+  if (cached && Date.now() < cached.expireAt) {
+    return cached.value
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
     select: { canAccessDrive: true },
-  }).then(user => {
-    if (!user?.canAccessDrive) {
+  })
+  const value = !!user?.canAccessDrive
+  driveAccessCache.set(userId, { value, expireAt: Date.now() + DRIVE_ACCESS_TTL_MS })
+  return value
+}
+
+// === 文件所有权校验 — 防止用户越权操作他人文件 ===
+/**
+ * 校验当前用户是否拥有指定文件的操作权限。
+ * 管理员豁免；普通用户仅能操作自己上传的文件。
+ * 返回文件记录（含 storagePath / isFolder 等），或 null 表示无权访问/不存在。
+ */
+async function assertFileOwnership(
+  fileId: number,
+  user: { userId: number; role: string },
+): Promise<{
+  id: number
+  name: string
+  isFolder: boolean
+  parentId: number | null
+  storagePath: string
+  size: bigint
+  mimeType: string | null
+  uploadedById: number | null
+} | null> {
+  const file = await prisma.driveFile.findUnique({
+    where: { id: fileId },
+    select: {
+      id: true,
+      name: true,
+      isFolder: true,
+      parentId: true,
+      storagePath: true,
+      size: true,
+      mimeType: true,
+      uploadedById: true,
+    },
+  })
+  if (!file) return null
+  // 管理员豁免
+  if (user.role === 'admin') return file
+  // 普通用户必须为上传者
+  if (file.uploadedById !== user.userId) return null
+  return file
+}
+
+// 所有路由需要登录 + canAccessDrive
+router.use(authenticate, async (req: Request, res: Response, next) => {
+  try {
+    const hasAccess = await checkDriveAccess(req.user!.userId)
+    if (!hasAccess) {
       res.status(403).json({ error: '无网盘访问权限' })
       return
     }
     next()
-  }).catch(() => {
+  } catch {
     res.status(500).json({ error: '权限校验失败' })
-  })
+  }
 })
 
 /* ---------- 获取文件列表（支持分页） ---------- */
@@ -53,7 +124,12 @@ router.get('/files', async (req: Request, res: Response) => {
     const parentId = parentIdStr ? parseId(parentIdStr) : null
     const { page, limit, skip } = parsePagination(req.query)
 
-    const where: { parentId: number | null } = { parentId }
+    // 所有权过滤：管理员看全部，普通用户仅看自己上传的文件
+    const isAdmin = req.user!.role === 'admin'
+    const where: { parentId: number | null; uploadedById?: number } = { parentId }
+    if (!isAdmin) {
+      where.uploadedById = req.user!.userId
+    }
 
     const [data, total] = await Promise.all([
       prisma.driveFile.findMany({
@@ -76,7 +152,7 @@ router.get('/files', async (req: Request, res: Response) => {
       prisma.driveFile.count({ where }),
     ])
 
-    res.json({ data, total, page, pageCount: Math.ceil(total / limit) })
+    res.json({ data: transformSizeList(data), total, page, pageCount: Math.ceil(total / limit) })
   } catch (err) {
     console.error('获取文件列表失败:', err)
     res.status(500).json({ error: '获取文件列表失败' })
@@ -92,28 +168,14 @@ router.get('/files/:id', async (req: Request, res: Response) => {
       return
     }
 
-    const file = await prisma.driveFile.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        name: true,
-        isFolder: true,
-        parentId: true,
-        size: true,
-        mimeType: true,
-        storagePath: true,
-        createdAt: true,
-        updatedAt: true,
-        uploadedBy: { select: { id: true, username: true } },
-      },
-    })
-
+    // 所有权校验：非上传者/非管理员返回 404（不暴露文件存在性）
+    const file = await assertFileOwnership(id, req.user!)
     if (!file) {
-      res.status(404).json({ error: '文件不存在' })
+      res.status(404).json({ error: '文件不存在或无权访问' })
       return
     }
 
-    res.json(file)
+    res.json(transformSize(file))
   } catch (err) {
     console.error('获取文件信息失败:', err)
     res.status(500).json({ error: '获取文件信息失败' })
@@ -129,10 +191,17 @@ router.get('/search', async (req: Request, res: Response) => {
       return
     }
 
+    // 所有权过滤：管理员搜全部，普通用户仅搜自己的文件
+    const isAdmin = req.user!.role === 'admin'
+    const where: { name: { contains: string }; uploadedById?: number } = {
+      name: { contains: q },
+    }
+    if (!isAdmin) {
+      where.uploadedById = req.user!.userId
+    }
+
     const files = await prisma.driveFile.findMany({
-      where: {
-        name: { contains: q },
-      },
+      where,
       select: {
         id: true,
         name: true,
@@ -148,7 +217,7 @@ router.get('/search', async (req: Request, res: Response) => {
       take: 50,
     })
 
-    res.json(files)
+    res.json(transformSizeList(files))
   } catch (err) {
     console.error('搜索文件失败:', err)
     res.status(500).json({ error: '搜索失败' })
@@ -306,7 +375,7 @@ router.post('/files', async (req: Request, res: Response) => {
       },
     })
 
-    res.status(201).json(folder)
+    res.status(201).json(transformSize(folder))
   } catch (err) {
     console.error('创建文件夹失败:', err)
     res.status(500).json({ error: '创建文件夹失败' })
@@ -425,7 +494,7 @@ router.post('/upload', async (req: Request, res: Response) => {
             })
           }
 
-          res.status(201).json(file)
+          res.status(201).json(transformSize(file))
         } catch (writeErr) {
           // 存储节点写入失败 → 回滚：删除 DB 记录 + 清理节点残片
           await prisma.driveFile.delete({ where: { id: file.id } }).catch(() => {})
@@ -469,9 +538,9 @@ router.get('/files/:id/download', async (req: Request, res: Response) => {
       return
     }
 
-    const file = await prisma.driveFile.findUnique({ where: { id } })
+    const file = await assertFileOwnership(id, req.user!)
     if (!file || file.isFolder) {
-      res.status(404).json({ error: '文件不存在' })
+      res.status(404).json({ error: '文件不存在或无权访问' })
       return
     }
 
@@ -519,9 +588,9 @@ router.get('/download/:id', async (req: Request, res: Response) => {
       return
     }
 
-    const file = await prisma.driveFile.findUnique({ where: { id } })
+    const file = await assertFileOwnership(id, req.user!)
     if (!file || file.isFolder) {
-      res.status(404).json({ error: '文件不存在' })
+      res.status(404).json({ error: '文件不存在或无权访问' })
       return
     }
 
@@ -571,9 +640,9 @@ router.put('/files/:id', async (req: Request, res: Response) => {
       return
     }
 
-    const file = await prisma.driveFile.findUnique({ where: { id } })
+    const file = await assertFileOwnership(id, req.user!)
     if (!file) {
-      res.status(404).json({ error: '文件不存在' })
+      res.status(404).json({ error: '文件不存在或无权访问' })
       return
     }
 
@@ -731,7 +800,7 @@ router.put('/files/:id', async (req: Request, res: Response) => {
       },
     })
 
-    res.json(updated)
+    res.json(updated ? transformSize(updated) : null)
   } catch (err) {
     console.error('更新文件失败:', err)
     res.status(500).json({ error: '更新文件失败' })
@@ -781,9 +850,9 @@ router.delete('/files/:id', async (req: Request, res: Response) => {
       return
     }
 
-    const file = await prisma.driveFile.findUnique({ where: { id } })
+    const file = await assertFileOwnership(id, req.user!)
     if (!file) {
-      res.status(404).json({ error: '文件不存在' })
+      res.status(404).json({ error: '文件不存在或无权访问' })
       return
     }
 

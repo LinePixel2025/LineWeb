@@ -8,19 +8,20 @@ datasource db {
 }
 
 model User {
-  id              Int       @id @default(autoincrement())
-  username        String    @unique
-  email           String    @unique
-  password        String
-  role            String    @default("user")
-  settings        String?   // JSON：用户个性化设置（背景类型、颜色等）
-  canAccessDrive  Boolean   @default(false) // 是否有网盘访问权限
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  posts           Post[]
-  comments        Comment[]
-  driveFiles      DriveFile[] // 上传的文件
-  apiKeys         ApiKey[]
+  id               Int       @id @default(autoincrement())
+  username         String    @unique
+  email            String    @unique
+  password         String
+  role             String    @default("user")
+  settings         String?   // JSON：用户个性化设置（背景类型、颜色等）
+  canAccessDrive   Boolean   @default(false) // 是否有网盘访问权限
+  tokenValidAfter  DateTime  @default(now()) @map("token_valid_after") // JWT 失效校验基准时间
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  posts            Post[]
+  comments         Comment[]
+  driveFiles       DriveFile[] // 上传的文件
+  apiKeys          ApiKey[]
 
   @@map("users")
 }
@@ -35,9 +36,10 @@ model Post {
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   authorId  Int       @map("author_id")
-  author    User      @relation(fields: [authorId], references: [id])
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
   comments  Comment[]
 
+  @@index([authorId])
   @@map("posts")
 }
 
@@ -48,12 +50,15 @@ model Comment {
   updatedAt DateTime  @updatedAt @map("updated_at")
   postId    Int       @map("post_id")
   post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
-  authorId  Int       @map("author_id")
-  author    User      @relation(fields: [authorId], references: [id])
+  authorId  Int?      @map("author_id")
+  author    User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
   parentId  Int?      @map("parent_id")
   parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies   Comment[] @relation("CommentReplies")
 
+  @@index([postId])
+  @@index([authorId])
+  @@index([parentId])
   @@map("comments")
 }
 
@@ -82,26 +87,30 @@ model DriveFile {
   size         BigInt      @default(0)             // 文件大小（字节）
   mimeType     String?                             // MIME 类型（文件才有）
   storagePath  String   @unique                     // 存储节点上的相对路径
-  uploadedById Int                                 // 上传者 ID
-  uploadedBy   User        @relation(fields: [uploadedById], references: [id])
+  uploadedById Int?                                // 上传者 ID（null=用户已删除，归属管理员）
+  uploadedBy   User?       @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
   createdAt    DateTime    @default(now()) @map("created_at")
   updatedAt    DateTime    @updatedAt @map("updated_at")
 
+  @@index([parentId])
+  @@index([uploadedById])
   @@map("drive_files")
 }
 
 model ApiKey {
   id          Int       @id @default(autoincrement())
   name        String
-  key         String    @unique
+  key         String    // 掩码（如 lw_abc...），仅用于展示；认证时用 keyHash 查询
+  keyHash     String    @unique @map("key_hash") // sha256(fullKey)，DB 不存完整 key 防泄漏
   prefix      String    @default("lw_")
   userId      Int       @map("user_id")
-  user        User      @relation(fields: [userId], references: [id])
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   active      Boolean   @default(true)
   lastUsedAt  DateTime? @map("last_used_at")
   expiresAt   DateTime? @map("expires_at")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
+  @@index([userId])
   @@map("api_keys")
 }

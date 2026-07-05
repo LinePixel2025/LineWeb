@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express'
 import rateLimit from 'express-rate-limit'
 import { AppError } from '../middleware/errorHandler.js'
-import { authenticate } from '../middleware/auth.js'
-import { registerUser, loginUser, getUserById, updateUserSettings } from '../services/authService.js'
+import { authenticate, clearTokenValidAfterCache } from '../middleware/auth.js'
+import { registerUser, loginUser, getUserById, updateUserSettings, invalidateUserTokens } from '../services/authService.js'
 import { registerSchema, loginSchema, updateSettingsSchema } from '../config/index.js'
 import { getErrorMessage, getErrorStatus } from '../lib/utils.js'
 
@@ -89,6 +89,19 @@ router.put('/settings', authenticate, async (req: Request, res: Response) => {
 
   const user = await updateUserSettings(req.user!.userId, settings)
   res.json({ user })
+})
+
+// 登出 — 使该用户的所有 JWT 立即失效
+router.post('/logout', authenticate, async (req: Request, res: Response) => {
+  try {
+    await invalidateUserTokens(req.user!.userId)
+    // 清除内存缓存，使下次请求立即校验失败
+    clearTokenValidAfterCache(req.user!.userId)
+    res.json({ message: '已登出' })
+  } catch (err) {
+    console.error('登出失败:', err)
+    res.status(500).json({ error: '登出失败' })
+  }
 })
 
 export default router

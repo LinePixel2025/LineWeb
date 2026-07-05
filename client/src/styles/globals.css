@@ -114,6 +114,40 @@ body.menu-open {
   width: 100%;
 }
 
+/* --- 触摸/滚动优化 --- */
+body {
+  overscroll-behavior: none;
+}
+
+button,
+[role="button"],
+.liquid-btn,
+.lex-btn {
+  touch-action: manipulation;
+}
+
+.upload-zone-drop {
+  touch-action: none;
+}
+
+.drive-toolbar-breadcrumbs {
+  touch-action: pan-x;
+}
+
+.preview-container,
+.drive-dialog,
+.reply-form,
+.admin-layout-overlay {
+  overscroll-behavior: contain;
+}
+
+.admin-sidebar,
+.lex-content,
+.drive-table-wrap,
+.comment-list {
+  will-change: scroll-position;
+}
+
 a {
   color: var(--lg-accent);
   text-decoration: none;
@@ -804,9 +838,11 @@ select.lg-input optgroup {
   transition: color 0.15s ease, background 0.15s ease;
 }
 
-.lex-btn:hover {
-  background: rgba(255,255,255,0.08);
-  color: var(--lg-text-primary);
+@media (hover: hover) {
+  .lex-btn:hover {
+    background: rgba(255,255,255,0.08);
+    color: var(--lg-text-primary);
+  }
 }
 
 .lex-btn--on {
@@ -1203,6 +1239,13 @@ select.lg-input optgroup {
   .liquid-btn:hover {
     transform: none !important;
   }
+  /* 显式覆盖各按钮类的 height — 这些类原本 height < 44px 会忽略 min-height */
+  .lex-btn { min-width: 44px; min-height: 44px; height: auto; }
+  .pagination-btn { width: 44px; height: 44px; }
+  .posts-search-submit { width: 44px; height: 44px; }
+  .admin-page-btn { width: 44px; height: 44px; }
+  .page-editor-canvas-item-tool-btn { width: 44px; height: 44px; }
+  .drive-view-toggle { width: 44px; height: 44px; }
 }
 
 /* Home page responsive */
@@ -1228,7 +1271,7 @@ select.lg-input optgroup {
   font-weight: 500;
   font-family: var(--lg-font);
   font-size: 0.95rem;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -1328,12 +1371,14 @@ select.lg-input optgroup {
   color: var(--lg-text-secondary);
   font-size: 1.1rem;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
-.posts-search-submit:hover {
-  background: var(--lg-accent-soft);
-  color: var(--lg-accent);
+@media (hover: hover) {
+  .posts-search-submit:hover {
+    background: var(--lg-accent-soft);
+    color: var(--lg-accent);
+  }
 }
 
 .posts-toolbar-divider {
@@ -1358,14 +1403,16 @@ select.lg-input optgroup {
   font-weight: 500;
   font-family: var(--lg-font);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
   white-space: nowrap;
 }
 
-.posts-sort-btn-inline:hover {
-  background: var(--lg-accent-soft);
-  color: var(--lg-accent);
-  border-color: var(--lg-accent);
+@media (hover: hover) {
+  .posts-sort-btn-inline:hover {
+    background: var(--lg-accent-soft);
+    color: var(--lg-accent);
+    border-color: var(--lg-accent);
+  }
 }
 
 .posts-list {
@@ -1532,6 +1579,7 @@ select.lg-input optgroup {
 .admin-layout {
   display: flex;
   min-height: 100vh;
+  min-height: 100dvh;
   /* Transparent so wallpaper shows through */
   background: transparent;
   position: relative;
@@ -1973,13 +2021,25 @@ body.admin-menu-open {
   transform: rotate(90deg);
 }
 
-.admin-wallpaper-refresh.refreshing {
+/* 伪元素叠加静态 box-shadow，通过 opacity 切换 — 合成器线程友好，不触发重绘 */
+.admin-wallpaper-refresh::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 20px var(--lg-accent-glow);
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.admin-wallpaper-refresh.refreshing::after {
   animation: adminRefreshPulse 0.8s ease;
 }
 
 @keyframes adminRefreshPulse {
-  0%, 100% { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
-  50% { box-shadow: 0 0 20px var(--lg-accent-glow); }
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
 }
 
 /* --- Responsive --- */
@@ -2966,6 +3026,7 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   display: flex;
   flex-direction: column;
   height: calc(100vh - 56px);
+  height: calc(100dvh - 56px);
   position: relative;
   overflow: hidden;
 }
@@ -3266,9 +3327,11 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   transition: color 0.15s ease, background-color 0.15s ease;
 }
 
-.page-editor-canvas-item-tool-btn:hover {
-  background: rgba(255,255,255,0.10);
-  color: var(--lg-text-primary);
+@media (hover: hover) {
+  .page-editor-canvas-item-tool-btn:hover {
+    background: rgba(255,255,255,0.10);
+    color: var(--lg-text-primary);
+  }
 }
 
 .page-editor-canvas-item-tool-btn:disabled {
@@ -4038,12 +4101,14 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   color: var(--lg-text-secondary);
   cursor: pointer;
   font-size: 1rem;
-  transition: all 0.15s;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
   flex-shrink: 0;
 }
-.drive-view-toggle:hover {
-  background: rgba(255,255,255,0.08);
-  color: var(--lg-text-primary);
+@media (hover: hover) {
+  .drive-view-toggle:hover {
+    background: rgba(255,255,255,0.08);
+    color: var(--lg-text-primary);
+  }
 }
 .drive-view-toggle--active {
   background: var(--lg-accent-soft);
@@ -4308,7 +4373,7 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
   color: var(--lg-text-tertiary);
   background: transparent;
 }
@@ -4459,6 +4524,7 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   position: relative;
   max-width: 90vw;
   max-height: 85vh;
+  max-height: 85dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4467,16 +4533,19 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
 .preview-container--video {
   max-width: 85vw;
   max-height: 85vh;
+  max-height: 85dvh;
 }
 .preview-image {
   max-width: 100%;
   max-height: 85vh;
+  max-height: 85dvh;
   border-radius: var(--lg-radius-md);
   object-fit: contain;
 }
 .preview-video {
   max-width: 100%;
   max-height: 80vh;
+  max-height: 80dvh;
   border-radius: var(--lg-radius-md);
 }
 .preview-close {
@@ -4645,9 +4714,49 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
 }
 
 /* Mobile blur downscale for performance */
-@media (max-width: 480px) {
-  .lg-surface, .lg-surface-strong {
-    backdrop-filter: blur(8px) saturate(140%);
+/* 移动端 backdrop-filter 全面降级 — 移除 SVG 折射滤镜引用，仅保留简单 blur
+   断点提高到 768px，覆盖所有玻璃表面类，避免移动端 GPU 重载 */
+@media (max-width: 768px) {
+  .lg-surface,
+  .lg-surface-strong,
+  .lg-surface-blur,
+  .lg-surface-strong-blur,
+  .navbar,
+  .lg-input,
+  .lex-editor,
+  .lex-code,
+  .article-content pre,
+  .editor-error,
+  .admin-topbar,
+  .admin-sidebar,
+  .page-editor-topbar,
+  .page-editor-context-menu,
+  .page-editor-module-setup-card,
+  .download-toast,
+  .wallpaper-refresh-btn,
+  .admin-wallpaper-refresh,
+  .admin-page-btn {
+    backdrop-filter: blur(8px) saturate(140%) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(140%) !important;
+  }
+
+  /* ::before 伪元素的 backdrop-filter 也降级 */
+  .lg-surface::before,
+  .lg-surface-strong::before,
+  .navbar::before {
+    backdrop-filter: blur(8px) saturate(140%) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(140%) !important;
+  }
+}
+
+/* 用户偏好减少动画 — 禁用 SVG 滤镜 + 简化 backdrop-filter */
+@media (prefers-reduced-motion: reduce) {
+  .lg-surface,
+  .lg-surface-strong,
+  .lg-surface-blur,
+  .lg-surface-strong-blur {
+    backdrop-filter: blur(4px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(4px) saturate(120%) !important;
   }
 }
 

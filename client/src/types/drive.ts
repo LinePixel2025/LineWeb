@@ -3,7 +3,7 @@ export interface DriveItem {
   name: string
   isFolder: boolean
   parentId: number | null
-  size: number
+  size: string  // BigInt 序列化为字符串，避免精度丢失；显示时用 Number() 转换
   mimeType: string | null
   createdAt: string
   updatedAt: string

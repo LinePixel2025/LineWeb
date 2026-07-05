@@ -22,6 +22,9 @@ const EXCLUDE_CLASSES = [
 /* 管理后台页面 — 完全不扫描 */
 const ADMIN_PATHS = ['/admin']
 
+/* 滚动节流间隔（ms）— 移动端不需要每帧扫描 */
+const SCROLL_THROTTLE_MS = 200
+
 function luminance(r: number, g: number, b: number): number {
   return 0.299 * r + 0.587 * g + 0.114 * b
 }
@@ -50,19 +53,32 @@ function isExcluded(el: Element): boolean {
   return false
 }
 
+/* 检测是否应禁用扫描：移动端或用户偏好减少动画 */
+function shouldDisableScan(): boolean {
+  if (typeof window === 'undefined') return true
+  // 移动端默认禁用（backdrop-filter 已降级，文本反色不必要）
+  if (window.innerWidth <= 768) return true
+  // 用户偏好减少动画
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return true
+  return false
+}
+
 // ============================================================
 
 export function ContrastProvider({ children }: { children: ReactNode }) {
   const { bgUrl } = useWallpaper()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const rafRef = useRef(0)
+  const lastScanRef = useRef(0)
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const location = useLocation()
   const isAdminPath = ADMIN_PATHS.some(p => location.pathname.startsWith(p))
 
-  /* 核心扫描 — 读写分离避免 Layout Thrashing */
+  /* 核心扫描 — 仅扫描视口内元素，避免全屏像素读回 */
   const doScan = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
+    if (shouldDisableScan()) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
@@ -83,6 +99,10 @@ export function ContrastProvider({ children }: { children: ReactNode }) {
     const elements = document.querySelectorAll(SCAN_SELECTOR)
     const updates: Array<{ el: Element; value: string | null }> = []
 
+    // 视口边界（带 50px 缓冲区，避免边缘元素漏判）
+    const viewportTop = -50
+    const viewportBottom = vh + 50
+
     for (const el of elements) {
       if (isExcluded(el)) {
         updates.push({ el, value: null })
@@ -90,6 +110,8 @@ export function ContrastProvider({ children }: { children: ReactNode }) {
       }
 
       const rect = el.getBoundingClientRect()
+      // 跳过视口外的元素 — 显著减少计算量
+      if (rect.bottom < viewportTop || rect.top > viewportBottom) continue
       if (rect.width < 1 || rect.height < 1) continue
 
       const sx = rect.left + rect.width / 2
@@ -135,6 +157,19 @@ export function ContrastProvider({ children }: { children: ReactNode }) {
     cancelAnimationFrame(rafRef.current)
     rafRef.current = requestAnimationFrame(doScan)
   }, [doScan])
+
+  /* 节流的扫描 — 滚动时最多每 200ms 扫描一次 */
+  const throttledScan = useCallback(() => {
+    if (scrollTimerRef.current) return
+    const now = Date.now()
+    const elapsed = now - lastScanRef.current
+    const delay = Math.max(0, SCROLL_THROTTLE_MS - elapsed)
+    scrollTimerRef.current = setTimeout(() => {
+      scrollTimerRef.current = null
+      lastScanRef.current = Date.now()
+      scheduleScan()
+    }, delay)
+  }, [scheduleScan])
 
   /* 壁纸变化 → 重建 canvas */
   useEffect(() => {
@@ -189,25 +224,38 @@ export function ContrastProvider({ children }: { children: ReactNode }) {
     scheduleScan()
   }, [location.pathname, scheduleScan, isAdminPath])
 
-  /* 滚动 → 扫描（非管理后台时） */
+  /* 滚动 → 节流扫描（非管理后台时） */
   useEffect(() => {
-    if (isAdminPath) return
-    const onScroll = () => scheduleScan()
+    if (isAdminPath || shouldDisableScan()) return
+    const onScroll = () => throttledScan()
     window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [scheduleScan, isAdminPath])
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      if (scrollTimerRef.current) {
+        clearTimeout(scrollTimerRef.current)
+        scrollTimerRef.current = null
+      }
+    }
+  }, [throttledScan, isAdminPath])
 
   /* 窗口大小变化 → ResizeObserver 延迟扫描 */
   useEffect(() => {
-    if (isAdminPath) return
-    const ro = new ResizeObserver(() => scheduleScan())
+    if (isAdminPath || shouldDisableScan()) return
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null
+    const ro = new ResizeObserver(() => {
+      if (resizeTimer) clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(() => scheduleScan(), 300)
+    })
     ro.observe(document.documentElement)
-    return () => ro.disconnect()
+    return () => {
+      ro.disconnect()
+      if (resizeTimer) clearTimeout(resizeTimer)
+    }
   }, [scheduleScan, isAdminPath])
 
   /* 首次挂载后找 canvas 触发扫描 */
   useEffect(() => {
-    if (isAdminPath) return
+    if (isAdminPath || shouldDisableScan()) return
     let id = requestAnimationFrame(function check() {
       if (canvasRef.current) { scheduleScan(); return }
       id = requestAnimationFrame(check)
@@ -219,6 +267,7 @@ export function ContrastProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     return () => {
       cancelAnimationFrame(rafRef.current)
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current)
       if (canvasRef.current) {
         canvasRef.current.width = 0
         canvasRef.current = null

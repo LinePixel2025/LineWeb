@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useRef, useMemo, type ReactNode } from 'react'
 import type { DownloadTask, DriveItem } from '../types/drive'
 
 interface DownloadContextValue {
@@ -97,8 +97,14 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     abortControllersRef.current.delete(id)
   }, [])
 
+  const value = useMemo<DownloadContextValue>(() => ({
+    tasks,
+    startDownload,
+    cancelDownload,
+  }), [tasks, startDownload, cancelDownload])
+
   return (
-    <DownloadContext.Provider value={{ tasks, startDownload, cancelDownload }}>
+    <DownloadContext.Provider value={value}>
       {children}
     </DownloadContext.Provider>
   )

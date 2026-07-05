@@ -35,10 +35,26 @@ export function errorHandler(
     return
   }
 
-  // Prisma 错误
+  // Prisma 错误 — 按 code 细化状态码与提示
   if (err.name === 'PrismaClientKnownRequestError') {
-    res.status(400).json({ error: '数据库操作失败' })
-    return
+    const code = (err as unknown as { code: string }).code
+    switch (code) {
+      case 'P2002': // 唯一约束冲突
+        res.status(409).json({ error: '唯一约束冲突', code })
+        return
+      case 'P2025': // 记录不存在
+        res.status(404).json({ error: '记录不存在', code })
+        return
+      case 'P2003': // 外键约束失败
+        res.status(400).json({ error: '外键约束失败', code })
+        return
+      case 'P2014': // 无效的关联 ID
+        res.status(400).json({ error: '无效的关联 ID', code })
+        return
+      default:
+        res.status(400).json({ error: '数据库操作失败', code })
+        return
+    }
   }
 
   // 未知错误 — 生产环境不暴露详情

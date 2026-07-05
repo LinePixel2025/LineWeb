@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, memo } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import api from '../../lib/api'
@@ -8,7 +8,7 @@ import type { CommentData } from '../../types/comment'
 
 const CONTENT_MAX = 300
 
-function CollapsibleContent({ content }: { content: string }) {
+const CollapsibleContent = memo(function CollapsibleContent({ content }: { content: string }) {
   const [showAll, setShowAll] = useState(false)
   const isLong = content.length > CONTENT_MAX
 
@@ -24,9 +24,9 @@ function CollapsibleContent({ content }: { content: string }) {
       )}
     </div>
   )
-}
+})
 
-function ReplyForm({
+const ReplyForm = memo(function ReplyForm({
   parentId,
   postId,
   onReply,
@@ -85,9 +85,9 @@ function ReplyForm({
       </div>
     </div>
   )
-}
+})
 
-function CommentCard({
+const CommentCard = memo(function CommentCard({
   comment,
   postId,
   onReplyAdded,
@@ -153,7 +153,7 @@ function CommentCard({
       </LiquidGlass>
     </div>
   )
-}
+})
 
 export default function CommentSection({ postId }: { postId: number }) {
   const { user } = useAuth()
@@ -163,17 +163,17 @@ export default function CommentSection({ postId }: { postId: number }) {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
 
-  const fetchComments = () => {
+  const fetchComments = useCallback(() => {
     setLoading(true)
     api.get<CommentData[]>(`/comments/post/${postId}`)
       .then(setTopLevel)
       .catch(() => {})
       .finally(() => setLoading(false))
-  }
+  }, [postId])
 
-  useEffect(() => { fetchComments() }, [postId])
+  useEffect(() => { fetchComments() }, [postId, fetchComments])
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     if (!text.trim() || sending) return
     setSending(true)
@@ -187,10 +187,10 @@ export default function CommentSection({ postId }: { postId: number }) {
     } finally {
       setSending(false)
     }
-  }
+  }, [postId, sending, text])
 
   // 服务器只支持一级嵌套，parentId 总是顶级评论 ID —— 直接 map 而非递归
-  const handleReplyAdded = (parentId: number, reply: CommentData) => {
+  const handleReplyAdded = useCallback((parentId: number, reply: CommentData) => {
     setTopLevel(prev =>
       prev.map(c =>
         c.id === parentId
@@ -198,7 +198,7 @@ export default function CommentSection({ postId }: { postId: number }) {
           : c
       )
     )
-  }
+  }, [])
 
   const totalComments = topLevel.reduce((sum, c) => sum + 1 + c.replies.length, 0)
 

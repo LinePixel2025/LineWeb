@@ -95,8 +95,9 @@ export function WallpaperProvider({ children }: { children: ReactNode }) {
 
     try {
       const data = await api.get<WallpaperData>(`/bing-wallpaper${qs ? `?${qs}` : ''}`, { signal: controller.signal })
-      const sep = data.url.includes('?') ? '&' : '?'
-      setBgUrl(`${data.url}${sep}_t=${Date.now()}`)
+      // 移除 _t 缓存破坏参数 — 让浏览器 HTTP 缓存 + ETag 自然工作
+      // ContrastContext 的 _t 剥离逻辑保留作向后兼容
+      setBgUrl(data.url)
       setCopyright(data.copyright)
       setWallpaperTitle(data.title || '')
       setWallpaperDate(data.date || '')

@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
-import api from '../lib/api'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
+import api, { setToken } from '../lib/api'
 
 const TOKEN_KEY = 'lineweb_token'
 
@@ -34,36 +34,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       return
     }
+    // 首次加载时把 token 写入 api 模块缓存
+    setToken(token)
     api.get<User>('/auth/me')
       .then(setUser)
-      .catch(() => localStorage.removeItem(TOKEN_KEY))
+      .catch(() => setToken(null))
       .finally(() => setLoading(false))
   }, [])
 
-  const login = async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string) => {
     const data = await api.post<{ token: string; user: User }>('/auth/login', { email, password })
-    localStorage.setItem(TOKEN_KEY, data.token)
+    setToken(data.token)
     setUser(data.user)
-  }
+  }, [])
 
-  const register = async (username: string, email: string, password: string) => {
+  const register = useCallback(async (username: string, email: string, password: string) => {
     const data = await api.post<{ token: string; user: User }>('/auth/register', { username, email, password })
-    localStorage.setItem(TOKEN_KEY, data.token)
+    setToken(data.token)
     setUser(data.user)
-  }
+  }, [])
 
-  const logout = () => {
-    localStorage.removeItem(TOKEN_KEY)
+  const logout = useCallback(() => {
+    setToken(null)
     setUser(null)
-  }
+  }, [])
 
-  const updateSettings = async (settings: string) => {
+  const updateSettings = useCallback(async (settings: string) => {
     const data = await api.put<{ user: User }>('/auth/settings', { settings })
     setUser(data.user)
-  }
+  }, [])
+
+  const isAdmin = user?.role === 'admin'
+
+  const value = useMemo<AuthContextType>(() => ({
+    user,
+    loading,
+    login,
+    register,
+    logout,
+    isAdmin,
+    updateSettings,
+  }), [user, loading, login, register, logout, isAdmin, updateSettings])
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, isAdmin: user?.role === 'admin', updateSettings }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   )
