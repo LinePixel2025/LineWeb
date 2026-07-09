@@ -28,6 +28,7 @@ const PageEditor = lazy(() => import('./pages/admin/PageEditor'))
 const UserAdminPage = lazy(() => import('./pages/admin/UserAdminPage'))
 const ApiAdminPage = lazy(() => import('./pages/admin/ApiAdminPage'))
 const DeviceMonitorPage = lazy(() => import('./pages/admin/DeviceMonitorPage'))
+const GlassTestPage = lazy(() => import('./pages/GlassTestPage'))
 
 function RouteLoading() {
   return (
@@ -62,6 +63,7 @@ export default function App() {
                     <Route path="/drive" element={
                       <ProtectedRoute><DrivePage /></ProtectedRoute>
                     } />
+                    <Route path="/glass-test" element={<GlassTestPage />} />
                   </Route>
 
                   {/* Admin layout — separate from main site */}
