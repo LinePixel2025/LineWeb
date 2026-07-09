@@ -27,7 +27,7 @@ LineWeb API 提供个人网站/CMS 的全部功能，包括 **认证、文章、
 
 | 属性 | 值 |
 |---|---|
-| 基础 URL | `http://localhost:3001/api`（开发）/ 部署域名（生产） |
+| 基础 URL | `https://lineweb-production.up.railway.app/api`（生产）/ `https://lineweb-production.up.railway.app/api`（开发） |
 | 数据格式 | JSON（请求 `Content-Type: application/json`，响应 `application/json`） |
 | 认证方式 | JWT Bearer Token 或 API Key（`X-API-Key` 请求头） |
 | 分页 | 统一 `page` + `limit` 参数，响应含 `total` / `page` / `pageCount` |
@@ -44,19 +44,19 @@ LineWeb API 提供个人网站/CMS 的全部功能，包括 **认证、文章、
 
 ```bash
 # 1. 健康检查
-curl http://localhost:3001/api/health
+curl https://lineweb-production.up.railway.app/api/health
 
 # 2. 登录获取 Token
-curl -X POST http://localhost:3001/api/auth/login \
+curl -X POST https://lineweb-production.up.railway.app/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@lineweb.dev","password":"admin123"}'
 
 # 3. 使用 Token 获取个人信息（替换 YOUR_TOKEN）
-curl http://localhost:3001/api/auth/me \
+curl https://lineweb-production.up.railway.app/api/auth/me \
   -H "Authorization: Bearer YOUR_TOKEN"
 
 # 4. 获取文章列表（需认证）
-curl http://localhost:3001/api/posts?page=1&limit=10 \
+curl https://lineweb-production.up.railway.app/api/posts?page=1&limit=10 \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -64,7 +64,7 @@ curl http://localhost:3001/api/posts?page=1&limit=10 \
 
 ```typescript
 // 项目已经封装好 api.ts，这里展示底层 fetch 用法
-const API_BASE = 'http://localhost:3001/api'
+const API_BASE = 'https://lineweb-production.up.railway.app/api'
 
 async function login(email: string, password: string) {
   const res = await fetch(`${API_BASE}/auth/login`, {
@@ -95,7 +95,7 @@ console.log(me)
 ```python
 import requests
 
-API_BASE = 'http://localhost:3001/api'
+API_BASE = 'https://lineweb-production.up.railway.app/api'
 
 # 登录
 resp = requests.post(f'{API_BASE}/auth/login', json={
@@ -1163,7 +1163,7 @@ CORS_ORIGIN="*"
 ```javascript
 // Node.js / 浏览器环境
 async function publishArticle() {
-  const API = 'http://localhost:3001/api'
+  const API = 'https://lineweb-production.up.railway.app/api'
 
   // 1. 登录
   const loginRes = await fetch(`${API}/auth/login`, {
@@ -1225,7 +1225,7 @@ async function uploadFile(token, filePath, parentId) {
   form.set('file', new File([createReadStream(filePath)], 'photo.jpg'))
   if (parentId) form.set('parentId', String(parentId))
 
-  const res = await fetch('http://localhost:3001/api/drive/upload', {
+  const res = await fetch('https://lineweb-production.up.railway.app/api/drive/upload', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: form,
@@ -1238,7 +1238,7 @@ async function uploadFile(token, filePath, parentId) {
 
 ```javascript
 async function downloadFile(token, fileId) {
-  const res = await fetch(`http://localhost:3001/api/drive/download/${fileId}`, {
+  const res = await fetch(`https://lineweb-production.up.railway.app/api/drive/download/${fileId}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
   const reader = res.body.getReader()
@@ -1334,7 +1334,7 @@ class LineWebAPI:
 
 
 # 使用示例
-api = LineWebAPI('http://localhost:3001/api')
+api = LineWebAPI('https://lineweb-production.up.railway.app/api')
 user = api.login('admin@lineweb.dev', 'admin123')
 print(f'登录成功: {user["username"]}')
 
@@ -1357,17 +1357,17 @@ print(f'今日壁纸: {wallpaper.get("title", "")}')
 
 ```bash
 # === 1. 登录 ===
-TOKEN=$(curl -s -X POST http://localhost:3001/api/auth/login \
+TOKEN=$(curl -s -X POST https://lineweb-production.up.railway.app/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@lineweb.dev","password":"admin123"}' | \
   python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
 
 # === 2. 获取 Dashboard 统计 ===
-curl -s http://localhost:3001/api/stats \
+curl -s https://lineweb-production.up.railway.app/api/stats \
   -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 
 # === 3. 创建文章 ===
-curl -s -X POST http://localhost:3001/api/posts \
+curl -s -X POST https://lineweb-production.up.railway.app/api/posts \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{
@@ -1379,19 +1379,19 @@ curl -s -X POST http://localhost:3001/api/posts \
   }' | python3 -m json.tool
 
 # === 4. 查看文章（需认证） ===
-curl -s http://localhost:3001/api/posts/api-post \
+curl -s https://lineweb-production.up.railway.app/api/posts/api-post \
   -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 
 # === 5. 获取今日壁纸（需认证） ===
-curl -s http://localhost:3001/api/bing-wallpaper \
+curl -s https://lineweb-production.up.railway.app/api/bing-wallpaper \
   -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 
 # === 6. 获取文件列表 ===
-curl -s "http://localhost:3001/api/drive/files?page=1&limit=10" \
+curl -s "https://lineweb-production.up.railway.app/api/drive/files?page=1&limit=10" \
   -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 
 # === 7. 删除文章 ===
-curl -s -X DELETE http://localhost:3001/api/posts/1 \
+curl -s -X DELETE https://lineweb-production.up.railway.app/api/posts/1 \
   -H "Authorization: Bearer $TOKEN"
 ```
 
