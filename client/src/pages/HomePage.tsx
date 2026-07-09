@@ -61,9 +61,6 @@ export default function HomePage() {
           >
             Line Web
           </h1>
-          <p style={{ fontSize: 'clamp(0.95rem, 3vw, 1.1rem)', lineHeight: 1.6, marginTop: '16px', color: 'var(--lg-text-secondary)' }}>
-            一个融合 Liquid Glass 设计语言的个人空间
-          </p>
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '36px' }}>
             <Link to="/posts" className="liquid-btn primary lg">
               浏览文章
