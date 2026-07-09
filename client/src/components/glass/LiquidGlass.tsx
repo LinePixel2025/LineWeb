@@ -1,7 +1,4 @@
-// client/src/components/glass/LiquidGlass.tsx
 import React, { useRef, useEffect, memo } from 'react'
-import AdvancedGlass from 'liquid-glass-react'
-import { useGlassCapabilities } from './useGlassCapabilities'
 
 export interface LiquidGlassProps {
   children: React.ReactNode
@@ -16,89 +13,30 @@ export interface LiquidGlassProps {
 }
 
 /**
- * Map variant + chromatic props to liquid-glass-react props.
+ * Liquid Glass component — 利用已有的 CSS 类实现玻璃效果，
+ * 同时叠加交互式镜面高光和色差边缘。
  *
- * variant → displacementScale + blurAmount + saturation:
- *   regular:  medium refraction, standard blur (matches lg-surface)
- *   strong:   heavy refraction, thick glass feel (matches lg-surface-strong)
- *   blur:     medium refraction, darker tint for content-heavy surfaces
+ * 折射和毛玻璃由 CSS lg-surface / lg-surface-strong 类的
+ * backdrop-filter + ::before 驱动，保证与纯 CSS 用法效果完全一致。
  *
- * chromatic → aberrationIntensity:
- *   true:  2 (subtle RGB channel separation at edges)
- *   false: 0 (disabled)
- *
- * interactive → elasticity:
- *   true:  0.15 (subtle elastic pull toward cursor)
- *   false: 0 (rigid, no mouse response)
+ * 结构：
+ *   ┌──────────────────────────────┐
+ *   │  interactive highlight (z:3)  │  鼠标跟随镜面高光
+ *   │  content (z:2)                │  子内容
+ *   │  rim glow (z:1)               │  上边缘泛光
+ *   │  CSS element (z:0)            │  SVG refr + blur + tint + shadow
+ *   │  CSS ::before (z:-1)          │  heavy blur(16.8px) frosted underlay
+ *   │  CSS ::after (z:1)            │  static specular (被 interactive 覆盖)
+ *   └──────────────────────────────┘
  */
-function mapPropsToAdvanced(
-  variant: 'regular' | 'strong' | 'blur',
-  chromatic: boolean,
-  interactive: boolean,
-): {
-  displacementScale: number
-  blurAmount: number
-  saturation: number
-  aberrationIntensity: number
-  elasticity: number
-  cornerRadius: number
-} {
-  const base = {
-    aberrationIntensity: chromatic ? 2 : 0,
-    elasticity: interactive ? 0.15 : 0,
-    cornerRadius: 28, // matches --lg-radius-xl
-  }
-
-  switch (variant) {
-    case 'strong':
-      return { ...base, displacementScale: 80, blurAmount: 0.06, saturation: 140 }
-    case 'blur':
-      return { ...base, displacementScale: 45, blurAmount: 0.05, saturation: 120 }
-    case 'regular':
-    default:
-      return { ...base, displacementScale: 45, blurAmount: 0.05, saturation: 150 }
-  }
-}
-
-/* ================================================================
-   Advanced Mode — liquid-glass-react with SVG displacement
-   Only active on Chromium desktop browsers.
-   ================================================================ */
-const AdvancedMode = memo(function AdvancedMode({
-  children,
-  variant,
-  className = '',
-  style,
-  interactive,
-  chromatic,
-}: Required<Pick<LiquidGlassProps, 'children' | 'variant' | 'interactive' | 'chromatic'>> &
-  Pick<LiquidGlassProps, 'className' | 'style'>) {
-  const advancedProps = mapPropsToAdvanced(variant, chromatic, interactive)
-
-  return (
-    <AdvancedGlass
-      {...advancedProps}
-      className={className}
-      style={style}
-    >
-      {children}
-    </AdvancedGlass>
-  )
-})
-
-/* ================================================================
-   Legacy Mode — CSS-only glass (Safari, Firefox, mobile)
-   Preserves the original implementation exactly.
-   ================================================================ */
-const LegacyMode = memo(function LegacyMode({
+const LiquidGlass = memo(function LiquidGlass({
   children,
   variant = 'regular',
   className = '',
   style,
   interactive = true,
   chromatic = true,
-}: Required<Pick<LiquidGlassProps, 'children' | 'variant' | 'interactive' | 'chromatic'>> &
-  Pick<LiquidGlassProps, 'className' | 'style'>) {
+}: LiquidGlassProps) {
   const ref = useRef<HTMLDivElement>(null)
   const specularRef = useRef<HTMLDivElement>(null)
 
@@ -115,6 +53,7 @@ const LegacyMode = memo(function LegacyMode({
     const throttleMs = window.innerWidth <= 768 ? 50 : 16
 
     const onMove = (e: MouseEvent | TouchEvent) => {
+      // 每帧只读一次 getBoundingClientRect
       if (!cachedRect) {
         cachedRect = el.getBoundingClientRect()
         rectFrame = requestAnimationFrame(() => { cachedRect = null })
@@ -150,6 +89,7 @@ const LegacyMode = memo(function LegacyMode({
   const isStrong = variant === 'strong' || variant === 'blur'
   const isBlur = variant === 'blur'
 
+  // 使用 CSS class 驱动玻璃效果 — 确保与全局样式 100% 一致
   const glassClass = isBlur
     ? 'lg-surface-strong lg-surface-strong-blur'
     : isStrong
@@ -159,8 +99,12 @@ const LegacyMode = memo(function LegacyMode({
   const allClass = `${glassClass}${interactive ? '' : ' lg-surface-no-specular'} ${className}`.trim()
 
   return (
-    <div ref={ref} className={allClass} style={style}>
-      {/* Interactive specular highlight */}
+    <div
+      ref={ref}
+      className={allClass}
+      style={style}
+    >
+      {/* Interactive specular highlight — 鼠标跟随高光，覆盖 CSS ::after */}
       <div
         ref={specularRef}
         style={{
@@ -169,6 +113,9 @@ const LegacyMode = memo(function LegacyMode({
           borderRadius: 'inherit',
           pointerEvents: 'none',
           zIndex: 3,
+          // CSS 变量驱动 — 由 onMove 中 setProperty 更新，避免重拼字符串
+          '--lg-specular-x': '30%',
+          '--lg-specular-y': '20%',
           background: interactive
             ? 'radial-gradient(circle at var(--lg-specular-x, 30%) var(--lg-specular-y, 20%), rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.08) 30%, transparent 60%)'
             : 'transparent',
@@ -224,36 +171,6 @@ const LegacyMode = memo(function LegacyMode({
       </div>
     </div>
   )
-})
-
-/* ================================================================
-   Main Component — auto-selects mode based on browser capabilities
-   Public API unchanged — all consumer files work without modification.
-   ================================================================ */
-const LiquidGlass = memo(function LiquidGlass({
-  children,
-  variant = 'regular',
-  className = '',
-  style,
-  interactive = true,
-  chromatic = true,
-}: LiquidGlassProps) {
-  const { supportsDisplacement } = useGlassCapabilities()
-
-  const modeProps = {
-    variant: variant ?? 'regular',
-    interactive: interactive ?? true,
-    chromatic: chromatic ?? true,
-    className,
-    style,
-    children,
-  }
-
-  if (supportsDisplacement) {
-    return <AdvancedMode {...modeProps} />
-  }
-
-  return <LegacyMode {...modeProps} />
 })
 
 export default LiquidGlass

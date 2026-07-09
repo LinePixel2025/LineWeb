@@ -1,15 +1,12 @@
 // client/src/pages/GlassTestPage.tsx
 import { useState } from 'react'
 import LiquidGlass from '../components/glass/LiquidGlass'
-import { useGlassCapabilities } from '../components/glass/useGlassCapabilities'
 
 /**
- * Dev test page for visual comparison of glass rendering modes.
- * Shows the current browser's capabilities and renders test cards
- * with all variant/interactive/chromatic combinations.
+ * Dev test page for glass effect verification.
+ * Renders test cards with all variant/interactive/chromatic combinations.
  */
 export default function GlassTestPage() {
-  const capabilities = useGlassCapabilities()
   const [variant, setVariant] = useState<'regular' | 'strong' | 'blur'>('regular')
   const [interactive, setInteractive] = useState(true)
   const [chromatic, setChromatic] = useState(true)
@@ -18,10 +15,7 @@ export default function GlassTestPage() {
     <div className="page container" style={{ padding: '40px 20px' }}>
       <h1 style={{ marginBottom: 8 }}>Glass Effect Test</h1>
       <p style={{ color: 'var(--lg-text-secondary)', marginBottom: 32 }}>
-        Browser: {capabilities.supportsDisplacement
-          ? '✅ Chromium — SVG displacement active'
-          : '⚠️ Non-Chromium — CSS fallback active'}
-        {' · '}Mobile: {capabilities.isMobile ? 'Yes' : 'No'}
+        SVG displacement refraction with edge bending. Hover over cards to see interactive effects.
       </p>
 
       {/* Controls */}
@@ -113,8 +107,8 @@ export default function GlassTestPage() {
         <LiquidGlass variant="strong" interactive={interactive} chromatic={chromatic}>
           <div style={{ padding: 32 }}>
             <p style={{ color: 'var(--lg-text-secondary)' }}>
-              Wide glass surface test. In advanced mode, SVG displacement refraction shows
-              visible edge bending. In legacy mode, you see CSS-only frosted glass.
+              Wide glass surface test. SVG displacement refraction shows visible edge bending.
+              The displacement map creates realistic light refraction at glass edges.
             </p>
           </div>
         </LiquidGlass>
