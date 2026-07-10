@@ -1,31 +1,38 @@
 import { useState, useCallback, memo } from 'react'
 import { useDrive } from '../../contexts/DriveContext'
+import api from '../../lib/api'
 import type { Breadcrumb } from '../../types/drive'
 
-export interface PathBarProps {
-  onNavigate?: (path: Breadcrumb[]) => void
-}
-
-const PathBar = memo(function PathBar({ onNavigate }: PathBarProps) {
-  const { state, navigateToBreadcrumb, navigateTo } = useDrive()
+const PathBar = memo(function PathBar() {
+  const { state, navigateToBreadcrumb, navigateTo, refreshFiles } = useDrive()
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
 
   const handleBreadcrumbClick = useCallback((index: number) => {
     navigateToBreadcrumb(index)
-    onNavigate?.(state.currentPath.slice(0, index + 1))
-  }, [navigateToBreadcrumb, onNavigate, state.currentPath])
+  }, [navigateToBreadcrumb])
 
   const handleDoubleClick = useCallback(() => {
     setIsEditing(true)
     setEditValue(state.currentPath.map(p => p.name).join('/'))
   }, [state.currentPath])
 
-  const handleEditSubmit = useCallback(() => {
+  const handleEditSubmit = useCallback(async () => {
+    const trimmed = editValue.trim()
+    if (!trimmed) {
+      setIsEditing(false)
+      return
+    }
+
+    try {
+      const breadcrumbs = await api.get<Breadcrumb[]>(`/drive/resolve-path?path=${encodeURIComponent(trimmed)}`)
+      navigateTo(breadcrumbs)
+    } catch {
+      // Path resolution failed, stay in edit mode
+      return
+    }
     setIsEditing(false)
-    // TODO: 解析路径并导航
-    console.log('Navigate to:', editValue)
-  }, [editValue])
+  }, [editValue, navigateTo])
 
   const handleEditCancel = useCallback(() => {
     setIsEditing(false)
@@ -85,7 +92,7 @@ const PathBar = memo(function PathBar({ onNavigate }: PathBarProps) {
         </button>
         <button
           className="path-bar-action"
-          onClick={() => window.location.reload()}
+          onClick={refreshFiles}
           title="刷新"
         >
           ↻

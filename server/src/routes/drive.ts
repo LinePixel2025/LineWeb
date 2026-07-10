@@ -781,6 +781,43 @@ router.delete('/files/:id', async (req: Request, res: Response) => {
   }
 })
 
+/* ---------- 解析路径字符串为面包屑 ---------- */
+router.get('/resolve-path', async (req: Request, res: Response) => {
+  try {
+    const pathStr = (req.query.path as string || '').trim()
+    if (!pathStr) {
+      res.json([{ id: null, name: '根目录' }])
+      return
+    }
+
+    const segments = pathStr.split('/').filter(s => s.length > 0)
+    const breadcrumbs: { id: number | null; name: string }[] = [{ id: null, name: '根目录' }]
+
+    let currentParentId: number | null = null
+    for (const segment of segments) {
+      const folder: { id: number; name: string } | null = await prisma.driveFile.findFirst({
+        where: {
+          name: segment,
+          isFolder: true,
+          parentId: currentParentId,
+        },
+        select: { id: true, name: true },
+      })
+      if (!folder) {
+        res.status(404).json({ error: `文件夹 "${segment}" 不存在` })
+        return
+      }
+      breadcrumbs.push({ id: folder.id, name: folder.name })
+      currentParentId = folder.id
+    }
+
+    res.json(breadcrumbs)
+  } catch (err) {
+    console.error('解析路径失败:', err)
+    res.status(500).json({ error: '解析路径失败' })
+  }
+})
+
 /* ---------- 手动触发文件同步 ---------- */
 router.post('/sync', async (_req: Request, res: Response) => {
   try {
