@@ -3,7 +3,7 @@ import LiquidGlass from '../glass/LiquidGlass'
 import LiquidButton from '../glass/LiquidButton'
 import type { DriveItem } from '../../types/drive'
 import { getFileIcon, getFileTypeLabel } from '../../types/drive'
-import { formatFileSize, formatDate } from '../../lib/format'
+import FileAttributes from './FileAttributes'
 
 export interface DriveDetailPanelProps {
   item: DriveItem | null
@@ -86,49 +86,16 @@ const DriveDetailPanel = memo(function DriveDetailPanel({
           <LiquidButton size="sm" variant="ghost" onClick={() => onRename(item)}>
             ✏️ 重命名
           </LiquidButton>
+          <LiquidButton size="sm" variant="ghost" onClick={() => navigator.clipboard.writeText(item.name)}>
+            📋 复制名称
+          </LiquidButton>
           <LiquidButton size="sm" variant="danger" onClick={() => onDelete(item)}>
             🗑️ 删除
           </LiquidButton>
         </div>
 
-        {/* File Info */}
-        <div className="drive-detail-info">
-          <h4 className="drive-detail-info-heading">文件信息</h4>
-          <div className="drive-detail-info-list">
-            {!item.isFolder && (
-              <div className="drive-detail-info-row">
-                <span className="drive-detail-info-label">大小</span>
-                <span className="drive-detail-info-value">{formatFileSize(Number(item.size))}</span>
-              </div>
-            )}
-            {item.isFolder && (
-              <div className="drive-detail-info-row">
-                <span className="drive-detail-info-label">类型</span>
-                <span className="drive-detail-info-value">文件夹</span>
-              </div>
-            )}
-            {item.mimeType && (
-              <div className="drive-detail-info-row">
-                <span className="drive-detail-info-label">MIME 类型</span>
-                <span className="drive-detail-info-value">{item.mimeType}</span>
-              </div>
-            )}
-            <div className="drive-detail-info-row">
-              <span className="drive-detail-info-label">创建时间</span>
-              <span className="drive-detail-info-value">{formatDate(item.createdAt)}</span>
-            </div>
-            <div className="drive-detail-info-row">
-              <span className="drive-detail-info-label">修改时间</span>
-              <span className="drive-detail-info-value">{formatDate(item.updatedAt)}</span>
-            </div>
-            {item.uploadedBy && (
-              <div className="drive-detail-info-row">
-                <span className="drive-detail-info-label">上传者</span>
-                <span className="drive-detail-info-value">{item.uploadedBy.username}</span>
-              </div>
-            )}
-          </div>
-        </div>
+        {/* File Attributes */}
+        <FileAttributes item={item} />
       </LiquidGlass>
     </aside>
   )

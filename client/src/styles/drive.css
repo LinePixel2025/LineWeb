@@ -825,3 +825,47 @@
   font-size: 0.7rem;
   line-height: 1;
 }
+
+/* ============================================================
+   File Attributes — Detail Panel Info Section
+   ============================================================ */
+
+.file-attributes {
+  border-top: 1px solid var(--lg-glass-border);
+  padding-top: 16px;
+}
+
+.file-attributes-heading {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--lg-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 12px;
+}
+
+.file-attributes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.file-attribute-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.file-attribute-label {
+  font-size: 0.8rem;
+  color: var(--lg-text-tertiary);
+  flex-shrink: 0;
+}
+
+.file-attribute-value {
+  font-size: 0.8rem;
+  color: var(--lg-text-secondary);
+  text-align: right;
+  word-break: break-all;
+}
