@@ -253,67 +253,76 @@
 
 /* Admin table — mobile card layout */
 @media (max-width: 580px) {
-  .admin-table { min-width: unset; }
-  .admin-table thead { display: none; }
+  .admin-table {
+    min-width: unset;
+  }
+
+  .admin-table thead {
+    display: none;
+  }
 
   .admin-table tbody,
   .admin-table tr,
-  .admin-table td { display: block; }
+  .admin-table td {
+    display: block;
+  }
 
   .admin-row {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 14px;
+    gap: 10px;
+    padding: 16px;
+    position: relative;
     border-bottom: 1px solid var(--lg-glass-border);
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: var(--lg-radius-md);
+    margin-bottom: 8px;
   }
 
-  /* 隐藏 data-label 伪元素 — 卡片布局不需要标签 */
-  .admin-cell::before { display: none !important; }
+  .admin-row:last-child {
+    margin-bottom: 0;
+  }
+
+  .admin-cell::before {
+    display: none !important;
+  }
 
   .admin-cell {
     padding: 0;
-    border: none;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
   }
 
-  /* 标题行：标题居左，状态徽章居右 */
   .admin-cell--title {
     max-width: unset;
     white-space: normal;
-    flex-direction: row;
-    align-items: center;
-    gap: 10px;
   }
 
   .admin-post-title {
     font-size: 1rem;
     font-weight: 600;
-    flex: 1;
-    min-width: 0;
   }
 
   .admin-post-date {
-    margin-top: 0;
+    margin-top: 4px;
     font-size: 0.78rem;
   }
 
-  /* 状态徽章：在标题行右侧 */
   .admin-cell--status {
     position: absolute;
-    top: 14px;
-    right: 14px;
+    top: 16px;
+    right: 16px;
   }
 
-  .admin-row {
-    position: relative;
+  /* Status badge pill enhancement */
+  .admin-badge {
+    font-size: 0.72rem;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    font-weight: 600;
   }
 
-  /* 操作按钮：横向紧凑排列 */
+  /* Actions: full-width vertical on very small screens, horizontal on 360-580px */
   .admin-actions {
+    display: flex;
     flex-direction: row;
     gap: 6px;
     flex-wrap: nowrap;
@@ -322,13 +331,24 @@
   .admin-actions .liquid-btn {
     flex: 1;
     min-width: 0;
-    padding: 8px 0;
-    font-size: 0.82rem;
     justify-content: center;
+    font-size: 0.78rem;
+    padding: 6px 8px;
   }
 
   .admin-cell--actions {
     justify-content: stretch;
+  }
+
+  /* Pagination mobile simplification */
+  .admin-pagination {
+    gap: 4px;
+  }
+
+  .admin-page-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 0.9rem;
   }
 }
 
