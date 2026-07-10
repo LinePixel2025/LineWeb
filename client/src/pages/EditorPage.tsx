@@ -121,26 +121,24 @@ export default function EditorPage() {
           />
         </div>
 
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <div className="editor-field" style={{ flex: 1, minWidth: 180 }}>
-            <label className="editor-label">Slug</label>
-            <input
-              className="lg-input"
-              value={slug}
-              onChange={e => setSlug(e.target.value)}
-              placeholder={title ? toSlug(title) : 'article-slug'}
-            />
-          </div>
+        <div className="editor-field">
+          <label className="editor-label">Slug</label>
+          <input
+            className="lg-input"
+            value={slug}
+            onChange={e => setSlug(e.target.value)}
+            placeholder={title ? toSlug(title) : 'article-slug'}
+          />
+        </div>
 
-          <div className="editor-field" style={{ flex: 2, minWidth: 240 }}>
-            <label className="editor-label">摘要</label>
-            <input
-              className="lg-input"
-              value={summary}
-              onChange={e => setSummary(e.target.value)}
-              placeholder="文章摘要（可选）"
-            />
-          </div>
+        <div className="editor-field">
+          <label className="editor-label">摘要</label>
+          <input
+            className="lg-input"
+            value={summary}
+            onChange={e => setSummary(e.target.value)}
+            placeholder="文章摘要（可选）"
+          />
         </div>
 
         <div className="editor-field">
