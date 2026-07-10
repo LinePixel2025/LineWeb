@@ -2,7 +2,6 @@ import { useReducer, useEffect, useCallback, useRef, useMemo, useState } from 'r
 import LiquidGlass from '../components/glass/LiquidGlass'
 import LiquidButton from '../components/glass/LiquidButton'
 import DriveToolbar from '../components/drive/DriveToolbar'
-import DriveSidebar from '../components/drive/DriveSidebar'
 import DriveNavigation from '../components/drive/DriveNavigation'
 import MobileNav from '../components/drive/MobileNav'
 import DriveDetailPanel from '../components/drive/DriveDetailPanel'
@@ -291,11 +290,6 @@ export default function DrivePage() {
     dispatch({ type: 'SET_SORT', payload: sort })
   }, [])
 
-  // 分类过滤变更
-  const handleCategoryChange = useCallback((filter: CategoryFilter) => {
-    dispatch({ type: 'SET_CATEGORY_FILTER', payload: filter })
-  }, [])
-
   // 计算显示的文件列表
   const displayItems = useMemo(() => {
     let items = state.searchResults !== null ? state.searchResults : state.items
@@ -363,7 +357,7 @@ export default function DrivePage() {
 
   return (
     <DriveProvider>
-      <div className={`page drive-page ${isMobile ? 'drive-page--mobile' : ''}`}>
+      <div className="page drive-page">
         {/* Desktop/Tablet Navigation Sidebar */}
         {isDesktop && (
           <DriveNavigation
