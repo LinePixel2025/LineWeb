@@ -614,7 +614,7 @@
   /* User admin inline edit */
   .admin-cell--actions .lg-input {
     font-size: 16px;
-    min-height: 40px;
+    min-height: 44px;
   }
 
   /* Toast: top position to avoid tab bar */
