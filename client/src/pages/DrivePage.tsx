@@ -16,6 +16,7 @@ import Pagination from '../components/Pagination'
 import api, { ApiError } from '../lib/api'
 import { useDownload } from '../contexts/DownloadContext'
 import { useResponsive } from '../hooks/useResponsive'
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { DriveProvider } from '../contexts/DriveContext'
 import type { DriveItem, Breadcrumb, DriveListResponse, SortOption, CategoryFilter, ViewMode } from '../types/drive'
 import { getFileCategory } from '../types/drive'
@@ -334,6 +335,32 @@ export default function DrivePage() {
 
     return items
   }, [state.searchResults, state.items, state.categoryFilter, state.sort])
+
+  // 快捷键支持
+  useKeyboardShortcuts({
+    selectedFileIds: state.selectedId ? [state.selectedId] : [],
+    currentPathLength: state.breadcrumbs.length,
+    onDelete: state.selectedId
+      ? () => {
+          const item = displayItems.find((i) => i.id === state.selectedId)
+          if (item) dispatch({ type: 'SET_DELETE_ITEM', payload: item })
+        }
+      : undefined,
+    onRename: state.selectedId
+      ? () => {
+          const item = displayItems.find((i) => i.id === state.selectedId)
+          if (item) dispatch({ type: 'SET_RENAME_ITEM', payload: item })
+        }
+      : undefined,
+    onNewFolder: openNewFolder,
+    onUpload: openUpload,
+    onRefresh: refresh,
+    onClearSelection: () => handleSelect(null),
+    onNavigateBack: () => navigateToBreadcrumb(state.breadcrumbs.length - 2),
+    onSelectAll: () => {
+      if (displayItems.length > 0) handleSelect(displayItems[0])
+    },
+  })
 
   const isSearching = state.searchResults !== null
 
