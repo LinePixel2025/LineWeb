@@ -679,7 +679,6 @@ body.admin-menu-open {
 
 /* More menu overlay */
 .admin-more-overlay {
-  display: none;
   position: fixed;
   inset: 0;
   z-index: 300;
@@ -778,9 +777,9 @@ body.admin-menu-open {
     display: flex;
   }
 
-  /* Add bottom padding to main content for tab bar */
+  /* Add bottom padding to main content for tab bar + safe area */
   .admin-main {
-    padding-bottom: 72px;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
   }
 }
 
