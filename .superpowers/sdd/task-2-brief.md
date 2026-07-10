@@ -1,102 +1,100 @@
-# Task 2: 创建useResponsive响应式布局hook
+# Task 2: Avatar Service Layer
 
-## 项目上下文
-这是网盘前端界面重构项目的第二步。项目采用React 19 + TypeScript + Vite技术栈。Task 1已完成DriveContext状态管理。
+## Files:
+- Create: `server/src/services/avatarService.ts`
 
-## 任务目标
-创建useResponsive hook，用于检测当前设备类型和屏幕尺寸，支持响应式布局。
+## Interfaces:
+- Consumes: `sendCommand`, `streamWrite`, `streamRead`, `isNodeConnected` from `../services/storageTunnel.js`
+- Produces:
+  - `uploadAvatar(userId: number, buffer: Buffer, mimeType: string): Promise<string>` — 返回 `_avatars/{userId}.webp`
+  - `getAvatarPathByUserId(userId: number): Promise<string | null>` — 返回用户的 avatarPath
+  - `getAvatarStream(avatarPath: string): Promise<AsyncGenerator<Buffer>>` — 返回可读流
+  - `deleteAvatar(userId: number): Promise<void>` — 删除头像文件并清空 DB
 
-## 文件列表
-- Create: `client/src/hooks/useResponsive.ts`
-- Test: `client/src/hooks/__tests__/useResponsive.test.ts`
+## Steps
 
-## 接口定义
-Produces: `useResponsive` hook - 返回当前设备类型和屏幕尺寸
-
-## 详细步骤
-
-### Step 1: 创建useResponsive.ts
-
-创建 `client/src/hooks/useResponsive.ts` 文件：
+### Step 1: 创建 avatarService.ts
 
 ```typescript
-import { useState, useEffect } from 'react'
+import sharp from 'sharp'
+import prisma from '../lib/prisma.js'
+import { streamWrite, streamRead, sendCommand, isNodeConnected } from './storageTunnel.js'
 
-export type DeviceType = 'desktop' | 'tablet' | 'mobile'
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+const MAX_FILE_SIZE = 2 * 1024 * 1024
+const AVATAR_DIR = '_avatars'
 
-export interface ResponsiveInfo {
-  deviceType: DeviceType
-  isDesktop: boolean
-  isTablet: boolean
-  isMobile: boolean
-  width: number
-  height: number
+function getAvatarPath(userId: number): string {
+  return `${AVATAR_DIR}/${userId}.webp`
 }
 
-const BREAKPOINTS = {
-  desktop: 1024,
-  tablet: 768
+async function processAvatar(buffer: Buffer): Promise<Buffer> {
+  return sharp(buffer)
+    .resize(256, 256, { fit: 'cover' })
+    .webp({ quality: 80 })
+    .toBuffer()
 }
 
-export function useResponsive(): ResponsiveInfo {
-  const [size, setSize] = useState({
-    width: typeof window !== 'undefined' ? window.innerWidth : 1024,
-    height: typeof window !== 'undefined' ? window.innerHeight : 768
-  })
-
-  useEffect(() => {
-    const handleResize = () => {
-      setSize({
-        width: window.innerWidth,
-        height: window.innerHeight
-      })
-    }
-
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
-
-  const deviceType: DeviceType = 
-    size.width >= BREAKPOINTS.desktop ? 'desktop' :
-    size.width >= BREAKPOINTS.tablet ? 'tablet' :
-    'mobile'
-
-  return {
-    deviceType,
-    isDesktop: deviceType === 'desktop',
-    isTablet: deviceType === 'tablet',
-    isMobile: deviceType === 'mobile',
-    width: size.width,
-    height: size.height
+export async function uploadAvatar(userId: number, buffer: Buffer, mimeType: string): Promise<string> {
+  if (!isNodeConnected()) {
+    throw Object.assign(new Error('存储节点不可用'), { status: 503 })
   }
+  if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
+    throw Object.assign(new Error('仅支持图片格式 (JPEG/PNG/WebP/GIF)'), { status: 400 })
+  }
+  if (buffer.length > MAX_FILE_SIZE) {
+    throw Object.assign(new Error('文件大小不能超过 2MB'), { status: 400 })
+  }
+  const processed = await processAvatar(buffer)
+  const avatarPath = getAvatarPath(userId)
+  const chunks = (async function* () { yield processed })()
+  const resp = await streamWrite(avatarPath, chunks, processed.length)
+  if (!resp.success) {
+    throw Object.assign(new Error('头像上传失败'), { status: 500 })
+  }
+  await prisma.user.update({
+    where: { id: userId },
+    data: { avatarPath },
+  })
+  return avatarPath
+}
+
+export async function getAvatarPathByUserId(userId: number): Promise<string | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { avatarPath: true },
+  })
+  return user?.avatarPath || null
+}
+
+export async function getAvatarStream(avatarPath: string): Promise<AsyncGenerator<Buffer>> {
+  if (!isNodeConnected()) {
+    throw Object.assign(new Error('存储节点不可用'), { status: 503 })
+  }
+  return streamRead(avatarPath)
+}
+
+export async function deleteAvatar(userId: number): Promise<void> {
+  const avatarPath = await getAvatarPathByUserId(userId)
+  if (!avatarPath) return
+  if (isNodeConnected()) {
+    await sendCommand({ type: 'delete_file', path: avatarPath }).catch(() => {})
+  }
+  await prisma.user.update({
+    where: { id: userId },
+    data: { avatarPath: null },
+  })
 }
 ```
 
-### Step 2: 创建测试文件
+### Step 2: TypeScript compile check
 
-创建 `client/src/hooks/__tests__/useResponsive.test.ts` 文件，包含以下测试用例：
-- 宽度 >= 1024 返回 desktop
-- 宽度 768-1023 返回 tablet
-- 宽度 < 768 返回 mobile
-- 窗口 resize 时更新状态
+Run: `cd server && npx tsc --noEmit`
+Expected: No errors
 
-### Step 3: 运行测试验证
-
-Run: `cd client && npm test -- --watchAll=false useResponsive.test.ts`
-Expected: 所有测试通过
-
-### Step 4: 提交代码
+### Step 3: 提交
 
 ```bash
-git add client/src/hooks/useResponsive.ts client/src/hooks/__tests__/useResponsive.test.ts
-git commit -m "feat(drive): add useResponsive hook for responsive layout"
+git add server/src/services/avatarService.ts
+git commit -m "feat: add avatar service (upload, get, delete)"
 ```
-
-## Global Constraints
-- 保持Liquid Glass设计语言
-- 响应式断点：桌面端≥1024px、平板端768-1023px、移动端<768px
-
-## 注意事项
-- 使用 useState + useEffect 监听窗口 resize
-- 断点值必须与设计文档一致：desktop: 1024, tablet: 768
-- SSR 兼容：typeof window !== 'undefined' 检查

@@ -1,44 +1,26 @@
-# Task 4 Report: TreeView树形目录组件
+# Task 4: Admin Avatar Endpoint — Report
 
-## Status: DONE
+## Status
+✅ Complete
 
-## 提交记录
+## Commit
+`c3fde76` — `feat: add admin avatar set endpoint`
 
-```
-7c64377 feat(drive): add TreeView component for folder navigation
-0293d82 fix(drive): remove unused imports and fix CSS class issue
-bf4167f feat(drive): implement responsive layout framework
-9b66463 feat(drive): add useResponsive hook for responsive layout
-0e127b4 feat(drive): add DriveContext state management
-```
+## Files Modified
+- `server/src/services/avatarService.ts` — added `adminSetAvatar` export (delegates to `uploadAvatar`)
+- `server/src/routes/users.ts` — added `PUT /:id/avatar` route with busboy multipart parsing, validates user exists, delegates to `adminSetAvatar`, returns `{ avatarPath }`
+- `server/src/index.ts` — added `avatarSet` entry in API self-description under `users`
 
-## 测试结果
+## Verification
+- `cd server && npx tsc --noEmit` — no errors
 
-- 通过: 27
-- 失败: 0
+## Implementation Notes
+- The route is protected by existing `router.use(authenticate, requireAdmin)` — only admins can set any user's avatar
+- Handles edge cases: invalid user ID (400), user not found (404), no file provided (400), busboy parse failure (400), storage node errors (503 via avatarService)
+- `adminSetAvatar` was missing from avatarService (Task 2 scope gap); added as a thin wrapper around `uploadAvatar`
 
-```
- ✓ src/hooks/__tests__/useResponsive.test.ts (7 tests)
- ✓ src/contexts/__tests__/DriveContext.test.tsx (17 tests)
- ✓ src/components/drive/__tests__/TreeView.test.tsx (3 tests)
-```
+## Concerns
+- None
 
-## 实现内容
-
-1. **创建 `client/src/components/drive/TreeView.tsx`** — 树形目录组件，支持：
-   - 无限层级展开/折叠
-   - 懒加载子节点（点击时才请求 API）
-   - 加载状态指示
-   - 高亮当前路径节点
-   - `memo` 包装避免不必要重渲染
-
-2. **修改 `client/src/components/drive/DriveNavigation.tsx`** — 导入 TreeView 替换占位符
-
-3. **添加样式到 `client/src/styles/drive.css`** — TreeView 相关 CSS 类（`.tree-view`, `.tree-node`, `.tree-node-content`, `.tree-node-expand`, `.tree-node-label`, `.tree-node-icon`, `.tree-node-name`）
-
-4. **创建测试文件 `client/src/components/drive/__tests__/TreeView.test.tsx`** — 3 个测试用例
-
-## 遇到的问题和解决方案
-
-- **问题**: `toggleExpand` 逻辑中，根节点初始 `isExpanded: true` 但 `hasLoaded: false`，点击展开按钮时走入 else 分支只做折叠而不加载子节点
-- **解决**: 将条件从 `!node.isExpanded && !node.hasLoaded` 改为 `!node.hasLoaded`，确保任何未加载子节点的情况下点击都会先加载
+## Report Path
+`.superpowers/sdd/task-4-report.md`

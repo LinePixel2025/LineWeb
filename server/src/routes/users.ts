@@ -4,6 +4,7 @@ import prisma from '../lib/prisma.js'
 import { parsePagination, parseId, getErrorMessage, getErrorStatus } from '../lib/utils.js'
 import busboy from 'busboy'
 import { adminSetAvatar } from '../services/avatarService.js'
+import { sendCommand, isNodeConnected } from '../services/storageTunnel.js'
 import { updateUserSchema } from '../config/index.js'
 import { authenticate, requireAdmin } from '../middleware/auth.js'
 import { clearDriveAccessCache } from './drive.js'
@@ -224,6 +225,11 @@ router.delete('/:id', async (req: Request, res: Response) => {
   if (!user) {
     res.status(404).json({ error: '用户不存在' })
     return
+  }
+
+  // 删除存储节点上的头像文件（如果存在）
+  if (user.avatarPath && isNodeConnected()) {
+    await sendCommand({ type: 'delete_file', path: user.avatarPath }).catch(() => {})
   }
 
   // 使用事务：先删除评论，再删除文章，最后删除用户

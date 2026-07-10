@@ -1,122 +1,148 @@
-# Task 7: 创建Toolbar工具栏组件
+# Task 7: Frontend Integration
 
-## 项目上下文
-这是网盘前端界面重构项目的第七步。项目采用React 19 + TypeScript + Vite技术栈。Task 1-6已完成基础架构和导航组件。
+## Files:
+- Modify: `client/src/components/comments/CommentSection.tsx` (评论者头像)
+- Modify: `client/src/components/Navbar.tsx` (当前用户头像)
+- Modify: `client/src/pages/ProfilePage.tsx` (头像上传)
+- Modify: `client/src/pages/admin/UserAdminPage.tsx` (用户列表头像)
 
-## 任务目标
-创建Toolbar工具栏组件，用于显示操作按钮（新建文件夹、上传、同步等）和视图切换。
+## Steps
 
-## 文件列表
-- Create: `client/src/components/drive/Toolbar.tsx`
-- Modify: `client/src/pages/DrivePage.tsx`
-- Test: `client/src/components/drive/__tests__/Toolbar.test.tsx`
+### Step 1: 评论 card 添加 UserAvatar
 
-## 接口定义
-- Consumes: `useDrive` - 获取视图模式和操作方法
-- Produces: `Toolbar` component - 工具栏组件
-
-## 详细步骤
-
-### Step 1: 创建Toolbar.tsx
-
-创建 `client/src/components/drive/Toolbar.tsx` 文件：
-
-```typescript
-import { memo, useCallback } from 'react'
-import LiquidButton from '../glass/LiquidButton'
-import { useDrive } from '../../contexts/DriveContext'
-
-export interface ToolbarProps {
-  onNewFolder?: () => void
-  onUpload?: () => void
-  onSync?: () => void
-  syncing?: boolean
-}
-
-const Toolbar = memo(function Toolbar({ 
-  onNewFolder, 
-  onUpload, 
-  onSync, 
-  syncing = false 
-}: ToolbarProps) {
-  const { state, setViewMode } = useDrive()
-
-  const handleViewToggle = useCallback(() => {
-    setViewMode(state.viewMode === 'list' ? 'grid' : 'list')
-  }, [state.viewMode, setViewMode])
-
-  return (
-    <div className="toolbar">
-      <div className="toolbar-actions">
-        <LiquidButton size="sm" variant="glass" onClick={onNewFolder}>
-          📁 新建
-        </LiquidButton>
-        <LiquidButton size="sm" variant="primary" onClick={onUpload}>
-          ⬆ 上传
-        </LiquidButton>
-        <LiquidButton size="sm" variant="ghost" onClick={onSync} disabled={syncing}>
-          {syncing ? '🔄 同步中...' : '🔄 同步'}
-        </LiquidButton>
-      </div>
-
-      <div className="toolbar-controls">
-        <button
-          className={`toolbar-view-toggle ${state.viewMode === 'grid' ? 'toolbar-view-toggle--active' : ''}`}
-          onClick={handleViewToggle}
-          title={state.viewMode === 'list' ? '切换为网格视图' : '切换为列表视图'}
-        >
-          {state.viewMode === 'list' ? '☰' : '▦'}
-        </button>
-      </div>
-    </div>
-  )
-})
-
-export default Toolbar
+在 `client/src/components/comments/CommentSection.tsx` 中导入 UserAvatar：
+```tsx
+import UserAvatar from '../UserAvatar'
 ```
 
-### Step 2: 添加Toolbar样式到drive.css
+在 `CommentCard` 组件的 comment-meta div 中，在作者名前添加 UserAvatar：
+```tsx
+<div className="comment-meta">
+  <UserAvatar userId={comment.author.id} username={comment.author.username} size="sm" />
+  <span className="comment-author">{comment.author.username}</span>
+  <span className="comment-time">{new Date(comment.createdAt).toLocaleString('zh-CN')}</span>
+</div>
+```
 
-在 `client/src/styles/drive.css` 文件中添加工具栏样式：
-- .toolbar
-- .toolbar-actions
-- .toolbar-controls
-- .toolbar-view-toggle
+在 reply-item 的 comment-meta 中也添加：
+```tsx
+<div className="comment-meta">
+  <UserAvatar userId={reply.author.id} username={reply.author.username} size="sm" />
+  <span className="comment-author">{reply.author.username}</span>
+  <span className="comment-time">{new Date(reply.createdAt).toLocaleString('zh-CN')}</span>
+</div>
+```
 
-### Step 3: 更新DrivePage使用Toolbar
+### Step 2: 导航栏添加用户头像
 
-修改 `client/src/pages/DrivePage.tsx` 文件：
-- 导入Toolbar组件
-- 在PathBar下方添加Toolbar
+在 `client/src/components/Navbar.tsx` 中导入 UserAvatar：
+```tsx
+import UserAvatar from './UserAvatar'
+```
 
-### Step 4: 创建测试文件
+找到用户名的 Link：
+```tsx
+<Link
+  to="/profile"
+  className={`navbar-link ${location.pathname === '/profile' ? 'active' : ''}`}
+  onClick={closeMenu}
+>
+  {user.username}
+</Link>
+```
 
-创建 `client/src/components/drive/__tests__/Toolbar.test.tsx` 文件，包含以下测试用例：
-- 渲染工具栏
-- 点击新建按钮调用onNewFolder
-- 点击上传按钮调用onUpload
-- 点击同步按钮调用onSync
-- 点击视图切换按钮切换视图模式
+替换为：
+```tsx
+<Link
+  to="/profile"
+  className={`navbar-link ${location.pathname === '/profile' ? 'active' : ''}`}
+  onClick={closeMenu}
+  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+>
+  <UserAvatar userId={user.id} username={user.username} size="sm" />
+  {user.username}
+</Link>
+```
 
-### Step 5: 运行TypeScript检查
+### Step 3: 个人设置页添加头像上传
 
-Run: `cd client && npx tsc --noEmit`
-Expected: 无类型错误
+在 `client/src/pages/ProfilePage.tsx` 中导入：
+```tsx
+import UserAvatar from '../components/UserAvatar'
+```
 
-### Step 6: 提交代码
+在资料卡片（profile-card）中，"角色"显示的 div 之后、"退出登录"按钮之前添加：
+
+```tsx
+{/* 头像区域 */}
+<div style={{ marginBottom: '22px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+  <UserAvatar userId={user!.id} username={user!.username} size="xl" />
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+    <label className="liquid-btn glass sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 16px' }}>
+      上传头像
+      <input
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={async (e) => {
+          const file = e.target.files?.[0]
+          if (!file) return
+          if (file.size > 2 * 1024 * 1024) {
+            alert('文件大小不能超过 2MB')
+            return
+          }
+          const formData = new FormData()
+          formData.append('avatar', file)
+          try {
+            await fetch('/api/auth/avatar', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${localStorage.getItem('lineweb_token')}` },
+              body: formData,
+            })
+            window.location.reload()
+          } catch {
+            alert('上传失败')
+          }
+        }}
+      />
+    </label>
+    <LiquidButton size="sm" variant="ghost" onClick={async () => {
+      try {
+        await fetch('/api/auth/avatar', {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('lineweb_token')}` },
+        })
+        window.location.reload()
+      } catch {
+        alert('删除失败')
+      }
+    }}>
+      移除头像
+    </LiquidButton>
+  </div>
+</div>
+```
+
+### Step 4: 管理后台用户列表添加头像
+
+在 `client/src/pages/admin/UserAdminPage.tsx` 中导入 UserAvatar：
+```tsx
+import UserAvatar from '../../components/UserAvatar'
+```
+
+找到用户名的 td 单元格，替换为：
+```tsx
+<td className="admin-cell admin-cell--title" data-label="用户名">
+  <div className="admin-post-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <UserAvatar userId={u.id} username={u.username} size="sm" />
+    {u.username}
+  </div>
+</td>
+```
+
+### Step 5: 提交
 
 ```bash
-git add client/src/components/drive/Toolbar.tsx client/src/pages/DrivePage.tsx client/src/styles/drive.css client/src/components/drive/__tests__/Toolbar.test.tsx
-git commit -m "feat(drive): add Toolbar component for file operations"
+git add client/src/components/comments/CommentSection.tsx client/src/components/Navbar.tsx client/src/pages/ProfilePage.tsx client/src/pages/admin/UserAdminPage.tsx
+git commit -m "feat: integrate UserAvatar into comments, navbar, profile, and admin"
 ```
-
-## Global Constraints
-- 保持Liquid Glass设计语言
-- 所有现有功能必须正常工作
-
-## 注意事项
-- 使用useDrive hook获取视图模式和操作方法
-- 使用LiquidButton组件保持设计语言一致性
-- 支持新建文件夹、上传、同步操作
-- 支持列表/网格视图切换
-- 使用memo包装组件避免不必要的重渲染

@@ -45,7 +45,9 @@ export default function UserAvatar({ userId, username, size = 'md' }: UserAvatar
         }
         setFailed(true)
       })
-      .catch(() => setFailed(true))
+      .catch(() => {
+        if (!controller.signal.aborted) setFailed(true)
+      })
 
     return () => controller.abort()
   }, [userId])

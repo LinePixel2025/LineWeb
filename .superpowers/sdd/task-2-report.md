@@ -1,30 +1,28 @@
-# Task 2: useResponsive Hook - Report
+# Task 2: Avatar Service Layer - Report
 
-## 状态：DONE
+## Status
+✅ Complete
 
-## 实现内容
+## Commit
+`7e2ba1051ca1b45a5287bcd7cb5433a72b5781ce` - `feat: add avatar service (upload, get, delete)`
 
-- 重写 `client/src/hooks/useResponsive.ts`：修正断点（desktop:1024, tablet:768），新增 `deviceType`、`width`、`height` 返回值
-- 创建 `client/src/hooks/__tests__/useResponsive.test.ts`：7 个测试用例覆盖所有断点、边界值和 resize 更新
+## Created Files
+- `server/src/services/avatarService.ts` (69 lines)
 
-## 提交记录
+## Verification
+- `cd server && npx tsc --noEmit` — Passed (no errors)
 
-```
-9b66463 feat(drive): add useResponsive hook for responsive layout
-```
+## Implementation Summary
+Created the avatar service layer with 4 exported functions:
+- **uploadAvatar** — validates mime type (JPEG/PNG/WebP/GIF), max file size (2MB), processes via Sharp (resize 256x256, WebP quality 80), writes to storage tunnel, updates DB
+- **getAvatarPathByUserId** — fetches user's `avatarPath` from DB
+- **getAvatarStream** — returns `AsyncGenerator<Buffer>` via `streamRead` (with connectivity check)
+- **deleteAvatar** — removes storage node file, nullifies `avatarPath` in DB (no-op if no avatar set)
 
-## 测试结果
+All functions check `isNodeConnected()` for storage-dependent operations.
 
-```
-Test Files  1 passed (1)
-      Tests  7 passed (7)
-   Duration  1.67s
-```
+## Concerns
+None.
 
-## 遇到的问题和解决方案
-
-| 问题 | 解决方案 |
-|------|----------|
-| 原有 hook 使用 480/768 断点，与设计文档不符 | 按规范重写为 1024/768，返回 `DeviceType` 而非 `Breakpoint` |
-| 原有 hook 不返回 `width`/`height` | 添加 `width`/`height` 到返回值 |
-| 原有 hook 使用 `matchMedia`，与规范的 `resize` 事件方案不同 | 改用 `useState + useEffect + resize` 事件监听 |
+## Report Path
+`.superpowers/sdd/task-2-report.md`

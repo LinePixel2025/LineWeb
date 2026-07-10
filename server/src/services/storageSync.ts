@@ -39,7 +39,7 @@ export async function syncDriveFiles(): Promise<SyncReport> {
     // 1. 递归列出存储节点所有路径（文件 + 文件夹）
     const nodePaths = await listDirRecursive('')
     // 排除隐藏的系统目录（如 _avatars/），这些不应出现在网盘中
-    const filteredPaths = nodePaths.filter(p => !p.startsWith('_avatars/'))
+    const filteredPaths = nodePaths.filter(p => p !== '_avatars' && !p.startsWith('_avatars/'))
     report.scanned = filteredPaths.length
 
     // 2. 获取数据库全部记录

@@ -1,222 +1,98 @@
-# Task 4: 创建TreeView树形目录组件
+# Task 4: Admin Avatar Endpoint
 
-## 项目上下文
-这是网盘前端界面重构项目的第四步。项目采用React 19 + TypeScript + Vite技术栈。Task 1-3已完成基础架构。
+## Files:
+- Modify: `server/src/routes/users.ts` (新增 PUT /:id/avatar 端点)
+- Modify: `server/src/index.ts` (更新 API 自描述)
 
-## 任务目标
-创建TreeView树形目录组件，用于在侧边栏显示完整的文件夹层级结构，支持展开/折叠和导航。
+## Interfaces:
+- Consumes: `adminSetAvatar` from `../services/avatarService.js`, `getErrorStatus`, `getErrorMessage` from `../lib/utils.js`
+- Produces: `PUT /api/users/:id/avatar` 管理员为任意用户设置头像
 
-## 文件列表
-- Create: `client/src/components/drive/TreeView.tsx`
-- Modify: `client/src/components/drive/DriveNavigation.tsx`
-- Test: `client/src/components/drive/__tests__/TreeView.test.tsx`
+## Steps
 
-## 接口定义
-- Consumes: `useDrive` - 获取当前路径和导航方法
-- Produces: `TreeView` component - 树形目录组件
+### Step 1: 在 users.ts 中添加头像端点
 
-## 详细步骤
+在文件顶部添加导入（与现有 busboy 导入合并）：
+```typescript
+import busboy from 'busboy'
+```
 
-### Step 1: 创建TreeView.tsx
+新增头像相关的导入：
+```typescript
+import { adminSetAvatar } from '../services/avatarService.js'
+import { parsePagination, parseId, getErrorMessage, getErrorStatus } from '../lib/utils.js'
+```
 
-创建 `client/src/components/drive/TreeView.tsx` 文件：
+注意：`parsePagination` 和 `parseId` 已导入，只需要添加 `getErrorMessage` 和 `getErrorStatus`。
+
+在 `delete('/:id')` 路由之前添加 PUT `/:id/avatar` 路由：
 
 ```typescript
-import { useState, useCallback, memo } from 'react'
-import { useDrive } from '../../contexts/DriveContext'
-import api from '../../lib/api'
-import type { DriveItem } from '../../types/drive'
-
-interface TreeNode {
-  id: number | null
-  name: string
-  children: TreeNode[]
-  isExpanded: boolean
-  isLoading: boolean
-  hasLoaded: boolean
-}
-
-export interface TreeViewProps {
-  onFolderSelect?: (folderId: number | null, folderName: string) => void
-}
-
-const TreeView = memo(function TreeView({ onFolderSelect }: TreeViewProps) {
-  const { state, navigateToFolder } = useDrive()
-  const [tree, setTree] = useState<TreeNode>({
-    id: null,
-    name: '根目录',
-    children: [],
-    isExpanded: true,
-    isLoading: false,
-    hasLoaded: false
-  })
-
-  const loadChildren = useCallback(async (node: TreeNode) => {
-    if (node.hasLoaded) return
-
-    setTree(prev => {
-      const updateNode = (n: TreeNode): TreeNode => {
-        if (n.id === node.id) {
-          return { ...n, isLoading: true }
-        }
-        return { ...n, children: n.children.map(updateNode) }
-      }
-      return updateNode(prev)
-    })
-
-    try {
-      const params = new URLSearchParams()
-      if (node.id !== null) params.set('parentId', String(node.id))
-      params.set('limit', '100')
-      
-      const res = await api.get<{ data: DriveItem[] }>(`/drive/files?${params}`)
-      const folders = res.data.filter(item => item.isFolder)
-      
-      setTree(prev => {
-        const updateNode = (n: TreeNode): TreeNode => {
-          if (n.id === node.id) {
-            return {
-              ...n,
-              children: folders.map(folder => ({
-                id: folder.id,
-                name: folder.name,
-                children: [],
-                isExpanded: false,
-                isLoading: false,
-                hasLoaded: false
-              })),
-              isLoading: false,
-              hasLoaded: true,
-              isExpanded: true
-            }
-          }
-          return { ...n, children: n.children.map(updateNode) }
-        }
-        return updateNode(prev)
-      })
-    } catch (error) {
-      console.error('Failed to load children:', error)
-      setTree(prev => {
-        const updateNode = (n: TreeNode): TreeNode => {
-          if (n.id === node.id) {
-            return { ...n, isLoading: false }
-          }
-          return { ...n, children: n.children.map(updateNode) }
-        }
-        return updateNode(prev)
-      })
-    }
-  }, [])
-
-  const toggleExpand = useCallback(async (node: TreeNode) => {
-    if (!node.isExpanded && !node.hasLoaded) {
-      await loadChildren(node)
-    } else {
-      setTree(prev => {
-        const updateNode = (n: TreeNode): TreeNode => {
-          if (n.id === node.id) {
-            return { ...n, isExpanded: !n.isExpanded }
-          }
-          return { ...n, children: n.children.map(updateNode) }
-        }
-        return updateNode(prev)
-      })
-    }
-  }, [loadChildren])
-
-  const handleFolderClick = useCallback((node: TreeNode) => {
-    navigateToFolder(node.id, node.name)
-    onFolderSelect?.(node.id, node.name)
-  }, [navigateToFolder, onFolderSelect])
-
-  const renderNode = (node: TreeNode, level: number = 0) => {
-    const isActive = state.currentPath.some(p => p.id === node.id)
-    const hasChildren = node.children.length > 0 || !node.hasLoaded
-
-    return (
-      <div key={node.id ?? 'root'} className="tree-node" style={{ paddingLeft: `${level * 16}px` }}>
-        <div className={`tree-node-content ${isActive ? 'tree-node-content--active' : ''}`}>
-          {hasChildren && (
-            <button
-              className="tree-node-expand"
-              onClick={(e) => {
-                e.stopPropagation()
-                toggleExpand(node)
-              }}
-              disabled={node.isLoading}
-            >
-              {node.isLoading ? '⏳' : node.isExpanded ? '▼' : '▶'}
-            </button>
-          )}
-          {!hasChildren && <span className="tree-node-spacer" />}
-          
-          <button
-            className="tree-node-label"
-            onClick={() => handleFolderClick(node)}
-          >
-            <span className="tree-node-icon">📁</span>
-            <span className="tree-node-name">{node.name}</span>
-          </button>
-        </div>
-        
-        {node.isExpanded && node.children.map(child => renderNode(child, level + 1))}
-      </div>
-    )
+// 管理员设置用户头像
+router.put('/:id/avatar', async (req: Request, res: Response) => {
+  const id = parseId(req.params.id)
+  if (id === null) {
+    res.status(400).json({ error: '无效的用户 ID' })
+    return
   }
 
-  return (
-    <div className="tree-view">
-      {renderNode(tree)}
-    </div>
-  )
-})
+  const user = await prisma.user.findUnique({ where: { id } })
+  if (!user) {
+    res.status(404).json({ error: '用户不存在' })
+    return
+  }
 
-export default TreeView
+  let fileBuffer: Buffer | null = null
+  let fileMimeType = ''
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const bb = busboy({ headers: req.headers })
+      bb.on('file', (_fieldname, stream, info) => {
+        fileMimeType = info.mimeType
+        const chunks: Buffer[] = []
+        stream.on('data', (chunk: Buffer) => chunks.push(chunk))
+        stream.on('end', () => { fileBuffer = Buffer.concat(chunks) })
+      })
+      bb.on('finish', () => resolve())
+      bb.on('error', (err: Error) => reject(err))
+      req.pipe(bb)
+    })
+  } catch {
+    res.status(400).json({ error: '文件解析失败' })
+    return
+  }
+
+  if (!fileBuffer) {
+    res.status(400).json({ error: '请提供头像文件' })
+    return
+  }
+
+  try {
+    const avatarPath = await adminSetAvatar(id, fileBuffer, fileMimeType)
+    res.json({ avatarPath })
+  } catch (err: unknown) {
+    const status = getErrorStatus(err)
+    res.status(status).json({ error: getErrorMessage(err) })
+  }
+})
 ```
 
-### Step 2: 更新DriveNavigation使用TreeView
+### Step 2: 更新 API 自描述
 
-修改 `client/src/components/drive/DriveNavigation.tsx` 文件：
-- 导入TreeView组件
-- 在侧边栏中使用TreeView替换占位符
+在 index.ts 的 users 部分添加：
+```typescript
+avatarSet: { method: 'PUT', path: '/api/users/:id/avatar', auth: 'admin', description: '管理员设置用户头像 (multipart/form-data)' },
+```
 
-### Step 3: 添加TreeView样式到drive.css
+### Step 3: 验证
 
-在 `client/src/styles/drive.css` 文件中添加树形目录样式：
-- .tree-view
-- .tree-node
-- .tree-node-content
-- .tree-node-expand
-- .tree-node-label
-- .tree-node-icon
-- .tree-node-name
+Run: `cd server && npx tsc --noEmit`
+Expected: No errors
 
-### Step 4: 创建测试文件
-
-创建 `client/src/components/drive/__tests__/TreeView.test.tsx` 文件，包含以下测试用例：
-- 渲染根节点
-- 点击展开按钮加载子节点
-- 点击文件夹调用onFolderSelect
-
-### Step 5: 运行测试验证
-
-Run: `cd client && npm test -- --watchAll=false TreeView.test.tsx`
-Expected: 所有测试通过
-
-### Step 6: 提交代码
+### Step 4: 提交
 
 ```bash
-git add client/src/components/drive/TreeView.tsx client/src/components/drive/DriveNavigation.tsx client/src/styles/drive.css client/src/components/drive/__tests__/TreeView.test.tsx
-git commit -m "feat(drive): add TreeView component for folder navigation"
+git add server/src/routes/users.ts server/src/index.ts
+git commit -m "feat: add admin avatar set endpoint"
 ```
-
-## Global Constraints
-- 保持Liquid Glass设计语言
-- 所有现有功能必须正常工作
-
-## 注意事项
-- 使用useDrive hook获取当前路径和导航方法
-- 使用api.get获取文件夹子节点
-- 支持无限层级展开/折叠
-- 使用memo包装组件避免不必要的重渲染
-- 树形节点需要显示加载状态

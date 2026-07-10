@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useWallpaper } from '../contexts/WallpaperContext'
 import { useNavigate } from 'react-router-dom'
 import UserAvatar from '../components/UserAvatar'
 import LiquidGlass from '../components/glass/LiquidGlass'
 import LiquidButton from '../components/glass/LiquidButton'
+import api from '../lib/api'
 
 const DEFAULT_COLOR = '#0d0d0f'
 
@@ -118,24 +119,26 @@ export default function ProfilePage() {
                   const formData = new FormData()
                   formData.append('avatar', file)
                   try {
-                    await fetch('/api/auth/avatar', {
+                    const res = await fetch('/api/auth/avatar', {
                       method: 'POST',
                       headers: { 'Authorization': `Bearer ${localStorage.getItem('lineweb_token')}` },
                       body: formData,
                     })
+                    if (!res.ok) {
+                      const data = await res.json().catch(() => ({}))
+                      throw new Error(data.error || '上传失败')
+                    }
                     window.location.reload()
-                  } catch {
-                    alert('上传失败')
+                  } catch (err) {
+                    alert(err instanceof Error ? err.message : '上传失败')
                   }
+                  e.target.value = ''
                 }}
               />
             </label>
             <LiquidButton size="sm" variant="ghost" onClick={async () => {
               try {
-                await fetch('/api/auth/avatar', {
-                  method: 'DELETE',
-                  headers: { 'Authorization': `Bearer ${localStorage.getItem('lineweb_token')}` },
-                })
+                await api.delete('/auth/avatar')
                 window.location.reload()
               } catch {
                 alert('删除失败')

@@ -43,6 +43,7 @@ router.post('/', async (req: Request, res: Response) => {
   } catch (err: unknown) {
     const status = getErrorStatus(err)
     res.status(status).json({ error: getErrorMessage(err) })
+    return
   }
 })
 
@@ -64,6 +65,7 @@ router.get('/', async (req: Request, res: Response) => {
   } catch (err: unknown) {
     const status = getErrorStatus(err)
     res.status(status).json({ error: getErrorMessage(err) })
+    return
   }
 })
 
@@ -89,6 +91,7 @@ router.get('/:userId', async (req: Request, res: Response) => {
   } catch (err: unknown) {
     const status = getErrorStatus(err)
     res.status(status).json({ error: getErrorMessage(err) })
+    return
   }
 })
 
@@ -100,6 +103,7 @@ router.delete('/', async (req: Request, res: Response) => {
   } catch (err: unknown) {
     const status = getErrorStatus(err)
     res.status(status).json({ error: getErrorMessage(err) })
+    return
   }
 })
 
