@@ -1,5 +1,4 @@
-import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 const mainTabs = [
   { path: '/admin', label: '文章', icon: '📝' },
@@ -25,14 +24,14 @@ export function AdminBottomTabBar({ onMoreClick }: { onMoreClick: () => void }) 
   return (
     <nav className="admin-bottom-tab-bar">
       {mainTabs.map(tab => (
-        <a
+        <Link
           key={tab.path}
-          href={tab.path}
+          to={tab.path}
           className={`admin-tab-item ${isActive(tab.path) ? 'admin-tab-item--active' : ''}`}
         >
           <span className="admin-tab-icon">{tab.icon}</span>
           <span className="admin-tab-label">{tab.label}</span>
-        </a>
+        </Link>
       ))}
       <button className="admin-tab-item" onClick={onMoreClick}>
         <span className="admin-tab-icon">⋯</span>
