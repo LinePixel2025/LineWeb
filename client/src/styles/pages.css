@@ -721,7 +721,12 @@ body.admin-menu-open {
   color: var(--lg-text-tertiary);
   font-size: 1.1rem;
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 10px 14px;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 6px;
   transition: background 0.15s ease;
 }
@@ -771,10 +776,6 @@ body.admin-menu-open {
 @media (max-width: 767px) {
   .admin-bottom-tab-bar {
     display: flex;
-  }
-
-  .admin-more-overlay {
-    display: block;
   }
 
   /* Add bottom padding to main content for tab bar */
