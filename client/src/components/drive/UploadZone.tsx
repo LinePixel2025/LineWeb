@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, memo } from 'react'
 import LiquidGlass from '../glass/LiquidGlass'
 import LiquidButton from '../glass/LiquidButton'
 import { formatSpeed, formatMB, formatETA } from '../../lib/format'
+import { useDragAndDrop } from '../../hooks/useDragAndDrop'
 import type { TransferProgress } from '../../types/drive'
 
 export interface UploadZoneProps {
@@ -15,7 +16,6 @@ const UploadZone = memo(function UploadZone({
   onUploaded,
   onClose,
 }: UploadZoneProps) {
-  const [dragOver, setDragOver] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState<TransferProgress | null>(null)
   const [failedFiles, setFailedFiles] = useState<string[]>([])
@@ -132,21 +132,14 @@ const UploadZone = memo(function UploadZone({
     [uploadFileViaXHR, onUploaded],
   )
 
+  const { isDragging, dragProps } = useDragAndDrop({
+    onFilesDropped: uploadFiles,
+  })
+
   const handleCancel = useCallback(() => {
     abortRef.current = true
     xhrRef.current?.abort()
   }, [])
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      setDragOver(false)
-      if (e.dataTransfer.files.length > 0) {
-        uploadFiles(e.dataTransfer.files)
-      }
-    },
-    [uploadFiles],
-  )
 
   const handleFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -182,10 +175,8 @@ const UploadZone = memo(function UploadZone({
       {!uploading && failedFiles.length === 0 && (
         <LiquidGlass variant="blur" chromatic={false} className="upload-zone-drop-glass">
           <div
-            className={`upload-zone-drop ${dragOver ? 'upload-zone-drop--drag' : ''}`}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
+            className={`upload-zone-drop ${isDragging ? 'upload-zone-drop--drag' : ''}`}
+            {...dragProps}
             onClick={() => fileInputRef.current?.click()}
           >
             <span className="upload-zone-drop-icon">📂</span>

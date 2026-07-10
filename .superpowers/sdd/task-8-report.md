@@ -1,33 +1,33 @@
-# Task 8 Report: 更新文章列表页
+# Task 8 Report: 实现拖拽上传功能
 
-## Status: DONE
+## 状态
+DONE
 
-## Commits
-- `feat: update posts page for new design system` (09c19d3)
+## 完成内容
 
-## Test Summary
-TypeScript 检查通过，Vite 构建成功，无错误。
+### 1. 创建 `client/src/hooks/useDragAndDrop.ts`
+- 实现 `useDragAndDrop` hook，封装拖拽上传逻辑
+- 使用 `dragCounterRef` 解决子元素触发的 `dragLeave` 问题
+- 支持多文件拖拽，提供 `isDragging` 状态用于 UI 反馈
+- 导出 `DragAndDropOptions` 和 `DragAndDropReturn` 接口
 
-## Changes Made
-更新了 `client/src/pages/PostsPage.tsx` 以使用新的设计系统：
+### 2. 修改 `client/src/components/drive/UploadZone.tsx`
+- 导入并使用 `useDragAndDrop` hook
+- 移除内联的拖拽处理逻辑（`dragOver` 状态、`handleDrop`）
+- 使用 hook 提供的 `dragProps` 和 `isDragging`
+- 组件保持 `memo` 包装避免不必要的重渲染
 
-1. **CSS 变量替换**：
-   - 将 `className="text-secondary"` 替换为 `style={{ color: 'var(--color-text-secondary)' }}`
-   - 将 `className="text-tertiary"` 替换为 `style={{ color: 'var(--color-text-tertiary)' }}`
-   - 使用内联样式直接引用 CSS 变量，确保与新设计系统一致
+### 3. 创建测试文件 `client/src/hooks/__tests__/useDragAndDrop.test.ts`
+- 测试初始状态 `isDragging` 为 `false`
+- 测试拖拽进入时 `isDragging` 变为 `true`
+- 测试拖拽离开时 `isDragging` 变为 `false`
+- 测试放下文件时调用 `onFilesDropped`
 
-2. **组件类名更新**：
-   - 将清除按钮的类名从 `liquid-btn ghost sm` 更新为 `btn btn-ghost`
-   - 保持其他 LiquidGlass 组件和工具栏类名不变
+## TypeScript 检查结果
+✅ 无类型错误
 
-3. **代码清理**：
-   - 移除了未使用的中文注释
-   - 统一了注释风格（使用英文注释）
+## 提交记录
+待提交
 
-## Verification
-- [x] TypeScript 类型检查通过 (`npx tsc --noEmit`)
-- [x] Vite 生产构建成功 (`npx vite build`)
-- [x] 文件内容与任务简报中的代码完全匹配
-
-## Concerns
-无。所有更改按计划完成，代码通过了所有验证。
+## 遇到的问题和解决方案
+无
