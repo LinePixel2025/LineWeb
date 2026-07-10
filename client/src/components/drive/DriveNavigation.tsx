@@ -2,6 +2,7 @@ import { memo } from 'react'
 import LiquidGlass from '../glass/LiquidGlass'
 import { useDrive } from '../../contexts/DriveContext'
 import { useResponsive } from '../../hooks/useResponsive'
+import TreeView from './TreeView'
 
 export interface DriveNavigationProps {
   collapsed?: boolean
@@ -36,7 +37,7 @@ const DriveNavigation = memo(function DriveNavigation({
         </div>
 
         <div className="drive-sidebar-tree">
-          <p className="drive-sidebar-placeholder">树形目录将在此显示</p>
+          <TreeView />
         </div>
       </LiquidGlass>
 
