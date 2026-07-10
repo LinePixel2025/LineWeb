@@ -15,6 +15,26 @@ export interface Breadcrumb {
   name: string
 }
 
+export type SortField = 'name' | 'size' | 'updatedAt' | 'createdAt' | 'type'
+export type SortDirection = 'asc' | 'desc'
+
+export interface SortOption {
+  field: SortField
+  direction: SortDirection
+}
+
+export type CategoryFilter = 'all' | 'images' | 'videos' | 'audio' | 'documents' | 'archives' | 'code'
+
+export type ViewMode = 'list' | 'grid'
+
+export interface SidebarNavItem {
+  id: string
+  label: string
+  icon: string
+  filter?: CategoryFilter
+  count?: number
+}
+
 export function getFileIcon(item: DriveItem): string {
   if (item.isFolder) return '📁'
   const ext = item.name.includes('.') ? item.name.split('.').pop()!.toLowerCase() : ''
@@ -29,6 +49,34 @@ export function getFileIcon(item: DriveItem): string {
   if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return '🗜️'
   if (['js', 'ts', 'py', 'java', 'go', 'rs', 'c', 'cpp', 'html', 'css'].includes(ext)) return '💻'
   return '📄'
+}
+
+export function getFileCategory(item: DriveItem): CategoryFilter {
+  if (item.isFolder) return 'all'
+  const ext = item.name.includes('.') ? item.name.split('.').pop()!.toLowerCase() : ''
+  const mime = (item.mimeType || '').toLowerCase()
+  if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) return 'images'
+  if (mime.startsWith('video/') || ['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext)) return 'videos'
+  if (mime.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'flac'].includes(ext)) return 'audio'
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return 'archives'
+  if (['js', 'ts', 'py', 'java', 'go', 'rs', 'c', 'cpp', 'html', 'css'].includes(ext)) return 'code'
+  return 'documents'
+}
+
+export function getFileTypeLabel(item: DriveItem): string {
+  if (item.isFolder) return '文件夹'
+  const ext = item.name.includes('.') ? item.name.split('.').pop()!.toLowerCase() : ''
+  const mime = (item.mimeType || '').toLowerCase()
+  if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) return '图片'
+  if (mime.startsWith('video/') || ['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext)) return '视频'
+  if (mime.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'flac'].includes(ext)) return '音频'
+  if (mime.includes('pdf') || ext === 'pdf') return 'PDF 文档'
+  if (['doc', 'docx'].includes(ext)) return 'Word 文档'
+  if (['xls', 'xlsx'].includes(ext)) return 'Excel 表格'
+  if (['ppt', 'pptx'].includes(ext)) return 'PPT 演示'
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return '压缩包'
+  if (['js', 'ts', 'py', 'java', 'go', 'rs', 'c', 'cpp', 'html', 'css'].includes(ext)) return '代码文件'
+  return '文件'
 }
 
 export interface DriveListResponse {

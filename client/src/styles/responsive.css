@@ -331,3 +331,171 @@
     justify-content: stretch;
   }
 }
+
+/* ============================================================
+   Drive Page Responsive
+   ============================================================ */
+
+/* Tablet: Hide detail panel, show sidebar */
+@media (max-width: 1024px) {
+  .drive-page {
+    grid-template-columns: 200px 1fr;
+  }
+
+  .drive-detail-panel {
+    display: none;
+  }
+
+  .drive-sidebar {
+    position: sticky;
+    top: calc(var(--lg-nav-height) + 20px);
+    height: fit-content;
+    max-height: calc(100vh - var(--lg-nav-height) - 40px);
+    overflow-y: auto;
+  }
+}
+
+/* Mobile: Single column, hide sidebar */
+@media (max-width: 768px) {
+  .drive-page {
+    grid-template-columns: 1fr;
+    padding: calc(var(--lg-nav-height) + 12px) 12px 12px;
+    gap: 12px;
+  }
+
+  .drive-sidebar {
+    display: none;
+  }
+
+  .drive-detail-panel {
+    display: none;
+  }
+
+  .drive-toolbar {
+    padding: 12px;
+  }
+
+  .drive-toolbar-top {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .drive-toolbar-actions {
+    justify-content: stretch;
+  }
+
+  .drive-toolbar-actions .liquid-btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .drive-toolbar-middle {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .drive-toolbar-controls {
+    justify-content: space-between;
+  }
+
+  .drive-sort-dropdown {
+    flex-wrap: wrap;
+  }
+
+  .drive-sort-label {
+    display: none;
+  }
+
+  .drive-sort-btn {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+  }
+
+  .drive-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
+
+  .drive-grid-card-body {
+    padding: 16px 12px 12px;
+  }
+
+  .drive-grid-card-icon {
+    font-size: 2rem;
+  }
+
+  .drive-grid-card-name {
+    font-size: 0.8rem;
+  }
+
+  .drive-grid-card-meta,
+  .drive-grid-card-date {
+    font-size: 0.7rem;
+  }
+
+  .drive-grid-card-actions {
+    opacity: 1;
+    padding: 6px 8px 8px;
+  }
+
+  .drive-table th.col-actions,
+  .drive-cell--actions {
+    display: none;
+  }
+
+  .drive-table th.col-date,
+  .drive-cell--date {
+    display: none;
+  }
+
+  .drive-table th.col-size,
+  .drive-cell--size {
+    width: 80px;
+    font-size: 0.8rem;
+  }
+}
+
+/* Small mobile */
+@media (max-width: 480px) {
+  .drive-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+  }
+
+  .drive-grid-card-body {
+    padding: 12px 8px 8px;
+    gap: 4px;
+  }
+
+  .drive-grid-card-icon {
+    font-size: 1.5rem;
+    margin-bottom: 4px;
+  }
+
+  .drive-grid-card-name {
+    font-size: 0.75rem;
+  }
+
+  .drive-grid-card-actions {
+    flex-wrap: wrap;
+  }
+
+  .drive-grid-card-actions .liquid-btn {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+  }
+
+  .drive-toolbar-breadcrumbs {
+    font-size: 0.82rem;
+  }
+
+  .drive-breadcrumb-btn {
+    font-size: 0.82rem;
+  }
+
+  .drive-breadcrumb-current {
+    font-size: 0.82rem;
+  }
+}

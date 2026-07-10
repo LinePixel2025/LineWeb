@@ -1,22 +1,32 @@
 import { memo } from 'react'
 import LiquidGlass from '../glass/LiquidGlass'
 import LiquidButton from '../glass/LiquidButton'
-import type { Breadcrumb } from '../../types/drive'
+import type { Breadcrumb, SortOption, ViewMode } from '../../types/drive'
 
 export interface DriveToolbarProps {
   breadcrumbs: Breadcrumb[]
   searchQuery: string
   searching: boolean
   searchResultCount: number | null
-  viewMode: 'list' | 'grid'
+  viewMode: ViewMode
+  sort: SortOption
   onSearch: (query: string) => void
   onNavigate: (index: number) => void
   onToggleView: () => void
   onNewFolder: () => void
   onUpload: () => void
   onSync: () => void
+  onSortChange: (sort: SortOption) => void
   syncing: boolean
 }
+
+const sortOptions: { field: SortOption['field']; label: string }[] = [
+  { field: 'name', label: '名称' },
+  { field: 'size', label: '大小' },
+  { field: 'updatedAt', label: '修改时间' },
+  { field: 'createdAt', label: '创建时间' },
+  { field: 'type', label: '类型' },
+]
 
 const DriveToolbar = memo(function DriveToolbar({
   breadcrumbs,
@@ -24,25 +34,51 @@ const DriveToolbar = memo(function DriveToolbar({
   searching,
   searchResultCount,
   viewMode,
+  sort,
   onSearch,
   onNavigate,
   onToggleView,
   onNewFolder,
   onUpload,
   onSync,
+  onSortChange,
   syncing,
 }: DriveToolbarProps) {
+  const handleSortClick = (field: SortOption['field']) => {
+    if (sort.field === field) {
+      onSortChange({ field, direction: sort.direction === 'asc' ? 'desc' : 'asc' })
+    } else {
+      onSortChange({ field, direction: 'asc' })
+    }
+  }
+
   return (
     <LiquidGlass variant="blur" chromatic={false} className="drive-toolbar">
-      {/* Row 1: Title + Action buttons */}
+      {/* Row 1: Breadcrumbs + Action buttons */}
       <div className="drive-toolbar-top">
-        <h1 className="drive-toolbar-title">☁️ 网盘</h1>
+        <nav className="drive-toolbar-breadcrumbs">
+          {breadcrumbs.map((crumb, i) => (
+            <span key={i} className="drive-breadcrumb-item">
+              {i > 0 && <span className="drive-breadcrumb-sep">›</span>}
+              {i === breadcrumbs.length - 1 ? (
+                <span className="drive-breadcrumb-current">{crumb.name}</span>
+              ) : (
+                <button
+                  className="drive-breadcrumb-btn"
+                  onClick={() => onNavigate(i)}
+                >
+                  {crumb.name}
+                </button>
+              )}
+            </span>
+          ))}
+        </nav>
         <div className="drive-toolbar-actions">
           <LiquidButton size="sm" variant="glass" onClick={onNewFolder}>
-            📁 新建文件夹
+            📁 新建
           </LiquidButton>
           <LiquidButton size="sm" variant="primary" onClick={onUpload}>
-            ⬆ 上传文件
+            ⬆ 上传
           </LiquidButton>
           <LiquidButton size="sm" variant="ghost" onClick={onSync} disabled={syncing}>
             {syncing ? '🔄 同步中...' : '🔄 同步'}
@@ -50,7 +86,7 @@ const DriveToolbar = memo(function DriveToolbar({
         </div>
       </div>
 
-      {/* Row 2: Search + View toggle */}
+      {/* Row 2: Search + Sort + View toggle */}
       <div className="drive-toolbar-middle">
         <div className="drive-toolbar-search">
           <input
@@ -70,33 +106,38 @@ const DriveToolbar = memo(function DriveToolbar({
             </span>
           )}
         </div>
-        <button
-          className={`drive-view-toggle ${viewMode === 'grid' ? 'drive-view-toggle--active' : ''}`}
-          onClick={onToggleView}
-          title={viewMode === 'list' ? '切换为网格视图' : '切换为列表视图'}
-        >
-          {viewMode === 'list' ? '☰' : '▦'}
-        </button>
-      </div>
 
-      {/* Row 3: Breadcrumbs */}
-      <nav className="drive-toolbar-breadcrumbs">
-        {breadcrumbs.map((crumb, i) => (
-          <span key={i} className="drive-breadcrumb-item">
-            {i > 0 && <span className="drive-breadcrumb-sep">›</span>}
-            {i === breadcrumbs.length - 1 ? (
-              <span className="drive-breadcrumb-current">{crumb.name}</span>
-            ) : (
+        <div className="drive-toolbar-controls">
+          {/* Sort Dropdown */}
+          <div className="drive-sort-dropdown">
+            <span className="drive-sort-label">排序:</span>
+            {sortOptions.map(option => (
               <button
-                className="drive-breadcrumb-btn"
-                onClick={() => onNavigate(i)}
+                key={option.field}
+                className={`drive-sort-btn ${sort.field === option.field ? 'drive-sort-btn--active' : ''}`}
+                onClick={() => handleSortClick(option.field)}
+                title={`按${option.label}${sort.direction === 'asc' ? '降序' : '升序'}`}
               >
-                {crumb.name}
+                {option.label}
+                {sort.field === option.field && (
+                  <span className="drive-sort-arrow">
+                    {sort.direction === 'asc' ? '↑' : '↓'}
+                  </span>
+                )}
               </button>
-            )}
-          </span>
-        ))}
-      </nav>
+            ))}
+          </div>
+
+          {/* View Toggle */}
+          <button
+            className={`drive-view-toggle ${viewMode === 'grid' ? 'drive-view-toggle--active' : ''}`}
+            onClick={onToggleView}
+            title={viewMode === 'list' ? '切换为网格视图' : '切换为列表视图'}
+          >
+            {viewMode === 'list' ? '☰' : '▦'}
+          </button>
+        </div>
+      </div>
     </LiquidGlass>
   )
 })
