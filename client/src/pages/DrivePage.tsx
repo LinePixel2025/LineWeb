@@ -11,13 +11,14 @@ import DriveListView from '../components/drive/DriveListView'
 import DriveGridView from '../components/drive/DriveGridView'
 import UploadZone from '../components/drive/UploadZone'
 import DrivePreview from '../components/drive/DrivePreview'
+import BatchActions from '../components/drive/BatchActions'
 import { NewFolderDialog, RenameDialog, DeleteDialog } from '../components/drive/DriveDialogs'
 import Pagination from '../components/Pagination'
 import api, { ApiError } from '../lib/api'
 import { useDownload } from '../contexts/DownloadContext'
 import { useResponsive } from '../hooks/useResponsive'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
-import { DriveProvider } from '../contexts/DriveContext'
+import { DriveProvider, useDrive } from '../contexts/DriveContext'
 import type { DriveItem, Breadcrumb, DriveListResponse, SortOption, CategoryFilter, ViewMode } from '../types/drive'
 import { getFileCategory } from '../types/drive'
 
@@ -151,6 +152,70 @@ function driveReducer(state: DriveState, action: DriveAction): DriveState {
     default:
       return state
   }
+}
+
+interface BatchActionsBridgeProps {
+  items: DriveItem[]
+  onRefresh: () => void
+  onStartDownload: (item: DriveItem) => void
+  onDeleteItem: (item: DriveItem) => void
+}
+
+function BatchActionsBridge({ items, onRefresh, onStartDownload, onDeleteItem }: BatchActionsBridgeProps) {
+  const { state, clearSelection } = useDrive()
+
+  const handleBatchDownload = useCallback(() => {
+    const selectedItems = items.filter(item => state.selectedFiles.includes(item.id))
+    selectedItems.forEach(item => {
+      if (!item.isFolder) onStartDownload(item)
+    })
+  }, [items, state.selectedFiles, onStartDownload])
+
+  const handleBatchDelete = useCallback(async () => {
+    const selectedItems = items.filter(item => state.selectedFiles.includes(item.id))
+    if (selectedItems.length === 0) return
+    if (!confirm(`确定删除选中的 ${selectedItems.length} 个文件？`)) return
+    try {
+      await Promise.all(selectedItems.map(item => api.delete(`/drive/files/${item.id}`)))
+      clearSelection()
+      onRefresh()
+    } catch {
+      // errors handled silently
+    }
+  }, [items, state.selectedFiles, clearSelection, onRefresh])
+
+  const handleBatchFavorite = useCallback(() => {
+    const selectedFolders = items.filter(item => state.selectedFiles.includes(item.id) && item.isFolder)
+    selectedFolders.forEach(item => {
+      const key = 'lineweb_favorites'
+      try {
+        const raw = localStorage.getItem(key)
+        const favorites = raw ? JSON.parse(raw) : []
+        if (!favorites.some((f: { folderId: number }) => f.folderId === item.id)) {
+          favorites.push({ id: `fav-${item.id}`, folderId: item.id, folderName: item.name, order: Date.now() })
+          localStorage.setItem(key, JSON.stringify(favorites))
+        }
+      } catch {
+        // ignore
+      }
+    })
+    clearSelection()
+  }, [items, state.selectedFiles, clearSelection])
+
+  const handleBatchMove = useCallback(() => {
+    // TODO: implement folder picker dialog
+    alert('移动功能即将上线')
+  }, [])
+
+  return (
+    <BatchActions
+      onBatchDownload={handleBatchDownload}
+      onBatchMove={handleBatchMove}
+      onBatchDelete={handleBatchDelete}
+      onBatchFavorite={handleBatchFavorite}
+      onClearSelection={clearSelection}
+    />
+  )
 }
 
 export default function DrivePage() {
@@ -422,6 +487,13 @@ export default function DrivePage() {
               onUpload={openUpload}
               onSync={handleSync}
               syncing={state.syncing}
+            />
+
+            <BatchActionsBridge
+              items={displayItems}
+              onRefresh={refresh}
+              onStartDownload={startDownload}
+              onDeleteItem={(item) => dispatch({ type: 'SET_DELETE_ITEM', payload: item })}
             />
 
             {/* Upload Zone */}

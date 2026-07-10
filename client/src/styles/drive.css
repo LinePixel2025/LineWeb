@@ -653,3 +653,79 @@
   flex: 1;
   min-width: 0;
 }
+
+/* ============================================================
+   Batch Actions — Selection Toolbar
+   ============================================================ */
+
+.batch-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-glass-bg);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid var(--lg-glass-border);
+  animation: batch-actions-in 0.2s ease-out;
+}
+
+@keyframes batch-actions-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.batch-actions-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.batch-actions-count {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--lg-accent);
+}
+
+.batch-actions-clear {
+  border: none;
+  background: transparent;
+  color: var(--lg-text-secondary);
+  font-size: 0.8rem;
+  font-family: var(--lg-font);
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: var(--lg-radius-sm);
+  transition: all 0.15s ease;
+}
+
+.batch-actions-clear:hover {
+  background: var(--lg-glass-border);
+  color: var(--lg-text-primary);
+}
+
+.batch-actions-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 767px) {
+  .batch-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .batch-actions-buttons {
+    width: 100%;
+    justify-content: center;
+  }
+}
