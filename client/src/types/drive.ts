@@ -112,3 +112,53 @@ export interface DownloadTask {
   status: 'downloading' | 'complete' | 'cancelled' | 'error'
   error?: string
 }
+
+export interface TabItem {
+  id: string
+  folderId: number | null
+  folderName: string
+  path: Breadcrumb[]
+}
+
+export interface FavoriteItem {
+  id: string
+  folderId: number
+  folderName: string
+  groupId?: string
+  order: number
+}
+
+export interface DriveContextState {
+  currentPath: Breadcrumb[]
+  tabs: TabItem[]
+  activeTabId: string | null
+  selectedFiles: number[]
+  favorites: FavoriteItem[]
+  viewMode: ViewMode
+  sort: SortOption
+  categoryFilter: CategoryFilter
+  searchQuery: string
+  searchResults: DriveItem[] | null
+  searching: boolean
+}
+
+export interface DriveContextType {
+  state: DriveContextState
+  navigateTo: (path: Breadcrumb[]) => void
+  navigateToFolder: (folderId: number | null, folderName: string) => void
+  navigateToBreadcrumb: (index: number) => void
+  openTab: (folderId: number | null, folderName: string) => void
+  closeTab: (tabId: string) => void
+  setActiveTab: (tabId: string) => void
+  selectFile: (fileId: number, multiSelect?: boolean) => void
+  selectAll: (fileIds: number[]) => void
+  clearSelection: () => void
+  addFavorite: (folderId: number, folderName: string) => void
+  removeFavorite: (folderId: number) => void
+  reorderFavorites: (favorites: FavoriteItem[]) => void
+  setViewMode: (mode: ViewMode) => void
+  setSort: (sort: SortOption) => void
+  setCategoryFilter: (filter: CategoryFilter) => void
+  setSearchQuery: (query: string) => void
+  refreshFiles: () => void
+}
