@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useWallpaper } from '../contexts/WallpaperContext'
+import { AdminBottomTabBar, AdminMoreMenu } from './admin/AdminMobileNav'
 
 const navItems = [
   { path: '/admin', label: '文章管理', icon: '📝' },
@@ -30,6 +31,7 @@ export default function AdminLayout() {
   const sidebarRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
 
   const closeMobile = () => setMobileOpen(false)
 
@@ -123,6 +125,10 @@ export default function AdminLayout() {
           </Link>
         </div>
       </aside>
+
+      {/* Mobile bottom tab bar */}
+      <AdminBottomTabBar onMoreClick={() => setMoreOpen(true)} />
+      <AdminMoreMenu open={moreOpen} onClose={() => setMoreOpen(false)} />
 
       {/* Background */}
       {bgType === 'wallpaper' && bgUrl ? (
