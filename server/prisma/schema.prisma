@@ -15,6 +15,7 @@ model User {
   role             String    @default("user")
   settings         String?   // JSON：用户个性化设置（背景类型、颜色等）
   canAccessDrive   Boolean   @default(false) // 是否有网盘访问权限
+  avatarPath       String?   @map("avatar_path") // 存储节点路径（如 _avatars/1.webp）
   tokenValidAfter  DateTime  @default(now()) @map("token_valid_after") // JWT 失效校验基准时间
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
