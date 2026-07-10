@@ -2772,3 +2772,58 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
 .wallpaper-refresh-btn.refreshing svg {
   animation: spin 0.8s linear infinite;
 }
+
+/* ============================================================
+   Admin Mobile Fixes (< 768px)
+   ============================================================ */
+@media (max-width: 767px) {
+  /* Hide sidebar on mobile */
+  .admin-sidebar {
+    display: none;
+  }
+
+  /* Remove sidebar offset from main content */
+  .admin-main {
+    margin-left: 0;
+  }
+
+  .admin-main--collapsed {
+    margin-left: 0;
+  }
+
+  /* Hide hamburger toggle on mobile (using bottom tab bar instead) */
+  .admin-topbar-toggle {
+    display: none;
+  }
+
+  /* Hide overlay (sidebar is hidden, no need for overlay) */
+  .admin-layout-overlay {
+    display: none;
+  }
+
+  /* Adjust topbar for mobile */
+  .admin-topbar {
+    padding: 0 12px;
+  }
+
+  /* Adjust content padding */
+  .admin-content {
+    padding: 16px 12px 24px;
+  }
+
+  /* Page header responsive */
+  .admin-page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .admin-page-title {
+    font-size: 1.2rem;
+  }
+
+  /* Wallpaper refresh button - move up to avoid tab bar overlap */
+  .admin-wallpaper-refresh {
+    bottom: 80px;
+  }
+}
