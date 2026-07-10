@@ -814,11 +814,6 @@ body.admin-menu-open {
 /* ============================================================
    Drive Table — 网盘列表样式
    ============================================================ */
-.drive-breadcrumb-current {
-  color: var(--lg-text);
-  font-weight: 500;
-  padding: 2px 4px;
-}
 
 /* Table view */
 .drive-table-wrap {
@@ -842,10 +837,25 @@ body.admin-menu-open {
   color: var(--lg-text-tertiary);
   white-space: nowrap;
 }
-.drive-table th.col-name { width: auto; min-width: 160px; }
-.drive-table th.col-size { width: 100px; text-align: right; }
-.drive-table th.col-date { width: 130px; }
-.drive-table th.col-actions { width: 160px; text-align: right; }
+.drive-table th.col-name,
+.drive-table th.col-type { width: auto; min-width: 120px; cursor: pointer; user-select: none; }
+.drive-table th.col-name { min-width: 180px; }
+.drive-table th.col-size { width: 100px; text-align: right; cursor: pointer; user-select: none; }
+.drive-table th.col-date { width: 140px; cursor: pointer; user-select: none; }
+.drive-table th.col-actions { width: 140px; text-align: right; }
+.drive-table th.col--active {
+  color: var(--lg-text-primary);
+}
+.drive-table th.col--right {
+  text-align: right;
+}
+.col-header-label {
+  font-size: 0.78rem;
+}
+.col-header-arrow {
+  font-size: 0.65rem;
+  margin-left: 2px;
+}
 
 .drive-row {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
@@ -856,6 +866,14 @@ body.admin-menu-open {
 }
 .drive-row:hover {
   background: rgba(255, 255, 255, 0.04);
+}
+.drive-row--selected {
+  background: var(--lg-accent-soft) !important;
+}
+.drive-cell--type {
+  color: var(--lg-text-secondary);
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 .drive-cell {
   padding: 12px 16px;
@@ -972,9 +990,9 @@ body.admin-menu-open {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 .drive-grid-card-icon {
-  font-size: 2.5rem;
+  font-size: 2.8rem;
   line-height: 1;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .drive-grid-card-name {
   font-size: 0.85rem;

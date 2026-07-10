@@ -453,57 +453,141 @@
 }
 
 /* ============================================================
-   Toolbar
+   DriveToolbar — Finder-style
    ============================================================ */
 
-.toolbar {
+.drive-toolbar {
+  padding: 8px 16px !important;
+  gap: 8px;
+  border-radius: var(--lg-radius-md) !important;
+}
+
+.drive-toolbar-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
   gap: 12px;
 }
 
-.toolbar-actions {
+.drive-toolbar-nav {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-shrink: 0;
 }
 
-.toolbar-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.toolbar-view-toggle {
+.drive-toolbar-nav-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border: none;
   background: var(--lg-glass-bg);
   color: var(--lg-text-secondary);
-  font-size: 1.1rem;
   cursor: pointer;
   border-radius: var(--lg-radius-sm);
   transition: all 0.15s ease;
 }
 
-.toolbar-view-toggle:hover {
+.drive-toolbar-nav-btn:hover {
   background: var(--lg-glass-border);
   color: var(--lg-text-primary);
 }
 
-.toolbar-view-toggle--active {
-  background: var(--lg-accent);
-  color: white;
+.drive-toolbar-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
 }
 
-.toolbar-view-toggle--active:hover {
-  background: var(--lg-accent);
-  color: white;
+.drive-toolbar-breadcrumbs::-webkit-scrollbar {
+  display: none;
+}
+
+.drive-breadcrumb-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.drive-breadcrumb-current {
+  color: var(--lg-text);
+  font-weight: 500;
+  font-size: 0.85rem;
+  padding: 2px 4px;
+}
+
+.drive-breadcrumb-btn {
+  border: none;
+  background: transparent;
+  color: var(--lg-text-secondary);
+  font-size: 0.85rem;
+  font-family: var(--lg-font);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--lg-radius-sm);
+  transition: all 0.15s ease;
+}
+
+.drive-breadcrumb-btn:hover {
+  background: var(--lg-glass-bg);
+  color: var(--lg-text-primary);
+}
+
+.drive-toolbar-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-glass-bg);
+  border: 1px solid var(--lg-glass-border);
+  flex-shrink: 0;
+  min-width: 160px;
+  max-width: 240px;
+  transition: border-color 0.15s ease;
+}
+
+.drive-toolbar-search:focus-within {
+  border-color: var(--lg-accent);
+}
+
+.drive-toolbar-search-input {
+  flex: 1;
+  min-width: 80px;
+  border: none;
+  background: transparent;
+  color: var(--lg-text-primary);
+  font-size: 0.82rem;
+  font-family: var(--lg-font);
+  outline: none;
+}
+
+.drive-toolbar-search-input::placeholder {
+  color: var(--lg-text-tertiary);
+}
+
+.drive-toolbar-search-hint {
+  font-size: 0.75rem;
+  color: var(--lg-text-tertiary);
+  flex-shrink: 0;
+}
+
+.drive-toolbar-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.drive-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* ============================================================
