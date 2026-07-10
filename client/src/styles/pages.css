@@ -1915,3 +1915,70 @@ body.admin-menu-open {
   color: var(--lg-text-tertiary, rgba(255,255,255,0.45));
   padding: 4px 0;
 }
+
+/* ============================================================
+   字体自动反色系统 — data-ac 属性驱动 (JS ContrastProvider)
+   ============================================================
+   JS 遍历采样壁纸亮度，为元素设置 data-ac="black|white"
+   CSS 属性选择器切换对应颜色。文章区 .article-content 排除外。
+   放在 CSS 末尾确保 source order 不会被 data-ac 优先级
+   同优先级的组件选择器意外覆盖。
+   */
+
+html { --_ac-white: #f5f5f7; --_ac-white-sec: #c7c7cd; --_ac-white-dim: #98989d; }
+html { --_ac-black: #111;   --_ac-black-sec: #48484a;  --_ac-black-dim: #8e8e93; }
+
+/* data-ac 通过 CSS 自定义属性切换，不需要 !important，组件用 var(--_ac-c) 即可 */
+html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(--_ac-white-dim); }
+/* data-contrast 已移除，由 ContrastContext 修复 */
+[data-ac="black"] { --_ac-c: var(--_ac-black); --_ac-c2: var(--_ac-black-sec); --_ac-c3: var(--_ac-black-dim); }
+
+/* 基础 data-ac 切换 — 末尾放最后保证 */
+[data-ac="white"] { color: var(--_ac-white) !important; }
+[data-ac="black"] { color: var(--_ac-black) !important; }
+
+/* .text-secondary / .text-tertiary 的 data-ac 覆盖 */
+.text-secondary[data-ac="white"],
+[data-ac="white"] .text-secondary { color: var(--_ac-white-sec) !important; }
+.text-secondary[data-ac="black"],
+[data-ac="black"] .text-secondary { color: var(--_ac-black-sec) !important; }
+.text-tertiary[data-ac="white"],
+[data-ac="white"] .text-tertiary { color: var(--_ac-white-dim) !important; }
+.text-tertiary[data-ac="black"],
+[data-ac="black"] .text-tertiary { color: var(--_ac-black-dim) !important; }
+
+/* 渐变文字（首页 Hero）排除反色 */
+.hero-title, h1[style*="WebkitBackgroundClip"] {
+  color: unset !important;
+}
+
+/* 个人资料页 — 始终白色文字，不参与背景反色 */
+.profile-page,
+.profile-page [data-ac] {
+  color: #fff !important;
+}
+.profile-page .text-tertiary,
+.profile-page [data-ac] .text-tertiary {
+  color: rgba(255,255,255,0.45) !important;
+}
+.profile-page .text-secondary,
+.profile-page [data-ac] .text-secondary {
+  color: rgba(255,255,255,0.65) !important;
+}
+.profile-page a {
+  color: var(--lg-accent) !important;
+}
+
+/* 交互按钮 — 不被 data-ac 覆盖 */
+.liquid-btn:not(.glass):not(.ghost) {
+  color: white !important;
+}
+.calc-display { color: var(--lg-text-primary); }
+
+/* 平滑过渡 */
+[data-ac] { transition: color 0.3s ease; }
+
+/* 刷新按钮旋转动画 — CSS 内处理，不依赖 inline style */
+.wallpaper-refresh-btn.refreshing svg {
+  animation: spin 0.8s linear infinite;
+}
