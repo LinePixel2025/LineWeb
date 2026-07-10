@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useWallpaper } from '../contexts/WallpaperContext'
 import { useNavigate } from 'react-router-dom'
+import UserAvatar from '../components/UserAvatar'
 import LiquidGlass from '../components/glass/LiquidGlass'
 import LiquidButton from '../components/glass/LiquidButton'
 
@@ -97,6 +98,52 @@ export default function ProfilePage() {
           <span style={{ fontSize: '1rem', color: user?.role === 'admin' ? 'var(--lg-accent)' : 'var(--lg-text-secondary)' }}>
             {user?.role === 'admin' ? '管理员' : '用户'}
           </span>
+        </div>
+        <div style={{ marginBottom: '22px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <UserAvatar userId={user!.id} username={user!.username} size="xl" />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label className="liquid-btn glass sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 16px' }}>
+              上传头像
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  if (file.size > 2 * 1024 * 1024) {
+                    alert('文件大小不能超过 2MB')
+                    return
+                  }
+                  const formData = new FormData()
+                  formData.append('avatar', file)
+                  try {
+                    await fetch('/api/auth/avatar', {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${localStorage.getItem('lineweb_token')}` },
+                      body: formData,
+                    })
+                    window.location.reload()
+                  } catch {
+                    alert('上传失败')
+                  }
+                }}
+              />
+            </label>
+            <LiquidButton size="sm" variant="ghost" onClick={async () => {
+              try {
+                await fetch('/api/auth/avatar', {
+                  method: 'DELETE',
+                  headers: { 'Authorization': `Bearer ${localStorage.getItem('lineweb_token')}` },
+                })
+                window.location.reload()
+              } catch {
+                alert('删除失败')
+              }
+            }}>
+              移除头像
+            </LiquidButton>
+          </div>
         </div>
         <LiquidButton variant="danger" size="md" onClick={handleLogout}>
           退出登录

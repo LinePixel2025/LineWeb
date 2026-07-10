@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import UserAvatar from '../../components/UserAvatar'
 import LiquidButton from '../../components/glass/LiquidButton'
 import LiquidGlass from '../../components/glass/LiquidGlass'
 import api from '../../lib/api'
@@ -102,7 +103,10 @@ export default function UserAdminPage() {
                 return (
                   <tr key={u.id} className="admin-row fade-in" style={{ animationDelay: `${i * 0.04}s` }}>
                     <td className="admin-cell admin-cell--title" data-label="用户名">
-                      <div className="admin-post-title">{u.username}</div>
+                      <div className="admin-post-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <UserAvatar userId={u.id} username={u.username} size="sm" />
+                        {u.username}
+                      </div>
                     </td>
                     <td className="admin-cell" data-label="邮箱">
                       <code style={{ fontSize: '0.8125rem', color: 'var(--lg-text-secondary)' }}>{u.email}</code>

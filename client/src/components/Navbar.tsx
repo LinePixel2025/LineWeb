@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import UserAvatar from './UserAvatar'
 import { useAuth } from '../contexts/AuthContext'
 
 const navItems = [
@@ -88,7 +89,9 @@ export default function Navbar() {
                 to="/profile"
                 className={`navbar-link ${location.pathname === '/profile' ? 'active' : ''}`}
                 onClick={closeMenu}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
               >
+                <UserAvatar userId={user.id} username={user.username} size="sm" />
                 {user.username}
               </Link>
             </>

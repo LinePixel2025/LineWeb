@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, memo } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import api from '../../lib/api'
+import UserAvatar from '../UserAvatar'
 import LiquidGlass from '../glass/LiquidGlass'
 import LiquidButton from '../glass/LiquidButton'
 import type { CommentData } from '../../types/comment'
@@ -105,6 +106,7 @@ const CommentCard = memo(function CommentCard({
     <div className="comment-item">
       <LiquidGlass variant="regular" interactive={false} chromatic={false} style={{ padding: '16px' }}>
         <div className="comment-meta">
+          <UserAvatar userId={comment.author.id} username={comment.author.username} size="sm" />
           <span className="comment-author">{comment.author.username}</span>
           <span className="comment-time">{new Date(comment.createdAt).toLocaleString('zh-CN')}</span>
         </div>
@@ -142,6 +144,7 @@ const CommentCard = memo(function CommentCard({
             {comment.replies.map(reply => (
               <div key={reply.id} className="reply-item">
                 <div className="comment-meta">
+                  <UserAvatar userId={reply.author.id} username={reply.author.username} size="sm" />
                   <span className="comment-author">{reply.author.username}</span>
                   <span className="comment-time">{new Date(reply.createdAt).toLocaleString('zh-CN')}</span>
                 </div>
