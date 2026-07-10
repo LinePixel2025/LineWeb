@@ -17,6 +17,7 @@ import driveRoutes from './routes/drive.js'
 import deviceRoutes from './routes/devices.js'
 import statsRoutes from './routes/stats.js'
 import apiKeyRoutes from './routes/apiKeys.js'
+import avatarRoutes from './routes/avatar.js'
 import { authenticate } from './middleware/auth.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel, isNodeConnected } from './services/storageTunnel.js'
@@ -107,6 +108,7 @@ app.use('/api/drive', driveRoutes)
 app.use('/api/devices', deviceRoutes)
 app.use('/api/stats', statsRoutes)
 app.use('/api/api-keys', apiKeyRoutes)
+app.use('/api/auth/avatar', avatarRoutes)
 
 // API 自描述端点 — 列出所有可用路由
 app.get('/api', (_req, res) => {
@@ -119,6 +121,10 @@ app.get('/api', (_req, res) => {
       register: { method: 'POST', path: '/api/auth/register', auth: 'public', description: '用户注册（唯一公开端点之一）' },
       me: { method: 'GET', path: '/api/auth/me', auth: true, description: '获取当前用户信息' },
       settings: { method: 'PUT', path: '/api/auth/settings', auth: true, description: '更新用户设置' },
+      avatarUpload: { method: 'POST', path: '/api/auth/avatar', auth: true, description: '上传/更新头像 (multipart/form-data)' },
+      avatarGet: { method: 'GET', path: '/api/auth/avatar', auth: true, description: '获取当前用户头像' },
+      avatarGetById: { method: 'GET', path: '/api/auth/avatar/:userId', auth: true, description: '获取指定用户头像' },
+      avatarDelete: { method: 'DELETE', path: '/api/auth/avatar', auth: true, description: '删除头像' },
     },
     posts: {
       list: { method: 'GET', path: '/api/posts?page=&limit=', auth: true, description: '文章列表（需认证）' },
