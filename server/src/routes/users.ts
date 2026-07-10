@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express'
 import bcrypt from 'bcryptjs'
 import prisma from '../lib/prisma.js'
-import { parsePagination, parseId } from '../lib/utils.js'
+import { parsePagination, parseId, getErrorMessage, getErrorStatus } from '../lib/utils.js'
+import busboy from 'busboy'
+import { adminSetAvatar } from '../services/avatarService.js'
 import { updateUserSchema } from '../config/index.js'
 import { authenticate, requireAdmin } from '../middleware/auth.js'
 import { clearDriveAccessCache } from './drive.js'
@@ -153,6 +155,55 @@ router.put('/:id/drive-access', async (req: Request, res: Response) => {
   clearDriveAccessCache(id)
 
   res.json(updated)
+})
+
+// 管理员设置用户头像
+router.put('/:id/avatar', async (req: Request, res: Response) => {
+  const id = parseId(req.params.id)
+  if (id === null) {
+    res.status(400).json({ error: '无效的用户 ID' })
+    return
+  }
+
+  const user = await prisma.user.findUnique({ where: { id } })
+  if (!user) {
+    res.status(404).json({ error: '用户不存在' })
+    return
+  }
+
+  let fileBuffer: Buffer | null = null
+  let fileMimeType = ''
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const bb = busboy({ headers: req.headers })
+      bb.on('file', (_fieldname, stream, info) => {
+        fileMimeType = info.mimeType
+        const chunks: Buffer[] = []
+        stream.on('data', (chunk: Buffer) => chunks.push(chunk))
+        stream.on('end', () => { fileBuffer = Buffer.concat(chunks) })
+      })
+      bb.on('finish', () => resolve())
+      bb.on('error', (err: Error) => reject(err))
+      req.pipe(bb)
+    })
+  } catch {
+    res.status(400).json({ error: '文件解析失败' })
+    return
+  }
+
+  if (!fileBuffer) {
+    res.status(400).json({ error: '请提供头像文件' })
+    return
+  }
+
+  try {
+    const avatarPath = await adminSetAvatar(id, fileBuffer, fileMimeType)
+    res.json({ avatarPath })
+  } catch (err: unknown) {
+    const status = getErrorStatus(err)
+    res.status(status).json({ error: getErrorMessage(err) })
+  }
 })
 
 // 删除用户（级联删除其评论和文章）

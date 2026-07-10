@@ -56,6 +56,10 @@ export async function getAvatarStream(avatarPath: string): Promise<AsyncGenerato
   return streamRead(avatarPath)
 }
 
+export async function adminSetAvatar(userId: number, buffer: Buffer, mimeType: string): Promise<string> {
+  return uploadAvatar(userId, buffer, mimeType)
+}
+
 export async function deleteAvatar(userId: number): Promise<void> {
   const avatarPath = await getAvatarPathByUserId(userId)
   if (!avatarPath) return

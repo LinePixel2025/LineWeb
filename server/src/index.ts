@@ -175,6 +175,7 @@ app.get('/api', (_req, res) => {
       detail: { method: 'GET', path: '/api/users/:id', auth: 'admin', description: '用户详情' },
       update: { method: 'PUT', path: '/api/users/:id', auth: 'admin', description: '更新用户（角色/密码）' },
       driveAccess: { method: 'PUT', path: '/api/users/:id/drive-access', auth: 'admin', description: '切换网盘访问权限' },
+      avatarSet: { method: 'PUT', path: '/api/users/:id/avatar', auth: 'admin', description: '管理员设置用户头像 (multipart/form-data)' },
       delete: { method: 'DELETE', path: '/api/users/:id', auth: 'admin', description: '删除用户' },
     },
     devices: {
