@@ -1,6 +1,7 @@
 import { useState, useCallback, memo } from 'react'
 import LiquidButton from '../glass/LiquidButton'
 import ContextMenu from './ContextMenu'
+import ThumbnailGrid from './ThumbnailGrid'
 import type { DriveItem } from '../../types/drive'
 import { getFileIcon } from '../../types/drive'
 import { formatFileSize, formatDate } from '../../lib/format'
@@ -70,6 +71,19 @@ const DriveGridView = memo(function DriveGridView({
             key={item.id}
             className={`drive-grid-card ${selectedId === item.id ? 'drive-grid-card--selected' : ''}`}
           >
+            {/* Thumbnail preview for image/video files */}
+            {!item.isFolder && (() => {
+              const mime = (item.mimeType || '').toLowerCase()
+              const ext = item.name.split('.').pop()?.toLowerCase() || ''
+              const isMedia = mime.startsWith('image/') || mime.startsWith('video/') ||
+                ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'mp4', 'webm'].includes(ext)
+              return isMedia
+            })() && (
+              <div className="drive-grid-card-thumbnail">
+                <ThumbnailGrid items={[item]} size="medium" />
+              </div>
+            )}
+
             {/* Main click area */}
             <button
               className="drive-grid-card-body"
