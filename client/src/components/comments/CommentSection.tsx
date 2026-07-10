@@ -230,7 +230,7 @@ export default function CommentSection({ postId }: { postId: number }) {
           </form>
         ) : (
           <div className="comment-login-prompt">
-            <Link to="/login">登录</Link> 后可以发表评论
+            <Link to="/login" target="_blank" rel="noopener noreferrer">登录</Link> 后可以发表评论
           </div>
         )}
 

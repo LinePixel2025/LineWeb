@@ -62,10 +62,10 @@ export default function HomePage() {
             Line Web
           </h1>
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '36px' }}>
-            <Link to="/posts" className="liquid-btn primary lg">
+            <Link to="/posts" className="liquid-btn primary lg" target="_blank" rel="noopener noreferrer">
               浏览文章
             </Link>
-            <Link to="/features" className="liquid-btn glass lg">
+            <Link to="/features" className="liquid-btn glass lg" target="_blank" rel="noopener noreferrer">
               探索功能
             </Link>
           </div>
@@ -96,6 +96,8 @@ export default function HomePage() {
                     textDecoration: 'none',
                     color: 'inherit',
                   }}
+                  target="_blank"
+                  rel="noopener noreferrer"
                 >
                   <h3 style={{ marginBottom: '4px' }}>{post.title}</h3>
                   {post.summary && (
@@ -113,7 +115,7 @@ export default function HomePage() {
           </div>
 
           <div style={{ textAlign: 'center', marginTop: '32px' }}>
-            <Link to="/posts" className="liquid-btn glass md">
+            <Link to="/posts" className="liquid-btn glass md" target="_blank" rel="noopener noreferrer">
               查看全部文章 →
             </Link>
           </div>

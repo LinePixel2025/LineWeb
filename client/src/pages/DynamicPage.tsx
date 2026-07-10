@@ -45,7 +45,7 @@ export default function DynamicPage() {
       <div className="page container" style={{ textAlign: 'center', paddingTop: '120px' }}>
         <h2 style={{ marginBottom: 16 }}>页面未找到</h2>
         <p className="text-secondary" style={{ marginBottom: 24 }}>{error || '该页面不存在或尚未发布'}</p>
-        <Link to="/features" className="liquid-btn glass md">
+        <Link to="/features" className="liquid-btn glass md" target="_blank" rel="noopener noreferrer">
           ← 返回功能界面
           <span className="btn-flare" />
         </Link>
@@ -59,7 +59,7 @@ export default function DynamicPage() {
   return (
     <div className="page container" style={{ maxWidth: '800px', paddingTop: 'calc(var(--lg-nav-height) + 60px)' }}>
       <div style={{ marginBottom: 32 }}>
-        <Link to="/features" className="text-tertiary" style={{ fontSize: '0.85rem' }}>
+        <Link to="/features" className="text-tertiary" style={{ fontSize: '0.85rem' }} target="_blank" rel="noopener noreferrer">
           ← 返回功能界面
         </Link>
       </div>
