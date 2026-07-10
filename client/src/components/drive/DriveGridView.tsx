@@ -1,6 +1,6 @@
 import { useState, useCallback, memo } from 'react'
 import LiquidButton from '../glass/LiquidButton'
-import DriveContextMenu from './DriveContextMenu'
+import ContextMenu from './ContextMenu'
 import type { DriveItem } from '../../types/drive'
 import { getFileIcon } from '../../types/drive'
 import { formatFileSize, formatDate } from '../../lib/format'
@@ -14,6 +14,10 @@ export interface DriveGridViewProps {
   onRename: (item: DriveItem) => void
   onDelete: (item: DriveItem) => void
   onSelect: (item: DriveItem | null) => void
+  onNewFolder?: () => void
+  onUpload?: () => void
+  onRefresh?: () => void
+  onSelectAll?: () => void
 }
 
 const DriveGridView = memo(function DriveGridView({
@@ -25,17 +29,31 @@ const DriveGridView = memo(function DriveGridView({
   onRename,
   onDelete,
   onSelect,
+  onNewFolder,
+  onUpload,
+  onRefresh,
+  onSelectAll,
 }: DriveGridViewProps) {
   const [contextMenu, setContextMenu] = useState<{
-    item: DriveItem
+    item?: DriveItem
     position: { x: number; y: number }
   } | null>(null)
 
-  const handleContextMenu = useCallback((e: React.MouseEvent, item: DriveItem) => {
+  const handleItemContextMenu = useCallback((e: React.MouseEvent, item: DriveItem) => {
     e.preventDefault()
     onSelect(item)
     setContextMenu({
       item,
+      position: { x: e.clientX, y: e.clientY },
+    })
+  }, [onSelect])
+
+  const handleBlankAreaContextMenu = useCallback((e: React.MouseEvent) => {
+    // Only trigger if right-clicking on the grid container itself, not on cards
+    if ((e.target as HTMLElement).closest('.drive-grid-card')) return
+    e.preventDefault()
+    onSelect(null)
+    setContextMenu({
       position: { x: e.clientX, y: e.clientY },
     })
   }, [onSelect])
@@ -46,7 +64,7 @@ const DriveGridView = memo(function DriveGridView({
 
   return (
     <>
-      <div className="drive-grid">
+      <div className="drive-grid" onContextMenu={handleBlankAreaContextMenu}>
         {items.map((item) => (
           <div
             key={item.id}
@@ -59,7 +77,7 @@ const DriveGridView = memo(function DriveGridView({
                 onSelect(item)
                 if (item.isFolder) onFolderClick(item)
               }}
-              onContextMenu={(e) => handleContextMenu(e, item)}
+              onContextMenu={(e) => handleItemContextMenu(e, item)}
             >
               <span className="drive-grid-card-icon">
                 {getFileIcon(item)}
@@ -97,7 +115,7 @@ const DriveGridView = memo(function DriveGridView({
       </div>
 
       {contextMenu && (
-        <DriveContextMenu
+        <ContextMenu
           item={contextMenu.item}
           position={contextMenu.position}
           onClose={closeContextMenu}
@@ -106,6 +124,10 @@ const DriveGridView = memo(function DriveGridView({
           onRename={onRename}
           onDelete={onDelete}
           onFolderClick={onFolderClick}
+          onNewFolder={onNewFolder}
+          onUpload={onUpload}
+          onRefresh={onRefresh}
+          onSelectAll={onSelectAll}
         />
       )}
     </>

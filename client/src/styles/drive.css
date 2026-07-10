@@ -539,3 +539,117 @@
     display: none;
   }
 }
+
+/* ============================================================
+   Context Menu — Liquid Glass Style
+   ============================================================ */
+
+.context-menu {
+  min-width: 200px;
+  max-width: 280px;
+  padding: 6px;
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-glass-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--lg-glass-border);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15);
+  animation: context-menu-in 0.15s ease-out;
+}
+
+@keyframes context-menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.context-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-glass-bg);
+}
+
+.context-menu-icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.context-menu-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--lg-text-primary);
+}
+
+.context-menu-divider {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--lg-glass-border);
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--lg-text-secondary);
+  font-size: 0.82rem;
+  font-family: var(--lg-font);
+  cursor: pointer;
+  border-radius: var(--lg-radius-sm);
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.context-menu-item:hover {
+  background: var(--lg-glass-border);
+  color: var(--lg-text-primary);
+}
+
+.context-menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.context-menu-item:disabled:hover {
+  background: transparent;
+  color: var(--lg-text-secondary);
+}
+
+.context-menu-item--danger {
+  color: var(--lg-danger, #ef4444);
+}
+
+.context-menu-item--danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--lg-danger, #ef4444);
+}
+
+.context-menu-item-icon {
+  flex-shrink: 0;
+  font-size: 0.9rem;
+  line-height: 1;
+  width: 20px;
+  text-align: center;
+}
+
+.context-menu-item-label {
+  flex: 1;
+  min-width: 0;
+}

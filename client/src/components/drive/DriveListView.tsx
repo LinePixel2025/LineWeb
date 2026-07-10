@@ -1,6 +1,6 @@
 import { useState, useCallback, memo } from 'react'
 import LiquidButton from '../glass/LiquidButton'
-import DriveContextMenu from './DriveContextMenu'
+import ContextMenu from './ContextMenu'
 import type { DriveItem } from '../../types/drive'
 import { getFileIcon } from '../../types/drive'
 import { formatFileSize, formatDate } from '../../lib/format'
@@ -14,6 +14,10 @@ export interface DriveListViewProps {
   onRename: (item: DriveItem) => void
   onDelete: (item: DriveItem) => void
   onSelect: (item: DriveItem | null) => void
+  onNewFolder?: () => void
+  onUpload?: () => void
+  onRefresh?: () => void
+  onSelectAll?: () => void
 }
 
 function DriveRow({
@@ -100,17 +104,31 @@ const DriveListView = memo(function DriveListView({
   onRename,
   onDelete,
   onSelect,
+  onNewFolder,
+  onUpload,
+  onRefresh,
+  onSelectAll,
 }: DriveListViewProps) {
   const [contextMenu, setContextMenu] = useState<{
-    item: DriveItem
+    item?: DriveItem
     position: { x: number; y: number }
   } | null>(null)
 
-  const handleContextMenu = useCallback((e: React.MouseEvent, item: DriveItem) => {
+  const handleItemContextMenu = useCallback((e: React.MouseEvent, item: DriveItem) => {
     e.preventDefault()
     onSelect(item)
     setContextMenu({
       item,
+      position: { x: e.clientX, y: e.clientY },
+    })
+  }, [onSelect])
+
+  const handleBlankAreaContextMenu = useCallback((e: React.MouseEvent) => {
+    // Only trigger if right-clicking on the table wrapper itself, not on rows
+    if ((e.target as HTMLElement).closest('.drive-row')) return
+    e.preventDefault()
+    onSelect(null)
+    setContextMenu({
       position: { x: e.clientX, y: e.clientY },
     })
   }, [onSelect])
@@ -121,7 +139,7 @@ const DriveListView = memo(function DriveListView({
 
   return (
     <>
-      <div className="drive-table-wrap">
+      <div className="drive-table-wrap" onContextMenu={handleBlankAreaContextMenu}>
         <table className="drive-table">
           <thead>
             <tr>
@@ -143,7 +161,7 @@ const DriveListView = memo(function DriveListView({
                 onRename={onRename}
                 onDelete={onDelete}
                 onSelect={onSelect}
-                onContextMenu={handleContextMenu}
+                onContextMenu={handleItemContextMenu}
               />
             ))}
           </tbody>
@@ -151,7 +169,7 @@ const DriveListView = memo(function DriveListView({
       </div>
 
       {contextMenu && (
-        <DriveContextMenu
+        <ContextMenu
           item={contextMenu.item}
           position={contextMenu.position}
           onClose={closeContextMenu}
@@ -160,6 +178,10 @@ const DriveListView = memo(function DriveListView({
           onRename={onRename}
           onDelete={onDelete}
           onFolderClick={onFolderClick}
+          onNewFolder={onNewFolder}
+          onUpload={onUpload}
+          onRefresh={onRefresh}
+          onSelectAll={onSelectAll}
         />
       )}
     </>

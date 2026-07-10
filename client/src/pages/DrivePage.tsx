@@ -436,6 +436,14 @@ export default function DrivePage() {
                 onRename={(item) => dispatch({ type: 'SET_RENAME_ITEM', payload: item })}
                 onDelete={(item) => dispatch({ type: 'SET_DELETE_ITEM', payload: item })}
                 onSelect={handleSelect}
+                onNewFolder={openNewFolder}
+                onUpload={openUpload}
+                onRefresh={refresh}
+                onSelectAll={() => {
+                  if (displayItems.length > 0) {
+                    handleSelect(displayItems[0])
+                  }
+                }}
               />
             ) : (
               <DriveGridView
@@ -447,6 +455,14 @@ export default function DrivePage() {
                 onRename={(item) => dispatch({ type: 'SET_RENAME_ITEM', payload: item })}
                 onDelete={(item) => dispatch({ type: 'SET_DELETE_ITEM', payload: item })}
                 onSelect={handleSelect}
+                onNewFolder={openNewFolder}
+                onUpload={openUpload}
+                onRefresh={refresh}
+                onSelectAll={() => {
+                  if (displayItems.length > 0) {
+                    handleSelect(displayItems[0])
+                  }
+                }}
               />
             )}
 
