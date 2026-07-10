@@ -2,8 +2,7 @@ import { useReducer, useEffect, useCallback, useRef, useMemo, useState } from 'r
 import LiquidGlass from '../components/glass/LiquidGlass'
 import LiquidButton from '../components/glass/LiquidButton'
 import DriveToolbar from '../components/drive/DriveToolbar'
-import Toolbar from '../components/drive/Toolbar'
-import PathBar from '../components/drive/PathBar'
+
 import DriveNavigation from '../components/drive/DriveNavigation'
 import MobileNav from '../components/drive/MobileNav'
 import DriveDetailPanel from '../components/drive/DriveDetailPanel'
@@ -222,6 +221,21 @@ function BatchActionsBridge({ items, onRefresh, onStartDownload, onDeleteItem }:
   )
 }
 
+function DriveSyncBridge({ onNavigate }: { onNavigate: (path: Breadcrumb[]) => void }) {
+  const driveContext = useDrive()
+  const prevPathRef = useRef<string>('')
+
+  useEffect(() => {
+    const pathKey = JSON.stringify(driveContext.state.currentPath)
+    if (pathKey !== prevPathRef.current) {
+      prevPathRef.current = pathKey
+      onNavigate(driveContext.state.currentPath)
+    }
+  }, [driveContext.state.currentPath, onNavigate])
+
+  return null
+}
+
 export default function DrivePage() {
   const [state, dispatch] = useReducer(driveReducer, initialState)
   const { startDownload } = useDownload()
@@ -229,17 +243,10 @@ export default function DrivePage() {
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [mobileTab, setMobileTab] = useState<'files' | 'favorites' | 'search' | 'settings'>('files')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const driveContext = useDrive()
-  const prevContextPathRef = useRef<string>('')
 
-  // 同步 DriveContext 侧边栏导航到本地状态
-  useEffect(() => {
-    const pathKey = JSON.stringify(driveContext.state.currentPath)
-    if (pathKey !== prevContextPathRef.current) {
-      prevContextPathRef.current = pathKey
-      dispatch({ type: 'SET_BREADCRUMBS', payload: driveContext.state.currentPath })
-    }
-  }, [driveContext.state.currentPath])
+  const handleContextNavigate = useCallback((path: Breadcrumb[]) => {
+    dispatch({ type: 'SET_BREADCRUMBS', payload: path })
+  }, [])
 
   // 计算当前父文件夹 ID
   const currentParentId = state.breadcrumbs[state.breadcrumbs.length - 1]?.id ?? null
@@ -342,10 +349,7 @@ export default function DrivePage() {
     }
   }, [refresh])
 
-  // 切换视图模式
-  const toggleView = useCallback(() => {
-    dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'list' ? 'grid' : 'list' })
-  }, [state.viewMode])
+
 
   // 打开新建文件夹对话框
   const openNewFolder = useCallback(() => {
@@ -366,11 +370,6 @@ export default function DrivePage() {
   // 选择文件
   const handleSelect = useCallback((item: DriveItem | null) => {
     dispatch({ type: 'SET_SELECTED', payload: item?.id ?? null })
-  }, [])
-
-  // 排序变更
-  const handleSortChange = useCallback((sort: SortOption) => {
-    dispatch({ type: 'SET_SORT', payload: sort })
   }, [])
 
   // 计算显示的文件列表
@@ -466,6 +465,7 @@ export default function DrivePage() {
 
   return (
     <DriveProvider>
+      <DriveSyncBridge onNavigate={handleContextNavigate} />
       <div className="page drive-page">
         {/* Desktop/Tablet Navigation Sidebar */}
         {isDesktop && (
@@ -483,25 +483,13 @@ export default function DrivePage() {
               searchQuery={state.searchQuery}
               searching={state.searching}
               searchResultCount={state.searchResults?.length ?? null}
-              viewMode={state.viewMode}
-              sort={state.sort}
               onSearch={(query) => dispatch({ type: 'SET_SEARCH_QUERY', payload: query })}
               onNavigate={navigateToBreadcrumb}
-              onToggleView={toggleView}
-              onNewFolder={openNewFolder}
-              onUpload={openUpload}
-              onSync={handleSync}
-              onSortChange={handleSortChange}
-              syncing={state.syncing}
-            />
-
-            <PathBar />
-
-            <Toolbar
               onNewFolder={openNewFolder}
               onUpload={openUpload}
               onSync={handleSync}
               syncing={state.syncing}
+              onParentFolder={() => navigateToBreadcrumb(state.breadcrumbs.length - 2)}
             />
 
             <BatchActionsBridge
@@ -544,6 +532,12 @@ export default function DrivePage() {
               <DriveListView
                 items={displayItems}
                 selectedId={state.selectedId}
+                sortField={state.sort.field}
+                sortDirection={state.sort.direction}
+                onSortChange={(field) => {
+                  const direction = state.sort.field === field && state.sort.direction === 'asc' ? 'desc' : 'asc'
+                  dispatch({ type: 'SET_SORT', payload: { field, direction } })
+                }}
                 onFolderClick={navigateToFolder}
                 onPreview={handlePreview}
                 onDownload={startDownload}
