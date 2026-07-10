@@ -38,7 +38,9 @@ export async function syncDriveFiles(): Promise<SyncReport> {
   try {
     // 1. 递归列出存储节点所有路径（文件 + 文件夹）
     const nodePaths = await listDirRecursive('')
-    report.scanned = nodePaths.length
+    // 排除隐藏的系统目录（如 _avatars/），这些不应出现在网盘中
+    const filteredPaths = nodePaths.filter(p => !p.startsWith('_avatars/'))
+    report.scanned = filteredPaths.length
 
     // 2. 获取数据库全部记录
     const dbRecords = await prisma.driveFile.findMany({
@@ -50,7 +52,7 @@ export async function syncDriveFiles(): Promise<SyncReport> {
     const dbPathMap = new Map(dbRecords.map(f => [f.storagePath, f]))
 
     // 3. 节点上的路径集合
-    const nodePathSet = new Set(nodePaths)
+    const nodePathSet = new Set(filteredPaths)
 
     // 4. 清理孤立记录：DB 有但节点上已经不存在的
     //    只有在 unique 约束下，每个 storagePath 才保证只有一条记录
@@ -79,7 +81,7 @@ export async function syncDriveFiles(): Promise<SyncReport> {
     }
 
     // 5. 修复缺失记录：节点上有但 DB 中没有的路径（文件或文件夹）
-    for (const nodePath of nodePaths) {
+    for (const nodePath of filteredPaths) {
       if (dbPathMap.has(nodePath)) continue
 
       try {
