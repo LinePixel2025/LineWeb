@@ -2,8 +2,8 @@ import { useState, useCallback, memo } from 'react'
 import LiquidButton from '../glass/LiquidButton'
 import ContextMenu from './ContextMenu'
 import type { DriveItem } from '../../types/drive'
-import { getFileIcon } from '../../types/drive'
 import { formatFileSize, formatDate } from '../../lib/format'
+import { getDriveIcon, DownloadIcon, RenameIcon, DeleteIcon, StarIcon } from './DriveIcons'
 
 export interface DriveListViewProps {
   items: DriveItem[]
@@ -49,7 +49,7 @@ function DriveRow({
     >
       <td className="drive-cell drive-cell--name" data-label="名称">
         <span className="drive-cell-file">
-          <span className="drive-cell-icon">{getFileIcon(item)}</span>
+          <span className="drive-cell-icon">{getDriveIcon(item, 18)}</span>
           {item.isFolder ? (
             <button
               className="drive-name-btn drive-name-btn--folder"
@@ -79,15 +79,15 @@ function DriveRow({
                 预览
               </LiquidButton>
               <LiquidButton size="sm" variant="ghost" onClick={() => onDownload(item)}>
-                下载
+                <DownloadIcon size={14} />
               </LiquidButton>
             </>
           )}
           <LiquidButton size="sm" variant="ghost" onClick={() => onRename(item)}>
-            重命名
+            <RenameIcon size={14} />
           </LiquidButton>
           <LiquidButton size="sm" variant="danger" onClick={() => onDelete(item)}>
-            删除
+            <DeleteIcon size={14} />
           </LiquidButton>
         </div>
       </td>

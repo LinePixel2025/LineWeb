@@ -1126,12 +1126,13 @@ body.admin-menu-open {
 .drive-detail-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 20px;
 }
 
 .drive-detail-actions .liquid-btn {
-  flex: 1;
+  font-size: 0.78rem;
+  padding: 6px 10px;
   min-width: 0;
   justify-content: center;
 }
@@ -1174,6 +1175,73 @@ body.admin-menu-open {
   color: var(--lg-text-secondary);
   text-align: right;
   word-break: break-all;
+}
+
+/* Favorite button in detail panel */
+.drive-detail-fav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--lg-glass-border);
+  border-radius: var(--lg-radius-sm);
+  background: transparent;
+  color: var(--lg-text-secondary);
+  font-size: 0.85rem;
+  font-family: var(--lg-font);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.drive-detail-fav-btn:hover {
+  background: var(--lg-glass-bg);
+  color: var(--lg-text-primary);
+}
+
+.drive-detail-fav-btn--active {
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.drive-detail-fav-btn--active:hover {
+  background: rgba(245, 158, 11, 0.08);
+}
+
+/* Favorite remove button */
+.drive-sidebar-fav-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+
+.drive-sidebar-fav-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--lg-text-tertiary);
+  font-size: 0.65rem;
+  cursor: pointer;
+  border-radius: var(--lg-radius-sm);
+  opacity: 0;
+  transition: all 0.15s ease;
+}
+
+.drive-sidebar-favorite-item:hover .drive-sidebar-fav-remove {
+  opacity: 1;
+}
+
+.drive-sidebar-fav-remove:hover {
+  background: var(--lg-glass-border);
+  color: var(--lg-danger);
 }
 
 /* ============================================================
@@ -1619,48 +1687,6 @@ body.admin-menu-open {
   border-radius: var(--lg-radius-full);
   min-width: 20px;
   text-align: center;
-}
-
-.drive-sidebar-storage {
-  margin-top: auto;
-}
-
-/* Storage Bar */
-.drive-storage-bar {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.drive-storage-bar-track {
-  height: 6px;
-  background: var(--lg-glass-bg);
-  border-radius: var(--lg-radius-full);
-  overflow: hidden;
-}
-
-.drive-storage-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--lg-accent), var(--lg-accent-hover));
-  border-radius: var(--lg-radius-full);
-  transition: width 0.3s ease;
-}
-
-.drive-storage-bar-text {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.8rem;
-  color: var(--lg-text-secondary);
-}
-
-.drive-storage-bar-sep {
-  color: var(--lg-text-tertiary);
-}
-
-.drive-storage-bar-percent {
-  font-size: 0.75rem;
-  color: var(--lg-text-tertiary);
 }
 
 /* ============================================================

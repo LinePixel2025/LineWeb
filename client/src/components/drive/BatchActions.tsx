@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import LiquidButton from '../glass/LiquidButton'
 import { useDrive } from '../../contexts/DriveContext'
+import { DownloadIcon, FolderIcon, StarIcon, DeleteIcon } from './DriveIcons'
 
 export interface BatchActionsProps {
   onBatchDownload?: () => void
@@ -39,16 +40,16 @@ const BatchActions = memo(function BatchActions({
 
       <div className="batch-actions-buttons">
         <LiquidButton size="sm" variant="glass" onClick={onBatchDownload}>
-          ⬇ 批量下载
+          <DownloadIcon size={14} /> 批量下载
         </LiquidButton>
         <LiquidButton size="sm" variant="glass" onClick={onBatchMove}>
-          📁 移动到
+          <FolderIcon size={14} /> 移动到
         </LiquidButton>
         <LiquidButton size="sm" variant="ghost" onClick={onBatchFavorite}>
-          ⭐ 收藏
+          <StarIcon size={14} /> 收藏
         </LiquidButton>
         <LiquidButton size="sm" variant="danger" onClick={onBatchDelete}>
-          🗑️ 删除
+          <DeleteIcon size={14} /> 删除
         </LiquidButton>
       </div>
     </div>

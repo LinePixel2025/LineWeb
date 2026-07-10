@@ -2,6 +2,7 @@ import { memo } from 'react'
 import LiquidGlass from '../glass/LiquidGlass'
 import LiquidButton from '../glass/LiquidButton'
 import type { Breadcrumb, SortOption, ViewMode } from '../../types/drive'
+import { NewFolderIcon, UploadIcon, RefreshIcon, SearchIcon, GridViewIcon, ListViewIcon } from './DriveIcons'
 
 export interface DriveToolbarProps {
   breadcrumbs: Breadcrumb[]
@@ -53,7 +54,7 @@ const DriveToolbar = memo(function DriveToolbar({
   }
 
   return (
-    <LiquidGlass variant="blur" chromatic={false} className="drive-toolbar">
+    <LiquidGlass variant="blur" interactive={false} chromatic={false} className="drive-toolbar">
       {/* Row 1: Breadcrumbs + Action buttons */}
       <div className="drive-toolbar-top">
         <nav className="drive-toolbar-breadcrumbs">
@@ -75,13 +76,13 @@ const DriveToolbar = memo(function DriveToolbar({
         </nav>
         <div className="drive-toolbar-actions">
           <LiquidButton size="sm" variant="glass" onClick={onNewFolder}>
-            📁 新建
+            <NewFolderIcon size={14} /> 新建
           </LiquidButton>
           <LiquidButton size="sm" variant="primary" onClick={onUpload}>
-            ⬆ 上传
+            <UploadIcon size={14} /> 上传
           </LiquidButton>
           <LiquidButton size="sm" variant="ghost" onClick={onSync} disabled={syncing}>
-            {syncing ? '🔄 同步中...' : '🔄 同步'}
+            <RefreshIcon size={14} /> {syncing ? '同步中...' : '同步'}
           </LiquidButton>
         </div>
       </div>
@@ -92,7 +93,7 @@ const DriveToolbar = memo(function DriveToolbar({
           <input
             className="lg-input drive-toolbar-search-input"
             type="text"
-            placeholder="🔍 搜索文件..."
+            placeholder="搜索文件..."
             value={searchQuery}
             onChange={e => onSearch(e.target.value)}
           />
@@ -134,7 +135,7 @@ const DriveToolbar = memo(function DriveToolbar({
             onClick={onToggleView}
             title={viewMode === 'list' ? '切换为网格视图' : '切换为列表视图'}
           >
-            {viewMode === 'list' ? '☰' : '▦'}
+            {viewMode === 'list' ? <GridViewIcon size={16} /> : <ListViewIcon size={16} />}
           </button>
         </div>
       </div>

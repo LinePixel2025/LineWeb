@@ -1,6 +1,7 @@
 import { memo, useCallback } from 'react'
 import LiquidButton from '../glass/LiquidButton'
 import { useDrive } from '../../contexts/DriveContext'
+import { NewFolderIcon, UploadIcon, RefreshIcon, GridViewIcon, ListViewIcon } from './DriveIcons'
 
 export interface ToolbarProps {
   onNewFolder?: () => void
@@ -25,13 +26,13 @@ const Toolbar = memo(function Toolbar({
     <div className="toolbar">
       <div className="toolbar-actions">
         <LiquidButton size="sm" variant="glass" onClick={onNewFolder}>
-          📁 新建
+          <NewFolderIcon size={14} /> 新建
         </LiquidButton>
         <LiquidButton size="sm" variant="primary" onClick={onUpload}>
-          ⬆ 上传
+          <UploadIcon size={14} /> 上传
         </LiquidButton>
         <LiquidButton size="sm" variant="ghost" onClick={onSync} disabled={syncing}>
-          {syncing ? '🔄 同步中...' : '🔄 同步'}
+          <RefreshIcon size={14} /> {syncing ? '同步中...' : '同步'}
         </LiquidButton>
       </div>
 
@@ -41,7 +42,7 @@ const Toolbar = memo(function Toolbar({
           onClick={handleViewToggle}
           title={state.viewMode === 'list' ? '切换为网格视图' : '切换为列表视图'}
         >
-          {state.viewMode === 'list' ? '☰' : '▦'}
+          {state.viewMode === 'list' ? <GridViewIcon size={16} /> : <ListViewIcon size={16} />}
         </button>
       </div>
     </div>

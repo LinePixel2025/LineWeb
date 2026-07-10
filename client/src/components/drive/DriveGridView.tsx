@@ -3,8 +3,8 @@ import LiquidButton from '../glass/LiquidButton'
 import ContextMenu from './ContextMenu'
 import ThumbnailGrid from './ThumbnailGrid'
 import type { DriveItem } from '../../types/drive'
-import { getFileIcon } from '../../types/drive'
 import { formatFileSize, formatDate } from '../../lib/format'
+import { getDriveIcon, DownloadIcon, RenameIcon, DeleteIcon } from './DriveIcons'
 
 export interface DriveGridViewProps {
   items: DriveItem[]
@@ -94,7 +94,7 @@ const DriveGridView = memo(function DriveGridView({
               onContextMenu={(e) => handleItemContextMenu(e, item)}
             >
               <span className="drive-grid-card-icon">
-                {getFileIcon(item)}
+                {getDriveIcon(item, 28)}
               </span>
               <span className="drive-grid-card-name" title={item.name}>{item.name}</span>
               <span className="drive-grid-card-meta">
@@ -113,15 +113,15 @@ const DriveGridView = memo(function DriveGridView({
                     预览
                   </LiquidButton>
                   <LiquidButton size="sm" variant="ghost" onClick={() => onDownload(item)}>
-                    下载
+                    <DownloadIcon size={14} />
                   </LiquidButton>
                 </>
               )}
               <LiquidButton size="sm" variant="ghost" onClick={() => onRename(item)}>
-                重命名
+                <RenameIcon size={14} />
               </LiquidButton>
               <LiquidButton size="sm" variant="danger" onClick={() => onDelete(item)}>
-                删除
+                <DeleteIcon size={14} />
               </LiquidButton>
             </div>
           </div>

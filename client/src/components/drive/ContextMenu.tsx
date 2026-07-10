@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, memo } from 'react'
 import { createPortal } from 'react-dom'
-import type { DriveItem } from '../../types/drive'
+import type { DriveItem, FavoriteItem } from '../../types/drive'
+import { useDrive } from '../../contexts/DriveContext'
+import { FolderIcon, StarIcon, DownloadIcon, DeleteIcon, RenameIcon, NewFolderIcon, UploadIcon, RefreshIcon, SelectAllIcon, getDriveIcon } from './DriveIcons'
 
 export interface ContextMenuItem {
   label: string
-  icon: string
+  icon: React.ReactNode
   action: () => void
   variant?: 'default' | 'danger'
   disabled?: boolean
@@ -39,11 +41,25 @@ const ContextMenu = memo(function ContextMenu({
   onRefresh,
   onSelectAll
 }: ContextMenuProps) {
+  const { state, addFavorite, removeFavorite } = useDrive()
+
+  const isFavorite = useCallback((folderId: number) => {
+    return state.favorites.some((f: FavoriteItem) => f.folderId === folderId)
+  }, [state.favorites])
+
+  const handleToggleFavorite = useCallback((item: DriveItem) => {
+    if (isFavorite(item.id)) {
+      removeFavorite(item.id)
+    } else {
+      addFavorite(item.id, item.name)
+    }
+  }, [isFavorite, addFavorite, removeFavorite])
+
   const [adjustedPos, setAdjustedPos] = useState(position)
 
   useEffect(() => {
     const menuWidth = 200
-    const menuHeight = 300
+    const menuHeight = 350
     const padding = 8
 
     let x = position.x
@@ -81,11 +97,10 @@ const ContextMenu = memo(function ContextMenu({
   const menuItems: ContextMenuItem[] = []
 
   if (item) {
-    // 文件/文件夹菜单
     if (item.isFolder) {
       menuItems.push({
         label: '打开文件夹',
-        icon: '📂',
+        icon: <FolderIcon size={16} />,
         action: () => handleAction(() => onFolderClick?.(item))
       })
     }
@@ -99,53 +114,58 @@ const ContextMenu = memo(function ContextMenu({
       if (isPreviewable) {
         menuItems.push({
           label: '预览',
-          icon: '👁️',
+          icon: getDriveIcon(item, 16),
           action: () => handleAction(() => onPreview?.(item))
         })
       }
 
       menuItems.push({
         label: '下载',
-        icon: '⬇️',
+        icon: <DownloadIcon size={16} />,
         action: () => handleAction(() => onDownload?.(item))
       })
     }
 
     menuItems.push({
+      label: isFavorite(item.id) ? '取消收藏' : '收藏',
+      icon: <StarIcon size={16} filled={isFavorite(item.id)} />,
+      action: () => handleAction(() => handleToggleFavorite(item))
+    })
+
+    menuItems.push({
       label: '重命名',
-      icon: '✏️',
+      icon: <RenameIcon size={16} />,
       action: () => handleAction(() => onRename?.(item))
     })
 
     menuItems.push({
       label: '删除',
-      icon: '🗑️',
+      icon: <DeleteIcon size={16} />,
       action: () => handleAction(() => onDelete?.(item)),
       variant: 'danger'
     })
   } else {
-    // 空白区域菜单
     menuItems.push({
       label: '新建文件夹',
-      icon: '📁',
+      icon: <NewFolderIcon size={16} />,
       action: () => handleAction(() => onNewFolder?.())
     })
 
     menuItems.push({
       label: '上传文件',
-      icon: '⬆️',
+      icon: <UploadIcon size={16} />,
       action: () => handleAction(() => onUpload?.())
     })
 
     menuItems.push({
       label: '刷新',
-      icon: '🔄',
+      icon: <RefreshIcon size={16} />,
       action: () => handleAction(() => onRefresh?.())
     })
 
     menuItems.push({
       label: '全选',
-      icon: '☑️',
+      icon: <SelectAllIcon size={16} />,
       action: () => handleAction(() => onSelectAll?.())
     })
   }
@@ -164,7 +184,7 @@ const ContextMenu = memo(function ContextMenu({
       {item && (
         <div className="context-menu-header">
           <span className="context-menu-icon">
-            {item.isFolder ? '📁' : '📄'}
+            {getDriveIcon(item, 16)}
           </span>
           <span className="context-menu-name" title={item.name}>
             {item.name}

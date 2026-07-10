@@ -21,6 +21,7 @@ import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { DriveProvider, useDrive } from '../contexts/DriveContext'
 import type { DriveItem, Breadcrumb, DriveListResponse, SortOption, CategoryFilter, ViewMode } from '../types/drive'
 import { getFileCategory } from '../types/drive'
+import { FolderIcon } from '../components/drive/DriveIcons'
 
 // === 状态类型定义 ===
 interface DriveState {
@@ -65,6 +66,7 @@ type DriveAction =
   | { type: 'SET_SELECTED'; payload: number | null }
   | { type: 'SET_CATEGORY_FILTER'; payload: CategoryFilter }
   | { type: 'SET_SORT'; payload: SortOption }
+  | { type: 'SET_BREADCRUMBS'; payload: Breadcrumb[] }
 
 // === 初始状态 ===
 const initialState: DriveState = {
@@ -149,6 +151,8 @@ function driveReducer(state: DriveState, action: DriveAction): DriveState {
       return { ...state, categoryFilter: action.payload }
     case 'SET_SORT':
       return { ...state, sort: action.payload }
+    case 'SET_BREADCRUMBS':
+      return { ...state, breadcrumbs: action.payload, searchQuery: '', searchResults: null, selectedId: null, categoryFilter: 'all' }
     default:
       return state
   }
@@ -225,6 +229,17 @@ export default function DrivePage() {
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [mobileTab, setMobileTab] = useState<'files' | 'favorites' | 'search' | 'settings'>('files')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const driveContext = useDrive()
+  const prevContextPathRef = useRef<string>('')
+
+  // 同步 DriveContext 侧边栏导航到本地状态
+  useEffect(() => {
+    const pathKey = JSON.stringify(driveContext.state.currentPath)
+    if (pathKey !== prevContextPathRef.current) {
+      prevContextPathRef.current = pathKey
+      dispatch({ type: 'SET_BREADCRUMBS', payload: driveContext.state.currentPath })
+    }
+  }, [driveContext.state.currentPath])
 
   // 计算当前父文件夹 ID
   const currentParentId = state.breadcrumbs[state.breadcrumbs.length - 1]?.id ?? null
@@ -462,7 +477,7 @@ export default function DrivePage() {
 
         {/* Main Content */}
         <div className="drive-main">
-          <LiquidGlass variant="blur" className="page-card drive-content-card">
+          <LiquidGlass variant="blur" interactive={false} className="page-card drive-content-card">
             <DriveToolbar
               breadcrumbs={state.breadcrumbs}
               searchQuery={state.searchQuery}
@@ -519,8 +534,8 @@ export default function DrivePage() {
                 <LiquidButton size="sm" variant="glass" onClick={refresh}>重试</LiquidButton>
               </LiquidGlass>
             ) : displayItems.length === 0 ? (
-              <LiquidGlass variant="blur" className="drive-state-card">
-                <span className="drive-state-icon">☁️</span>
+              <LiquidGlass variant="blur" interactive={false} className="drive-state-card">
+                <span className="drive-state-icon"><FolderIcon size={40} /></span>
                 <p className="drive-state-text">
                   {isSearching ? '未找到匹配的文件' : '网盘为空，点击上方按钮上传文件'}
                 </p>

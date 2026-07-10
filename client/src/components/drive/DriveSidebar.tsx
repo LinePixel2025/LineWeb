@@ -14,8 +14,6 @@ export interface DriveSidebarProps {
     archives: number
     code: number
   }
-  storageUsed?: number
-  storageTotal?: number
 }
 
 const navItems: SidebarNavItem[] = [
@@ -37,23 +35,12 @@ const DriveSidebar = memo(function DriveSidebar({
   activeFilter,
   onFilterChange,
   fileCounts,
-  storageUsed = 0,
-  storageTotal = 10 * 1024 * 1024 * 1024,
 }: DriveSidebarProps) {
-  const storagePercent = storageTotal > 0 ? Math.round((storageUsed / storageTotal) * 100) : 0
-
-  const formatBytes = (bytes: number): string => {
-    if (bytes === 0) return '0 B'
-    const k = 1024
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-  }
 
   return (
     <aside className="drive-sidebar">
       {/* Main Navigation */}
-      <LiquidGlass variant="blur" chromatic={false} className="drive-sidebar-section">
+      <LiquidGlass variant="blur" interactive={false} chromatic={false} className="drive-sidebar-section">
         <nav className="drive-sidebar-nav">
           {navItems.map(item => (
             <button
@@ -72,7 +59,7 @@ const DriveSidebar = memo(function DriveSidebar({
       </LiquidGlass>
 
       {/* File Categories */}
-      <LiquidGlass variant="blur" chromatic={false} className="drive-sidebar-section">
+      <LiquidGlass variant="blur" interactive={false} chromatic={false} className="drive-sidebar-section">
         <h3 className="drive-sidebar-heading">文件分类</h3>
         <nav className="drive-sidebar-nav">
           {categoryItems.map(item => (
@@ -91,26 +78,6 @@ const DriveSidebar = memo(function DriveSidebar({
         </nav>
       </LiquidGlass>
 
-      {/* Storage Usage */}
-      <LiquidGlass variant="blur" chromatic={false} className="drive-sidebar-section drive-sidebar-storage">
-        <h3 className="drive-sidebar-heading">存储空间</h3>
-        <div className="drive-storage-bar">
-          <div className="drive-storage-bar-track">
-            <div
-              className="drive-storage-bar-fill"
-              style={{ width: `${Math.min(storagePercent, 100)}%` }}
-            />
-          </div>
-          <div className="drive-storage-bar-text">
-            <span>{formatBytes(storageUsed)}</span>
-            <span className="drive-storage-bar-sep">/</span>
-            <span>{formatBytes(storageTotal)}</span>
-          </div>
-          <div className="drive-storage-bar-percent">
-            已使用 {storagePercent}%
-          </div>
-        </div>
-      </LiquidGlass>
     </aside>
   )
 })

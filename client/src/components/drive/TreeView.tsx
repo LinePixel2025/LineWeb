@@ -2,6 +2,7 @@ import { useState, useCallback, memo } from 'react'
 import { useDrive } from '../../contexts/DriveContext'
 import api from '../../lib/api'
 import type { DriveItem } from '../../types/drive'
+import { FolderIcon, ChevronRight, ChevronDown } from './DriveIcons'
 
 interface TreeNode {
   id: number | null
@@ -121,18 +122,18 @@ const TreeView = memo(function TreeView({ onFolderSelect }: TreeViewProps) {
               }}
               disabled={node.isLoading}
             >
-              {node.isLoading ? '⏳' : node.isExpanded ? '▼' : '▶'}
+              {node.isLoading ? '⏳' : node.isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
             </button>
           )}
           {!hasChildren && <span className="tree-node-spacer" />}
           
           <button
-            className="tree-node-label"
-            onClick={() => handleFolderClick(node)}
-          >
-            <span className="tree-node-icon">📁</span>
-            <span className="tree-node-name">{node.name}</span>
-          </button>
+              className="tree-node-label"
+              onClick={() => handleFolderClick(node)}
+            >
+              <span className="tree-node-icon"><FolderIcon size={14} /></span>
+              <span className="tree-node-name">{node.name}</span>
+            </button>
         </div>
         
         {node.isExpanded && node.children.map(child => renderNode(child, level + 1))}
