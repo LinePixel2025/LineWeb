@@ -17,10 +17,8 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 })
 
-router.use(authLimiter)
-
 // 注册
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', authLimiter, async (req: Request, res: Response) => {
   const parsed = registerSchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: '输入数据无效', details: parsed.error.flatten() })
@@ -41,7 +39,7 @@ router.post('/register', async (req: Request, res: Response) => {
 })
 
 // 登录
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', authLimiter, async (req: Request, res: Response) => {
   const parsed = loginSchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: '输入数据无效' })
