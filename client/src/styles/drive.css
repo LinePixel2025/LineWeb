@@ -241,52 +241,126 @@
   line-height: 1;
 }
 
-/* --- Path Bar Placeholder --- */
+/* --- Path Bar --- */
 
-.drive-path-bar {
+.path-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 12px;
   padding: 8px 0;
   font-size: 0.85rem;
   color: var(--lg-text-secondary);
+  user-select: none;
+}
+
+.path-bar-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   overflow-x: auto;
   white-space: nowrap;
   -webkit-overflow-scrolling: touch;
+  flex: 1;
+  min-width: 0;
 }
 
-.drive-path-bar::-webkit-scrollbar {
+.path-bar-breadcrumbs::-webkit-scrollbar {
   display: none;
 }
 
-.drive-path-sep {
-  color: var(--lg-text-tertiary);
+.path-bar-item {
+  display: inline-flex;
+  align-items: center;
   flex-shrink: 0;
 }
 
-.drive-path-item {
+.path-bar-separator {
+  color: var(--lg-text-tertiary);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.path-bar-link {
   border: none;
   background: transparent;
   color: var(--lg-text-secondary);
   font-size: 0.85rem;
   font-family: var(--lg-font);
   cursor: pointer;
-  padding: 2px 4px;
+  padding: 2px 6px;
   border-radius: var(--lg-radius-sm);
   transition: all 0.15s ease;
-  flex-shrink: 0;
 }
 
-.drive-path-item:hover {
+.path-bar-link:hover {
   background: var(--lg-glass-bg);
   color: var(--lg-text-primary);
 }
 
-.drive-path-current {
+.path-bar-current {
   color: var(--lg-text-primary);
   font-weight: 500;
-  cursor: default;
+  padding: 2px 6px;
+}
+
+.path-bar-edit {
+  flex: 1;
+  min-width: 0;
+}
+
+.path-bar-input {
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--lg-glass-border);
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-glass-bg);
+  color: var(--lg-text-primary);
+  font-size: 0.85rem;
+  font-family: var(--lg-font);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.path-bar-input:focus {
+  border-color: var(--lg-accent);
+}
+
+.path-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   flex-shrink: 0;
+}
+
+.path-bar-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: var(--lg-glass-bg);
+  color: var(--lg-text-secondary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  border-radius: var(--lg-radius-sm);
+  transition: all 0.15s ease;
+}
+
+.path-bar-action:hover {
+  background: var(--lg-glass-border);
+  color: var(--lg-text-primary);
+}
+
+.path-bar-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.path-bar-action:disabled:hover {
+  background: var(--lg-glass-bg);
+  color: var(--lg-text-secondary);
 }
 
 /* ============================================================

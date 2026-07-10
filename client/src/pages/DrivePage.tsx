@@ -2,6 +2,7 @@ import { useReducer, useEffect, useCallback, useRef, useMemo, useState } from 'r
 import LiquidGlass from '../components/glass/LiquidGlass'
 import LiquidButton from '../components/glass/LiquidButton'
 import DriveToolbar from '../components/drive/DriveToolbar'
+import PathBar from '../components/drive/PathBar'
 import DriveNavigation from '../components/drive/DriveNavigation'
 import MobileNav from '../components/drive/MobileNav'
 import DriveDetailPanel from '../components/drive/DriveDetailPanel'
@@ -385,6 +386,8 @@ export default function DrivePage() {
               onSortChange={handleSortChange}
               syncing={state.syncing}
             />
+
+            <PathBar />
 
             {/* Upload Zone */}
             {state.showUpload && (
