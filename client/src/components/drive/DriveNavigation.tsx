@@ -3,6 +3,7 @@ import LiquidGlass from '../glass/LiquidGlass'
 import { useDrive } from '../../contexts/DriveContext'
 import { useResponsive } from '../../hooks/useResponsive'
 import TreeView from './TreeView'
+import TabList from './TabList'
 
 export interface DriveNavigationProps {
   collapsed?: boolean
@@ -43,6 +44,10 @@ const DriveNavigation = memo(function DriveNavigation({
 
       {!collapsed && (
         <>
+          <LiquidGlass variant="blur" chromatic={false} className="drive-sidebar-section">
+            <TabList />
+          </LiquidGlass>
+
           <LiquidGlass variant="blur" chromatic={false} className="drive-sidebar-section">
             <h3 className="drive-sidebar-heading">收藏夹</h3>
             <div className="drive-sidebar-favorites">

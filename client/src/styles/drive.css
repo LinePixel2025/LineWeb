@@ -145,6 +145,95 @@
   white-space: nowrap;
 }
 
+/* --- TabList --- */
+
+.tab-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tab-list-heading {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--lg-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+.tab-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tab-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--lg-radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: var(--lg-text-secondary);
+}
+
+.tab-item:hover {
+  background: var(--lg-glass-bg);
+  color: var(--lg-text-primary);
+}
+
+.tab-item--active {
+  background: var(--lg-glass-bg);
+  color: var(--lg-accent);
+}
+
+.tab-item--active .tab-item-name {
+  font-weight: 500;
+}
+
+.tab-item-icon {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.tab-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+
+.tab-item-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--lg-text-tertiary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  border-radius: var(--lg-radius-sm);
+  transition: all 0.15s ease;
+  opacity: 0;
+}
+
+.tab-item:hover .tab-item-close {
+  opacity: 1;
+}
+
+.tab-item-close:hover {
+  background: var(--lg-glass-border);
+  color: var(--lg-text-primary);
+}
+
 .drive-sidebar-placeholder {
   font-size: 0.8rem;
   color: var(--lg-text-tertiary);
