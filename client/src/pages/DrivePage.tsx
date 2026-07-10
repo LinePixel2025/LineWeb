@@ -2,6 +2,7 @@ import { useReducer, useEffect, useCallback, useRef, useMemo, useState } from 'r
 import LiquidGlass from '../components/glass/LiquidGlass'
 import LiquidButton from '../components/glass/LiquidButton'
 import DriveToolbar from '../components/drive/DriveToolbar'
+import Toolbar from '../components/drive/Toolbar'
 import PathBar from '../components/drive/PathBar'
 import DriveNavigation from '../components/drive/DriveNavigation'
 import MobileNav from '../components/drive/MobileNav'
@@ -388,6 +389,13 @@ export default function DrivePage() {
             />
 
             <PathBar />
+
+            <Toolbar
+              onNewFolder={openNewFolder}
+              onUpload={openUpload}
+              onSync={handleSync}
+              syncing={state.syncing}
+            />
 
             {/* Upload Zone */}
             {state.showUpload && (
