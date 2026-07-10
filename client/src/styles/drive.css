@@ -1,0 +1,225 @@
+/* ============================================================
+   Drive — Responsive Layout Framework
+   ============================================================ */
+
+/* --- Drive Navigation (Desktop/Tablet Sidebar) --- */
+
+.drive-sidebar--collapsed {
+  width: 60px;
+  overflow: hidden;
+}
+
+.drive-sidebar--collapsed .drive-sidebar-heading,
+.drive-sidebar--collapsed .drive-sidebar-tree,
+.drive-sidebar--collapsed .drive-sidebar-favorites,
+.drive-sidebar--collapsed .drive-sidebar-placeholder {
+  display: none;
+}
+
+.drive-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.drive-sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: var(--lg-glass-bg);
+  color: var(--lg-text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  border-radius: var(--lg-radius-sm);
+  transition: all 0.15s ease;
+}
+
+.drive-sidebar-toggle:hover {
+  background: var(--lg-glass-border);
+  color: var(--lg-text-primary);
+}
+
+.drive-sidebar-tree {
+  min-height: 80px;
+}
+
+.drive-sidebar-placeholder {
+  font-size: 0.8rem;
+  color: var(--lg-text-tertiary);
+  text-align: center;
+  padding: 12px 0;
+}
+
+.drive-sidebar-favorites {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.drive-sidebar-favorite-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--lg-radius-sm);
+  font-size: 0.85rem;
+  color: var(--lg-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.drive-sidebar-favorite-item:hover {
+  background: var(--lg-glass-bg);
+  color: var(--lg-text-primary);
+}
+
+/* --- Detail Panel (Desktop) --- */
+
+.drive-detail-panel {
+  position: sticky;
+  top: calc(var(--lg-nav-height) + 20px);
+  height: fit-content;
+  max-height: calc(100vh - var(--lg-nav-height) - 40px);
+  overflow-y: auto;
+}
+
+/* --- Mobile Bottom Navigation --- */
+
+.mobile-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  height: 56px;
+  padding: 0 8px;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  background: rgba(20, 20, 22, 0.85);
+  backdrop-filter: blur(16.8px) saturate(180%);
+  -webkit-backdrop-filter: blur(16.8px) saturate(180%);
+  border-top: 1px solid var(--lg-glass-border);
+}
+
+.mobile-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex: 1;
+  padding: 6px 4px;
+  border: none;
+  background: transparent;
+  color: var(--lg-text-tertiary);
+  font-family: var(--lg-font);
+  cursor: pointer;
+  transition: color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-nav-item--active {
+  color: var(--lg-accent);
+}
+
+.mobile-nav-item:active {
+  opacity: 0.7;
+}
+
+.mobile-nav-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.mobile-nav-label {
+  font-size: 0.65rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* --- Path Bar Placeholder --- */
+
+.drive-path-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  font-size: 0.85rem;
+  color: var(--lg-text-secondary);
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+}
+
+.drive-path-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.drive-path-sep {
+  color: var(--lg-text-tertiary);
+  flex-shrink: 0;
+}
+
+.drive-path-item {
+  border: none;
+  background: transparent;
+  color: var(--lg-text-secondary);
+  font-size: 0.85rem;
+  font-family: var(--lg-font);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--lg-radius-sm);
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.drive-path-item:hover {
+  background: var(--lg-glass-bg);
+  color: var(--lg-text-primary);
+}
+
+.drive-path-current {
+  color: var(--lg-text-primary);
+  font-weight: 500;
+  cursor: default;
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   Responsive Overrides
+   ============================================================ */
+
+/* Tablet: 768px - 1023px */
+@media (max-width: 1023px) {
+  .drive-sidebar--collapsed {
+    width: 0;
+    display: none;
+  }
+
+  .drive-detail-panel {
+    display: none;
+  }
+}
+
+/* Mobile: < 768px */
+@media (max-width: 767px) {
+  .mobile-nav {
+    display: flex;
+  }
+
+  .drive-page {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0) + 12px);
+  }
+}
+
+/* Desktop: >= 1024px — hide mobile nav */
+@media (min-width: 1024px) {
+  .mobile-nav {
+    display: none;
+  }
+}

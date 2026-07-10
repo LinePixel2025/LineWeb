@@ -1,8 +1,10 @@
-import { useReducer, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useReducer, useEffect, useCallback, useRef, useMemo, useState } from 'react'
 import LiquidGlass from '../components/glass/LiquidGlass'
 import LiquidButton from '../components/glass/LiquidButton'
 import DriveToolbar from '../components/drive/DriveToolbar'
 import DriveSidebar from '../components/drive/DriveSidebar'
+import DriveNavigation from '../components/drive/DriveNavigation'
+import MobileNav from '../components/drive/MobileNav'
 import DriveDetailPanel from '../components/drive/DriveDetailPanel'
 import DriveListView from '../components/drive/DriveListView'
 import DriveGridView from '../components/drive/DriveGridView'
@@ -12,6 +14,8 @@ import { NewFolderDialog, RenameDialog, DeleteDialog } from '../components/drive
 import Pagination from '../components/Pagination'
 import api, { ApiError } from '../lib/api'
 import { useDownload } from '../contexts/DownloadContext'
+import { useResponsive } from '../hooks/useResponsive'
+import { DriveProvider } from '../contexts/DriveContext'
 import type { DriveItem, Breadcrumb, DriveListResponse, SortOption, CategoryFilter, ViewMode } from '../types/drive'
 import { getFileCategory } from '../types/drive'
 
@@ -150,7 +154,10 @@ function driveReducer(state: DriveState, action: DriveAction): DriveState {
 export default function DrivePage() {
   const [state, dispatch] = useReducer(driveReducer, initialState)
   const { startDownload } = useDownload()
+  const { isDesktop, isMobile } = useResponsive()
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const [mobileTab, setMobileTab] = useState<'files' | 'favorites' | 'search' | 'settings'>('files')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   // 计算当前父文件夹 ID
   const currentParentId = state.breadcrumbs[state.breadcrumbs.length - 1]?.id ?? null
@@ -355,141 +362,151 @@ export default function DrivePage() {
   }, [state.selectedId, displayItems])
 
   return (
-    <div className="page drive-page">
-      {/* Sidebar */}
-      <DriveSidebar
-        activeFilter={state.categoryFilter}
-        onFilterChange={handleCategoryChange}
-        fileCounts={fileCounts}
-      />
-
-      {/* Main Content */}
-      <div className="drive-main">
-        <LiquidGlass variant="blur" className="page-card drive-content-card">
-          <DriveToolbar
-            breadcrumbs={state.breadcrumbs}
-            searchQuery={state.searchQuery}
-            searching={state.searching}
-            searchResultCount={state.searchResults?.length ?? null}
-            viewMode={state.viewMode}
-            sort={state.sort}
-            onSearch={(query) => dispatch({ type: 'SET_SEARCH_QUERY', payload: query })}
-            onNavigate={navigateToBreadcrumb}
-            onToggleView={toggleView}
-            onNewFolder={openNewFolder}
-            onUpload={openUpload}
-            onSync={handleSync}
-            onSortChange={handleSortChange}
-            syncing={state.syncing}
+    <DriveProvider>
+      <div className={`page drive-page ${isMobile ? 'drive-page--mobile' : ''}`}>
+        {/* Desktop/Tablet Navigation Sidebar */}
+        {isDesktop && (
+          <DriveNavigation
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           />
+        )}
 
-          {/* Upload Zone */}
-          {state.showUpload && (
-            <UploadZone
-              parentId={currentParentId}
-              onUploaded={handleUploaded}
-              onClose={() => dispatch({ type: 'TOGGLE_UPLOAD', payload: false })}
+        {/* Main Content */}
+        <div className="drive-main">
+          <LiquidGlass variant="blur" className="page-card drive-content-card">
+            <DriveToolbar
+              breadcrumbs={state.breadcrumbs}
+              searchQuery={state.searchQuery}
+              searching={state.searching}
+              searchResultCount={state.searchResults?.length ?? null}
+              viewMode={state.viewMode}
+              sort={state.sort}
+              onSearch={(query) => dispatch({ type: 'SET_SEARCH_QUERY', payload: query })}
+              onNavigate={navigateToBreadcrumb}
+              onToggleView={toggleView}
+              onNewFolder={openNewFolder}
+              onUpload={openUpload}
+              onSync={handleSync}
+              onSortChange={handleSortChange}
+              syncing={state.syncing}
             />
-          )}
 
-          {/* Content */}
-          {state.loading ? (
-            <div className="drive-loading">
-              <div className="spinner" />
-              <p style={{ marginTop: '12px', color: 'var(--lg-text-tertiary)', fontSize: '0.85rem' }}>
-                正在加载...
-              </p>
-            </div>
-          ) : state.error ? (
-            <LiquidGlass variant="blur" className="drive-state-card">
-              <p className="drive-state-text">⚠️ {state.error}</p>
-              <LiquidButton size="sm" variant="glass" onClick={refresh}>重试</LiquidButton>
-            </LiquidGlass>
-          ) : displayItems.length === 0 ? (
-            <LiquidGlass variant="blur" className="drive-state-card">
-              <span className="drive-state-icon">☁️</span>
-              <p className="drive-state-text">
-                {isSearching ? '未找到匹配的文件' : '网盘为空，点击上方按钮上传文件'}
-              </p>
-            </LiquidGlass>
-          ) : state.viewMode === 'list' ? (
-            <DriveListView
-              items={displayItems}
-              selectedId={state.selectedId}
-              onFolderClick={navigateToFolder}
-              onPreview={handlePreview}
-              onDownload={startDownload}
-              onRename={(item) => dispatch({ type: 'SET_RENAME_ITEM', payload: item })}
-              onDelete={(item) => dispatch({ type: 'SET_DELETE_ITEM', payload: item })}
-              onSelect={handleSelect}
-            />
-          ) : (
-            <DriveGridView
-              items={displayItems}
-              selectedId={state.selectedId}
-              onFolderClick={navigateToFolder}
-              onPreview={handlePreview}
-              onDownload={startDownload}
-              onRename={(item) => dispatch({ type: 'SET_RENAME_ITEM', payload: item })}
-              onDelete={(item) => dispatch({ type: 'SET_DELETE_ITEM', payload: item })}
-              onSelect={handleSelect}
-            />
-          )}
-
-          {/* 翻页控件 */}
-          {!isSearching && (
-            <>
-              <Pagination
-                page={state.page}
-                totalPages={state.totalPages}
-                onPageChange={(p) => fetchItems(currentParentId, p)}
+            {/* Upload Zone */}
+            {state.showUpload && (
+              <UploadZone
+                parentId={currentParentId}
+                onUploaded={handleUploaded}
+                onClose={() => dispatch({ type: 'TOGGLE_UPLOAD', payload: false })}
               />
-              <div style={{ textAlign: 'center', marginTop: '12px', color: 'var(--lg-text-tertiary)', fontSize: '0.85rem' }}>
-                第 {state.page}/{state.totalPages} 页，共 {state.total} 项
+            )}
+
+            {/* Content */}
+            {state.loading ? (
+              <div className="drive-loading">
+                <div className="spinner" />
+                <p style={{ marginTop: '12px', color: 'var(--lg-text-tertiary)', fontSize: '0.85rem' }}>
+                  正在加载...
+                </p>
               </div>
-            </>
-          )}
-        </LiquidGlass>
+            ) : state.error ? (
+              <LiquidGlass variant="blur" className="drive-state-card">
+                <p className="drive-state-text">⚠️ {state.error}</p>
+                <LiquidButton size="sm" variant="glass" onClick={refresh}>重试</LiquidButton>
+              </LiquidGlass>
+            ) : displayItems.length === 0 ? (
+              <LiquidGlass variant="blur" className="drive-state-card">
+                <span className="drive-state-icon">☁️</span>
+                <p className="drive-state-text">
+                  {isSearching ? '未找到匹配的文件' : '网盘为空，点击上方按钮上传文件'}
+                </p>
+              </LiquidGlass>
+            ) : state.viewMode === 'list' ? (
+              <DriveListView
+                items={displayItems}
+                selectedId={state.selectedId}
+                onFolderClick={navigateToFolder}
+                onPreview={handlePreview}
+                onDownload={startDownload}
+                onRename={(item) => dispatch({ type: 'SET_RENAME_ITEM', payload: item })}
+                onDelete={(item) => dispatch({ type: 'SET_DELETE_ITEM', payload: item })}
+                onSelect={handleSelect}
+              />
+            ) : (
+              <DriveGridView
+                items={displayItems}
+                selectedId={state.selectedId}
+                onFolderClick={navigateToFolder}
+                onPreview={handlePreview}
+                onDownload={startDownload}
+                onRename={(item) => dispatch({ type: 'SET_RENAME_ITEM', payload: item })}
+                onDelete={(item) => dispatch({ type: 'SET_DELETE_ITEM', payload: item })}
+                onSelect={handleSelect}
+              />
+            )}
+
+            {/* 翻页控件 */}
+            {!isSearching && (
+              <>
+                <Pagination
+                  page={state.page}
+                  totalPages={state.totalPages}
+                  onPageChange={(p) => fetchItems(currentParentId, p)}
+                />
+                <div style={{ textAlign: 'center', marginTop: '12px', color: 'var(--lg-text-tertiary)', fontSize: '0.85rem' }}>
+                  第 {state.page}/{state.totalPages} 页，共 {state.total} 项
+                </div>
+              </>
+            )}
+          </LiquidGlass>
+        </div>
+
+        {/* Detail Panel — Desktop only */}
+        {isDesktop && (
+          <DriveDetailPanel
+            item={selectedItem}
+            onClose={() => handleSelect(null)}
+            onDownload={startDownload}
+            onRename={(item) => dispatch({ type: 'SET_RENAME_ITEM', payload: item })}
+            onDelete={(item) => dispatch({ type: 'SET_DELETE_ITEM', payload: item })}
+            onPreview={handlePreview}
+          />
+        )}
+
+        {/* Mobile Bottom Navigation */}
+        {isMobile && (
+          <MobileNav activeTab={mobileTab} onTabChange={setMobileTab} />
+        )}
+
+        {/* Modal overlays */}
+        {state.previewItem && (
+          <DrivePreview
+            item={state.previewItem}
+            onClose={() => dispatch({ type: 'SET_PREVIEW_ITEM', payload: null })}
+          />
+        )}
+        {state.showNewFolder && (
+          <NewFolderDialog
+            parentId={currentParentId}
+            onCreated={() => { refresh(); dispatch({ type: 'TOGGLE_NEW_FOLDER', payload: false }) }}
+            onClose={() => dispatch({ type: 'TOGGLE_NEW_FOLDER', payload: false })}
+          />
+        )}
+        {state.renameItem && (
+          <RenameDialog
+            item={state.renameItem}
+            onRenamed={() => { dispatch({ type: 'SET_RENAME_ITEM', payload: null }); refresh() }}
+            onClose={() => dispatch({ type: 'SET_RENAME_ITEM', payload: null })}
+          />
+        )}
+        {state.deleteItem && (
+          <DeleteDialog
+            item={state.deleteItem}
+            onDeleted={() => { dispatch({ type: 'SET_DELETE_ITEM', payload: null }); refresh() }}
+            onClose={() => dispatch({ type: 'SET_DELETE_ITEM', payload: null })}
+          />
+        )}
       </div>
-
-      {/* Detail Panel */}
-      <DriveDetailPanel
-        item={selectedItem}
-        onClose={() => handleSelect(null)}
-        onDownload={startDownload}
-        onRename={(item) => dispatch({ type: 'SET_RENAME_ITEM', payload: item })}
-        onDelete={(item) => dispatch({ type: 'SET_DELETE_ITEM', payload: item })}
-        onPreview={handlePreview}
-      />
-
-      {/* Modal overlays */}
-      {state.previewItem && (
-        <DrivePreview
-          item={state.previewItem}
-          onClose={() => dispatch({ type: 'SET_PREVIEW_ITEM', payload: null })}
-        />
-      )}
-      {state.showNewFolder && (
-        <NewFolderDialog
-          parentId={currentParentId}
-          onCreated={() => { refresh(); dispatch({ type: 'TOGGLE_NEW_FOLDER', payload: false }) }}
-          onClose={() => dispatch({ type: 'TOGGLE_NEW_FOLDER', payload: false })}
-        />
-      )}
-      {state.renameItem && (
-        <RenameDialog
-          item={state.renameItem}
-          onRenamed={() => { dispatch({ type: 'SET_RENAME_ITEM', payload: null }); refresh() }}
-          onClose={() => dispatch({ type: 'SET_RENAME_ITEM', payload: null })}
-        />
-      )}
-      {state.deleteItem && (
-        <DeleteDialog
-          item={state.deleteItem}
-          onDeleted={() => { dispatch({ type: 'SET_DELETE_ITEM', payload: null }); refresh() }}
-          onClose={() => dispatch({ type: 'SET_DELETE_ITEM', payload: null })}
-        />
-      )}
-    </div>
+    </DriveProvider>
   )
 }

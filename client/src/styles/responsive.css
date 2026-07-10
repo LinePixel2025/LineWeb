@@ -339,7 +339,7 @@
 /* Tablet: Hide detail panel, show sidebar */
 @media (max-width: 1024px) {
   .drive-page {
-    grid-template-columns: 200px 1fr;
+    grid-template-columns: 1fr;
   }
 
   .drive-detail-panel {
