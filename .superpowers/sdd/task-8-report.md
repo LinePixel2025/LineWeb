@@ -27,7 +27,13 @@ DONE
 ✅ 无类型错误
 
 ## 提交记录
-待提交
+```
+5e20e08 feat(drive): implement drag and drop upload functionality
+47654a1 feat(drive): add Toolbar component for file operations
+ce131b6 feat(drive): add TabList component for tab navigation
+ac0ab98 fix(PathBar): 实现编辑模式提交功能，修复审查问题
+555e7f8 feat(drive): add PathBar component for breadcrumb navigation
+```
 
 ## 遇到的问题和解决方案
 无

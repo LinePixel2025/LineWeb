@@ -1,163 +1,127 @@
-### Task 6: 更新导航栏组件
+# Task 6: 创建TabList标签页组件
 
-**Files:**
-- Modify: `client/src/components/Navbar.tsx`
+## 项目上下文
+这是网盘前端界面重构项目的第六步。项目采用React 19 + TypeScript + Vite技术栈。Task 1-5已完成基础架构。
 
-**Interfaces:**
-- Consumes: useTheme hook
-- Produces: 更新后的导航栏组件
+## 任务目标
+创建TabList标签页组件，用于在侧边栏显示已打开的文件夹标签，支持关闭和切换。
 
-- [ ] **Step 1: 更新导航栏组件**
+## 文件列表
+- Create: `client/src/components/drive/TabList.tsx`
+- Modify: `client/src/components/drive/DriveNavigation.tsx`
+- Test: `client/src/components/drive/__tests__/TabList.test.tsx`
 
-```tsx
-// client/src/components/Navbar.tsx
-import { useState, useRef, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
-import { useTheme } from '../contexts/ThemeContext'
+## 接口定义
+- Consumes: `useDrive` - 获取标签页状态和操作方法
+- Produces: `TabList` component - 标签页列表组件
 
-const navItems = [
-  { path: '/', label: '首页' },
-  { path: '/features', label: '功能' },
-  { path: '/posts', label: '文章' },
-]
+## 详细步骤
 
-export default function Navbar() {
-  const { user, isAdmin } = useAuth()
-  const { theme, toggleTheme } = useTheme()
-  const location = useLocation()
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const btnRef = useRef<HTMLButtonElement>(null)
+### Step 1: 创建TabList.tsx
 
-  const closeMenu = () => setMobileOpen(false)
-  const toggleMenu = () => setMobileOpen(prev => !prev)
+创建 `client/src/components/drive/TabList.tsx` 文件：
 
-  // Lock body scroll when menu is open
-  useEffect(() => {
-    if (mobileOpen) {
-      document.body.classList.add('menu-open')
-    } else {
-      document.body.classList.remove('menu-open')
-    }
-    return () => document.body.classList.remove('menu-open')
-  }, [mobileOpen])
+```typescript
+import { memo, useCallback } from 'react'
+import { useDrive } from '../../contexts/DriveContext'
 
-  // Close menu on outside tap
-  useEffect(() => {
-    if (!mobileOpen) return
-    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
-      if (!menuRef.current?.contains(e.target as Node) && !btnRef.current?.contains(e.target as Node)) {
-        setMobileOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('touchstart', handleClickOutside, { passive: true })
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('touchstart', handleClickOutside)
-    }
-  }, [mobileOpen])
+export interface TabListProps {
+  onTabSelect?: (tabId: string) => void
+}
+
+const TabList = memo(function TabList({ onTabSelect }: TabListProps) {
+  const { state, setActiveTab, closeTab } = useDrive()
+
+  const handleTabClick = useCallback((tabId: string) => {
+    setActiveTab(tabId)
+    onTabSelect?.(tabId)
+  }, [setActiveTab, onTabSelect])
+
+  const handleCloseClick = useCallback((e: React.MouseEvent, tabId: string) => {
+    e.stopPropagation()
+    closeTab(tabId)
+  }, [closeTab])
+
+  if (state.tabs.length <= 1) {
+    return null // 只有一个标签时不显示
+  }
 
   return (
-    <nav className="navbar">
-      <div className="navbar-inner">
-        <Link to="/" className="navbar-logo">Line Web</Link>
-
-        <div
-          ref={menuRef}
-          className={`navbar-links ${mobileOpen ? 'open' : ''}`}
-        >
-          {navItems.map(item => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`navbar-link ${location.pathname === item.path ? 'active' : ''}`}
-              onClick={closeMenu}
-            >
-              {item.label}
-            </Link>
-          ))}
-
-          {user ? (
-            <>
-              {user.canAccessDrive && (
-                <Link
-                  to="/drive"
-                  className={`navbar-link ${location.pathname === '/drive' ? 'active' : ''}`}
-                  onClick={closeMenu}
-                >
-                  网盘
-                </Link>
-              )}
-              {isAdmin && (
-                <Link
-                  to="/admin"
-                  className={`navbar-link ${location.pathname.startsWith('/admin') ? 'active' : ''}`}
-                  onClick={closeMenu}
-                >
-                  管理
-                </Link>
-              )}
-              <Link
-                to="/profile"
-                className={`navbar-link ${location.pathname === '/profile' ? 'active' : ''}`}
-                onClick={closeMenu}
-              >
-                {user.username}
-              </Link>
-            </>
-          ) : (
-            <Link
-              to="/login"
-              className="navbar-link"
-              onClick={closeMenu}
-            >
-              登录
-            </Link>
-          )}
-
-          <button
-            className="theme-toggle"
-            onClick={toggleTheme}
-            aria-label={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'}
+    <div className="tab-list">
+      <h4 className="tab-list-heading">打开的标签</h4>
+      <div className="tab-list-items">
+        {state.tabs.map(tab => (
+          <div
+            key={tab.id}
+            className={`tab-item ${tab.id === state.activeTabId ? 'tab-item--active' : ''}`}
+            onClick={() => handleTabClick(tab.id)}
           >
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
-        </div>
-
-        <button
-          ref={btnRef}
-          className="mobile-menu-btn"
-          onClick={toggleMenu}
-          aria-label={mobileOpen ? '关闭菜单' : '打开菜单'}
-        >
-          {mobileOpen ? (
-            <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="4" y1="4" x2="18" y2="18" />
-              <line x1="18" y1="4" x2="4" y2="18" />
-            </svg>
-          ) : (
-            <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="3" y1="6" x2="19" y2="6" />
-              <line x1="3" y1="11" x2="19" y2="11" />
-              <line x1="3" y1="16" x2="19" y2="16" />
-            </svg>
-          )}
-        </button>
+            <span className="tab-item-icon">📁</span>
+            <span className="tab-item-name">{tab.folderName}</span>
+            {state.tabs.length > 1 && (
+              <button
+                className="tab-item-close"
+                onClick={(e) => handleCloseClick(e, tab.id)}
+                aria-label={`关闭${tab.folderName}标签`}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        ))}
       </div>
-    </nav>
+    </div>
   )
-}
+})
+
+export default TabList
 ```
 
-- [ ] **Step 2: 验证导航栏**
+### Step 2: 更新DriveNavigation使用TabList
 
-在浏览器中检查导航栏是否正确显示，主题切换是否工作。
+修改 `client/src/components/drive/DriveNavigation.tsx` 文件：
+- 导入TabList组件
+- 在侧边栏中添加TabList组件
 
-- [ ] **Step 3: 提交更改**
+### Step 3: 添加TabList样式到drive.css
+
+在 `client/src/styles/drive.css` 文件中添加标签页样式：
+- .tab-list
+- .tab-list-heading
+- .tab-list-items
+- .tab-item
+- .tab-item--active
+- .tab-item-icon
+- .tab-item-name
+- .tab-item-close
+
+### Step 4: 创建测试文件
+
+创建 `client/src/components/drive/__tests__/TabList.test.tsx` 文件，包含以下测试用例：
+- 只有一个标签时不显示
+- 多个标签时显示列表
+- 点击标签调用setActiveTab
+- 点击关闭按钮调用closeTab
+
+### Step 5: 运行TypeScript检查
+
+Run: `cd client && npx tsc --noEmit`
+Expected: 无类型错误
+
+### Step 6: 提交代码
 
 ```bash
-git add client/src/components/Navbar.tsx
-git commit -m "feat: update navbar with theme toggle"
+git add client/src/components/drive/TabList.tsx client/src/components/drive/DriveNavigation.tsx client/src/styles/drive.css client/src/components/drive/__tests__/TabList.test.tsx
+git commit -m "feat(drive): add TabList component for tab navigation"
 ```
+
+## Global Constraints
+- 保持Liquid Glass设计语言
+- 所有现有功能必须正常工作
+
+## 注意事项
+- 使用useDrive hook获取标签页状态和操作方法
+- 只有一个标签时不显示标签列表
+- 支持点击标签切换
+- 支持关闭标签（最后一个标签不能关闭）
+- 使用memo包装组件避免不必要的重渲染

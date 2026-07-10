@@ -1,50 +1,51 @@
-# Task 10: 更新页面样式
+# Task 10: 实现快捷键支持
 
-## Status: DONE
+## 状态：DONE
 
-## Commits
-- `050e577` feat: update page styles for new design system
+## 提交记录
+```
+382f304 feat(drive): implement keyboard shortcuts
+fd466bc feat(drive): implement enhanced context menu
+5e20e08 feat(drive): implement drag and drop upload functionality
+47654a1 feat(drive): add Toolbar component for file operations
+ce131b6 feat(drive): add TabList component for tab navigation
+```
 
-## Test Summary
-TypeScript 检查通过，无编译错误。
+## TypeScript 检查结果
+✅ 无类型错误
 
-## Changes Made
-已更新 `client/src/styles/pages.css` 文件，将所有旧的 CSS 变量（`--lg-*`）替换为新的设计系统变量：
+## 测试结果
+✅ 11 tests passed
 
-### 主要更新内容：
-1. **页面容器**：`.page` 和 `.container` 使用新的间距和布局变量
-2. **首页区域**：`.home-section` 使用 `100dvh` 和 flexbox 居中
-3. **文章页面**：`.posts-toolbar`、`.posts-search-wrap`、`.posts-list` 等使用新的间距和颜色变量
-4. **文章详情**：`.post-page` 使用新的间距变量
-5. **个人资料**：`.profile-card` 使用新的间距和颜色变量
-6. **功能卡片**：`.features-card` 使用新的间距变量
-7. **刷新按钮**：`.wallpaper-refresh-btn` 使用新的玻璃效果和过渡变量
-8. **管理后台**：所有管理后台相关样式使用新的颜色、间距和圆角变量
-9. **网盘页面**：所有网盘相关样式使用新的颜色、间距和圆角变量
-10. **评论系统**：所有评论相关样式使用新的颜色和间距变量
-11. **对话框**：所有对话框样式使用新的颜色和间距变量
-12. **下载提示**：所有下载提示样式使用新的颜色和间距变量
-13. **移动端菜单**：新增 `.mobile-menu-btn` 和响应式样式
+## 实现内容
 
-### 新增样式：
-- `.page` - 页面容器
-- `.container` - 内容容器
-- `.home-section` - 首页区域
-- `.spinner` - 加载动画
-- `.fade-in-stagger` - 淡入动画
-- `body.menu-open` - 菜单打开状态
-- `.mobile-menu-btn` - 移动端菜单按钮
-- `@media (max-width: 768px)` - 移动端响应式样式
+### 创建文件
+- `client/src/hooks/useKeyboardShortcuts.ts` — 快捷键 hook
 
-### CSS 变量映射：
-- `--lg-text-*` → `--color-text-*`
-- `--lg-accent` → `--color-accent`
-- `--lg-glass-*` → `--glass-*`
-- `--lg-radius-*` → `--radius-*`
-- `--lg-font` → `--font-sans`
-- `--lg-transition` → `--transition-fast`
-- `--lg-nav-height` → `--nav-height`
-- `--lg-*` 间距 → `--spacing-*`
+### 修改文件
+- `client/src/pages/DrivePage.tsx` — 集成 hook
 
-## Concerns
-无。所有更改已完成并通过 TypeScript 检查。
+### 测试文件
+- `client/src/hooks/__tests__/useKeyboardShortcuts.test.ts` — 11 个测试用例
+
+## 支持的快捷键
+| 快捷键 | 功能 |
+|--------|------|
+| Ctrl+A | 全选 |
+| Delete | 删除选中文件 |
+| F2 | 重命名（单选时） |
+| Escape | 取消选择 |
+| Ctrl+N | 新建文件夹 |
+| Ctrl+U | 上传文件 |
+| F5 / Ctrl+R | 刷新 |
+| Backspace | 返回上级目录 |
+
+## 遇到的问题和解决方案
+
+**问题：** 任务简报中 hook 使用 `useDrive()` 获取状态，但 `DrivePage` 使用本地 `useReducer` 而非 `DriveContext`，直接调用 `useDrive` 会导致 hook 无法在 DrivePage 中使用（DrivePage 是 Provider 的父组件）。
+
+**解决方案：** 将 hook 设计为接收 `selectedFileIds`、`currentPathLength` 等参数，而非内部调用 `useDrive`，使其与 DrivePage 的状态管理方式兼容。
+
+**问题：** 测试文件中 `vi.fn()` 返回的 `Mock` 类型不能直接赋值给 `(() => void) | undefined`。
+
+**解决方案：** 将 opts 类型声明中的 mock 函数类型改为 `() => void`。

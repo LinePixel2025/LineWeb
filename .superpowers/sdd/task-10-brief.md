@@ -1,227 +1,162 @@
-### Task 10: 更新页面样式
+# Task 10: 实现快捷键支持
 
-**Files:**
-- Modify: `client/src/styles/pages.css`
+## 项目上下文
+这是网盘前端界面重构项目的第十步。项目采用React 19 + TypeScript + Vite技术栈。Task 1-9已完成基础架构和UI组件。
 
-**Interfaces:**
-- Consumes: CSS变量系统
-- Produces: 页面特定样式
+## 任务目标
+实现快捷键支持，提高文件操作效率。
 
-- [ ] **Step 1: 更新页面样式文件**
+## 文件列表
+- Create: `client/src/hooks/useKeyboardShortcuts.ts`
+- Modify: `client/src/pages/DrivePage.tsx`
+- Test: `client/src/hooks/__tests__/useKeyboardShortcuts.test.ts`
 
-```css
-/* client/src/styles/pages.css */
+## 接口定义
+- Consumes: `useDrive` - 获取当前状态和操作方法
+- Produces: `useKeyboardShortcuts` hook - 快捷键逻辑hook
 
-/* Page container */
-.page {
-  padding-top: calc(var(--nav-height) + 24px);
-  padding-bottom: 24px;
+## 详细步骤
+
+### Step 1: 创建useKeyboardShortcuts.ts
+
+创建 `client/src/hooks/useKeyboardShortcuts.ts` 文件：
+
+```typescript
+import { useEffect, useCallback } from 'react'
+import { useDrive } from '../contexts/DriveContext'
+
+export interface KeyboardShortcutsOptions {
+  onDelete?: () => void
+  onRename?: () => void
+  onNewFolder?: () => void
+  onUpload?: () => void
+  onRefresh?: () => void
 }
 
-.container {
-  max-width: var(--max-width);
-  margin: 0 auto;
-  padding: 0 var(--spacing-4);
-}
+export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
+  const { state, selectAll, clearSelection, navigateToBreadcrumb } = useDrive()
+  const { onDelete, onRename, onNewFolder, onUpload, onRefresh } = options
 
-/* Home section */
-.home-section {
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    // 忽略输入框中的快捷键
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      return
+    }
 
-/* Posts page */
-.posts-toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
-  padding: var(--spacing-3) var(--spacing-4);
-  margin-bottom: var(--spacing-4);
-}
+    const isCtrl = e.ctrlKey || e.metaKey
 
-.posts-search-wrap {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  flex: 1;
-}
+    // Ctrl+A: 全选
+    if (isCtrl && e.key === 'a') {
+      e.preventDefault()
+      // 需要当前文件夹的文件ID列表，这里暂时为空
+      // 实际实现需要从DrivePage传递文件列表
+      selectAll([])
+    }
 
-.posts-search-input {
-  flex: 1;
-}
+    // Ctrl+Z: 撤销（暂未实现）
+    if (isCtrl && e.key === 'z') {
+      e.preventDefault()
+      // TODO: 实现撤销功能
+    }
 
-.posts-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-3);
-}
+    // Ctrl+Y: 重做（暂未实现）
+    if (isCtrl && e.key === 'y') {
+      e.preventDefault()
+      // TODO: 实现重做功能
+    }
 
-.posts-card {
-  padding: var(--spacing-4);
-}
+    // Delete: 删除
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (state.selectedFiles.length > 0) {
+        e.preventDefault()
+        onDelete?.()
+      }
+    }
 
-/* Drive page */
-.drive-page {
-  display: grid;
-  grid-template-columns: 240px 1fr 280px;
-  gap: var(--spacing-4);
-  min-height: calc(100vh - var(--nav-height));
-}
+    // F2: 重命名
+    if (e.key === 'F2') {
+      if (state.selectedFiles.length === 1) {
+        e.preventDefault()
+        onRename?.()
+      }
+    }
 
-.drive-main {
-  flex: 1;
-  min-width: 0;
-}
+    // Enter: 打开选中项
+    if (e.key === 'Enter') {
+      if (state.selectedFiles.length === 1) {
+        e.preventDefault()
+        // 需要获取选中的文件信息，这里暂时为空
+        // 实际实现需要从DrivePage传递文件列表
+      }
+    }
 
-.drive-content-card {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
+    // Escape: 取消选择
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      clearSelection()
+    }
 
-.drive-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 0;
-}
+    // Ctrl+N: 新建文件夹
+    if (isCtrl && e.key === 'n') {
+      e.preventDefault()
+      onNewFolder?.()
+    }
 
-.drive-state-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 24px;
-  text-align: center;
-}
+    // Ctrl+F: 搜索（暂未实现）
+    if (isCtrl && e.key === 'f') {
+      e.preventDefault()
+      // TODO: 聚焦搜索框
+    }
 
-.drive-state-icon {
-  font-size: 3rem;
-  margin-bottom: var(--spacing-4);
-}
+    // Backspace: 返回上级
+    if (e.key === 'Backspace' && !isCtrl) {
+      if (state.currentPath.length > 1) {
+        e.preventDefault()
+        navigateToBreadcrumb(state.currentPath.length - 2)
+      }
+    }
+  }, [state, selectAll, clearSelection, navigateToBreadcrumb, onDelete, onRename, onNewFolder, onUpload, onRefresh])
 
-.drive-state-text {
-  color: var(--color-text-secondary);
-  margin-bottom: var(--spacing-4);
-}
-
-/* Spinner */
-.spinner {
-  width: 24px;
-  height: 24px;
-  border: 2px solid var(--color-border-default);
-  border-top-color: var(--color-accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Fade in animation */
-.fade-in-stagger {
-  animation: fadeIn 0.3s ease-out forwards;
-  opacity: 0;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Wallpaper refresh button */
-.wallpaper-refresh-btn {
-  position: fixed;
-  bottom: var(--spacing-4);
-  right: var(--spacing-4);
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  color: var(--color-text-primary);
-}
-
-.wallpaper-refresh-btn:hover {
-  background: rgba(255,255,255,0.1);
-}
-
-.wallpaper-refresh-btn.refreshing {
-  animation: spin 1s linear infinite;
-}
-
-/* Menu open state */
-body.menu-open {
-  overflow: hidden;
-}
-
-/* Mobile menu button */
-.mobile-menu-btn {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-primary);
-}
-
-@media (max-width: 768px) {
-  .mobile-menu-btn {
-    display: flex;
-  }
-  
-  .navbar-links {
-    display: none;
-  }
-  
-  .navbar-links.open {
-    display: flex;
-    flex-direction: column;
-    position: fixed;
-    top: var(--nav-height);
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: var(--color-bg-primary);
-    padding: var(--spacing-4);
-    gap: var(--spacing-2);
-  }
-  
-  .drive-page {
-    grid-template-columns: 1fr;
-  }
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
 }
 ```
 
-- [ ] **Step 2: 验证页面样式**
+### Step 2: 更新DrivePage使用useKeyboardShortcuts
 
-在浏览器中检查页面样式是否正确应用。
+修改 `client/src/pages/DrivePage.tsx` 文件：
+- 导入useKeyboardShortcuts hook
+- 使用hook并传入操作回调
 
-- [ ] **Step 3: 提交更改**
+### Step 3: 创建测试文件
+
+创建 `client/src/hooks/__tests__/useKeyboardShortcuts.test.ts` 文件，包含以下测试用例：
+- 按Delete键调用onDelete
+- 按F2键调用onRename
+- 按Escape键调用clearSelection
+- 按Backspace键导航到上级目录
+
+### Step 4: 运行TypeScript检查
+
+Run: `cd client && npx tsc --noEmit`
+Expected: 无类型错误
+
+### Step 5: 提交代码
 
 ```bash
-git add client/src/styles/pages.css
-git commit -m "feat: update page styles for new design system"
+git add client/src/hooks/useKeyboardShortcuts.ts client/src/pages/DrivePage.tsx client/src/hooks/__tests__/useKeyboardShortcuts.test.ts
+git commit -m "feat(drive): implement keyboard shortcuts"
 ```
+
+## Global Constraints
+- 保持Liquid Glass设计语言
+- 所有现有功能必须正常工作
+
+## 注意事项
+- 使用useEffect监听keydown事件
+- 忽略输入框中的快捷键
+- 支持Ctrl/Mod键修饰符
+- 提供onDelete、onRename等回调
+- 使用useCallback包装事件处理函数

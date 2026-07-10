@@ -1,150 +1,137 @@
-### Task 8: 更新文章列表页
+# Task 8: 实现拖拽上传功能
 
-**Files:**
-- Modify: `client/src/pages/PostsPage.tsx`
+## 项目上下文
+这是网盘前端界面重构项目的第八步。项目采用React 19 + TypeScript + Vite技术栈。Task 1-7已完成基础架构和UI组件。
 
-**Interfaces:**
-- Consumes: CSS变量系统，LiquidGlass组件
-- Produces: 更新后的文章列表页
+## 任务目标
+实现拖拽上传功能，支持将文件从系统文件管理器拖入网盘界面进行上传。
 
-- [ ] **Step 1: 更新文章列表页组件**
+## 文件列表
+- Create: `client/src/hooks/useDragAndDrop.ts`
+- Modify: `client/src/components/drive/UploadZone.tsx`
+- Test: `client/src/hooks/__tests__/useDragAndDrop.test.ts`
 
-```tsx
-// client/src/pages/PostsPage.tsx
-import { useState, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
-import api from '../lib/api'
-import LiquidGlass from '../components/glass/LiquidGlass'
-import Pagination from '../components/Pagination'
+## 接口定义
+- Consumes: `useDrive` - 获取当前路径
+- Produces: `useDragAndDrop` hook - 拖拽逻辑hook
 
-interface PostSummary {
-  id: number; title: string; summary: string | null
-  slug: string; createdAt: string; author: { username: string }
+## 详细步骤
+
+### Step 1: 创建useDragAndDrop.ts
+
+创建 `client/src/hooks/useDragAndDrop.ts` 文件：
+
+```typescript
+import { useState, useCallback, useRef } from 'react'
+
+export interface DragAndDropOptions {
+  onFilesDropped?: (files: FileList) => void
+  onDragStateChange?: (isDragging: boolean) => void
 }
-interface PostsResponse { posts: PostSummary[]; total: number; page: number; totalPages: number }
 
-export default function PostsPage() {
-  const [data, setData] = useState<PostsResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState(1)
-  const [sort, setSort] = useState<'desc' | 'asc'>('desc')
-  const [search, setSearch] = useState('')
-  const [searchInput, setSearchInput] = useState('')
+export interface DragAndDropReturn {
+  isDragging: boolean
+  dragProps: {
+    onDragOver: (e: React.DragEvent) => void
+    onDragEnter: (e: React.DragEvent) => void
+    onDragLeave: (e: React.DragEvent) => void
+    onDrop: (e: React.DragEvent) => void
+  }
+}
 
-  const fetchPosts = useCallback(() => {
-    setLoading(true)
-    const params = new URLSearchParams({
-      page: String(page),
-      limit: '6',
-      sort,
-    })
-    if (search) params.set('search', search)
-    api.get<PostsResponse>(`/posts?${params}`)
-      .then(setData).catch(console.error).finally(() => setLoading(false))
-  }, [page, sort, search])
+export function useDragAndDrop(options: DragAndDropOptions = {}): DragAndDropReturn {
+  const { onFilesDropped, onDragStateChange } = options
+  const [isDragging, setIsDragging] = useState(false)
+  const dragCounterRef = useRef(0)
 
-  useEffect(() => { fetchPosts() }, [fetchPosts])
-
-  const handleSearch = (e: React.FormEvent) => {
+  const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
-    setPage(1)
-    setSearch(searchInput.trim())
+    e.stopPropagation()
+  }, [])
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    dragCounterRef.current++
+    
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true)
+      onDragStateChange?.(true)
+    }
+  }, [onDragStateChange])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    dragCounterRef.current--
+    
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false)
+      onDragStateChange?.(false)
+    }
+  }, [onDragStateChange])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    setIsDragging(false)
+    dragCounterRef.current = 0
+    onDragStateChange?.(false)
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      onFilesDropped?.(e.dataTransfer.files)
+      e.dataTransfer.clearData()
+    }
+  }, [onFilesDropped, onDragStateChange])
+
+  return {
+    isDragging,
+    dragProps: {
+      onDragOver: handleDragOver,
+      onDragEnter: handleDragEnter,
+      onDragLeave: handleDragLeave,
+      onDrop: handleDrop
+    }
   }
-
-  const handleClearSearch = () => {
-    setSearchInput('')
-    setSearch('')
-    setPage(1)
-  }
-
-  const toggleSort = () => {
-    setPage(1)
-    setSort(prev => prev === 'desc' ? 'asc' : 'desc')
-  }
-
-  return (
-    <div className="page container" style={{ maxWidth: '720px' }}>
-      <h1 style={{ marginBottom: '8px' }}>文章</h1>
-      <p style={{ marginBottom: '24px', color: 'var(--color-text-secondary)' }}>发现 Line Web 的最新内容</p>
-
-      {/* Toolbar */}
-      <LiquidGlass variant="blur" chromatic={false} className="posts-toolbar">
-        <div className="posts-search-wrap">
-          <span className="posts-search-icon">🔍</span>
-          <input
-            className="lg-input posts-search-input"
-            type="text"
-            placeholder="搜索文章标题…"
-            value={searchInput}
-            onChange={e => setSearchInput(e.target.value)}
-          />
-          <button type="button" className="posts-search-submit" onClick={handleSearch} aria-label="搜索">→</button>
-          <div className="posts-toolbar-divider" />
-          <button className="posts-sort-btn-inline" onClick={toggleSort}>
-            {sort === 'desc' ? '🕐 最新' : '🕐 最早'}
-          </button>
-        </div>
-        {search && (
-          <button type="button" className="btn btn-ghost" onClick={handleClearSearch}>
-            ✕ 清除
-          </button>
-        )}
-      </LiquidGlass>
-
-      {/* Search results hint */}
-      {search && data && (
-        <p style={{ margin: '16px 0 0', fontSize: '0.88rem', color: 'var(--color-text-tertiary)' }}>
-          搜索 "{search}" 找到 {data.total} 篇文章
-        </p>
-      )}
-
-      {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}><div className="spinner" /></div>
-      ) : data?.posts.length === 0 ? (
-        <LiquidGlass variant="regular" chromatic={false} style={{ textAlign: 'center', padding: '60px 24px', marginTop: '24px' }}>
-          <p style={{ color: 'var(--color-text-secondary)' }}>{search ? `未找到包含 "${search}" 的文章` : '暂无文章'}</p>
-        </LiquidGlass>
-      ) : (
-        <>
-          <div className="posts-list">
-            {data?.posts.map((post, i) => (
-              <LiquidGlass key={post.id} variant="blur" chromatic={false} className="fade-in-stagger posts-card" style={{ animationDelay: `${i * 0.05}s` }}>
-                <Link
-                  to={`/posts/${post.slug}`}
-                  style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
-                >
-                  <h3>{post.title}</h3>
-                  {post.summary && <p style={{ marginTop: '8px', fontSize: '0.92rem', color: 'var(--color-text-secondary)' }}>{post.summary}</p>}
-                  <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
-                    <span style={{ color: 'var(--color-text-tertiary)' }}>{post.author.username}</span>
-                    <span style={{ color: 'var(--color-text-tertiary)' }}>{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
-                  </div>
-                </Link>
-              </LiquidGlass>
-            ))}
-          </div>
-
-          {data && data.totalPages > 1 && (
-            <Pagination
-              page={page}
-              totalPages={data.totalPages}
-              onPageChange={setPage}
-            />
-          )}
-        </>
-      )}
-    </div>
-  )
 }
 ```
 
-- [ ] **Step 2: 验证文章列表页**
+### Step 2: 更新UploadZone使用useDragAndDrop
 
-在浏览器中检查文章列表页是否正确显示。
+修改 `client/src/components/drive/UploadZone.tsx` 文件：
+- 导入useDragAndDrop hook
+- 使用hook提供的dragProps替换原有的拖拽处理逻辑
 
-- [ ] **Step 3: 提交更改**
+### Step 3: 创建测试文件
+
+创建 `client/src/hooks/__tests__/useDragAndDrop.test.ts` 文件，包含以下测试用例：
+- 初始状态isDragging为false
+- 拖拽进入时isDragging变为true
+- 拖拽离开时isDragging变为false
+- 放下文件时调用onFilesDropped
+
+### Step 4: 运行TypeScript检查
+
+Run: `cd client && npx tsc --noEmit`
+Expected: 无类型错误
+
+### Step 5: 提交代码
 
 ```bash
-git add client/src/pages/PostsPage.tsx
-git commit -m "feat: update posts page for new design system"
+git add client/src/hooks/useDragAndDrop.ts client/src/components/drive/UploadZone.tsx client/src/hooks/__tests__/useDragAndDrop.test.ts
+git commit -m "feat(drive): implement drag and drop upload functionality"
 ```
+
+## Global Constraints
+- 保持Liquid Glass设计语言
+- 所有现有功能必须正常工作
+
+## 注意事项
+- 使用useState和useRef管理拖拽状态
+- 处理dragCounter解决子元素触发的dragLeave问题
+- 支持多文件拖拽
+- 提供isDragging状态用于UI反馈
+- 使用memo包装组件避免不必要的重渲染

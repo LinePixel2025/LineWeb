@@ -1,164 +1,122 @@
-### Task 7: 更新首页
+# Task 7: 创建Toolbar工具栏组件
 
-**Files:**
-- Modify: `client/src/pages/HomePage.tsx`
+## 项目上下文
+这是网盘前端界面重构项目的第七步。项目采用React 19 + TypeScript + Vite技术栈。Task 1-6已完成基础架构和导航组件。
 
-**Interfaces:**
-- Consumes: CSS变量系统，LiquidGlass组件
-- Produces: 更新后的首页
+## 任务目标
+创建Toolbar工具栏组件，用于显示操作按钮（新建文件夹、上传、同步等）和视图切换。
 
-- [ ] **Step 1: 更新首页组件**
+## 文件列表
+- Create: `client/src/components/drive/Toolbar.tsx`
+- Modify: `client/src/pages/DrivePage.tsx`
+- Test: `client/src/components/drive/__tests__/Toolbar.test.tsx`
 
-```tsx
-// client/src/pages/HomePage.tsx
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import api from '../lib/api'
-import { useWallpaper } from '../contexts/WallpaperContext'
-import LiquidGlass from '../components/glass/LiquidGlass'
+## 接口定义
+- Consumes: `useDrive` - 获取视图模式和操作方法
+- Produces: `Toolbar` component - 工具栏组件
 
-interface PostPreview {
-  id: number
-  title: string
-  summary: string | null
-  slug: string
-  createdAt: string
-  author: { username: string }
+## 详细步骤
+
+### Step 1: 创建Toolbar.tsx
+
+创建 `client/src/components/drive/Toolbar.tsx` 文件：
+
+```typescript
+import { memo, useCallback } from 'react'
+import LiquidButton from '../glass/LiquidButton'
+import { useDrive } from '../../contexts/DriveContext'
+
+export interface ToolbarProps {
+  onNewFolder?: () => void
+  onUpload?: () => void
+  onSync?: () => void
+  syncing?: boolean
 }
 
-export default function HomePage() {
-  const [recentPosts, setRecentPosts] = useState<PostPreview[]>([])
-  const { refresh, loading } = useWallpaper()
+const Toolbar = memo(function Toolbar({ 
+  onNewFolder, 
+  onUpload, 
+  onSync, 
+  syncing = false 
+}: ToolbarProps) {
+  const { state, setViewMode } = useDrive()
 
-  useEffect(() => {
-    api.get<{ posts: PostPreview[] }>('/posts?page=1&limit=3')
-      .then(data => setRecentPosts(data.posts))
-      .catch(() => {})
-  }, [])
+  const handleViewToggle = useCallback(() => {
+    setViewMode(state.viewMode === 'list' ? 'grid' : 'list')
+  }, [state.viewMode, setViewMode])
 
   return (
-    <>
-      {/* Hero */}
-      <section
-        style={{
-          textAlign: 'center',
-          padding: '160px 24px 100px',
-          minHeight: '100dvh',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-        className="home-section"
-      >
-        <LiquidGlass
-          variant="strong"
-          chromatic={false}
-          style={{
-            padding: '56px 48px',
-            maxWidth: '520px',
-            width: '100%',
-          }}
+    <div className="toolbar">
+      <div className="toolbar-actions">
+        <LiquidButton size="sm" variant="glass" onClick={onNewFolder}>
+          📁 新建
+        </LiquidButton>
+        <LiquidButton size="sm" variant="primary" onClick={onUpload}>
+          ⬆ 上传
+        </LiquidButton>
+        <LiquidButton size="sm" variant="ghost" onClick={onSync} disabled={syncing}>
+          {syncing ? '🔄 同步中...' : '🔄 同步'}
+        </LiquidButton>
+      </div>
+
+      <div className="toolbar-controls">
+        <button
+          className={`toolbar-view-toggle ${state.viewMode === 'grid' ? 'toolbar-view-toggle--active' : ''}`}
+          onClick={handleViewToggle}
+          title={state.viewMode === 'list' ? '切换为网格视图' : '切换为列表视图'}
         >
-          <h1
-            style={{
-              fontSize: 'clamp(2.4rem, 7vw, 4rem)',
-              fontWeight: 700,
-              letterSpacing: '-0.03em',
-              color: 'var(--color-text-primary)',
-              background: 'linear-gradient(135deg, var(--color-text-primary) 0%, var(--color-accent) 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}
-          >
-            Line Web
-          </h1>
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '36px' }}>
-            <Link to="/posts" className="btn btn-primary">
-              浏览文章
-            </Link>
-            <Link to="/features" className="btn btn-glass">
-              探索功能
-            </Link>
-          </div>
-        </LiquidGlass>
-      </section>
-
-      {/* Latest Posts Preview */}
-      {recentPosts.length > 0 && (
-        <section
-          className="home-posts-section"
-          style={{
-            maxWidth: '720px',
-            margin: '0 auto',
-          }}
-        >
-          <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-            <h2>最新文章</h2>
-            <p style={{ marginTop: '8px', color: 'var(--color-text-secondary)' }}>近期发布的内容精选</p>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {recentPosts.map((post, i) => (
-              <LiquidGlass key={post.id} variant="blur" chromatic={false} className="fade-in-stagger" style={{ padding: '24px', animationDelay: `${i * 0.08}s` }}>
-                <Link
-                  to={`/posts/${post.slug}`}
-                  style={{
-                    display: 'block',
-                    textDecoration: 'none',
-                    color: 'inherit',
-                  }}
-                >
-                  <h3 style={{ marginBottom: '4px' }}>{post.title}</h3>
-                  {post.summary && (
-                    <p style={{ marginTop: '8px', fontSize: '0.92rem', color: 'var(--color-text-secondary)' }}>
-                      {post.summary}
-                    </p>
-                  )}
-                  <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
-                    <span style={{ color: 'var(--color-text-tertiary)' }}>{post.author.username}</span>
-                    <span style={{ color: 'var(--color-text-tertiary)' }}>{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
-                  </div>
-                </Link>
-              </LiquidGlass>
-            ))}
-          </div>
-
-          <div style={{ textAlign: 'center', marginTop: '32px' }}>
-            <Link to="/posts" className="btn btn-glass">
-              查看全部文章 →
-            </Link>
-          </div>
-        </section>
-      )}
-
-      {/* Refresh wallpaper button */}
-      <button
-        onClick={refresh}
-        className={`wallpaper-refresh-btn${loading ? ' refreshing' : ''}`}
-        disabled={loading}
-        aria-label="刷新壁纸"
-        title="刷新壁纸"
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="23 4 23 10 17 10" />
-          <polyline points="1 20 1 14 7 14" />
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-        </svg>
-      </button>
-    </>
+          {state.viewMode === 'list' ? '☰' : '▦'}
+        </button>
+      </div>
+    </div>
   )
-}
+})
+
+export default Toolbar
 ```
 
-- [ ] **Step 2: 验证首页**
+### Step 2: 添加Toolbar样式到drive.css
 
-在浏览器中检查首页是否正确显示。
+在 `client/src/styles/drive.css` 文件中添加工具栏样式：
+- .toolbar
+- .toolbar-actions
+- .toolbar-controls
+- .toolbar-view-toggle
 
-- [ ] **Step 3: 提交更改**
+### Step 3: 更新DrivePage使用Toolbar
+
+修改 `client/src/pages/DrivePage.tsx` 文件：
+- 导入Toolbar组件
+- 在PathBar下方添加Toolbar
+
+### Step 4: 创建测试文件
+
+创建 `client/src/components/drive/__tests__/Toolbar.test.tsx` 文件，包含以下测试用例：
+- 渲染工具栏
+- 点击新建按钮调用onNewFolder
+- 点击上传按钮调用onUpload
+- 点击同步按钮调用onSync
+- 点击视图切换按钮切换视图模式
+
+### Step 5: 运行TypeScript检查
+
+Run: `cd client && npx tsc --noEmit`
+Expected: 无类型错误
+
+### Step 6: 提交代码
 
 ```bash
-git add client/src/pages/HomePage.tsx
-git commit -m "feat: update homepage for new design system"
+git add client/src/components/drive/Toolbar.tsx client/src/pages/DrivePage.tsx client/src/styles/drive.css client/src/components/drive/__tests__/Toolbar.test.tsx
+git commit -m "feat(drive): add Toolbar component for file operations"
 ```
+
+## Global Constraints
+- 保持Liquid Glass设计语言
+- 所有现有功能必须正常工作
+
+## 注意事项
+- 使用useDrive hook获取视图模式和操作方法
+- 使用LiquidButton组件保持设计语言一致性
+- 支持新建文件夹、上传、同步操作
+- 支持列表/网格视图切换
+- 使用memo包装组件避免不必要的重渲染
