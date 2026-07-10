@@ -1,0 +1,333 @@
+/* =============================================================
+   Line Web — Responsive Styles
+   Media queries and mobile optimizations
+   ============================================================= */
+
+/* ============================================================
+   Lexical toolbar responsive
+   ============================================================ */
+@media (max-width: 600px) {
+  .lex-tb {
+    gap: 1px;
+    padding: 4px;
+  }
+  .lex-btn {
+    min-width: 28px;
+    height: 28px;
+    font-size: 0.72rem;
+    padding: 0 4px;
+  }
+  .lex-div {
+    margin: 0 2px;
+  }
+}
+
+/* ============================================================
+   Mobile Navbar
+   ============================================================ */
+@media (max-width: 768px) {
+  .container { padding: 0 16px; }
+
+  h1 { font-size: 1.8rem; }
+  h2 { font-size: 1.4rem; }
+
+  .mobile-menu-btn { display: flex; }
+
+  .navbar-links {
+    position: absolute;
+    top: calc(var(--lg-nav-height) + 8px);
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    display: none;
+    background: transparent;
+    border: 1px solid var(--lg-glass-border);
+    border-radius: var(--lg-radius-md);
+    padding: 0;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    pointer-events: auto;
+    transform-origin: top center;
+  }
+
+  .navbar-links.open {
+    display: flex;
+    animation: menuSlideIn 0.3s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+  }
+
+  /* Frosted underlay + tint — the glass base */
+  .navbar-links::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    z-index: 0;
+    pointer-events: none;
+    backdrop-filter: var(--lg-frost);
+    -webkit-backdrop-filter: var(--lg-frost);
+    background: rgba(25, 25, 30, 0.82);
+  }
+
+  /* Specular highlight */
+  .navbar-links::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    z-index: 1;
+    pointer-events: none;
+    background: radial-gradient(circle at 30% 20%, rgba(255,255,255,0.10) 0%, transparent 50%);
+  }
+
+  .navbar-link {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    padding: 14px 16px;
+    border-radius: 0;
+  }
+
+  .navbar-link:first-child {
+    border-radius: var(--lg-radius-md) var(--lg-radius-md) 0 0;
+  }
+
+  .navbar-link:last-child {
+    border-radius: 0 0 var(--lg-radius-md) var(--lg-radius-md);
+  }
+
+  .navbar-link:only-child {
+    border-radius: var(--lg-radius-md);
+  }
+
+  .lg-surface { padding: 16px; }
+  .lg-surface-strong { padding: 20px; }
+}
+
+/* Extra small devices */
+@media (max-width: 480px) {
+  .container { padding: 0 12px; }
+
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.2rem; }
+
+  .page { padding-top: calc(var(--lg-nav-height) + 24px); padding-bottom: 40px; }
+
+  .lg-surface { padding: 14px; }
+  .lg-surface-strong { padding: 16px; }
+
+  /* 移动端溢出修复 */
+  .pe-featured-fields { padding-left: 0; }
+  .lex-content { padding: 12px 14px; }
+  .post-content-card { overflow-wrap: break-word; word-break: break-word; }
+  .upload-zone-progress-stats { gap: 8px; font-size: 0.75rem; }
+}
+
+/* h3/h4 responsive */
+@media (max-width: 768px) {
+  h3 { font-size: 1.2rem; }
+  h4 { font-size: 1rem; }
+}
+
+@media (max-width: 480px) {
+  h3 { font-size: 1.1rem; }
+  h4 { font-size: 0.95rem; }
+  body { font-size: 0.92rem; }
+}
+
+/* Extra small devices — iPhone SE */
+@media (max-width: 360px) {
+  .navbar {
+    width: calc(100% - 24px);
+    height: 48px;
+  }
+  .navbar-inner { padding: 0 12px; }
+  .navbar-logo { font-size: 1rem; }
+
+  .container { padding: 0 8px; }
+  .lg-surface { padding: 12px; }
+  .lg-surface-strong { padding: 14px; }
+  .page { padding-top: calc(var(--lg-nav-height) + 16px); padding-bottom: 32px; }
+}
+
+/* Mobile animation downgrade */
+@media (max-width: 768px) {
+  * { --lg-transition: 0.15s ease; }
+  .fade-in { animation-duration: 0.25s !important; }
+}
+
+/* Larger touch targets for mobile */
+@media (hover: none) and (pointer: coarse) {
+  .navbar-link { padding: 14px 16px; }
+  .navbar-link, button, a, .liquid-btn { min-height: 44px; }
+  button, .liquid-btn { min-height: 44px; }
+  .theme-toggle { width: 44px; height: 44px; }
+  .liquid-btn:hover {
+    transform: none !important;
+  }
+  /* 显式覆盖各按钮类的 height — 这些类原本 height < 44px 会忽略 min-height */
+  .lex-btn { min-width: 44px; min-height: 44px; height: auto; }
+  .pagination-btn { width: 44px; height: 44px; }
+  .posts-search-submit { width: 44px; height: 44px; }
+  .admin-page-btn { width: 44px; height: 44px; }
+  .page-editor-canvas-item-tool-btn { width: 44px; height: 44px; }
+  .drive-view-toggle { width: 44px; height: 44px; }
+}
+
+/* Home page responsive */
+.home-posts-section {
+  padding: 80px 24px 120px;
+}
+
+@media (max-width: 480px) {
+  .home-section { padding: 120px 16px 80px !important; }
+  .home-section .lg-surface-strong { padding: 32px 20px !important; }
+  .home-posts-section { padding: 48px 12px 80px !important; }
+}
+
+/* Pagination responsive */
+@media (max-width: 480px) {
+  .pagination-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 0.85rem;
+  }
+}
+
+/* Features page responsive */
+@media (max-width: 480px) {
+  .features-card { padding: 28px 20px !important; }
+  .features-card .features-emoji { font-size: 2.2rem; }
+  .features-card h3 { font-size: 1.05rem; }
+}
+
+/* Posts page responsive */
+@media (max-width: 640px) {
+  .posts-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .posts-sort-btn-inline {
+    align-self: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .posts-card {
+    padding: 16px;
+  }
+
+  .posts-toolbar {
+    padding: 12px;
+  }
+
+  .posts-sort-btn-inline {
+    font-size: 0.78rem;
+    padding: 5px 10px;
+  }
+}
+
+/* Post page responsive */
+@media (max-width: 768px) {
+  .post-content-card { padding: 20px; }
+  .post-page .post-title { font-size: 1.6rem; }
+  .post-page .post-meta { flex-direction: column; gap: 4px; }
+  .post-back-link { margin-bottom: 20px; }
+}
+
+@media (max-width: 480px) {
+  .post-content-card { padding: 16px; border-radius: var(--lg-radius-md); }
+  .post-page .post-title { font-size: 1.35rem; }
+  .article-content { font-size: 0.95rem; line-height: 1.75; }
+  .post-back-link { font-size: 0.82rem; margin-bottom: 16px; }
+}
+
+/* Profile page responsive */
+@media (max-width: 480px) {
+  .profile-card { padding: 20px; }
+  .profile-page h1 { font-size: 1.3rem; }
+  .profile-btn-row { flex-direction: column; align-items: stretch; }
+}
+
+/* Admin table — mobile card layout */
+@media (max-width: 580px) {
+  .admin-table { min-width: unset; }
+  .admin-table thead { display: none; }
+
+  .admin-table tbody,
+  .admin-table tr,
+  .admin-table td { display: block; }
+
+  .admin-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px;
+    border-bottom: 1px solid var(--lg-glass-border);
+  }
+
+  /* 隐藏 data-label 伪元素 — 卡片布局不需要标签 */
+  .admin-cell::before { display: none !important; }
+
+  .admin-cell {
+    padding: 0;
+    border: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* 标题行：标题居左，状态徽章居右 */
+  .admin-cell--title {
+    max-width: unset;
+    white-space: normal;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .admin-post-title {
+    font-size: 1rem;
+    font-weight: 600;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .admin-post-date {
+    margin-top: 0;
+    font-size: 0.78rem;
+  }
+
+  /* 状态徽章：在标题行右侧 */
+  .admin-cell--status {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+  }
+
+  .admin-row {
+    position: relative;
+  }
+
+  /* 操作按钮：横向紧凑排列 */
+  .admin-actions {
+    flex-direction: row;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+
+  .admin-actions .liquid-btn {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 0;
+    font-size: 0.82rem;
+    justify-content: center;
+  }
+
+  .admin-cell--actions {
+    justify-content: stretch;
+  }
+}

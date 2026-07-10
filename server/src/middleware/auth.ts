@@ -118,7 +118,9 @@ async function authenticateWithApiKeyAndSetUser(
     prisma.apiKey.update({
       where: { id: keyRecord.id },
       data: { lastUsedAt: new Date() },
-    }).catch(() => {})
+    }).catch((err) => {
+      console.error(`[Auth] 更新 API Key lastUsedAt 失败 (id=${keyRecord.id}):`, err.message)
+    })
 
     next()
   } catch (err) {

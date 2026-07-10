@@ -7,12 +7,25 @@ function parseCorsOrigins(raw: string | undefined): string | string[] | boolean 
   return origins.length === 1 ? origins[0] : origins
 }
 
+/**
+ * 要求环境变量必须存在
+ * 生产环境：缺失时直接抛错，防止使用不安全的默认值
+ * 开发环境：允许使用 fallback 默认值
+ */
+function requireEnv(key: string, fallback?: string): string {
+  const value = process.env[key] || fallback
+  if (!value) {
+    throw new Error(`环境变量 ${key} 未设置，请检查 .env 或 Railway 配置`)
+  }
+  return value
+}
+
 export const config = {
   port: parseInt(process.env.PORT || '3001', 10),
-  jwtSecret: process.env.JWT_SECRET || 'lineweb-dev-secret-change-in-production',
+  jwtSecret: requireEnv('JWT_SECRET', process.env.NODE_ENV === 'production' ? undefined : 'lineweb-dev-secret'),
   jwtExpiresIn: '7d' as const,
   corsOrigin: parseCorsOrigins(process.env.CORS_ORIGIN),
-  storageNodeToken: process.env.STORAGE_NODE_TOKEN || 'lineweb-storage-node-secret-change-in-production',
+  storageNodeToken: requireEnv('STORAGE_NODE_TOKEN', process.env.NODE_ENV === 'production' ? undefined : 'lineweb-storage-node-secret'),
   maxFileSizeMB: parseInt(process.env.MAX_FILE_SIZE_MB || '500', 10),
   uploadChunkKB: parseInt(process.env.UPLOAD_CHUNK_KB || '64', 10),
   downloadChunkKB: parseInt(process.env.DOWNLOAD_CHUNK_KB || '256', 10),

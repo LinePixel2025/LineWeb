@@ -1,0 +1,69 @@
+/* =============================================================
+   Line Web — CSS Variables
+   ============================================================= */
+
+:root {
+  /* ===== Dark Mode (default) ===== */
+
+  /* Backgrounds */
+  --lg-bg: #0d0d0f;
+  --lg-bg-secondary: #1a1a1e;
+
+  /* Text */
+  --lg-text-primary: #f5f5f7;
+  --lg-text-secondary: #c7c7cd;
+  --lg-text-tertiary: #98989d;
+
+  /* Article text — always dark-mode */
+  --lg-text-article: #f5f5f7;
+  --lg-text-article-secondary: #c7c7cd;
+
+  /* Accent */
+  --lg-accent: #2997ff;
+  --lg-accent-hover: #40a9ff;
+  --lg-accent-soft: rgba(41, 151, 255, 0.18);
+  --lg-accent-glow: rgba(41, 151, 255, 0.3);
+
+  /* States */
+  --lg-danger: #ff3b30;
+  --lg-success: #34c759;
+  --lg-warning: #ff9500;
+
+  /* Glass surface */
+  --lg-glass-bg: rgba(255, 255, 255, 0.07);
+  --lg-glass-border: rgba(255, 255, 255, 0.14);
+  --lg-glass-shadow: rgba(0, 0, 0, 0.5);
+
+  /* Typography */
+  --lg-font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
+    'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --lg-font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+
+  /* Layout */
+  --lg-nav-height: 56px;
+  --lg-max-width: 1120px;
+
+  /* Safe area (iOS notch + Home Indicator) */
+  --lg-safe-top: env(safe-area-inset-top, 0px);
+  --lg-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --lg-safe-left: env(safe-area-inset-left, 0px);
+  --lg-safe-right: env(safe-area-inset-right, 0px);
+
+  /* Border radius scale */
+  --lg-radius-sm: 8px;
+  --lg-radius-md: 14px;
+  --lg-radius-lg: 20px;
+  --lg-radius-xl: 28px;
+  --lg-radius-full: 9999px;
+
+  /* Transitions */
+  --lg-transition: 0.35s cubic-bezier(0.25, 0.1, 0.25, 1);
+
+  /* Glass frost presets (backdrop-filter shorthand) */
+  --lg-frost: blur(16.8px) saturate(180%);
+  --lg-frost-heavy: blur(24px) saturate(180%);
+
+  /* Touch targets */
+  --lg-touch-target-min: 44px;
+  --lg-touch-target-min-sm: 36px;
+}

@@ -55,13 +55,26 @@ export async function syncDriveFiles(): Promise<SyncReport> {
     // 4. 清理孤立记录：DB 有但节点上已经不存在的
     //    只有在 unique 约束下，每个 storagePath 才保证只有一条记录
     const orphans = dbRecords.filter(f => !nodePathSet.has(f.storagePath))
-    for (const orphan of orphans) {
+    if (orphans.length > 0) {
+      const orphanIds = orphans.map(o => o.id)
       try {
-        await prisma.driveFile.delete({ where: { id: orphan.id } })
-        report.orphansRemoved++
-        console.log(`[Sync] 删除孤立记录: ${orphan.name} (${orphan.storagePath})`)
+        const deleteResult = await prisma.driveFile.deleteMany({
+          where: { id: { in: orphanIds } }
+        })
+        report.orphansRemoved = deleteResult.count
+        console.log(`[Sync] 批量删除 ${deleteResult.count} 条孤立记录`)
       } catch (err: unknown) {
-        report.errors.push(`删除孤立记录失败: ${orphan.storagePath} — ${err instanceof Error ? err.message : String(err)}`)
+        report.errors.push(`批量删除孤立记录失败: ${err instanceof Error ? err.message : String(err)}`)
+        // 回退到逐条删除
+        for (const orphan of orphans) {
+          try {
+            await prisma.driveFile.delete({ where: { id: orphan.id } })
+            report.orphansRemoved++
+            console.log(`[Sync] 删除孤立记录: ${orphan.name} (${orphan.storagePath})`)
+          } catch (deleteErr: unknown) {
+            report.errors.push(`删除孤立记录失败: ${orphan.storagePath} — ${deleteErr instanceof Error ? deleteErr.message : String(deleteErr)}`)
+          }
+        }
       }
     }
 

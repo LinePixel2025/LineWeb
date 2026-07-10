@@ -1,0 +1,499 @@
+/* =============================================================
+   Line Web — Component Styles
+   Buttons, Inputs, Pagination, Editor, etc.
+   ============================================================= */
+
+/* ============================================================
+   Liquid Button — Design System
+   ============================================================ */
+.liquid-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  border-radius: 9999px;
+  font-family: var(--lg-font);
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+  user-select: none;
+  text-decoration: none;
+  white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+}
+.liquid-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Touch scale via CSS, not React state */
+.liquid-btn:active {
+  transform: scale(0.96);
+}
+
+/* Sizes */
+.liquid-btn.sm { padding: 6px 16px; font-size: 0.82rem; }
+.liquid-btn.md { padding: 10px 24px; font-size: 0.9rem; }
+.liquid-btn.lg { padding: 14px 32px; font-size: 1rem; }
+
+/* Variants */
+.liquid-btn.primary {
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.10) 0%, transparent 50%),
+    linear-gradient(135deg, var(--lg-accent), #40a9ff);
+  color: white;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 12px var(--lg-accent-glow);
+}
+.liquid-btn.primary:hover {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 6px 20px var(--lg-accent-glow);
+}
+.liquid-btn.primary:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.liquid-btn.glass {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.10) 0%, transparent 50%),
+    linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04)),
+    rgba(0,0,0,0.15);
+  backdrop-filter: var(--lg-frost);
+  -webkit-backdrop-filter: var(--lg-frost);
+  border: 1px solid rgba(255,255,255,0.18);
+  box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.2), 0 2px 8px rgba(0,0,0,0.15);
+  color: var(--lg-text-primary);
+}
+.liquid-btn.glass:hover {
+  transform: translateY(-1px);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 50%),
+    linear-gradient(135deg, rgba(255,255,255,0.14), rgba(255,255,255,0.08)),
+    rgba(0,0,0,0.15);
+}
+
+.liquid-btn.ghost {
+  background: transparent;
+  color: var(--lg-text-primary);
+}
+.liquid-btn.ghost:hover {
+  background: var(--lg-accent-soft);
+}
+
+.liquid-btn.danger {
+  background: linear-gradient(135deg, #ff3b30, #ff6b6b);
+  color: white;
+  box-shadow: 0 4px 12px rgba(255,59,48,0.3);
+}
+.liquid-btn.danger:hover {
+  transform: translateY(-1px) scale(1.02);
+}
+
+/* Hover flare overlay */
+.liquid-btn .btn-flare {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.liquid-btn.primary .btn-flare {
+  background: radial-gradient(circle at 50% 0%, rgba(255,255,255,0.2) 0%, transparent 60%);
+}
+.liquid-btn.glass .btn-flare,
+.liquid-btn.ghost .btn-flare,
+.liquid-btn.danger .btn-flare {
+  background: radial-gradient(circle at 50% 0%, rgba(255,255,255,0.1) 0%, transparent 60%);
+}
+.liquid-btn:hover .btn-flare {
+  opacity: 1;
+}
+
+/* ============================================================
+   Pagination — 分页控件
+   ============================================================ */
+.pagination-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--lg-glass-border);
+  cursor: pointer;
+  font-weight: 500;
+  font-family: var(--lg-font);
+  font-size: 0.95rem;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pagination-btn:active {
+  transform: scale(0.92);
+}
+
+.pagination-btn--active {
+  background: var(--lg-accent) !important;
+  color: white !important;
+}
+
+/* ============================================================
+   Editor Page
+   ============================================================ */
+.editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.editor-label {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--lg-text-tertiary);
+  font-weight: 500;
+}
+
+.editor-error {
+  background: linear-gradient(180deg, rgba(255,255,255,0.10) 0%, transparent 50%), rgba(255,59,48,0.12);
+  color: var(--lg-danger);
+  padding: 8px 12px;
+  border-radius: var(--lg-radius-sm);
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+  border: 1px solid rgba(255,59,48,0.2);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.editor-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.editor-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.editor-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--lg-accent);
+  cursor: pointer;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* ============================================================
+   Lexical Rich Text Editor
+   ============================================================ */
+
+/* ---- editor shell ---- */
+.lex-editor {
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-glass-bg);
+  backdrop-filter: blur(16.8px);
+  -webkit-backdrop-filter: blur(16.8px);
+  border: 1px solid var(--lg-glass-border);
+  overflow: hidden;
+  position: relative;
+}
+
+/* ---- toolbar ---- */
+.lex-tb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--lg-glass-border);
+  background: rgba(255,255,255,0.03);
+  user-select: none;
+}
+
+.lex-grp {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.lex-div {
+  display: inline-block;
+  width: 1px;
+  height: 22px;
+  background: var(--lg-glass-border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.lex-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--lg-text-secondary);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+@media (hover: hover) {
+  .lex-btn:hover {
+    background: rgba(255,255,255,0.08);
+    color: var(--lg-text-primary);
+  }
+}
+
+.lex-btn--on {
+  background: var(--lg-accent-soft);
+  color: var(--lg-accent);
+}
+
+.lex-btn sub {
+  font-size: 0.6rem;
+}
+
+.lex-btn strong,
+.lex-btn b {
+  font-weight: 700;
+}
+
+.lex-btn em,
+.lex-btn i {
+  font-style: italic;
+}
+
+.lex-btn u {
+  text-decoration: underline;
+}
+
+.lex-btn s {
+  text-decoration: line-through;
+}
+
+/* ---- editor body ---- */
+.lex-body {
+  position: relative;
+}
+
+.lex-content {
+  position: relative;
+  outline: none;
+  resize: vertical;
+  padding: 16px 20px;
+  font-size: 0.92rem;
+  line-height: 1.7;
+  color: var(--lg-text-article);
+  min-height: inherit;
+  overflow-y: auto;
+}
+
+/* ---- placeholder ---- */
+.lex-placeholder {
+  position: absolute;
+  top: 16px;
+  left: 20px;
+  pointer-events: none;
+  color: var(--lg-text-tertiary);
+  font-size: 0.92rem;
+  user-select: none;
+}
+
+/* ---- content typography ---- */
+
+.lex-p {
+  margin: 0 0 0.6em;
+}
+
+.lex-h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0.8em 0 0.3em;
+  color: var(--lg-text-primary);
+  line-height: 1.3;
+}
+
+.lex-h2 {
+  font-size: 1.3rem;
+  font-weight: 650;
+  margin: 0.7em 0 0.3em;
+  color: var(--lg-text-primary);
+  line-height: 1.35;
+}
+
+.lex-h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.6em 0 0.2em;
+  color: var(--lg-text-primary);
+  line-height: 1.4;
+}
+
+.lex-bold {
+  font-weight: 700;
+}
+
+.lex-italic {
+  font-style: italic;
+}
+
+.lex-uline {
+  text-decoration: underline;
+}
+
+.lex-strike {
+  text-decoration: line-through;
+}
+
+/* ---- lists ---- */
+.lex-ul,
+.lex-ol {
+  margin: 0 0 0.6em;
+  padding-left: 1.5em;
+}
+
+.lex-li {
+  margin: 0.2em 0;
+}
+
+.lex-li-nested {
+  list-style-type: circle;
+}
+
+/* ---- quote ---- */
+.lex-quote {
+  border-left: 3px solid var(--lg-accent);
+  padding: 8px 16px;
+  margin: 0.6em 0;
+  color: var(--lg-text-article-secondary);
+  background: var(--lg-accent-soft);
+  border-radius: 0 var(--lg-radius-sm) var(--lg-radius-sm) 0;
+}
+
+/* ---- code ---- */
+.lex-code {
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--lg-glass-border);
+  border-radius: var(--lg-radius-sm);
+  padding: 16px;
+  margin: 0.6em 0;
+  font-family: var(--lg-font-mono);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+  tab-size: 2;
+}
+
+/* ---- inline code ---- */
+.lex-code-inline {
+  font-family: var(--lg-font-mono);
+  background: var(--lg-accent-soft);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+/* ---- link ---- */
+.lex-link {
+  color: var(--lg-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ---- table ---- */
+.lex-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.6em 0;
+  border: 1px solid var(--lg-glass-border);
+  border-radius: var(--lg-radius-sm);
+  overflow: hidden;
+}
+
+.lex-td,
+.lex-th {
+  border: 1px solid var(--lg-glass-border);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.lex-th {
+  background: rgba(255,255,255,0.05);
+  font-weight: 600;
+  color: var(--lg-text-primary);
+}
+
+/* ---- code highlighting tokens ---- */
+.lex-token-comment,
+.lex-token-prolog,
+.lex-token-doctype,
+.lex-token-cdata { color: #6a9955; }
+.lex-token-punctuation { color: #d4d4d4; }
+.lex-token-property,
+.lex-token-tag,
+.lex-token-boolean,
+.lex-token-number,
+.lex-token-constant,
+.lex-token-symbol,
+.lex-token-deleted { color: #b5cea8; }
+.lex-token-selector,
+.lex-token-attr,
+.lex-token-string,
+.lex-token-char,
+.lex-token-builtin,
+.lex-token-inserted { color: #ce9178; }
+.lex-token-operator,
+.lex-token-entity,
+.lex-token-url { color: #d4d4d4; }
+.lex-token-atrule,
+.lex-token-attr-value,
+.lex-token-keyword { color: #569cd6; }
+.lex-token-function,
+.lex-token-class-name { color: #dcdcaa; }
+.lex-token-regex,
+.lex-token-important,
+.lex-token-variable { color: #d16969; }
+
+/* ============================================================
+   Mobile
+   ============================================================ */
+.mobile-menu-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--lg-text-primary);
+  cursor: pointer;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-menu-btn:active {
+  opacity: 0.6;
+}
+
+/* Mobile menu open/close animation */
+@keyframes menuSlideIn {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}

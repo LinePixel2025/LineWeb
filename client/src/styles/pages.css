@@ -1,0 +1,657 @@
+/* =============================================================
+   Line Web — Page-Specific Styles
+   Posts, Drive, Admin, Profile, Features, etc.
+   ============================================================= */
+
+/* ============================================================
+   Markdown Content
+   ============================================================ */
+.article-content {
+  line-height: 1.8;
+  color: var(--lg-text-article);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.article-content h1,
+.article-content h2,
+.article-content h3,
+.article-content h4 {
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+}
+
+.article-content h1:first-child,
+.article-content h2:first-child,
+.article-content h3:first-child {
+  margin-top: 0;
+}
+
+.article-content p {
+  margin-bottom: 1em;
+}
+
+.article-content ul,
+.article-content ol {
+  margin-bottom: 1em;
+  padding-left: 1.5em;
+}
+
+.article-content blockquote {
+  border-left: 3px solid var(--lg-accent);
+  padding: 8px 16px;
+  margin: 1em 0;
+  color: var(--lg-text-article-secondary);
+  background: var(--lg-accent-soft);
+  border-radius: 0 var(--lg-radius-md) var(--lg-radius-md) 0;
+}
+
+.article-content code {
+  font-family: var(--lg-font-mono);
+  background: var(--lg-accent-soft);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.article-content pre {
+  background: var(--lg-glass-bg);
+  backdrop-filter: blur(16.8px);
+  border: 1px solid var(--lg-glass-border);
+  border-radius: var(--lg-radius-md);
+  padding: 20px;
+  overflow-x: auto;
+  margin-bottom: 1em;
+  white-space: pre;
+}
+
+.article-content pre code {
+  background: none;
+  padding: 0;
+}
+
+.article-content img {
+  max-width: 100%;
+  border-radius: var(--lg-radius-md);
+}
+
+/* ============================================================
+   Posts Page — 文章列表工具栏
+   ============================================================ */
+.posts-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+
+.posts-search-wrap {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--lg-glass-border);
+  border-radius: var(--lg-radius-md);
+  padding: 0 4px 0 14px;
+  transition: border-color var(--lg-transition);
+}
+
+.posts-search-wrap:focus-within {
+  border-color: var(--lg-accent);
+  box-shadow: 0 0 0 3px var(--lg-accent-soft);
+}
+
+.posts-search-icon {
+  flex-shrink: 0;
+  font-size: 0.9rem;
+  opacity: 0.6;
+}
+
+.posts-search-input {
+  flex: 1;
+  min-width: 0;
+  width: auto !important;
+  padding: 12px 10px !important;
+  font-size: 0.9rem;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.posts-search-input:focus {
+  box-shadow: none !important;
+}
+
+.posts-search-submit {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--lg-radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--lg-text-secondary);
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+@media (hover: hover) {
+  .posts-search-submit:hover {
+    background: var(--lg-accent-soft);
+    color: var(--lg-accent);
+  }
+}
+
+.posts-toolbar-divider {
+  width: 1px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.12);
+  flex-shrink: 0;
+  margin: 0 4px;
+}
+
+.posts-sort-btn-inline {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: var(--lg-radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--lg-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 500;
+  font-family: var(--lg-font);
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  white-space: nowrap;
+}
+
+@media (hover: hover) {
+  .posts-sort-btn-inline:hover {
+    background: var(--lg-accent-soft);
+    color: var(--lg-accent);
+    border-color: var(--lg-accent);
+  }
+}
+
+.posts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.posts-card {
+  padding: 24px;
+}
+
+/* ============================================================
+   Post Page — 文章详情
+   ============================================================ */
+.post-page {
+  max-width: 720px;
+}
+
+.post-content-card {
+  padding: 32px;
+}
+
+.post-page .post-title {
+  font-size: 2rem;
+  line-height: 1.3;
+}
+
+.post-page .post-meta {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+  margin-bottom: 32px;
+}
+
+.post-back-link {
+  display: inline-block;
+  margin-bottom: 24px;
+  font-size: 0.9rem;
+}
+
+/* ============================================================
+   Profile Page — 个人中心
+   ============================================================ */
+.profile-card {
+  padding: 32px;
+}
+
+.profile-label {
+  font-size: 0.75rem;
+  display: block;
+  margin-bottom: 8px;
+  color: rgba(255,255,255,0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.profile-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* ============================================================
+   FeaturesPage — 功能卡片
+   ============================================================ */
+.features-card {
+  padding: 40px 24px;
+}
+
+.features-card .features-emoji {
+  font-size: 2.8rem;
+}
+
+/* ============================================================
+   Wallpaper Refresh Button — Floating bottom-right
+   ============================================================ */
+.wallpaper-refresh-btn {
+  position: fixed;
+  bottom: max(60px, calc(var(--lg-safe-bottom) + 24px));
+  right: max(16px, var(--lg-safe-right));
+  z-index: 50;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--lg-glass-border);
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: var(--lg-frost);
+  -webkit-backdrop-filter: var(--lg-frost);
+  color: var(--lg-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+  box-shadow: 0 2px 8px var(--lg-glass-shadow);
+}
+
+.wallpaper-refresh-btn:hover {
+  background: rgba(255,255,255,0.14);
+  color: var(--lg-text-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px var(--lg-glass-shadow);
+}
+
+.wallpaper-refresh-btn:active {
+  transform: scale(0.92);
+}
+
+.wallpaper-refresh-btn svg {
+  transition: transform 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.wallpaper-refresh-btn:active svg {
+  transform: rotate(90deg);
+}
+
+/* ============================================================
+   Admin Layout — Standalone admin interface
+   ============================================================ */
+
+/* --- Layout containers --- */
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* Transparent so wallpaper shows through */
+  background: transparent;
+  position: relative;
+}
+
+.admin-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-left: 240px;
+  position: relative;
+  z-index: 2;
+  transition: margin-left 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.admin-main--collapsed {
+  margin-left: 58px;
+}
+
+.admin-content {
+  flex: 1;
+  padding: 24px 32px 48px;
+  overflow-y: auto;
+}
+
+/* --- Sidebar --- */
+.admin-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 240px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  background: rgba(10, 10, 14, 0.78);
+  backdrop-filter: var(--lg-frost-heavy);
+  -webkit-backdrop-filter: var(--lg-frost-heavy);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  transition: width 0.3s cubic-bezier(0.25, 0.1, 0.25, 1),
+              transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+  overflow: hidden;
+}
+
+.admin-sidebar-header {
+  padding: 20px 20px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.admin-sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--lg-text-primary);
+}
+
+.admin-sidebar-logo-mark {
+  color: var(--lg-accent);
+  flex-shrink: 0;
+}
+
+.admin-sidebar-logo-text {
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.admin-sidebar-logo-badge {
+  font-size: 0.65rem;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: var(--lg-accent-soft);
+  color: var(--lg-accent);
+  letter-spacing: 0.02em;
+  margin-left: auto;
+}
+
+/* --- Sidebar collapsed state (desktop) --- */
+.admin-sidebar--collapsed {
+  width: 58px;
+}
+
+.admin-sidebar--collapsed .admin-sidebar-logo-text,
+.admin-sidebar--collapsed .admin-sidebar-logo-badge,
+.admin-sidebar--collapsed .admin-sidebar-link-label,
+.admin-sidebar--collapsed .admin-sidebar-link--back .admin-sidebar-link-icon {
+  display: none;
+}
+
+.admin-sidebar--collapsed .admin-sidebar-logo {
+  justify-content: center;
+}
+
+.admin-sidebar--collapsed .admin-sidebar-link {
+  justify-content: center;
+  padding: 10px 8px;
+}
+
+.admin-sidebar--collapsed .admin-sidebar-header {
+  padding: 14px 8px 10px;
+}
+
+.admin-sidebar--collapsed .admin-sidebar-nav {
+  padding: 8px 6px;
+}
+
+/* --- Sidebar link icon --- */
+.admin-sidebar-link-icon {
+  font-size: 0.95rem;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* --- Sidebar collapse button --- */
+.admin-sidebar-collapse-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--lg-font);
+  width: 100%;
+  text-align: left;
+}
+
+.admin-sidebar-collapse-btn:hover {
+  color: var(--lg-accent) !important;
+  background: var(--lg-accent-soft);
+}
+
+/* Sidebar nav */
+.admin-sidebar-nav {
+  flex: 1;
+  padding: 8px 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.admin-sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--lg-radius-md);
+  color: var(--lg-text-secondary);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.admin-sidebar-link:hover {
+  color: var(--lg-text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.admin-sidebar-link--active {
+  color: var(--lg-accent) !important;
+  background: var(--lg-accent-soft);
+}
+
+.admin-sidebar-link--active:hover {
+  background: rgba(41, 151, 255, 0.22);
+}
+
+/* Sidebar footer */
+.admin-sidebar-footer {
+  padding: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.admin-sidebar-link--back {
+  font-size: 0.85rem;
+  color: var(--lg-text-tertiary);
+}
+
+.admin-sidebar-link--back:hover {
+  color: var(--lg-accent);
+}
+
+/* --- Top bar --- */
+.admin-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  padding: 0 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(10, 10, 14, 0.55);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.admin-topbar-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--lg-text-secondary);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.admin-topbar-toggle:hover {
+  color: var(--lg-text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.admin-topbar-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--lg-text-secondary);
+}
+
+.admin-topbar-spacer {
+  flex: 1;
+}
+
+.admin-topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-topbar-username {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--lg-text-primary);
+}
+
+.admin-topbar-role {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: var(--lg-accent-soft);
+  color: var(--lg-accent);
+}
+
+.admin-topbar-logout {
+  font-size: 0.82rem;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: var(--lg-text-tertiary);
+  cursor: pointer;
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+  font-family: var(--lg-font);
+}
+
+.admin-topbar-logout:hover {
+  color: var(--lg-danger);
+  border-color: rgba(255, 59, 48, 0.3);
+  background: rgba(255, 59, 48, 0.08);
+}
+
+/* --- Admin page wrapper --- */
+.admin-page {
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.admin-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.admin-page-title {
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.admin-page-table-wrap {
+  border-radius: var(--lg-radius-md) !important;
+  overflow: hidden;
+}
+
+/* Override admin-table inside admin layout to not min-width conflict */
+.admin-layout .admin-table {
+  min-width: unset;
+}
+
+.admin-layout .admin-cell--title {
+  max-width: unset;
+}
+
+/* --- Mobile sidebar --- */
+.admin-layout-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 199;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* Admin body lock */
+body.admin-menu-open {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+}
+
+/* --- Wallpaper refresh button --- */
+.admin-wallpaper-refresh {
+  position: fixed;
+  bottom: max(24px, calc(var(--lg-safe-bottom) + 12px));
+  right: max(24px, var(--lg-safe-right));
+  z-index: 150;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--lg-glass-border);
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: var(--lg-frost);
+  -webkit-backdrop-filter: var(--lg-frost);
+  color: var(--lg-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+              box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.admin-wallpaper-refresh:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--lg-text-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
