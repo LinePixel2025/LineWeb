@@ -61,8 +61,8 @@ export const pageSchema = z.object({
   schema: z.string().min(1, '页面 Schema 不能为空'),
   published: z.boolean().optional().default(false),
   featured: z.boolean().optional().default(false),
-  featureEmoji: z.string().max(10).optional(),
-  featureDesc: z.string().max(200).optional(),
+  featureEmoji: z.string().max(10).nullish(),
+  featureDesc: z.string().max(200).nullish(),
 })
 
 export const pageUpdateSchema = pageSchema.partial()
