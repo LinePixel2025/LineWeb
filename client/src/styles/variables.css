@@ -24,6 +24,11 @@
   --lg-accent-soft: rgba(41, 151, 255, 0.18);
   --lg-accent-glow: rgba(41, 151, 255, 0.3);
 
+  --lg-accent-secondary: #E8927C;
+  --lg-accent-secondary-hover: #D4785E;
+  --lg-accent-secondary-soft: rgba(232, 146, 124, 0.18);
+  --lg-accent-secondary-glow: rgba(232, 146, 124, 0.3);
+
   /* States */
   --lg-danger: #ff3b30;
   --lg-success: #34c759;
@@ -38,10 +43,22 @@
   --lg-font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
     'Helvetica Neue', Helvetica, Arial, sans-serif;
   --lg-font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+  --lg-font-display: 'Instrument Serif', var(--lg-font);
 
   /* Layout */
   --lg-nav-height: 56px;
   --lg-max-width: 1120px;
+
+  /* Spacing scale */
+  --lg-space-1: 4px;
+  --lg-space-2: 8px;
+  --lg-space-3: 12px;
+  --lg-space-4: 16px;
+  --lg-space-5: 24px;
+  --lg-space-6: 32px;
+  --lg-space-7: 48px;
+  --lg-space-8: 64px;
+  --lg-space-9: 96px;
 
   /* Safe area (iOS notch + Home Indicator) */
   --lg-safe-top: env(safe-area-inset-top, 0px);
