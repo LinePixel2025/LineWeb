@@ -622,4 +622,84 @@
     bottom: auto;
     top: 16px;
   }
+
+  /* Page editor mobile */
+  .page-editor-topbar {
+    padding: 8px 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .page-editor-topbar-left {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .page-editor-title-input {
+    max-width: 100%;
+    flex-basis: 100%;
+    order: 10;
+  }
+  .page-editor-step-label { display: none; }
+  .page-editor-topbar-divider { display: none; }
+
+  .page-editor-module-setup-card {
+    padding: 20px;
+    border-radius: var(--lg-radius-md);
+  }
+
+  /* 3-column → single column: hide palette, show canvas + props stacked */
+  .page-editor-body {
+    flex-direction: column;
+  }
+  .page-editor-palette {
+    width: 100%;
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1px solid var(--lg-glass-border);
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 8px;
+    gap: 4px;
+  }
+  .page-editor-palette-header { display: none; }
+  .page-editor-palette-grid {
+    flex-direction: row;
+    gap: 4px;
+    padding: 0;
+  }
+  .page-editor-palette-item {
+    padding: 8px 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .page-editor-palette-icon { font-size: 1rem; }
+
+  .page-editor-canvas {
+    padding: 12px;
+    min-height: 250px;
+  }
+  .page-editor-canvas-item-tools {
+    opacity: 1;
+  }
+  .page-editor-canvas-item-tool-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .page-editor-props {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--lg-glass-border);
+    max-height: 40vh;
+  }
+
+  .pe-featured-fields { padding-left: 0; }
+
+  .page-editor-context-menu {
+    position: fixed;
+    left: 12px !important;
+    right: 12px;
+    bottom: 12px !important;
+    top: auto !important;
+    min-width: unset;
+  }
 }
