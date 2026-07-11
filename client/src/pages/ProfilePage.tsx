@@ -6,6 +6,7 @@ import UserAvatar from '../components/UserAvatar'
 import LiquidGlass from '../components/glass/LiquidGlass'
 import LiquidButton from '../components/glass/LiquidButton'
 import api from '../lib/api'
+import { useGlass } from '../contexts/GlassContext'
 
 const DEFAULT_COLOR = '#0d0d0f'
 
@@ -13,6 +14,7 @@ export default function ProfilePage() {
   const { user, logout, updateSettings } = useAuth()
   const { wallpaperTitle, wallpaperDate: currentWallpaperDate,
     previewWallpaper, history, loadHistory, historyLoading } = useWallpaper()
+  const { glassEnabled, toggleGlass } = useGlass()
   const navigate = useNavigate()
 
   const [bgType, setBgType] = useState<'wallpaper' | 'solid'>('wallpaper')
@@ -269,6 +271,44 @@ export default function ProfilePage() {
             )}
           </>
         )}
+
+        {/* 液态玻璃效果 */}
+        <div style={{ marginBottom: '22px' }}>
+          <span className="profile-label">液态玻璃效果</span>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '14px 18px', borderRadius: '14px',
+            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+          }}>
+            <div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 500, color: 'var(--lg-text-primary)', marginBottom: '2px' }}>
+                液态玻璃
+              </div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--lg-text-tertiary)' }}>
+                {glassEnabled ? 'SVG 折射 + 交互高光 + 色差' : '关闭后仅保留毛玻璃'}
+              </div>
+            </div>
+            <button
+              onClick={toggleGlass}
+              style={{
+                position: 'relative', width: '48px', height: '28px', borderRadius: '14px',
+                border: '1px solid', flexShrink: 0, cursor: 'pointer',
+                borderColor: glassEnabled ? 'var(--lg-accent)' : 'rgba(255,255,255,0.15)',
+                background: glassEnabled ? 'var(--lg-accent)' : 'rgba(255,255,255,0.08)',
+                transition: 'all 0.25s ease',
+              }}
+            >
+              <span style={{
+                position: 'absolute', top: '2px',
+                left: glassEnabled ? '22px' : '2px',
+                width: '22px', height: '22px', borderRadius: '50%',
+                background: '#fff',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                transition: 'left 0.25s ease',
+              }} />
+            </button>
+          </div>
+        </div>
 
         {/* 保存 */}
         <div className="profile-btn-row" style={{ marginTop: '6px' }}>
