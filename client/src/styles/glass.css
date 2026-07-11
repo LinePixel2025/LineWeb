@@ -277,3 +277,34 @@ select.lg-input optgroup {
   color: var(--lg-accent);
   background: var(--lg-accent-soft);
 }
+
+/* ============================================================
+   Glass Toggle — data-glass="off" overrides
+   Keeps frosted blur (backdrop-filter on ::before), removes
+   SVG refraction, static specular highlight, and interactive layers.
+   ============================================================ */
+[data-glass="off"] .lg-surface,
+[data-glass="off"] .lg-surface-strong {
+  backdrop-filter: blur(1.7px) saturate(150%);
+  -webkit-backdrop-filter: blur(1.7px) saturate(150%);
+}
+
+[data-glass="off"] .lg-surface::after,
+[data-glass="off"] .lg-surface-strong::after {
+  display: none;
+}
+
+[data-glass="off"] .navbar {
+  backdrop-filter: blur(1.7px) saturate(170%);
+  -webkit-backdrop-filter: blur(1.7px) saturate(170%);
+}
+
+[data-glass="off"] .lg-input {
+  backdrop-filter: blur(1.7px) saturate(150%);
+  -webkit-backdrop-filter: blur(1.7px) saturate(150%);
+}
+
+[data-glass="off"] .theme-toggle {
+  backdrop-filter: blur(1.7px) saturate(150%);
+  -webkit-backdrop-filter: blur(1.7px) saturate(150%);
+}
