@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { WallpaperProvider } from './contexts/WallpaperContext'
+import { GlassProvider } from './contexts/GlassContext'
 import { ContrastProvider } from './contexts/ContrastContext'
 import { DownloadProvider } from './contexts/DownloadContext'
 import Layout from './components/Layout'
@@ -43,7 +44,8 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <WallpaperProvider>
-          <ContrastProvider>
+          <GlassProvider>
+            <ContrastProvider>
             <DownloadProvider>
               <Suspense fallback={<RouteLoading />}>
                 <Routes>
@@ -86,6 +88,7 @@ export default function App() {
               <DownloadToast />
             </DownloadProvider>
           </ContrastProvider>
+          </GlassProvider>
         </WallpaperProvider>
       </AuthProvider>
     </BrowserRouter>
