@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import api from '../lib/api'
 import { useWallpaper } from '../contexts/WallpaperContext'
 import LiquidGlass from '../components/glass/LiquidGlass'
+import StatsCard from '../components/StatsCard'
 
 interface PostPreview {
   id: number
@@ -69,6 +70,29 @@ export default function HomePage() {
               探索功能
             </Link>
           </div>
+        </LiquidGlass>
+      </section>
+
+      {/* Stats Section */}
+      <section
+        className="home-stats-section"
+        style={{
+          maxWidth: '720px',
+          margin: '0 auto',
+          padding: '0 24px',
+        }}
+      >
+        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+          <h2>网站统计</h2>
+          <p className="text-secondary" style={{ marginTop: '8px' }}>网站运行数据概览</p>
+        </div>
+        
+        <LiquidGlass variant="blur" chromatic={false} style={{ padding: '32px' }}>
+          <StatsCard 
+            items={['posts', 'users', 'comments', 'pages']} 
+            layout="horizontal" 
+            showLabels={true} 
+          />
         </LiquidGlass>
       </section>
 
