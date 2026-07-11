@@ -1,98 +1,70 @@
-# Task 4: Admin Avatar Endpoint
+# Task 4: 前端 - 在首页添加统计组件
 
-## Files:
-- Modify: `server/src/routes/users.ts` (新增 PUT /:id/avatar 端点)
-- Modify: `server/src/index.ts` (更新 API 自描述)
+## 任务概述
+在首页添加统计组件，展示网站概览数据。
 
-## Interfaces:
-- Consumes: `adminSetAvatar` from `../services/avatarService.js`, `getErrorStatus`, `getErrorMessage` from `../lib/utils.js`
-- Produces: `PUT /api/users/:id/avatar` 管理员为任意用户设置头像
+## 文件
+- Modify: `client/src/pages/HomePage.tsx:76-123`
 
-## Steps
+## 接口
+- Consumes: `StatsCard` 组件
 
-### Step 1: 在 users.ts 中添加头像端点
+## 实现步骤
 
-在文件顶部添加导入（与现有 busboy 导入合并）：
-```typescript
-import busboy from 'busboy'
-```
+### Step 1: 在首页导入StatsCard组件
 
-新增头像相关的导入：
-```typescript
-import { adminSetAvatar } from '../services/avatarService.js'
-import { parsePagination, parseId, getErrorMessage, getErrorStatus } from '../lib/utils.js'
-```
-
-注意：`parsePagination` 和 `parseId` 已导入，只需要添加 `getErrorMessage` 和 `getErrorStatus`。
-
-在 `delete('/:id')` 路由之前添加 PUT `/:id/avatar` 路由：
+在 `client/src/pages/HomePage.tsx` 顶部添加导入：
 
 ```typescript
-// 管理员设置用户头像
-router.put('/:id/avatar', async (req: Request, res: Response) => {
-  const id = parseId(req.params.id)
-  if (id === null) {
-    res.status(400).json({ error: '无效的用户 ID' })
-    return
-  }
-
-  const user = await prisma.user.findUnique({ where: { id } })
-  if (!user) {
-    res.status(404).json({ error: '用户不存在' })
-    return
-  }
-
-  let fileBuffer: Buffer | null = null
-  let fileMimeType = ''
-
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const bb = busboy({ headers: req.headers })
-      bb.on('file', (_fieldname, stream, info) => {
-        fileMimeType = info.mimeType
-        const chunks: Buffer[] = []
-        stream.on('data', (chunk: Buffer) => chunks.push(chunk))
-        stream.on('end', () => { fileBuffer = Buffer.concat(chunks) })
-      })
-      bb.on('finish', () => resolve())
-      bb.on('error', (err: Error) => reject(err))
-      req.pipe(bb)
-    })
-  } catch {
-    res.status(400).json({ error: '文件解析失败' })
-    return
-  }
-
-  if (!fileBuffer) {
-    res.status(400).json({ error: '请提供头像文件' })
-    return
-  }
-
-  try {
-    const avatarPath = await adminSetAvatar(id, fileBuffer, fileMimeType)
-    res.json({ avatarPath })
-  } catch (err: unknown) {
-    const status = getErrorStatus(err)
-    res.status(status).json({ error: getErrorMessage(err) })
-  }
-})
+import StatsCard from '../components/StatsCard'
 ```
 
-### Step 2: 更新 API 自描述
+### Step 2: 在最新文章部分之前添加统计组件
 
-在 index.ts 的 users 部分添加：
+在最新文章预览部分之前添加统计组件：
+
 ```typescript
-avatarSet: { method: 'PUT', path: '/api/users/:id/avatar', auth: 'admin', description: '管理员设置用户头像 (multipart/form-data)' },
+{/* Stats Section */}
+<section
+  className="home-stats-section"
+  style={{
+    maxWidth: '720px',
+    margin: '0 auto',
+    padding: '0 24px',
+  }}
+>
+  <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+    <h2>网站统计</h2>
+    <p className="text-secondary" style={{ marginTop: '8px' }}>网站运行数据概览</p>
+  </div>
+  
+  <LiquidGlass variant="blur" chromatic={false} style={{ padding: '32px' }}>
+    <StatsCard 
+      items={['posts', 'users', 'comments', 'pages']} 
+      layout="horizontal" 
+      showLabels={true} 
+    />
+  </LiquidGlass>
+</section>
 ```
 
-### Step 3: 验证
+### Step 3: 测试首页统计组件
 
-Run: `cd server && npx tsc --noEmit`
-Expected: No errors
+1. 启动开发服务器：`npm run dev`
+2. 访问首页：`http://localhost:5173`
+3. 验证统计组件显示正确
+4. 测试不同布局方式（修改layout prop）
 
-### Step 4: 提交
+### Step 4: 提交更改
 
 ```bash
-git add server/src/routes/users.ts server/src/index.ts
-git commit -m "feat: add admin avatar set endpoint"
+git add client/src/pages/HomePage.tsx
+git commit -m "feat: add stats component to homepage"
 ```
+
+## 全局约束
+- 使用现有的LiquidGlass组件保持设计一致性
+- 公开API无需认证，只返回总数不返回详细信息
+- 数据缓存5分钟避免频繁请求
+- 组件支持三种布局方式：horizontal、vertical、grid
+- 错误时显示友好提示，加载时显示骨架屏

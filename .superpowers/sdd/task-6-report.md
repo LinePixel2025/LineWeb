@@ -1,21 +1,25 @@
-# Task 6 Report: UserAvatar Component
+# Task 6: 表单/弹窗移动端优化 CSS
 
-## Status
-**Complete**
+## Status: DONE
+
+## Changes
+- Modified `client/src/styles/responsive.css` (+104 lines)
+- Added `@media (max-width: 767px)` block at end of file containing:
+  - Form fields: vertical stack (`width: 100%`), 16px min font size (prevent iOS zoom), 44px min height
+  - Editor controls: vertical stack (`flex-direction: column`)
+  - Modals: near-fullscreen (full width, bottom-aligned via `align-items: flex-end`, 90vh max)
+  - Comment edit forms responsive
+  - Stat cards: single column grid
+  - Device monitor header: vertical stack
+  - Toast: top position (`bottom: auto; top: 16px`)
+
+## Verification
+- `npx tsc --noEmit` in client/: **passed** (no errors)
+- CSS is pure CSS (no TypeScript involved)
 
 ## Commit
-- `2a7e41f` — feat: add UserAvatar component with default initials fallback
+- `3d5bcc8` — feat(admin): mobile form, modal, and toast optimization CSS
 
-## Summary
-Created `client/src/components/UserAvatar.tsx` with:
-- **size** prop (`sm`=24px, `md`=32px, `lg`=48px, `xl`=80px)
-- Fetches avatar from `GET /api/auth/avatar/:userId` with Bearer token
-- Falls back to a colored circle (golden-angle hue) with username initials
-- Cleans up with `AbortController` and `URL.revokeObjectURL`
-- Handles 204 (no avatar) → initials fallback
-- Handles network/fetch errors → initials fallback
-
-## Concerns
-- Client-side TS not checked (Vite handles it — `tsc` not available in `client/`)
-- Inline styles match project conventions (see `Guards.tsx`, `CommentSection.tsx`)
-- Token key `lineweb_token` matches `api.ts`'s `TOKEN_KEY`
+## Notes
+- Used `767px` breakpoint (not 768px) to avoid overlap with existing `max-width: 768px` navbar block — matches task brief exactly
+- All CSS follows existing conventions in the file

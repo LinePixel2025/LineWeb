@@ -1,32 +1,36 @@
-# Task 7: Frontend Integration — Report
+# Task 7: EditorPage 表单布局优化
 
-**Status:** ✅ Complete
+## Status: DONE
 
-## Changes Made
+## Changes
 
-### 1. `client/src/components/comments/CommentSection.tsx`
-- Added `import UserAvatar from '../UserAvatar'`
-- Added `<UserAvatar>` in the main `CommentCard` comment-meta (line 109)
-- Added `<UserAvatar>` in the reply-item comment-meta (line 147)
+**Modified:** `client/src/pages/EditorPage.tsx`
 
-### 2. `client/src/components/Navbar.tsx`
-- Added `import UserAvatar from './UserAvatar'`
-- Added `style={{ display: 'flex', alignItems: 'center', gap: '6px' }}` and `<UserAvatar>` to the profile Link (line 92-94)
+- Removed the `<div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>` wrapper around Slug and Summary fields (was lines 124-144)
+- Each field (Slug, 摘要) is now a standalone `.editor-field` div, same as 标题 and 内容
+- Removed inline `flex` and `minWidth` styles from both fields
+- Mobile vertical stacking CSS was already in place from Task 6
 
-### 3. `client/src/pages/ProfilePage.tsx`
-- Added `import UserAvatar from '../components/UserAvatar'`
-- Added avatar upload section (UserAvatar + upload input + remove button) between the "角色" row and the "退出登录" button (lines 102-145)
+### Before (horizontal flex layout):
+```tsx
+<div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+  <div className="editor-field" style={{ flex: 1, minWidth: 180 }}>...</div>
+  <div className="editor-field" style={{ flex: 2, minWidth: 240 }}>...</div>
+</div>
+```
 
-### 4. `client/src/pages/admin/UserAdminPage.tsx`
-- Added `import UserAvatar from '../../components/UserAvatar'`
-- Replaced plain username with a flex container containing `<UserAvatar>` + username (lines 106-108)
+### After (vertical stack):
+```tsx
+<div className="editor-field">...</div>
+<div className="editor-field">...</div>
+```
 
 ## Verification
-- All 4 files confirmed correct via read-back
-- TypeScript errors are pre-existing (tsconfig `baseUrl`/`paths` config issues), unrelated to changes
+
+- `cd client && npx tsc --noEmit` — passed (zero errors)
+- All 4 form fields now use consistent `.editor-field` class without inline flex styles
+- Mobile CSS media query (768px) already has `.editor-field { width: 100% }` from Task 6
 
 ## Commit
-`682b2ca` - `feat: integrate UserAvatar into comments, navbar, profile, and admin`
 
-## Concerns
-None. All changes follow the task brief exactly.
+- `64e76a2` — `feat(admin): EditorPage form vertical layout for mobile`

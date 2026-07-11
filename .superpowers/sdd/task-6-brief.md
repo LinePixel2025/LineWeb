@@ -1,113 +1,133 @@
-# Task 6: Frontend UserAvatar Component
+### Task 6: 表单/弹窗移动端优化 CSS
 
-## Files:
-- Create: `client/src/components/UserAvatar.tsx`
+**Files:**
+- Modify: `client/src/styles/responsive.css`（在 580px 媒体查询之后添加 768px 媒体查询）
 
-## Steps
+**Interfaces:**
+- Consumes: `.admin-modal`, `.admin-modal-overlay`, `.admin-modal-input`, `.admin-modal-footer`, `.lg-input`, `.editor-field`, `.editor-controls`, `.editor-actions` 类名
+- Produces: 移动端全屏弹窗、纵向表单、输入框 16px 最小字号
 
-### Step 1: 创建 UserAvatar 组件
+- [ ] **Step 1: 在 responsive.css 末尾添加 768px 媒体查询**
 
-```tsx
-import { useState, useEffect } from 'react'
+在 `client/src/styles/responsive.css` 文件末尾添加：
 
-interface UserAvatarProps {
-  userId: number
-  username: string
-  size?: 'sm' | 'md' | 'lg' | 'xl'
-}
-
-const SIZE_MAP = { sm: 24, md: 32, lg: 48, xl: 80 } as const
-
-function getInitials(name: string): string {
-  const trimmed = name.trim()
-  if (!trimmed) return '?'
-  const first = trimmed.charAt(0)
-  if (/[a-zA-Z]/.test(first)) {
-    return first.toUpperCase()
-  }
-  return first
-}
-
-function getColor(userId: number): string {
-  const hue = (userId * 137.508) % 360
-  return `hsl(${hue}, 50%, 50%)`
-}
-
-export default function UserAvatar({ userId, username, size = 'md' }: UserAvatarProps) {
-  const px = SIZE_MAP[size]
-  const [imgSrc, setImgSrc] = useState<string | null>(null)
-  const [failed, setFailed] = useState(false)
-
-  useEffect(() => {
-    setImgSrc(null)
-    setFailed(false)
-    const controller = new AbortController()
-
-    fetch(`/api/auth/avatar/${userId}`, {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('lineweb_token')}` },
-      signal: controller.signal,
-    })
-      .then(res => {
-        if (res.ok && res.status !== 204) {
-          return res.blob().then(blob => {
-            setImgSrc(URL.createObjectURL(blob))
-          })
-        }
-        setFailed(true)
-      })
-      .catch(() => setFailed(true))
-
-    return () => controller.abort()
-  }, [userId])
-
-  useEffect(() => {
-    return () => {
-      if (imgSrc) URL.revokeObjectURL(imgSrc)
-    }
-  }, [imgSrc])
-
-  if (imgSrc && !failed) {
-    return (
-      <img
-        src={imgSrc}
-        alt={username}
-        style={{
-          width: px,
-          height: px,
-          borderRadius: '50%',
-          objectFit: 'cover',
-          flexShrink: 0,
-        }}
-      />
-    )
+```css
+/* ============================================================
+   Admin Mobile Forms & Modals (< 768px)
+   ============================================================ */
+@media (max-width: 767px) {
+  /* Form fields: vertical stack */
+  .editor-field {
+    width: 100%;
   }
 
-  return (
-    <div
-      style={{
-        width: px,
-        height: px,
-        borderRadius: '50%',
-        background: getColor(userId),
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#fff',
-        fontSize: px * 0.4,
-        fontWeight: 600,
-        flexShrink: 0,
-        userSelect: 'none',
-      }}
-    >
-      {getInitials(username)}
-    </div>
-  )
+  .editor-field .lg-input,
+  .admin-modal-input {
+    font-size: 16px; /* prevent iOS zoom */
+    min-height: 44px;
+  }
+
+  /* Editor controls: stack on mobile */
+  .editor-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .editor-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .editor-actions .liquid-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Modal: near-fullscreen on mobile */
+  .admin-modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .admin-modal {
+    max-width: 100%;
+    width: 100%;
+    margin: 0;
+    border-radius: var(--lg-radius-lg) var(--lg-radius-lg) 0 0;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  .admin-modal-footer {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .admin-modal-btn {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  /* Comment edit form */
+  .comment-edit-form textarea {
+    font-size: 16px;
+    min-height: 80px;
+  }
+
+  .comment-edit-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .comment-edit-actions .liquid-btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  /* Stat cards responsive */
+  .api-stat-cards {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  /* Device monitor header */
+  .api-header-controls {
+    flex-direction: column;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .api-refresh-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* User admin inline edit */
+  .admin-cell--actions .lg-input {
+    font-size: 16px;
+    min-height: 40px;
+  }
+
+  /* Toast: top position to avoid tab bar */
+  .toast-container {
+    bottom: auto;
+    top: 16px;
+  }
 }
 ```
 
-### Step 2: 提交
+- [ ] **Step 2: 验证页面无 TypeScript 错误**
+
+Run: `cd client && npx tsc --noEmit`
+Expected: 无错误
+
+- [ ] **Step 3: 提交**
 
 ```bash
-git add client/src/components/UserAvatar.tsx
-git commit -m "feat: add UserAvatar component with default initials fallback"
+git add client/src/styles/responsive.css
+git commit -m "feat(admin): mobile form, modal, and toast optimization CSS"
 ```
+
+---
+

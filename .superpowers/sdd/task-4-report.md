@@ -1,26 +1,34 @@
-# Task 4: Admin Avatar Endpoint — Report
+# Task 4: 前端 - 在首页添加统计组件 - 完成报告
 
-## Status
-✅ Complete
+## 实现内容
 
-## Commit
-`c3fde76` — `feat: add admin avatar set endpoint`
+在首页 (`client/src/pages/HomePage.tsx`) 添加了统计组件，展示网站概览数据。
 
-## Files Modified
-- `server/src/services/avatarService.ts` — added `adminSetAvatar` export (delegates to `uploadAvatar`)
-- `server/src/routes/users.ts` — added `PUT /:id/avatar` route with busboy multipart parsing, validates user exists, delegates to `adminSetAvatar`, returns `{ avatarPath }`
-- `server/src/index.ts` — added `avatarSet` entry in API self-description under `users`
+### 具体更改
 
-## Verification
-- `cd server && npx tsc --noEmit` — no errors
+1. **导入 StatsCard 组件**：在文件顶部添加 `import StatsCard from '../components/StatsCard'`
 
-## Implementation Notes
-- The route is protected by existing `router.use(authenticate, requireAdmin)` — only admins can set any user's avatar
-- Handles edge cases: invalid user ID (400), user not found (404), no file provided (400), busboy parse failure (400), storage node errors (503 via avatarService)
-- `adminSetAvatar` was missing from avatarService (Task 2 scope gap); added as a thin wrapper around `uploadAvatar`
+2. **添加统计区块**：在 Hero 区域和最新文章预览区域之间添加统计组件，包括：
+   - 标题 "网站统计" 和描述 "网站运行数据概览"
+   - 使用 LiquidGlass 容器包裹 StatsCard 组件
+   - 配置：`items={['posts', 'users', 'comments', 'pages']}`, `layout="horizontal"`, `showLabels={true}`
 
-## Concerns
-- None
+## 测试结果
 
-## Report Path
-`.superpowers/sdd/task-4-report.md`
+- TypeScript 类型检查通过 (`npx tsc --noEmit`)
+- 代码结构符合现有代码风格和设计模式
+
+## 文件变更
+
+- `client/src/pages/HomePage.tsx` (24 行新增)
+
+## 提交信息
+
+- Commit: `07c97c1` - feat: add stats component to homepage
+
+## 自检结果
+
+- ✓ 实现符合任务规范
+- ✓ 使用现有的 LiquidGlass 组件保持设计一致性
+- ✓ 组件配置正确（posts, users, comments, pages 四项统计，水平布局，显示标签）
+- ✓ 代码风格与现有代码库一致

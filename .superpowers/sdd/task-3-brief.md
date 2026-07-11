@@ -1,156 +1,128 @@
-# Task 3: Avatar Routes (Self-Service)
+# Task 3: 前端 - 在PageEditor中添加stats组件类型
 
-## Files:
-- Create: `server/src/routes/avatar.ts`
-- Modify: `server/src/index.ts` (注册路由 + API 自描述)
+## 任务概述
+在页面编辑器中添加stats组件类型，使其可以拖拽到页面中。
 
-## Interfaces:
-- Consumes: `authenticate` from `../middleware/auth.js`, avatar service functions from `../services/avatarService.js`
-- Produces: `POST /api/auth/avatar`, `GET /api/auth/avatar`, `GET /api/auth/avatar/:userId`, `DELETE /api/auth/avatar`
+## 文件
+- Modify: `client/src/pages/admin/PageEditor.tsx:61-75` (PALETTE_ITEMS)
+- Modify: `client/src/pages/admin/PageEditor.tsx:270-342` (PreviewComponent)
+- Modify: `client/src/pages/admin/PageEditor.tsx:223-251` (PropsEditor)
 
-## Steps
+## 接口
+- Consumes: `StatsCard` 组件
+- Produces: 页面编辑器中的 `stats` 组件类型
 
-### Step 1: 创建 avatar.ts 路由文件
+## 实现步骤
+
+### Step 1: 添加stats到PALETTE_ITEMS
+
+在 `client/src/pages/admin/PageEditor.tsx` 的 PALETTE_ITEMS 数组中添加：
 
 ```typescript
-import { Router, Request, Response } from 'express'
-import busboy from 'busboy'
-import { authenticate } from '../middleware/auth.js'
-import { uploadAvatar, getAvatarPathByUserId, getAvatarStream, deleteAvatar } from '../services/avatarService.js'
-import { getErrorMessage, getErrorStatus } from '../lib/utils.js'
-
-const router = Router()
-
-router.use(authenticate)
-
-router.post('/', async (req: Request, res: Response) => {
-  const userId = req.user!.userId
-
-  let fileBuffer: Buffer | null = null
-  let fileMimeType = ''
-
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const bb = busboy({ headers: req.headers })
-      bb.on('file', (_fieldname, stream, info) => {
-        fileMimeType = info.mimeType
-        const chunks: Buffer[] = []
-        stream.on('data', (chunk: Buffer) => chunks.push(chunk))
-        stream.on('end', () => { fileBuffer = Buffer.concat(chunks) })
-      })
-      bb.on('finish', () => resolve())
-      bb.on('error', (err: Error) => reject(err))
-      req.pipe(bb)
-    })
-  } catch {
-    res.status(400).json({ error: '文件解析失败' })
-    return
-  }
-
-  if (!fileBuffer) {
-    res.status(400).json({ error: '请提供头像文件' })
-    return
-  }
-
-  try {
-    const avatarPath = await uploadAvatar(userId, fileBuffer, fileMimeType)
-    res.json({ avatarPath })
-  } catch (err: unknown) {
-    const status = getErrorStatus(err)
-    res.status(status).json({ error: getErrorMessage(err) })
-  }
-})
-
-router.get('/', async (req: Request, res: Response) => {
-  const userId = req.user!.userId
-  try {
-    const avatarPath = await getAvatarPathByUserId(userId)
-    if (!avatarPath) {
-      res.status(204).end()
-      return
-    }
-    const stream = await getAvatarStream(avatarPath)
-    res.setHeader('Content-Type', 'image/webp')
-    res.setHeader('Cache-Control', 'public, max-age=86400')
-    for await (const chunk of stream) {
-      res.write(chunk)
-    }
-    res.end()
-  } catch (err: unknown) {
-    const status = getErrorStatus(err)
-    res.status(status).json({ error: getErrorMessage(err) })
-  }
-})
-
-router.get('/:userId', async (req: Request, res: Response) => {
-  const targetId = parseInt(req.params.userId, 10)
-  if (isNaN(targetId) || targetId < 1) {
-    res.status(400).json({ error: '无效的用户 ID' })
-    return
-  }
-  try {
-    const avatarPath = await getAvatarPathByUserId(targetId)
-    if (!avatarPath) {
-      res.status(204).end()
-      return
-    }
-    const stream = await getAvatarStream(avatarPath)
-    res.setHeader('Content-Type', 'image/webp')
-    res.setHeader('Cache-Control', 'public, max-age=86400')
-    for await (const chunk of stream) {
-      res.write(chunk)
-    }
-    res.end()
-  } catch (err: unknown) {
-    const status = getErrorStatus(err)
-    res.status(status).json({ error: getErrorMessage(err) })
-  }
-})
-
-router.delete('/', async (req: Request, res: Response) => {
-  const userId = req.user!.userId
-  try {
-    await deleteAvatar(userId)
-    res.json({ message: '头像已删除' })
-  } catch (err: unknown) {
-    const status = getErrorStatus(err)
-    res.status(status).json({ error: getErrorMessage(err) })
-  }
-})
-
-export default router
+{ type: 'stats', label: '统计', icon: '📊', defaultProps: { items: ['posts', 'users', 'comments', 'pages'], layout: 'horizontal', showLabels: true } },
 ```
 
-### Step 2: 注册路由到 index.ts
+### Step 2: 更新ComponentType类型
 
-在 index.ts 中添加导入：
+修改类型定义：
+
 ```typescript
-import avatarRoutes from './routes/avatar.js'
+type ComponentType = 'heading' | 'paragraph' | 'image' | 'button' | 'divider'
+  | 'list' | 'card' | 'columns' | 'spacer' | 'html' | 'stats'
 ```
 
-在 `app.use('/api/auth', authRoutes)` 之后添加：
+### Step 3: 在PreviewComponent中添加stats渲染
+
+首先在文件顶部添加导入：
+
 ```typescript
-app.use('/api/auth/avatar', avatarRoutes)
+import StatsCard from '../../components/StatsCard'
 ```
 
-### Step 3: 更新 API 自描述端点
+然后在 `PreviewComponent` 的 `renderInner` 函数中添加stats case：
 
-在 index.ts 的 `/api` 端点中，auth 部分添加：
 ```typescript
-avatarUpload: { method: 'POST', path: '/api/auth/avatar', auth: true, description: '上传/更新头像 (multipart/form-data)' },
-avatarGet: { method: 'GET', path: '/api/auth/avatar', auth: true, description: '获取当前用户头像' },
-avatarGetById: { method: 'GET', path: '/api/auth/avatar/:userId', auth: true, description: '获取指定用户头像' },
-avatarDelete: { method: 'DELETE', path: '/api/auth/avatar', auth: true, description: '删除头像' },
+case 'stats': {
+  const items = (comp.props.items as string[]) || ['posts', 'users', 'comments', 'pages']
+  const layout = (comp.props.layout as string) || 'horizontal'
+  const showLabels = comp.props.showLabels !== false
+  
+  return (
+    <StatsCard 
+      items={items as ('posts' | 'users' | 'comments' | 'pages')[]} 
+      layout={layout as 'horizontal' | 'vertical' | 'grid'} 
+      showLabels={showLabels} 
+    />
+  )
+}
 ```
 
-### Step 4: 验证
+### Step 4: 在PropsEditor中添加stats配置
 
-Run: `cd server && npx tsc --noEmit`
-Expected: No errors
+在 `PropsEditor` 的 `render` 函数中添加stats case：
 
-### Step 5: 提交
+```typescript
+case 'stats': {
+  const items = (comp.props.items as string[]) || ['posts', 'users', 'comments', 'pages']
+  const layout = (comp.props.layout as string) || 'horizontal'
+  const showLabels = comp.props.showLabels !== false
+  
+  return (
+    <div className="pe-fields">
+      <div className="pe-field">
+        <label className="pe-field-label">显示项目</label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {(['posts', 'users', 'comments', 'pages'] as const).map((item) => (
+            <label key={item} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input 
+                type="checkbox" 
+                checked={items.includes(item)} 
+                onChange={(e) => {
+                  const newItems = e.target.checked 
+                    ? [...items, item] 
+                    : items.filter(i => i !== item)
+                  set('items', newItems)
+                }}
+                style={{ accentColor: 'var(--lg-accent)' }} 
+              />
+              {item === 'posts' ? '文章' : item === 'users' ? '用户' : item === 'comments' ? '评论' : '页面'}
+            </label>
+          ))}
+        </div>
+      </div>
+      {S('layout', '布局方式', [
+        { value: 'horizontal', label: '水平' },
+        { value: 'vertical', label: '垂直' },
+        { value: 'grid', label: '网格' },
+      ])}
+      <label className="pe-toggle">
+        <input type="checkbox" checked={showLabels} onChange={e => set('showLabels', e.target.checked)} />
+        <span className="pe-toggle-slider" /> <span className="pe-toggle-label">显示标签</span>
+      </label>
+    </div>
+  )
+}
+```
+
+### Step 5: 测试页面编辑器中的stats组件
+
+1. 启动开发服务器：`npm run dev`
+2. 登录管理后台
+3. 进入页面管理，创建新页面
+4. 从控件仓库拖拽"统计"组件到画布
+5. 配置组件属性（选择显示项目、布局方式等）
+6. 预览组件效果
+
+### Step 6: 提交更改
 
 ```bash
-git add server/src/routes/avatar.ts server/src/index.ts
-git commit -m "feat: add avatar routes (upload, get, delete)"
+git add client/src/pages/admin/PageEditor.tsx
+git commit -m "feat: add stats component type to page editor"
 ```
+
+## 全局约束
+- 使用现有的LiquidGlass组件保持设计一致性
+- 公开API无需认证，只返回总数不返回详细信息
+- 数据缓存5分钟避免频繁请求
+- 组件支持三种布局方式：horizontal、vertical、grid
+- 错误时显示友好提示，加载时显示骨架屏
