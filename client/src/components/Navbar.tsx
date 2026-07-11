@@ -45,6 +45,21 @@ export default function Navbar() {
     }
   }, [mobileOpen])
 
+  // Add scrolled class to navbar on scroll for visual depth
+  useEffect(() => {
+    const el = document.querySelector('.navbar') as HTMLElement | null
+    if (!el) return
+
+    const onScroll = () => {
+      requestAnimationFrame(() => {
+        el.classList.toggle('navbar--scrolled', window.scrollY > 80)
+      })
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
   return (
     <nav className="navbar">
       <div className="navbar-inner">
