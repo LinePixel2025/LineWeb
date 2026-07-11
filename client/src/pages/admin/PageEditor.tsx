@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useReducer, useRef, useCallback, type DragEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../../lib/api'
+import StatsCard from '../../components/StatsCard'
 
 /* ============================================================
    Types
@@ -19,7 +20,7 @@ interface ComponentSchema {
 }
 
 type ComponentType = 'heading' | 'paragraph' | 'image' | 'button' | 'divider'
-  | 'list' | 'card' | 'columns' | 'spacer' | 'html'
+  | 'list' | 'card' | 'columns' | 'spacer' | 'html' | 'stats'
 
 interface PaletteItem {
   type: ComponentType; label: string; icon: string
@@ -72,6 +73,7 @@ const PALETTE_ITEMS: PaletteItem[] = [
   ] },
   { type: 'list', label: '列表', icon: '☰', defaultProps: { items: ['项目一', '项目二', '项目三'], ordered: false } },
   { type: 'html', label: '自定义HTML', icon: '</>', defaultProps: { html: '<p style="color:var(--lg-text-secondary)">自定义内容</p>' } },
+  { type: 'stats', label: '统计', icon: '📊', defaultProps: { items: ['posts', 'users', 'comments', 'pages'], layout: 'horizontal', showLabels: true } },
 ]
 
 /* ============================================================
@@ -243,6 +245,45 @@ function PropsEditor({ comp, onUpdate, onAddChild }: PropsEditorProps) {
         </div>
       )
       case 'html': return <div className="pe-fields">{TA('html', 'HTML 代码', 8)}</div>
+      case 'stats': {
+        const items = (comp.props.items as string[]) || ['posts', 'users', 'comments', 'pages']
+        const layout = (comp.props.layout as string) || 'horizontal'
+        const showLabels = comp.props.showLabels !== false
+        return (
+          <div className="pe-fields">
+            <div className="pe-field">
+              <label className="pe-field-label">显示项目</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {(['posts', 'users', 'comments', 'pages'] as const).map((item) => (
+                  <label key={item} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={items.includes(item)}
+                      onChange={(e) => {
+                        const newItems = e.target.checked
+                          ? [...items, item]
+                          : items.filter(i => i !== item)
+                        set('items', newItems)
+                      }}
+                      style={{ accentColor: 'var(--lg-accent)' }}
+                    />
+                    {item === 'posts' ? '文章' : item === 'users' ? '用户' : item === 'comments' ? '评论' : '页面'}
+                  </label>
+                ))}
+              </div>
+            </div>
+            {S('layout', '布局方式', [
+              { value: 'horizontal', label: '水平' },
+              { value: 'vertical', label: '垂直' },
+              { value: 'grid', label: '网格' },
+            ])}
+            <label className="pe-toggle">
+              <input type="checkbox" checked={showLabels} onChange={e => set('showLabels', e.target.checked)} />
+              <span className="pe-toggle-slider" /> <span className="pe-toggle-label">显示标签</span>
+            </label>
+          </div>
+        )
+      }
       case 'divider': return <div className="pe-hint">分割线无需额外配置</div>
       default: return <div className="pe-hint">无可配置属性</div>
     }
@@ -338,6 +379,18 @@ const PreviewComponent = React.memo(function PreviewComponent({
         return <Tag style={{ margin: 0, paddingLeft: 20 }}>{items.map((item, ii) => <li key={ii}>{item}</li>)}</Tag>
       }
       case 'html': return <div dangerouslySetInnerHTML={{ __html: (comp.props.html as string) || '' }} />
+      case 'stats': {
+        const items = (comp.props.items as string[]) || ['posts', 'users', 'comments', 'pages']
+        const layout = (comp.props.layout as string) || 'horizontal'
+        const showLabels = comp.props.showLabels !== false
+        return (
+          <StatsCard
+            items={items as ('posts' | 'users' | 'comments' | 'pages')[]}
+            layout={layout as 'horizontal' | 'vertical' | 'grid'}
+            showLabels={showLabels}
+          />
+        )
+      }
       default: return <div style={{ color: 'var(--lg-text-tertiary)' }}>未知组件</div>
     }
   }
