@@ -80,7 +80,7 @@ export default function StatsCard({ items, layout, showLabels }: StatsCardProps)
     <div style={layoutStyle}>
       {items.map((item) => (
         <LiquidGlass key={item} variant="blur" interactive={false} chromatic={false} style={itemStyle}>
-          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--lg-text-primary)' }}>
+          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--lg-accent-secondary)' }}>
             {data[item]}
           </div>
           {showLabels && (
