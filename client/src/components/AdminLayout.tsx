@@ -191,7 +191,9 @@ export default function AdminLayout() {
         </header>
 
         <div className="admin-content">
-          <Outlet />
+          <div className="page-transition">
+            <Outlet />
+          </div>
         </div>
       </div>
 

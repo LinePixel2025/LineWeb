@@ -38,7 +38,9 @@ export default function Layout() {
 
       <Navbar />
       <main style={{ position: 'relative', zIndex: 2 }}>
-        <Outlet />
+        <div className="page-transition">
+          <Outlet />
+        </div>
       </main>
 
       {/* Copyright — with safe-area inset */}

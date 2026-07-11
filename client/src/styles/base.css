@@ -206,6 +206,10 @@ h4 { font-size: 1.15rem; }
   animation: fadeIn 0.5s ease-out both;
 }
 
+.page-transition {
+  animation: fadeIn 0.3s ease-out;
+}
+
 .glass-rise {
   animation: glassRise 0.6s cubic-bezier(0.25, 0.1, 0.25, 1) both;
 }
