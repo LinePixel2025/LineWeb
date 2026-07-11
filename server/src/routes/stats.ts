@@ -6,7 +6,7 @@ const router = Router()
 
 // === 60s 内存缓存 — 避免每次打开 dashboard 触发 11 个并发查询 ===
 const STATS_CACHE_TTL_MS = 60 * 1000
-let statsCache: { data: unknown; expireAt: number } | null = null
+let statsCache: { key: string; data: unknown; expireAt: number } | null = null
 
 async function computeStats() {
   const [
@@ -51,20 +51,60 @@ async function computeStats() {
 /* ---------- Dashboard 统计汇总（需要管理员权限） ---------- */
 router.get('/', authenticate, requireAdmin, async (_req: Request, res: Response) => {
   try {
+    const cacheKey = 'admin_stats'
+    const now = Date.now()
+
     // 命中缓存直接返回
-    if (statsCache && Date.now() < statsCache.expireAt) {
+    if (statsCache && statsCache.key === cacheKey && now < statsCache.expireAt) {
       res.setHeader('Cache-Control', 'private, max-age=60')
       res.json(statsCache.data)
       return
     }
 
     const data = await computeStats()
-    statsCache = { data, expireAt: Date.now() + STATS_CACHE_TTL_MS }
+    statsCache = { key: cacheKey, data, expireAt: now + STATS_CACHE_TTL_MS }
 
     res.setHeader('Cache-Control', 'private, max-age=60')
     res.json(data)
   } catch (err) {
     console.error('获取统计数据失败:', err)
+    res.status(500).json({ error: '获取统计数据失败' })
+  }
+})
+
+/* ---------- 公开统计端点（无需认证） ---------- */
+router.get('/public', async (_req: Request, res: Response) => {
+  try {
+    const cacheKey = 'public_stats'
+    const now = Date.now()
+
+    // 检查缓存
+    if (statsCache && statsCache.key === cacheKey && now < statsCache.expireAt) {
+      res.setHeader('Cache-Control', 'public, max-age=300')
+      res.json(statsCache.data)
+      return
+    }
+
+    const [totalPosts, totalUsers, totalComments, totalPages] = await Promise.all([
+      prisma.post.count(),
+      prisma.user.count(),
+      prisma.comment.count(),
+      prisma.page.count(),
+    ])
+
+    const data = {
+      posts: totalPosts,
+      users: totalUsers,
+      comments: totalComments,
+      pages: totalPages,
+    }
+
+    statsCache = { key: cacheKey, data, expireAt: now + STATS_CACHE_TTL_MS }
+
+    res.setHeader('Cache-Control', 'public, max-age=300')
+    res.json(data)
+  } catch (err) {
+    console.error('获取公开统计数据失败:', err)
     res.status(500).json({ error: '获取统计数据失败' })
   }
 })
