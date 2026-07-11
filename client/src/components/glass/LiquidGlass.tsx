@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, memo } from 'react'
+import { useGlass } from '../../contexts/GlassContext'
 
 export interface LiquidGlassProps {
   children: React.ReactNode
@@ -37,12 +38,13 @@ const LiquidGlass = memo(function LiquidGlass({
   interactive = true,
   chromatic = true,
 }: LiquidGlassProps) {
+  const { glassEnabled } = useGlass()
   const ref = useRef<HTMLDivElement>(null)
   const specularRef = useRef<HTMLDivElement>(null)
 
   // Mouse-following specular highlight — 直接操作 DOM 避免重渲染
   useEffect(() => {
-    if (!interactive) return
+    if (!interactive || !glassEnabled) return
     const el = ref.current
     const specular = specularRef.current
     if (!el || !specular) return
@@ -97,7 +99,7 @@ const LiquidGlass = memo(function LiquidGlass({
       el.removeEventListener('mouseleave', onLeave)
       cancelAnimationFrame(rectFrame)
     }
-  }, [interactive])
+  }, [interactive, glassEnabled])
 
   const isStrong = variant === 'strong' || variant === 'blur'
   const isBlur = variant === 'blur'
@@ -117,28 +119,29 @@ const LiquidGlass = memo(function LiquidGlass({
       className={allClass}
       style={style}
     >
-      {/* Interactive specular highlight — 鼠标跟随高光，覆盖 CSS ::after */}
-      <div
-        ref={specularRef}
-        style={{
-          position: 'absolute',
-          inset: 0,
-          borderRadius: 'inherit',
-          pointerEvents: 'none',
-          zIndex: 3,
-          // CSS 变量驱动 — 由 onMove 中 setProperty 更新，避免重拼字符串
-          '--lg-specular-x': '30%',
-          '--lg-specular-y': '20%',
-          opacity: 0,
-          background: interactive
-            ? 'radial-gradient(circle at var(--lg-specular-x, 30%) var(--lg-specular-y, 20%), rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.08) 30%, transparent 60%)'
-            : 'transparent',
-          transition: interactive ? 'opacity 0.6s ease-out' : 'none',
-        } as React.CSSProperties}
-      />
+      {/* Interactive specular highlight — only when glass is fully enabled */}
+      {glassEnabled && (
+        <div
+          ref={specularRef}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: 'inherit',
+            pointerEvents: 'none',
+            zIndex: 3,
+            '--lg-specular-x': '30%',
+            '--lg-specular-y': '20%',
+            opacity: 0,
+            background: interactive
+              ? 'radial-gradient(circle at var(--lg-specular-x, 30%) var(--lg-specular-y, 20%), rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.08) 30%, transparent 60%)'
+              : 'transparent',
+            transition: interactive ? 'opacity 0.6s ease-out' : 'none',
+          } as React.CSSProperties}
+        />
+      )}
 
-      {/* Top edge rim glow */}
-      {interactive && (
+      {/* Top edge rim glow — only when glass is fully enabled */}
+      {glassEnabled && interactive && (
         <div
           style={{
             position: 'absolute',
@@ -151,8 +154,8 @@ const LiquidGlass = memo(function LiquidGlass({
         />
       )}
 
-      {/* Chromatic aberration edge refraction */}
-      {chromatic && (
+      {/* Chromatic aberration — only when glass is fully enabled */}
+      {glassEnabled && chromatic && (
         <>
           <div
             style={{
