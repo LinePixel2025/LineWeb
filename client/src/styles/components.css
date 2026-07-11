@@ -92,6 +92,19 @@
   transform: translateY(-1px) scale(1.02);
 }
 
+.liquid-btn.coral {
+  background: linear-gradient(135deg, var(--lg-accent-secondary), var(--lg-accent-secondary-hover));
+  color: white;
+  box-shadow: 0 4px 12px var(--lg-accent-secondary-glow);
+}
+.liquid-btn.coral:hover {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 6px 20px var(--lg-accent-secondary-glow);
+}
+.liquid-btn.coral:active {
+  transform: translateY(0) scale(0.98);
+}
+
 /* Hover flare overlay */
 .liquid-btn .btn-flare {
   position: absolute;
@@ -106,7 +119,8 @@
 }
 .liquid-btn.glass .btn-flare,
 .liquid-btn.ghost .btn-flare,
-.liquid-btn.danger .btn-flare {
+.liquid-btn.danger .btn-flare,
+.liquid-btn.coral .btn-flare {
   background: radial-gradient(circle at 50% 0%, rgba(255,255,255,0.1) 0%, transparent 60%);
 }
 .liquid-btn:hover .btn-flare {
