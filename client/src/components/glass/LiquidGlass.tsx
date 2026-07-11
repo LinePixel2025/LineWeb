@@ -53,6 +53,7 @@ const LiquidGlass = memo(function LiquidGlass({
     const throttleMs = window.innerWidth <= 768 ? 50 : 16
 
     const onMove = (e: MouseEvent | TouchEvent) => {
+      specular.style.opacity = '1'
       // 每帧只读一次 getBoundingClientRect
       if (!cachedRect) {
         cachedRect = el.getBoundingClientRect()
@@ -79,9 +80,21 @@ const LiquidGlass = memo(function LiquidGlass({
 
     el.addEventListener('mousemove', onMove)
     el.addEventListener('touchmove', onMove, { passive: true })
+
+    const onEnter = () => {
+      specular.style.opacity = '1'
+    }
+    const onLeave = () => {
+      specular.style.opacity = '0'
+    }
+
+    el.addEventListener('mouseenter', onEnter)
+    el.addEventListener('mouseleave', onLeave)
     return () => {
       el.removeEventListener('mousemove', onMove)
       el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('mouseenter', onEnter)
+      el.removeEventListener('mouseleave', onLeave)
       cancelAnimationFrame(rectFrame)
     }
   }, [interactive])
@@ -116,10 +129,11 @@ const LiquidGlass = memo(function LiquidGlass({
           // CSS 变量驱动 — 由 onMove 中 setProperty 更新，避免重拼字符串
           '--lg-specular-x': '30%',
           '--lg-specular-y': '20%',
+          opacity: 0,
           background: interactive
             ? 'radial-gradient(circle at var(--lg-specular-x, 30%) var(--lg-specular-y, 20%), rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.08) 30%, transparent 60%)'
             : 'transparent',
-          transition: interactive ? 'background 0.15s ease-out' : 'none',
+          transition: interactive ? 'opacity 0.6s ease-out' : 'none',
         } as React.CSSProperties}
       />
 
