@@ -36,6 +36,7 @@ const __dirname = path.dirname(__filename)
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
+      upgradeInsecureRequests: null,  // 无 HTTPS 时禁用，否则浏览器强制升级 HTTP → HTTPS
       defaultSrc: ["'self'"],
       scriptSrc: process.env.NODE_ENV === 'production'
         ? ["'self'"]
