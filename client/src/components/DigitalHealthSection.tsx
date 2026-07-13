@@ -85,7 +85,7 @@ export default function DigitalHealthSection() {
   }
 
   return (
-    <div id="digital-health">
+    <div id="digital-health" style={{ marginTop: '24px' }}>
     <LiquidGlass variant="strong" chromatic={false} className="profile-card">
       <h2 style={{ margin: '0 0 22px', fontSize: '1.1rem', fontWeight: 600, color: 'var(--lg-text-primary)' }}>数字健康</h2>
       <p className="text-secondary" style={{ fontSize: '0.9rem', marginBottom: '22px' }}>

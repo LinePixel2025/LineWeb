@@ -60,7 +60,7 @@ export default function DigitalHealthCard() {
       style={{
         maxWidth: '720px',
         margin: '0 auto',
-        padding: 'var(--lg-space-7) var(--lg-space-5) 0',
+        padding: 'var(--lg-space-7) var(--lg-space-5) var(--lg-space-7)',
       }}
     >
       <LiquidGlass variant="strong" chromatic={false} style={{ padding: 'var(--lg-space-6)' }}>
