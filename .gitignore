@@ -42,3 +42,6 @@ Thumbs.db
 .idea/
 .mcp.json
 docs/superpowers/
+
+# Time Master 开发指南（仅本地）
+scripts/time-master-guide.md
