@@ -4,6 +4,7 @@ import api from '../lib/api'
 import { useWallpaper } from '../contexts/WallpaperContext'
 import LiquidGlass from '../components/glass/LiquidGlass'
 import StatsCard from '../components/StatsCard'
+import DigitalHealthCard from '../components/DigitalHealthCard'
 
 interface PostPreview {
   id: number
@@ -83,6 +84,9 @@ export default function HomePage() {
           </div>
         </LiquidGlass>
       </section>
+
+      {/* DigitalHealth Section */}
+      <DigitalHealthCard />
 
       {/* Stats Section */}
       <section
