@@ -19,9 +19,16 @@ function getTodayDate(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-// 获取当前用户今日屏幕时间
+// 获取当前用户今日屏幕时间（JWT 登录态）
 router.get('/screen-time', authenticate, async (req: Request, res: Response) => {
   const userId = req.user!.userId
+  const data = await getTodayScreenTime(userId, getTodayDate())
+  res.json(data)
+})
+
+// 获取屏幕时间数据（Token 认证，供第三方应用调用）
+router.get('/screen-time/data', authenticateScreenTimeToken, async (req: Request, res: Response) => {
+  const userId = req.screenTimeToken!.userId
   const data = await getTodayScreenTime(userId, getTodayDate())
   res.json(data)
 })
