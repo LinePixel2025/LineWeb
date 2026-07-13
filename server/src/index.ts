@@ -40,10 +40,10 @@ app.use(helmet({
       scriptSrc: process.env.NODE_ENV === 'production'
         ? ["'self'"]
         : ["'self'", "'unsafe-inline'", "'unsafe-eval'", "'blob:'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
-      connectSrc: ["'self'", 'https:'],
-      fontSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'", 'https:', 'http:'],
+      fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com', 'https://fonts.googleapis.com'],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
       frameAncestors: ["'none'"],
@@ -51,6 +51,7 @@ app.use(helmet({
   },
   crossOriginEmbedderPolicy: false,  // 避免阻塞壁纸代理跨域资源
   crossOriginResourcePolicy: { policy: 'cross-origin' },
+  strictTransportSecurity: false,  // 无 HTTPS 时禁用 HSTS，避免浏览器缓存 HTTPS 重定向
 }))
 
 // CORS — 生产环境同源（不反射任意源），开发环境允许 Vite dev server
