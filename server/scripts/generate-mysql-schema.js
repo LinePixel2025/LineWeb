@@ -26,8 +26,9 @@ console.log('[mysql-schema] 已生成 MySQL schema')
 try {
   execSync(`npx prisma db push --schema prisma/schema.mysql.generated.prisma --accept-data-loss`, { cwd, env, stdio: 'inherit' })
   console.log('[mysql-schema] Schema 同步完成')
-} finally {
+} catch (e) {
   try { fs.unlinkSync(dst) } catch {}
+  process.exit(1)
 }
 
 console.log('[mysql-schema] 完成')

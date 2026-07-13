@@ -20,7 +20,13 @@ echo "[deploy] 构建前端..."
 npm run build
 
 echo "[deploy] 同步数据库..."
-cd server && node scripts/generate-mysql-schema.js && cd ..
+cd server && node scripts/generate-mysql-schema.js
+
+# seed 仅首次执行（seed.ts 自带去重，不会重复插入）
+npx prisma db seed --schema prisma/schema.mysql.generated.prisma 2>/dev/null || true
+
+rm -f prisma/schema.mysql.generated.prisma
+cd ..
 
 echo "[deploy] 重启服务..."
 pm2 restart lineweb
