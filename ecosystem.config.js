@@ -7,7 +7,7 @@ module.exports = {
       name: 'lineweb',
       script: 'npx',
       args: 'tsx server/src/index.ts',
-      cwd: '/opt/lineweb',
+      cwd: '/www/wwwroot/lineweb',
       env: {
         NODE_ENV: 'production',
         PORT: 3001,
@@ -21,7 +21,7 @@ module.exports = {
     {
       name: 'lineweb-webhook',
       script: 'scripts/webhook-server.mjs',
-      cwd: '/opt/lineweb',
+      cwd: '/www/wwwroot/lineweb',
       env: {
         WEBHOOK_PORT: '9000',
         WEBHOOK_SECRET: '<替换为你的 Webhook Secret>',

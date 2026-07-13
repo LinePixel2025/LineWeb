@@ -31,7 +31,7 @@ function runDeploy() {
   deploying = true
   console.log('[webhook] 开始执行 deploy.sh...')
 
-  const proc = spawn('/bin/bash', ['/opt/lineweb/scripts/deploy.sh'], {
+  const proc = spawn('/bin/bash', ['/www/wwwroot/lineweb/scripts/deploy.sh'], {
     detached: true,
     stdio: 'inherit',
   })

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-cd /opt/lineweb
+cd /www/wwwroot/lineweb
 export NODE_ENV=production
 
 echo "[serve.sh] 启动服务 (端口 ${PORT:-3001})..."

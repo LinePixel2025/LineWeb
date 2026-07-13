@@ -1,14 +1,14 @@
 #!/bin/bash
 set -e
 
-LOG_FILE="/opt/lineweb/deploy.log"
+LOG_FILE="/www/wwwroot/lineweb/deploy.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 echo "========================================"
 echo "[deploy] $(date '+%Y-%m-%d %H:%M:%S')"
 echo "[deploy] 开始自动部署..."
 
-cd /opt/lineweb
+cd /www/wwwroot/lineweb
 
 echo "[deploy] 拉取最新代码..."
 git pull
