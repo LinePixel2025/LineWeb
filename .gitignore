@@ -34,8 +34,11 @@ __pycache__/
 Thumbs.db
 
 # IDE & AI 工具
+.agents/
 .claude/
 .trae/
 .superpowers/
 .vscode/
 .idea/
+.mcp.json
+docs/superpowers/

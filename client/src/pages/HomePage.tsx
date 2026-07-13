@@ -4,7 +4,7 @@ import api from '../lib/api'
 import { useWallpaper } from '../contexts/WallpaperContext'
 import LiquidGlass from '../components/glass/LiquidGlass'
 import StatsCard from '../components/StatsCard'
-import DigitalHealthCard from '../components/DigitalHealthCard'
+import DigitalHealthCard from '../components/DigitalHealthCard/DigitalHealthCard'
 
 interface PostPreview {
   id: number
