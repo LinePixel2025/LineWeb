@@ -12,8 +12,13 @@ const env = { ...process.env, NODE_ENV: 'production' }
 
 let schema = fs.readFileSync(src, 'utf-8')
 
-// 替换 provider
+// 替换 provider: SQLite → MySQL
 schema = schema.replace('provider = "sqlite"', 'provider = "mysql"')
+
+// MySQL String 默认 VARCHAR(191)，长文本列需要显式指定 @db.Text
+schema = schema.replace(/(content\s+String)/g, '$1 @db.Text')
+schema = schema.replace(/(schema\s+String)/g, '$1 @db.Text')
+schema = schema.replace(/(settings\s+String\?)/g, '$1 @db.Text')
 
 fs.writeFileSync(dst, schema)
 console.log('[mysql-schema] 已生成 MySQL schema')
