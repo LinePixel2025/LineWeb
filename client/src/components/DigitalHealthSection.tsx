@@ -119,7 +119,7 @@ export default function DigitalHealthSection() {
             onChange={(e) => setExpireDays(e.target.value)}
             style={{ padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.10)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontFamily: 'var(--lg-font)', fontSize: '0.85rem' }}
           >
-            {EXPIRE_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            {EXPIRE_OPTIONS.map(opt => <option key={opt.value} value={opt.value} style={{ color: '#000', background: '#fff' }}>{opt.label}</option>)}
           </select>
         </div>
         <button onClick={handleCreate} disabled={creating} className="liquid-btn primary sm">
