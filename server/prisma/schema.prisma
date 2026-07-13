@@ -23,6 +23,8 @@ model User {
   comments         Comment[]
   driveFiles       DriveFile[] // 上传的文件
   apiKeys          ApiKey[]
+  screenTimeTokens ScreenTimeToken[]
+  screenTimeLogs   ScreenTimeLog[]
 
   @@map("users")
 }
@@ -114,4 +116,33 @@ model ApiKey {
 
   @@index([userId])
   @@map("api_keys")
+}
+
+model ScreenTimeToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
+  name      String    @default("Time Master")
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("screen_time_tokens")
+}
+
+model ScreenTimeLog {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @map("user_id")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date          String   // YYYY-MM-DD
+  totalSeconds  Int      @map("total_seconds")
+  reportedAt    DateTime @map("reported_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, date])
+  @@index([userId])
+  @@map("screen_time_logs")
 }
