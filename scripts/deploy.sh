@@ -20,9 +20,9 @@ echo "[deploy] 构建前端..."
 npm run build
 
 echo "[deploy] 同步数据库..."
-cd server && npx prisma db push && cd ..
+cd server && node scripts/generate-mysql-schema.js && cd ..
 
 echo "[deploy] 重启服务..."
-systemctl restart lineweb.service
+pm2 restart lineweb
 
 echo "[deploy] 部署完成"
