@@ -4,10 +4,10 @@
 
 - **Monorepo**: 根目录用 `concurrently` 同时启动 `server/`（Express + Prisma，端口 3001）和 `client/`（React 19 + Vite，端口 5173）。
 - **数据库**: 通过 Prisma 使用 SQLite（`server/prisma/lineweb.db`）。README 里写的 MySQL 是错的，以 `schema.prisma` 为准（`provider = "sqlite"`）。
-- **生产环境**: 部署到 Railway，使用 PostgreSQL。`server/scripts/generate-pg-schema.js` 负责把 Prisma schema 转成 PG 兼容的版本。
+- **生产环境**: 宝塔面板 + OpenCloudOS 9 自托管服务器。使用 MySQL（宝塔内置）替代 SQLite，通过 `server/scripts/generate-mysql-schema.js` 转换 schema。PM2 管理进程（`ecosystem.config.js`，含敏感信息已加入 `.gitignore`），Nginx 反向代理。GitHub Webhook（端口 9000）监听 push 事件自动触发 `scripts/deploy.sh` 完成 git pull → npm install → build → db push → pm2 restart。
 - **认证**: JWT（`Authorization: Bearer <token>`），token 存在 `localStorage` 的 `lineweb_token` 键下。同时支持 API Key（`X-API-Key: <key>`）。客户端收到 401 时自动跳转 `/login`（但 `/auth/login`、`/auth/register`、`/auth/me` 这三个路径除外）。
 - **所有 API 端点都需要认证**，以下公开路径除外：`/auth/login`、`/auth/register`、`/health`、`/posts`、`/pages/featured`、`/pages/slug`、`/bing-wallpaper`、`/stats/public`。认证检查在 `server/src/index.ts` 中通过全局中间件完成。
-- **存储节点**: 独立的 Python 服务（`storage-node/`）通过 WebSocket 连接，用于网盘功能的文件操作。
+- **存储节点**: 独立的 Python 服务（`storage-node/`）通过 WebSocket 连接，用于网盘功能的文件操作，留在本地电脑不部署到服务器。
 
 ## 命令
 
@@ -30,12 +30,12 @@ npm run test         # 前端测试 — 需要在 client/ 目录下运行：cd c
 - **测试**: Vitest + jsdom + `@testing-library`。setup 文件：`client/src/test-setup.ts`。测试文件与被测代码放在同目录的 `__tests__/` 下。
 - **代码分割**: `App.tsx` 中所有页面使用 `React.lazy()` 做路由级代码分割。
 - **中文为主**: 代码注释和 UI 文案使用中文，默认语言为 `zh-CN`。
-- **无 CI/CD**: 仓库没有 GitHub Actions 或任何部署流水线。
+- **无 CI/CD**: 仓库没有 GitHub Actions，使用 GitHub Webhook + 服务器端 `scripts/deploy.sh` 实现自动部署。
 
 ## 数据库须知
 
 - `server/.env` 虽然被 `.gitignore` 忽略（`*.env`），但已提交到仓库。如需新增环境变量，也请同步更新 `server/.env`。
-- 开发环境用 `db:push` 同步 schema，不用 migration。生产环境通过 `generate-pg-schema.js` 转换为 PostgreSQL 格式。
+- 开发环境用 `db:push` 同步 schema，不用 migration。生产环境通过 `generate-mysql-schema.js` 转换为 MySQL 格式。
 - 种子数据创建的管理员账号：`admin@lineweb.dev` / `admin123`。
 
 ## 语言

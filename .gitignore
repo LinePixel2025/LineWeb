@@ -8,6 +8,7 @@ client/dist/
 # 环境变量
 .env
 *.env
+ecosystem.config.js
 
 # 数据库
 *.db
