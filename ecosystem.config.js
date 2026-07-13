@@ -11,6 +11,11 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 3001,
+        DATABASE_URL: '<从 server/.env 复制>',
+        JWT_SECRET: '<从 server/.env 复制>',
+        CORS_ORIGIN: '',
+        STORAGE_NODE_TOKEN: '<从 server/.env 复制>',
+        MAX_FILE_SIZE_MB: '10240',
       },
       instances: 1,
       exec_mode: 'fork',
