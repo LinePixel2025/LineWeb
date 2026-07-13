@@ -32,6 +32,15 @@ npm run test         # 前端测试 — 需要在 client/ 目录下运行：cd c
 - **中文为主**: 代码注释和 UI 文案使用中文，默认语言为 `zh-CN`。
 - **无 CI/CD**: 仓库没有 GitHub Actions，使用 GitHub Webhook + 服务器端 `scripts/deploy.sh` 实现自动部署。
 
+## 部署速查
+
+- **服务器**: 123.207.8.77 (腾讯云 OpenCloudOS 9)
+- **面板**: 宝塔 Linux 面板
+- **项目路径**: `/www/wwwroot/lineweb`
+- **Webhook 端口**: 9000
+- **部署日志**: `/www/wwwroot/lineweb/deploy.log`
+- **关键文件**: `ecosystem.config.js` 含敏感信息，已加入 `.gitignore`，服务器上用 `git update-index --skip-worktree` 防止被覆盖
+
 ## 数据库须知
 
 - `server/.env` 虽然被 `.gitignore` 忽略（`*.env`），但已提交到仓库。如需新增环境变量，也请同步更新 `server/.env`。
