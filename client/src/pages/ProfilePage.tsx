@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useWallpaper } from '../contexts/WallpaperContext'
 import { useNavigate } from 'react-router-dom'
 import UserAvatar from '../components/UserAvatar'
+import DigitalHealthSection from '../components/DigitalHealthSection'
 import LiquidGlass from '../components/glass/LiquidGlass'
 import LiquidButton from '../components/glass/LiquidButton'
 import api from '../lib/api'
@@ -325,6 +326,8 @@ export default function ProfilePage() {
           {error && <span style={{ color: 'var(--lg-danger)', fontSize: '0.85rem' }}>{error}</span>}
         </div>
       </LiquidGlass>
+
+      <DigitalHealthSection />
     </div>
   )
 }
