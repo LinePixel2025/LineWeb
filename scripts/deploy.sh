@@ -11,10 +11,13 @@ echo "[deploy] 开始自动部署..."
 cd /opt/lineweb
 
 echo "[deploy] 拉取最新代码..."
-git pull origin master
+git pull
 
 echo "[deploy] 安装依赖..."
 npm install
+
+echo "[deploy] 构建前端..."
+npm run build
 
 echo "[deploy] 同步数据库..."
 cd server && npx prisma db push && cd ..

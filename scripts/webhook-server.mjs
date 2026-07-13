@@ -54,6 +54,22 @@ const server = http.createServer((req, res) => {
     return
   }
 
+  const eventType = req.headers['x-github-event'] || ''
+
+  if (eventType === 'ping') {
+    console.log('[webhook] 收到 GitHub ping 事件')
+    res.writeHead(200, { 'Content-Type': 'text/plain' })
+    res.end('pong')
+    return
+  }
+
+  if (eventType !== 'push') {
+    console.log(`[webhook] 忽略非 push 事件: ${eventType}`)
+    res.writeHead(200, { 'Content-Type': 'text/plain' })
+    res.end('Ignored: non-push event')
+    return
+  }
+
   const signature = req.headers['x-hub-signature-256'] || ''
   let body = ''
 
