@@ -18,6 +18,7 @@ import deviceRoutes from './routes/devices.js'
 import statsRoutes from './routes/stats.js'
 import apiKeyRoutes from './routes/apiKeys.js'
 import avatarRoutes from './routes/avatar.js'
+import healthRoutes from './routes/health.js'
 import { authenticate } from './middleware/auth.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel, isNodeConnected } from './services/storageTunnel.js'
@@ -88,7 +89,7 @@ app.use('/api', (req, _res, next) => {
 
 // 全局认证中间件 — 除公开路径外，所有 API 请求必须携带 JWT 或 API Key
 // 注意：req.path 在 /api 中间件中不含 /api 前缀（如 /auth/login 而非 /api/auth/login）
-const publicApiPaths = ['/auth/login', '/auth/register', '/health', '/posts', '/pages/featured', '/pages/slug', '/bing-wallpaper', '/stats/public']
+const publicApiPaths = ['/auth/login', '/auth/register', '/health', '/health/push', '/posts', '/pages/featured', '/pages/slug', '/bing-wallpaper', '/stats/public']
 app.use('/api', (req, res, next) => {
   if (publicApiPaths.some(p => req.path === p || req.path.startsWith(p + '/'))) {
     next()
@@ -109,6 +110,7 @@ app.use('/api/devices', deviceRoutes)
 app.use('/api/stats', statsRoutes)
 app.use('/api/api-keys', apiKeyRoutes)
 app.use('/api/auth/avatar', avatarRoutes)
+app.use('/api/health', healthRoutes)
 
 // API 自描述端点 — 列出所有可用路由
 app.get('/api', (_req, res) => {
@@ -191,6 +193,13 @@ app.get('/api', (_req, res) => {
       detail: { method: 'GET', path: '/api/api-keys/:id', auth: 'admin', description: '获取 API Key 详情' },
       update: { method: 'PUT', path: '/api/api-keys/:id', auth: 'admin', description: '更新 API Key（名称/状态/过期）' },
       delete: { method: 'DELETE', path: '/api/api-keys/:id', auth: 'admin', description: '删除 API Key' },
+    },
+    health: {
+      screenTime: { method: 'GET', path: '/api/health/screen-time', auth: true, description: '获取今日屏幕时间' },
+      push: { method: 'POST', path: '/api/health/push', auth: 'X-Screen-Time-Token', description: '推送屏幕时间' },
+      createToken: { method: 'POST', path: '/api/health/tokens', auth: true, description: '生成屏幕时间 Token' },
+      listTokens: { method: 'GET', path: '/api/health/tokens', auth: true, description: '列出屏幕时间 Token' },
+      deleteToken: { method: 'DELETE', path: '/api/health/tokens/:id', auth: true, description: '删除屏幕时间 Token' },
     },
     system: {
       health: { method: 'GET', path: '/api/health', auth: 'public', description: '服务健康检查（唯一公开端点之一）' },
