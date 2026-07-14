@@ -63,18 +63,8 @@ export default function DigitalHealthCard() {
         padding: 'var(--lg-space-7) var(--lg-space-5) var(--lg-space-7)',
       }}
     >
-      <LiquidGlass variant="strong" chromatic={false} style={{ padding: 'var(--lg-space-6)', position: 'relative' }}>
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            borderRadius: 'inherit',
-            background: 'rgba(0, 0, 0, 0.35)',
-            pointerEvents: 'none',
-            zIndex: 1,
-          }}
-        />
-        <div style={{ position: 'relative', zIndex: 2 }}>
+      <div style={{ position: 'relative' }}>
+        <LiquidGlass variant="strong" chromatic={false} style={{ padding: 'var(--lg-space-6)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div>
             <h2 style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--lg-text-primary)' }}>数字健康</h2>
@@ -133,8 +123,18 @@ export default function DigitalHealthCard() {
             </Link>
           </div>
         )}
-        </div>
       </LiquidGlass>
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 1,
+            borderRadius: '28px',
+            background: 'rgba(0, 0, 0, 0.35)',
+            pointerEvents: 'none',
+          }}
+        />
+      </div>
     </section>
   )
 }
