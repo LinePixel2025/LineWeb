@@ -86,9 +86,7 @@ export default function HomePage() {
       </section>
 
       {/* DigitalHealth Section */}
-      <div style={{ filter: 'brightness(0.72)', transition: 'filter 0.4s' }}>
-        <DigitalHealthCard />
-      </div>
+      <DigitalHealthCard />
 
       {/* Stats Section */}
       <section
