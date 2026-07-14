@@ -11,9 +11,8 @@ echo "[deploy] 开始自动部署..."
 cd /www/wwwroot/lineweb
 
 echo "[deploy] 拉取最新代码..."
-git stash push -- ecosystem.config.js 2>/dev/null || true
-git pull --rebase
-git stash pop 2>/dev/null || true
+git fetch origin master
+git reset --hard origin/master
 
 echo "[deploy] 安装依赖..."
 npm install
