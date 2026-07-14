@@ -74,6 +74,7 @@ export default function DigitalHealthCard() {
             zIndex: 1,
           }}
         />
+        <div style={{ position: 'relative', zIndex: 2 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div>
             <h2 style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--lg-text-primary)' }}>数字健康</h2>
@@ -132,6 +133,7 @@ export default function DigitalHealthCard() {
             </Link>
           </div>
         )}
+        </div>
       </LiquidGlass>
     </section>
   )
