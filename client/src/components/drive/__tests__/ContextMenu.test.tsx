@@ -3,6 +3,22 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import ContextMenu from '../ContextMenu'
 import type { DriveItem } from '../../../types/drive'
 
+vi.mock('../../../contexts/DriveContext', () => ({
+  useDrive: vi.fn(),
+  DriveProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}))
+
+import { useDrive } from '../../../contexts/DriveContext'
+const mockUseDrive = vi.mocked(useDrive)
+
+function setupDriveState() {
+  mockUseDrive.mockReturnValue({
+    state: { favorites: [], selectedFiles: [] },
+    addFavorite: vi.fn(),
+    removeFavorite: vi.fn(),
+  } as unknown as ReturnType<typeof useDrive>)
+}
+
 const mockFileItem: DriveItem = {
   id: 1,
   name: 'test-file.jpg',
@@ -26,6 +42,10 @@ const mockFolderItem: DriveItem = {
 }
 
 describe('ContextMenu', () => {
+  beforeEach(() => {
+    setupDriveState()
+  })
+
   it('渲染文件菜单', () => {
     const onClose = vi.fn()
     render(

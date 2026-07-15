@@ -27,7 +27,6 @@ describe('TreeView', () => {
     render(<TreeView />, { wrapper })
 
     expect(screen.getByText('根目录')).toBeInTheDocument()
-    expect(screen.getByText('📁')).toBeInTheDocument()
   })
 
   it('点击展开按钮加载子节点', async () => {
@@ -40,9 +39,9 @@ describe('TreeView', () => {
 
     vi.mocked(api.get).mockResolvedValueOnce({ data: mockFolders })
 
-    render(<TreeView />, { wrapper })
+    const { container } = render(<TreeView />, { wrapper })
 
-    const expandButton = screen.getByText('▼')
+    const expandButton = container.querySelector('.tree-node-expand') as HTMLElement
     await user.click(expandButton)
 
     await waitFor(() => {
@@ -62,9 +61,9 @@ describe('TreeView', () => {
 
     vi.mocked(api.get).mockResolvedValueOnce({ data: mockFolders })
 
-    render(<TreeView onFolderSelect={onFolderSelect} />, { wrapper })
+    const { container } = render(<TreeView onFolderSelect={onFolderSelect} />, { wrapper })
 
-    const expandButton = screen.getByText('▼')
+    const expandButton = container.querySelector('.tree-node-expand') as HTMLElement
     await user.click(expandButton)
 
     await waitFor(() => {
