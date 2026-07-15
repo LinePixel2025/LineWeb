@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import DOMPurify from 'dompurify'
-import api from '../lib/api'
+import { usePageBySlug } from '../hooks/useQueries'
 import LiquidButton from '../components/glass/LiquidButton'
 
 interface PageSchema {
@@ -20,17 +20,8 @@ interface ComponentData {
 
 export default function DynamicPage() {
   const { slug } = useParams<{ slug: string }>()
-  const [page, setPage] = useState<PageSchema | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (!slug) return
-    api.get<PageSchema>(`/pages/slug/${slug}`)
-      .then(setPage)
-      .catch(() => setError('页面不存在'))
-      .finally(() => setLoading(false))
-  }, [slug])
+  const { data: page, isLoading: loading, isError } = usePageBySlug(slug)
+  const error = isError ? '页面不存在' : ''
 
   if (loading) {
     return (
@@ -93,7 +84,7 @@ function RenderComponent({ comp }: { comp: ComponentData }) {
     case 'image': {
       const src = comp.props.src as string
       return src
-        ? <img src={src} alt={(comp.props.alt as string) || ''} style={{ maxWidth: '100%', borderRadius: 'var(--lg-radius-md)' }} />
+        ? <img src={src} alt={(comp.props.alt as string) || ''} loading="lazy" style={{ maxWidth: '100%', borderRadius: 'var(--lg-radius-md)' }} />
         : null
     }
     case 'button': {
@@ -138,7 +129,8 @@ function RenderComponent({ comp }: { comp: ComponentData }) {
       return <Tag style={{ margin: 0, paddingLeft: 20 }}>{items.map((item, ii) => <li key={ii}>{item}</li>)}</Tag>
     }
     case 'html':
-      return <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize((comp.props.html as string) || '') }} />
+      const html = useMemo(() => DOMPurify.sanitize((comp.props.html as string) || ''), [comp.props.html])
+      return <div dangerouslySetInnerHTML={{ __html: html }} />
     default:
       return null
   }

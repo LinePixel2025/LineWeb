@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
-import { useState, useEffect } from 'react'
 import LiquidGlass from '../components/glass/LiquidGlass'
-import api from '../lib/api'
+import { useFeaturedPages } from '../hooks/useQueries'
 
 interface FeaturedPage {
   id: number
@@ -34,15 +33,8 @@ const features = [
 ]
 
 export default function FeaturesPage() {
-  const [customPages, setCustomPages] = useState<FeaturedPage[]>([])
-  const [loaded, setLoaded] = useState(false)
-
-  useEffect(() => {
-    api.get<{ pages: FeaturedPage[] }>('/pages/featured')
-      .then(data => setCustomPages(data.pages))
-      .catch(() => {})
-      .finally(() => setLoaded(true))
-  }, [])
+  const { data: featuredData, isSuccess } = useFeaturedPages()
+  const customPages = featuredData?.pages ?? []
 
   return (
     <div className="page container" style={{ maxWidth: '800px', paddingTop: 'calc(var(--lg-nav-height) + 60px)' }}>
@@ -149,7 +141,7 @@ export default function FeaturesPage() {
         ))}
       </div>
 
-      {loaded && customPages.length === 0 && (
+      {isSuccess && customPages.length === 0 && (
         <p className="text-tertiary" style={{ textAlign: 'center', marginTop: '24px' }}>
           管理员尚未添加自定义模块
         </p>

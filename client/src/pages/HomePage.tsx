@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import api from '../lib/api'
 import { useWallpaper } from '../contexts/WallpaperContext'
+import { usePostsList } from '../hooks/useQueries'
 import LiquidGlass from '../components/glass/LiquidGlass'
 import StatsCard from '../components/StatsCard'
 import DigitalHealthCard from '../components/DigitalHealthCard/DigitalHealthCard'
@@ -16,14 +15,9 @@ interface PostPreview {
 }
 
 export default function HomePage() {
-  const [recentPosts, setRecentPosts] = useState<PostPreview[]>([])
   const { refresh, loading } = useWallpaper()
-
-  useEffect(() => {
-    api.get<{ posts: PostPreview[] }>('/posts?page=1&limit=3')
-      .then(data => setRecentPosts(data.posts))
-      .catch(() => {})
-  }, [])
+  const { data: postsData } = usePostsList(1, undefined, undefined, 3)
+  const recentPosts = postsData?.posts ?? []
 
   return (
     <>

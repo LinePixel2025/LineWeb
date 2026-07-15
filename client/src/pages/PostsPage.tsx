@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import api from '../lib/api'
+import { usePostsList } from '../hooks/useQueries'
 import LiquidGlass from '../components/glass/LiquidGlass'
 import Pagination from '../components/Pagination'
 
@@ -11,26 +11,12 @@ interface PostSummary {
 interface PostsResponse { posts: PostSummary[]; total: number; page: number; totalPages: number }
 
 export default function PostsPage() {
-  const [data, setData] = useState<PostsResponse | null>(null)
-  const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [sort, setSort] = useState<'desc' | 'asc'>('desc')
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
 
-  const fetchPosts = useCallback(() => {
-    setLoading(true)
-    const params = new URLSearchParams({
-      page: String(page),
-      limit: '6',
-      sort,
-    })
-    if (search) params.set('search', search)
-    api.get<PostsResponse>(`/posts?${params}`)
-      .then(setData).catch(console.error).finally(() => setLoading(false))
-  }, [page, sort, search])
-
-  useEffect(() => { fetchPosts() }, [fetchPosts])
+  const { data, isLoading: loading } = usePostsList(page, sort, search || undefined, 6)
 
   // 搜索提交
   const handleSearch = (e: React.FormEvent) => {

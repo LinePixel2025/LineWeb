@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import DOMPurify from 'dompurify'
-import api from '../lib/api'
+import { usePost } from '../hooks/useQueries'
 import LiquidGlass from '../components/glass/LiquidGlass'
 import CommentSection from '../components/comments/CommentSection'
 
@@ -12,16 +12,7 @@ interface PostDetail {
 
 export default function PostPage() {
   const { slug } = useParams<{ slug: string }>()
-  const [post, setPost] = useState<PostDetail | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (!slug) return
-    setLoading(true)
-    api.get<PostDetail>(`/posts/${slug}`)
-      .then(setPost).catch(err => setError(err.message)).finally(() => setLoading(false))
-  }, [slug])
+  const { data: post, isLoading: loading, error } = usePost(slug)
 
   if (loading) return <div className="page container" style={{ display: 'flex', justifyContent: 'center', paddingTop: '120px' }}><div className="spinner" /></div>
 
@@ -29,7 +20,7 @@ export default function PostPage() {
     return (
       <div className="page container" style={{ textAlign: 'center', paddingTop: '120px' }}>
         <h2>文章未找到</h2>
-        <p className="text-secondary" style={{ marginTop: '8px' }}>{error || '请检查链接是否正确'}</p>
+        <p className="text-secondary" style={{ marginTop: '8px' }}>{error instanceof Error ? error.message : (error || '请检查链接是否正确')}</p>
         <Link to="/posts" className="liquid-btn glass" style={{ marginTop: '20px', display: 'inline-block', padding: '10px 24px', borderRadius: '9999px', background: 'var(--lg-glass-bg)', border: '1px solid var(--lg-glass-border)', textDecoration: 'none', color: 'var(--lg-text-primary)' }} target="_blank" rel="noopener noreferrer">返回文章列表</Link>
       </div>
     )
@@ -46,7 +37,7 @@ export default function PostPage() {
           <span className="text-tertiary">{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
         </div>
 
-        <div className="article-content" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(post.content, { USE_PROFILES: { html: true } }) }} />
+        <div className="article-content" dangerouslySetInnerHTML={{ __html: useMemo(() => DOMPurify.sanitize(post.content, { USE_PROFILES: { html: true } }), [post.content]) }} />
       </LiquidGlass>
 
       <div className="post-section-divider" />
