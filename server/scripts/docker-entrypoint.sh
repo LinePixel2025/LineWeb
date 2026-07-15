@@ -40,6 +40,8 @@ prepare_pg_schema() {
     fs.writeFileSync('prisma/schema.pg.prisma', s);
     console.log('  📄 PostgreSQL schema 已生成');
   "
+  # 删除遗留的 prisma.config.ts（否则 Prisma 会忽略 schema 中的 url）
+  rm -f prisma.config.ts
 }
 
 # ---- 数据库初始化 ----
