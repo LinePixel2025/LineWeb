@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import busboy from 'busboy'
 import { authenticate } from '../middleware/auth.js'
-import { uploadAvatar, getAvatarPathByUserId, getAvatarStream, deleteAvatar } from '../services/avatarService.js'
+import { uploadAvatar, getAvatarPathByUserId, getAvatarStream, deleteAvatar, processAvatarStream } from '../services/avatarService.js'
 import { getErrorMessage, getErrorStatus } from '../lib/utils.js'
 
 const router = Router()
@@ -19,11 +19,17 @@ router.post('/', async (req: Request, res: Response) => {
       const bb = busboy({ headers: req.headers })
       bb.on('file', (_fieldname, stream, info) => {
         fileMimeType = info.mimeType
-        const chunks: Buffer[] = []
-        stream.on('data', (chunk: Buffer) => chunks.push(chunk))
-        stream.on('end', () => { fileBuffer = Buffer.concat(chunks) })
+        processAvatarStream(stream)
+          .then(result => { fileBuffer = result.buffer })
+          .catch(reject)
       })
-      bb.on('finish', () => resolve())
+      bb.on('finish', () => {
+        if (!fileBuffer) {
+          reject(new Error('请提供头像文件'))
+          return
+        }
+        resolve()
+      })
       bb.on('error', (err: Error) => reject(err))
       req.pipe(bb)
     })

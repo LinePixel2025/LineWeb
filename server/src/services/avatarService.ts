@@ -1,4 +1,5 @@
 import sharp from 'sharp'
+import { Readable } from 'stream'
 import prisma from '../lib/prisma.js'
 import { streamWrite, streamRead, sendCommand, isNodeConnected } from './storageTunnel.js'
 
@@ -15,6 +16,48 @@ async function processAvatar(buffer: Buffer): Promise<Buffer> {
     .resize(256, 256, { fit: 'cover' })
     .webp({ quality: 80 })
     .toBuffer()
+}
+
+export async function processAvatarStream(
+  inputStream: Readable,
+  maxSizeBytes: number = 2 * 1024 * 1024
+): Promise<{ buffer: Buffer; webpSize: number }> {
+  const chunks: Buffer[] = []
+  let totalSize = 0
+  let resolved = false
+
+  const transform = sharp()
+    .resize(256, 256, { fit: 'cover', position: 'center' })
+    .webp({ quality: 80 })
+
+  return new Promise((resolve, reject) => {
+    inputStream
+      .pipe(transform)
+      .on('data', (chunk: Buffer) => {
+        totalSize += chunk.length
+        if (totalSize > maxSizeBytes) {
+          inputStream.destroy()
+          transform.destroy()
+          if (!resolved) {
+            resolved = true
+            reject(new Error('处理后图片过大'))
+          }
+          return
+        }
+        chunks.push(chunk)
+      })
+      .on('end', () => {
+        if (resolved) return
+        resolved = true
+        const buffer = Buffer.concat(chunks)
+        resolve({ buffer, webpSize: buffer.length })
+      })
+      .on('error', (err: Error) => {
+        if (resolved) return
+        resolved = true
+        reject(err)
+      })
+  })
 }
 
 export async function uploadAvatar(userId: number, buffer: Buffer, mimeType: string): Promise<string> {
