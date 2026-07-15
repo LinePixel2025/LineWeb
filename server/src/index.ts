@@ -65,18 +65,18 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
 }))
 
-// 压缩响应 — gzip/deflate
-app.use(compression())
+// 压缩响应 — compression supports gzip/deflate/brotli based on Accept-Encoding
+app.use(compression({ threshold: '2kb', filter: (req, _res) => !req.path.includes('/proxy') && !req.path.includes('/download') }))
 
 app.set('trust proxy', 1)  // 信任反向代理（Railway），用于 rate-limiter 正确获取客户端 IP
-app.use(express.json({ limit: '10mb' }))
-app.use(express.urlencoded({ limit: '10mb', extended: true }))
+app.use(express.json({ limit: '1mb' }))
+app.use(express.urlencoded({ limit: '1mb', extended: true }))
 
 // === 全局速率限制 ===
 // 所有 /api 端点每 IP 每 15 分钟最多 200 次请求
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200,
+  max: 600,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: '请求过于频繁，请稍后再试' },

@@ -5,6 +5,7 @@ const TOKEN_PREFIX = 'st_'
 const TOKEN_BYTES = 32
 
 export function generateScreenTimeToken(): string {
+  // Performance: crypto.randomBytes is sync but not on hot path — acceptable for token creation
   return TOKEN_PREFIX + crypto.randomBytes(TOKEN_BYTES).toString('hex')
 }
 

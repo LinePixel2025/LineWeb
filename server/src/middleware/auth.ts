@@ -22,6 +22,15 @@ declare global {
 const tokenValidAfterCache = new Map<number, { value: Date; expireAt: number }>()
 const TOKEN_VALID_AFTER_TTL_MS = 60 * 1000
 
+// 定期清理过期缓存条目
+const cacheCleanupInterval = setInterval(() => {
+  const now = Date.now()
+  for (const [key, entry] of tokenValidAfterCache.entries()) {
+    if (now >= entry.expireAt) tokenValidAfterCache.delete(key)
+  }
+}, 60_000)
+cacheCleanupInterval.unref()
+
 /** 清除指定用户的 tokenValidAfter 缓存（登出/改密时调用） */
 export function clearTokenValidAfterCache(userId: number): void {
   tokenValidAfterCache.delete(userId)

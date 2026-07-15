@@ -10,6 +10,7 @@ const router = Router()
 router.use(authenticate, requireAdmin)
 
 function generateApiKey(): { fullKey: string; prefix: string } {
+  // Performance: crypto.randomBytes is sync but not on hot path — acceptable for token creation
   const randomBytes = crypto.randomBytes(config.apiKeyLength)
   const raw = randomBytes
     .toString('base64url')
