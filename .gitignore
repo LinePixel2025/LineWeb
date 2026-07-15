@@ -42,7 +42,18 @@ Thumbs.db
 .vscode/
 .idea/
 .mcp.json
+.codegraph/
+.omo/
 docs/superpowers/
 
-# Time Master 开发指南（仅本地）
+# AI 生成内容
+**/AGENTS.md
+skills-lock.json
+1panel-setup.md
+PERFORMANCE_REPORT.md
+docs/design-review.md
+docs/optimization-summary-2026-07-05.md
+docs/archive/sdd/
+scripts/lineweb-screen-time-api.md
+scripts/lineweb-screen-time-read-api.md
 scripts/time-master-guide.md
