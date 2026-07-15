@@ -13,6 +13,10 @@
 #
 # 更新部署:
 #   git pull && docker compose up -d --build
+#
+# 静态资源加速（可选）:
+#   如果宿主机 Nginx 需要直连静态文件，取消注释 volumes 挂载
+#   并在 nginx.conf 中配置 alias /opt/lineweb/client/dist/assets/
 # ============================================================
 
 services:
@@ -28,10 +32,34 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       STORAGE_NODE_TOKEN: ${STORAGE_NODE_TOKEN:-}
       MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-10240}
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
+      DATABASE_POOL_TIMEOUT: ${DATABASE_POOL_TIMEOUT:-30}
     networks:
       - default
       - 1panel
     restart: unless-stopped
+    # 资源限制 — 防止容器耗尽宿主机资源
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    # 健康检查 — Docker 自动重启不健康容器
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/health', function(r) { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', function() { process.exit(1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    # 日志限制 — 防止日志填满磁盘
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
   1panel:

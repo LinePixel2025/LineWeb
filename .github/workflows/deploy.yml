@@ -19,4 +19,6 @@ jobs:
             cd /home/Lineweb
             git pull origin master
             docker compose up -d --build
-            docker system prune -f
+            # 精准清理 — 仅移除 24h+ 的悬空镜像和构建缓存，保留层缓存加速后续构建
+            docker image prune -f --filter "until=24h"
+            docker builder prune -f --filter "until=24h"

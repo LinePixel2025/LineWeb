@@ -51,7 +51,7 @@ export async function registerUser(username: string, email: string, password: st
     throw Object.assign(new Error('用户名或邮箱已被注册'), { status: 409 })
   }
 
-  const hashed = await bcrypt.hash(password, 12)
+  const hashed = await bcrypt.hash(password, 10)  // 成本因子 10: ~100ms vs 12 的 ~300ms, 仍足够安全
   const user = await prisma.user.create({
     data: { username, email, password: hashed },
   })

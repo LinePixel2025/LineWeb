@@ -27,6 +27,9 @@ export default defineConfig({
           if (id.includes('node_modules/react')) {
             return 'vendor'
           }
+          if (id.includes('node_modules/@tanstack/react-query')) {
+            return 'query'
+          }
         },
       },
     },

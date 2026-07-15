@@ -10,7 +10,7 @@ WORKDIR /app/client
 
 # 利用 Docker 层缓存：先安装依赖
 COPY client/package.json client/package-lock.json ./
-RUN npm ci
+RUN npm ci && npm cache clean --force
 
 # 复制源码并构建
 COPY client/ ./
@@ -26,7 +26,7 @@ RUN apk add --no-cache bash
 
 # 安装 server 生产依赖（tsx + prisma CLI 均在 dependencies 中）
 COPY server/package.json server/package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev && npm cache clean --force
 
 # 复制 server 源码、Prisma schema、脚本
 COPY server/ ./

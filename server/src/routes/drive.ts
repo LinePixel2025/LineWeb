@@ -410,14 +410,25 @@ router.post('/upload', async (req: Request, res: Response) => {
           const origDotIdx = originalName.lastIndexOf('.')
           const origBase = origDotIdx > 0 ? originalName.slice(0, origDotIdx) : originalName
           const origExt = origDotIdx > 0 ? originalName.slice(origDotIdx) : ''
+          // 单次查询获取所有冲突路径，避免 N+1 循环查询
+          const pattern = `${parentPath}${base}(`
+          const existingDups = await prisma.driveFile.findMany({
+            where: {
+              storagePath: { startsWith: pattern },
+              parentId: parentId || null,
+            },
+            select: { storagePath: true },
+          })
+          const usedNumbers = new Set<number>()
+          for (const dup of existingDups) {
+            const match = dup.storagePath.match(new RegExp(`^${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\d+)\\)\\${ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`))
+            if (match) {
+              usedNumbers.add(parseInt(match[1], 10))
+            }
+          }
           for (let i = 1; i < 100; i++) {
-            const candidate = `${parentPath}${base}(${i})${ext}`
-            const dup = await prisma.driveFile.findFirst({
-              where: { storagePath: candidate },
-              select: { id: true },
-            })
-            if (!dup) {
-              storagePath = candidate
+            if (!usedNumbers.has(i)) {
+              storagePath = `${parentPath}${base}(${i})${ext}`
               finalName = `${origBase}(${i})${origExt}`
               break
             }
