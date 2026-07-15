@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { memo, useState, useRef, useEffect } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useWallpaper } from '../contexts/WallpaperContext'
@@ -16,7 +16,7 @@ const navItems = [
 
 const SIDEBAR_COLLAPSED_KEY = 'lineweb_admin_sidebar_collapsed'
 
-export default function AdminLayout() {
+export default memo(function AdminLayout() {
   const { user, logout } = useAuth()
   const { bgUrl, bgType, solidColor, loaded, refresh } = useWallpaper()
   const location = useLocation()
@@ -26,7 +26,11 @@ export default function AdminLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   // Desktop collapse (persisted)
   const [collapsed, setCollapsed] = useState(() => {
-    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true'
+    try {
+      return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true'
+    } catch {
+      return false
+    }
   })
   const sidebarRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -214,4 +218,4 @@ export default function AdminLayout() {
       </button>
     </div>
   )
-}
+})

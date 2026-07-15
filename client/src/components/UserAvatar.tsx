@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { memo, useState, useEffect } from 'react'
 
 interface UserAvatarProps {
   userId: number
@@ -23,7 +23,7 @@ function getColor(userId: number): string {
   return `hsl(${hue}, 50%, 50%)`
 }
 
-export default function UserAvatar({ userId, username, size = 'md' }: UserAvatarProps) {
+export default memo(function UserAvatar({ userId, username, size = 'md' }: UserAvatarProps) {
   const px = SIZE_MAP[size]
   const [imgSrc, setImgSrc] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
@@ -63,6 +63,7 @@ export default function UserAvatar({ userId, username, size = 'md' }: UserAvatar
       <img
         src={imgSrc}
         alt={username}
+        loading="lazy"
         style={{
           width: px,
           height: px,
@@ -94,4 +95,4 @@ export default function UserAvatar({ userId, username, size = 'md' }: UserAvatar
       {getInitials(username)}
     </div>
   )
-}
+})

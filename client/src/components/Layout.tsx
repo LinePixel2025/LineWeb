@@ -1,8 +1,9 @@
+import { memo } from 'react'
 import { Outlet } from 'react-router-dom'
 import Navbar from './Navbar'
 import { useWallpaper } from '../contexts/WallpaperContext'
 
-export default function Layout() {
+export default memo(function Layout() {
   const { bgUrl, bgType, solidColor, copyright, loaded } = useWallpaper()
 
   return (
@@ -15,7 +16,7 @@ export default function Layout() {
               position: 'fixed',
               inset: 0,
               zIndex: 0,
-              background: `url(${bgUrl}) center/cover no-repeat`,
+              background: `url(${bgUrl}) center/cover no-repeat`, // P18: CSS background cannot use loading="lazy" — acceptable for hero image
               transition: 'opacity var(--lg-transition)',
               opacity: loaded ? 1 : 0,
               transform: 'scale(1.02)',
@@ -64,4 +65,4 @@ export default function Layout() {
       )}
     </div>
   )
-}
+})

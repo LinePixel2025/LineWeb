@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { memo, useState, useRef, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import UserAvatar from './UserAvatar'
 import { useAuth } from '../contexts/AuthContext'
@@ -9,7 +9,7 @@ const navItems = [
   { path: '/posts', label: '文章' },
 ]
 
-export default function Navbar() {
+export default memo(function Navbar() {
   const { user, isAdmin } = useAuth()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -143,4 +143,4 @@ export default function Navbar() {
       </div>
     </nav>
   )
-}
+})

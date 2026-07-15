@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { memo, useState, useEffect } from 'react'
 import LiquidGlass from './glass/LiquidGlass'
 import api from '../lib/api'
 
@@ -22,7 +22,7 @@ const LABELS: Record<string, string> = {
   pages: '页面',
 }
 
-export default function StatsCard({ items, layout, showLabels }: StatsCardProps) {
+export default memo(function StatsCard({ items, layout, showLabels }: StatsCardProps) {
   const [data, setData] = useState<StatsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -92,4 +92,4 @@ export default function StatsCard({ items, layout, showLabels }: StatsCardProps)
       ))}
     </div>
   )
-}
+})
