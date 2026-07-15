@@ -1,0 +1,205 @@
+# LineWeb — 项目知识库
+
+**生成时间：** 2026-07-16
+**提交：** 81025f7
+**分支：** master
+
+## 概述
+
+个人网站/CMS 单体仓库，融合 Apple Liquid Glass 设计语言（WWDC 2025）。React 19 SPA 前端，Express 4 REST API 后端，Python 3 WebSocket 文件存储节点。SQLite 本地开发，PostgreSQL 生产环境。
+
+## 目录结构
+
+```
+lineweb/
+├── client/           # React 19 + Vite 6 SPA（97 个源文件）→ 开发端口 5173，生产从 dist/ 提供
+├── server/           # Express 4 + Prisma 6 API（28 个源文件）→ 端口 3001，tsx 运行时，.js 导入后缀
+├── storage-node/     # Python 3 WebSocket 文件存储客户端（5 个文件）→ D:/LineWebDrive，仅本地
+├── scripts/          # 14 个运维脚本（部署、开发启动/停止、webhook、截图）
+├── docs/             # API 参考（1417 行）、Drive 部署指南、Liquid Glass 指南
+├── .omo/             # OpenCode 会话续传数据
+├── .trae/            # Trae IDE 配置、项目规则
+├── .superpowers/     # SDD 任务产物
+├── .codegraph/       # 代码图谱分析数据库
+├── .agents/          # 代理技能定义（pdf）
+│
+├── package.json      # 单体仓库根 — concurrently 编排 client + server
+├── Dockerfile        # 多阶段构建：构建 client dist → Node 22 Alpine server
+├── docker-compose.yml
+├── .github/workflows/ # GitHub Actions CI/CD（push master → 自动部署）
+├── nginx.conf        # Nginx 反向代理配置（Docker Compose 用，引用上游 serve:3001）
+└── .npmrc            # 中文 npm 镜像
+```
+
+### 子项目 AGENTS.md
+
+| 目录 | AGENTS.md | 覆盖内容 |
+|-----------|-----------|----------|
+| `client/` | ✅ | 路由、Context、网盘模块、数据获取、测试、反模式 |
+| `server/` | ✅ | 中间件链、12 个路由、8 个服务、认证流程、反模式 |
+| `storage-node/` | ✅ | WebSocket 协议、9 个命令、安全、配置 |
+
+## 哪里找
+
+| 跨模块关注点 | 位置 | 说明 |
+|----------------------|----------|-------|
+| 单体仓库编排 | `package.json` | `concurrently` 同时运行前后端；`postinstall` 级联安装子目录依赖 |
+| 部署流水线 | `Dockerfile` + `docker-compose.yml` + `.github/workflows/deploy.yml` | GitHub Actions SSH 到 123.207.8.77 自动部署 |
+| 数据库结构 | `server/prisma/schema.prisma` | 8 个模型；SQLite 开发，PostgreSQL Docker（自动转换） |
+| 认证（JWT + API Key） | `server/src/middleware/auth.ts` | 双认证；9 个公开路径在 `index.ts` 中白名单 |
+| 存储架构 | `server/src/services/storageTunnel.ts` ↔ `storage-node/main.py` | WebSocket 隧道；服务器代理命令到 Python 节点 |
+| 设计系统 | `client/src/styles/variables.css` + `glass.css` + `filters.svg` | 自定义 Liquid Glass，基于 CSS 变量 + SVG 置换滤镜 |
+| 环境配置 | `server/.env`（开发）+ `.env.docker`（生产） | `JWT_SECRET`、`DATABASE_URL`、`STORAGE_NODE_TOKEN` |
+| Nginx 反向代理 | `nginx.conf`（Docker）+ 1Panel 面板 | 1Panel 管理外部 HTTPS 反代 → 容器 3001 端口 |
+
+## 架构
+
+```
+┌──────────────┐     HTTP/API      ┌──────────────────┐     WebSocket     ┌──────────────────┐
+│  浏览器        │ ◄──────────────► │  Express Server   │ ◄──────────────► │  Storage Node    │
+│  (React SPA)  │    端口 3001     │  (tsx/Node)       │   /ws/storage    │  (Python)        │
+│               │                  │  + Prisma ↔ SQLite │                  │  D:/LineWebDrive  │
+└──────────────┘                  │  + WebSocket WSS   │                  └──────────────────┘
+                                   └──────────────────┘
+
+开发：  Vite :5173 → 代理 /api → Express :3001
+生产：  Express 提供 client/dist/ + Nginx 反向代理
+Docker：Nginx → Express → PostgreSQL（运行于 1Panel/Ubuntu）
+```
+
+### 启动流程
+
+```
+server.listen(3001)
+  ├── helmet(CSP) → cors → compression → body parser(1mb)
+  ├── rate-limit(600/15min) → 设备追踪 → 全局认证检查
+  ├── 12 个路由组挂载于 /api/*
+  ├── [生产] express.static(client/dist) + SPA fallback
+  └── errorHandler
+
+监听后：
+  ├── http.createServer → WebSocket 隧道路由 /ws/storage
+  ├── 网盘同步定时器（每 5 分钟）
+  ├── 启动延迟（10s）：去重 + 初始同步
+  └── 设备追踪清理（30 分钟不活跃超时）
+```
+
+## 约定
+
+### 沟通
+
+- **项目文档、注释、AI 交互均使用中文**
+
+### TypeScript
+
+- 前后端均 `strict: true`
+- 前端 `noUnusedLocals: false`、`noUnusedParameters: false` — 死代码不被检测
+- 前后端均 `skipLibCheck: true` — 跳过 .d.ts 类型检查
+- 前端：`@/*` 别名 → `src/*`（已配置但很少使用；大部分使用相对导入）
+- 后端：ESM 配合 .js 后缀（`import x from './routes/auth.js'`，尽管源文件是 .ts）
+
+### CSS
+
+- **纯 CSS** — 无 Tailwind、无 CSS 模块、无 CSS-in-JS
+- 命名空间 BEM：`.lg-*`（设计系统）、`.drive-*`、`.admin-*`、`.lex-*`（编辑器）
+- 状态修饰符：`--active`、`--selected`、`--collapsed`
+- 数据属性：`[data-glass="off"]`、`[data-theme="dark"]`
+
+### 命名
+
+| 分类 | 约定 | 示例 |
+|----------|-----------|---------|
+| React 组件 | PascalCase，默认导出 | `Navbar.tsx` |
+| 页面 | PascalCase，懒加载 | `HomePage.tsx` |
+| Context | PascalCase + Context 后缀 | `AuthContext.tsx` |
+| Hooks | `use` 前缀，camelCase | `useThumbnails.ts` |
+| 后端路由 | 复数，每个域一个文件 | `routes/auth.ts` |
+| 后端服务 | 域名 + Service 后缀 | `services/authService.ts` |
+| 数据库模型 | PascalCase 单数 → snake_case 表名（@map） | `DriveFile` → `drive_files` |
+| CSS 类名 | kebab-case，模块命名空间 | `.drive-grid-card--selected` |
+
+### 工具链缺失（值得注意）
+
+- **无 ESLint、Prettier、Biome 或 EditorConfig** — 代码格式未强制执行
+- **CI/CD** — GitHub Actions（`.github/workflows/deploy.yml`），push master → SSH 自动部署至 123.207.8.77
+- **根目录无 `npm test`** — 仅在 `client/` 中有测试；server 零测试
+- **不使用 `prisma migrate`** — 约定仅使用 `prisma db push`
+- **测试约定**：源文件旁 `__tests__/` 目录、`.test.{ts,tsx}` 命名、`vi.mock()`（无 MSW）
+
+## 反模式（项目全局）
+
+### TypeScript
+
+- **`req.user!.userId`**（后端 27 处）— 非空断言；应使用声明合并
+- **`as any`**（1 处）、**`: any`**（2 处）、**`as unknown as X`**（10 处）— 散落的类型绕过
+- **`@/` 别名未普及** — 已配置但仅 2 个文件使用
+
+### 错误处理
+
+- **裸 `catch {}`**（9 处）— 前后端多处静默吞错
+- **`.catch(() => {})`**（8 处）— Promise 拒绝被忽略
+- **错误传播不一致** — 部分路由委托给 `errorHandler`，部分内联 `res.status(500)`
+
+### 代码质量
+
+- **死代码**：`client/.../DriveSidebar.tsx`、`DriveContextMenu.tsx`、`server/src/lib/errorHandler.ts`
+- **超大文件**：`drive.ts`（833 行）、`PageEditor.tsx`（733 行）、`DrivePage.tsx`（588 行）、`globals.css`（~2000+ 行）
+- **跨模块耦合**：`users.ts` 从 `drive.ts` 导入 `clearDriveAccessCache`
+- **服务层不一致**：部分路由使用 service 层（auth、posts、avatar），其他直接调用 Prisma（comments、pages、stats、apiKeys）
+- **React Query 已接入但未使用** — `QueryClientProvider` 在 App.tsx 中配置，所有页面仍使用手动 `useState+useEffect`
+
+### 数据库
+
+- **无迁移** — 仅使用 `prisma db push`；无回滚能力
+- **`$queryRawUnsafe`**（2 处）— 去重脚本中的原始 SQL（已参数化，但绕过了类型安全）
+- **双数据库策略** — SQLite 开发，PostgreSQL Docker（容器启动时自动转换 schema）
+
+### 安全
+
+- **明文 token** 存储于 `storage-node/config.json`
+- **JWT 存于 localStorage** — 标准 SPA 模式，存在 XSS 风险
+
+## 命令
+
+```bash
+# 开发
+npm run dev              # concurrently：server (3001) + client (5173)
+npm run dev:server       # tsx watch server/src/index.ts
+npm run dev:client       # vite（端口 5173，代理 /api → :3001）
+
+# 构建 & 生产
+npm run build            # 仅 vite 构建 client（server 通过 tsx 运行，从不编译）
+npm run start            # 构建 client → 生成 PG schema → tsx server/src/index.ts
+
+# 数据库
+npm run db:push          # prisma db push（SQLite 开发）
+npm run db:seed          # 种子数据 admin@lineweb.dev / admin123
+npm run db:studio        # prisma studio
+
+# 测试（仅 client/）
+cd client && npm run test        # vitest run（12 个测试文件）
+cd client && npm run test:watch  # vitest watch
+
+# Storage Node（本地机器）
+cd storage-node && python main.py
+
+# 部署
+docker compose up -d --build   # Docker Compose（1Panel/Ubuntu 生产环境）
+
+# 自动部署（GitHub Actions）
+# git push origin master → GitHub Actions SSH → docker compose up -d --build
+# 服务器：123.207.8.77，项目路径：/home/Lineweb
+```
+
+## 注意事项
+
+- **Server 运行时使用 tsx** — 生产环境从不编译为 JS。根目录 `npm run build` 仅构建 client。
+- **Docker 将 SQLite schema 转换为 PostgreSQL** — `docker-entrypoint.sh` 通过 Node 脚本将 `provider = "sqlite"` 改写为 `"postgresql"`，然后执行 `prisma db push`。
+- **Storage node 是外部进程** — Python 进程运行在本地 Windows 机器上，未容器化。通过 WebSocket 以指数退避重连方式连接到 `/ws/storage`。
+- **中文友好默认配置** — `.npmrc` 设置 npmmirror.com 镜像；文档使用中文。
+- **`webhook-server.mjs` 已弃用** — 自动部署已迁移至 GitHub Actions（`.github/workflows/deploy.yml`）。push master 后 GitHub SSH 到服务器执行 `git pull` + `docker compose up -d --build`。
+- **`deploy.sh` 已弃用** — 部署命令已内联至 GitHub Actions workflow 中，不再需要宿主机进程。
+- **部署目标**：123.207.8.77，路径 `/home/Lineweb`，Docker 容器由 1Panel 面板管理。
+- **Server 无测试** — `server/` 中零测试基础设施。Playwright 是依赖但无配置或测试。
+- **CSS 是单体的** — 所有样式从 `globals.css`（~2000+ 行）级联。无作用域机制。
+- **认证中间件跳过 9 个路径**：`/auth/login`、`/auth/register`、`/health`、`/health/push`、`/posts`、`/pages/featured`、`/pages/slug`、`/bing-wallpaper`、`/stats/public`。
