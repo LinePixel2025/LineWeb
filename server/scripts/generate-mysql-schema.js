@@ -7,6 +7,7 @@ const { execSync } = require('child_process')
 
 const src = path.join(__dirname, '../prisma/schema.prisma')
 const dst = path.join(__dirname, '../prisma/schema.mysql.generated.prisma')
+const cfg = path.join(__dirname, '../prisma/prisma.config.ts')
 const cwd = path.join(__dirname, '..')
 const env = { ...process.env, NODE_ENV: 'production' }
 
@@ -14,6 +15,10 @@ let schema = fs.readFileSync(src, 'utf-8')
 
 // 替换 provider: SQLite → MySQL
 schema = schema.replace('provider = "sqlite"', 'provider = "mysql"')
+
+// Prisma 7+: datasource 不再支持 url 字段，移除之
+// URL 通过 prisma.config.ts 或 --url 参数传递
+schema = schema.replace(/\n\s*url\s*=\s*env\("DATABASE_URL"\)/g, '')
 
 // MySQL String 默认 VARCHAR(191)，长文本列需要显式指定 @db.Text
 schema = schema.replace(/(content\s+String)/g, '$1 @db.Text')
@@ -23,12 +28,30 @@ schema = schema.replace(/(settings\s+String\?)/g, '$1 @db.Text')
 fs.writeFileSync(dst, schema)
 console.log('[mysql-schema] 已生成 MySQL schema')
 
+// 生成 prisma.config.ts（Prisma 7+ 要求）
+const configTs = `
+import { defineConfig } from 'prisma/config'
+
+export default defineConfig({
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL,
+    },
+  },
+})
+`
+fs.writeFileSync(cfg, configTs)
+console.log('[mysql-schema] 已生成 prisma.config.ts')
+
 try {
   execSync(`npx prisma db push --schema prisma/schema.mysql.generated.prisma --accept-data-loss`, { cwd, env, stdio: 'inherit' })
   console.log('[mysql-schema] Schema 同步完成')
 } catch (e) {
   try { fs.unlinkSync(dst) } catch {}
+  try { fs.unlinkSync(cfg) } catch {}
   process.exit(1)
 }
 
+// 清理临时文件
+try { fs.unlinkSync(cfg) } catch {}
 console.log('[mysql-schema] 完成')
