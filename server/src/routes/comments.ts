@@ -62,19 +62,32 @@ router.get('/post/:postId', async (req: Request, res: Response) => {
     return
   }
 
-  const allComments = await prisma.comment.findMany({
-    where: { postId },
-    select: {
-      id: true,
-      content: true,
-      createdAt: true,
-      parentId: true,
-      author: { select: { id: true, username: true } },
-    },
-    orderBy: { createdAt: 'asc' },
-  })
+  const { page, limit, skip } = parsePagination(req.query)
 
-  res.json(buildCommentTree(allComments))
+  const [allComments, total] = await Promise.all([
+    prisma.comment.findMany({
+      where: { postId },
+      select: {
+        id: true,
+        content: true,
+        createdAt: true,
+        parentId: true,
+        author: { select: { id: true, username: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+      skip,
+      take: limit,
+    }),
+    prisma.comment.count({ where: { postId } }),
+  ])
+
+  res.json({
+    comments: buildCommentTree(allComments),
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+  })
 })
 
 // 发表评论（需登录）

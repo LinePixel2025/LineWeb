@@ -43,6 +43,7 @@ model Post {
   comments  Comment[]
 
   @@index([authorId])
+  @@index([published, createdAt])
   @@map("posts")
 }
 
@@ -62,6 +63,7 @@ model Comment {
   @@index([postId])
   @@index([authorId])
   @@index([parentId])
+  @@index([postId, createdAt])
   @@map("comments")
 }
 
@@ -77,6 +79,7 @@ model Page {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  @@index([published, featured])
   @@map("pages")
 }
 
@@ -97,6 +100,7 @@ model DriveFile {
 
   @@index([parentId])
   @@index([uploadedById])
+  @@index([name])
   @@map("drive_files")
 }
 
