@@ -60,18 +60,20 @@ function createTab(folderId: number | null, folderName: string, path: Breadcrumb
 
 const defaultTab = createTab(null, '根目录', [{ id: null, name: '根目录' }])
 
-const initialState: DriveContextState = {
-  currentPath: [{ id: null, name: '根目录' }],
-  tabs: [defaultTab],
-  activeTabId: defaultTab.id,
-  selectedFiles: [],
-  favorites: loadFavorites(),
-  viewMode: 'list',
-  sort: { field: 'name', direction: 'asc' },
-  categoryFilter: 'all',
-  searchQuery: '',
-  searchResults: null,
-  searching: false,
+function createInitialState(): DriveContextState {
+  return {
+    currentPath: [{ id: null, name: '根目录' }],
+    tabs: [defaultTab],
+    activeTabId: defaultTab.id,
+    selectedFiles: [],
+    favorites: loadFavorites(),
+    viewMode: 'list',
+    sort: { field: 'name', direction: 'asc' },
+    categoryFilter: 'all',
+    searchQuery: '',
+    searchResults: null,
+    searching: false,
+  }
 }
 
 function driveReducer(state: DriveContextState, action: DriveAction): DriveContextState {
@@ -230,7 +232,7 @@ function driveReducer(state: DriveContextState, action: DriveAction): DriveConte
 const DriveContext = createContext<DriveContextType | null>(null)
 
 export function DriveProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(driveReducer, initialState)
+  const [state, dispatch] = useReducer(driveReducer, undefined, createInitialState)
 
   const navigateTo = useCallback((path: Breadcrumb[]) => {
     dispatch({ type: 'NAVIGATE_TO', path })
