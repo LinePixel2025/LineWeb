@@ -123,6 +123,23 @@ export async function streamWrite(
     throw new Error('存储节点未连接')
   }
 
+  // P8: Check WebSocket buffer before sending to prevent memory buildup
+  const MAX_BUFFER = 1024 * 1024 // 1MB high water mark
+
+  async function waitForDrain(ws: WebSocket, maxBuffer: number): Promise<void> {
+    if ((ws.bufferedAmount ?? 0) > maxBuffer) {
+      await new Promise<void>(resolve => {
+        const check = () => {
+          if ((ws?.bufferedAmount ?? 0) <= maxBuffer) {
+            ws?.removeListener('drain', check)
+            resolve()
+          }
+        }
+        ws.on('drain', check)
+      })
+    }
+  }
+
   const knownSize = totalSize && totalSize > 0 ? totalSize : undefined
   const initCmd: NodeCommand = {
     id: batchId, type: 'write_file', path,
@@ -153,6 +170,8 @@ export async function streamWrite(
           if (!activeNode || !nodeConnected) {
             throw new Error('存储节点已断开')
           }
+          // P8: 等待缓冲区排空再发送下一个分块，防止内存堆积
+          await waitForDrain(activeNode, MAX_BUFFER)
           activeNode.send(JSON.stringify(dCmd))
         } catch (err: unknown) {
           // 中间块发送失败 — 清理 .tmp 残片
