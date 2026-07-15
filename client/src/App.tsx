@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './contexts/AuthContext'
 import { WallpaperProvider } from './contexts/WallpaperContext'
 import { GlassProvider } from './contexts/GlassContext'
@@ -31,6 +32,17 @@ const ApiAdminPage = lazy(() => import('./pages/admin/ApiAdminPage'))
 const DeviceMonitorPage = lazy(() => import('./pages/admin/DeviceMonitorPage'))
 const GlassTestPage = lazy(() => import('./pages/GlassTestPage'))
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
+
 function RouteLoading() {
   return (
     <div className="page container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -42,6 +54,7 @@ function RouteLoading() {
 export default function App() {
   return (
     <BrowserRouter>
+      <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <WallpaperProvider>
           <GlassProvider>
@@ -91,6 +104,7 @@ export default function App() {
           </GlassProvider>
         </WallpaperProvider>
       </AuthProvider>
+      </QueryClientProvider>
     </BrowserRouter>
   )
 }
