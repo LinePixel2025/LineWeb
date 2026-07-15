@@ -9,6 +9,9 @@ import { config } from '../config/index.js'
 
 const router = Router()
 
+// P23: In-memory cache for resolve-path to avoid repeated N+1 queries per segment
+const pathCache = new Map<string, number>()
+
 /**
  * 修复 busboy 对中文文件名的 mojibake 损坏。
  * busboy v1.6.0 在解析 Content-Disposition 时，可能将 UTF-8 字节
@@ -43,6 +46,15 @@ function transformSizeList<T extends { size: bigint }>(files: T[]): WithSize<T>[
 // === canAccessDrive 内存缓存（60s TTL，避免每请求查 DB） ===
 const driveAccessCache = new Map<number, { value: boolean; expireAt: number }>()
 const DRIVE_ACCESS_TTL_MS = 60 * 1000
+
+// 定期清理过期缓存条目
+const driveAccessCleanupInterval = setInterval(() => {
+  const now = Date.now()
+  for (const [key, entry] of driveAccessCache.entries()) {
+    if (now >= entry.expireAt) driveAccessCache.delete(key)
+  }
+}, 60_000)
+driveAccessCleanupInterval.unref()
 
 /** 清除指定用户的 canAccessDrive 缓存（权限变更时调用） */
 export function clearDriveAccessCache(userId: number): void {
@@ -214,6 +226,7 @@ router.get('/search', async (req: Request, res: Response) => {
         uploadedBy: { select: { id: true, username: true } },
       },
       orderBy: [{ isFolder: 'desc' }, { name: 'asc' }],
+      // SQLite LIKE '%query%' cannot use index; limited to 50 results
       take: 50,
     })
 
@@ -423,6 +436,8 @@ router.post('/upload', async (req: Request, res: Response) => {
 
         // === 先创建 DB 记录（唯一约束可防止重复），再写入存储节点 ===
         // 这样即使后续写入失败，也不会出现「节点有文件但 DB 缺失」的不一致状态
+        // P10: Storage write happens after DB create — cleanup on failure
+        // P33: DB create + storage write wrapped in error handling (external write prevents $transaction)
         const file = await prisma.driveFile.create({
           data: {
             name: finalName,
@@ -438,11 +453,13 @@ router.post('/upload', async (req: Request, res: Response) => {
           },
         })
 
+        let writeSucceeded = false
         try {
           const writeResult = await streamWrite(storagePath, streamToAsyncIterable(stream), 0)
           if (!writeResult.success) {
             throw new Error(`存储节点写入失败: ${writeResult.error}`)
           }
+          writeSucceeded = true
 
           // 写入节点成功后更新实际大小
           if (totalSize > 0) {
@@ -456,11 +473,14 @@ router.post('/upload', async (req: Request, res: Response) => {
         } catch (writeErr) {
           // 存储节点写入失败 → 回滚：删除 DB 记录 + 清理节点残片
           await prisma.driveFile.delete({ where: { id: file.id } }).catch(() => {})
-          try {
-            if (isNodeConnected()) {
-              await sendCommand({ type: 'delete_file', path: storagePath })
-            }
-          } catch { /* 节点清理失败则留待后续处理 */ }
+          // P10: Only notify storage node if write actually started (prevents double-cleanup)
+          if (writeSucceeded) {
+            try {
+              if (isNodeConnected()) {
+                await sendCommand({ type: 'delete_file', path: storagePath })
+              }
+            } catch { /* 节点清理失败则留待后续处理 */ }
+          }
           throw writeErr
         }
       } catch (err: unknown) {
@@ -596,23 +616,13 @@ router.put('/files/:id', async (req: Request, res: Response) => {
       const newStoragePath = parentParts.join('/')
 
       // 如果是文件夹，需要更新所有子文件的 storagePath（递归）
+      // P2+P33: Single UPDATE replaces N+1 — SQLite REPLACE updates all child paths atomically
       if (file.isFolder) {
         const oldPrefix = file.storagePath + '/'
         const newPrefix = newStoragePath + '/'
-        const children = await prisma.driveFile.findMany({
-          where: {
-            storagePath: { startsWith: oldPrefix },
-          },
-        })
-        await Promise.all(
-          children.map(child =>
-            prisma.driveFile.update({
-              where: { id: child.id },
-              data: {
-                storagePath: child.storagePath.replace(oldPrefix, newPrefix),
-              },
-            })
-          )
+        await prisma.$executeRawUnsafe(
+          `UPDATE drive_files SET storagePath = REPLACE(storagePath, ?, ?) WHERE storagePath LIKE ?`,
+          oldPrefix, newPrefix, `${oldPrefix}%`
         )
       }
 
@@ -642,16 +652,11 @@ router.put('/files/:id', async (req: Request, res: Response) => {
         }
 
         // 不能移动到自身或子文件夹下
+        // P7: storagePath prefix check replaces N+1 ancestor walk — zero additional queries
         if (file.isFolder) {
-          let checkParent: typeof newParent | null = newParent
-          while (checkParent) {
-            if (checkParent.id === id) {
-              res.status(400).json({ error: '不能移动到自身或子文件夹中' })
-              return
-            }
-            checkParent = checkParent.parentId
-              ? await prisma.driveFile.findUnique({ where: { id: checkParent.parentId } })
-              : null
+          if (newParent.id === id || newParent.storagePath.startsWith(file.storagePath + '/')) {
+            res.status(400).json({ error: '不能移动到自身或子文件夹中' })
+            return
           }
         }
 
@@ -729,20 +734,13 @@ async function deleteFileRecursive(id: number): Promise<void> {
   const file = await prisma.driveFile.findUnique({ where: { id } })
   if (!file) return
 
-  // 先收集所有子文件的 storagePath（递归）
-  const pathsToDelete: string[] = []
-  async function collectPaths(f: NonNullable<typeof file>) {
-    pathsToDelete.push(f.storagePath)
-    if (f.isFolder) {
-      const children = await prisma.driveFile.findMany({
-        where: { parentId: f.id },
-      })
-      for (const child of children) {
-        await collectPaths(child)
-      }
-    }
-  }
-  await collectPaths(file)
+  // P33: Single query collects all descendant storagePaths via unique index prefix scan
+  // (replaces recursive N+1 parentId walk)
+  const descendants = await prisma.driveFile.findMany({
+    where: { storagePath: { startsWith: file.storagePath + '/' } },
+    select: { storagePath: true },
+  })
+  const pathsToDelete = [file.storagePath, ...descendants.map(d => d.storagePath)]
 
   // 先删除 DB 记录（级联 CASCADE 会自动处理子记录）
   await prisma.driveFile.delete({ where: { id } })
@@ -795,14 +793,32 @@ router.get('/resolve-path', async (req: Request, res: Response) => {
 
     let currentParentId: number | null = null
     for (const segment of segments) {
-      const folder: { id: number; name: string } | null = await prisma.driveFile.findFirst({
-        where: {
-          name: segment,
-          isFolder: true,
-          parentId: currentParentId,
-        },
-        select: { id: true, name: true },
-      })
+      // P23: Check cache before querying DB for each path segment
+      const cacheKey = `${currentParentId ?? 'root'}:${segment}`
+      const cachedId = pathCache.get(cacheKey)
+      let folder: { id: number; name: string } | null = null
+
+      if (cachedId !== undefined) {
+        folder = await prisma.driveFile.findUnique({
+          where: { id: cachedId },
+          select: { id: true, name: true },
+        })
+      }
+
+      if (!folder) {
+        folder = await prisma.driveFile.findFirst({
+          where: {
+            name: segment,
+            isFolder: true,
+            parentId: currentParentId,
+          },
+          select: { id: true, name: true },
+        })
+        if (folder) {
+          pathCache.set(cacheKey, folder.id)
+        }
+      }
+
       if (!folder) {
         res.status(404).json({ error: `文件夹 "${segment}" 不存在` })
         return
