@@ -17,8 +17,24 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
             cd /home/Lineweb
-            git pull origin master
-            docker compose up -d --build
-            # 精准清理 — 仅移除 24h+ 的悬空镜像和构建缓存，保留层缓存加速后续构建
+            echo "=== [1/5] 拉取最新代码 ==="
+            git fetch origin master
+            git reset --hard origin/master
+            echo "当前 HEAD: $(git log --oneline -1)"
+
+            echo "=== [2/5] 停止旧容器 ==="
+            docker compose down
+
+            echo "=== [3/5] 构建并启动新容器 ==="
+            docker compose up -d --build --force-recreate
+
+            echo "=== [4/5] 等待健康检查 ==="
+            sleep 5
+            docker compose ps
+            docker compose logs --tail=10
+
+            echo "=== [5/5] 精准清理旧镜像/缓存（保留 24h 内构建缓存） ==="
             docker image prune -f --filter "until=24h"
             docker builder prune -f --filter "until=24h"
+
+            echo "=== 部署完成 ==="
