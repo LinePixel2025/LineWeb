@@ -14,7 +14,7 @@ RUN npm ci
 
 # 复制源码并构建
 COPY client/ ./
-RUN npm run build
+RUN npx vite build
 
 
 # ---- Stage 2: 最终运行镜像 ----
