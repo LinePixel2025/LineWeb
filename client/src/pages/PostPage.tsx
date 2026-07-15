@@ -14,6 +14,12 @@ export default function PostPage() {
   const { slug } = useParams<{ slug: string }>()
   const { data: post, isLoading: loading, error } = usePost(slug)
 
+  // useMemo 必须在所有早期 return 之前调用（React Hooks 规则）
+  const sanitizedContent = useMemo(
+    () => post ? DOMPurify.sanitize(post.content, { USE_PROFILES: { html: true } }) : '',
+    [post?.content],
+  )
+
   if (loading) return <div className="page container" style={{ display: 'flex', justifyContent: 'center', paddingTop: '120px' }}><div className="spinner" /></div>
 
   if (error || !post) {
@@ -37,7 +43,7 @@ export default function PostPage() {
           <span className="text-tertiary">{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
         </div>
 
-        <div className="article-content" dangerouslySetInnerHTML={{ __html: useMemo(() => DOMPurify.sanitize(post.content, { USE_PROFILES: { html: true } }), [post.content]) }} />
+        <div className="article-content" dangerouslySetInnerHTML={{ __html: sanitizedContent }} />
       </LiquidGlass>
 
       <div className="post-section-divider" />
