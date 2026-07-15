@@ -1,4 +1,5 @@
-import { useState, useCallback, memo } from 'react'
+import { useState, useCallback, memo, useRef, useMemo, forwardRef } from 'react'
+import { TableVirtuoso } from 'react-virtuoso'
 import LiquidButton from '../glass/LiquidButton'
 import ContextMenu from './ContextMenu'
 import type { DriveItem, SortField, SortDirection } from '../../types/drive'
@@ -30,15 +31,14 @@ const SORT_COLUMNS: { field: SortField; label: string; align?: string }[] = [
   { field: 'type', label: '类型' },
 ]
 
-function DriveRow({ item, isSelected, onFolderClick, onPreview, onDownload, onRename, onDelete, onSelect, onContextMenu }: {
-  item: DriveItem; isSelected: boolean
+function DriveRow({ item, onFolderClick, onPreview, onDownload, onRename, onDelete }: {
+  item: DriveItem
   onFolderClick: (item: DriveItem) => void; onPreview: (item: DriveItem) => void
   onDownload: (item: DriveItem) => void; onRename: (item: DriveItem) => void
-  onDelete: (item: DriveItem) => void; onSelect: (item: DriveItem) => void
-  onContextMenu: (e: React.MouseEvent, item: DriveItem) => void
+  onDelete: (item: DriveItem) => void
 }) {
   return (
-    <tr className={`drive-row ${isSelected ? 'drive-row--selected' : ''}`} onClick={() => onSelect(item)} onContextMenu={(e) => onContextMenu(e, item)}>
+    <>
       <td className="drive-cell drive-cell--name">
         <span className="drive-cell-file">
           <span className="drive-cell-icon">{getDriveIcon(item, 18)}</span>
@@ -64,7 +64,7 @@ function DriveRow({ item, isSelected, onFolderClick, onPreview, onDownload, onRe
           <LiquidButton size="sm" variant="danger" onClick={() => onDelete(item)}><DeleteIcon size={14} /></LiquidButton>
         </div>
       </td>
-    </tr>
+    </>
   )
 }
 
@@ -82,11 +82,39 @@ const DriveListView = memo(function DriveListView({ items, selectedId, sortField
 
   const closeContextMenu = useCallback(() => setContextMenu(null), [])
 
+  // Stable refs for virtualized table row component
+  const itemsRef = useRef(items)
+  itemsRef.current = items
+  const selectedIdRef = useRef(selectedId)
+  selectedIdRef.current = selectedId
+  const onSelectRef = useRef(onSelect)
+  onSelectRef.current = onSelect
+  const handleItemContextMenuRef = useRef(handleItemContextMenu)
+  handleItemContextMenuRef.current = handleItemContextMenu
+
+  const CustomTableRow = useMemo(() => forwardRef<HTMLTableRowElement, any>(({ children, ...props }, ref) => {
+    const idx = Number(props['data-index'])
+    const currentItems = itemsRef.current
+    const currentSelectedId = selectedIdRef.current
+    const item = !isNaN(idx) && idx >= 0 && idx < currentItems.length ? currentItems[idx] : undefined
+    return (
+      <tr ref={ref} {...props}
+        className={`drive-row ${item && currentSelectedId === item.id ? 'drive-row--selected' : ''}`}
+        onClick={() => item && onSelectRef.current(item)}
+        onContextMenu={(e) => item && handleItemContextMenuRef.current(e, item)}
+      />
+    )
+  }), [])
+
   return (
     <>
       <div className="drive-table-wrap" onContextMenu={handleBlankAreaContextMenu}>
-        <table className="drive-table">
-          <thead>
+        <TableVirtuoso
+          className="drive-table"
+          style={{ height: 'calc(100vh - 280px)' }}
+          totalCount={items.length}
+          components={{ TableRow: CustomTableRow }}
+          fixedHeaderContent={() => (
             <tr>
               {SORT_COLUMNS.map(col => (
                 <th key={col.field} className={`col-${col.field}${col.align === 'right' ? ' col--right' : ''}${sortField === col.field ? ' col--active' : ''}`} onClick={() => onSortChange?.(col.field)}>
@@ -96,15 +124,14 @@ const DriveListView = memo(function DriveListView({ items, selectedId, sortField
               ))}
               <th className="col-actions">操作</th>
             </tr>
-          </thead>
-          <tbody>
-            {items.map(item => (
-              <DriveRow key={item.id} item={item} isSelected={selectedId === item.id}
-                onFolderClick={onFolderClick} onPreview={onPreview} onDownload={onDownload}
-                onRename={onRename} onDelete={onDelete} onSelect={onSelect} onContextMenu={handleItemContextMenu} />
-            ))}
-          </tbody>
-        </table>
+          )}
+          itemContent={(index) => {
+            const item = items[index]
+            return <DriveRow item={item}
+              onFolderClick={onFolderClick} onPreview={onPreview} onDownload={onDownload}
+              onRename={onRename} onDelete={onDelete} />
+          }}
+        />
       </div>
       {contextMenu && (
         <ContextMenu item={contextMenu.item} position={contextMenu.position} onClose={closeContextMenu}
