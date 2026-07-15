@@ -2,7 +2,7 @@
 # LineWeb Docker Compose — 适配 1Panel / Ubuntu
 #
 # 前置准备（在 1Panel 面板操作）:
-#   【数据库】→ MySQL → 创建数据库 "lineweb"（utf8mb4）
+#   【数据库】→ PostgreSQL → 创建数据库 "lineweb"
 #   【网站】→ 创建网站 → 反向代理 → 目标 URL: http://127.0.0.1:3001
 #   【文件】→ 上传项目 → 或 git clone 到 /opt/lineweb
 #
@@ -28,7 +28,12 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       STORAGE_NODE_TOKEN: ${STORAGE_NODE_TOKEN:-}
       MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-10240}
-    extra_hosts:
-      # 容器内通过 host.docker.internal 访问宿主机 1Panel MySQL
-      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - 1panel
     restart: unless-stopped
+
+networks:
+  1panel:
+    external: true
+    name: 1panel-network
