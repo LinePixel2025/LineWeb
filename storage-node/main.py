@@ -38,6 +38,7 @@ def handle_write_file(cmd: dict) -> dict:
     is_last = cmd.get("isLast", False)
 
     # 单块模式：data + isLast → 直接写入最终文件（兼容新旧 Express 代码）
+    # P16: Single-chunk base64 overhead acceptable for files <64KB; larger files use chunked mode
     if data_b64 and is_last:
         data = base64.b64decode(data_b64)
         abs_path = ROOT / path
@@ -84,9 +85,9 @@ def handle_write_file_data(cmd: dict) -> dict:
     try:
         data = base64.b64decode(data_b64)
         os.write(fd, data)
-        os.fsync(fd)  # 强制落盘，确保每次 chunk 确认时数据已持久化
 
         if is_last:
+            os.fsync(fd)  # P15: 仅最后一块强制落盘，确保文件完整性
             os.close(fd)
             final_path = ROOT / path
             os.rename(str(_active_write_file["tmp_path"]), str(final_path))
