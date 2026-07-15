@@ -69,6 +69,12 @@ function RenderComponents({ components }: { components: ComponentData[] }) {
 }
 
 function RenderComponent({ comp }: { comp: ComponentData }) {
+  // useMemo 必须在 switch 之前调用，不能在 case 内条件调用（React Hooks 规则）
+  const sanitizedHtml = useMemo(
+    () => comp.type === 'html' ? DOMPurify.sanitize((comp.props.html as string) || '') : '',
+    [comp.type, comp.props.html],
+  )
+
   switch (comp.type) {
     case 'heading': {
       const level = Math.min(4, Math.max(1, (comp.props.level as number) || 2))
@@ -129,8 +135,7 @@ function RenderComponent({ comp }: { comp: ComponentData }) {
       return <Tag style={{ margin: 0, paddingLeft: 20 }}>{items.map((item, ii) => <li key={ii}>{item}</li>)}</Tag>
     }
     case 'html':
-      const html = useMemo(() => DOMPurify.sanitize((comp.props.html as string) || ''), [comp.props.html])
-      return <div dangerouslySetInnerHTML={{ __html: html }} />
+      return <div dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />
     default:
       return null
   }
