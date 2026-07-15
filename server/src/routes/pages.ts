@@ -3,6 +3,7 @@ import prisma from '../lib/prisma.js'
 import { parsePagination, parseId } from '../lib/utils.js'
 import { pageSchema, pageUpdateSchema } from '../config/index.js'
 import { authenticate, requireAdmin } from '../middleware/auth.js'
+import { asyncHandler } from '../lib/asyncHandler.js'
 
 const router = Router()
 
@@ -17,7 +18,7 @@ const router = Router()
 */
 
 // 1. 公开接口：获取所有在功能界面展示的已发布页面
-router.get('/featured', async (req: Request, res: Response) => {
+router.get('/featured', asyncHandler(async (req: Request, res: Response) => {
   const pages = await prisma.page.findMany({
     where: { published: true, featured: true },
     select: {
@@ -27,10 +28,10 @@ router.get('/featured', async (req: Request, res: Response) => {
     orderBy: { createdAt: 'desc' },
   })
   res.json({ pages })
-})
+}))
 
 // 2. 公开接口：按 slug 获取已发布页面
-router.get('/slug/:slug', async (req: Request, res: Response) => {
+router.get('/slug/:slug', asyncHandler(async (req: Request, res: Response) => {
   const page = await prisma.page.findUnique({
     where: { slug: req.params.slug, published: true },
     select: { id: true, title: true, slug: true, schema: true, createdAt: true, updatedAt: true },
@@ -40,10 +41,10 @@ router.get('/slug/:slug', async (req: Request, res: Response) => {
     return
   }
   res.json(page)
-})
+}))
 
 // 3. 管理面板：获取页面列表（分页）
-router.get('/', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.get('/', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const { page, limit, skip } = parsePagination(req.query)
 
   const [pages, total] = await Promise.all([
@@ -62,10 +63,10 @@ router.get('/', authenticate, requireAdmin, async (req: Request, res: Response) 
   ])
 
   res.json({ pages, total, page, limit, totalPages: Math.ceil(total / limit) })
-})
+}))
 
 // 4. 创建页面
-router.post('/', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.post('/', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const parsed = pageSchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: '输入数据无效', details: parsed.error.flatten() })
@@ -82,10 +83,10 @@ router.post('/', authenticate, requireAdmin, async (req: Request, res: Response)
     data: parsed.data,
   })
   res.status(201).json(page)
-})
+}))
 
 // 5. 管理面板：按 ID 获取页面完整内容
-router.get('/:id', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.get('/:id', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const id = parseId(req.params.id)
   if (id === null) {
     res.status(400).json({ error: '无效 ID' })
@@ -100,10 +101,10 @@ router.get('/:id', authenticate, requireAdmin, async (req: Request, res: Respons
   }
 
   res.json(page)
-})
+}))
 
 // 6. 更新页面
-router.put('/:id', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.put('/:id', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const id = parseId(req.params.id)
   if (id === null) {
     res.status(400).json({ error: '无效 ID' })
@@ -131,10 +132,10 @@ router.put('/:id', authenticate, requireAdmin, async (req: Request, res: Respons
     data: parsed.data,
   })
   res.json(page)
-})
+}))
 
 // 7. 删除页面
-router.delete('/:id', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.delete('/:id', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const id = parseId(req.params.id)
   if (id === null) {
     res.status(400).json({ error: '无效 ID' })
@@ -143,6 +144,6 @@ router.delete('/:id', authenticate, requireAdmin, async (req: Request, res: Resp
 
   await prisma.page.delete({ where: { id } })
   res.json({ message: '已删除' })
-})
+}))
 
 export default router

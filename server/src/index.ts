@@ -103,8 +103,9 @@ app.use('/api', (req, res, next) => {
 })
 
 // 公开端点缓存中间件 — 减少不必要的 API 请求（仅对 GET 请求）
+// 注意：排除 /admin 路径，管理端接口不应被浏览器缓存
 const cachePublic = (maxAge = 300) => (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  if (req.method === 'GET') {
+  if (req.method === 'GET' && !req.path.startsWith('/admin')) {
     res.set('Cache-Control', `public, max-age=${maxAge}`)
   }
   next()
