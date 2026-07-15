@@ -1,0 +1,52 @@
+# Dependencies
+node_modules
+client/node_modules
+server/node_modules
+storage-node/__pycache__
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Environment (secrets)
+.env
+.env.*
+!.env.docker
+server/.env
+ecosystem.config.js
+
+# Build artifacts
+client/dist
+server/dist
+
+# Database
+server/prisma/*.db
+server/prisma/*.db-journal
+server/prisma/migrations
+
+# Logs
+*.log
+deploy.log
+npm-debug.log*
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Code intelligence (not needed for build)
+.codegraph
+
+# Python (storage-node used as external service)
+.venv
+storage-node/venv
+
+# Docs (keep only essential)
+*.md
+!README.md
