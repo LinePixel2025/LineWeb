@@ -7,7 +7,7 @@ const { execSync } = require('child_process')
 
 const src = path.join(__dirname, '../prisma/schema.prisma')
 const dst = path.join(__dirname, '../prisma/schema.mysql.generated.prisma')
-const cfg = path.join(__dirname, '../prisma/prisma.config.ts')
+const cfg = path.join(__dirname, '../prisma.config.ts')
 const cwd = path.join(__dirname, '..')
 const env = { ...process.env, NODE_ENV: 'production' }
 
@@ -33,7 +33,7 @@ const configTs = `
 import { defineConfig } from 'prisma/config'
 
 export default defineConfig({
-  datasources: {
+  datasource: {
     db: {
       url: process.env.DATABASE_URL,
     },

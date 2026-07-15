@@ -27,6 +27,7 @@ cd server && node scripts/generate-mysql-schema.js
 npx prisma db seed --schema prisma/schema.mysql.generated.prisma 2>/dev/null || true
 
 rm -f prisma/schema.mysql.generated.prisma
+rm -f prisma.config.ts
 cd ..
 
 echo "[deploy] 重启服务..."
