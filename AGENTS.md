@@ -1,7 +1,7 @@
 # LineWeb — 项目知识库
 
 **生成时间：** 2026-07-16
-**提交：** 81025f7
+**提交：** cccbabe
 **分支：** master
 
 ## 概述
@@ -44,13 +44,16 @@ lineweb/
 | 跨模块关注点 | 位置 | 说明 |
 |----------------------|----------|-------|
 | 单体仓库编排 | `package.json` | `concurrently` 同时运行前后端；`postinstall` 级联安装子目录依赖 |
-| 部署流水线 | `Dockerfile` + `docker-compose.yml` + `.github/workflows/deploy.yml` | GitHub Actions SSH 到 123.207.8.77 自动部署 |
+| 部署流水线 | `Dockerfile` + `docker-compose.yml` + `.github/workflows/deploy.yml` | GitHub Actions SSH 到 123.207.8.77 自动部署（git reset --hard + docker compose down → up --build --force-recreate） |
 | 数据库结构 | `server/prisma/schema.prisma` | 8 个模型；SQLite 开发，PostgreSQL Docker（自动转换） |
+| 数据库连接池 | `server/src/lib/prisma.ts` | 生产 PostgreSQL 自动注入 `connection_limit=10&pool_timeout=30`（环境变量 `DATABASE_POOL_SIZE`/`DATABASE_POOL_TIMEOUT` 可覆盖） |
 | 认证（JWT + API Key） | `server/src/middleware/auth.ts` | 双认证；9 个公开路径在 `index.ts` 中白名单 |
 | 存储架构 | `server/src/services/storageTunnel.ts` ↔ `storage-node/main.py` | WebSocket 隧道；服务器代理命令到 Python 节点 |
 | 设计系统 | `client/src/styles/variables.css` + `glass.css` + `filters.svg` | 自定义 Liquid Glass，基于 CSS 变量 + SVG 置换滤镜 |
 | 环境配置 | `server/.env`（开发）+ `.env.docker`（生产） | `JWT_SECRET`、`DATABASE_URL`、`STORAGE_NODE_TOKEN` |
-| Nginx 反向代理 | `nginx.conf`（Docker）+ 1Panel 面板 | 1Panel 管理外部 HTTPS 反代 → 容器 3001 端口 |
+| Nginx 反向代理 | `nginx.conf`（Docker）+ 1Panel 面板 | 1Panel 管理外部 HTTPS 反代 → 容器 3001 端口；静态资源 `/assets/` 直连 + Brotli 压缩 |
+| 字体加载 | `client/src/main.tsx` + `client/index.html` | @fontsource/instrument-serif 异步加载（requestIdleCallback）；woff2 preload |
+| API 缓存策略 | `server/src/index.ts` cachePublic 中间件 | 公开端点 Cache-Control（posts/pages/comments 5min，bing 10min，stats 1min） |
 
 ## 架构
 
@@ -63,7 +66,7 @@ lineweb/
                                    └──────────────────┘
 
 开发：  Vite :5173 → 代理 /api → Express :3001
-生产：  Express 提供 client/dist/ + Nginx 反向代理
+生产：  Nginx /assets/ 直连静态文件 → Express 仅处理 /api + SPA fallback
 Docker：Nginx → Express → PostgreSQL（运行于 1Panel/Ubuntu）
 ```
 
@@ -71,9 +74,10 @@ Docker：Nginx → Express → PostgreSQL（运行于 1Panel/Ubuntu）
 
 ```
 server.listen(3001)
-  ├── helmet(CSP) → cors → compression → body parser(1mb)
+  ├── helmet(CSP) → cors → compression
+  ├── body parser 限定 /api（避免静态文件请求触发解析）
   ├── rate-limit(600/15min) → 设备追踪 → 全局认证检查
-  ├── 12 个路由组挂载于 /api/*
+  ├── cachePublic 中间件 → 12 个路由组挂载于 /api/*
   ├── [生产] express.static(client/dist) + SPA fallback
   └── errorHandler
 
@@ -82,6 +86,55 @@ server.listen(3001)
   ├── 网盘同步定时器（每 5 分钟）
   ├── 启动延迟（10s）：去重 + 初始同步
   └── 设备追踪清理（30 分钟不活跃超时）
+```
+
+## 性能优化（2026-07-16）
+
+### 网络层
+| 优化 | 文件 | 说明 |
+|------|------|------|
+| Nginx 直连静态文件 | `nginx.conf` | `location /assets/` 绕过 Express 中间件链，expires 1y + immutable |
+| Brotli 压缩 | `nginx.conf` | `brotli on` + `brotli_static on`（比 gzip 小 20-30%） |
+| Gzip 扩展 | `nginx.conf` | 新增 woff2/ttf/wasm 类型；gzip_vary on |
+| upstream keepalive | `nginx.conf` | `keepalive 32` 减少 TCP 握手 |
+
+### 服务端
+| 优化 | 文件 | 说明 |
+|------|------|------|
+| Body-parser 限定 /api | `server/src/index.ts:73-75` | `express.json/urlencoded` 仅对 `/api` 路径，静态文件不再浪费解析 |
+| 公开 API 缓存头 | `server/src/index.ts:105-111` | `cachePublic(maxAge)` 中间件；posts/pages/comments 5min，bing 10min，stats 1min |
+| 数据库连接池 | `server/src/lib/prisma.ts` | 生产 PostgreSQL 自动追加 `connection_limit=10&pool_timeout=30` |
+| bcrypt 降成本 | `server/src/services/authService.ts:54` | `bcrypt.hash(password, 12)` → `10`（~300ms → ~100ms，仍足够安全） |
+| N+1 去重修复 | `server/src/routes/drive.ts:413-435` | 上传去重从循环 `findFirst`（最多 99 次）改为单次 `findMany` + 内存集合匹配 |
+
+### 前端
+| 优化 | 文件 | 说明 |
+|------|------|------|
+| 字体异步加载 | `client/src/main.tsx:8-19` | @fontsource 动态 import + requestIdleCallback，不阻塞首屏渲染 |
+| 字体预加载 | `client/index.html:14-16` | `<link rel="preload">` woff2 字体文件 |
+| React Query 独立 chunk | `client/vite.config.ts:30-32` | `@tanstack/react-query` 拆分为 `query-xxx.js` |
+
+### 容器 / CI
+| 优化 | 文件 | 说明 |
+|------|------|------|
+| Docker 资源限制 | `docker-compose.yml` | cpus: 2 / memory: 512M；reservations 0.5 / 256M |
+| 健康检查 | `docker-compose.yml` | 30s 间隔 GET /api/health，3 次失败自动重启 |
+| 日志限制 | `docker-compose.yml` | json-file + max-size 10m + max-file 3 |
+| CI 精准清理 | `.github/workflows/deploy.yml` | `docker image/builder prune --filter "until=24h"` 替代 `docker system prune -f` |
+| 强制部署 | `.github/workflows/deploy.yml` | `git fetch + reset --hard` + `docker compose down` + `--force-recreate` |
+
+## 部署流程（GitHub Actions）
+
+```
+git push origin master
+   → GitHub Actions SSH 至 123.207.8.77
+      → cd /home/Lineweb
+      → git fetch origin master
+      → git reset --hard origin/master     # 强制覆盖（.env 在 .gitignore 不受影响）
+      → docker compose down               # 停止旧容器
+      → docker compose up -d --build --force-recreate  # 重建并启动
+      → docker compose ps + logs          # 输出状态确认
+      → docker image/builder prune --filter "until=24h"  # 仅清理 24h+ 旧缓存
 ```
 
 ## 约定
@@ -153,6 +206,7 @@ server.listen(3001)
 - **无迁移** — 仅使用 `prisma db push`；无回滚能力
 - **`$queryRawUnsafe`**（2 处）— 去重脚本中的原始 SQL（已参数化，但绕过了类型安全）
 - **双数据库策略** — SQLite 开发，PostgreSQL Docker（容器启动时自动转换 schema）
+- **连接池未显式配置** — 生产 PostgreSQL 通过 `prisma.ts` 注入 `connection_limit=10&pool_timeout=30`
 
 ### 安全
 
@@ -187,7 +241,10 @@ cd storage-node && python main.py
 docker compose up -d --build   # Docker Compose（1Panel/Ubuntu 生产环境）
 
 # 自动部署（GitHub Actions）
-# git push origin master → GitHub Actions SSH → docker compose up -d --build
+# git push origin master → GitHub Actions SSH →
+#   git fetch + reset --hard → docker compose down →
+#   docker compose up -d --build --force-recreate →
+#   docker image/builder prune --filter "until=24h"
 # 服务器：123.207.8.77，项目路径：/home/Lineweb
 ```
 
@@ -197,9 +254,11 @@ docker compose up -d --build   # Docker Compose（1Panel/Ubuntu 生产环境）
 - **Docker 将 SQLite schema 转换为 PostgreSQL** — `docker-entrypoint.sh` 通过 Node 脚本将 `provider = "sqlite"` 改写为 `"postgresql"`，然后执行 `prisma db push`。
 - **Storage node 是外部进程** — Python 进程运行在本地 Windows 机器上，未容器化。通过 WebSocket 以指数退避重连方式连接到 `/ws/storage`。
 - **中文友好默认配置** — `.npmrc` 设置 npmmirror.com 镜像；文档使用中文。
-- **`webhook-server.mjs` 已弃用** — 自动部署已迁移至 GitHub Actions（`.github/workflows/deploy.yml`）。push master 后 GitHub SSH 到服务器执行 `git pull` + `docker compose up -d --build`。
-- **`deploy.sh` 已弃用** — 部署命令已内联至 GitHub Actions workflow 中，不再需要宿主机进程。
+- **部署强制覆盖** — 使用 `git reset --hard origin/master` 而非 `git pull`，避免服务器本地改动（如误修改的 tracked 文件）导致合并冲突、部署静默失败。
+- **Docker 强制重建** — `--force-recreate` 确保即使镜像 hash 相同也会新建容器；`docker compose down` 确保旧容器先停止。
+- **构建缓存保留** — 使用 `image/builder prune --filter "until=24h"` 替代 `docker system prune -f`，保留 24h 内的构建层缓存加速后续部署。
 - **部署目标**：123.207.8.77，路径 `/home/Lineweb`，Docker 容器由 1Panel 面板管理。
 - **Server 无测试** — `server/` 中零测试基础设施。Playwright 是依赖但无配置或测试。
 - **CSS 是单体的** — 所有样式从 `globals.css`（~2000+ 行）级联。无作用域机制。
 - **认证中间件跳过 9 个路径**：`/auth/login`、`/auth/register`、`/health`、`/health/push`、`/posts`、`/pages/featured`、`/pages/slug`、`/bing-wallpaper`、`/stats/public`。
+- **字体异步加载** — `@fontsource/instrument-serif` 在首屏渲染后通过 `requestIdleCallback` 异步加载，`index.html` 中有 woff2 preload 标签提前下载。
