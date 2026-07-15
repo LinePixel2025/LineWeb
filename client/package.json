@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fontsource/instrument-serif": "^5.2.8",
     "@lexical/code": "^0.46.0",
     "@lexical/html": "^0.46.0",
     "@lexical/link": "^0.46.0",

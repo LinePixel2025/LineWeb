@@ -12,9 +12,24 @@
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <meta name="description" content="Line Web — 个人网站" />
     <title>Line Web</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0,1&display=swap" rel="stylesheet">
+    <style>
+      /* 骨架屏 — JS 加载前立即显示，消除白屏 */
+      #root:empty::before {
+        content: '';
+        display: block;
+        width: 32px;
+        height: 32px;
+        margin: 40vh auto 0;
+        border: 3px solid rgba(128,128,128,0.15);
+        border-top-color: rgba(128,128,128,0.5);
+        border-radius: 50%;
+        animation: lw-spin 0.8s linear infinite;
+      }
+      @keyframes lw-spin {
+        to { transform: rotate(360deg); }
+      }
+      body { background: #0a0a0a; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

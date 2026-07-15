@@ -30,7 +30,7 @@ rm -f prisma/schema.mysql.generated.prisma
 rm -f prisma.config.ts
 cd ..
 
-echo "[deploy] 重启服务..."
-pm2 restart lineweb
+echo "[deploy] 重新构建并启动 Docker 容器..."
+docker compose up -d --build
 
 echo "[deploy] 部署完成"

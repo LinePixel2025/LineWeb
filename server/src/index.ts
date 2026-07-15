@@ -293,7 +293,7 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (err) => {
   console.error('[Uncaught Exception]', err)
   // 不立即退出，记录后让现有请求完成；下次出错再退出
-  // 生产环境应由进程管理器（PM2/Railway）自动重启
+  // 生产环境由 Docker restart: unless-stopped 自动重启
 })
 
 // === 优雅停机 ===

@@ -7,12 +7,12 @@ import { GlassProvider } from './contexts/GlassContext'
 import { ContrastProvider } from './contexts/ContrastContext'
 import { DownloadProvider } from './contexts/DownloadContext'
 import Layout from './components/Layout'
-import AdminLayout from './components/AdminLayout'
 import { ProtectedRoute, AdminRoute } from './components/Guards'
 import DownloadToast from './components/drive/DownloadToast'
 
-// 路由级代码分割 — 所有页面懒加载，减少首屏包体积
+// 路由级代码分割 — 所有页面和布局懒加载，减少首屏包体积
 const HomePage = lazy(() => import('./pages/HomePage'))
+const AdminLayout = lazy(() => import('./components/AdminLayout'))
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 const PostsPage = lazy(() => import('./pages/PostsPage'))
