@@ -157,7 +157,7 @@ router.get('/', async (req: Request, res: Response) => {
         return
       }
 
-      const historyRes = await fetch(`${UAPIS_BASE}/history?resolution=4k&page_size=30`)
+      const historyRes = await fetch(`${UAPIS_BASE}/history?resolution=1080p&page_size=30`)
       if (!historyRes.ok) {
         res.status(502).json({ error: '上游壁纸服务暂时不可用' })
         return
@@ -175,7 +175,7 @@ router.get('/', async (req: Request, res: Response) => {
       return
     }
 
-    let apiUrl = `${UAPIS_BASE}?format=json&resolution=4k`
+    let apiUrl = `${UAPIS_BASE}?format=json&resolution=1080p`
 
     if (mode === 'random') {
       apiUrl += '&random=true'
