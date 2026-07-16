@@ -93,7 +93,7 @@ app.use('/api', (req, _res, next) => {
 
 // 全局认证中间件 — 除公开路径外，所有 API 请求必须携带 JWT 或 API Key
 // 注意：req.path 在 /api 中间件中不含 /api 前缀（如 /auth/login 而非 /api/auth/login）
-const publicApiPaths = ['/auth/login', '/auth/register', '/health', '/health/push', '/posts', '/pages/featured', '/pages/slug', '/bing-wallpaper', '/stats/public', '/version']
+const publicApiPaths = ['/auth/login', '/auth/register', '/health', '/health/push', '/posts', '/pages/featured', '/pages/slug', '/bing-wallpaper', '/stats/public', '/version', '/comments/post']
 app.use('/api', (req, res, next) => {
   if (publicApiPaths.some(p => req.path === p || req.path.startsWith(p + '/'))) {
     next()
