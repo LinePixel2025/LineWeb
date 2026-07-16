@@ -19,7 +19,14 @@ import {
 const router = Router()
 
 function getTodayDate(): string {
-  return new Date().toISOString().slice(0, 10)
+  // Asia/Shanghai (UTC+8) — China does not observe DST
+  // Use manual offset instead of Intl.DateTimeFormat to avoid ICU dependency in Alpine
+  const now = Date.now()
+  const shanghai = new Date(now + 8 * 60 * 60 * 1000)
+  const y = shanghai.getUTCFullYear()
+  const m = String(shanghai.getUTCMonth() + 1).padStart(2, '0')
+  const d = String(shanghai.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 // 获取当前用户今日屏幕时间（JWT 登录态）
