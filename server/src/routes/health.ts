@@ -4,6 +4,7 @@ import { authenticateScreenTimeToken } from '../middleware/screenTimeAuth.js'
 import {
   createScreenTimeTokenSchema,
   pushScreenTimeSchema,
+  setDailyGoalSchema,
 } from '../config/index.js'
 import {
   createScreenTimeToken,
@@ -11,6 +12,8 @@ import {
   deleteScreenTimeToken,
   pushScreenTime,
   getTodayScreenTime,
+  setDailyGoal,
+  getDailyGoal,
 } from '../services/screenTimeService.js'
 
 const router = Router()
@@ -77,6 +80,32 @@ router.delete('/tokens/:id', authenticate, async (req: Request, res: Response) =
   }
   await deleteScreenTimeToken(req.user!.userId, id)
   res.json({ message: '已删除' })
+})
+
+// 设置今日使用目标（JWT 登录态）
+router.put('/daily-goal', authenticate, async (req: Request, res: Response) => {
+  const parsed = setDailyGoalSchema.safeParse(req.body)
+  if (!parsed.success) {
+    res.status(400).json({ error: '输入数据无效', details: parsed.error.flatten() })
+    return
+  }
+
+  const { goalSeconds } = parsed.data
+  await setDailyGoal(req.user!.userId, getTodayDate(), goalSeconds)
+  const result = await getDailyGoal(req.user!.userId, getTodayDate())
+  res.json(result)
+})
+
+// 获取今日使用目标（JWT 登录态）
+router.get('/daily-goal', authenticate, async (req: Request, res: Response) => {
+  const data = await getDailyGoal(req.user!.userId, getTodayDate())
+  res.json(data)
+})
+
+// 获取今日使用目标（Token 认证，供 Time Master 调用）
+router.get('/daily-goal/data', authenticateScreenTimeToken, async (req: Request, res: Response) => {
+  const data = await getDailyGoal(req.screenTimeToken!.userId, getTodayDate())
+  res.json(data)
 })
 
 export default router

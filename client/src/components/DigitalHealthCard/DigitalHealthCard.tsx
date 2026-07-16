@@ -6,6 +6,7 @@ import LiquidGlass from '@/components/glass/LiquidGlass'
 
 interface ScreenTimeData {
   totalSeconds: number
+  dailyGoalSeconds: number | null
   date: string
   reportedAt: string | null
   updatedAt: string | null
@@ -14,8 +15,15 @@ interface ScreenTimeData {
 function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
-  if (hours > 0) return `${hours} 小时 ${minutes} 分钟`
+  if (hours > 0 && minutes > 0) return `${hours} 小时 ${minutes} 分钟`
+  if (hours > 0) return `${hours} 小时`
   return `${minutes} 分钟`
+}
+
+function getGoalProgressColor(percent: number): string {
+  if (percent >= 100) return 'var(--lg-danger)'
+  if (percent >= 75) return '#f59e0b'
+  return 'var(--lg-success)'
 }
 
 function timeAgo(iso: string | null): string {
@@ -64,7 +72,7 @@ export default function DigitalHealthCard() {
       }}
     >
       <div style={{ position: 'relative' }}>
-        <LiquidGlass variant="strong" chromatic={false} style={{ padding: 'var(--lg-space-6)' }}>
+        <LiquidGlass variant="strong" style={{ padding: 'var(--lg-space-6)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div>
             <h2 style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--lg-text-primary)' }}>数字健康</h2>
@@ -99,17 +107,63 @@ export default function DigitalHealthCard() {
         )}
 
         {!error && !loading && data && data.totalSeconds > 0 && (
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '2.4rem', fontWeight: 700, color: 'var(--lg-accent-secondary)' }}>
-              {formatDuration(data.totalSeconds)}
-            </span>
-            <span className="text-tertiary" style={{ fontSize: '0.85rem' }}>
-              上次更新：{timeAgo(data.reportedAt)}
-            </span>
+          <>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '2.4rem', fontWeight: 700, color: 'var(--lg-accent-secondary)' }}>
+                {formatDuration(data.totalSeconds)}
+              </span>
+              <span className="text-tertiary" style={{ fontSize: '0.85rem' }}>
+                上次更新：{timeAgo(data.reportedAt)}
+              </span>
+            </div>
+            {data.dailyGoalSeconds != null && data.dailyGoalSeconds > 0 && (
+              <div style={{ marginTop: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--lg-text-secondary)' }}>
+                    今日目标：{formatDuration(data.dailyGoalSeconds)}
+                  </span>
+                  <span style={{
+                    fontSize: '0.82rem', fontWeight: 600,
+                    color: getGoalProgressColor(Math.round((data.totalSeconds / data.dailyGoalSeconds) * 100)),
+                  }}>
+                    {Math.round((data.totalSeconds / data.dailyGoalSeconds) * 100)}%
+                  </span>
+                </div>
+                <div style={{
+                  width: '100%', height: '6px', borderRadius: '3px',
+                  background: 'rgba(255,255,255,0.08)', overflow: 'hidden',
+                }}>
+                  <div style={{
+                    width: `${Math.min(100, Math.round((data.totalSeconds / data.dailyGoalSeconds) * 100))}%`,
+                    height: '100%', borderRadius: '3px',
+                    background: getGoalProgressColor(Math.round((data.totalSeconds / data.dailyGoalSeconds) * 100)),
+                    transition: 'width 0.5s ease',
+                  }} />
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {!error && !loading && data && data.totalSeconds === 0 && data.dailyGoalSeconds != null && data.dailyGoalSeconds > 0 && (
+          <div>
+            <p className="text-secondary" style={{ fontSize: '0.95rem', marginBottom: '8px' }}>
+              今日目标：{formatDuration(data.dailyGoalSeconds)}
+            </p>
+            <p className="text-secondary" style={{ fontSize: '0.95rem', marginBottom: '12px' }}>
+              还没有屏幕时间数据。连接 Time Master 后开始同步。
+            </p>
+            <Link
+              to="/profile#digital-health"
+              className="liquid-btn glass sm"
+              style={{ textDecoration: 'none' }}
+            >
+              去连接
+            </Link>
           </div>
         )}
 
-        {!error && !loading && data && data.totalSeconds === 0 && (
+        {!error && !loading && data && data.totalSeconds === 0 && (data.dailyGoalSeconds == null || data.dailyGoalSeconds === 0) && (
           <div>
             <p className="text-secondary" style={{ fontSize: '0.95rem', marginBottom: '12px' }}>
               还没有屏幕时间数据。连接 Time Master 后开始同步。

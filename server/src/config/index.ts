@@ -106,3 +106,7 @@ export const pushScreenTimeSchema = z.object({
   totalSeconds: z.number().int().min(0).max(86400),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 })
+
+export const setDailyGoalSchema = z.object({
+  goalSeconds: z.number().int().min(0).max(86400).nullable(),
+})

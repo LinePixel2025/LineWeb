@@ -83,12 +83,29 @@ export async function getTodayScreenTime(userId: number, date: string) {
     where: { userId_date: { userId, date } },
   })
   if (!log) {
-    return { totalSeconds: 0, date, reportedAt: null, updatedAt: null }
+    return { totalSeconds: 0, date, dailyGoalSeconds: null, reportedAt: null, updatedAt: null }
   }
   return {
     totalSeconds: log.totalSeconds,
+    dailyGoalSeconds: log.dailyGoalSeconds,
     date: log.date,
     reportedAt: log.reportedAt.toISOString(),
     updatedAt: log.updatedAt.toISOString(),
   }
+}
+
+export async function setDailyGoal(userId: number, date: string, goalSeconds: number | null) {
+  return prisma.screenTimeLog.upsert({
+    where: { userId_date: { userId, date } },
+    create: { userId, date, totalSeconds: 0, dailyGoalSeconds: goalSeconds, reportedAt: new Date() },
+    update: { dailyGoalSeconds: goalSeconds },
+  })
+}
+
+export async function getDailyGoal(userId: number, date: string) {
+  const log = await prisma.screenTimeLog.findUnique({
+    where: { userId_date: { userId, date } },
+    select: { dailyGoalSeconds: true },
+  })
+  return { dailyGoalSeconds: log?.dailyGoalSeconds ?? null, date }
 }
