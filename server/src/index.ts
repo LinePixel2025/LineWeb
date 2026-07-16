@@ -93,7 +93,7 @@ app.use('/api', (req, _res, next) => {
 
 // 全局认证中间件 — 除公开路径外，所有 API 请求必须携带 JWT 或 API Key
 // 注意：req.path 在 /api 中间件中不含 /api 前缀（如 /auth/login 而非 /api/auth/login）
-const publicApiPaths = ['/auth/login', '/auth/register', '/health', '/health/push', '/posts', '/pages/featured', '/pages/slug', '/bing-wallpaper', '/stats/public']
+const publicApiPaths = ['/auth/login', '/auth/register', '/health', '/health/push', '/posts', '/pages/featured', '/pages/slug', '/bing-wallpaper', '/stats/public', '/version']
 app.use('/api', (req, res, next) => {
   if (publicApiPaths.some(p => req.path === p || req.path.startsWith(p + '/'))) {
     next()
@@ -219,6 +219,16 @@ app.get('/api', (_req, res) => {
       apiIndex: { method: 'GET', path: '/api', auth: true, description: 'API 端点列表（需认证）' },
       authMethods: '支持 JWT (Authorization: Bearer <token>) 和 API Key (X-API-Key: <key>) 两种认证方式。所有端点（除 login/register/health 外）均需认证。',
     },
+  })
+})
+
+// 部署版本信息 — 用于 CI/CD 验证部署是否成功
+app.get('/api/version', (_req, res) => {
+  res.json({
+    version: process.env.GIT_SHA || 'unknown',
+    nodeVersion: process.version,
+    nodeEnv: process.env.NODE_ENV || 'development',
+    timestamp: new Date().toISOString(),
   })
 })
 

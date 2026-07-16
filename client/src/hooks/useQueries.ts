@@ -77,6 +77,7 @@ export function usePost(slug: string | undefined) {
     queryKey: queryKeys.posts.detail(slug ?? ''),
     queryFn: () => api.get<PostDetail>(`/posts/${slug}`),
     enabled: !!slug,
+    staleTime: 5 * 60 * 1000, // 5 分钟：文章详情很少变化，缓存以减少 API 请求
   })
 }
 
@@ -84,6 +85,7 @@ export function useComments(postId: number) {
   return useQuery({
     queryKey: queryKeys.comments.byPost(postId),
     queryFn: () => api.get<unknown[]>(`/comments/post/${postId}`),
+    staleTime: 30_000, // 30 秒：评论变化较快，但保持短暂缓存避免重复请求
   })
 }
 
@@ -99,6 +101,7 @@ export function usePageBySlug(slug: string | undefined) {
     queryKey: queryKeys.pages.bySlug(slug ?? ''),
     queryFn: () => api.get<PageSchema>(`/pages/slug/${slug}`),
     enabled: !!slug,
+    staleTime: 5 * 60 * 1000, // 5 分钟：页面详情很少变化
   })
 }
 

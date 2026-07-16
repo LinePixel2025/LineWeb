@@ -17,23 +17,37 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
             cd /home/Lineweb
-            echo "=== [1/5] 拉取最新代码 ==="
+            echo "=== [1/6] 拉取最新代码 ==="
             git fetch origin master
             git reset --hard origin/master
             echo "当前 HEAD: $(git log --oneline -1)"
 
-            echo "=== [2/5] 停止旧容器 ==="
+            echo "=== [2/6] 停止旧容器 ==="
             docker compose down
 
-            echo "=== [3/5] 构建并启动新容器 ==="
-            docker compose up -d --build --force-recreate
+            echo "=== [3/6] 强制重建客户端（跳过 Docker 缓存） ==="
+            docker compose build --no-cache-filter=client-build --pull
 
-            echo "=== [4/5] 等待健康检查 ==="
+            echo "=== [4/6] 启动新容器 ==="
+            docker compose up -d --force-recreate
+
+            echo "=== [5/6] 刷新 Nginx 缓存并等待健康检查 ==="
             sleep 5
+            # 重启 Nginx 以清除 1Panel/OpenResty 的静态资源缓存
+            docker restart 1Panel-openresty 2>/dev/null || nginx -s reload 2>/dev/null || echo "(nginx reload skipped)"
+            sleep 3
             docker compose ps
             docker compose logs --tail=10
 
-            echo "=== [5/5] 精准清理旧镜像/缓存（保留 24h 内构建缓存） ==="
+            echo "=== [6/6] 部署验证 ==="
+            CONTAINER=$(docker compose ps -q server)
+            echo "容器客户端构建文件:"
+            docker exec $CONTAINER sh -c 'ls /app/client/dist/assets/PostPage-*.js 2>/dev/null || echo "  (no PostPage chunk)"'
+            docker exec $CONTAINER sh -c 'ls /app/client/dist/assets/index-*.js 2>/dev/null || echo "  (no index chunk)"'
+            echo "健康检查:"
+            curl -s http://localhost:3001/api/health || echo "  (health check failed)"
+
+            echo "=== [6/6] 精准清理旧镜像/缓存（保留 24h 内构建缓存） ==="
             docker image prune -f --filter "until=24h"
             docker builder prune -f --filter "until=24h"
 

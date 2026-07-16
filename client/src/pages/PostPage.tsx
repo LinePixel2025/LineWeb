@@ -1,9 +1,10 @@
-import { useMemo } from 'react'
+import { useMemo, lazy, Suspense } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import DOMPurify from 'dompurify'
 import { usePost } from '../hooks/useQueries'
 import LiquidGlass from '../components/glass/LiquidGlass'
-import CommentSection from '../components/comments/CommentSection'
+
+const CommentSection = lazy(() => import('../components/comments/CommentSection'))
 
 interface PostDetail {
   id: number; title: string; content: string; summary: string | null
@@ -48,7 +49,9 @@ export default function PostPage() {
 
       <div className="post-section-divider" />
 
-      <CommentSection postId={post.id} />
+      <Suspense fallback={<div className="page container" style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}><div className="spinner" /></div>}>
+        <CommentSection postId={post.id} />
+      </Suspense>
     </article>
   )
 }
