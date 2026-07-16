@@ -168,8 +168,8 @@ export default function CommentSection({ postId }: { postId: number }) {
 
   const fetchComments = useCallback(() => {
     setLoading(true)
-    api.get<CommentData[]>(`/comments/post/${postId}`)
-      .then(setTopLevel)
+    api.get<{ comments: CommentData[] }>(`/comments/post/${postId}`)
+      .then(res => setTopLevel(res.comments || []))
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [postId])

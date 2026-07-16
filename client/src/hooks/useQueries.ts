@@ -84,7 +84,10 @@ export function usePost(slug: string | undefined) {
 export function useComments(postId: number) {
   return useQuery({
     queryKey: queryKeys.comments.byPost(postId),
-    queryFn: () => api.get<unknown[]>(`/comments/post/${postId}`),
+    queryFn: async () => {
+      const res = await api.get<{ comments: unknown[] }>(`/comments/post/${postId}`)
+      return res.comments ?? []
+    },
     staleTime: 30_000, // 30 秒：评论变化较快，但保持短暂缓存避免重复请求
   })
 }
