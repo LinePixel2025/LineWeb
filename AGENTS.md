@@ -1,7 +1,7 @@
 # LineWeb — 项目知识库
 
 **生成时间：** 2026-07-16
-**提交：** cccbabe
+**提交：** 17057eb
 **分支：** master
 
 ## 概述
@@ -44,10 +44,10 @@ lineweb/
 | 跨模块关注点 | 位置 | 说明 |
 |----------------------|----------|-------|
 | 单体仓库编排 | `package.json` | `concurrently` 同时运行前后端；`postinstall` 级联安装子目录依赖 |
-| 部署流水线 | `Dockerfile` + `docker-compose.yml` + `.github/workflows/deploy.yml` | GitHub Actions SSH 到 123.207.8.77 自动部署（git reset --hard + docker compose down → up --build --force-recreate） |
+| 部署流水线 | `Dockerfile` + `docker-compose.yml` + `.github/workflows/deploy.yml` | GitHub Actions SSH 到 123.207.8.77 自动部署（git reset --hard + docker compose down → build --no-cache → up --force-recreate + Nginx 缓存刷新） |
 | 数据库结构 | `server/prisma/schema.prisma` | 8 个模型；SQLite 开发，PostgreSQL Docker（自动转换） |
 | 数据库连接池 | `server/src/lib/prisma.ts` | 生产 PostgreSQL 自动注入 `connection_limit=10&pool_timeout=30`（环境变量 `DATABASE_POOL_SIZE`/`DATABASE_POOL_TIMEOUT` 可覆盖） |
-| 认证（JWT + API Key） | `server/src/middleware/auth.ts` | 双认证；9 个公开路径在 `index.ts` 中白名单 |
+| 认证（JWT + API Key） | `server/src/middleware/auth.ts` | 双认证；11 个公开路径在 `index.ts` 中白名单 |
 | 存储架构 | `server/src/services/storageTunnel.ts` ↔ `storage-node/main.py` | WebSocket 隧道；服务器代理命令到 Python 节点 |
 | 设计系统 | `client/src/styles/variables.css` + `glass.css` + `filters.svg` | 自定义 Liquid Glass，基于 CSS 变量 + SVG 置换滤镜 |
 | 环境配置 | `server/.env`（开发）+ `.env.docker`（生产） | `JWT_SECRET`、`DATABASE_URL`、`STORAGE_NODE_TOKEN` |
@@ -243,8 +243,9 @@ docker compose up -d --build   # Docker Compose（1Panel/Ubuntu 生产环境）
 # 自动部署（GitHub Actions）
 # git push origin master → GitHub Actions SSH →
 #   git fetch + reset --hard → docker compose down →
-#   docker compose up -d --build --force-recreate →
-#   docker image/builder prune --filter "until=24h"
+#   docker compose build --no-cache --pull →
+#   docker compose up -d --force-recreate →
+#   Nginx 缓存刷新 → 部署验证（chunk hash + health）
 # 服务器：123.207.8.77，项目路径：/home/Lineweb
 ```
 
@@ -255,10 +256,10 @@ docker compose up -d --build   # Docker Compose（1Panel/Ubuntu 生产环境）
 - **Storage node 是外部进程** — Python 进程运行在本地 Windows 机器上，未容器化。通过 WebSocket 以指数退避重连方式连接到 `/ws/storage`。
 - **中文友好默认配置** — `.npmrc` 设置 npmmirror.com 镜像；文档使用中文。
 - **部署强制覆盖** — 使用 `git reset --hard origin/master` 而非 `git pull`，避免服务器本地改动（如误修改的 tracked 文件）导致合并冲突、部署静默失败。
-- **Docker 强制重建** — `--force-recreate` 确保即使镜像 hash 相同也会新建容器；`docker compose down` 确保旧容器先停止。
+- **Docker 强制重建** — `--no-cache` 跳过全部缓存层确保服务端和客户端代码均更新；`--force-recreate` 确保即使镜像 hash 相同也会新建容器；`docker compose down` 确保旧容器先停止。
 - **构建缓存保留** — 使用 `image/builder prune --filter "until=24h"` 替代 `docker system prune -f`，保留 24h 内的构建层缓存加速后续部署。
 - **部署目标**：123.207.8.77，路径 `/home/Lineweb`，Docker 容器由 1Panel 面板管理。
 - **Server 无测试** — `server/` 中零测试基础设施。Playwright 是依赖但无配置或测试。
 - **CSS 是单体的** — 所有样式从 `globals.css`（~2000+ 行）级联。无作用域机制。
-- **认证中间件跳过 9 个路径**：`/auth/login`、`/auth/register`、`/health`、`/health/push`、`/posts`、`/pages/featured`、`/pages/slug`、`/bing-wallpaper`、`/stats/public`。
+- **认证中间件跳过 11 个路径**：`/auth/login`、`/auth/register`、`/health`、`/health/push`、`/posts`、`/pages/featured`、`/pages/slug`、`/bing-wallpaper`、`/stats/public`、`/version`、`/comments/post`。
 - **字体异步加载** — `@fontsource/instrument-serif` 在首屏渲染后通过 `requestIdleCallback` 异步加载，`index.html` 中有 woff2 preload 标签提前下载。
