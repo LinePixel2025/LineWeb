@@ -25,8 +25,8 @@ jobs:
             echo "=== [2/6] 停止旧容器 ==="
             docker compose down
 
-            echo "=== [3/6] 强制重建客户端（跳过 Docker 缓存） ==="
-            docker compose build --no-cache-filter=client-build --pull
+            echo "=== [3/6] 强制完整重建（跳过全部 Docker 缓存，确保服务端和客户端代码均更新） ==="
+            docker compose build --no-cache --pull
 
             echo "=== [4/6] 启动新容器 ==="
             docker compose up -d --force-recreate
