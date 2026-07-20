@@ -29,6 +29,7 @@ export const config = {
   maxFileSizeMB: parseInt(process.env.MAX_FILE_SIZE_MB || '500', 10),
   uploadChunkKB: parseInt(process.env.UPLOAD_CHUNK_KB || '64', 10),
   downloadChunkKB: parseInt(process.env.DOWNLOAD_CHUNK_KB || '256', 10),
+  streamChunkKB: parseInt(process.env.STREAM_CHUNK_KB || '2048', 10),
   driveSyncIntervalMs: parseInt(process.env.DRIVE_SYNC_INTERVAL_MS || '300000', 10),
   apiKeyPrefix: 'lw_',
   apiKeyLength: 48,

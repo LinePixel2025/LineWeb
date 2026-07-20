@@ -8,7 +8,7 @@ const CHUNK_SIZE = config.uploadChunkKB * 1024 || 32768
 interface NodeCommand {
   id: string
   type: 'write_file' | 'write_file_data' | 'write_file_end'
-       | 'read_file'
+       | 'read_file' | 'read_file_stream' | 'write_file_stream' | 'stream_eof'
        | 'delete_file' | 'mkdir'
        | 'move' | 'stat' | 'list_dir' | 'rename'
   path: string
@@ -19,6 +19,9 @@ interface NodeCommand {
   isLast?: boolean
   offset?: number
   length?: number
+  streamId?: number
+  sha256?: string
+  bytesWritten?: number
 }
 
 interface NodeResponse {
