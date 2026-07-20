@@ -102,7 +102,9 @@ const DriveListView = memo(function DriveListView({ items, selectedId, sortField
         className={`drive-row ${item && currentSelectedId === item.id ? 'drive-row--selected' : ''}`}
         onClick={() => item && onSelectRef.current(item)}
         onContextMenu={(e) => item && handleItemContextMenuRef.current(e, item)}
-      />
+      >
+        {children}
+      </tr>
     )
   }), [])
 
