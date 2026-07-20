@@ -167,6 +167,7 @@ async def handle_binary_frame(ws, data: bytes):
 async def handle_read_file_stream(ws, cmd):
     """二进制流式读取 — 发送一次命令，持续推送二进制帧直到读完或 length 耗尽。"""
     stream_id = cmd.get("streamId", 0)
+    cmd_id = cmd.get("id", "")
     path = cmd.get("path", "")
     offset = cmd.get("offset", 0)
     length = cmd.get("length")  # None = 读到文件末尾
@@ -174,12 +175,16 @@ async def handle_read_file_stream(ws, cmd):
     abs_path = ROOT / path
     if not abs_path.exists():
         await ws.send(json.dumps({
+            "id": cmd_id,
             "type": "stream_end",
             "streamId": stream_id,
             "success": False,
             "error": "文件不存在",
         }))
         return
+
+    # 发送 ack 让服务端 sendCommand() 立即返回，不阻塞后续流
+    await ws.send(json.dumps({"id": cmd_id, "success": True}))
 
     h = hashlib.sha256()
     bytes_read = 0
@@ -247,11 +252,13 @@ def handle_write_file_stream(cmd):
 async def handle_stream_eof(ws, cmd):
     """流结束 — fsync + close + rename + SHA-256 校验。"""
     stream_id = cmd.get("streamId", 0)
+    cmd_id = cmd.get("id", "")
     expected_sha256 = cmd.get("sha256", "")
 
     stream = active_streams.pop(stream_id, None)
     if not stream:
         await ws.send(json.dumps({
+            "id": cmd_id,
             "type": "stream_end",
             "streamId": stream_id,
             "success": False,
@@ -277,6 +284,7 @@ async def handle_stream_eof(ws, cmd):
             log.error(f"Binary stream SHA-256 mismatch: {stream['path']} (expected={expected_sha256[:8]}..., actual={actual_sha256[:8]}...)")
 
         await ws.send(json.dumps({
+            "id": cmd_id,
             "type": "stream_end",
             "streamId": stream_id,
             "sha256": actual_sha256,
@@ -292,6 +300,7 @@ async def handle_stream_eof(ws, cmd):
         except:
             pass
         await ws.send(json.dumps({
+            "id": cmd_id,
             "type": "stream_end",
             "streamId": stream_id,
             "success": False,

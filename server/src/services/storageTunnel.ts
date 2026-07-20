@@ -569,7 +569,19 @@ export function initStorageTunnel(server: HttpServer) {
           return
         }
 
-        // 处理 stream_end 控制帧
+        // 先检查是否是 pending 命令的响应（如 stream_eof 的 ack）
+        {
+          const response: NodeResponse = msg
+          if (response.id && pendingCommands.has(response.id)) {
+            const pending = pendingCommands.get(response.id)!
+            clearTimeout(pending.timer)
+            pendingCommands.delete(response.id)
+            pending.resolve(response)
+            return
+          }
+        }
+
+        // 处理 stream_end 控制帧（下载流的结束信号）
         if (msg.type === 'stream_end') {
           const stream = streamRegistry.get(msg.streamId)
           if (stream) {
@@ -579,7 +591,7 @@ export function initStorageTunnel(server: HttpServer) {
           return
         }
 
-        // 处理命令响应
+        // 处理命令响应（旧协议兼容）
         const response: NodeResponse = msg
         if (response.id && pendingCommands.has(response.id)) {
           const pending = pendingCommands.get(response.id)!
