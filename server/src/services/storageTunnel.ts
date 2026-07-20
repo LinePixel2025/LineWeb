@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws'
 import { IncomingMessage } from 'http'
 import { Server as HttpServer } from 'http'
 import { config } from '../config/index.js'
+import { createHash } from 'crypto'
 
 const CHUNK_SIZE = config.uploadChunkKB * 1024 || 32768
 
@@ -50,6 +51,25 @@ const pendingCommands = new Map<string, {
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
+}
+
+const WS_MAX_BUFFER = 1024 * 1024  // 1MB high water mark
+
+function waitForDrain(maxBuffer: number): Promise<void> {
+  if (!activeNode) return Promise.resolve()
+  return new Promise<void>(resolve => {
+    if ((activeNode!.bufferedAmount ?? 0) <= maxBuffer) {
+      resolve()
+      return
+    }
+    const check = () => {
+      if ((activeNode!.bufferedAmount ?? 0) <= maxBuffer) {
+        activeNode!.removeListener('drain', check)
+        resolve()
+      }
+    }
+    activeNode!.on('drain', check)
+  })
 }
 
 const streamRegistry = new Map<number, PendingStream>()
@@ -202,23 +222,6 @@ export async function streamWrite(
     throw new Error('存储节点未连接')
   }
 
-  // P8: Check WebSocket buffer before sending to prevent memory buildup
-  const MAX_BUFFER = 1024 * 1024 // 1MB high water mark
-
-  async function waitForDrain(ws: WebSocket, maxBuffer: number): Promise<void> {
-    if ((ws.bufferedAmount ?? 0) > maxBuffer) {
-      await new Promise<void>(resolve => {
-        const check = () => {
-          if ((ws?.bufferedAmount ?? 0) <= maxBuffer) {
-            ws?.removeListener('drain', check)
-            resolve()
-          }
-        }
-        ws.on('drain', check)
-      })
-    }
-  }
-
   const knownSize = totalSize && totalSize > 0 ? totalSize : undefined
   const initCmd: NodeCommand = {
     id: batchId, type: 'write_file', path,
@@ -250,7 +253,7 @@ export async function streamWrite(
             throw new Error('存储节点已断开')
           }
           // P8: 等待缓冲区排空再发送下一个分块，防止内存堆积
-          await waitForDrain(activeNode, MAX_BUFFER)
+          await waitForDrain(WS_MAX_BUFFER)
           activeNode.send(JSON.stringify(dCmd))
         } catch (err: unknown) {
           // 中间块发送失败 — 清理 .tmp 残片
@@ -420,6 +423,89 @@ export async function* streamReadBinary(
     clearTimeout(timeout)
     streamRegistry.delete(streamId)
   }
+}
+
+/**
+ * 二进制流式上传 — busboy 流出的 Buffer 直接封装为 WebSocket 二进制帧，
+ * 无 base64 编码开销。每 STREAM_CHUNK_KB 累积一批发送。
+ */
+export async function streamWriteBinary(
+  path: string,
+  chunks: AsyncIterable<Buffer>,
+  totalSize?: number,
+): Promise<{ sha256: string; bytesWritten: number }> {
+  if (!activeNode || !nodeConnected) {
+    throw new Error('存储节点未连接')
+  }
+
+  const streamId = nextStreamId()
+  const sha256 = createHash('sha256')
+  const CHUNK = config.streamChunkKB * 1024
+  let buffered = Buffer.alloc(0)
+  let totalBytes = 0
+
+  const initResp = await sendCommand({
+    type: 'write_file_stream',
+    path,
+    streamId,
+    totalSize,
+  })
+  if (!initResp.success) {
+    throw new Error(`初始化写入流失败: ${initResp.error || '未知错误'}`)
+  }
+
+  try {
+    for await (const chunk of chunks) {
+      sha256.update(chunk)
+      buffered = Buffer.concat([buffered, chunk])
+
+      while (buffered.length >= CHUNK) {
+        const frame = Buffer.concat([
+          createStreamHeader(streamId),
+          buffered.subarray(0, CHUNK),
+        ])
+        buffered = buffered.subarray(CHUNK)
+        totalBytes += CHUNK
+        await waitForDrain(WS_MAX_BUFFER)
+        activeNode.send(frame)
+      }
+    }
+
+    if (buffered.length > 0) {
+      totalBytes += buffered.length
+      await waitForDrain(WS_MAX_BUFFER)
+      activeNode.send(Buffer.concat([createStreamHeader(streamId), buffered]))
+    }
+
+    const digest = sha256.digest('hex')
+    const streamEndResp = await sendCommand({
+      type: 'stream_eof',
+      path,
+      streamId,
+      sha256: digest,
+    })
+
+    if (!streamEndResp.success) {
+      throw new Error(`上传完成确认失败: ${streamEndResp.error || 'SHA-256 校验不匹配'}`)
+    }
+
+    return {
+      sha256: digest,
+      bytesWritten: totalBytes,
+    }
+  } catch (err) {
+    try {
+      await sendCommand({ type: 'delete_file', path: path + '.tmp' })
+    } catch { /* ignore */ }
+    throw err
+  }
+}
+
+/** 生成 4 字节大端 streamId 头 */
+function createStreamHeader(streamId: number): Buffer {
+  const buf = Buffer.alloc(4)
+  buf.writeUInt32BE(streamId, 0)
+  return buf
 }
 
 /**
