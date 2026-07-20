@@ -381,6 +381,18 @@ async def handle_command(cmd: dict, ws) -> dict | None:
     """
     cmd_type = cmd.get("type")
     cmd_id = cmd.get("id")
+
+    # 处理新的流式命令（不在 HANDLERS 字典中，需优先路由）
+    if cmd_type == "read_file_stream":
+        await handle_read_file_stream(ws, cmd)
+        return None  # 异步处理，不返回同步响应
+    if cmd_type == "write_file_stream":
+        result = handle_write_file_stream(cmd)
+        return {"id": cmd_id, **result}
+    if cmd_type == "stream_eof":
+        await handle_stream_eof(ws, cmd)
+        return None
+
     handler = HANDLERS.get(cmd_type)
     if not handler:
         return {"id": cmd_id, "success": False, "error": f"未知命令: {cmd_type}"}
@@ -408,15 +420,6 @@ async def handle_command(cmd: dict, ws) -> dict | None:
                     "isEOF": result.get("isEOF", True),
                 }
             return {"id": cmd_id, "success": False, "error": result.get("error", "读取失败")}
-        elif cmd_type == "read_file_stream":
-            await handle_read_file_stream(ws, cmd)
-            return None  # 异步处理，不返回同步响应
-        elif cmd_type == "write_file_stream":
-            result = handle_write_file_stream(cmd)
-            return {"id": cmd_id, **result}
-        elif cmd_type == "stream_eof":
-            await handle_stream_eof(ws, cmd)
-            return None
         elif cmd_type == "move":
             new_path = Path(cmd.get("newPath", "")).as_posix()
             result = handler(path, new_path)
