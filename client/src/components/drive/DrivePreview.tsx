@@ -14,6 +14,8 @@ const TOKEN = () => encodeURIComponent(localStorage.getItem('lineweb_token') || 
 const ImagePreview = memo(function ImagePreview({ item, onClose }: DrivePreviewProps) {
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   const imgSrc = `/api/drive/download/${item.id}?token=${TOKEN()}`
 
@@ -29,12 +31,18 @@ const ImagePreview = memo(function ImagePreview({ item, onClose }: DrivePreviewP
           <button className="preview-toolbar-btn" onClick={() => { setZoom(1); setRotation(0) }} title="重置">⟲</button>
         </div>
         <div className="preview-image-wrap">
-          <img
-            src={imgSrc}
-            alt={item.name}
-            className="preview-image"
-            style={{ transform: `scale(${zoom}) rotate(${rotation}deg)` }}
-          />
+          {loading && <div className="spinner" />}
+          {error && <p className="preview-error">{error}</p>}
+          {!error && (
+            <img
+              src={imgSrc}
+              alt={item.name}
+              className="preview-image"
+              style={{ transform: `scale(${zoom}) rotate(${rotation}deg)` }}
+              onLoad={() => setLoading(false)}
+              onError={() => { setLoading(false); setError('图片加载失败') }}
+            />
+          )}
         </div>
         <button className="preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
       </div>
@@ -46,11 +54,21 @@ const ImagePreview = memo(function ImagePreview({ item, onClose }: DrivePreviewP
 /* ---------- Video Preview ---------- */
 
 const VideoPreview = memo(function VideoPreview({ item, onClose }: DrivePreviewProps) {
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
   const videoSrc = `/api/drive/download/${item.id}?token=${TOKEN()}`
   return createPortal(
     <div className="preview-overlay" onClick={onClose}>
       <div className="preview-container preview-container--video" onClick={e => e.stopPropagation()}>
-        <video controls autoPlay className="preview-video" src={videoSrc}>
+        {loading && <div className="spinner" />}
+        {error && <p className="preview-error">{error}</p>}
+        <video
+          controls autoPlay
+          className={`preview-video ${loading ? 'preview-video--hidden' : ''}`}
+          src={videoSrc}
+          onLoadedData={() => setLoading(false)}
+          onError={() => { setLoading(false); setError('视频加载失败') }}
+        >
           您的浏览器不支持视频播放
         </video>
         <button className="preview-close" onClick={onClose} aria-label="关闭预览">✕</button>

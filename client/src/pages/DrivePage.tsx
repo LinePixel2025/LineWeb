@@ -10,6 +10,7 @@ import DriveListView from '../components/drive/DriveListView'
 import DriveGridView from '../components/drive/DriveGridView'
 import UploadZone from '../components/drive/UploadZone'
 import DrivePreview from '../components/drive/DrivePreview'
+import DownloadManager from '../components/drive/DownloadManager'
 import BatchActions from '../components/drive/BatchActions'
 import { NewFolderDialog, RenameDialog, DeleteDialog } from '../components/drive/DriveDialogs'
 import Pagination from '../components/Pagination'
@@ -701,7 +702,10 @@ export default function DrivePage() {
           <MobileNav activeTab={mobileTab} onTabChange={setMobileTab} />
         )}
 
-        {/* Modal overlays */}
+        {/* Download Manager — Floating Panel */}
+        <DownloadManager />
+
+        {/* Modals */}
         {state.previewItem && (
           <DrivePreview
             item={state.previewItem}
