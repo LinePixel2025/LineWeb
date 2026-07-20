@@ -31,6 +31,9 @@ interface NodeResponse {
   error?: string
   bytesRead?: number
   isEOF?: boolean
+  sha256?: string
+  streamId?: number
+  type?: string
 }
 
 // 全局存储节点连接
@@ -47,6 +50,79 @@ const pendingCommands = new Map<string, {
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
+}
+
+const streamRegistry = new Map<number, PendingStream>()
+
+let _nextStreamId = 0
+function nextStreamId(): number {
+  // 递增，溢出回绕，跳过 0（0 保留给控制帧），跳过冲突
+  do {
+    _nextStreamId = (_nextStreamId + 1) & 0xFFFFFFFF
+  } while (_nextStreamId === 0 || streamRegistry.has(_nextStreamId))
+  return _nextStreamId
+}
+
+class PendingStream {
+  private chunks: Buffer[] = []
+  private done = false
+  private error: Error | null = null
+  private endData: NodeResponse | null = null
+  private pushResolve: (() => void) | null = null
+  private checksumResolve: ((value: void) => void) | null = null
+  private checksumReject: ((err: Error) => void) | null = null
+
+  constructor(readonly streamId: number) {}
+
+  push(data: Buffer): void {
+    this.chunks.push(data)
+    this.pushResolve?.()
+    this.pushResolve = null
+  }
+
+  end(resp: NodeResponse): void {
+    this.endData = resp
+    this.done = true
+    this.pushResolve?.()
+    this.pushResolve = null
+    if (resp.success && resp.sha256) {
+      this.checksumResolve?.()
+    } else if (!resp.success) {
+      this.error = new Error(resp.error || '流传输失败')
+      this.checksumReject?.(this.error)
+    } else {
+      this.checksumResolve?.()
+    }
+  }
+
+  fail(err: Error): void {
+    this.error = err
+    this.done = true
+    this.pushResolve?.()
+    this.pushResolve = null
+    this.checksumReject?.(err)
+  }
+
+  async *[Symbol.asyncIterator](): AsyncGenerator<Buffer> {
+    let i = 0
+    while (!this.done || i < this.chunks.length) {
+      if (i < this.chunks.length) {
+        yield this.chunks[i++]
+      } else if (!this.done) {
+        await new Promise<void>(r => { this.pushResolve = r })
+      } else {
+        break
+      }
+    }
+    if (this.error) throw this.error
+  }
+
+  awaitChecksum(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.checksumResolve = resolve
+      this.checksumReject = reject
+    })
+  }
 }
 
 /**
@@ -323,8 +399,20 @@ export function initStorageTunnel(server: HttpServer) {
       }
     }, 5000)
 
-    ws.on('message', (raw: Buffer) => {
+    ws.on('message', (raw: Buffer, isBinary: boolean) => {
       try {
+        // 二进制帧：路由到 PendingStream
+        if (isBinary) {
+          if (raw.length < 4) return
+          const streamId = raw.readUInt32BE(0)
+          const payload = raw.subarray(4)
+          const stream = streamRegistry.get(streamId)
+          if (stream) {
+            stream.push(payload)
+          }
+          return
+        }
+
         const msg = JSON.parse(raw.toString())
 
         if (!authenticated) {
@@ -341,6 +429,16 @@ export function initStorageTunnel(server: HttpServer) {
             console.log('❌ Storage node auth failed')
             ws.send(JSON.stringify({ type: 'auth_error', error: '认证失败' }))
             ws.close(4002, '认证失败')
+          }
+          return
+        }
+
+        // 处理 stream_end 控制帧
+        if (msg.type === 'stream_end') {
+          const stream = streamRegistry.get(msg.streamId)
+          if (stream) {
+            const response: NodeResponse = msg
+            stream.end(response)
           }
           return
         }
@@ -370,6 +468,12 @@ export function initStorageTunnel(server: HttpServer) {
           clearTimeout(pending.timer)
           pending.reject(new Error('存储节点已断开'))
           pendingCommands.delete(id)
+        }
+
+        // 清理 streamRegistry
+        for (const [id, stream] of streamRegistry) {
+          stream.fail(new Error('存储节点已断开'))
+          streamRegistry.delete(id)
         }
       }
     })
