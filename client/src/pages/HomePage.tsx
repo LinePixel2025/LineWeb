@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import { useWallpaper } from '../contexts/WallpaperContext'
 import { usePostsList } from '../hooks/useQueries'
 import LiquidGlass from '../components/glass/LiquidGlass'
 import StatsCard from '../components/StatsCard'
@@ -16,7 +15,6 @@ interface PostPreview {
 }
 
 export default function HomePage() {
-  const { refresh, loading } = useWallpaper()
   const { data: postsData } = usePostsList(1, undefined, undefined, 3)
   const recentPosts = postsData?.posts ?? []
 
@@ -171,21 +169,6 @@ export default function HomePage() {
           </div>
         </section>
       )}
-
-      {/* Refresh wallpaper button — bottom right */}
-      <button
-        onClick={refresh}
-        className={`wallpaper-refresh-btn${loading ? ' refreshing' : ''}`}
-        disabled={loading}
-        aria-label="刷新壁纸"
-        title="刷新壁纸"
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="23 4 23 10 17 10" />
-          <polyline points="1 20 1 14 7 14" />
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-        </svg>
-      </button>
 
       {/* AI 助手 — 浮动聊天组件 */}
       <AiAssistant />
