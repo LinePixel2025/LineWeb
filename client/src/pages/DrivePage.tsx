@@ -357,7 +357,13 @@ export default function DrivePage() {
     searchTimerRef.current = setTimeout(async () => {
       dispatch({ type: 'SET_SEARCH_RESULTS', payload: { results: null, searching: true } })
       try {
-        const data = await api.get<DriveItem[]>(`/drive/search?q=${encodeURIComponent(state.searchQuery)}`)
+        // 尝试 FTS5 搜索，失败回退到普通搜索
+        let data: DriveItem[]
+        try {
+          data = await api.get<DriveItem[]>(`/drive/fts-search?q=${encodeURIComponent(state.searchQuery)}`)
+        } catch {
+          data = await api.get<DriveItem[]>(`/drive/search?q=${encodeURIComponent(state.searchQuery)}`)
+        }
         dispatch({ type: 'SET_SEARCH_RESULTS', payload: { results: data, searching: false } })
       } catch {
         dispatch({ type: 'SET_SEARCH_RESULTS', payload: { results: [], searching: false } })

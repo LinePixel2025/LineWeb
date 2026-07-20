@@ -25,6 +25,7 @@ import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel, isNodeConnected } from './services/storageTunnel.js'
 import { syncDriveFiles } from './services/storageSync.js'
 import { deduplicateDriveFiles } from './services/dedupDriveFiles.js'
+import { ensureFTSTable } from './services/ftsSearch.js'
 import { recordRequest, startTracking } from './services/deviceTracker.js'
 import prisma from './lib/prisma.js'
 
@@ -298,6 +299,11 @@ const syncInterval = setInterval(() => {
   syncDriveFiles().catch(err => console.error('[Sync] 定时同步失败:', err))
 }, config.driveSyncIntervalMs)
 syncInterval.unref()  // 不阻止进程退出
+
+// 启动时初始化 FTS5 表（非阻塞）
+ensureFTSTable().catch(err => {
+  console.warn('[FTS] Initialization skipped:', err.message)
+})
 
 // 启动后延迟 10 秒执行去重 + 首次同步（等待节点连接）
 const startupTimer = setTimeout(async () => {

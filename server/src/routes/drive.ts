@@ -6,6 +6,7 @@ import { authenticate } from '../middleware/auth.js'
 import { sendCommand, streamRead, streamReadBinary, streamWriteBinary, isNodeConnected } from '../services/storageTunnel.js'
 import { syncDriveFiles } from '../services/storageSync.js'
 import { config } from '../config/index.js'
+import { searchFTS, syncFTSIndex, deleteFTSIndex } from '../services/ftsSearch.js'
 
 const router = Router()
 
@@ -271,6 +272,43 @@ router.get('/search', async (req: Request, res: Response) => {
   }
 })
 
+/* ---------- FTS5 全文搜索 ---------- */
+router.get('/fts-search', async (req: Request, res: Response) => {
+  try {
+    const q = (req.query.q as string || '').trim()
+    if (!q) {
+      res.json([])
+      return
+    }
+
+    const isAdmin = req.user!.role === 'admin'
+    const results = await searchFTS(q, isAdmin, req.user!.userId)
+
+    // 查询完整文件信息
+    if (results.length === 0) {
+      res.json([])
+      return
+    }
+    const fileIds = results.map(r => r.id)
+    const files = await prisma.driveFile.findMany({
+      where: { id: { in: fileIds } },
+      select: {
+        id: true, name: true, isFolder: true, parentId: true,
+        size: true, mimeType: true, createdAt: true, updatedAt: true,
+        uploadedBy: { select: { id: true, username: true } },
+      },
+    })
+    // 按搜索结果顺序排序
+    const fileMap = new Map(files.map(f => [f.id, f]))
+    const ordered = fileIds.map(id => fileMap.get(id)).filter(Boolean)
+
+    res.json(transformSizeList(ordered as any[]))
+  } catch (err) {
+    console.error('FTS搜索失败:', err)
+    res.status(500).json({ error: '搜索失败' })
+  }
+})
+
 /**
  * 创建文件夹共用逻辑
  * 提取自 /folders 和 /files 路由，避免代码重复
@@ -358,6 +396,8 @@ async function handleCreateFolder(
     },
   })
 
+  // P25: 同步 FTS 索引
+  syncFTSIndex([folder.id]).catch(() => {})
   res.status(201).json(transformSize(folder))
 }
 
@@ -491,6 +531,9 @@ router.post('/upload', async (req: Request, res: Response) => {
           })
 
           res.status(201).json(transformSize(file))
+
+          // 异步更新 FTS 索引
+          syncFTSIndex([file.id]).catch(() => {})
         } catch (writeErr) {
           await prisma.driveFile.delete({ where: { id: file.id } }).catch(() => {})
           if (writeSucceeded) {
@@ -804,6 +847,10 @@ router.put('/files/:id', async (req: Request, res: Response) => {
     if (updates.length > 0) {
       await prisma.$transaction(updates)
     }
+
+    // 异步更新 FTS 索引（重命名/移动后名称或路径可能变化）
+    syncFTSIndex([id]).catch(() => {})
+
     const updated = await prisma.driveFile.findUnique({
       where: { id },
       select: {
@@ -834,9 +881,13 @@ async function deleteFileRecursive(id: number): Promise<void> {
   // (replaces recursive N+1 parentId walk)
   const descendants = await prisma.driveFile.findMany({
     where: { storagePath: { startsWith: file.storagePath + '/' } },
-    select: { storagePath: true },
+    select: { id: true, storagePath: true },
   })
   const pathsToDelete = [file.storagePath, ...descendants.map(d => d.storagePath)]
+
+  // 收集所有被删除文件的 ID，异步删除 FTS 索引
+  const allIds = [file.id, ...descendants.map(d => d.id)]
+  deleteFTSIndex(allIds).catch(() => {})
 
   // 先删除 DB 记录（级联 CASCADE 会自动处理子记录）
   await prisma.driveFile.delete({ where: { id } })
