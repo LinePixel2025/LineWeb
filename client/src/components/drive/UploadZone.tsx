@@ -173,7 +173,7 @@ const UploadZone = memo(function UploadZone({
       </div>
 
       {!uploading && failedFiles.length === 0 && (
-        <LiquidGlass variant="blur" interactive={false} chromatic={false} className="upload-zone-drop-glass">
+        <LiquidGlass variant="blur" interactive={false} className="upload-zone-drop-glass">
           <div
             className={`upload-zone-drop ${isDragging ? 'upload-zone-drop--drag' : ''}`}
             {...dragProps}
@@ -181,13 +181,13 @@ const UploadZone = memo(function UploadZone({
           >
             <span className="upload-zone-drop-icon">📂</span>
             <span className="upload-zone-drop-text">拖拽文件到此处或点击选择</span>
-            <span className="upload-zone-drop-hint">支持多文件上传，单个文件最大 10GB</span>
+            <span className="upload-zone-drop-hint">支持多文件上传</span>
           </div>
         </LiquidGlass>
       )}
 
       {uploading && progress && (
-        <LiquidGlass variant="blur" interactive={false} chromatic={false} style={{ padding: '16px' }}>
+        <LiquidGlass variant="blur" interactive={false} style={{ padding: '16px' }}>
           <div className="upload-zone-progress">
             <div className="upload-zone-progress-info">
               <span>📄 {progress.fileName}</span>
@@ -211,7 +211,7 @@ const UploadZone = memo(function UploadZone({
       )}
 
       {failedFiles.length > 0 && (
-        <LiquidGlass variant="blur" interactive={false} chromatic={false} className="upload-zone-failed-glass">
+        <LiquidGlass variant="blur" interactive={false} className="upload-zone-failed-glass">
           <div className="upload-zone-failed">
             <p>⚠️ 以下文件上传失败：</p>
             <ul>
