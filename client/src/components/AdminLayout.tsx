@@ -12,6 +12,7 @@ const navItems = [
   { path: '/admin/users', label: '用户管理', icon: '👤' },
   { path: '/admin/api', label: 'API 密钥', icon: '🔑' },
   { path: '/admin/devices', label: '设备监控', icon: '📡' },
+  { path: '/admin/ai', label: 'AI 助手', icon: '🤖' },
 ]
 
 const SIDEBAR_COLLAPSED_KEY = 'lineweb_admin_sidebar_collapsed'

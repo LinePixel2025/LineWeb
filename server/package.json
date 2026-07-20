@@ -25,6 +25,7 @@
     "express-rate-limit": "^8.5.2",
     "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.2",
+    "openai": "^6.48.0",
     "prisma": "^6.0.0",
     "sharp": "^0.33.5",
     "tsx": "^4.19.0",

@@ -167,3 +167,16 @@ model ScreenTimeLog {
   @@index([userId])
   @@map("screen_time_logs")
 }
+
+model AiConfig {
+  id           Int      @id @default(autoincrement())
+  provider     String   @default("openai")
+  model        String   @default("gpt-4o-mini")
+  apiKey       String   @default("")
+  baseUrl      String?
+  systemPrompt String   @default("你是 LineWeb 网站的 AI 助手，你可以回答关于网站内容、文章、功能等问题。请用中文回答，保持友好、专业的语气。如果用户问到网站没有的信息，请如实告知。")
+  isEnabled    Boolean  @default(false)
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("ai_config")
+}

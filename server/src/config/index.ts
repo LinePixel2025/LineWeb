@@ -111,3 +111,22 @@ export const pushScreenTimeSchema = z.object({
 export const setDailyGoalSchema = z.object({
   goalSeconds: z.number().int().min(0).max(86400).nullable(),
 })
+
+// === AI 助手 Schemas ===
+
+export const aiChatSchema = z.object({
+  message: z.string().min(1, '消息不能为空').max(2000, '消息过长'),
+  history: z.array(z.object({
+    role: z.enum(['user', 'assistant']),
+    content: z.string(),
+  })).max(20).optional().default([]),
+})
+
+export const aiConfigUpdateSchema = z.object({
+  provider: z.string().min(1).max(50).optional(),
+  model: z.string().min(1).max(100).optional(),
+  apiKey: z.string().max(200).optional(),
+  baseUrl: z.string().max(500).nullable().optional(),
+  systemPrompt: z.string().max(3000).optional(),
+  isEnabled: z.boolean().optional(),
+})

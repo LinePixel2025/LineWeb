@@ -30,6 +30,7 @@ const PageEditor = lazy(() => import('./pages/admin/PageEditor'))
 const UserAdminPage = lazy(() => import('./pages/admin/UserAdminPage'))
 const ApiAdminPage = lazy(() => import('./pages/admin/ApiAdminPage'))
 const DeviceMonitorPage = lazy(() => import('./pages/admin/DeviceMonitorPage'))
+const AiAdminPage = lazy(() => import('./pages/admin/AiAdminPage'))
 const GlassTestPage = lazy(() => import('./pages/GlassTestPage'))
 
 const queryClient = new QueryClient({
@@ -93,6 +94,7 @@ export default function App() {
                     <Route path="/admin/users" element={<UserAdminPage />} />
                     <Route path="/admin/api" element={<ApiAdminPage />} />
                     <Route path="/admin/devices" element={<DeviceMonitorPage />} />
+                    <Route path="/admin/ai" element={<AiAdminPage />} />
                   </Route>
                 </Routes>
               </Suspense>

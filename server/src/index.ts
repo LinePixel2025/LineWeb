@@ -20,6 +20,7 @@ import statsRoutes from './routes/stats.js'
 import apiKeyRoutes from './routes/apiKeys.js'
 import avatarRoutes from './routes/avatar.js'
 import healthRoutes from './routes/health.js'
+import aiRoutes from './routes/ai.js'
 import { authenticate } from './middleware/auth.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel, isNodeConnected } from './services/storageTunnel.js'
@@ -95,7 +96,7 @@ app.use('/api', (req, _res, next) => {
 
 // 全局认证中间件 — 除公开路径外，所有 API 请求必须携带 JWT 或 API Key
 // 注意：req.path 在 /api 中间件中不含 /api 前缀（如 /auth/login 而非 /api/auth/login）
-const publicApiPaths = ['/auth/login', '/auth/register', '/health', '/health/push', '/posts', '/pages/featured', '/pages/slug', '/bing-wallpaper', '/stats/public', '/version', '/comments/post']
+const publicApiPaths = ['/auth/login', '/auth/register', '/health', '/health/push', '/posts', '/pages/featured', '/pages/slug', '/bing-wallpaper', '/stats/public', '/version', '/comments/post', '/ai/chat']
 app.use('/api', (req, res, next) => {
   if (publicApiPaths.some(p => req.path === p || req.path.startsWith(p + '/'))) {
     next()
@@ -133,6 +134,7 @@ app.use('/api/devices', deviceRoutes)
 app.use('/api/api-keys', apiKeyRoutes)
 app.use('/api/auth/avatar', avatarRoutes)
 app.use('/api/health', healthRoutes)
+app.use('/api/ai', aiRoutes)
 
 // API 自描述端点 — 列出所有可用路由
 app.get('/api', (_req, res) => {

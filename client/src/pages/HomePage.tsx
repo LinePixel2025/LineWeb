@@ -4,6 +4,7 @@ import { usePostsList } from '../hooks/useQueries'
 import LiquidGlass from '../components/glass/LiquidGlass'
 import StatsCard from '../components/StatsCard'
 import DigitalHealthCard from '../components/DigitalHealthCard/DigitalHealthCard'
+import AiAssistant from '../components/AiAssistant'
 
 interface PostPreview {
   id: number
@@ -185,6 +186,9 @@ export default function HomePage() {
           <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
         </svg>
       </button>
+
+      {/* AI 助手 — 浮动聊天组件 */}
+      <AiAssistant />
     </>
   )
 }
