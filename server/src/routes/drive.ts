@@ -626,7 +626,10 @@ async function handleDownload(req: Request, res: Response): Promise<void> {
 
       try {
         for await (const chunk of streamReadBinary(file.storagePath, start, len)) {
-          res.write(chunk)
+          const canContinue = res.write(chunk)
+          if (!canContinue) {
+            await new Promise<void>(resolve => res.once('drain', resolve))
+          }
         }
         res.end()
       } catch (streamErr: unknown) {
@@ -646,7 +649,10 @@ async function handleDownload(req: Request, res: Response): Promise<void> {
 
     try {
       for await (const chunk of streamReadBinary(file.storagePath)) {
-        res.write(chunk)
+        const canContinue = res.write(chunk)
+        if (!canContinue) {
+          await new Promise<void>(resolve => res.once('drain', resolve))
+        }
       }
       res.end()
     } catch (streamErr: unknown) {

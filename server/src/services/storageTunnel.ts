@@ -53,7 +53,7 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
 }
 
-const WS_MAX_BUFFER = 1024 * 1024  // 1MB high water mark
+const WS_MAX_BUFFER = 8 * 1024 * 1024  // 8MB high water mark
 
 function waitForDrain(maxBuffer: number): Promise<void> {
   if (!activeNode) return Promise.resolve()
@@ -445,6 +445,11 @@ export async function* streamReadBinary(
 /**
  * 二进制流式上传 — busboy 流出的 Buffer 直接封装为 WebSocket 二进制帧，
  * 无 base64 编码开销。每 STREAM_CHUNK_KB 累积一批发送。
+ *
+ * 性能优化：
+ *   - 用 pending: Buffer[] 数组代替 Buffer.concat 累积，避免 O(n²) 拷贝
+ *   - SHA-256 只在发送帧时批量更新（每 ~4MB 一次）
+ *   - 只在发送时执行一次 Buffer.concat 合并帧
  */
 export async function streamWriteBinary(
   path: string,
@@ -458,7 +463,10 @@ export async function streamWriteBinary(
   const streamId = nextStreamId()
   const sha256 = createHash('sha256')
   const CHUNK = config.streamChunkKB * 1024
-  let buffered = Buffer.alloc(0)
+
+  // pending 数组避免 O(n²) 的 Buffer.concat([buffered, chunk]) 模式
+  const pending: Buffer[] = []
+  let pendingBytes = 0
   let totalBytes = 0
 
   const initResp = await sendCommand({
@@ -472,27 +480,43 @@ export async function streamWriteBinary(
   }
 
   try {
-    for await (const chunk of chunks) {
-      sha256.update(chunk)
-      buffered = Buffer.concat([buffered, chunk])
+    // 逐帧发送累积数据：每次达到 CHUNK 或数据流结束
+    const flush = async (force: boolean): Promise<void> => {
+      while (pendingBytes >= CHUNK || (force && pendingBytes > 0)) {
+        const takeSize = force ? pendingBytes : CHUNK
+        // 合并 pending 为单一 Buffer —— 每 CHUNK 合并一次，而非每个 busboy chunk
+        const combined = Buffer.concat(pending)
+        const frameData = combined.subarray(0, takeSize)
+        const rest = combined.subarray(takeSize)
 
-      while (buffered.length >= CHUNK) {
-        const frame = Buffer.concat([
-          createStreamHeader(streamId),
-          buffered.subarray(0, CHUNK),
-        ])
-        buffered = buffered.subarray(CHUNK)
-        totalBytes += CHUNK
+        // 重建 pending：剩余数据
+        pending.length = 0
+        if (rest.length > 0) pending.push(rest)
+        pendingBytes -= takeSize
+
+        // 批量更新 SHA-256（每帧一次，而非每个 busboy chunk）
+        sha256.update(frameData)
+
+        // 构造 WebSocket 帧：4 字节 streamId + 原始数据
+        const frame = Buffer.concat([createStreamHeader(streamId), frameData])
+        totalBytes += frameData.length
+
         await waitForDrain(WS_MAX_BUFFER)
+        if (!activeNode) throw new Error('存储节点已断开')
         activeNode.send(frame)
       }
     }
 
-    if (buffered.length > 0) {
-      totalBytes += buffered.length
-      await waitForDrain(WS_MAX_BUFFER)
-      activeNode.send(Buffer.concat([createStreamHeader(streamId), buffered]))
+    for await (const chunk of chunks) {
+      // O(1) 压入，不拷贝
+      pending.push(chunk)
+      pendingBytes += chunk.length
+      // 累积到阈值时刷出
+      await flush(false)
     }
+
+    // 强制刷出剩余数据
+    await flush(true)
 
     const digest = sha256.digest('hex')
     const streamEndResp = await sendCommand({
