@@ -1,4 +1,4 @@
-import { useState, useEffect, memo } from 'react'
+import { useState, memo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import type { DriveItem } from '../../types/drive'
 
@@ -7,73 +7,35 @@ export interface DrivePreviewProps {
   onClose: () => void
 }
 
+const TOKEN = () => encodeURIComponent(localStorage.getItem('lineweb_token') || '')
+
 /* ---------- Image Preview ---------- */
 
 const ImagePreview = memo(function ImagePreview({ item, onClose }: DrivePreviewProps) {
-  const [loading, setLoading] = useState(true)
-  const [src, setSrc] = useState('')
-  const [error, setError] = useState('')
-  const [loadProgress, setLoadProgress] = useState(0)
+  const [zoom, setZoom] = useState(1)
+  const [rotation, setRotation] = useState(0)
 
-  useEffect(() => {
-    let objectUrl: string | null = null
-    let cancelled = false
-
-    const fetchImage = async () => {
-      try {
-        const token = localStorage.getItem('lineweb_token')
-        const res = await fetch(`/api/drive/download/${item.id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (!res.ok) throw new Error('加载失败')
-        if (cancelled) return
-
-        const contentLength = parseInt(res.headers.get('X-Content-Length') || '0', 10)
-        const reader = res.body!.getReader()
-        const chunks: Uint8Array[] = []
-        let loaded = 0
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          chunks.push(value)
-          loaded += value.length
-          if (contentLength > 0 && !cancelled) {
-            setLoadProgress(Math.round((loaded / contentLength) * 100))
-          }
-        }
-
-        if (cancelled) return
-        const blob = new Blob(chunks as BlobPart[], { type: item.mimeType || undefined })
-        objectUrl = URL.createObjectURL(blob)
-        setSrc(objectUrl)
-      } catch (err: unknown) {
-        if (!cancelled) setError(err instanceof Error ? err.message : '加载失败')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-
-    fetchImage()
-    return () => {
-      cancelled = true
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
-    }
-  }, [item.id, item.mimeType])
+  const imgSrc = `/api/drive/download/${item.id}?token=${TOKEN()}`
 
   return createPortal(
     <div className="preview-overlay" onClick={onClose}>
       <div className="preview-container" onClick={e => e.stopPropagation()}>
-        {loading && (
-          <div className="preview-loading">
-            <div className="spinner" />
-            {loadProgress > 0 && (
-              <p className="preview-loading-text">加载中 {loadProgress}%</p>
-            )}
-          </div>
-        )}
-        {error && <p className="preview-error">{error}</p>}
-        {src && <img src={src} alt={item.name} className="preview-image" />}
+        <div className="preview-toolbar">
+          <button className="preview-toolbar-btn" onClick={() => setZoom(z => Math.max(0.25, z - 0.25))} title="缩小">−</button>
+          <span className="preview-toolbar-label">{Math.round(zoom * 100)}%</span>
+          <button className="preview-toolbar-btn" onClick={() => setZoom(z => Math.min(4, z + 0.25))} title="放大">+</button>
+          <button className="preview-toolbar-btn" onClick={() => setRotation(r => r - 90)} title="左旋">↺</button>
+          <button className="preview-toolbar-btn" onClick={() => setRotation(r => r + 90)} title="右旋">↻</button>
+          <button className="preview-toolbar-btn" onClick={() => { setZoom(1); setRotation(0) }} title="重置">⟲</button>
+        </div>
+        <div className="preview-image-wrap">
+          <img
+            src={imgSrc}
+            alt={item.name}
+            className="preview-image"
+            style={{ transform: `scale(${zoom}) rotate(${rotation}deg)` }}
+          />
+        </div>
         <button className="preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
       </div>
     </div>,
@@ -84,38 +46,86 @@ const ImagePreview = memo(function ImagePreview({ item, onClose }: DrivePreviewP
 /* ---------- Video Preview ---------- */
 
 const VideoPreview = memo(function VideoPreview({ item, onClose }: DrivePreviewProps) {
-  const [src, setSrc] = useState('')
+  const videoSrc = `/api/drive/download/${item.id}?token=${TOKEN()}`
+  return createPortal(
+    <div className="preview-overlay" onClick={onClose}>
+      <div className="preview-container preview-container--video" onClick={e => e.stopPropagation()}>
+        <video controls autoPlay className="preview-video" src={videoSrc}>
+          您的浏览器不支持视频播放
+        </video>
+        <button className="preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
+      </div>
+    </div>,
+    document.body
+  )
+})
+
+/* ---------- Audio Preview ---------- */
+
+const AudioPreview = memo(function AudioPreview({ item, onClose }: DrivePreviewProps) {
+  const audioSrc = `/api/drive/download/${item.id}?token=${TOKEN()}`
+  return createPortal(
+    <div className="preview-overlay" onClick={onClose}>
+      <div className="preview-container preview-container--audio" onClick={e => e.stopPropagation()}>
+        <div className="preview-audio-icon">🎵</div>
+        <p className="preview-audio-name">{item.name}</p>
+        <audio controls autoPlay className="preview-audio" src={audioSrc}>
+          您的浏览器不支持音频播放
+        </audio>
+        <button className="preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
+      </div>
+    </div>,
+    document.body
+  )
+})
+
+/* ---------- PDF Preview ---------- */
+
+const PdfPreview = memo(function PdfPreview({ item, onClose }: DrivePreviewProps) {
+  const pdfSrc = `/api/drive/download/${item.id}?token=${TOKEN()}`
+  return createPortal(
+    <div className="preview-overlay" onClick={onClose}>
+      <div className="preview-container preview-container--pdf" onClick={e => e.stopPropagation()}>
+        <iframe
+          className="preview-pdf"
+          src={pdfSrc}
+          title={item.name}
+        />
+        <button className="preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
+      </div>
+    </div>,
+    document.body
+  )
+})
+
+/* ---------- Code Preview ---------- */
+
+const CodePreview = memo(function CodePreview({ item, onClose }: DrivePreviewProps) {
+  const [code, setCode] = useState('')
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    let objectUrl: string | null = null
-    const loadVideo = async () => {
-      try {
-        const token = localStorage.getItem('lineweb_token')
-        const res = await fetch(`/api/drive/download/${item.id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (!res.ok) throw new Error('加载失败')
-        const blob = await res.blob()
-        objectUrl = URL.createObjectURL(blob)
-        setSrc(objectUrl)
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : '加载失败')
-      }
-    }
-    loadVideo()
-    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl) }
+    let cancelled = false
+    const token = localStorage.getItem('lineweb_token')
+    fetch(`/api/drive/download/${item.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.text())
+      .then(text => { if (!cancelled) { setCode(text); setLoading(false) } })
+      .catch(e => { if (!cancelled) { setError(e.message); setLoading(false) } })
+    return () => { cancelled = true }
   }, [item.id])
 
   return createPortal(
     <div className="preview-overlay" onClick={onClose}>
-      <div className="preview-container preview-container--video" onClick={e => e.stopPropagation()}>
-        {error ? (
-          <p className="preview-error">{error}</p>
-        ) : src ? (
-          <video controls autoPlay className="preview-video" src={src} />
-        ) : (
+      <div className="preview-container preview-container--code" onClick={e => e.stopPropagation()}>
+        {loading ? (
           <div className="spinner" />
+        ) : error ? (
+          <p className="preview-error">{error}</p>
+        ) : (
+          <pre className="preview-code"><code>{code}</code></pre>
         )}
         <button className="preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
       </div>
@@ -130,13 +140,35 @@ const DrivePreview = memo(function DrivePreview({ item, onClose }: DrivePreviewP
   const mime = (item.mimeType || '').toLowerCase()
   const ext = item.name.includes('.') ? item.name.split('.').pop()!.toLowerCase() : ''
 
-  if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) {
+  if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
     return <ImagePreview item={item} onClose={onClose} />
   }
   if (mime.startsWith('video/') || ['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext)) {
     return <VideoPreview item={item} onClose={onClose} />
   }
-  return null
+  if (mime.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'flac', 'aac'].includes(ext)) {
+    return <AudioPreview item={item} onClose={onClose} />
+  }
+  if (mime.includes('pdf') || ext === 'pdf') {
+    return <PdfPreview item={item} onClose={onClose} />
+  }
+  if (['js', 'ts', 'jsx', 'tsx', 'py', 'java', 'go', 'rs', 'c', 'cpp', 'h', 'hpp', 'cs', 'rb', 'php', 'swift', 'kt', 'scala', 'html', 'css', 'scss', 'less', 'json', 'xml', 'yaml', 'yml', 'toml', 'md', 'sql', 'sh', 'bash', 'zsh', 'dockerfile', 'gitignore'].includes(ext)) {
+    return <CodePreview item={item} onClose={onClose} />
+  }
+
+  return createPortal(
+    <div className="preview-overlay" onClick={onClose}>
+      <div className="preview-container" onClick={e => e.stopPropagation()}>
+        <div className="preview-unsupported">
+          <span className="preview-unsupported-icon">📄</span>
+          <p className="preview-unsupported-text">此文件类型不支持预览</p>
+          <p className="preview-unsupported-name">{item.name}</p>
+        </div>
+        <button className="preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
+      </div>
+    </div>,
+    document.body
+  )
 })
 
 export default DrivePreview

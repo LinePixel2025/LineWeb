@@ -953,3 +953,311 @@
   text-align: right;
   word-break: break-all;
 }
+
+/* ============================================================
+   Download Manager — Fixed Bottom-right Panel
+   ============================================================ */
+
+.download-manager {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+  width: 360px;
+  max-height: 400px;
+  animation: download-manager-in 0.2s ease-out;
+}
+
+@keyframes download-manager-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.download-manager-inner {
+  padding: 12px;
+}
+
+.download-manager-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--lg-glass-border);
+}
+
+.download-manager-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--lg-text-primary);
+}
+
+.download-manager-count {
+  font-size: 0.75rem;
+  color: var(--lg-text-tertiary);
+  background: var(--lg-glass-bg);
+  padding: 2px 8px;
+  border-radius: var(--lg-radius-sm);
+}
+
+.download-manager-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.download-manager-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-glass-bg);
+  position: relative;
+}
+
+.download-manager-item--complete {
+  opacity: 0.7;
+}
+
+.download-manager-item--error {
+  border-left: 3px solid var(--lg-danger, #ef4444);
+}
+
+.download-manager-item-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.download-manager-item-name {
+  font-size: 0.82rem;
+  color: var(--lg-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.download-manager-item-status {
+  font-size: 0.75rem;
+  color: var(--lg-text-tertiary);
+  flex-shrink: 0;
+}
+
+.download-manager-item-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.download-manager-progress-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--lg-glass-border);
+  overflow: hidden;
+}
+
+.download-manager-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--lg-accent);
+  transition: width 0.3s ease;
+}
+
+.download-manager-item-size {
+  font-size: 0.7rem;
+  color: var(--lg-text-tertiary);
+  flex-shrink: 0;
+}
+
+.download-manager-item-cancel {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--lg-text-tertiary);
+  cursor: pointer;
+  border-radius: var(--lg-radius-sm);
+  font-size: 0.8rem;
+}
+
+.download-manager-item-cancel:hover {
+  background: var(--lg-glass-border);
+  color: var(--lg-text-primary);
+}
+
+.download-manager-item-error {
+  font-size: 0.75rem;
+  color: var(--lg-danger, #ef4444);
+  margin-top: 2px;
+}
+
+@media (max-width: 767px) {
+  .download-manager {
+    width: calc(100% - 32px);
+    bottom: 72px;
+    right: 16px;
+  }
+}
+
+/* ============================================================
+   Preview Enhancements — Image Zoom/Rotate, Audio, PDF, Code
+   ============================================================ */
+
+.preview-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: var(--lg-radius-md);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  z-index: 10;
+}
+
+.preview-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.85rem;
+  cursor: pointer;
+  border-radius: var(--lg-radius-sm);
+  transition: all 0.15s ease;
+}
+
+.preview-toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.preview-toolbar-label {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.7);
+  min-width: 40px;
+  text-align: center;
+}
+
+.preview-image-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.preview-image {
+  max-width: none;
+  max-height: none;
+  transition: transform 0.15s ease;
+  object-fit: contain;
+}
+
+.preview-container--audio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 40px;
+  max-width: 400px;
+}
+
+.preview-audio-icon {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.preview-audio-name {
+  font-size: 0.9rem;
+  color: var(--lg-text-primary);
+  text-align: center;
+  word-break: break-all;
+}
+
+.preview-audio {
+  width: 100%;
+}
+
+.preview-container--pdf {
+  width: 90vw;
+  height: 90vh;
+  max-width: 1200px;
+  max-height: 90vh;
+}
+
+.preview-pdf {
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: var(--lg-radius-sm);
+}
+
+.preview-container--code {
+  width: 80vw;
+  height: 80vh;
+  max-width: 1000px;
+  max-height: 80vh;
+}
+
+.preview-code {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  margin: 0;
+  padding: 20px;
+  background: var(--lg-surface);
+  border-radius: var(--lg-radius-sm);
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--lg-text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.preview-unsupported {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px;
+  text-align: center;
+}
+
+.preview-unsupported-icon {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.preview-unsupported-text {
+  font-size: 0.9rem;
+  color: var(--lg-text-secondary);
+}
+
+.preview-unsupported-name {
+  font-size: 0.8rem;
+  color: var(--lg-text-tertiary);
+  word-break: break-all;
+}

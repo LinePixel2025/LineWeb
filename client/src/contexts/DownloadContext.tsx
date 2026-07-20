@@ -9,20 +9,34 @@ interface DownloadContextValue {
 
 const DownloadContext = createContext<DownloadContextValue | null>(null)
 
+const MAX_MEMORY_SIZE = 100 * 1024 * 1024 // 100MB
+
 export function DownloadProvider({ children }: { children: ReactNode }) {
   const [tasks, setTasks] = useState<DownloadTask[]>([])
   const downloadIdRef = useRef(0)
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map())
 
-  const startDownload = useCallback(async (item: DriveItem) => {
-    if (item.isFolder) return
+  const removeTaskAfter = useCallback((id: string, delay: number) => {
+    setTimeout(() => setTasks(prev => prev.filter(t => t.id !== id)), delay)
+  }, [])
 
+  const directDownload = useCallback((item: DriveItem) => {
+    const token = localStorage.getItem('lineweb_token')
+    const a = document.createElement('a')
+    a.href = `/api/drive/download/${item.id}?token=${encodeURIComponent(token!)}`
+    a.download = item.name
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }, [])
+
+  const streamDownloadWithProgress = useCallback(async (item: DriveItem) => {
     const id = `dl-${++downloadIdRef.current}`
     const abortController = new AbortController()
     abortControllersRef.current.set(id, abortController)
 
     setTasks(prev => [...prev, {
-      id, fileName: item.name, loaded: 0, total: 0, speed: 0, status: 'downloading',
+      id, fileName: item.name, loaded: 0, total: 0, speed: 0, status: 'downloading' as const,
     }])
 
     try {
@@ -40,8 +54,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       const reader = res.body!.getReader()
       const chunks: Uint8Array[] = []
       let loaded = 0
-      const startTime = Date.now()
-      let lastUpdate = startTime
+      let lastUpdate = Date.now()
       let lastLoaded = 0
 
       while (true) {
@@ -56,11 +69,9 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
           const windowSpeed = (loaded - lastLoaded) / ((now - lastUpdate) / 1000)
           lastUpdate = now
           lastLoaded = loaded
-
           setTasks(prev =>
             prev.map(t => t.id === id ? {
-              ...t, loaded, total: contentLength || loaded,
-              speed: windowSpeed,
+              ...t, loaded, total: contentLength || loaded, speed: windowSpeed,
             } : t)
           )
         }
@@ -77,20 +88,28 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       setTasks(prev =>
         prev.map(t => t.id === id ? { ...t, status: 'complete' as const, loaded, total: contentLength || loaded } : t)
       )
-      setTimeout(() => setTasks(prev => prev.filter(t => t.id !== id)), 3000)
+      removeTaskAfter(id, 3000)
     } catch (err: unknown) {
       const aborted = err instanceof DOMException && err.name === 'AbortError'
-      if (aborted) {
-        setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'cancelled' as const } : t))
-      } else {
-        const message = err instanceof Error ? err.message : '下载失败'
-        setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'error' as const, error: message } : t))
-      }
-      setTimeout(() => setTasks(prev => prev.filter(t => t.id !== id)), 5000)
+      setTasks(prev => prev.map(t => t.id === id ? {
+        ...t, status: (aborted ? 'cancelled' : 'error') as const,
+        error: aborted ? undefined : (err instanceof Error ? err.message : '下载失败'),
+      } : t))
+      removeTaskAfter(id, aborted ? 1000 : 5000)
     } finally {
       abortControllersRef.current.delete(id)
     }
-  }, [])
+  }, [removeTaskAfter])
+
+  const startDownload = useCallback((item: DriveItem) => {
+    if (item.isFolder) return
+    const size = Number(item.size)
+    if (size > MAX_MEMORY_SIZE) {
+      directDownload(item)
+    } else {
+      streamDownloadWithProgress(item)
+    }
+  }, [directDownload, streamDownloadWithProgress])
 
   const cancelDownload = useCallback((id: string) => {
     abortControllersRef.current.get(id)?.abort()
@@ -98,9 +117,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<DownloadContextValue>(() => ({
-    tasks,
-    startDownload,
-    cancelDownload,
+    tasks, startDownload, cancelDownload,
   }), [tasks, startDownload, cancelDownload])
 
   return (
