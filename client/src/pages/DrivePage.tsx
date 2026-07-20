@@ -41,6 +41,7 @@ interface DriveState {
   deleteItem: DriveItem | null
   renameItem: DriveItem | null
   syncing: boolean
+  syncMessage: string
   selectedId: number | null
   categoryFilter: CategoryFilter
   sort: SortOption
@@ -62,6 +63,7 @@ type DriveAction =
   | { type: 'SET_DELETE_ITEM'; payload: DriveItem | null }
   | { type: 'SET_RENAME_ITEM'; payload: DriveItem | null }
   | { type: 'SET_SYNCING'; payload: boolean }
+  | { type: 'SET_SYNC_MESSAGE'; payload: string }
   | { type: 'SET_SELECTED'; payload: number | null }
   | { type: 'SET_CATEGORY_FILTER'; payload: CategoryFilter }
   | { type: 'SET_SORT'; payload: SortOption }
@@ -86,6 +88,7 @@ const initialState: DriveState = {
   deleteItem: null,
   renameItem: null,
   syncing: false,
+  syncMessage: '',
   selectedId: null,
   categoryFilter: 'all',
   sort: { field: 'name', direction: 'asc' },
@@ -144,6 +147,8 @@ function driveReducer(state: DriveState, action: DriveAction): DriveState {
       return { ...state, renameItem: action.payload }
     case 'SET_SYNCING':
       return { ...state, syncing: action.payload }
+    case 'SET_SYNC_MESSAGE':
+      return { ...state, syncMessage: action.payload }
     case 'SET_SELECTED':
       return { ...state, selectedId: action.payload }
     case 'SET_CATEGORY_FILTER':
@@ -339,11 +344,19 @@ export default function DrivePage() {
   // 同步文件
   const handleSync = useCallback(async () => {
     dispatch({ type: 'SET_SYNCING', payload: true })
+    dispatch({ type: 'SET_SYNC_MESSAGE', payload: '' })
     try {
-      await api.post('/drive/sync')
+      const report = await api.post<{ missingCreated: number; errors: string[]; scanned: number }>('/drive/sync')
+      if (report.errors && report.errors.length > 0) {
+        dispatch({ type: 'SET_SYNC_MESSAGE', payload: `同步完成，${report.errors.length} 个错误: ${report.errors.slice(0, 2).join('; ')}` })
+      } else if (report.missingCreated > 0) {
+        dispatch({ type: 'SET_SYNC_MESSAGE', payload: `同步完成，发现 ${report.missingCreated} 个新文件` })
+      } else {
+        dispatch({ type: 'SET_SYNC_MESSAGE', payload: '同步完成，没有新文件' })
+      }
       refresh()
     } catch {
-      // ignore sync errors silently
+      dispatch({ type: 'SET_SYNC_MESSAGE', payload: '同步失败，请检查存储节点连接' })
     } finally {
       dispatch({ type: 'SET_SYNCING', payload: false })
     }
@@ -491,6 +504,19 @@ export default function DrivePage() {
               syncing={state.syncing}
               onParentFolder={() => navigateToBreadcrumb(state.breadcrumbs.length - 2)}
             />
+
+            {state.syncMessage && (
+              <div className="drive-sync-message" style={{
+                padding: '8px 16px',
+                fontSize: '0.85rem',
+                color: state.syncMessage.includes('失败') || state.syncMessage.includes('错误') ? 'var(--lg-text-danger)' : 'var(--lg-text-secondary)',
+                background: 'var(--lg-surface)',
+                borderRadius: '8px',
+                marginBottom: '8px',
+              }}>
+                {state.syncMessage}
+              </div>
+            )}
 
             <BatchActionsBridge
               items={displayItems}

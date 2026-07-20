@@ -56,6 +56,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const token = getToken()
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
+    // 禁止浏览器缓存认证 API 的响应（配合服务端 Cache-Control: no-store）
+    headers['Cache-Control'] = 'no-cache'
   }
 
   if (options.body && !headers['Content-Type']) {

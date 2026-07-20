@@ -99,6 +99,12 @@ app.use('/api', (req, res, next) => {
     next()
     return
   }
+  // 禁止浏览器缓存认证 API 的响应（避免 304 导致显示旧数据）
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  res.set('Pragma', 'no-cache')
+  res.set('Expires', '0')
+  // 禁用 Express 自动生成的 ETag，防止浏览器条件请求命中 304
+  res.set('ETag', '')
   authenticate(req, res, next)
 })
 
