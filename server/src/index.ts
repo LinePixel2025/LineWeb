@@ -14,6 +14,7 @@ import pageRoutes from './routes/pages.js'
 import commentRoutes from './routes/comments.js'
 import userRoutes from './routes/users.js'
 import driveRoutes from './routes/drive.js'
+import driveFavoritesRoutes from './routes/driveFavorites.js'
 import deviceRoutes from './routes/devices.js'
 import statsRoutes from './routes/stats.js'
 import apiKeyRoutes from './routes/apiKeys.js'
@@ -126,6 +127,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/bing-wallpaper', cachePublic(600), bingRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/drive', driveRoutes)
+app.use('/api/drive/favorites', driveFavoritesRoutes)
 app.use('/api/devices', deviceRoutes)
 app.use('/api/api-keys', apiKeyRoutes)
 app.use('/api/auth/avatar', avatarRoutes)

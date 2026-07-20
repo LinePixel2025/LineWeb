@@ -22,6 +22,7 @@ model User {
   posts            Post[]
   comments         Comment[]
   driveFiles       DriveFile[] // 上传的文件
+  driveFavorites   DriveFavorite[]
   apiKeys          ApiKey[]
   screenTimeTokens ScreenTimeToken[]
   screenTimeLogs   ScreenTimeLog[]
@@ -102,6 +103,21 @@ model DriveFile {
   @@index([uploadedById])
   @@index([name])
   @@map("drive_files")
+}
+
+model DriveFavorite {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  folderId   Int      @map("folder_id")
+  folderName String   @map("folder_name")
+  order      Int      @default(0)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, folderId])
+  @@index([userId])
+  @@map("drive_favorites")
 }
 
 model ApiKey {

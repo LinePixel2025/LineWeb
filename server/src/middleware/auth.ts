@@ -90,6 +90,27 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     return
   }
 
+  // ——— 最后回退：?token= 查询参数（下载直链使用） ———
+  const queryToken = req.query.token as string | undefined
+  if (queryToken) {
+    try {
+      const payload = jwt.verify(queryToken, config.jwtSecret) as AuthPayload & { iat?: number }
+      if (payload.iat && payload.userId) {
+        const validAfter = await getTokenValidAfter(payload.userId)
+        if (payload.iat * 1000 < validAfter.getTime()) {
+          res.status(401).json({ error: 'Token 已失效' })
+          return
+        }
+      }
+      req.user = payload
+      next()
+      return
+    } catch {
+      res.status(401).json({ error: 'Token 无效' })
+      return
+    }
+  }
+
   res.status(401).json({ error: '未登录' })
 }
 
