@@ -10,7 +10,6 @@ import DriveListView from '../components/drive/DriveListView'
 import DriveGridView from '../components/drive/DriveGridView'
 import UploadZone from '../components/drive/UploadZone'
 import DrivePreview from '../components/drive/DrivePreview'
-import DownloadManager from '../components/drive/DownloadManager'
 import BatchActions from '../components/drive/BatchActions'
 import FolderPickerDialog from '../components/drive/FolderPickerDialog'
 import { NewFolderDialog, RenameDialog, DeleteDialog } from '../components/drive/DriveDialogs'
@@ -349,9 +348,6 @@ function DrivePageInner() {
 
       {/* Mobile Nav */}
       {isMobile && <MobileNav activeTab={mobileTab} onTabChange={setMobileTab} />}
-
-      {/* Download Manager */}
-      <DownloadManager />
 
       {/* Modals */}
       {dialogs.previewItem && (
