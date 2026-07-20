@@ -83,6 +83,22 @@ function nextStreamId(): number {
   return _nextStreamId
 }
 
+const STREAM_IDLE_TIMEOUT_MS = 5 * 60 * 1000
+const staleStreamReaper = setInterval(() => {
+  const now = Date.now()
+  for (const [id, stream] of streamRegistry) {
+    if ('lastActivity' in stream) {
+      const lastActivity = (stream as any).lastActivity as number
+      if (now - lastActivity > STREAM_IDLE_TIMEOUT_MS) {
+        console.warn(`[StorageTunnel] Reaping stale stream ${id}`)
+        stream.fail(new Error('下载流超时 (5min 无活动)'))
+        streamRegistry.delete(id)
+      }
+    }
+  }
+}, 60_000)
+staleStreamReaper.unref()
+
 class PendingStream {
   private chunks: Buffer[] = []
   private done = false
@@ -95,6 +111,7 @@ class PendingStream {
   constructor(readonly streamId: number) {}
 
   push(data: Buffer): void {
+    (this as any).lastActivity = Date.now()
     this.chunks.push(data)
     this.pushResolve?.()
     this.pushResolve = null

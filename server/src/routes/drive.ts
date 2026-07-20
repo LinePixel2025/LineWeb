@@ -10,7 +10,28 @@ import { config } from '../config/index.js'
 const router = Router()
 
 // P23: In-memory cache for resolve-path to avoid repeated N+1 queries per segment
-const pathCache = new Map<string, number>()
+class PathCache {
+  private cache = new Map<string, { value: number; expiresAt: number }>()
+  private maxSize = 500
+  private ttlMs = 5 * 60 * 1000
+
+  get(key: string): number | undefined {
+    const entry = this.cache.get(key)
+    if (!entry) return undefined
+    if (Date.now() >= entry.expiresAt) { this.cache.delete(key); return undefined }
+    return entry.value
+  }
+
+  set(key: string, value: number): void {
+    if (this.cache.size >= this.maxSize) {
+      const oldest = this.cache.keys().next().value
+      if (oldest) this.cache.delete(oldest)
+    }
+    this.cache.set(key, { value, expiresAt: Date.now() + this.ttlMs })
+  }
+}
+
+const pathCache = new PathCache()
 
 /**
  * 修复 busboy 对中文文件名的 mojibake 损坏。
@@ -423,32 +444,27 @@ router.post('/upload', async (req: Request, res: Response) => {
           const origDotIdx = originalName.lastIndexOf('.')
           const origBase = origDotIdx > 0 ? originalName.slice(0, origDotIdx) : originalName
           const origExt = origDotIdx > 0 ? originalName.slice(origDotIdx) : ''
-          // 单次查询获取所有冲突路径，避免 N+1 循环查询
-          const pattern = `${parentPath}${base}(`
+          // 生成 99 个候选路径，单次 IN 查询利用 @unique 索引
+          const candidates: string[] = []
+          for (let i = 1; i <= 99; i++) {
+            candidates.push(`${parentPath}${base}(${i})${ext}`)
+          }
           const existingDups = await prisma.driveFile.findMany({
-            where: {
-              storagePath: { startsWith: pattern },
-              parentId: parentId || null,
-            },
+            where: { storagePath: { in: candidates } },
             select: { storagePath: true },
           })
-          const usedNumbers = new Set<number>()
-          for (const dup of existingDups) {
-            const match = dup.storagePath.match(new RegExp(`^${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\d+)\\)\\${ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`))
-            if (match) {
-              usedNumbers.add(parseInt(match[1], 10))
-            }
-          }
-          for (let i = 1; i < 100; i++) {
-            if (!usedNumbers.has(i)) {
-              storagePath = `${parentPath}${base}(${i})${ext}`
+          const taken = new Set(existingDups.map(d => d.storagePath))
+          for (let i = 1; i <= 99; i++) {
+            const candidate = `${parentPath}${base}(${i})${ext}`
+            if (!taken.has(candidate)) {
+              storagePath = candidate
               finalName = `${origBase}(${i})${origExt}`
               break
             }
           }
-        }
 
         // === 先创建 DB 记录，再流式写入存储节点 ===
+        }
         const file = await prisma.driveFile.create({
           data: {
             name: finalName,
@@ -493,10 +509,17 @@ router.post('/upload', async (req: Request, res: Response) => {
       }
     })
 
+    bb.on('limit', () => {
+      if (!fileError) {
+        fileError = new Error(`文件大小超过限制 (${config.maxFileSizeMB}MB)`)
+      }
+    })
+
     bb.on('close', () => {
       if (fileError) {
         if (!res.headersSent) {
-          res.status(502).json({ error: fileError.message })
+          const isSizeLimit = fileError.message.includes('限制')
+          res.status(isSizeLimit ? 413 : 502).json({ error: fileError.message })
         }
       } else if (!fileProcessed) {
         res.status(400).json({ error: '请选择文件' })
@@ -618,6 +641,9 @@ router.put('/files/:id', async (req: Request, res: Response) => {
 
     const { name, parentId } = req.body as { name?: string; parentId?: number | null }
 
+    // 收集所有 DB 变更，通过事务原子执行
+    const updates: any[] = []
+
     // 重命名
     if (name !== undefined) {
       if (typeof name !== 'string' || name.trim().length === 0) {
@@ -643,29 +669,33 @@ router.put('/files/:id', async (req: Request, res: Response) => {
         }
       }
 
-      // 更新 storagePath（保留父路径，仅改文件名部分）
+      // 计算新 storagePath
       const parentParts = file.storagePath.split('/')
       parentParts[parentParts.length - 1] = name.trim()
       const newStoragePath = parentParts.join('/')
 
-      // 如果是文件夹，需要更新所有子文件的 storagePath（递归）
-      // P2+P33: Single UPDATE replaces N+1 — SQLite REPLACE updates all child paths atomically
+      // 收集父记录更新
+      updates.push(
+        prisma.driveFile.update({
+          where: { id },
+          data: {
+            name: name.trim(),
+            storagePath: newStoragePath,
+          },
+        })
+      )
+
+      // 如果是文件夹，收集子文件 storagePath 更新
       if (file.isFolder) {
         const oldPrefix = file.storagePath + '/'
         const newPrefix = newStoragePath + '/'
-        await prisma.$executeRawUnsafe(
-          `UPDATE drive_files SET storagePath = REPLACE(storagePath, ?, ?) WHERE storagePath LIKE ?`,
-          oldPrefix, newPrefix, `${oldPrefix}%`
+        updates.push(
+          prisma.$executeRawUnsafe(
+            `UPDATE drive_files SET storagePath = REPLACE(storagePath, ?, ?) WHERE storagePath LIKE ?`,
+            oldPrefix, newPrefix, `${oldPrefix}%`
+          )
         )
       }
-
-      await prisma.driveFile.update({
-        where: { id },
-        data: {
-          name: name.trim(),
-          storagePath: newStoragePath,
-        },
-      })
     }
 
     // 移动（更改父文件夹）
@@ -685,7 +715,6 @@ router.put('/files/:id', async (req: Request, res: Response) => {
         }
 
         // 不能移动到自身或子文件夹下
-        // P7: storagePath prefix check replaces N+1 ancestor walk — zero additional queries
         if (file.isFolder) {
           if (newParent.id === id || newParent.storagePath.startsWith(file.storagePath + '/')) {
             res.status(400).json({ error: '不能移动到自身或子文件夹中' })
@@ -708,13 +737,28 @@ router.put('/files/:id', async (req: Request, res: Response) => {
           }
         }
 
-        await prisma.driveFile.update({
-          where: { id },
-          data: {
-            parentId: newParentId,
-            storagePath: newStoragePath,
-          },
-        })
+        // 收集父记录更新
+        updates.push(
+          prisma.driveFile.update({
+            where: { id },
+            data: {
+              parentId: newParentId,
+              storagePath: newStoragePath,
+            },
+          })
+        )
+
+        // 如果是文件夹，收集子文件 storagePath 更新
+        if (file.isFolder) {
+          const oldPrefix = file.storagePath + '/'
+          const newPrefix = newStoragePath + '/'
+          updates.push(
+            prisma.$executeRawUnsafe(
+              `UPDATE drive_files SET storagePath = REPLACE(storagePath, ?, ?) WHERE storagePath LIKE ?`,
+              oldPrefix, newPrefix, `${oldPrefix}%`
+            )
+          )
+        }
       } else {
         // 移动到根目录
         const newStoragePath = file.name
@@ -731,16 +775,35 @@ router.put('/files/:id', async (req: Request, res: Response) => {
           }
         }
 
-        await prisma.driveFile.update({
-          where: { id },
-          data: {
-            parentId: null,
-            storagePath: newStoragePath,
-          },
-        })
+        // 收集父记录更新
+        updates.push(
+          prisma.driveFile.update({
+            where: { id },
+            data: {
+              parentId: null,
+              storagePath: newStoragePath,
+            },
+          })
+        )
+
+        // 如果是文件夹，收集子文件 storagePath 更新
+        if (file.isFolder) {
+          const oldPrefix = file.storagePath + '/'
+          const newPrefix = newStoragePath + '/'
+          updates.push(
+            prisma.$executeRawUnsafe(
+              `UPDATE drive_files SET storagePath = REPLACE(storagePath, ?, ?) WHERE storagePath LIKE ?`,
+              oldPrefix, newPrefix, `${oldPrefix}%`
+            )
+          )
+        }
       }
     }
 
+    // 原子执行所有 DB 变更
+    if (updates.length > 0) {
+      await prisma.$transaction(updates)
+    }
     const updated = await prisma.driveFile.findUnique({
       where: { id },
       select: {
@@ -868,9 +931,9 @@ router.get('/resolve-path', async (req: Request, res: Response) => {
 })
 
 /* ---------- 手动触发文件同步 ---------- */
-router.post('/sync', async (_req: Request, res: Response) => {
+router.post('/sync', async (req: Request, res: Response) => {
   try {
-    const report = await syncDriveFiles()
+    const report = await syncDriveFiles(req.user!.userId)
     res.json(report)
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : '同步失败'

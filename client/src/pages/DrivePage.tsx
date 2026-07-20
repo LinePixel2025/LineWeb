@@ -1,4 +1,4 @@
-import { useReducer, useEffect, useCallback, useRef, useMemo, useState } from 'react'
+import { createPortal, useState, useReducer, useEffect, useCallback, useRef, useMemo, useState } from 'react'
 import LiquidGlass from '../components/glass/LiquidGlass'
 import LiquidButton from '../components/glass/LiquidButton'
 import DriveToolbar from '../components/drive/DriveToolbar'
@@ -23,6 +23,15 @@ import { getFileCategory } from '../types/drive'
 import { FolderIcon } from '../components/drive/DriveIcons'
 
 // === 状态类型定义 ===
+// Bridge for SelectAll keyboard shortcut (outside DriveProvider)
+let _pendingSelectAllIds: number[] | null = null
+export function setPendingSelectAllIds(ids: number[]) { _pendingSelectAllIds = ids }
+export function consumePendingSelectAllIds(): number[] | null {
+  const ids = _pendingSelectAllIds
+  _pendingSelectAllIds = null
+  return ids
+}
+
 interface DriveState {
   items: DriveItem[]
   loading: boolean
@@ -170,7 +179,12 @@ interface BatchActionsBridgeProps {
 }
 
 function BatchActionsBridge({ items, onRefresh, onStartDownload, onDeleteItem }: BatchActionsBridgeProps) {
-  const { state, clearSelection } = useDrive()
+  const { state, clearSelection, selectAll } = useDrive()
+
+  useEffect(() => {
+    const ids = consumePendingSelectAllIds()
+    if (ids && ids.length > 0) selectAll(ids)
+  }, [selectAll])
 
   const handleBatchDownload = useCallback(() => {
     const selectedItems = items.filter(item => state.selectedFiles.includes(item.id))
@@ -179,18 +193,37 @@ function BatchActionsBridge({ items, onRefresh, onStartDownload, onDeleteItem }:
     })
   }, [items, state.selectedFiles, onStartDownload])
 
-  const handleBatchDelete = useCallback(async () => {
+  const [showBatchConfirm, setShowBatchConfirm] = useState(false)
+  const [batchPending, setBatchPending] = useState(false)
+
+  const executeBatchDelete = useCallback(async () => {
     const selectedItems = items.filter(item => state.selectedFiles.includes(item.id))
     if (selectedItems.length === 0) return
-    if (!confirm(`确定删除选中的 ${selectedItems.length} 个文件？`)) return
+    setBatchPending(true)
     try {
-      await Promise.all(selectedItems.map(item => api.delete(`/drive/files/${item.id}`)))
+      const sorted = [...selectedItems].sort((a, b) => {
+        if (a.isFolder && !b.isFolder) return 1
+        if (!a.isFolder && b.isFolder) return -1
+        return 0
+      })
+      const results = await Promise.allSettled(
+        sorted.map(item => api.delete(`/drive/files/${item.id}`))
+      )
+      const errors = results.filter(r => r.status === 'rejected').length
+      if (errors > 0) console.warn(`批量删除: ${errors}/${sorted.length} 个文件删除失败`)
+    } finally {
+      setBatchPending(false)
+      setShowBatchConfirm(false)
       clearSelection()
       onRefresh()
-    } catch {
-      // errors handled silently
     }
   }, [items, state.selectedFiles, clearSelection, onRefresh])
+
+  const handleBatchDelete = useCallback(() => {
+    const selectedItems = items.filter(item => state.selectedFiles.includes(item.id))
+    if (selectedItems.length === 0) return
+    setShowBatchConfirm(true)
+  }, [items, state.selectedFiles])
 
   const handleBatchFavorite = useCallback(() => {
     const selectedFolders = items.filter(item => state.selectedFiles.includes(item.id) && item.isFolder)
@@ -216,7 +249,31 @@ function BatchActionsBridge({ items, onRefresh, onStartDownload, onDeleteItem }:
   }, [])
 
   return (
-    <BatchActions
+    <>
+      {showBatchConfirm && createPortal(
+        <div className="dialog-overlay" onClick={() => setShowBatchConfirm(false)}>
+          <div className="dialog" onClick={e => e.stopPropagation()}>
+            <div className="dialog-inner" style={{ background: 'var(--lg-surface)', borderRadius: '12px', padding: '24px' }}>
+              <h3 className="dialog-title">确认批量删除</h3>
+              <p className="dialog-desc">
+                确定要删除选中的 {state.selectedFiles.length} 个文件吗？
+                {items.filter(i => state.selectedFiles.includes(i.id)).some(i => i.isFolder)
+                  ? <><br/>文件夹内的所有内容将一并删除。</>
+                  : null}
+              </p>
+              <p className="dialog-warn" style={{ color: 'var(--lg-text-danger)', marginTop: '8px' }}>此操作不可撤销。</p>
+              <div className="dialog-actions" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
+                <button className="lg-btn lg-btn--ghost" onClick={() => setShowBatchConfirm(false)}>取消</button>
+                <button className="lg-btn lg-btn--danger" onClick={executeBatchDelete} disabled={batchPending}>
+                  {batchPending ? '删除中...' : '确认删除'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+      <BatchActions
       onBatchDownload={handleBatchDownload}
       onBatchMove={handleBatchMove}
       onBatchDelete={handleBatchDelete}
@@ -391,7 +448,11 @@ export default function DrivePage() {
 
     // 分类过滤
     if (state.categoryFilter !== 'all') {
+      const isSearching = state.searchResults !== null
       items = items.filter(item => {
+        // 搜索模式下文件夹也参与分类过滤
+        if (isSearching && item.isFolder) return getFileCategory(item) === state.categoryFilter
+        // 浏览模式始终显示文件夹
         if (item.isFolder) return true
         return getFileCategory(item) === state.categoryFilter
       })
@@ -450,7 +511,8 @@ export default function DrivePage() {
     onClearSelection: () => handleSelect(null),
     onNavigateBack: () => navigateToBreadcrumb(state.breadcrumbs.length - 2),
     onSelectAll: () => {
-      if (displayItems.length > 0) handleSelect(displayItems[0])
+      const allIds = displayItems.map(i => i.id)
+      if (allIds.length > 0) setPendingSelectAllIds(allIds)
     },
   })
 

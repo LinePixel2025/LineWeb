@@ -18,7 +18,7 @@ export interface SyncReport {
  * 4. 清理孤立的数据库记录（节点上已不存在的文件或文件夹）
  * 5. 为节点上存在但数据库缺失的路径创建记录（upsert 幂等）
  */
-export async function syncDriveFiles(): Promise<SyncReport> {
+export async function syncDriveFiles(uploaderUserId?: number): Promise<SyncReport> {
   const start = Date.now()
   const report: SyncReport = {
     scanned: 0,
@@ -110,14 +110,20 @@ export async function syncDriveFiles(): Promise<SyncReport> {
           }
         }
 
-        const uploader = await prisma.user.findFirst({
-          where: { canAccessDrive: true },
-          orderBy: { id: 'asc' },
-          select: { id: true },
-        })
-        if (!uploader) {
-          report.errors.push(`跳过 ${nodePath}: 未找到可用的上传者`)
-          continue
+        let uploaderId: number | undefined
+        if (uploaderUserId) {
+          uploaderId = uploaderUserId
+        } else {
+          const uploader = await prisma.user.findFirst({
+            where: { canAccessDrive: true },
+            orderBy: { id: 'asc' },
+            select: { id: true },
+          })
+          if (!uploader) {
+            report.errors.push(`跳过 ${nodePath}: 未找到可用的上传者`)
+            continue
+          }
+          uploaderId = uploader.id
         }
 
         // 使用 upsert 保证幂等：即使并发重复调用也不会创建重复记录
@@ -139,7 +145,7 @@ export async function syncDriveFiles(): Promise<SyncReport> {
             size: BigInt(info.size || 0),
             mimeType: isFolder ? null : guessMimeType(entryName),
             storagePath: nodePath,
-            uploadedById: uploader.id,
+            uploadedById: uploaderId,
           },
         })
         report.missingCreated++

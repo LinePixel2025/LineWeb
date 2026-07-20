@@ -34,22 +34,20 @@ const UploadZone = memo(function UploadZone({
         formData.append('file', file)
 
         const startTime = Date.now()
-        let lastUpdate = startTime
-        let lastLoaded = 0
+        const speedLog: { time: number; loaded: number }[] = []
 
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
             const now = Date.now()
-            const elapsed = (now - startTime) / 1000
-            const windowElapsed = (now - lastUpdate) / 1000
-            let speed = 0
-            if (windowElapsed > 0.15) {
-              speed = (e.loaded - lastLoaded) / windowElapsed
-              lastUpdate = now
-              lastLoaded = e.loaded
-            } else {
-              speed = elapsed > 0 ? e.loaded / elapsed : 0
+            speedLog.push({ time: now, loaded: e.loaded })
+            // 2秒滑动窗口：移除早于2秒的采样
+            while (speedLog.length > 1 && speedLog[0].time < now - 2000) {
+              speedLog.shift()
             }
+            const first = speedLog[0]
+            const last = speedLog[speedLog.length - 1]
+            const dt = (last.time - first.time) / 1000
+            const speed = dt > 0.1 ? (last.loaded - first.loaded) / dt : 0
 
             if (!abortRef.current) {
               setProgress({
