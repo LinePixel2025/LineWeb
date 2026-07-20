@@ -1,10 +1,11 @@
-import { memo, useCallback } from 'react'
+import { memo, useCallback, useEffect, useState } from 'react'
 import LiquidGlass from '../glass/LiquidGlass'
 import { useDrive } from '../../contexts/DriveContext'
 import { useResponsive } from '../../hooks/useResponsive'
 import TreeView from './TreeView'
 import TabList from './TabList'
 import { FolderIcon, StarIcon } from './DriveIcons'
+import api from '../../lib/api'
 
 export interface DriveNavigationProps {
   collapsed?: boolean
@@ -15,17 +16,32 @@ const DriveNavigation = memo(function DriveNavigation({
   collapsed = false,
   onToggleCollapse,
 }: DriveNavigationProps) {
-  const { state, navigateToFolder, removeFavorite } = useDrive()
+  const { state, navigateToFolder, removeFavorite, addFavorite } = useDrive()
   const { isMobile } = useResponsive()
+  // API 收藏（优先于 localStorage）
+  const [apiFavorites, setApiFavorites] = useState<{ id: number; folderId: number; folderName: string; order: number }[]>([])
+
+  useEffect(() => {
+    api.get<{ id: number; folderId: number; folderName: string; order: number }[]>('/drive/favorites')
+      .then(setApiFavorites)
+      .catch(() => { /* fallback to localStorage */ })
+  }, [])
 
   const handleFavoriteClick = useCallback((folderId: number | null, folderName: string) => {
     navigateToFolder(folderId, folderName)
   }, [navigateToFolder])
 
-  const handleRemoveFavorite = useCallback((e: React.MouseEvent, folderId: number) => {
+  const handleRemoveFavorite = useCallback(async (e: React.MouseEvent, folderId: number) => {
     e.stopPropagation()
     removeFavorite(folderId)
+    setApiFavorites(prev => prev.filter(f => f.folderId !== folderId))
+    try { await api.delete(`/drive/favorites/${folderId}`) } catch { /* ignore */ }
   }, [removeFavorite])
+
+  // 收藏来源：API 优先，回退 localStorage
+  const mergedFavorites = apiFavorites.length > 0
+    ? apiFavorites
+    : state.favorites.map(f => ({ id: 0, folderId: f.folderId, folderName: f.folderName, order: f.order }))
 
   if (isMobile) {
     return null
@@ -63,12 +79,12 @@ const DriveNavigation = memo(function DriveNavigation({
           <LiquidGlass variant="blur" interactive={false} chromatic={false} className="drive-sidebar-section">
             <h3 className="drive-sidebar-heading">收藏夹</h3>
             <div className="drive-sidebar-favorites">
-              {state.favorites.length === 0 ? (
+              {mergedFavorites.length === 0 ? (
                 <p className="drive-sidebar-placeholder">暂无收藏</p>
               ) : (
-                state.favorites.map(fav => (
+                mergedFavorites.map(fav => (
                   <div
-                    key={fav.id}
+                    key={`${fav.folderId}:${fav.id}`}
                     className="drive-sidebar-favorite-item"
                     onClick={() => handleFavoriteClick(fav.folderId, fav.folderName)}
                   >
