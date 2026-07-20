@@ -3,7 +3,7 @@ import busboy from 'busboy'
 import prisma from '../lib/prisma.js'
 import { parseId, parsePagination } from '../lib/utils.js'
 import { authenticate } from '../middleware/auth.js'
-import { sendCommand, streamRead, streamWrite, isNodeConnected } from '../services/storageTunnel.js'
+import { sendCommand, streamRead, streamWrite, streamReadBinary, streamWriteBinary, isNodeConnected } from '../services/storageTunnel.js'
 import { syncDriveFiles } from '../services/storageSync.js'
 import { config } from '../config/index.js'
 
@@ -30,6 +30,19 @@ function fixMojibake(name: string): string {
   } catch {
     return name // 解码失败则返回原值
   }
+}
+
+function parseRange(header: string, totalSize: number): { start: number; end?: number } | null {
+  const match = header.match(/^bytes=(\d+)-(\d*)$/)
+  if (!match) return null
+  const start = parseInt(match[1], 10)
+  if (start >= totalSize) return null
+  if (match[2] !== '') {
+    const end = parseInt(match[2], 10)
+    if (end >= totalSize) return { start, end: totalSize - 1 }
+    return { start, end }
+  }
+  return { start }
 }
 
 // === BigInt 序列化 — 显式转换 size 为字符串，避免全局原型污染 ===
@@ -545,25 +558,55 @@ async function handleDownload(req: Request, res: Response): Promise<void> {
     const encodedName = encodeURIComponent(file.name)
     const contentLength = Number(file.size)
 
-    // 设置响应头
+    const rangeHeader = req.headers.range
+
+    if (rangeHeader) {
+      const parsed = parseRange(rangeHeader, contentLength)
+      if (!parsed) {
+        res.status(416).setHeader('Content-Range', `bytes */${contentLength}`).end()
+        return
+      }
+
+      const { start, end } = parsed
+      const len = end !== undefined ? end - start + 1 : contentLength - start
+
+      res.status(206)
+      res.setHeader('Content-Type', mimeType)
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedName}`)
+      res.setHeader('Content-Range', `bytes ${start}-${end ?? contentLength - 1}/${contentLength}`)
+      res.setHeader('Content-Length', len)
+      res.setHeader('Cache-Control', 'no-cache')
+      res.setHeader('X-Content-Length', String(contentLength))
+      res.setHeader('Accept-Ranges', 'bytes')
+
+      try {
+        for await (const chunk of streamReadBinary(file.storagePath, start, len)) {
+          res.write(chunk)
+        }
+        res.end()
+      } catch (streamErr: unknown) {
+        console.error('下载流中断:', streamErr)
+        if (!res.writableEnded) res.end()
+      }
+      return
+    }
+
+    // 全量下载
     res.setHeader('Content-Type', mimeType)
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedName}`)
     res.setHeader('Content-Length', contentLength)
     res.setHeader('Cache-Control', 'no-cache')
-    res.setHeader('X-Content-Length', String(contentLength))  // 前端获取总大小
-    res.setHeader('X-Chunk-Size', String(config.downloadChunkKB * 1024))  // 下载块大小提示
+    res.setHeader('X-Content-Length', String(contentLength))
+    res.setHeader('Accept-Ranges', 'bytes')
 
     try {
-      // 从存储节点流式读取，逐块直接写入 HTTP 响应
-      for await (const chunk of streamRead(file.storagePath)) {
+      for await (const chunk of streamReadBinary(file.storagePath)) {
         res.write(chunk)
       }
       res.end()
     } catch (streamErr: unknown) {
       console.error('下载流中断:', streamErr)
-      if (!res.writableEnded) {
-        res.end()  // 优雅关闭，前端已收到部分数据
-      }
+      if (!res.writableEnded) res.end()
     }
   } catch (err) {
     console.error('下载文件失败:', err)
