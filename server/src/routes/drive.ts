@@ -3,7 +3,7 @@ import busboy from 'busboy'
 import prisma from '../lib/prisma.js'
 import { parseId, parsePagination } from '../lib/utils.js'
 import { authenticate } from '../middleware/auth.js'
-import { sendCommand, streamRead, streamWrite, streamReadBinary, streamWriteBinary, isNodeConnected } from '../services/storageTunnel.js'
+import { sendCommand, streamRead, streamReadBinary, streamWriteBinary, isNodeConnected } from '../services/storageTunnel.js'
 import { syncDriveFiles } from '../services/storageSync.js'
 import { config } from '../config/index.js'
 
