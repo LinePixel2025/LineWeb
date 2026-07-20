@@ -1,8 +1,8 @@
-import { createPortal, useState, useReducer, useEffect, useCallback, useRef, useMemo, useState } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import LiquidGlass from '../components/glass/LiquidGlass'
 import LiquidButton from '../components/glass/LiquidButton'
 import DriveToolbar from '../components/drive/DriveToolbar'
-
 import DriveNavigation from '../components/drive/DriveNavigation'
 import MobileNav from '../components/drive/MobileNav'
 import DriveDetailPanel from '../components/drive/DriveDetailPanel'
@@ -14,726 +14,356 @@ import DownloadManager from '../components/drive/DownloadManager'
 import BatchActions from '../components/drive/BatchActions'
 import { NewFolderDialog, RenameDialog, DeleteDialog } from '../components/drive/DriveDialogs'
 import Pagination from '../components/Pagination'
-import api, { ApiError } from '../lib/api'
+import api from '../lib/api'
 import { useDownload } from '../contexts/DownloadContext'
+import { DriveProvider, useDrive } from '../contexts/DriveContext'
 import { useResponsive } from '../hooks/useResponsive'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
-import { DriveProvider, useDrive } from '../contexts/DriveContext'
-import type { DriveItem, Breadcrumb, DriveListResponse, SortOption, CategoryFilter, ViewMode } from '../types/drive'
+import { useDriveFiles } from '../hooks/useDriveFiles'
+import { useDriveSearch } from '../hooks/useDriveSearch'
+import { useDriveSync } from '../hooks/useDriveSync'
+import { useDriveDialogs } from '../hooks/useDriveDialogs'
+import type { DriveItem, Breadcrumb, SortField } from '../types/drive'
 import { getFileCategory } from '../types/drive'
 import { FolderIcon } from '../components/drive/DriveIcons'
 
-// === 状态类型定义 ===
-// Bridge for SelectAll keyboard shortcut (outside DriveProvider)
-let _pendingSelectAllIds: number[] | null = null
-export function setPendingSelectAllIds(ids: number[]) { _pendingSelectAllIds = ids }
-export function consumePendingSelectAllIds(): number[] | null {
-  const ids = _pendingSelectAllIds
-  _pendingSelectAllIds = null
-  return ids
-}
-
-interface DriveState {
-  items: DriveItem[]
-  loading: boolean
-  error: string
-  page: number
-  totalPages: number
-  total: number
-  searchQuery: string
-  searchResults: DriveItem[] | null
-  searching: boolean
-  breadcrumbs: Breadcrumb[]
-  viewMode: ViewMode
-  showUpload: boolean
-  showNewFolder: boolean
-  previewItem: DriveItem | null
-  deleteItem: DriveItem | null
-  renameItem: DriveItem | null
-  syncing: boolean
-  syncMessage: string
-  selectedId: number | null
-  categoryFilter: CategoryFilter
-  sort: SortOption
-}
-
-// === Action 类型定义 ===
-type DriveAction =
-  | { type: 'SET_ITEMS'; payload: { items: DriveItem[]; total: number; page: number; totalPages: number } }
-  | { type: 'SET_LOADING'; payload: boolean }
-  | { type: 'SET_ERROR'; payload: string }
-  | { type: 'SET_SEARCH_QUERY'; payload: string }
-  | { type: 'SET_SEARCH_RESULTS'; payload: { results: DriveItem[] | null; searching: boolean } }
-  | { type: 'NAVIGATE_TO_FOLDER'; payload: Breadcrumb }
-  | { type: 'NAVIGATE_TO_BREADCRUMB'; payload: number }
-  | { type: 'SET_VIEW_MODE'; payload: ViewMode }
-  | { type: 'TOGGLE_UPLOAD'; payload: boolean }
-  | { type: 'TOGGLE_NEW_FOLDER'; payload: boolean }
-  | { type: 'SET_PREVIEW_ITEM'; payload: DriveItem | null }
-  | { type: 'SET_DELETE_ITEM'; payload: DriveItem | null }
-  | { type: 'SET_RENAME_ITEM'; payload: DriveItem | null }
-  | { type: 'SET_SYNCING'; payload: boolean }
-  | { type: 'SET_SYNC_MESSAGE'; payload: string }
-  | { type: 'SET_SELECTED'; payload: number | null }
-  | { type: 'SET_CATEGORY_FILTER'; payload: CategoryFilter }
-  | { type: 'SET_SORT'; payload: SortOption }
-  | { type: 'SET_BREADCRUMBS'; payload: Breadcrumb[] }
-
-// === 初始状态 ===
-const initialState: DriveState = {
-  items: [],
-  loading: true,
-  error: '',
-  page: 1,
-  totalPages: 1,
-  total: 0,
-  searchQuery: '',
-  searchResults: null,
-  searching: false,
-  breadcrumbs: [{ id: null, name: '根目录' }],
-  viewMode: 'list',
-  showUpload: false,
-  showNewFolder: false,
-  previewItem: null,
-  deleteItem: null,
-  renameItem: null,
-  syncing: false,
-  syncMessage: '',
-  selectedId: null,
-  categoryFilter: 'all',
-  sort: { field: 'name', direction: 'asc' },
-}
-
-// === Reducer 函数 ===
-function driveReducer(state: DriveState, action: DriveAction): DriveState {
-  switch (action.type) {
-    case 'SET_ITEMS':
-      return {
-        ...state,
-        items: action.payload.items,
-        total: action.payload.total,
-        page: action.payload.page,
-        totalPages: action.payload.totalPages,
-        loading: false,
-        error: '',
-      }
-    case 'SET_LOADING':
-      return { ...state, loading: action.payload }
-    case 'SET_ERROR':
-      return { ...state, error: action.payload, loading: false }
-    case 'SET_SEARCH_QUERY':
-      return { ...state, searchQuery: action.payload }
-    case 'SET_SEARCH_RESULTS':
-      return { ...state, searchResults: action.payload.results, searching: action.payload.searching }
-    case 'NAVIGATE_TO_FOLDER':
-      return {
-        ...state,
-        breadcrumbs: [...state.breadcrumbs, action.payload],
-        searchQuery: '',
-        searchResults: null,
-        selectedId: null,
-        categoryFilter: 'all',
-      }
-    case 'NAVIGATE_TO_BREADCRUMB':
-      return {
-        ...state,
-        breadcrumbs: state.breadcrumbs.slice(0, action.payload + 1),
-        searchQuery: '',
-        searchResults: null,
-        selectedId: null,
-        categoryFilter: 'all',
-      }
-    case 'SET_VIEW_MODE':
-      return { ...state, viewMode: action.payload }
-    case 'TOGGLE_UPLOAD':
-      return { ...state, showUpload: action.payload }
-    case 'TOGGLE_NEW_FOLDER':
-      return { ...state, showNewFolder: action.payload }
-    case 'SET_PREVIEW_ITEM':
-      return { ...state, previewItem: action.payload }
-    case 'SET_DELETE_ITEM':
-      return { ...state, deleteItem: action.payload }
-    case 'SET_RENAME_ITEM':
-      return { ...state, renameItem: action.payload }
-    case 'SET_SYNCING':
-      return { ...state, syncing: action.payload }
-    case 'SET_SYNC_MESSAGE':
-      return { ...state, syncMessage: action.payload }
-    case 'SET_SELECTED':
-      return { ...state, selectedId: action.payload }
-    case 'SET_CATEGORY_FILTER':
-      return { ...state, categoryFilter: action.payload }
-    case 'SET_SORT':
-      return { ...state, sort: action.payload }
-    case 'SET_BREADCRUMBS':
-      return { ...state, breadcrumbs: action.payload, searchQuery: '', searchResults: null, selectedId: null, categoryFilter: 'all' }
-    default:
-      return state
-  }
-}
-
-interface BatchActionsBridgeProps {
-  items: DriveItem[]
-  onRefresh: () => void
-  onStartDownload: (item: DriveItem) => void
-  onDeleteItem: (item: DriveItem) => void
-}
-
-function BatchActionsBridge({ items, onRefresh, onStartDownload, onDeleteItem }: BatchActionsBridgeProps) {
-  const { state, clearSelection, selectAll } = useDrive()
-
-  useEffect(() => {
-    const ids = consumePendingSelectAllIds()
-    if (ids && ids.length > 0) selectAll(ids)
-  }, [selectAll])
-
-  const handleBatchDownload = useCallback(() => {
-    const selectedItems = items.filter(item => state.selectedFiles.includes(item.id))
-    selectedItems.forEach(item => {
-      if (!item.isFolder) onStartDownload(item)
-    })
-  }, [items, state.selectedFiles, onStartDownload])
-
-  const [showBatchConfirm, setShowBatchConfirm] = useState(false)
-  const [batchPending, setBatchPending] = useState(false)
-
-  const executeBatchDelete = useCallback(async () => {
-    const selectedItems = items.filter(item => state.selectedFiles.includes(item.id))
-    if (selectedItems.length === 0) return
-    setBatchPending(true)
-    try {
-      const sorted = [...selectedItems].sort((a, b) => {
-        if (a.isFolder && !b.isFolder) return 1
-        if (!a.isFolder && b.isFolder) return -1
-        return 0
-      })
-      const results = await Promise.allSettled(
-        sorted.map(item => api.delete(`/drive/files/${item.id}`))
-      )
-      const errors = results.filter(r => r.status === 'rejected').length
-      if (errors > 0) console.warn(`批量删除: ${errors}/${sorted.length} 个文件删除失败`)
-    } finally {
-      setBatchPending(false)
-      setShowBatchConfirm(false)
-      clearSelection()
-      onRefresh()
-    }
-  }, [items, state.selectedFiles, clearSelection, onRefresh])
-
-  const handleBatchDelete = useCallback(() => {
-    const selectedItems = items.filter(item => state.selectedFiles.includes(item.id))
-    if (selectedItems.length === 0) return
-    setShowBatchConfirm(true)
-  }, [items, state.selectedFiles])
-
-  const handleBatchFavorite = useCallback(() => {
-    const selectedFolders = items.filter(item => state.selectedFiles.includes(item.id) && item.isFolder)
-    selectedFolders.forEach(item => {
-      const key = 'lineweb_favorites'
-      try {
-        const raw = localStorage.getItem(key)
-        const favorites = raw ? JSON.parse(raw) : []
-        if (!favorites.some((f: { folderId: number }) => f.folderId === item.id)) {
-          favorites.push({ id: `fav-${item.id}`, folderId: item.id, folderName: item.name, order: Date.now() })
-          localStorage.setItem(key, JSON.stringify(favorites))
-        }
-      } catch {
-        // ignore
-      }
-    })
-    clearSelection()
-  }, [items, state.selectedFiles, clearSelection])
-
-  const handleBatchMove = useCallback(() => {
-    // TODO: implement folder picker dialog
-    alert('移动功能即将上线')
-  }, [])
-
-  return (
-    <>
-      {showBatchConfirm && createPortal(
-        <div className="dialog-overlay" onClick={() => setShowBatchConfirm(false)}>
-          <div className="dialog" onClick={e => e.stopPropagation()}>
-            <div className="dialog-inner" style={{ background: 'var(--lg-surface)', borderRadius: '12px', padding: '24px' }}>
-              <h3 className="dialog-title">确认批量删除</h3>
-              <p className="dialog-desc">
-                确定要删除选中的 {state.selectedFiles.length} 个文件吗？
-                {items.filter(i => state.selectedFiles.includes(i.id)).some(i => i.isFolder)
-                  ? <><br/>文件夹内的所有内容将一并删除。</>
-                  : null}
-              </p>
-              <p className="dialog-warn" style={{ color: 'var(--lg-text-danger)', marginTop: '8px' }}>此操作不可撤销。</p>
-              <div className="dialog-actions" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
-                <button className="lg-btn lg-btn--ghost" onClick={() => setShowBatchConfirm(false)}>取消</button>
-                <button className="lg-btn lg-btn--danger" onClick={executeBatchDelete} disabled={batchPending}>
-                  {batchPending ? '删除中...' : '确认删除'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-      <BatchActions
-      onBatchDownload={handleBatchDownload}
-      onBatchMove={handleBatchMove}
-      onBatchDelete={handleBatchDelete}
-      onBatchFavorite={handleBatchFavorite}
-      onClearSelection={clearSelection}
-    />
-  )
-}
-
-function DriveSyncBridge({ onNavigate }: { onNavigate: (path: Breadcrumb[]) => void }) {
-  const driveContext = useDrive()
-  const prevPathRef = useRef<string>('')
-
-  useEffect(() => {
-    const pathKey = JSON.stringify(driveContext.state.currentPath)
-    if (pathKey !== prevPathRef.current) {
-      prevPathRef.current = pathKey
-      onNavigate(driveContext.state.currentPath)
-    }
-  }, [driveContext.state.currentPath, onNavigate])
-
-  return null
-}
-
-export default function DrivePage() {
-  const [state, dispatch] = useReducer(driveReducer, initialState)
+function DrivePageInner() {
+  const { state: ctx, setSort, selectAll, clearSelection } = useDrive()
   const { startDownload } = useDownload()
   const { isDesktop, isMobile } = useResponsive()
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const [mobileTab, setMobileTab] = useState<'files' | 'favorites' | 'search' | 'settings'>('files')
+  const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([{ id: null, name: '根目录' }])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [mobileTab, setMobileTab] = useState<'files' | 'favorites' | 'search' | 'settings'>('files')
+  const [batchSelected, setBatchSelected] = useState<number[]>([])
 
-  const handleContextNavigate = useCallback((path: Breadcrumb[]) => {
-    dispatch({ type: 'SET_BREADCRUMBS', payload: path })
-  }, [])
+  const currentParentId = breadcrumbs[breadcrumbs.length - 1]?.id ?? null
 
-  // 计算当前父文件夹 ID
-  const currentParentId = state.breadcrumbs[state.breadcrumbs.length - 1]?.id ?? null
+  // 数据
+  const { items, loading, error, total, page, totalPages, fetchItems, invalidate } =
+    useDriveFiles(currentParentId, ctx.sort, ctx.categoryFilter)
 
-  // 获取文件列表
-  const fetchItems = useCallback(async (parentId: number | null, targetPage?: number) => {
-    dispatch({ type: 'SET_LOADING', payload: true })
-    dispatch({ type: 'SET_ERROR', payload: '' })
-    try {
-      const p = targetPage ?? 1
-      const params = new URLSearchParams()
-      if (parentId !== null) params.set('parentId', String(parentId))
-      params.set('page', String(p))
-      params.set('limit', '15')
-      const res = await api.get<DriveListResponse>(`/drive/files?${params}`)
-      // 基于 id 去重（防御性 — 确保不会因后端数据问题导致重复渲染）
-      const seen = new Set<number>()
-      const deduped = res.data.filter(item => {
-        if (seen.has(item.id)) return false
-        seen.add(item.id)
-        return true
-      })
-      dispatch({
-        type: 'SET_ITEMS',
-        payload: { items: deduped, total: res.total, page: res.page, totalPages: res.pageCount },
-      })
-    } catch (err: unknown) {
-      dispatch({ type: 'SET_ERROR', payload: err instanceof ApiError ? err.message : '加载失败' })
-      dispatch({ type: 'SET_ITEMS', payload: { items: [], total: 0, page: 1, totalPages: 1 } })
-    }
-  }, [])
+  // 搜索
+  const search = useDriveSearch()
 
-  // 初始加载和文件夹切换时获取数据
+  // 同步
+  const syncOpts = useDriveSync()
+
+  // 对话框
+  const dialogs = useDriveDialogs()
+
+  // 初始加载 + 路径切换
   useEffect(() => {
-    fetchItems(currentParentId, 1)
+    fetchItems(1)
   }, [currentParentId, fetchItems])
 
-  // 搜索防抖
-  useEffect(() => {
-    if (!state.searchQuery.trim()) {
-      dispatch({ type: 'SET_SEARCH_RESULTS', payload: { results: null, searching: false } })
-      return
-    }
-
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
-    searchTimerRef.current = setTimeout(async () => {
-      dispatch({ type: 'SET_SEARCH_RESULTS', payload: { results: null, searching: true } })
-      try {
-        // 尝试 FTS5 搜索，失败回退到普通搜索
-        let data: DriveItem[]
-        try {
-          data = await api.get<DriveItem[]>(`/drive/fts-search?q=${encodeURIComponent(state.searchQuery)}`)
-        } catch {
-          data = await api.get<DriveItem[]>(`/drive/search?q=${encodeURIComponent(state.searchQuery)}`)
-        }
-        dispatch({ type: 'SET_SEARCH_RESULTS', payload: { results: data, searching: false } })
-      } catch {
-        dispatch({ type: 'SET_SEARCH_RESULTS', payload: { results: [], searching: false } })
-      }
-    }, 300)
-
-    return () => {
-      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
-    }
-  }, [state.searchQuery])
-
-  // 导航到文件夹
+  // 导航
   const navigateToFolder = useCallback((item: DriveItem) => {
     if (!item.isFolder) return
-    dispatch({ type: 'NAVIGATE_TO_FOLDER', payload: { id: item.id, name: item.name } })
+    setBreadcrumbs(prev => [...prev, { id: item.id, name: item.name }])
   }, [])
 
-  // 导航到面包屑
   const navigateToBreadcrumb = useCallback((index: number) => {
-    dispatch({ type: 'NAVIGATE_TO_BREADCRUMB', payload: index })
+    setBreadcrumbs(prev => prev.slice(0, index + 1))
   }, [])
 
-  // 预览文件
+  // 刷新
+  const refresh = useCallback(() => { invalidate() }, [invalidate])
+
+  // 预览 / 下载
   const handlePreview = useCallback((item: DriveItem) => {
     if (item.isFolder) return
     const mime = (item.mimeType || '').toLowerCase()
     const ext = item.name.includes('.') ? item.name.split('.').pop()!.toLowerCase() : ''
-    if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext) ||
-        mime.startsWith('video/') || ['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext)) {
-      dispatch({ type: 'SET_PREVIEW_ITEM', payload: item })
+    const previewableExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp',
+      'mp4', 'webm', 'avi', 'mov', 'mkv',
+      'mp3', 'wav', 'ogg', 'flac', 'aac',
+      'pdf',
+      'js', 'ts', 'jsx', 'tsx', 'py', 'java', 'go', 'rs', 'c', 'cpp',
+      'html', 'css', 'json', 'xml', 'yaml', 'yml', 'toml', 'md', 'sql', 'sh']
+    if (mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/') ||
+        mime.includes('pdf') || previewableExts.includes(ext)) {
+      dialogs.openPreview(item)
     } else {
       startDownload(item)
     }
-  }, [startDownload])
+  }, [startDownload, dialogs])
 
-  // 刷新当前页面
-  const refresh = useCallback(() => {
-    fetchItems(currentParentId, state.page)
-  }, [currentParentId, state.page, fetchItems])
-
-  // 同步文件
-  const handleSync = useCallback(async () => {
-    dispatch({ type: 'SET_SYNCING', payload: true })
-    dispatch({ type: 'SET_SYNC_MESSAGE', payload: '' })
-    try {
-      const report = await api.post<{ missingCreated: number; errors: string[]; scanned: number }>('/drive/sync')
-      if (report.errors && report.errors.length > 0) {
-        dispatch({ type: 'SET_SYNC_MESSAGE', payload: `同步完成，${report.errors.length} 个错误: ${report.errors.slice(0, 2).join('; ')}` })
-      } else if (report.missingCreated > 0) {
-        dispatch({ type: 'SET_SYNC_MESSAGE', payload: `同步完成，发现 ${report.missingCreated} 个新文件` })
-      } else {
-        dispatch({ type: 'SET_SYNC_MESSAGE', payload: '同步完成，没有新文件' })
-      }
-      refresh()
-    } catch {
-      dispatch({ type: 'SET_SYNC_MESSAGE', payload: '同步失败，请检查存储节点连接' })
-    } finally {
-      dispatch({ type: 'SET_SYNCING', payload: false })
-    }
-  }, [refresh])
-
-
-
-  // 打开新建文件夹对话框
-  const openNewFolder = useCallback(() => {
-    dispatch({ type: 'TOGGLE_NEW_FOLDER', payload: true })
-  }, [])
-
-  // 打开上传区域
-  const openUpload = useCallback(() => {
-    dispatch({ type: 'TOGGLE_UPLOAD', payload: true })
-  }, [])
-
-  // 上传完成处理
-  const handleUploaded = useCallback(() => {
-    refresh()
-    dispatch({ type: 'TOGGLE_UPLOAD', payload: false })
-  }, [refresh])
-
-  // 选择文件
-  const handleSelect = useCallback((item: DriveItem | null) => {
-    dispatch({ type: 'SET_SELECTED', payload: item?.id ?? null })
-  }, [])
-
-  // 计算显示的文件列表
+  // 显示数据
   const displayItems = useMemo(() => {
-    let items = state.searchResults !== null ? state.searchResults : state.items
+    let src = search.isSearchActive ? (search.results ?? []) : items
 
-    // 分类过滤
-    if (state.categoryFilter !== 'all') {
-      const isSearching = state.searchResults !== null
-      items = items.filter(item => {
-        // 搜索模式下文件夹也参与分类过滤
-        if (isSearching && item.isFolder) return getFileCategory(item) === state.categoryFilter
-        // 浏览模式始终显示文件夹
+    if (ctx.categoryFilter !== 'all') {
+      src = src.filter(item => {
+        if (search.isSearchActive && item.isFolder) return getFileCategory(item) === ctx.categoryFilter
         if (item.isFolder) return true
-        return getFileCategory(item) === state.categoryFilter
+        return getFileCategory(item) === ctx.categoryFilter
       })
     }
 
-    // 排序
-    items = [...items].sort((a, b) => {
-      // 文件夹始终排在前面
+    return [...src].sort((a, b) => {
       if (a.isFolder && !b.isFolder) return -1
       if (!a.isFolder && b.isFolder) return 1
-
-      const { field, direction } = state.sort
-      const multiplier = direction === 'asc' ? 1 : -1
-
+      const { field, direction } = ctx.sort
+      const mul = direction === 'asc' ? 1 : -1
       switch (field) {
-        case 'name':
-          return multiplier * a.name.localeCompare(b.name, 'zh-CN')
-        case 'size':
-          return multiplier * (Number(a.size) - Number(b.size))
-        case 'updatedAt':
-          return multiplier * (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime())
-        case 'createdAt':
-          return multiplier * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+        case 'name': return mul * a.name.localeCompare(b.name, 'zh-CN')
+        case 'size': return mul * (Number(a.size) - Number(b.size))
+        case 'updatedAt': return mul * (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime())
+        case 'createdAt': return mul * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
         case 'type': {
-          const extA = a.name.split('.').pop()?.toLowerCase() || ''
-          const extB = b.name.split('.').pop()?.toLowerCase() || ''
-          return multiplier * extA.localeCompare(extB)
+          const ea = a.name.split('.').pop()?.toLowerCase() || ''
+          const eb = b.name.split('.').pop()?.toLowerCase() || ''
+          return mul * ea.localeCompare(eb)
         }
-        default:
-          return 0
+        default: return 0
       }
     })
+  }, [items, search.results, search.isSearchActive, ctx.categoryFilter, ctx.sort])
 
-    return items
-  }, [state.searchResults, state.items, state.categoryFilter, state.sort])
-
-  // 快捷键支持
+  // 键盘快捷键
   useKeyboardShortcuts({
-    selectedFileIds: state.selectedId ? [state.selectedId] : [],
-    currentPathLength: state.breadcrumbs.length,
-    onDelete: state.selectedId
-      ? () => {
-          const item = displayItems.find((i) => i.id === state.selectedId)
-          if (item) dispatch({ type: 'SET_DELETE_ITEM', payload: item })
-        }
-      : undefined,
-    onRename: state.selectedId
-      ? () => {
-          const item = displayItems.find((i) => i.id === state.selectedId)
-          if (item) dispatch({ type: 'SET_RENAME_ITEM', payload: item })
-        }
-      : undefined,
-    onNewFolder: openNewFolder,
-    onUpload: openUpload,
+    selectedFileIds: batchSelected,
+    currentPathLength: breadcrumbs.length,
+    onDelete: () => {
+      if (batchSelected.length > 0) {
+        const item = displayItems.find(i => i.id === batchSelected[0])
+        if (item) dialogs.openDelete(item)
+      }
+    },
+    onRename: () => {
+      if (batchSelected.length > 0) {
+        const item = displayItems.find(i => i.id === batchSelected[0])
+        if (item) dialogs.openRename(item)
+      }
+    },
+    onNewFolder: dialogs.openNewFolder,
+    onUpload: dialogs.openUpload,
     onRefresh: refresh,
-    onClearSelection: () => handleSelect(null),
-    onNavigateBack: () => navigateToBreadcrumb(state.breadcrumbs.length - 2),
+    onClearSelection: () => { clearSelection(); setBatchSelected([]) },
+    onNavigateBack: () => navigateToBreadcrumb(breadcrumbs.length - 2),
     onSelectAll: () => {
-      const allIds = displayItems.map(i => i.id)
-      if (allIds.length > 0) setPendingSelectAllIds(allIds)
+      setBatchSelected(displayItems.map(i => i.id))
+      selectAll(displayItems.map(i => i.id))
     },
   })
 
-  const isSearching = state.searchResults !== null
-
-  // 计算分类计数
-  const fileCounts = useMemo(() => {
-    const allItems = state.items
-    return {
-      all: allItems.length,
-      images: allItems.filter(i => !i.isFolder && getFileCategory(i) === 'images').length,
-      videos: allItems.filter(i => !i.isFolder && getFileCategory(i) === 'videos').length,
-      audio: allItems.filter(i => !i.isFolder && getFileCategory(i) === 'audio').length,
-      documents: allItems.filter(i => !i.isFolder && getFileCategory(i) === 'documents').length,
-      archives: allItems.filter(i => !i.isFolder && getFileCategory(i) === 'archives').length,
-      code: allItems.filter(i => !i.isFolder && getFileCategory(i) === 'code').length,
-    }
-  }, [state.items])
-
-  // 获取选中的文件
+  // 选中文件
   const selectedItem = useMemo(() => {
-    if (!state.selectedId) return null
-    return displayItems.find(item => item.id === state.selectedId) || null
-  }, [state.selectedId, displayItems])
+    if (batchSelected.length === 0) return null
+    return displayItems.find(item => item.id === batchSelected[0]) || null
+  }, [batchSelected, displayItems])
+
+  const handleSelect = useCallback((item: DriveItem | null) => {
+    if (!item) {
+      clearSelection()
+      setBatchSelected([])
+      return
+    }
+    setBatchSelected([item.id])
+  }, [clearSelection])
+
+  // 上传完成
+  const handleUploaded = useCallback(() => {
+    refresh()
+    dialogs.closeUpload()
+  }, [refresh, dialogs])
 
   return (
-    <DriveProvider>
-      <DriveSyncBridge onNavigate={handleContextNavigate} />
-      <div className="page drive-page">
-        {/* Desktop/Tablet Navigation Sidebar */}
-        {isDesktop && (
-          <DriveNavigation
-            collapsed={sidebarCollapsed}
-            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+    <div className="page drive-page">
+      {isDesktop && (
+        <DriveNavigation
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        />
+      )}
+
+      <div className="drive-main">
+        <LiquidGlass variant="blur" interactive={false} className="page-card drive-content-card">
+          <DriveToolbar
+            breadcrumbs={breadcrumbs}
+            searchQuery={search.query}
+            searching={search.searching}
+            searchResultCount={search.results?.length ?? null}
+            onSearch={search.setQuery}
+            onNavigate={navigateToBreadcrumb}
+            onNewFolder={dialogs.openNewFolder}
+            onUpload={dialogs.openUpload}
+            onSync={syncOpts.sync}
+            syncing={syncOpts.syncing}
+            onParentFolder={() => navigateToBreadcrumb(breadcrumbs.length - 2)}
           />
-        )}
 
-        {/* Main Content */}
-        <div className="drive-main">
-          <LiquidGlass variant="blur" interactive={false} className="page-card drive-content-card">
-            <DriveToolbar
-              breadcrumbs={state.breadcrumbs}
-              searchQuery={state.searchQuery}
-              searching={state.searching}
-              searchResultCount={state.searchResults?.length ?? null}
-              onSearch={(query) => dispatch({ type: 'SET_SEARCH_QUERY', payload: query })}
-              onNavigate={navigateToBreadcrumb}
-              onNewFolder={openNewFolder}
-              onUpload={openUpload}
-              onSync={handleSync}
-              syncing={state.syncing}
-              onParentFolder={() => navigateToBreadcrumb(state.breadcrumbs.length - 2)}
+          {syncOpts.message && (
+            <div className="drive-sync-message" style={{
+              padding: '8px 16px', fontSize: '0.85rem',
+              color: syncOpts.message.includes('失败') || syncOpts.message.includes('错误')
+                ? 'var(--lg-text-danger)' : 'var(--lg-text-secondary)',
+              background: 'var(--lg-surface)', borderRadius: '8px', marginBottom: '8px',
+            }}>
+              {syncOpts.message}
+              <button onClick={syncOpts.clearMessage} style={{ marginLeft: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lg-text-tertiary)' }}>✕</button>
+            </div>
+          )}
+
+          {/* Batch Actions */}
+          {batchSelected.length > 0 && (
+            <BatchActions
+              onBatchDownload={() => {
+                displayItems.filter(i => batchSelected.includes(i.id) && !i.isFolder)
+                  .forEach(i => startDownload(i))
+              }}
+              onBatchMove={() => alert('移动功能即将上线')}
+              onBatchDelete={() => {
+                const item = displayItems.find(i => batchSelected.includes(i.id))
+                if (item) dialogs.openDelete(item)
+              }}
+              onBatchFavorite={() => {
+                displayItems.filter(i => batchSelected.includes(i.id) && i.isFolder)
+                  .forEach(item => {
+                    try {
+                      const raw = localStorage.getItem('lineweb_favorites')
+                      const favorites = raw ? JSON.parse(raw) : []
+                      if (!favorites.some((f: { folderId: number }) => f.folderId === item.id)) {
+                        favorites.push({ id: `fav-${item.id}`, folderId: item.id, folderName: item.name, order: Date.now() })
+                        localStorage.setItem('lineweb_favorites', JSON.stringify(favorites))
+                      }
+                    } catch { /* ignore */ }
+                  })
+                clearSelection()
+                setBatchSelected([])
+              }}
+              onClearSelection={() => { clearSelection(); setBatchSelected([]) }}
             />
+          )}
 
-            {state.syncMessage && (
-              <div className="drive-sync-message" style={{
-                padding: '8px 16px',
-                fontSize: '0.85rem',
-                color: state.syncMessage.includes('失败') || state.syncMessage.includes('错误') ? 'var(--lg-text-danger)' : 'var(--lg-text-secondary)',
-                background: 'var(--lg-surface)',
-                borderRadius: '8px',
-                marginBottom: '8px',
-              }}>
-                {state.syncMessage}
-              </div>
-            )}
+          {/* Upload Zone */}
+          {dialogs.showUpload && (
+            <UploadZone parentId={currentParentId} onUploaded={handleUploaded} onClose={dialogs.closeUpload} />
+          )}
 
-            <BatchActionsBridge
+          {/* Content */}
+          {loading ? (
+            <div className="drive-loading">
+              <div className="spinner" />
+              <p style={{ marginTop: '12px', color: 'var(--lg-text-tertiary)', fontSize: '0.85rem' }}>
+                正在加载...
+              </p>
+            </div>
+          ) : error ? (
+            <LiquidGlass variant="blur" className="drive-state-card">
+              <p className="drive-state-text">⚠️ {error}</p>
+              <LiquidButton size="sm" variant="glass" onClick={() => fetchItems(page, true)}>重试</LiquidButton>
+            </LiquidGlass>
+          ) : displayItems.length === 0 ? (
+            <LiquidGlass variant="blur" interactive={false} className="drive-state-card">
+              <span className="drive-state-icon"><FolderIcon size={40} /></span>
+              <p className="drive-state-text">
+                {search.isSearchActive ? '未找到匹配的文件' : '网盘为空，点击上方按钮上传文件'}
+              </p>
+            </LiquidGlass>
+          ) : ctx.viewMode === 'list' ? (
+            <DriveListView
               items={displayItems}
+              selectedId={batchSelected[0] ?? null}
+              sortField={ctx.sort.field}
+              sortDirection={ctx.sort.direction}
+              onSortChange={(field: SortField) => {
+                const direction = ctx.sort.field === field && ctx.sort.direction === 'asc' ? 'desc' : 'asc'
+                setSort({ field, direction })
+              }}
+              onFolderClick={navigateToFolder}
+              onPreview={handlePreview}
+              onDownload={startDownload}
+              onRename={(item) => dialogs.openRename(item)}
+              onDelete={(item) => dialogs.openDelete(item)}
+              onSelect={(item) => handleSelect(item)}
+              onNewFolder={dialogs.openNewFolder}
+              onUpload={dialogs.openUpload}
               onRefresh={refresh}
-              onStartDownload={startDownload}
-              onDeleteItem={(item) => dispatch({ type: 'SET_DELETE_ITEM', payload: item })}
             />
+          ) : (
+            <DriveGridView
+              items={displayItems}
+              selectedId={batchSelected[0] ?? null}
+              onFolderClick={navigateToFolder}
+              onPreview={handlePreview}
+              onDownload={startDownload}
+              onRename={(item) => dialogs.openRename(item)}
+              onDelete={(item) => dialogs.openDelete(item)}
+              onSelect={(item) => handleSelect(item)}
+              onNewFolder={dialogs.openNewFolder}
+              onUpload={dialogs.openUpload}
+              onRefresh={refresh}
+            />
+          )}
 
-            {/* Upload Zone */}
-            {state.showUpload && (
-              <UploadZone
-                parentId={currentParentId}
-                onUploaded={handleUploaded}
-                onClose={() => dispatch({ type: 'TOGGLE_UPLOAD', payload: false })}
+          {/* 翻页 */}
+          {!search.isSearchActive && totalPages > 1 && (
+            <>
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                onPageChange={(p) => fetchItems(p)}
               />
-            )}
-
-            {/* Content */}
-            {state.loading ? (
-              <div className="drive-loading">
-                <div className="spinner" />
-                <p style={{ marginTop: '12px', color: 'var(--lg-text-tertiary)', fontSize: '0.85rem' }}>
-                  正在加载...
-                </p>
+              <div style={{ textAlign: 'center', marginTop: '12px', color: 'var(--lg-text-tertiary)', fontSize: '0.85rem' }}>
+                第 {page}/{totalPages} 页，共 {total} 项
               </div>
-            ) : state.error ? (
-              <LiquidGlass variant="blur" className="drive-state-card">
-                <p className="drive-state-text">⚠️ {state.error}</p>
-                <LiquidButton size="sm" variant="glass" onClick={refresh}>重试</LiquidButton>
-              </LiquidGlass>
-            ) : displayItems.length === 0 ? (
-              <LiquidGlass variant="blur" interactive={false} className="drive-state-card">
-                <span className="drive-state-icon"><FolderIcon size={40} /></span>
-                <p className="drive-state-text">
-                  {isSearching ? '未找到匹配的文件' : '网盘为空，点击上方按钮上传文件'}
-                </p>
-              </LiquidGlass>
-            ) : state.viewMode === 'list' ? (
-              <DriveListView
-                items={displayItems}
-                selectedId={state.selectedId}
-                sortField={state.sort.field}
-                sortDirection={state.sort.direction}
-                onSortChange={(field) => {
-                  const direction = state.sort.field === field && state.sort.direction === 'asc' ? 'desc' : 'asc'
-                  dispatch({ type: 'SET_SORT', payload: { field, direction } })
-                }}
-                onFolderClick={navigateToFolder}
-                onPreview={handlePreview}
-                onDownload={startDownload}
-                onRename={(item) => dispatch({ type: 'SET_RENAME_ITEM', payload: item })}
-                onDelete={(item) => dispatch({ type: 'SET_DELETE_ITEM', payload: item })}
-                onSelect={handleSelect}
-                onNewFolder={openNewFolder}
-                onUpload={openUpload}
-                onRefresh={refresh}
-                onSelectAll={() => {
-                  if (displayItems.length > 0) {
-                    handleSelect(displayItems[0])
-                  }
-                }}
-              />
-            ) : (
-              <DriveGridView
-                items={displayItems}
-                selectedId={state.selectedId}
-                onFolderClick={navigateToFolder}
-                onPreview={handlePreview}
-                onDownload={startDownload}
-                onRename={(item) => dispatch({ type: 'SET_RENAME_ITEM', payload: item })}
-                onDelete={(item) => dispatch({ type: 'SET_DELETE_ITEM', payload: item })}
-                onSelect={handleSelect}
-                onNewFolder={openNewFolder}
-                onUpload={openUpload}
-                onRefresh={refresh}
-                onSelectAll={() => {
-                  if (displayItems.length > 0) {
-                    handleSelect(displayItems[0])
-                  }
-                }}
-              />
-            )}
-
-            {/* 翻页控件 */}
-            {!isSearching && (
-              <>
-                <Pagination
-                  page={state.page}
-                  totalPages={state.totalPages}
-                  onPageChange={(p) => fetchItems(currentParentId, p)}
-                />
-                <div style={{ textAlign: 'center', marginTop: '12px', color: 'var(--lg-text-tertiary)', fontSize: '0.85rem' }}>
-                  第 {state.page}/{state.totalPages} 页，共 {state.total} 项
-                </div>
-              </>
-            )}
-          </LiquidGlass>
-        </div>
-
-        {/* Detail Panel — Desktop only */}
-        {isDesktop && (
-          <DriveDetailPanel
-            item={selectedItem}
-            onClose={() => handleSelect(null)}
-            onDownload={startDownload}
-            onRename={(item) => dispatch({ type: 'SET_RENAME_ITEM', payload: item })}
-            onDelete={(item) => dispatch({ type: 'SET_DELETE_ITEM', payload: item })}
-            onPreview={handlePreview}
-          />
-        )}
-
-        {/* Mobile Bottom Navigation */}
-        {isMobile && (
-          <MobileNav activeTab={mobileTab} onTabChange={setMobileTab} />
-        )}
-
-        {/* Download Manager — Floating Panel */}
-        <DownloadManager />
-
-        {/* Modals */}
-        {state.previewItem && (
-          <DrivePreview
-            item={state.previewItem}
-            onClose={() => dispatch({ type: 'SET_PREVIEW_ITEM', payload: null })}
-          />
-        )}
-        {state.showNewFolder && (
-          <NewFolderDialog
-            parentId={currentParentId}
-            onCreated={() => { refresh(); dispatch({ type: 'TOGGLE_NEW_FOLDER', payload: false }) }}
-            onClose={() => dispatch({ type: 'TOGGLE_NEW_FOLDER', payload: false })}
-          />
-        )}
-        {state.renameItem && (
-          <RenameDialog
-            item={state.renameItem}
-            onRenamed={() => { dispatch({ type: 'SET_RENAME_ITEM', payload: null }); refresh() }}
-            onClose={() => dispatch({ type: 'SET_RENAME_ITEM', payload: null })}
-          />
-        )}
-        {state.deleteItem && (
-          <DeleteDialog
-            item={state.deleteItem}
-            onDeleted={() => { dispatch({ type: 'SET_DELETE_ITEM', payload: null }); refresh() }}
-            onClose={() => dispatch({ type: 'SET_DELETE_ITEM', payload: null })}
-          />
-        )}
+            </>
+          )}
+        </LiquidGlass>
       </div>
+
+      {/* Detail Panel */}
+      {isDesktop && (
+        <DriveDetailPanel
+          item={selectedItem}
+          onClose={() => handleSelect(null)}
+          onDownload={startDownload}
+          onRename={(item) => dialogs.openRename(item)}
+          onDelete={(item) => dialogs.openDelete(item)}
+          onPreview={handlePreview}
+        />
+      )}
+
+      {/* Mobile Nav */}
+      {isMobile && <MobileNav activeTab={mobileTab} onTabChange={setMobileTab} />}
+
+      {/* Download Manager */}
+      <DownloadManager />
+
+      {/* Modals */}
+      {dialogs.previewItem && (
+        <DrivePreview item={dialogs.previewItem} onClose={dialogs.closePreview} />
+      )}
+      {dialogs.showNewFolder && (
+        <NewFolderDialog
+          parentId={currentParentId}
+          onCreated={() => { refresh(); dialogs.closeNewFolder() }}
+          onClose={dialogs.closeNewFolder}
+        />
+      )}
+      {dialogs.renameItem && (
+        <RenameDialog
+          item={dialogs.renameItem}
+          onRenamed={() => { dialogs.closeRename(); refresh() }}
+          onClose={dialogs.closeRename}
+        />
+      )}
+      {dialogs.deleteItem && (
+        <DeleteDialog
+          item={dialogs.deleteItem}
+          onDeleted={() => { dialogs.closeDelete(); refresh() }}
+          onClose={dialogs.closeDelete}
+        />
+      )}
+    </div>
+  )
+}
+
+export default function DrivePage() {
+  return (
+    <DriveProvider>
+      <DrivePageInner />
     </DriveProvider>
   )
 }

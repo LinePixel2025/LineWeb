@@ -92,7 +92,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     } catch (err: unknown) {
       const aborted = err instanceof DOMException && err.name === 'AbortError'
       setTasks(prev => prev.map(t => t.id === id ? {
-        ...t, status: (aborted ? 'cancelled' : 'error') as const,
+        ...t, status: (aborted ? 'cancelled' : 'error') as 'cancelled' | 'error',
         error: aborted ? undefined : (err instanceof Error ? err.message : '下载失败'),
       } : t))
       removeTaskAfter(id, aborted ? 1000 : 5000)
