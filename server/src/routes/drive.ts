@@ -448,26 +448,13 @@ router.post('/upload', async (req: Request, res: Response) => {
           }
         }
 
-        // 流式转发到存储节点 — 边收边发，无需全量缓冲
-        let totalSize = 0
-
-        async function* streamToAsyncIterable(stream: AsyncIterable<Buffer>) {
-          for await (const chunk of stream) {
-            totalSize += chunk.length
-            yield chunk
-          }
-        }
-
-        // === 先创建 DB 记录（唯一约束可防止重复），再写入存储节点 ===
-        // 这样即使后续写入失败，也不会出现「节点有文件但 DB 缺失」的不一致状态
-        // P10: Storage write happens after DB create — cleanup on failure
-        // P33: DB create + storage write wrapped in error handling (external write prevents $transaction)
+        // === 先创建 DB 记录，再流式写入存储节点 ===
         const file = await prisma.driveFile.create({
           data: {
             name: finalName,
             isFolder: false,
             parentId: parentId || null,
-            size: BigInt(totalSize),
+            size: 0n,
             mimeType,
             storagePath,
             uploadedById: req.user!.userId,
@@ -479,31 +466,23 @@ router.post('/upload', async (req: Request, res: Response) => {
 
         let writeSucceeded = false
         try {
-          const writeResult = await streamWrite(storagePath, streamToAsyncIterable(stream), 0)
-          if (!writeResult.success) {
-            throw new Error(`存储节点写入失败: ${writeResult.error}`)
-          }
+          const { bytesWritten } = await streamWriteBinary(storagePath, stream)
           writeSucceeded = true
 
-          // 写入节点成功后更新实际大小
-          if (totalSize > 0) {
-            await prisma.driveFile.update({
-              where: { id: file.id },
-              data: { size: BigInt(totalSize) },
-            })
-          }
+          await prisma.driveFile.update({
+            where: { id: file.id },
+            data: { size: BigInt(bytesWritten) },
+          })
 
           res.status(201).json(transformSize(file))
         } catch (writeErr) {
-          // 存储节点写入失败 → 回滚：删除 DB 记录 + 清理节点残片
           await prisma.driveFile.delete({ where: { id: file.id } }).catch(() => {})
-          // P10: Only notify storage node if write actually started (prevents double-cleanup)
           if (writeSucceeded) {
             try {
               if (isNodeConnected()) {
                 await sendCommand({ type: 'delete_file', path: storagePath })
               }
-            } catch { /* 节点清理失败则留待后续处理 */ }
+            } catch { /* ignore */ }
           }
           throw writeErr
         }
