@@ -113,7 +113,7 @@ const DriveListView = memo(function DriveListView({ items, selectedId, sortField
       <div className="drive-table-wrap" onContextMenu={handleBlankAreaContextMenu}>
         <TableVirtuoso
           className="drive-table"
-          style={{ height: 'calc(100vh - 280px)' }}
+          style={{ height: 'calc(100vh - 280px)', width: '100%', minHeight: '1px' }}
           totalCount={items.length}
           components={{ TableRow: CustomTableRow }}
           fixedHeaderContent={() => (

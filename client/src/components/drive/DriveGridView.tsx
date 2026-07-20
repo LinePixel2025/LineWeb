@@ -84,7 +84,7 @@ const DriveGridView = memo(function DriveGridView({
   return (
     <>
       <VirtuosoGrid
-        style={{ height: 'calc(100vh - 280px)' }}
+        style={{ height: 'calc(100vh - 280px)', width: '100%', minHeight: '1px' }}
         totalCount={items.length}
         components={gridComponents}
         itemContent={(index) => {
