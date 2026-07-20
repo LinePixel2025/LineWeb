@@ -97,11 +97,18 @@ const DriveListView = memo(function DriveListView({ items, selectedId, sortField
     const currentItems = itemsRef.current
     const currentSelectedId = selectedIdRef.current
     const item = !isNaN(idx) && idx >= 0 && idx < currentItems.length ? currentItems[idx] : undefined
+    const isDraggable = item ? !item.isFolder : false
     return (
       <tr ref={ref} {...props}
         className={`drive-row ${item && currentSelectedId === item.id ? 'drive-row--selected' : ''}`}
         onClick={() => item && onSelectRef.current(item)}
         onContextMenu={(e) => item && handleItemContextMenuRef.current(e, item)}
+        draggable={isDraggable}
+        onDragStart={(e) => {
+          if (!item || item.isFolder) { e.preventDefault(); return }
+          e.dataTransfer.setData('text/plain', JSON.stringify([item.id]))
+          e.dataTransfer.effectAllowed = 'move'
+        }}
       >
         {children}
       </tr>

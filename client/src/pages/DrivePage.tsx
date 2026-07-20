@@ -12,6 +12,7 @@ import UploadZone from '../components/drive/UploadZone'
 import DrivePreview from '../components/drive/DrivePreview'
 import DownloadManager from '../components/drive/DownloadManager'
 import BatchActions from '../components/drive/BatchActions'
+import FolderPickerDialog from '../components/drive/FolderPickerDialog'
 import { NewFolderDialog, RenameDialog, DeleteDialog } from '../components/drive/DriveDialogs'
 import Pagination from '../components/Pagination'
 import api from '../lib/api'
@@ -35,6 +36,8 @@ function DrivePageInner() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileTab, setMobileTab] = useState<'files' | 'favorites' | 'search' | 'settings'>('files')
   const [batchSelected, setBatchSelected] = useState<number[]>([])
+  const [showFolderPicker, setShowFolderPicker] = useState(false)
+  const [pendingMoveIds, setPendingMoveIds] = useState<number[]>([])
 
   const currentParentId = breadcrumbs[breadcrumbs.length - 1]?.id ?? null
 
@@ -168,6 +171,25 @@ function DrivePageInner() {
     dialogs.closeUpload()
   }, [refresh, dialogs])
 
+  // 批量移动
+  const handleBatchMove = useCallback(() => {
+    if (batchSelected.length === 0) return
+    setPendingMoveIds(batchSelected)
+    setShowFolderPicker(true)
+  }, [batchSelected])
+
+  const handleFolderPick = useCallback(async (targetFolderId: number | null) => {
+    try {
+      await Promise.allSettled(
+        pendingMoveIds.map(fileId => api.put(`/drive/files/${fileId}`, { parentId: targetFolderId }))
+      )
+      clearSelection()
+      setBatchSelected([])
+      invalidate()
+    } catch { /* ignore */ }
+    setShowFolderPicker(false)
+  }, [pendingMoveIds, clearSelection, invalidate])
+
   return (
     <div className="page drive-page">
       {isDesktop && (
@@ -212,7 +234,7 @@ function DrivePageInner() {
                 displayItems.filter(i => batchSelected.includes(i.id) && !i.isFolder)
                   .forEach(i => startDownload(i))
               }}
-              onBatchMove={() => alert('移动功能即将上线')}
+              onBatchMove={handleBatchMove}
               onBatchDelete={() => {
                 const item = displayItems.find(i => batchSelected.includes(i.id))
                 if (item) dialogs.openDelete(item)
@@ -354,6 +376,15 @@ function DrivePageInner() {
           item={dialogs.deleteItem}
           onDeleted={() => { dialogs.closeDelete(); refresh() }}
           onClose={dialogs.closeDelete}
+        />
+      )}
+
+      {/* Folder Picker for batch move */}
+      {showFolderPicker && (
+        <FolderPickerDialog
+          title={`移动 ${pendingMoveIds.length} 个文件到...`}
+          onSelect={handleFolderPick}
+          onClose={() => setShowFolderPicker(false)}
         />
       )}
     </div>

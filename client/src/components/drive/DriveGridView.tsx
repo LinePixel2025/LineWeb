@@ -63,10 +63,17 @@ const DriveGridView = memo(function DriveGridView({
       const currentSelectedId = selectedIdRef.current
       const item = !isNaN(idx) && idx >= 0 && idx < currentItems.length ? currentItems[idx] : undefined
       const isSelected = item ? currentSelectedId === item.id : false
+      const isDraggable = item ? !item.isFolder : false
       return (
         <div {...props}
           className={`drive-grid-card${isSelected ? ' drive-grid-card--selected' : ''}`}
           style={{ flex: '1 1 160px', minWidth: 0, maxWidth: '1fr' }}
+          draggable={isDraggable}
+          onDragStart={(e) => {
+            if (!item || item.isFolder) { e.preventDefault(); return }
+            e.dataTransfer.setData('text/plain', JSON.stringify([item.id]))
+            e.dataTransfer.effectAllowed = 'move'
+          }}
         >
           {children}
         </div>
