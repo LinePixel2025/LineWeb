@@ -29,6 +29,8 @@ ROOT.mkdir(parents=True, exist_ok=True)
 # 当前活跃的写入临时文件（单线程缓存，同一时间只处理一个上传）
 _active_write_file: dict = {}  # { "path": ..., "fd": ..., "tmp_path": ... }
 
+active_streams: dict = {}  # { stream_id: { "type": "write", "file": f, "sha256": h, "bytes_written": int } }
+
 # === 文件操作函数 ===
 
 def handle_write_file(cmd: dict) -> dict:
@@ -137,8 +139,29 @@ def handle_read_file(cmd: dict) -> dict:
 
 
 async def handle_binary_frame(ws, data: bytes):
-    """处理二进制帧 — 路由到写入流。Task 8 实现。"""
-    pass
+    """处理二进制帧 — 按 streamId 路由到写入流。"""
+    if len(data) < 4:
+        return
+    stream_id = struct.unpack(">I", data[:4])[0]
+    payload = data[4:]
+
+    stream = active_streams.get(stream_id)
+    if not stream or stream.get("type") != "write":
+        log.warning(f"收到未知流 streamId={stream_id} 的二进制帧")
+        return
+
+    try:
+        f = stream["file"]
+        f.write(payload)
+        stream["sha256"].update(payload)
+        stream["bytes_written"] += len(payload)
+    except Exception as e:
+        log.error(f"写入流 streamId={stream_id} 失败: {e}")
+        try:
+            stream["file"].close()
+        except:
+            pass
+        active_streams.pop(stream_id, None)
 
 
 async def handle_read_file_stream(ws, cmd):
@@ -189,6 +212,85 @@ async def handle_read_file_stream(ws, cmd):
         }))
     except Exception as e:
         log.error(f"read_file_stream 失败 ({path}): {e}")
+        await ws.send(json.dumps({
+            "type": "stream_end",
+            "streamId": stream_id,
+            "success": False,
+            "error": str(e),
+        }))
+
+
+def handle_write_file_stream(cmd):
+    """初始化二进制流写入 — 打开 .tmp 文件准备接收数据。"""
+    stream_id = cmd.get("streamId", 0)
+    path = cmd.get("path", "")
+    total_size = cmd.get("totalSize", 0)
+
+    tmp_path = ROOT / (path + ".tmp")
+    tmp_path.parent.mkdir(parents=True, exist_ok=True)
+    f = open(str(tmp_path), "wb")
+
+    active_streams[stream_id] = {
+        "type": "write",
+        "path": path,
+        "tmp_path": str(tmp_path),
+        "file": f,
+        "sha256": hashlib.sha256(),
+        "bytes_written": 0,
+        "total_size": total_size,
+    }
+
+    log.info(f"Start binary stream write: {path} (stream {stream_id})")
+    return {"success": True}
+
+
+async def handle_stream_eof(ws, cmd):
+    """流结束 — fsync + close + rename + SHA-256 校验。"""
+    stream_id = cmd.get("streamId", 0)
+    expected_sha256 = cmd.get("sha256", "")
+
+    stream = active_streams.pop(stream_id, None)
+    if not stream:
+        await ws.send(json.dumps({
+            "type": "stream_end",
+            "streamId": stream_id,
+            "success": False,
+            "error": "无效的 streamId",
+        }))
+        return
+
+    try:
+        f = stream["file"]
+        f.flush()
+        os.fsync(f.fileno())
+        f.close()
+
+        actual_sha256 = stream["sha256"].hexdigest()
+        match = actual_sha256 == expected_sha256
+
+        if match:
+            final_path = str(ROOT / stream["path"])
+            os.rename(stream["tmp_path"], final_path)
+            log.info(f"Binary stream write complete: {stream['path']} ({stream['bytes_written']} bytes)")
+        else:
+            os.unlink(stream["tmp_path"])
+            log.error(f"Binary stream SHA-256 mismatch: {stream['path']} (expected={expected_sha256[:8]}..., actual={actual_sha256[:8]}...)")
+
+        await ws.send(json.dumps({
+            "type": "stream_end",
+            "streamId": stream_id,
+            "sha256": actual_sha256,
+            "bytesWritten": stream["bytes_written"],
+            "success": match,
+            "checksumMatch": match,
+            "error": None if match else "SHA-256 校验不匹配",
+        }))
+    except Exception as e:
+        log.error(f"stream_eof 失败 (stream {stream_id}): {e}")
+        try:
+            stream["file"].close()
+        except:
+            pass
         await ws.send(json.dumps({
             "type": "stream_end",
             "streamId": stream_id,
@@ -309,6 +411,12 @@ async def handle_command(cmd: dict, ws) -> dict | None:
         elif cmd_type == "read_file_stream":
             await handle_read_file_stream(ws, cmd)
             return None  # 异步处理，不返回同步响应
+        elif cmd_type == "write_file_stream":
+            result = handle_write_file_stream(cmd)
+            return {"id": cmd_id, **result}
+        elif cmd_type == "stream_eof":
+            await handle_stream_eof(ws, cmd)
+            return None
         elif cmd_type == "move":
             new_path = Path(cmd.get("newPath", "")).as_posix()
             result = handler(path, new_path)
