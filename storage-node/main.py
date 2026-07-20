@@ -5,6 +5,8 @@ import os
 import base64
 import logging
 import shutil
+import struct
+import hashlib
 from pathlib import Path
 
 # 配置
@@ -134,6 +136,67 @@ def handle_read_file(cmd: dict) -> dict:
     }
 
 
+async def handle_binary_frame(ws, data: bytes):
+    """处理二进制帧 — 路由到写入流。Task 8 实现。"""
+    pass
+
+
+async def handle_read_file_stream(ws, cmd):
+    """二进制流式读取 — 发送一次命令，持续推送二进制帧直到读完或 length 耗尽。"""
+    stream_id = cmd.get("streamId", 0)
+    path = cmd.get("path", "")
+    offset = cmd.get("offset", 0)
+    length = cmd.get("length")  # None = 读到文件末尾
+
+    abs_path = ROOT / path
+    if not abs_path.exists():
+        await ws.send(json.dumps({
+            "type": "stream_end",
+            "streamId": stream_id,
+            "success": False,
+            "error": "文件不存在",
+        }))
+        return
+
+    h = hashlib.sha256()
+    bytes_read = 0
+    CHUNK = 2 * 1024 * 1024  # 2MB
+
+    try:
+        with open(str(abs_path), "rb") as f:
+            f.seek(offset)
+            remaining = length
+            while True:
+                read_size = CHUNK if remaining is None else min(CHUNK, remaining)
+                chunk = f.read(read_size)
+                if not chunk:
+                    break
+                h.update(chunk)
+                bytes_read += len(chunk)
+                frame = struct.pack(">I", stream_id) + chunk
+                await ws.send(frame)  # websockets library: bytes -> binary frame
+                if remaining is not None:
+                    remaining -= len(chunk)
+                    if remaining <= 0:
+                        break
+
+        await ws.send(json.dumps({
+            "type": "stream_end",
+            "streamId": stream_id,
+            "sha256": h.hexdigest(),
+            "bytesRead": bytes_read,
+            "success": True,
+        }))
+    except Exception as e:
+        log.error(f"read_file_stream 失败 ({path}): {e}")
+        await ws.send(json.dumps({
+            "type": "stream_end",
+            "streamId": stream_id,
+            "success": False,
+            "error": str(e),
+        }))
+
+
 def handle_delete_file(path: str) -> dict:
     abs_path = ROOT / path
     if abs_path.is_dir():
@@ -243,6 +306,9 @@ async def handle_command(cmd: dict, ws) -> dict | None:
                     "isEOF": result.get("isEOF", True),
                 }
             return {"id": cmd_id, "success": False, "error": result.get("error", "读取失败")}
+        elif cmd_type == "read_file_stream":
+            await handle_read_file_stream(ws, cmd)
+            return None  # 异步处理，不返回同步响应
         elif cmd_type == "move":
             new_path = Path(cmd.get("newPath", "")).as_posix()
             result = handler(path, new_path)
@@ -280,10 +346,14 @@ async def connect():
 
                 # 主循环 — 接收并执行指令
                 async for message in ws:
-                    cmd = json.loads(message)
-                    response = await handle_command(cmd, ws)
-                    if response is not None:
-                        await ws.send(json.dumps(response))
+                    if isinstance(message, bytes):
+                        # 二进制帧：处理写入流数据（Task 8 实现）
+                        await handle_binary_frame(ws, message)
+                    else:
+                        cmd = json.loads(message)
+                        response = await handle_command(cmd, ws)
+                        if response is not None:
+                            await ws.send(json.dumps(response))
 
         except websockets.ConnectionClosed:
             log.warning("连接断开，准备重连...")
