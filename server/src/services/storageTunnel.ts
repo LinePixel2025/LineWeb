@@ -373,6 +373,56 @@ export async function* streamRead(path: string): AsyncGenerator<Buffer> {
 }
 
 /**
+ * 二进制流式读取 — 发送一次 read_file_stream 命令，存储节点持续推送二进制帧
+ * 每个二进制帧前 4 字节为 streamId，后接文件原始数据（无 base64）。
+ */
+export async function* streamReadBinary(
+  path: string,
+  offset = 0,
+  length?: number,
+): AsyncGenerator<Buffer> {
+  if (!activeNode || !nodeConnected) {
+    throw new Error('存储节点未连接')
+  }
+
+  const streamId = nextStreamId()
+  const stream = new PendingStream(streamId)
+  streamRegistry.set(streamId, stream)
+
+  const timeoutMs = 120_000
+  let timeout: ReturnType<typeof setTimeout> | undefined
+
+  const resetTimeout = () => {
+    clearTimeout(timeout)
+    timeout = setTimeout(() => {
+      stream.fail(new Error('下载流超时 (120s)'))
+      streamRegistry.delete(streamId)
+    }, timeoutMs)
+  }
+  resetTimeout()
+
+  try {
+    await sendCommand({
+      type: 'read_file_stream',
+      path,
+      streamId,
+      offset,
+      length,
+    })
+
+    for await (const chunk of stream) {
+      resetTimeout()
+      yield chunk
+    }
+
+    await stream.awaitChecksum()
+  } finally {
+    clearTimeout(timeout)
+    streamRegistry.delete(streamId)
+  }
+}
+
+/**
  * 初始化 WebSocket 服务器
  */
 export function initStorageTunnel(server: HttpServer) {
