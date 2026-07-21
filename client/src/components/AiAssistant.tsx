@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../lib/api'
+import LiquidGlass from './glass/LiquidGlass'
+import DOMPurify from 'dompurify'
 
 interface ChatMessage {
   id: number
@@ -8,6 +10,89 @@ interface ChatMessage {
 }
 
 let nextId = 1
+
+/** 轻量 markdown → HTML 渲染器 */
+function renderMarkdown(text: string): string {
+  // 1. HTML 转义
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+
+  // 2. 提取代码块为占位符
+  const codeBlocks: string[] = []
+  let processed = escaped.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    const idx = codeBlocks.length
+    const langClass = lang ? ` class="language-${lang}"` : ''
+    codeBlocks.push(`<pre><code${langClass}>${code}</code></pre>`)
+    return `%%CODEBLOCK_${idx}%%`
+  })
+
+  // 3. 行内模式处理
+  processed = processed
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+
+  // 4. 按行处理块级元素
+  const lines = processed.split('\n')
+  let html = ''
+  let inUl = false
+  let inOl = false
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const codeBlockMatch = line.match(/^%%CODEBLOCK_(\d+)%%$/)
+    if (codeBlockMatch) {
+      if (inUl) { html += '</ul>\n'; inUl = false }
+      if (inOl) { html += '</ol>\n'; inOl = false }
+      html += codeBlocks[parseInt(codeBlockMatch[1])] + '\n'
+      continue
+    }
+
+    // 标题
+    if (/^#{1,4}\s/.test(line)) {
+      if (inUl) { html += '</ul>\n'; inUl = false }
+      if (inOl) { html += '</ol>\n'; inOl = false }
+      const level = line.match(/^#{1,4}/)![0].length
+      html += `<h${level}>${line.replace(/^#+\s/, '')}</h${level}>\n`
+      continue
+    }
+
+    // 无序列表
+    if (/^\s*[-*]\s/.test(line)) {
+      if (inOl) { html += '</ol>\n'; inOl = false }
+      if (!inUl) { html += '<ul>\n'; inUl = true }
+      html += `<li>${line.replace(/^\s*[-*]\s/, '')}</li>\n`
+      continue
+    }
+
+    // 有序列表
+    if (/^\s*\d+\.\s/.test(line)) {
+      if (inUl) { html += '</ul>\n'; inUl = false }
+      if (!inOl) { html += '<ol>\n'; inOl = true }
+      html += `<li>${line.replace(/^\s*\d+\.\s/, '')}</li>\n`
+      continue
+    }
+
+    if (inUl) { html += '</ul>\n'; inUl = false }
+    if (inOl) { html += '</ol>\n'; inOl = false }
+
+    if (line.trim() === '') {
+      html += '<br>\n'
+      continue
+    }
+
+    html += `<p>${line}</p>\n`
+  }
+
+  if (inUl) html += '</ul>\n'
+  if (inOl) html += '</ol>\n'
+
+  return DOMPurify.sanitize(`<div class="ai-markdown">${html}</div>`)
+}
 
 export default function AiAssistant() {
   const [enabled, setEnabled] = useState(false)
@@ -86,7 +171,7 @@ export default function AiAssistant() {
       {/* 浮动按钮 */}
       {!open && (
         <button
-          className="ai-assistant-fab"
+          className="ai-assistant-fab lg-surface"
           onClick={() => setOpen(true)}
           aria-label="AI 助手"
           title="AI 助手"
@@ -97,7 +182,26 @@ export default function AiAssistant() {
 
       {/* 聊天面板 */}
       {open && (
-        <div className="ai-assistant-panel">
+        <LiquidGlass
+          variant="strong"
+          className="ai-assistant-panel"
+          interactive
+          chromatic
+          style={{
+            position: 'fixed',
+            bottom: '72px',
+            right: '20px',
+            zIndex: 1000,
+            width: '360px',
+            height: '500px',
+            maxHeight: 'calc(100dvh - 100px)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            animation: 'ai-panel-in 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)',
+            padding: 0,
+          }}
+        >
           {/* 头部 */}
           <div className="ai-assistant-header">
             <div className="ai-assistant-header-left">
@@ -130,13 +234,18 @@ export default function AiAssistant() {
                 className={`ai-chat-message ${msg.role === 'user' ? 'ai-chat-message--user' : 'ai-chat-message--ai'}`}
               >
                 <div className="ai-chat-bubble">
-                  {msg.content}
+                  {msg.role === 'assistant' ? (
+                    <div dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
+                  ) : (
+                    msg.content
+                  )}
                 </div>
               </div>
             ))}
             {loading && (
               <div className="ai-chat-message ai-chat-message--ai">
                 <div className="ai-chat-bubble ai-chat-typing">
+                  <span className="ai-chat-typing-label">思考中</span>
                   <span className="ai-chat-dot" />
                   <span className="ai-chat-dot" />
                   <span className="ai-chat-dot" />
@@ -150,7 +259,7 @@ export default function AiAssistant() {
           <div className="ai-chat-input-area">
             <textarea
               ref={inputRef}
-              className="ai-chat-input"
+              className="ai-chat-input lg-input"
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -170,7 +279,7 @@ export default function AiAssistant() {
               </svg>
             </button>
           </div>
-        </div>
+        </LiquidGlass>
       )}
     </>
   )

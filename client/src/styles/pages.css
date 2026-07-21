@@ -255,52 +255,6 @@
 }
 
 /* ============================================================
-   Wallpaper Refresh Button — Floating bottom-right
-   ============================================================ */
-.wallpaper-refresh-btn {
-  position: fixed;
-  bottom: max(60px, calc(var(--lg-safe-bottom) + 24px));
-  right: max(16px, var(--lg-safe-right));
-  z-index: 50;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 1px solid var(--lg-glass-border);
-  background: rgba(255,255,255,0.08);
-  backdrop-filter: var(--lg-frost);
-  -webkit-backdrop-filter: var(--lg-frost);
-  color: var(--lg-text-secondary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-              background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-              color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-              box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
-  box-shadow: 0 2px 8px var(--lg-glass-shadow);
-}
-
-.wallpaper-refresh-btn:hover {
-  background: rgba(255,255,255,0.14);
-  color: var(--lg-text-primary);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px var(--lg-glass-shadow);
-}
-
-.wallpaper-refresh-btn:active {
-  transform: scale(0.92);
-}
-
-.wallpaper-refresh-btn svg {
-  transition: transform 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-
-.wallpaper-refresh-btn:active svg {
-  transform: rotate(90deg);
-}
-
-/* ============================================================
    Admin Layout — Standalone admin interface
    ============================================================ */
 
@@ -781,38 +735,6 @@ body.admin-menu-open {
   .admin-main {
     padding-bottom: calc(72px + env(safe-area-inset-bottom));
   }
-}
-
-/* --- Wallpaper refresh button --- */
-.admin-wallpaper-refresh {
-  position: fixed;
-  bottom: max(24px, calc(var(--lg-safe-bottom) + 12px));
-  right: max(24px, var(--lg-safe-right));
-  z-index: 150;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 1px solid var(--lg-glass-border);
-  background: rgba(0, 0, 0, 0.35);
-  backdrop-filter: var(--lg-frost);
-  -webkit-backdrop-filter: var(--lg-frost);
-  color: var(--lg-text-secondary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-              background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-              color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-              box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.admin-wallpaper-refresh:hover {
-  background: rgba(255, 255, 255, 0.14);
-  color: var(--lg-text-primary);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 /* ============================================================
@@ -2768,10 +2690,6 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
 /* 平滑过渡 */
 [data-ac] { transition: color 0.3s ease; }
 
-/* 刷新按钮旋转动画 — CSS 内处理，不依赖 inline style */
-.wallpaper-refresh-btn.refreshing svg {
-  animation: spin 0.8s linear infinite;
-}
 
 /* ============================================================
    Page Editor — Visual Page Builder
@@ -3442,17 +3360,11 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
     font-size: 1.2rem;
   }
 
-  /* Wallpaper refresh button - move up to avoid tab bar overlap */
-  .admin-wallpaper-refresh {
-    bottom: 80px;
-  }
-}
-
-/* ============================================================
+  /* ============================================================
    AI 助手 — 浮动聊天组件
    ============================================================ */
 
-/* 浮动按钮 */
+/* 浮动按钮 — lg-surface 提供背景、边框和阴影 */
 .ai-assistant-fab {
   position: fixed;
   bottom: 72px;
@@ -3460,25 +3372,20 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   z-index: 999;
   width: 52px;
   height: 52px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: var(--lg-glass-bg, rgba(30, 30, 35, 0.75));
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-  color: #fff;
+  border-radius: var(--lg-radius-full);
+  color: var(--lg-text-primary);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
   transition: transform var(--lg-transition), box-shadow var(--lg-transition);
   animation: ai-fab-pulse 2.5s ease-in-out infinite;
 }
 
 .ai-assistant-fab:hover {
   transform: scale(1.08);
-  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
   animation: none;
+  box-shadow: 0 6px 28px var(--lg-glass-shadow), 0 2px 6px rgba(0,0,0,0.25);
 }
 
 .ai-assistant-fab:active {
@@ -3491,29 +3398,13 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
 }
 
 @keyframes ai-fab-pulse {
-  0%, 100% { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(41, 151, 255, 0.3); }
-  50% { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 8px rgba(41, 151, 255, 0); }
+  0%, 100% { box-shadow: 0 4px 20px var(--lg-glass-shadow), 0 0 0 0 var(--lg-accent-glow); }
+  50% { box-shadow: 0 4px 20px var(--lg-glass-shadow), 0 0 0 8px rgba(41, 151, 255, 0); }
 }
 
-/* 聊天面板 */
+/* 聊天面板 — 布局属性，玻璃效果由 LiquidGlass 组件提供 */
 .ai-assistant-panel {
-  position: fixed;
-  bottom: 72px;
-  right: 20px;
-  z-index: 1000;
-  width: 360px;
-  height: 500px;
-  max-height: calc(100dvh - 100px);
-  border-radius: var(--lg-radius-md, 12px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: var(--lg-glass-bg, rgba(22, 22, 28, 0.88));
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: ai-panel-in 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+  /* 仅保留布局、动画覆盖 — 玻璃效果来自 LiquidGlass strong variant */
 }
 
 @keyframes ai-panel-in {
@@ -3533,7 +3424,7 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--lg-glass-border);
   flex-shrink: 0;
 }
 
@@ -3659,9 +3550,9 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
 }
 
 .ai-chat-message--ai .ai-chat-bubble {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--lg-glass-bg);
   color: var(--lg-text-primary);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--lg-glass-border);
   border-bottom-left-radius: 6px;
 }
 
@@ -3669,16 +3560,23 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
 .ai-chat-typing {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   padding: 14px 16px;
 }
 
+.ai-chat-typing-label {
+  color: var(--lg-text-tertiary);
+  font-size: 0.85rem;
+  margin-right: 2px;
+  animation: ai-thinking-fade 1.6s ease-in-out infinite;
+}
+
 .ai-chat-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--lg-text-tertiary);
-  animation: ai-dot-bounce 1.4s ease-in-out infinite;
+  animation: ai-dot-refined 1.4s ease-in-out infinite;
 }
 
 .ai-chat-dot:nth-child(2) {
@@ -3689,9 +3587,14 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   animation-delay: 0.4s;
 }
 
-@keyframes ai-dot-bounce {
-  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-  40% { transform: scale(1); opacity: 1; }
+@keyframes ai-dot-refined {
+  0%, 80%, 100% { transform: translateY(0) scale(0.7); opacity: 0.3; }
+  40% { transform: translateY(-4px) scale(1); opacity: 1; }
+}
+
+@keyframes ai-thinking-fade {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }
 
 /* 输入区域 */
@@ -3700,29 +3603,19 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   align-items: flex-end;
   gap: 8px;
   padding: 12px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--lg-glass-border);
   flex-shrink: 0;
 }
 
-.ai-chat-input {
+/* 输入框 — lg-input 提供背景、边框等基础样式，此处仅保留布局覆盖 */
+.ai-chat-input.lg-input {
   flex: 1;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  /* lg-input 默认 padding: 14px 18px，聊天框用更紧凑的值 */
   padding: 10px 14px;
-  color: var(--lg-text-primary);
   font-size: 0.9rem;
-  font-family: var(--lg-font);
   resize: none;
-  outline: none;
   max-height: 120px;
   line-height: 1.5;
-  transition: border-color var(--lg-transition), background var(--lg-transition);
-}
-
-.ai-chat-input:focus {
-  border-color: var(--lg-accent, #2997ff);
-  background: rgba(255, 255, 255, 0.08);
 }
 
 .ai-chat-input::placeholder {
@@ -3733,12 +3626,17 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   opacity: 0.5;
 }
 
+.ai-chat-input:focus {
+  border-color: var(--lg-accent);
+  background: var(--lg-glass-bg);
+}
+
 .ai-chat-send {
   width: 38px;
   height: 38px;
   border-radius: 50%;
   border: none;
-  background: var(--lg-accent, #2997ff);
+  background: var(--lg-accent);
   color: #fff;
   cursor: pointer;
   display: flex;
@@ -3749,7 +3647,7 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
 }
 
 .ai-chat-send:hover:not(:disabled) {
-  background: #40a9ff;
+  background: var(--lg-accent-hover);
   transform: scale(1.05);
 }
 
@@ -3778,13 +3676,12 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   }
 
   .ai-assistant-panel {
-    bottom: 0;
-    right: 0;
-    width: 100%;
-    height: 100dvh;
-    max-height: 100dvh;
-    border-radius: 0;
-    border: none;
+    bottom: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
     animation: ai-panel-in-mobile 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
   }
 
@@ -3796,4 +3693,92 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   .ai-chat-message {
     max-width: 90%;
   }
+}
+
+/* ============================================================
+   AI Markdown 渲染 — AI 气泡中的格式化文本
+   ============================================================ */
+.ai-markdown {
+  line-height: 1.6;
+}
+
+.ai-markdown p {
+  margin: 0 0 8px;
+}
+
+.ai-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.ai-markdown h1,
+.ai-markdown h2,
+.ai-markdown h3,
+.ai-markdown h4 {
+  margin: 12px 0 6px;
+  font-weight: 600;
+  color: var(--lg-text-primary);
+}
+
+.ai-markdown h1 { font-size: 1.15rem; }
+.ai-markdown h2 { font-size: 1.1rem; }
+.ai-markdown h3 { font-size: 1.05rem; }
+.ai-markdown h4 { font-size: 1rem; }
+
+.ai-markdown ul,
+.ai-markdown ol {
+  margin: 4px 0;
+  padding-left: 20px;
+}
+
+.ai-markdown li {
+  margin: 2px 0;
+}
+
+.ai-markdown code {
+  font-family: var(--lg-font-mono);
+  font-size: 0.85em;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.ai-markdown pre {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--lg-glass-border);
+  border-radius: var(--lg-radius-sm);
+  padding: 12px 14px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.ai-markdown pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.82rem;
+  color: var(--lg-text-secondary);
+}
+
+.ai-markdown a {
+  color: var(--lg-accent);
+  text-decoration: underline;
+}
+
+.ai-markdown a:hover {
+  color: var(--lg-accent-hover);
+}
+
+.ai-markdown strong {
+  font-weight: 700;
+  color: var(--lg-text-primary);
+}
+
+.ai-markdown em {
+  font-style: italic;
+}
+
+.ai-markdown br {
+  display: block;
+  content: '';
+  margin-top: 0.4em;
 }
