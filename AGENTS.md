@@ -12,8 +12,8 @@
 
 ```
 lineweb/
-├── client/           # React 19 + Vite 6 SPA（97 个源文件）→ 开发端口 5173，生产从 dist/ 提供
-├── server/           # Express 4 + Prisma 6 API（28 个源文件）→ 端口 3001，tsx 运行时，.js 导入后缀
+├── client/           # React 19 + Vite 6 SPA → 开发端口 5173，生产从 dist/ 提供
+├── server/           # Express 4 + Prisma 6 API → 端口 3001，tsx 运行时，.js 导入后缀
 ├── storage-node/     # Python 3 WebSocket 文件存储客户端（5 个文件）→ D:/LineWebDrive，仅本地
 ├── scripts/          # 14 个运维脚本（部署、开发启动/停止、webhook、截图）
 ├── docs/             # API 参考（1417 行）、Drive 部署指南、Liquid Glass 指南
@@ -36,7 +36,7 @@ lineweb/
 | 目录 | AGENTS.md | 覆盖内容 |
 |-----------|-----------|----------|
 | `client/` | ✅ | 路由、Context、网盘模块、数据获取、测试、反模式 |
-| `server/` | ✅ | 中间件链、12 个路由、8 个服务、认证流程、反模式 |
+| `server/` | ✅ | 中间件链、13 个路由、9 个服务、认证流程、反模式 |
 | `storage-node/` | ✅ | WebSocket 协议、9 个命令、安全、配置 |
 
 ## 哪里找
@@ -44,11 +44,14 @@ lineweb/
 | 跨模块关注点 | 位置 | 说明 |
 |----------------------|----------|-------|
 | 单体仓库编排 | `package.json` | `concurrently` 同时运行前后端；`postinstall` 级联安装子目录依赖 |
-| 部署流水线 | `Dockerfile` + `docker-compose.yml` + `.github/workflows/deploy.yml` | GitHub Actions SSH 到 123.207.8.77 自动部署（git reset --hard + docker compose down → build --no-cache → up --force-recreate + Nginx 缓存刷新） |
-| 数据库结构 | `server/prisma/schema.prisma` | 8 个模型；SQLite 开发，PostgreSQL Docker（自动转换） |
+| 部署流水线 | `Dockerfile` + `docker-compose.yml` + `.github/workflows/deploy.yml` | GitHub Actions SSH 到 123.207.8.77 自动部署（git reset --hard → build --no-cache → down → up --force-recreate + Nginx 缓存刷新；`set -e` 使构建失败时立即停止，不会静默回退旧版本） |
+| 数据库结构 | `server/prisma/schema.prisma` | 9 个模型；SQLite 开发，PostgreSQL Docker（自动转换） |
 | 数据库连接池 | `server/src/lib/prisma.ts` | 生产 PostgreSQL 自动注入 `connection_limit=10&pool_timeout=30`（环境变量 `DATABASE_POOL_SIZE`/`DATABASE_POOL_TIMEOUT` 可覆盖） |
-| 认证（JWT + API Key） | `server/src/middleware/auth.ts` | 双认证；11 个公开路径在 `index.ts` 中白名单 |
+| 认证（JWT + API Key） | `server/src/middleware/auth.ts` | 双认证 + ?token= 查询参数；11 个公开路径在 `index.ts` 中白名单 |
+| 屏幕时间认证 | `server/src/middleware/screenTimeAuth.ts` | `X-Screen-Time-Token` 头单独认证，用于 `/api/health/push` |
 | 存储架构 | `server/src/services/storageTunnel.ts` ↔ `storage-node/main.py` | WebSocket 隧道；服务器代理命令到 Python 节点 |
+| 全文搜索 | `server/src/services/ftsSearch.ts` | SQLite FTS5 全文索引，启动时 `ensureFTSTable` |
+| React Query 层 | `client/src/hooks/useQueries.ts` + `queryKeys.ts` | 公开页面已使用，管理页面仍手写 `useState+useEffect` |
 | 设计系统 | `client/src/styles/variables.css` + `glass.css` + `filters.svg` | 自定义 Liquid Glass，基于 CSS 变量 + SVG 置换滤镜 |
 | 环境配置 | `server/.env`（开发）+ `.env.docker`（生产） | `JWT_SECRET`、`DATABASE_URL`、`STORAGE_NODE_TOKEN` |
 | Nginx 反向代理 | `nginx.conf`（Docker）+ 1Panel 面板 | 1Panel 管理外部 HTTPS 反代 → 容器 3001 端口；静态资源 `/assets/` 直连 + Brotli 压缩 |
@@ -77,7 +80,7 @@ server.listen(3001)
   ├── helmet(CSP) → cors → compression
   ├── body parser 限定 /api（避免静态文件请求触发解析）
   ├── rate-limit(600/15min) → 设备追踪 → 全局认证检查
-  ├── cachePublic 中间件 → 12 个路由组挂载于 /api/*
+  ├── cachePublic 中间件 → 13 个路由组挂载于 /api/*
   ├── [生产] express.static(client/dist) + SPA fallback
   └── errorHandler
 
@@ -129,10 +132,13 @@ server.listen(3001)
 git push origin master
    → GitHub Actions SSH 至 123.207.8.77
       → cd /home/Lineweb
+      → set -e（任意步骤失败立即退出，防止静默回退旧版本）
       → git fetch origin master
       → git reset --hard origin/master     # 强制覆盖（.env 在 .gitignore 不受影响）
-      → docker compose down               # 停止旧容器
-      → docker compose up -d --build --force-recreate  # 重建并启动
+      → docker compose build --no-cache --pull  # 先构建，不中断线上服务
+      → docker compose down               # 构建成功后才停旧容器
+      → docker compose up -d --force-recreate  # 启动新容器
+      → Nginx 缓存刷新 + 健康检查
       → docker compose ps + logs          # 输出状态确认
       → docker image/builder prune --filter "until=24h"  # 仅清理 24h+ 旧缓存
 ```
@@ -183,23 +189,22 @@ git push origin master
 
 ### TypeScript
 
-- **`req.user!.userId`**（后端 27 处）— 非空断言；应使用声明合并
+- **`req.user!.userId`**（后端 36 处）— 非空断言；应使用声明合并
 - **`as any`**（1 处）、**`: any`**（2 处）、**`as unknown as X`**（10 处）— 散落的类型绕过
 - **`@/` 别名未普及** — 已配置但仅 2 个文件使用
 
 ### 错误处理
 
-- **裸 `catch {}`**（9 处）— 前后端多处静默吞错
-- **`.catch(() => {})`**（8 处）— Promise 拒绝被忽略
+- **`.catch(() => {})`**（12 处）— Promise 拒绝被忽略，主要集中 storageTunnel/drive/routes 中
 - **错误传播不一致** — 部分路由委托给 `errorHandler`，部分内联 `res.status(500)`
 
 ### 代码质量
 
-- **死代码**：`client/.../DriveSidebar.tsx`、`DriveContextMenu.tsx`、`server/src/lib/errorHandler.ts`
+- **死代码**：`client/.../DriveSidebar.tsx` 和 `DriveContextMenu.tsx` 已删除；`server/src/lib/errorHandler.ts` 未使用（实际用 `middleware/errorHandler.ts`）
 - **超大文件**：`drive.ts`（833 行）、`PageEditor.tsx`（733 行）、`DrivePage.tsx`（588 行）、`globals.css`（~2000+ 行）
 - **跨模块耦合**：`users.ts` 从 `drive.ts` 导入 `clearDriveAccessCache`
 - **服务层不一致**：部分路由使用 service 层（auth、posts、avatar），其他直接调用 Prisma（comments、pages、stats、apiKeys）
-- **React Query 已接入但未使用** — `QueryClientProvider` 在 App.tsx 中配置，所有页面仍使用手动 `useState+useEffect`
+- **React Query 层已使用** — `QueryClientProvider` 在 App.tsx 中配置，公开页面通过 `useQueries.ts` 使用 React Query，管理页面仍手写 `useState+useEffect`
 
 ### 数据库
 
@@ -222,7 +227,7 @@ npm run dev:server       # tsx watch server/src/index.ts
 npm run dev:client       # vite（端口 5173，代理 /api → :3001）
 
 # 构建 & 生产
-npm run build            # 仅 vite 构建 client（server 通过 tsx 运行，从不编译）
+npm run build            # 仅 vite 构建 client（跳过 tsc 类型检查，server 通过 tsx 运行从不编译）
 npm run start            # 构建 client → 生成 PG schema → tsx server/src/index.ts
 
 # 数据库
@@ -231,7 +236,7 @@ npm run db:seed          # 种子数据 admin@lineweb.dev / admin123
 npm run db:studio        # prisma studio
 
 # 测试（仅 client/）
-cd client && npm run test        # vitest run（12 个测试文件）
+cd client && npm run test        # vitest run（14 个测试文件）
 cd client && npm run test:watch  # vitest watch
 
 # Storage Node（本地机器）
@@ -255,9 +260,9 @@ docker compose up -d --build   # Docker Compose（1Panel/Ubuntu 生产环境）
 - **Docker 将 SQLite schema 转换为 PostgreSQL** — `docker-entrypoint.sh` 通过 Node 脚本将 `provider = "sqlite"` 改写为 `"postgresql"`，然后执行 `prisma db push`。
 - **Storage node 是外部进程** — Python 进程运行在本地 Windows 机器上，未容器化。通过 WebSocket 以指数退避重连方式连接到 `/ws/storage`。
 - **中文友好默认配置** — `.npmrc` 设置 npmmirror.com 镜像；文档使用中文。
-- **部署强制覆盖** — 使用 `git reset --hard origin/master` 而非 `git pull`，避免服务器本地改动（如误修改的 tracked 文件）导致合并冲突、部署静默失败。
-- **Docker 强制重建** — `--no-cache` 跳过全部缓存层确保服务端和客户端代码均更新；`--force-recreate` 确保即使镜像 hash 相同也会新建容器；`docker compose down` 确保旧容器先停止。
-- **构建缓存保留** — 使用 `image/builder prune --filter "until=24h"` 替代 `docker system prune -f`，保留 24h 内的构建层缓存加速后续部署。
+- **部署强制覆盖** — 使用 `git reset --hard origin/master` 而非 `git pull`，避免服务器本地改动导致合并冲突。
+- **Docker 重建顺序** — 先 `build --no-cache --pull` 再 `down`，确保构建失败时旧容器继续运行不中断服务；`set -e` 确保任何步骤失败时脚本立即退出，避免静默回退旧版本。
+- **构建缓存保留** — `image/builder prune --filter "until=24h"` 保留 24h 内构建层缓存加速后续部署。
 - **部署目标**：123.207.8.77，路径 `/home/Lineweb`，Docker 容器由 1Panel 面板管理。
 - **Server 无测试** — `server/` 中零测试基础设施。Playwright 是依赖但无配置或测试。
 - **CSS 是单体的** — 所有样式从 `globals.css`（~2000+ 行）级联。无作用域机制。
