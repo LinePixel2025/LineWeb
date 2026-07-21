@@ -16,17 +16,20 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
+            set -e
             cd /home/Lineweb
+
             echo "=== [1/6] 拉取最新代码 ==="
             git fetch origin master
             git reset --hard origin/master
             echo "当前 HEAD: $(git log --oneline -1)"
 
-            echo "=== [2/6] 停止旧容器 ==="
-            docker compose down
-
-            echo "=== [3/6] 强制完整重建（跳过全部 Docker 缓存，确保服务端和客户端代码均更新） ==="
+            echo "=== [2/6] 强制完整重建（先构建，不中断服务） ==="
             docker compose build --no-cache --pull
+            echo "✅ 构建成功"
+
+            echo "=== [3/6] 停止旧容器 ==="
+            docker compose down
 
             echo "=== [4/6] 启动新容器 ==="
             docker compose up -d --force-recreate
@@ -47,8 +50,10 @@ jobs:
             echo "健康检查:"
             curl -s http://localhost:3001/api/health || echo "  (health check failed)"
 
-            echo "=== [6/6] 精准清理旧镜像/缓存（保留 24h 内构建缓存） ==="
+            echo "=== 部署成功 ==="
+
+            echo "=== [7/6] 精准清理旧镜像/缓存（保留 24h 内构建缓存） ==="
             docker image prune -f --filter "until=24h"
             docker builder prune -f --filter "until=24h"
 
-            echo "=== 部署完成 ==="
+            echo "=== ✅ 部署完成 ==="
