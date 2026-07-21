@@ -3359,6 +3359,7 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   .admin-page-title {
     font-size: 1.2rem;
   }
+}
 
   /* ============================================================
    AI 助手 — 浮动聊天组件
