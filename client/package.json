@@ -24,7 +24,6 @@
     "@tanstack/react-query-devtools": "^5.101.2",
     "dompurify": "^3.4.11",
     "lexical": "^0.46.0",
-    "liquid-glass-react": "^1.1.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.0.0",

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useLocation, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { GitHubButton, GitHubInput } from '../components/ui'
 
@@ -9,14 +9,17 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
+  const location = useLocation()
   const navigate = useNavigate()
+  const from = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from
+  const redirectTo = from?.pathname ? `${from.pathname}${from.search ?? ''}${from.hash ?? ''}` : '/'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(''); setLoading(true)
     try {
       await login(email, password)
-      navigate('/')
+      navigate(redirectTo, { replace: true })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '登录失败')
     } finally { setLoading(false) }

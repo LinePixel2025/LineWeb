@@ -21,7 +21,7 @@ const sections = [
   {
     title: 'Create', requireAuth: true,
     items: [
-      { path: '/admin/new', label: 'New Post', icon: 'M2.5 1.75a.25.25 0 0 1 .25-.25h10.5a.25.25 0 0 1 .25.25v10.5a.25.25 0 0 1-.25.25H2.75a.25.25 0 0 1-.25-.25V1.75ZM2.75 0A1.75 1.75 0 0 0 1 1.75v10.5C1 13.216 1.784 14 2.75 14h10.5A1.75 1.75 0 0 0 15 12.25V1.75A1.75 1.75 0 0 0 13.25 0H2.75ZM8 4.5a.75.75 0 0 1 .75.75v2h2a.75.75 0 0 1 0 1.5h-2v2a.75.75 0 0 1-1.5 0v-2h-2a.75.75 0 0 1 0-1.5h2v-2A.75.75 0 0 1 8 4.5Z' },
+      { path: '/admin/new', label: '写文章', icon: 'M2.5 1.75a.25.25 0 0 1 .25-.25h10.5a.25.25 0 0 1 .25.25v10.5a.25.25 0 0 1-.25.25H2.75a.25.25 0 0 1-.25-.25V1.75ZM2.75 0A1.75 1.75 0 0 0 1 1.75v10.5C1 13.216 1.784 14 2.75 14h10.5A1.75 1.75 0 0 0 15 12.25V1.75A1.75 1.75 0 0 0 13.25 0H2.75ZM8 4.5a.75.75 0 0 1 .75.75v2h2a.75.75 0 0 1 0 1.5h-2v2a.75.75 0 0 1-1.5 0v-2h-2a.75.75 0 0 1 0-1.5h2v-2A.75.75 0 0 1 8 4.5Z' },
     ]
   },
   {
@@ -85,7 +85,7 @@ export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onT
         <div className="gh-sidebar-footer">
           <button className="gh-sidebar-item gh-sidebar-collapse-btn" onClick={onToggleCollapse} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
             <svg className="gh-sidebar-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-              <path d={collapsed ? 'M6.354.646a.5.5 0 0 1 .708 0l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L10.043 5 6.354 1.354a.5.5 0 0 1 0-.708Z' : 'M3.354.646a.5.5 0 0 0-.708 0l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L-.043 5 3.354 1.354a.5.5 0 0 0 0-.708Z'} />
+              <path d={collapsed ? 'M6.354.646a.5.5 0 0 1 .708 0l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L10.043 5 6.354 1.354a.5.5 0 0 1 0-.708Z' : 'M9.646 1.646a.5.5 0 0 1 .708.708L6.707 6l3.647 3.646a.5.5 0 0 1-.708.708l-4-4a.5.5 0 0 1 0-.708l4-4Z'} />
             </svg>
             <span className="gh-sidebar-label">{collapsed ? 'Expand' : 'Collapse'}</span>
           </button>

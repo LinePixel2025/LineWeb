@@ -66,7 +66,7 @@ const PALETTE_ITEMS: PaletteItem[] = [
   { type: 'button', label: '按钮', icon: '⊞', defaultProps: { text: '按钮', variant: 'primary', link: '' } },
   { type: 'divider', label: '分割线', icon: '—', defaultProps: {} },
   { type: 'spacer', label: '间距', icon: '⇕', defaultProps: { height: 32 } },
-  { type: 'card', label: '玻璃卡片', icon: '▢', defaultProps: { padding: 24 }, defaultChildren: [] },
+  { type: 'card', label: '卡片', icon: '▢', defaultProps: { padding: 24 }, defaultChildren: [] },
   { type: 'columns', label: '双栏布局', icon: '‖', defaultProps: { ratio: '1:1' }, defaultChildren: [
     { id: '', type: 'paragraph' as ComponentType, props: { text: '左栏' }, children: [] },
     { id: '', type: 'paragraph' as ComponentType, props: { text: '右栏' }, children: [] },
@@ -149,7 +149,7 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
         title: action.data.title, slug: action.data.slug,
         published: action.data.published, featured: action.data.featured,
         featureEmoji: action.data.featureEmoji || '', featureDesc: action.data.featureDesc || '',
-        components: (() => { try { return JSON.parse(action.data.schema) } catch { return [] } })(),
+        components: (() => { try { const parsed = JSON.parse(action.data.schema); return Array.isArray(parsed) ? parsed : [] } catch { return [] } })(),
         saved: true, step: 'editor',
       }
     case 'SET_STEP': return { ...state, step: action.step }
@@ -163,6 +163,7 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
     case 'MOVE_COMPONENT': {
       const comps = [...state.components]
       const [moved] = comps.splice(action.fromIndex, 1)
+      if (!moved) return state
       comps.splice(action.toIndex, 0, moved); return { ...state, components: comps, saved: false }
     }
     case 'REMOVE_COMPONENT':
@@ -227,7 +228,7 @@ function PropsEditor({ comp, onUpdate, onAddChild }: PropsEditorProps) {
       case 'heading': return <div className="pe-fields">{S('level', '级别', [{ value: '1', label: 'H1' }, { value: '2', label: 'H2' }, { value: '3', label: 'H3' }, { value: '4', label: 'H4' }])}{T('text', '文字内容')}</div>
       case 'paragraph': return <div className="pe-fields">{TA('text', '段落文字', 6)}</div>
       case 'image': return <div className="pe-fields">{T('src', '图片URL')}{T('alt', '替代文字')}{T('width', '宽度')}</div>
-      case 'button': return <div className="pe-fields">{T('text', '按钮文字')}{S('variant', '样式', [{ value: 'primary', label: '主要' }, { value: 'glass', label: '玻璃' }, { value: 'ghost', label: '幽灵' }, { value: 'danger', label: '危险' }])}{T('link', '链接地址')}</div>
+      case 'button': return <div className="pe-fields">{T('text', '按钮文字')}{S('variant', '样式', [{ value: 'primary', label: '主要' }, { value: 'secondary', label: '次要' }, { value: 'ghost', label: '幽灵' }, { value: 'danger', label: '危险' }])}{T('link', '链接地址')}</div>
       case 'spacer': return <div className="pe-fields">{N('height', '高度 (px)', 4)}</div>
       case 'card': return <div className="pe-fields">{N('padding', '内边距 (px)', 0)}<div className="pe-hint">子组件在画布中管理</div></div>
       case 'columns': return <div className="pe-fields">{S('ratio', '比例', [{ value: '1:1', label: '1:1' }, { value: '1:2', label: '1:2' }, { value: '2:1', label: '2:1' }])}<div className="pe-hint">子组件在画布中管理</div></div>
@@ -328,7 +329,8 @@ const PreviewComponent = React.memo(function PreviewComponent({
       }
       case 'button': {
         const variant = (comp.props.variant as string) || 'primary'
-        const variantClass = variant === 'primary' ? 'gh-btn--primary' : variant === 'danger' ? 'gh-btn--danger' : variant === 'ghost' ? 'gh-btn--ghost' : 'gh-btn--secondary'
+        const normalizedVariant = variant === 'glass' ? 'secondary' : variant
+        const variantClass = normalizedVariant === 'primary' ? 'gh-btn--primary' : normalizedVariant === 'danger' ? 'gh-btn--danger' : normalizedVariant === 'ghost' ? 'gh-btn--ghost' : 'gh-btn--secondary'
         return <div className="page-editor-btn-wrap"><span className={`gh-btn ${variantClass} gh-btn--md`}>{(comp.props.text as string) || '按钮'}</span></div>
       }
       case 'divider': return <hr style={{ border: 'none', borderTop: '1px solid var(--gh-border)', margin: 0 }} />
@@ -458,7 +460,9 @@ export default function PageEditor() {
     if (!canvasRef.current) return
     const rect = canvasRef.current.getBoundingClientRect()
     const y = e.clientY - rect.top
-    const dropIndex = Math.min(state.components.length, Math.max(0, Math.round((y / rect.height) * state.components.length)))
+    const dropIndex = rect.height > 0
+      ? Math.min(state.components.length, Math.max(0, Math.round((y / rect.height) * state.components.length)))
+      : state.components.length
     dispatch({ type: 'SET_DRAG_OVER', index: dropIndex })
     dispatch({ type: 'SET_DROP_TARGET', id: null })
   }, [state.components.length])
@@ -535,9 +539,8 @@ export default function PageEditor() {
     dispatch({ type: 'CONTEXT_MENU', menu: null })
   }, [state.selectedId])
 
-  const handleMove = useCallback((dir: -1 | 1) => {
-    if (!state.selectedId) return
-    const idx = state.components.findIndex(c => c.id === state.selectedId)
+  const handleMove = useCallback((id: string, dir: -1 | 1) => {
+    const idx = state.components.findIndex(c => c.id === id)
     if (idx === -1) return
     const toIndex = Math.max(0, Math.min(state.components.length - 1, idx + dir))
     if (toIndex === idx) return
@@ -721,10 +724,10 @@ export default function PageEditor() {
                   <div className={`page-editor-canvas-item ${state.selectedId === comp.id ? 'page-editor-canvas-item--selected' : ''}`}>
                     <div className="page-editor-canvas-item-tools">
                       <span className="page-editor-canvas-item-type">{comp.type}</span>
-                      <button className="page-editor-canvas-item-tool-btn" onClick={() => handleMove(-1)} disabled={index === 0} title="上移">↑</button>
-                      <button className="page-editor-canvas-item-tool-btn" onClick={() => handleMove(1)} disabled={index === compCount - 1} title="下移">↓</button>
-                      <button className="page-editor-canvas-item-tool-btn" onClick={() => dispatch({ type: 'DUPLICATE_COMPONENT', id: comp.id })} title="复制">⧉</button>
-                      <button className="page-editor-canvas-item-tool-btn page-editor-canvas-item-tool-btn--danger" onClick={() => dispatch({ type: 'REMOVE_COMPONENT', id: comp.id })} title="删除">✕</button>
+                      <button className="page-editor-canvas-item-tool-btn" onClick={e => { e.stopPropagation(); handleMove(comp.id, -1) }} disabled={index === 0} title="上移">↑</button>
+                      <button className="page-editor-canvas-item-tool-btn" onClick={e => { e.stopPropagation(); handleMove(comp.id, 1) }} disabled={index === compCount - 1} title="下移">↓</button>
+                      <button className="page-editor-canvas-item-tool-btn" onClick={e => { e.stopPropagation(); dispatch({ type: 'DUPLICATE_COMPONENT', id: comp.id }) }} title="复制">⧉</button>
+                      <button className="page-editor-canvas-item-tool-btn page-editor-canvas-item-tool-btn--danger" onClick={e => { e.stopPropagation(); dispatch({ type: 'REMOVE_COMPONENT', id: comp.id }) }} title="删除">✕</button>
                     </div>
                     <PreviewComponent comp={comp} selectedId={state.selectedId} dropTargetId={state.dropTargetId}
                       onChildDragOver={handleChildDragOver} onChildDrop={handleChildDrop} />

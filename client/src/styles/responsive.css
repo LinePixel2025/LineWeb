@@ -28,6 +28,9 @@
     margin-left: 0 !important;
     padding: calc(var(--gh-nav-height) + var(--gh-space-4)) var(--gh-space-4) var(--gh-space-4);
   }
+  .gh-layout-root--admin .gh-content {
+    padding-top: var(--gh-space-4);
+  }
   .gh-sidebar {
     transform: translateX(-100%);
   }

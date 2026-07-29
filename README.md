@@ -1,12 +1,12 @@
 # Line Web
 
-融合 Apple Liquid Glass（WWDC 2025）设计语言的个人网站 / CMS。
+LineWeb 采用 GitHub Primer 风格：浅色/暗色主题、细边框、克制阴影、8px 圆角和明确的 focus ring。
 
 React 19 SPA 前端 + Express 4 REST API 后端 + Python 3 WebSocket 文件存储节点。
 
 ## 特性
 
-- ✨ **Liquid Glass 设计** — 自定义毛玻璃系统，CSS 变量 + SVG 置换滤镜
+- **GitHub Primer 设计** — 语义化 CSS 令牌、边框式信息层级与明暗主题
 - 📝 **文章系统** — Markdown 写作、发布与管理
 - ☁️ **网盘** — 文件上传/下载/预览/搜索，文件夹管理，批量操作，收藏夹跨设备同步
 - 🧮 **在线计算器** — 基础运算与科学计算
@@ -26,7 +26,7 @@ React 19 SPA 前端 + Express 4 REST API 后端 + Python 3 WebSocket 文件存�
 | 后端 | Express 4, Prisma 6, JWT, Zod, tsx 运行时 |
 | 数据库 | SQLite（开发）/ PostgreSQL（生产），自动转换 |
 | 存储节点 | Python 3 + websockets 库，WebSocket 二进制流传输 |
-| 设计 | CSS 变量 + SVG feDisplacementMap 滤镜，BEM 命名（`.lg-*`） |
+| 设计 | GitHub Primer 风格，CSS 变量令牌、`.gh-*` BEM 组件和 light/dark/auto 主题 |
 | 部署 | Docker + Nginx + GitHub Actions → 云服务器 |
 
 ## 架构
@@ -128,12 +128,12 @@ LineWeb 内置完整网盘功能，架构分为三层：
 lineweb/
 ├── client/              # React 19 + Vite 6 SPA
 │   └── src/
-│       ├── components/  # 共享组件（glass、drive、admin 等）
+│       ├── components/  # 共享组件（gh、drive、admin 等）
 │       ├── contexts/    # React Context（Auth、Drive、Download）
 │       ├── hooks/       # 自定义 Hook（useQueries、useDriveFiles 等）
 │       ├── pages/       # 页面组件（懒加载）
 │       ├── lib/         # 工具函数、API 客户端
-│       ├── styles/      # 全局样式（globals.css、variables.css、glass.css）
+│       ├── styles/      # 全局样式（variables、components、layout、pages 等）
 │       └── types/       # TypeScript 类型定义
 ├── server/              # Express 4 + Prisma API
 │   ├── src/
@@ -219,12 +219,12 @@ GitHub Actions 配置了自动部署：push master → SSH 连接云服务器 �
 
 ## 设计系统
 
-Liquid Glass 设计语言通过纯 CSS 实现：
+GitHub Primer 风格通过纯 CSS 实现：
 
-- **CSS 变量**：`variables.css` 定义颜色、间距、阴影令牌
-- **玻璃效果**：`glass.css` 提供 `.lg-glass`、`.lg-blur` 等变体
-- **SVG 滤镜**：`filters.svg` 使用 `feDisplacementMap` 实现湍流置换效果
-- **命名约定**：BEM 风格 `.lg-*` 设计系统、`.drive-*` 网盘、`.admin-*` 管理面板
+- **设计令牌**：`variables.css` 定义 `--gh-*` 颜色、间距、字体、圆角和阴影令牌
+- **组件样式**：`components.css` 提供 `.gh-btn`、`.gh-input`、`.gh-box`、`.gh-dialog` 等共享组件
+- **主题系统**：支持 light、dark 和 auto 三种主题，使用语义化令牌适配明暗模式
+- **命名约定**：BEM 风格 `.gh-*` 设计系统、`.drive-*` 网盘、`.admin-*` 管理面板
 
 ## License
 

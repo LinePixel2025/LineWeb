@@ -67,6 +67,14 @@ h4 { font-size: var(--gh-text-base); font-weight: 600; }
   margin-left: var(--gh-sidebar-collapsed);
 }
 
+.gh-layout-root--admin .gh-content {
+  padding-top: var(--gh-space-5);
+}
+
+.gh-layout-root--admin .gh-sidebar {
+  top: 0;
+}
+
 .gh-page-container {
   max-width: var(--gh-max-width);
   margin: 0 auto;

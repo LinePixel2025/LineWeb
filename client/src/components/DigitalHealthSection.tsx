@@ -87,17 +87,17 @@ export default function DigitalHealthSection() {
   return (
     <div id="digital-health" style={{ marginTop: '24px' }}>
     <div className="gh-box profile-card">
-      <h2 style={{ margin: '0 0 22px', fontSize: '1.1rem', fontWeight: 600, color: 'var(--lg-text-primary)' }}>数字健康</h2>
+      <h2 style={{ margin: '0 0 22px', fontSize: '1.1rem', fontWeight: 600, color: 'var(--gh-text)' }}>数字健康</h2>
       <p className="text-secondary" style={{ fontSize: '0.9rem', marginBottom: '22px' }}>
         连接 Time Master 以同步屏幕时间。在本地脚本中配置 Token 后，数据会定期推送到 LineWeb。
       </p>
 
       {newToken && (
         <div style={{ marginBottom: '22px', padding: '14px', borderRadius: '12px', background: 'rgba(41,151,255,0.08)', border: '1px solid rgba(41,151,255,0.2)' }}>
-          <div style={{ fontSize: '0.85rem', color: 'var(--lg-accent)', marginBottom: '8px' }}>Token 仅显示一次，请立即复制</div>
+          <div style={{ fontSize: '0.85rem', color: 'var(--gh-accent)', marginBottom: '8px' }}>Token 仅显示一次，请立即复制</div>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <code style={{ flex: 1, wordBreak: 'break-all', fontSize: '0.85rem', color: 'var(--lg-text-primary)' }}>{newToken}</code>
-            <button onClick={() => handleCopy(newToken)} className="liquid-btn glass sm">
+            <code style={{ flex: 1, wordBreak: 'break-all', fontSize: '0.85rem', color: 'var(--gh-text)' }}>{newToken}</code>
+            <button onClick={() => handleCopy(newToken)} className="gh-btn gh-btn--secondary gh-btn--sm">
               {copied ? '已复制' : '复制'}
             </button>
           </div>
@@ -112,22 +112,22 @@ export default function DigitalHealthSection() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="名称"
-            style={{ flex: 1, minWidth: '140px', padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.10)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontFamily: 'var(--lg-font)', fontSize: '0.85rem' }}
+            className="gh-input"
           />
           <select
             value={expireDays}
             onChange={(e) => setExpireDays(e.target.value)}
-            style={{ padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.10)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontFamily: 'var(--lg-font)', fontSize: '0.85rem' }}
+            className="gh-input"
           >
-            {EXPIRE_OPTIONS.map(opt => <option key={opt.value} value={opt.value} style={{ color: '#000', background: '#fff' }}>{opt.label}</option>)}
+            {EXPIRE_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
           </select>
         </div>
-        <button onClick={handleCreate} disabled={creating} className="liquid-btn primary sm">
+        <button onClick={handleCreate} disabled={creating} className="gh-btn gh-btn--primary gh-btn--sm">
           {creating ? '生成中…' : '生成 Token'}
         </button>
       </div>
 
-      {error && <div style={{ color: 'var(--lg-danger)', fontSize: '0.85rem', marginBottom: '16px' }}>{error}</div>}
+      {error && <div style={{ color: 'var(--gh-danger)', fontSize: '0.85rem', marginBottom: '16px' }}>{error}</div>}
 
       <div>
         <span className="profile-label">已连接的 Token</span>
@@ -138,12 +138,12 @@ export default function DigitalHealthSection() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {tokens.map(t => (
-              <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderRadius: '10px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div key={t.id} className="gh-list-item">
                 <div>
-                  <div style={{ fontSize: '0.92rem', fontWeight: 500, color: 'var(--lg-text-primary)' }}>{t.name}</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 500, color: 'var(--gh-text)' }}>{t.name}</div>
                   <div className="text-tertiary" style={{ fontSize: '0.78rem', marginTop: '2px' }}>{t.token} · 有效期至 {formatExpires(t.expiresAt)}</div>
                 </div>
-                <button onClick={() => handleDelete(t.id)} className="liquid-btn danger sm">删除</button>
+                <button onClick={() => handleDelete(t.id)} className="gh-btn gh-btn--danger gh-btn--sm">删除</button>
               </div>
             ))}
           </div>

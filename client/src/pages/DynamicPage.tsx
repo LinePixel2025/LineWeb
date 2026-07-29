@@ -88,7 +88,7 @@ function RenderComponent({ comp }: { comp: ComponentData }) {
     case 'image': {
       const src = comp.props.src as string
       return src
-        ? <img src={src} alt={(comp.props.alt as string) || ''} loading="lazy" style={{ maxWidth: '100%', borderRadius: '6px' }} />
+        ? <img src={src} alt={(comp.props.alt as string) || ''} loading="lazy" style={{ maxWidth: '100%', borderRadius: 'var(--gh-radius)' }} />
         : null
     }
     case 'button': {
@@ -101,7 +101,7 @@ function RenderComponent({ comp }: { comp: ComponentData }) {
       return <GitHubButton variant={variant}>{text}</GitHubButton>
     }
     case 'divider':
-      return <hr style={{ border: 'none', borderTop: '1px solid var(--gh-color-border-default)', margin: 0 }} />
+      return <hr style={{ border: 'none', borderTop: '1px solid var(--gh-border)', margin: 0 }} />
     case 'spacer':
       return <div style={{ height: (comp.props.height as number) || 24 }} />
     case 'card':

@@ -91,7 +91,7 @@ export default memo(function AdminLayout() {
   }
 
   return (
-    <div className="gh-layout-root">
+    <div className="gh-layout-root gh-layout-root--admin">
       {/* Mobile overlay */}
       {mobileOpen && (
         <div className="gh-sidebar-overlay" style={{ display: 'block' }} onClick={closeMobile} />

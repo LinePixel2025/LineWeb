@@ -80,11 +80,11 @@ export default function DailyGoalSetter() {
   }
 
   return (
-    <div style={{ marginTop: '28px', paddingTop: '24px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+    <div style={{ marginTop: '28px', paddingTop: '24px', borderTop: '1px solid var(--gh-border)' }}>
       <span className="profile-label">今日使用目标</span>
 
       {loading && !data ? (
-        <div style={{ padding: '12px 0', fontSize: '0.85rem', color: 'var(--lg-text-tertiary)' }}>
+        <div style={{ padding: '12px 0', fontSize: '0.85rem', color: 'var(--gh-text-tertiary)' }}>
           加载中…
         </div>
       ) : (
@@ -93,7 +93,7 @@ export default function DailyGoalSetter() {
             <div style={{
               marginBottom: '16px', padding: '10px 14px', borderRadius: '10px',
               background: 'rgba(41,151,255,0.06)', border: '1px solid rgba(41,151,255,0.15)',
-              fontSize: '0.9rem', color: 'var(--lg-accent)', fontWeight: 500,
+              fontSize: '0.9rem', color: 'var(--gh-accent)', fontWeight: 500,
             }}>
               当前目标：{formatGoal(data.dailyGoalSeconds)}
             </div>
@@ -107,15 +107,9 @@ export default function DailyGoalSetter() {
                 max={23}
                 value={hours}
                 onChange={(e) => setHours(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))}
-                style={{
-                  width: '64px', padding: '10px 14px', borderRadius: '10px',
-                  border: '1px solid rgba(255,255,255,0.10)',
-                  background: 'rgba(255,255,255,0.04)', color: '#fff',
-                  fontFamily: 'var(--lg-font)', fontSize: '0.85rem',
-                  textAlign: 'center', outline: 'none',
-                }}
+                className="gh-input"
               />
-              <span style={{ fontSize: '0.85rem', color: 'var(--lg-text-secondary)' }}>小时</span>
+              <span style={{ fontSize: '0.85rem', color: 'var(--gh-text-secondary)' }}>小时</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <input
@@ -124,15 +118,9 @@ export default function DailyGoalSetter() {
                 max={59}
                 value={minutes}
                 onChange={(e) => setMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
-                style={{
-                  width: '64px', padding: '10px 14px', borderRadius: '10px',
-                  border: '1px solid rgba(255,255,255,0.10)',
-                  background: 'rgba(255,255,255,0.04)', color: '#fff',
-                  fontFamily: 'var(--lg-font)', fontSize: '0.85rem',
-                  textAlign: 'center', outline: 'none',
-                }}
+                className="gh-input"
               />
-              <span style={{ fontSize: '0.85rem', color: 'var(--lg-text-secondary)' }}>分钟</span>
+              <span style={{ fontSize: '0.85rem', color: 'var(--gh-text-secondary)' }}>分钟</span>
             </div>
           </div>
 
@@ -140,7 +128,7 @@ export default function DailyGoalSetter() {
             <button
               onClick={handleSave}
               disabled={saving || (hours === 0 && minutes === 0)}
-              className="liquid-btn primary sm"
+              className="gh-btn gh-btn--primary gh-btn--sm"
               style={{ opacity: (saving || (hours === 0 && minutes === 0)) ? 0.5 : 1 }}
             >
               {saving ? '保存中…' : '保存目标'}
@@ -149,13 +137,13 @@ export default function DailyGoalSetter() {
               <button
                 onClick={handleClear}
                 disabled={saving}
-                className="liquid-btn ghost sm"
+                className="gh-btn gh-btn--ghost gh-btn--sm"
               >
                 清除目标
               </button>
             )}
             {saved && (
-              <span style={{ color: 'var(--lg-success)', fontSize: '0.85rem', fontWeight: 500 }}>
+              <span style={{ color: 'var(--gh-success)', fontSize: '0.85rem', fontWeight: 500 }}>
                 ✓ 已保存
               </span>
             )}
@@ -164,7 +152,7 @@ export default function DailyGoalSetter() {
       )}
 
       {error && (
-        <div style={{ color: 'var(--lg-danger)', fontSize: '0.85rem', marginTop: '10px' }}>
+        <div style={{ color: 'var(--gh-danger)', fontSize: '0.85rem', marginTop: '10px' }}>
           {error}
         </div>
       )}

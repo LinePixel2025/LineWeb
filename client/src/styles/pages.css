@@ -72,3 +72,129 @@
     gap: var(--gh-space-2);
   }
 }
+
+/* Lexical article editor */
+.lex-editor {
+  overflow: hidden;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+}
+.lex-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  padding: var(--gh-space-2);
+  border-bottom: 1px solid var(--gh-border);
+  background: var(--gh-canvas-inset);
+}
+.lex-toolbar button {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--gh-radius);
+  background: transparent;
+  color: var(--gh-text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+.lex-toolbar button:hover,
+.lex-toolbar button.active {
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+}
+.lex-body { position: relative; }
+.lex-content {
+  min-height: 260px;
+  padding: var(--gh-space-4);
+  outline: none;
+  color: var(--gh-text);
+  line-height: 1.75;
+}
+.lex-content:focus { box-shadow: inset 0 0 0 2px var(--gh-accent-soft); }
+.lex-placeholder {
+  position: absolute;
+  top: var(--gh-space-4);
+  left: var(--gh-space-4);
+  color: var(--gh-text-tertiary);
+  pointer-events: none;
+}
+.lex-p { margin: 0 0 var(--gh-space-3); }
+.lex-h1, .lex-h2, .lex-h3 { margin: var(--gh-space-4) 0 var(--gh-space-2); }
+.lex-h1 { font-size: var(--gh-text-2xl); }
+.lex-h2 { font-size: var(--gh-text-xl); }
+.lex-h3 { font-size: var(--gh-text-lg); }
+.lex-ul, .lex-ol { padding-left: var(--gh-space-5); }
+.lex-quote { margin: var(--gh-space-3) 0; padding-left: var(--gh-space-3); border-left: 3px solid var(--gh-accent); color: var(--gh-text-secondary); }
+.lex-code { display: block; padding: var(--gh-space-3); border-radius: var(--gh-radius); background: var(--gh-canvas-inset); font-family: var(--gh-font-mono); white-space: pre-wrap; }
+.lex-link { color: var(--gh-accent); text-decoration: underline; }
+.lex-editor pre { overflow-x: auto; }
+
+/* Visual page builder */
+.page-editor { min-width: 0; }
+.page-editor-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+  margin-bottom: var(--gh-space-4);
+  padding-bottom: var(--gh-space-3);
+  border-bottom: 1px solid var(--gh-border);
+}
+.page-editor-topbar-left, .page-editor-topbar-right { display: flex; align-items: center; gap: var(--gh-space-2); min-width: 0; }
+.page-editor-back-btn { border: 0; background: none; color: var(--gh-accent); cursor: pointer; font: inherit; white-space: nowrap; }
+.page-editor-topbar-divider { width: 1px; height: 24px; background: var(--gh-border); }
+.page-editor-title-input { min-width: 120px; max-width: 360px; border: 0; outline: 0; background: transparent; color: var(--gh-text); font-size: var(--gh-text-lg); font-weight: 600; }
+.page-editor-body { display: grid; grid-template-columns: 190px minmax(0, 1fr) 250px; min-height: 600px; border: 1px solid var(--gh-border); border-radius: var(--gh-radius); overflow: hidden; background: var(--gh-bg); }
+.page-editor-palette, .page-editor-props { background: var(--gh-canvas); }
+.page-editor-palette { border-right: 1px solid var(--gh-border); }
+.page-editor-props { border-left: 1px solid var(--gh-border); }
+.page-editor-palette-header, .page-editor-props-header { padding: var(--gh-space-3); border-bottom: 1px solid var(--gh-border); font-size: var(--gh-text-sm); font-weight: 600; }
+.page-editor-palette-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--gh-space-2); padding: var(--gh-space-3); }
+.page-editor-palette-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: var(--gh-space-2); border: 1px solid var(--gh-border); border-radius: var(--gh-radius); color: var(--gh-text-secondary); cursor: grab; font-size: var(--gh-text-xs); text-align: center; }
+.page-editor-palette-item:hover { border-color: var(--gh-accent); color: var(--gh-accent); background: var(--gh-accent-soft); }
+.page-editor-palette-icon { font-size: 1.1rem; }
+.page-editor-canvas { min-width: 0; min-height: 600px; padding: var(--gh-space-4); background: var(--gh-canvas-inset); }
+.page-editor-canvas-components { display: flex; flex-direction: column; gap: var(--gh-space-2); min-height: 520px; }
+.page-editor-canvas-empty { display: flex; min-height: 520px; flex-direction: column; align-items: center; justify-content: center; color: var(--gh-text-tertiary); border: 1px dashed var(--gh-border); border-radius: var(--gh-radius); }
+.page-editor-canvas-empty-icon { margin-bottom: var(--gh-space-2); font-size: 2rem; color: var(--gh-accent); }
+.page-editor-canvas-item { position: relative; border: 1px solid transparent; border-radius: var(--gh-radius); }
+.page-editor-canvas-item:hover, .page-editor-canvas-item--selected { border-color: var(--gh-accent); }
+.page-editor-canvas-item-tools { display: flex; align-items: center; gap: 3px; min-height: 28px; padding: 3px 6px; background: var(--gh-canvas); border-bottom: 1px solid var(--gh-border); border-radius: var(--gh-radius) var(--gh-radius) 0 0; }
+.page-editor-canvas-item-type { flex: 1; color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+.page-editor-canvas-item-tool-btn { border: 0; border-radius: 3px; background: transparent; color: var(--gh-text-secondary); cursor: pointer; }
+.page-editor-canvas-item-tool-btn:hover:not(:disabled) { color: var(--gh-accent); background: var(--gh-accent-soft); }
+.page-editor-canvas-item-tool-btn--danger:hover:not(:disabled) { color: var(--gh-danger); background: var(--gh-danger-soft); }
+.page-editor-canvas-item-tool-btn:disabled { opacity: .35; cursor: not-allowed; }
+.page-editor-drop-indicator { height: 28px; border: 1px dashed var(--gh-accent); border-radius: var(--gh-radius); color: var(--gh-accent); font-size: var(--gh-text-xs); text-align: center; line-height: 26px; background: var(--gh-accent-soft); }
+.page-editor-canvas-footer { margin-top: var(--gh-space-3); padding: var(--gh-space-3); border: 1px dashed var(--gh-border); border-radius: var(--gh-radius); color: var(--gh-text-tertiary); text-align: center; font-size: var(--gh-text-xs); }
+.page-editor-props-body { padding: var(--gh-space-3); }
+.page-editor-props-type { float: right; color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); font-weight: 400; }
+.pe-fields { display: flex; flex-direction: column; gap: var(--gh-space-3); }
+.pe-field { display: flex; flex-direction: column; gap: 6px; }
+.pe-field-label { color: var(--gh-text-secondary); font-size: var(--gh-text-xs); font-weight: 600; }
+.pe-field-hint, .pe-hint { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+.pe-field-err { color: var(--gh-danger); font-size: var(--gh-text-xs); }
+.pe-divider { height: 1px; background: var(--gh-border); margin: var(--gh-space-3) 0; }
+.pe-add-item-btn { border: 1px dashed var(--gh-border); border-radius: var(--gh-radius); padding: 6px 10px; background: transparent; color: var(--gh-accent); cursor: pointer; font: inherit; font-size: var(--gh-text-xs); }
+.page-editor-context-menu { position: fixed; z-index: 500; min-width: 120px; padding: 4px; border: 1px solid var(--gh-border); border-radius: var(--gh-radius); background: var(--gh-canvas); box-shadow: var(--gh-shadow-md); }
+.page-editor-context-item { display: block; width: 100%; padding: 7px 10px; border: 0; background: transparent; color: var(--gh-text); text-align: left; cursor: pointer; font: inherit; font-size: var(--gh-text-sm); }
+.page-editor-context-item:hover { background: var(--gh-accent-soft); color: var(--gh-accent); }
+.page-editor-context-divider { height: 1px; margin: 4px 0; background: var(--gh-border); }
+
+@media (max-width: 900px) {
+  .page-editor-body { grid-template-columns: 150px minmax(0, 1fr); }
+  .page-editor-props { grid-column: 1 / -1; border-top: 1px solid var(--gh-border); border-left: 0; }
+}
+@media (max-width: 767px) {
+  .page-editor-topbar { align-items: stretch; flex-direction: column; }
+  .page-editor-topbar-right { justify-content: flex-end; }
+  .page-editor-body { display: flex; flex-direction: column; }
+  .page-editor-palette { border-right: 0; border-bottom: 1px solid var(--gh-border); }
+  .page-editor-palette-grid { grid-template-columns: repeat(4, 1fr); }
+  .page-editor-canvas { min-height: 420px; }
+  .page-editor-canvas-components, .page-editor-canvas-empty { min-height: 360px; }
+  .page-editor-title-input { max-width: 100%; }
+}

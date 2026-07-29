@@ -170,7 +170,7 @@ export default function AiAssistant() {
       {/* 浮动按钮 */}
       {!open && (
         <button
-          className="ai-assistant-fab lg-surface"
+          className="ai-assistant-fab gh-box"
           onClick={() => setOpen(true)}
           aria-label="AI 助手"
           title="AI 助手"
@@ -255,7 +255,7 @@ export default function AiAssistant() {
           <div className="ai-chat-input-area">
             <textarea
               ref={inputRef}
-              className="ai-chat-input lg-input"
+              className="ai-chat-input gh-input gh-input--full"
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}

@@ -20,9 +20,9 @@ function formatDuration(seconds: number): string {
 }
 
 function getGoalProgressColor(percent: number): string {
-  if (percent >= 100) return 'var(--lg-danger)'
+  if (percent >= 100) return 'var(--gh-danger)'
   if (percent >= 75) return '#f59e0b'
-  return 'var(--lg-success)'
+  return 'var(--gh-success)'
 }
 
 function timeAgo(iso: string | null): string {
@@ -67,24 +67,20 @@ export default function DigitalHealthCard() {
       style={{
         maxWidth: '720px',
         margin: '0 auto',
-        padding: 'var(--lg-space-7) var(--lg-space-5) var(--lg-space-7)',
+        padding: 'var(--gh-space-7) var(--gh-space-5) var(--gh-space-7)',
       }}
     >
       <div style={{ position: 'relative' }}>
-        <div className="gh-box" style={{ padding: 'var(--lg-space-6)' }}>
+        <div className="gh-box" style={{ padding: 'var(--gh-space-6)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div>
-            <h2 style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--lg-text-primary)' }}>数字健康</h2>
+            <h2 style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--gh-text)' }}>数字健康</h2>
             <p className="text-secondary" style={{ fontSize: '0.85rem', marginTop: '4px' }}>今日电脑屏幕使用时间</p>
           </div>
           <button
             onClick={fetchData}
             disabled={loading}
-            style={{
-              width: '36px', height: '36px', borderRadius: '50%', border: '1px solid rgba(255,255,255,0.12)',
-              background: 'rgba(255,255,255,0.06)', color: 'var(--lg-text-secondary)', cursor: loading ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
+            className="gh-btn gh-btn--secondary gh-btn--sm"
             aria-label="刷新"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: loading ? 'rotate(360deg)' : undefined, transition: 'transform 1s linear' }}>
@@ -96,7 +92,7 @@ export default function DigitalHealthCard() {
         </div>
 
         {error && (
-          <div style={{ color: 'var(--lg-danger)', fontSize: '0.9rem' }}>
+          <div style={{ color: 'var(--gh-danger)', fontSize: '0.9rem' }}>
             获取失败，请稍后重试。
           </div>
         )}
@@ -108,7 +104,7 @@ export default function DigitalHealthCard() {
         {!error && !loading && data && data.totalSeconds > 0 && (
           <>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '2.4rem', fontWeight: 700, color: 'var(--lg-accent-secondary)' }}>
+              <span style={{ fontSize: '2.4rem', fontWeight: 700, color: 'var(--gh-accent)' }}>
                 {formatDuration(data.totalSeconds)}
               </span>
               <span className="text-tertiary" style={{ fontSize: '0.85rem' }}>
@@ -118,7 +114,7 @@ export default function DigitalHealthCard() {
             {data.dailyGoalSeconds != null && data.dailyGoalSeconds > 0 && (
               <div style={{ marginTop: '14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--lg-text-secondary)' }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--gh-text-secondary)' }}>
                     今日目标：{formatDuration(data.dailyGoalSeconds)}
                   </span>
                   <span style={{
@@ -130,7 +126,7 @@ export default function DigitalHealthCard() {
                 </div>
                 <div style={{
                   width: '100%', height: '6px', borderRadius: '3px',
-                  background: 'rgba(255,255,255,0.08)', overflow: 'hidden',
+                  background: 'var(--gh-canvas-inset)', overflow: 'hidden',
                 }}>
                   <div style={{
                     width: `${Math.min(100, Math.round((data.totalSeconds / data.dailyGoalSeconds) * 100))}%`,
@@ -154,7 +150,7 @@ export default function DigitalHealthCard() {
             </p>
             <Link
               to="/profile#digital-health"
-              className="liquid-btn glass sm"
+              className="gh-btn gh-btn--secondary gh-btn--sm"
               style={{ textDecoration: 'none' }}
             >
               去连接
@@ -169,7 +165,7 @@ export default function DigitalHealthCard() {
             </p>
             <Link
               to="/profile#digital-health"
-              className="liquid-btn glass sm"
+              className="gh-btn gh-btn--secondary gh-btn--sm"
               style={{ textDecoration: 'none' }}
             >
               去连接
@@ -177,17 +173,7 @@ export default function DigitalHealthCard() {
           </div>
         )}
       </div>
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 1,
-            borderRadius: '28px',
-            background: 'rgba(0, 0, 0, 0.35)',
-            pointerEvents: 'none',
-          }}
-        />
-      </div>
+    </div>
     </section>
   )
 }

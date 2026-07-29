@@ -63,7 +63,7 @@ const ReplyForm = memo(function ReplyForm({
   return (
     <div className="reply-form">
       <textarea
-        className="lg-input reply-input"
+        className="gh-input gh-input--full reply-input"
         value={text}
         onChange={e => setText(e.target.value)}
         onKeyDown={handleKeyDown}
@@ -122,7 +122,7 @@ const CommentCard = memo(function CommentCard({
               size="sm"
               variant="ghost"
               onClick={() => setExpanded(prev => !prev)}
-              style={{ color: 'var(--lg-text-tertiary)' }}
+              style={{ color: 'var(--gh-text-tertiary)' }}
             >
               {expanded ? `收起回复 (${comment.replies.length})` : `展开回复 (${comment.replies.length})`}
             </GitHubButton>
@@ -215,7 +215,7 @@ export default function CommentSection({ postId }: { postId: number }) {
         {user ? (
           <form className="comment-form" onSubmit={handleSubmit}>
             <textarea
-              className="lg-input comment-input"
+              className="gh-input gh-input--full comment-input"
               value={text}
               onChange={e => setText(e.target.value)}
               placeholder="写下你的评论..."

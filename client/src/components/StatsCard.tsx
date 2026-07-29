@@ -67,8 +67,8 @@ export default memo(function StatsCard({ items, layout, showLabels }: StatsCardP
       <div style={layoutStyle}>
         {items.map((item) => (
           <div key={item} className="gh-box" style={itemStyle}>
-            <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--lg-text-tertiary)' }}>--</div>
-            {showLabels && <div style={{ fontSize: '0.85rem', color: 'var(--lg-text-tertiary)', marginTop: '4px' }}>{LABELS[item]}</div>}
+            <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--gh-text-tertiary)' }}>--</div>
+            {showLabels && <div style={{ fontSize: '0.85rem', color: 'var(--gh-text-tertiary)', marginTop: '4px' }}>{LABELS[item]}</div>}
           </div>
         ))}
       </div>
@@ -79,11 +79,11 @@ export default memo(function StatsCard({ items, layout, showLabels }: StatsCardP
     <div style={layoutStyle}>
       {items.map((item) => (
         <div key={item} className="gh-box" style={itemStyle}>
-          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--lg-accent-secondary)' }}>
+          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--gh-accent)' }}>
             {data[item]}
           </div>
           {showLabels && (
-            <div style={{ fontSize: '0.85rem', color: 'var(--lg-text-secondary)', marginTop: '4px' }}>
+            <div style={{ fontSize: '0.85rem', color: 'var(--gh-text-secondary)', marginTop: '4px' }}>
               {LABELS[item]}
             </div>
           )}

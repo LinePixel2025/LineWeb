@@ -45,9 +45,9 @@ export default function DeviceMonitorPage() {
   }, [autoRefresh, fetchData])
 
   const stats = [
-    { label: '当前在线', value: data?.onlineCount ?? 0, color: '#3fb950' },
-    { label: '总记录数', value: data?.totalCount ?? 0, color: '#2f81f7' },
-    { label: '总请求接口', value: data?.allTime.reduce((s, d) => s + d.requestCount, 0) ?? 0, color: '#d29922' },
+    { label: '当前在线', value: data?.onlineCount ?? 0, color: 'var(--gh-success)' },
+    { label: '总记录数', value: data?.totalCount ?? 0, color: 'var(--gh-accent)' },
+    { label: '总请求接口', value: data?.allTime.reduce((s, d) => s + d.requestCount, 0) ?? 0, color: 'var(--gh-warning)' },
   ]
 
   const renderDeviceRow = (device: DeviceInfo, index: number) => (

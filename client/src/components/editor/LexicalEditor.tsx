@@ -84,7 +84,7 @@ export default function LexicalEditor({
   }
 
   return (
-    <LexicalComposer key={initialHtml ? 'inited' : 'blank'} initialConfig={config}>
+    <LexicalComposer key={initialHtml} initialConfig={config}>
       <div className="lex-editor">
         <EditorToolbar />
         <div className="lex-body" style={{ minHeight: height }}>
