@@ -37,6 +37,32 @@ export default memo(function Layout() {
         <div style={{ position: 'fixed', inset: 0, zIndex: 0, background: solidColor }} />
       )}
 
+      {/* Ambient blobs — slow floating light orbs */}
+      <div className="ambient-blob" style={{
+        width: '600px', height: '600px',
+        top: '-10%', right: '-15%',
+        background: 'radial-gradient(circle, var(--ambient-blue) 0%, transparent 70%)',
+        animation: 'ambient-float-1 30s ease-in-out infinite',
+        opacity: loaded ? 0.6 : 0,
+        transition: 'opacity 1s ease',
+      }} />
+      <div className="ambient-blob" style={{
+        width: '500px', height: '500px',
+        bottom: '-5%', left: '-10%',
+        background: 'radial-gradient(circle, var(--ambient-coral) 0%, transparent 70%)',
+        animation: 'ambient-float-2 25s ease-in-out infinite',
+        opacity: loaded ? 0.5 : 0,
+        transition: 'opacity 1s ease',
+      }} />
+      <div className="ambient-blob" style={{
+        width: '400px', height: '400px',
+        top: '40%', left: '50%',
+        background: 'radial-gradient(circle, var(--ambient-light) 0%, transparent 70%)',
+        animation: 'ambient-float-3 35s ease-in-out infinite',
+        opacity: loaded ? 0.3 : 0,
+        transition: 'opacity 1s ease',
+      }} />
+
       <Navbar />
       <main style={{ position: 'relative', zIndex: 2 }}>
         <div className="page-transition">
