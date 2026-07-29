@@ -4,13 +4,13 @@
 
 ### 1.1 现状
 
-LineWeb 前端当前采用 Apple Liquid Glass 设计语言：深色毛玻璃、环境光斑、大圆角、渐变文字、Instrument Serif 衬线标题。技术栈为 React 19 + Vite 6 + TypeScript，纯 CSS（无 Tailwind / CSS-in-JS）。
+LineWeb 前端已统一为 GitHub / Primer 风格的纯 CSS 设计系统，使用扁平化层级、系统字体、8px 圆角和 light/dark/auto 主题。技术栈为 React 19 + Vite 6 + TypeScript，纯 CSS（无 Tailwind / CSS-in-JS）。
 
 ### 1.2 目标
 
 将前端全面重构为 GitHub 风格：
 
-- 删除所有 Liquid Glass 效果（毛玻璃、光斑、折射、渐变文字、大圆角 hover 浮起）。
+- 保持扁平化视觉层级，使用边框、背景色和有限阴影，避免环境光斑、折射滤镜和不必要的渐变效果。
 - 采用 GitHub / Primer 风格的扁平化、现代化设计语言。
 - 将现有网站功能类比映射到 GitHub 功能与信息架构。
 - 三端统一响应式：桌面、平板、手机。
@@ -120,7 +120,7 @@ LineWeb 前端当前采用 Apple Liquid Glass 设计语言：深色毛玻璃、�
   - 左侧：用户资料卡片（头像、简介、统计）。
   - 中间：Activity Feed（最新文章、评论、网盘上传动态）。
   - 右侧：热门/推荐、贡献统计。
-- **删除**：大 hero 区域、bento grid、LiquidGlass 卡片。
+- **删除**：大 hero 区域、bento grid、装饰性视觉外壳。
 - **改造**：`StatsCard` 改为小尺寸数据卡片；Digital Health 改造为 GitHub contributions 风格热力图；AI 助手入口改为右下角悬浮按钮或顶部导航入口。
 
 ### 5.2 文章列表 `/posts` → Repositories
@@ -139,7 +139,7 @@ LineWeb 前端当前采用 Apple Liquid Glass 设计语言：深色毛玻璃、�
 - 顶部：标题 + 状态徽章（Open/Closed）、作者、日期、标签。
 - 主体：左侧窄边栏（作者头像 + 用户名），右侧主要内容。
 - 评论区：改为 issue timeline，每条评论一个卡片，左侧头像竖线，右侧评论内容。
-- Markdown 代码块使用 GitHub 风格背景，删除毛玻璃 pre。
+- Markdown 代码块使用 GitHub 风格背景，保持清晰的内容层级。
 
 ### 5.4 动态页面 `/page/:slug` → Wiki / Project Page
 
@@ -152,7 +152,7 @@ LineWeb 前端当前采用 Apple Liquid Glass 设计语言：深色毛玻璃、�
 - 顶部：breadcrumb、视图选择器、搜索框。
 - 主区域：文件表格（Name / Size / Type / Updated），表头可排序。
 - 网格视图保留但改为扁平卡片。
-- 预览面板改为右侧或弹出层，删除 LiquidGlass 外壳。
+- 预览面板改为右侧或弹出层，使用普通边框和背景容器。
 - 上传区改为类似 GitHub "Add file" 按钮下拉。
 
 ### 5.6 个人资料 `/profile` → GitHub Profile
@@ -238,21 +238,21 @@ LineWeb 前端当前采用 Apple Liquid Glass 设计语言：深色毛玻璃、�
 - `auto` 时：JavaScript 监听 `prefers-color-scheme`，将 `data-theme` 实时设为 `light` 或 `dark`；持久化存储的值为 `auto`，而不是具体颜色。
 - 用户偏好持久化到 `localStorage`。
 
-### 7.3 删除/降级
+### 7.3 主题与背景策略
 
-- 删除 `GlassContext`。
-- Bing 壁纸全局背景删除，可降级为主题页可选背景图（默认关闭）。
-- `ContrastContext` 删除，由主题系统覆盖。
+- 主题系统统一负责颜色和明暗模式。
+- Bing 壁纸可作为主题页的可选背景图，默认关闭。
+- 对比度设置由主题系统和无障碍样式统一覆盖。
 
 ---
 
 ## 8. 动效与交互
 
-### 8.1 删除
+### 8.1 视觉约束
 
-- Liquid Glass 光效、环境光斑飘动。
-- 所有 `backdrop-filter` 毛玻璃。
-- 渐变文字、大圆角 hover 浮起、页面进入动画。
+- 保持边框、背景和有限阴影构成的扁平层级。
+- 避免全屏装饰性光效、折射滤镜和不必要的渐变。
+- 避免大圆角 hover 浮起和页面进入动画。
 
 ### 8.2 保留/引入
 
@@ -282,16 +282,12 @@ LineWeb 前端当前采用 Apple Liquid Glass 设计语言：深色毛玻璃、�
 
 ## 10. 删除与迁移清单
 
-### 10.1 删除
+### 10.1 已完成的设计系统迁移
 
-- `client/src/styles/glass.css`
-- `client/src/components/glass/` 目录及所有组件
-- 环境光斑动画、毛玻璃变量、渐变文字效果
-- `GlassContext`
-- `.liquid-btn` 全部样式与组件
-- Instrument Serif 衬线标题字体
-- 当前 `--lg-*` 设计 token，全面替换为 `--gh-*`
-- 全局 Bing 壁纸背景（可保留为可选功能）
+- 统一使用 `client/src/styles/` 中的 GitHub Primer 变量和组件样式。
+- 统一使用 `.gh-*`、`.drive-*`、`.admin-*` 和 `.lex-*` 命名空间。
+- 使用系统字体、8px 圆角和 `--gh-*` 设计 token。
+- 主题由 `ThemeContext` 管理，支持 light / dark / auto。
 
 ### 10.2 保留并改造
 
@@ -319,7 +315,7 @@ LineWeb 前端当前采用 Apple Liquid Glass 设计语言：深色毛玻璃、�
 
 ## 12. 成功标准
 
-1. 全站无 Liquid Glass 视觉残留。
+1. 全站统一使用 GitHub / Primer 风格视觉系统。
 2. 所有组件统一 8px 圆角。
 3. `light / dark / auto` 主题正常工作。
 4. 桌面、平板、手机三端布局无严重错乱。

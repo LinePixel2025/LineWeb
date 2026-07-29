@@ -329,8 +329,7 @@ const PreviewComponent = React.memo(function PreviewComponent({
       }
       case 'button': {
         const variant = (comp.props.variant as string) || 'primary'
-        const normalizedVariant = variant === 'glass' ? 'secondary' : variant
-        const variantClass = normalizedVariant === 'primary' ? 'gh-btn--primary' : normalizedVariant === 'danger' ? 'gh-btn--danger' : normalizedVariant === 'ghost' ? 'gh-btn--ghost' : 'gh-btn--secondary'
+        const variantClass = variant === 'primary' ? 'gh-btn--primary' : variant === 'danger' ? 'gh-btn--danger' : variant === 'ghost' ? 'gh-btn--ghost' : 'gh-btn--secondary'
         return <div className="page-editor-btn-wrap"><span className={`gh-btn ${variantClass} gh-btn--md`}>{(comp.props.text as string) || '按钮'}</span></div>
       }
       case 'divider': return <hr style={{ border: 'none', borderTop: '1px solid var(--gh-border)', margin: 0 }} />

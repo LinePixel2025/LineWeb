@@ -1,6 +1,6 @@
 # AGENTS.md — LineWeb Client
 
-React 19 + Vite 6 + TypeScript 前端。端口 5173，路由级代码分割，Liquid Glass 设计系统。
+React 19 + Vite 6 + TypeScript 前端。端口 5173，路由级代码分割，GitHub Primer 风格纯 CSS 设计系统。
 
 ## 目录结构
 
@@ -11,7 +11,6 @@ client/src/
 ├── contexts/            # 6 个 Context（状态管理核心）
 │   ├── AuthContext.tsx       # JWT 认证状态（user/loading/isAdmin/login/register/logout）
 │   ├── WallpaperContext.tsx  # Bing 壁纸（依赖 AuthContext）
-│   ├── GlassContext.tsx      # 毛玻璃切换（依赖 AuthContext）
 │   ├── ContrastContext.tsx   # 高对比度模式（依赖 WallpaperContext）
 │   ├── DownloadContext.tsx   # 文件下载队列
 │   └── DriveContext.tsx      # 网盘导航状态（365 行，useReducer）
@@ -21,14 +20,13 @@ client/src/
 │   ├── Navbar.tsx / UserAvatar.tsx
 │   ├── drive/               # 网盘 UI（20 组件，最大模块）— 见下方
 │   ├── editor/              # Lexical 编辑器
-│   ├── glass/               # Liquid Glass 组件（LiquidGlass + LiquidButton + filters.svg）
 │   ├── comments/            # CommentSection（树形回复）
 │   ├── DigitalHealthCard/   # 屏幕时间卡片
 │   └── admin/               # AdminMobileNav
 ├── pages/               # 19 个页面（全部 lazy()）
 │   ├── HomePage / LoginPage / RegisterPage / PostsPage / PostPage
 │   ├── ProfilePage / DrivePage / CalculatorPage / FeaturesPage
-│   ├── DynamicPage / GlassTestPage / EditorPage / AdminPage
+│   ├── DynamicPage / EditorPage / AdminPage
 │   └── admin/              # 6 个管理页面（CommentAdmin/PageEditor/UserAdmin/ApiAdmin/DeviceMonitor/PageList）
 ├── hooks/               # useThumbnails / useKeyboardShortcuts / useDragAndDrop / useResponsive
 ├── lib/                 # api.ts（HTTP 客户端 + JWT + 401 处理）+ format.ts
@@ -62,8 +60,8 @@ localStorage.lineweb_token → AuthContext 初始化时读 token → GET /api/au
 ## Provider 嵌套顺序
 
 ```
-BrowserRouter → AuthProvider → WallpaperProvider → GlassProvider
-→ ContrastProvider → DownloadProvider → Suspense → Routes
+BrowserRouter → AuthProvider → ThemeProvider → WallpaperProvider
+→ DownloadProvider → Suspense → Routes
 ```
 
 ## Context 依赖图
@@ -71,7 +69,7 @@ BrowserRouter → AuthProvider → WallpaperProvider → GlassProvider
 ```
 AuthContext ← WallpaperContext ← ContrastContext
      ↓              ↓
-GlassContext    Layout/AdminLayout（读壁纸背景）
+ThemeContext    Layout/AdminLayout（读取主题和壁纸状态）
 ```
 
 `DownloadContext` 和 `DriveContext` 独立。

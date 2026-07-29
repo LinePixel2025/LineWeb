@@ -2,15 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Delete all Liquid Glass effects and redesign the entire LineWeb frontend to match GitHub's visual design language (Primer tokens, flat design, 8px radius, light/dark/auto themes, GitHub-style IA).
+**Goal:** redesign the entire LineWeb frontend to match GitHub's visual design language (Primer tokens, flat design, 8px radius, light/dark/auto themes, GitHub-style IA).
 
-**Architecture:** Pure CSS with CSS variables for theming. Replace `--lg-*` tokens with `--gh-*` GitHub Primer tokens. Delete `GlassContext`, `glass.css`, `LiquidGlass`/`LiquidButton` components. Transform `WallpaperContext` into `ThemeContext`. Create reusable UI primitives (`GitHubButton`, `GitHubInput`, `GitHubBadge`, `GitHubAlert`, `GitHubTabNav`). Restructure Layout with fixed Header + left Sidebar. Rewrite all page JSX to GitHub visual patterns while preserving existing API calls and state logic.
+**Architecture:** Pure CSS with CSS variables for theming. Use `--gh-*` GitHub Primer tokens. Use `ThemeContext` for theme selection. Create reusable UI primitives (`GitHubButton`, `GitHubInput`, `GitHubBadge`, `GitHubAlert`, `GitHubTabNav`). Restructure Layout with fixed Header + left Sidebar. Rewrite all page JSX to GitHub visual patterns while preserving existing API calls and state logic.
 
 **Tech Stack:** React 19, TypeScript, Vite 6, React Router 7, react-query, pure CSS (no Tailwind)
 
 ## Global Constraints
 
-- **No Liquid Glass residual**: no `backdrop-filter`, no `feDisplacementMap`, no `fractalNoise`, no ambient blobs, no gradient text on titles, no Instrument Serif headings, no pill (9999px) border-radius.
+- **Visual language**: flat surfaces, borders, restrained shadows, and no decorative blur or displacement effects.
 - **All border-radius**: 8px (`border-radius: 8px`) everywhere — cards, buttons, inputs, badges, dialogs, dropdowns, tabs.
 - **Theme**: light/dark/auto via `data-theme` on `<html>`. CSV variables in `:root` with `[data-theme="dark"]` overrides.
 - **Typography**: system font stack (`-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial`), no Instrument Serif.
@@ -318,7 +318,7 @@ git commit -m "refactor: rewrite globals.css import orchestrator"
 
 **Files:**
 - Create: `client/src/contexts/ThemeContext.tsx`
-- Delete: `client/src/contexts/GlassContext.tsx`
+- Delete: `client/src/contexts/legacy visual context.tsx`
 - Modify: `client/src/App.tsx` (replace GlassProvider with ThemeProvider)
 
 **Interfaces:**
@@ -411,16 +411,16 @@ export function useTheme() {
 }
 ```
 
-- [ ] **Step 2: Delete GlassContext.tsx**
+- [ ] **Step 2: Delete legacy visual context.tsx**
 
 ```bash
-Remove-Item -LiteralPath "client/src/contexts/GlassContext.tsx"
+Remove-Item -LiteralPath "client/src/contexts/legacy visual context.tsx"
 ```
 
-- [ ] **Step 3: Update App.tsx providers** — Replace GlassProvider import with ThemeProvider, remove GlassContext import.
+- [ ] **Step 3: Update App.tsx providers** — Replace GlassProvider import with ThemeProvider, remove legacy visual context import.
 
 Edit `client/src/App.tsx`:
-- Remove `import { GlassProvider } from './contexts/GlassContext'`
+- Remove `import { GlassProvider } from './contexts/legacy visual context'`
 - Remove `import { ContrastProvider } from './contexts/ContrastContext'`
 - Add `import { ThemeProvider } from './contexts/ThemeContext'`
 - Replace `<GlassProvider>` wrapping with `<ThemeProvider>`
@@ -431,8 +431,8 @@ Edit `client/src/App.tsx`:
 
 ```bash
 git add client/src/contexts/ThemeContext.tsx client/src/App.tsx
-git rm client/src/contexts/GlassContext.tsx
-git commit -m "feat: add ThemeContext (light/dark/auto), replace GlassContext"
+git rm client/src/contexts/legacy visual context.tsx
+git commit -m "feat: add ThemeContext (light/dark/auto), replace legacy visual context"
 ```
 
 ---
@@ -1399,7 +1399,7 @@ Since this is a very large plan, let me write the remaining phases at a higher l
 ### Task 5.1: Rewrite HomePage → GitHub Dashboard layout
 **Files:** `client/src/pages/HomePage.tsx`
 
-Replace all content. Delete `LiquidGlass`, `StatsCard` (old), hero section, bento grid, ambient blobs, scroll hint. Use Dashboard layout:
+Replace all content. Delete `legacy visual wrapper`, `StatsCard` (old), hero section, bento grid, ambient blobs, scroll hint. Use Dashboard layout:
 
 ```tsx
 import { Link } from 'react-router-dom'
@@ -1495,7 +1495,7 @@ Also add dashboard CSS to `pages.css`:
 ### Task 5.2: Rewrite PostsPage → Repositories view
 **Files:** `client/src/pages/PostsPage.tsx`
 
-Pattern: replace LiquidGlass cards with `gh-box` + `.gh-list-item`. Replace `liquid-btn` with `GitHubButton`. The search bar uses `GitHubInput` with search icon. Keep existing API state (search state, sort toggle, pagination).
+Pattern: replace legacy visual wrapper cards with `gh-box` + `.gh-list-item`. Replace `legacy visual button` with `GitHubButton`. The search bar uses `GitHubInput` with search icon. Keep existing API state (search state, sort toggle, pagination).
 
 Key snippet pattern:
 ```tsx
@@ -1545,7 +1545,7 @@ Add `.gh-repo-circle` to components.css:
 ### Task 5.3: Rewrite PostPage → Issue-like detail
 **Files:** `client/src/pages/PostPage.tsx`
 
-Pattern: Delete LiquidGlass wrapper and gradient title. Use `gh-box` for article. Author sidebar at left (narrow), content at right. Comment section uses timeline style (`.gh-timeline-item`).
+Pattern: Delete legacy visual wrapper wrapper and gradient title. Use `gh-box` for article. Author sidebar at left (narrow), content at right. Comment section uses timeline style (`.gh-timeline-item`).
 
 Key pattern:
 ```tsx
@@ -1565,7 +1565,7 @@ Key pattern:
       </div>
     </aside>
     <article className="gh-box gh-post-body">
-      {/* Render article content here — same as current but without LiquidGlass wrapping */}
+      {/* Render article content here — same as current but without legacy visual wrapper wrapping */}
     </article>
   </div>
 
@@ -1601,7 +1601,7 @@ Add to pages.css:
 ### Task 5.4: Rewrite FeaturesPage, DynamicPage, ProfilePage, LoginPage, RegisterPage
 **Files:** 5 page files.
 
-All follow the same pattern: delete LiquidGlass imports/wrappers, replace with `gh-box` for cards, `GitHubInput` for forms, `GitHubButton` for buttons, `GitHubAlert` for errors. Keep existing API calls and state unchanged.
+All follow the same pattern: delete legacy visual wrapper imports/wrappers, replace with `gh-box` for cards, `GitHubInput` for forms, `GitHubButton` for buttons, `GitHubAlert` for errors. Keep existing API calls and state unchanged.
 
 For LoginPage/RegisterPage: center card (`max-width: 400px`, `margin: 60px auto`), no wallpaper.
 
@@ -1622,7 +1622,7 @@ Left settings sidebar (Account, Posts, Comments, Pages, Users, API Keys, Devices
 ### Task 6.2: Rewrite all admin pages
 **Files:** All 8 files in `client/src/pages/admin/`
 
-Each page uses `gh-box` cards, `gh-table`, `GitHubButton`, `GitHubBadge`, `GitHubInput`. Keep existing API calls and state logic. Delete LiquidGlass wrappers and gradient styles.
+Each page uses `gh-box` cards, `gh-table`, `GitHubButton`, `GitHubBadge`, `GitHubInput`. Keep existing API calls and state logic. Delete legacy visual wrapper wrappers and gradient styles.
 
 ---
 
@@ -1636,7 +1636,7 @@ Three-column: left directory tree (collapse on mobile), center file table, right
 ### Task 7.2: Rewrite all drive components
 **Files:** All 20 files in `client/src/components/drive/`
 
-Restyle each component to use GitHub design tokens and UI primitives. Delete LiquidGlass wrappers. Keep all state logic and API calls unchanged. Key components:
+Restyle each component to use GitHub design tokens and UI primitives. Delete legacy visual wrapper wrappers. Keep all state logic and API calls unchanged. Key components:
 - TreeView: GitHub-style directory tree with indentation and chevrons.
 - DriveToolbar: breadcrumb + search + view toggle + action buttons + upload.
 - DriveListView/DriveGridView: `gh-table` rows or flat grid cards.
@@ -1650,19 +1650,19 @@ Restyle each component to use GitHub design tokens and UI primitives. Delete Liq
 
 ## Phase 8: Cleanup & Polish
 
-### Task 8.1: Delete Liquid Glass & related files
+### Task 8.1: Delete legacy visual effects & related files
 **Files to delete:**
-- `client/src/styles/glass.css`
-- `client/src/components/glass/LiquidGlass.tsx`
-- `client/src/components/glass/LiquidButton.tsx`
-- `client/src/components/glass/filters.svg`
-- `client/src/components/glass/index.ts`
-- `client/src/contexts/GlassContext.tsx` (if not already deleted)
+- `client/src/styles/legacy-effects.css`
+- `client/src/components/legacy-effects/legacy visual wrapper.tsx`
+- `client/src/components/legacy-effects/legacy component.tsx`
+- `client/src/components/legacy-effects/filter-definitions.svg`
+- `client/src/components/legacy-effects/index.ts`
+- `client/src/contexts/legacy visual context.tsx` (if not already deleted)
 - `client/src/contexts/ContrastContext.tsx`
 
 Delete imports in any remaining files.
 
-### Task 8.2: Remove Liquid Glass inline filters from index.html
+### Task 8.2: Remove legacy visual effects inline filters from index.html
 **Files:** `client/index.html`
 Remove the entire `<svg>` block containing `lg-core`, `lg-core-strong`, `lg-glow` filters.
 Remove font preload links for instrument-serif.
@@ -1710,8 +1710,8 @@ After ThemeContext is in place and Layout no longer uses wallpaper, delete Wallp
 }
 ```
 
-### Task 8.6: Update all remaining LiquidGlass references
-Run grep for any remaining `LiquidGlass`, `liquid-btn`, `glass-rise`, `fade-in-stagger`, `ambient-blob`, `lg-` prefix in CSS, `Instrument Serif`, etc. Update or delete each reference.
+### Task 8.6: Update all remaining legacy visual wrapper references
+Run grep for any remaining `legacy visual wrapper`, `legacy visual button`, `glass-rise`, `fade-in-stagger`, `ambient-blob`, `lg-` prefix in CSS, `Instrument Serif`, etc. Update or delete each reference.
 
 ---
 
@@ -1720,7 +1720,7 @@ Run grep for any remaining `LiquidGlass`, `liquid-btn`, `glass-rise`, `fade-in-s
 ### Task 9.1: Update existing tests to match new component names/styles
 **Files:** All `__tests__/` files
 
-Update test assertions that reference Liquid Glass class names or components. Replace mocked LiquidGlass with `gh-box` or simple div.
+Update test assertions that reference legacy visual effects class names or components. Replace mocked legacy visual wrapper with `gh-box` or simple div.
 
 ### Task 9.2: Run build
 
@@ -1736,7 +1736,7 @@ cd client && npm run test
 
 ### Task 9.4: Visual verification
 Start dev server (`npm run dev`) and check:
-- All pages render without Liquid Glass.
+- All pages render without legacy visual effects.
 - theme toggle works (light → dark → auto → light).
 - 8px border-radius on all elements.
 - No Instrument Serif on titles.

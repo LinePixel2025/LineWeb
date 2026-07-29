@@ -71,7 +71,7 @@ export default function LexicalEditor({
         const dom = new DOMParser().parseFromString(initialHtml, 'text/html')
         const nodes = $generateNodesFromDOM(editor, dom)
         for (const n of nodes) root.append(n)
-        root.append($createParagraphNode())
+        if (nodes.length === 0) root.append($createParagraphNode())
       }
     : undefined
 
@@ -84,7 +84,7 @@ export default function LexicalEditor({
   }
 
   return (
-    <LexicalComposer key={initialHtml} initialConfig={config}>
+    <LexicalComposer key={initialHtml ? 'inited' : 'blank'} initialConfig={config}>
       <div className="lex-editor">
         <EditorToolbar />
         <div className="lex-body" style={{ minHeight: height }}>

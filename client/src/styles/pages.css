@@ -80,7 +80,7 @@
   border-radius: var(--gh-radius);
   background: var(--gh-canvas);
 }
-.lex-toolbar {
+.lex-tb {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -89,7 +89,18 @@
   border-bottom: 1px solid var(--gh-border);
   background: var(--gh-canvas-inset);
 }
-.lex-toolbar button {
+.lex-grp {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+}
+.lex-div {
+  width: 1px;
+  height: 20px;
+  margin: 0 2px;
+  background: var(--gh-border);
+}
+.lex-btn {
   min-width: 30px;
   height: 30px;
   padding: 0 8px;
@@ -99,11 +110,16 @@
   color: var(--gh-text-secondary);
   cursor: pointer;
   font: inherit;
+  line-height: 1;
 }
-.lex-toolbar button:hover,
-.lex-toolbar button.active {
+.lex-btn:hover,
+.lex-btn--on {
   background: var(--gh-accent-soft);
   color: var(--gh-accent);
+}
+.lex-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--gh-focus-ring);
 }
 .lex-body { position: relative; }
 .lex-content {

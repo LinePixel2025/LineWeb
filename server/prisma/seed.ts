@@ -31,22 +31,21 @@ async function main() {
         title: '欢迎来到 Line Web',
         content: `<h1>欢迎</h1>
 
-<p>这是 Line Web 的第一篇文章。Line Web 是一个使用 Liquid Glass 设计语言的个人网站。</p>
+<p>这是 Line Web 的第一篇文章。这里记录想法、项目和日常探索。</p>
 
 <h2>关于</h2>
 
-<p>Line Web 融合了 Apple 最新的 Liquid Glass 设计理念，提供流畅、现代的用户体验。</p>
+<p>Line Web 采用简洁清晰的界面，专注于内容阅读和实用功能。</p>
 
 <h2>功能</h2>
 
 <ul>
-<li>✨ Liquid Glass 视觉效果</li>
 <li>📝 文章发布与管理</li>
 <li>🧮 在线计算器</li>
 <li>🌓 亮色/暗色模式</li>
 <li>📱 响应式设计</li>
 </ul>`,
-        summary: '欢迎来到 Line Web — 一个使用 Liquid Glass 设计语言的个人网站。',
+        summary: '欢迎来到 Line Web — 一个记录想法、项目和日常探索的个人空间。',
         slug: 'welcome-to-lineweb',
         published: true,
         authorId: 1,

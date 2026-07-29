@@ -6,7 +6,7 @@
 
 ## 概述
 
-个人网站/CMS 单体仓库，融合 Apple Liquid Glass 设计语言（WWDC 2025）。React 19 SPA 前端，Express 4 REST API 后端，Python 3 WebSocket 文件存储节点。SQLite 本地开发，PostgreSQL 生产环境。
+个人网站/CMS 单体仓库，采用 GitHub Primer 风格的纯 CSS 前端设计系统。React 19 SPA 前端，Express 4 REST API 后端，Python 3 WebSocket 文件存储节点。SQLite 本地开发，PostgreSQL 生产环境。
 
 ## 目录结构
 
@@ -16,7 +16,7 @@ lineweb/
 ├── server/           # Express 4 + Prisma 6 API → 端口 3001，tsx 运行时，.js 导入后缀
 ├── storage-node/     # Python 3 WebSocket 文件存储客户端（5 个文件）→ D:/LineWebDrive，仅本地
 ├── scripts/          # 14 个运维脚本（部署、开发启动/停止、webhook、截图）
-├── docs/             # API 参考（1417 行）、Drive 部署指南、Liquid Glass 指南
+├── docs/             # API 参考、Drive 部署指南和项目设计文档
 ├── .omo/             # OpenCode 会话续传数据
 ├── .trae/            # Trae IDE 配置、项目规则
 ├── .superpowers/     # SDD 任务产物
@@ -52,7 +52,7 @@ lineweb/
 | 存储架构 | `server/src/services/storageTunnel.ts` ↔ `storage-node/main.py` | WebSocket 隧道；服务器代理命令到 Python 节点 |
 | 全文搜索 | `server/src/services/ftsSearch.ts` | SQLite FTS5 全文索引，启动时 `ensureFTSTable` |
 | React Query 层 | `client/src/hooks/useQueries.ts` + `queryKeys.ts` | 公开页面已使用，管理页面仍手写 `useState+useEffect` |
-| 设计系统 | `client/src/styles/variables.css` + `glass.css` + `filters.svg` | 自定义 Liquid Glass，基于 CSS 变量 + SVG 置换滤镜 |
+| 设计系统 | `client/src/styles/variables.css` + `client/src/styles/*.css` | GitHub Primer 风格的 CSS 变量和组件样式 |
 | 环境配置 | `server/.env`（开发）+ `.env.docker`（生产） | `JWT_SECRET`、`DATABASE_URL`、`STORAGE_NODE_TOKEN` |
 | Nginx 反向代理 | `nginx.conf`（Docker）+ 1Panel 面板 | 1Panel 管理外部 HTTPS 反代 → 容器 3001 端口；静态资源 `/assets/` 直连 + Brotli 压缩 |
 | 字体加载 | `client/src/main.tsx` + `client/index.html` | @fontsource/instrument-serif 异步加载（requestIdleCallback）；woff2 preload |
@@ -160,9 +160,9 @@ git push origin master
 ### CSS
 
 - **纯 CSS** — 无 Tailwind、无 CSS 模块、无 CSS-in-JS
-- 命名空间 BEM：`.lg-*`（设计系统）、`.drive-*`、`.admin-*`、`.lex-*`（编辑器）
+- 命名空间 BEM：`.gh-*`（设计系统）、`.drive-*`、`.admin-*`、`.lex-*`（编辑器）
 - 状态修饰符：`--active`、`--selected`、`--collapsed`
-- 数据属性：`[data-glass="off"]`、`[data-theme="dark"]`
+- 主题属性：`[data-theme="dark"]`
 
 ### 命名
 

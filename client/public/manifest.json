@@ -1,7 +1,7 @@
 {
   "name": "Line Web",
   "short_name": "LineWeb",
-  "description": "一个融合 Liquid Glass 设计语言的个人空间",
+  "description": "一个简洁、现代的个人空间",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#000000",
