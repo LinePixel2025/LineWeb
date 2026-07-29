@@ -68,10 +68,10 @@ export default function HomePage() {
             代码 · 思考 · 生活
           </p>
           <div style={{ display: 'flex', gap: 'var(--lg-space-3)', justifyContent: 'center', flexWrap: 'wrap', marginTop: '36px' }}>
-            <Link to="/posts" className="liquid-btn primary lg" target="_blank" rel="noopener noreferrer">
+            <Link to="/posts" className="liquid-btn primary lg">
               浏览文章
             </Link>
-            <Link to="/features" className="liquid-btn glass lg" target="_blank" rel="noopener noreferrer">
+            <Link to="/features" className="liquid-btn glass lg">
               探索功能
             </Link>
           </div>
@@ -129,8 +129,6 @@ export default function HomePage() {
                     textDecoration: 'none',
                     color: 'inherit',
                   }}
-                  target="_blank"
-                  rel="noopener noreferrer"
                 >
                   <h3 style={{ marginBottom: '4px' }}>{post.title}</h3>
                   {post.summary && (
@@ -160,8 +158,6 @@ export default function HomePage() {
                 textDecoration: 'none',
                 transition: 'color var(--lg-transition)',
               }}
-              target="_blank"
-              rel="noopener noreferrer"
             >
               查看全部文章
               <span style={{ display: 'inline-block', transition: 'transform var(--lg-transition)' }}>→</span>
