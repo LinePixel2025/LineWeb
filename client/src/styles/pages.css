@@ -839,7 +839,7 @@ body.admin-menu-open {
   justify-content: center;
   align-items: center;
   gap: 6px;
-  margin-top: var(--space-6);
+  margin-top: var(--lg-space-6);
   flex-wrap: wrap;
 }
 
@@ -853,12 +853,13 @@ body.admin-menu-open {
   min-width: 44px;
   height: 44px;
   padding: 0 6px;
-  border-radius: var(--radius-md);
+  border-radius: var(--lg-radius-md);
   border: 1px solid var(--lg-glass-border);
   background: var(--lg-glass-bg);
   color: var(--lg-text-secondary);
   font-family: var(--lg-font);
   font-size: 0.88rem;
+  -webkit-tap-highlight-color: transparent;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
