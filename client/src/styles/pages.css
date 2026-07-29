@@ -837,59 +837,57 @@ body.admin-menu-open {
 .admin-pagination {
   display: flex;
   justify-content: center;
-  gap: 8px;
-  margin-top: 24px;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--space-6);
   flex-wrap: wrap;
 }
 
 .admin-ellipsis {
   color: var(--lg-text-tertiary);
-  align-self: center;
+  padding: 0 4px;
+  font-size: 0.88rem;
 }
 
 .admin-page-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 1px solid rgba(255,255,255,0.18);
-  cursor: pointer;
-  font-weight: 500;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 6px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--lg-glass-border);
+  background: var(--lg-glass-bg);
+  color: var(--lg-text-secondary);
   font-family: var(--lg-font);
-  font-size: 0.95rem;
-  transition: transform 0.2s ease, background 0.2s ease;
-  -webkit-tap-highlight-color: transparent;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.10) 0%, transparent 50%),
-    linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04)),
-    rgba(0,0,0,0.15);
-  color: var(--lg-text-primary);
-  backdrop-filter: var(--lg-frost);
-  -webkit-backdrop-filter: var(--lg-frost);
-  box-shadow:
-    inset 0 0.5px 0 rgba(255,255,255,0.2),
-    0 2px 8px rgba(0,0,0,0.15);
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .admin-page-btn:hover {
+  background: var(--lg-glass-hover);
+  color: var(--lg-text-primary);
+  border-color: rgba(255,255,255,0.15);
   transform: translateY(-1px);
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 50%),
-    linear-gradient(135deg, rgba(255,255,255,0.14), rgba(255,255,255,0.08)),
-    rgba(0,0,0,0.15);
+}
+
+.admin-page-btn:active {
+  transform: scale(0.95);
 }
 
 .admin-page-btn--active {
-  background: linear-gradient(135deg, var(--lg-accent), #40a9ff);
-  color: white;
-  border: none;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.3),
-    0 4px 12px var(--lg-accent-glow);
+  background: var(--lg-accent-soft);
+  color: var(--lg-accent);
+  border-color: var(--lg-accent);
+  font-weight: 600;
 }
 
-/* Touch feedback for buttons */
-.admin-page-btn:active {
-  transform: scale(0.92);
+.admin-page-btn--active:hover {
+  background: var(--lg-accent-soft);
+  color: var(--lg-accent);
 }
 
 /* ============================================================
