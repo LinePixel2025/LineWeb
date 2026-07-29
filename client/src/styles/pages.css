@@ -3837,3 +3837,40 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   color: var(--lg-accent);
   transition: color 0.2s ease;
 }
+
+/* Calculator display area */
+.calc-display-wrap {
+  margin-bottom: 16px;
+  padding: 16px 20px;
+  background: rgba(0,0,0,0.3);
+  border-radius: var(--lg-radius-md);
+  border: 1px solid var(--lg-glass-border);
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.calc-expression {
+  font-size: var(--text-sm);
+  color: var(--lg-text-tertiary);
+  font-family: var(--lg-font-mono);
+  min-height: 1.2em;
+  word-break: break-all;
+  text-align: right;
+  width: 100%;
+}
+
+.calc-display {
+  font-size: 2rem;
+  font-weight: 300;
+  color: var(--lg-text-primary);
+  font-family: var(--lg-font-mono);
+  overflow-x: auto;
+  white-space: nowrap;
+  max-width: 100%;
+  scrollbar-width: none;
+  line-height: 1.3;
+}

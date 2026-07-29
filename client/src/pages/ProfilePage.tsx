@@ -176,7 +176,7 @@ export default function ProfilePage() {
                   fontFamily: 'var(--lg-font)', transition: 'all 0.2s ease',
                 }}
               >
-                {t === 'wallpaper' ? '🖼 每日壁纸' : '🎨 纯色背景'}
+                {t === 'wallpaper' ? '每日壁纸' : '纯色背景'}
               </button>
             ))}
           </div>
@@ -208,10 +208,10 @@ export default function ProfilePage() {
               <span className="profile-label">壁纸来源</span>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 {([
-                  { key: 'latest' as const, label: '每日更新', icon: '🔄' },
-                  { key: 'random' as const, label: '随机历史', icon: '🎲' },
-                  { key: 'date' as const, label: '选择日期', icon: '📅' },
-                ]).map(({ key, label, icon }) => (
+                  { key: 'latest' as const, label: '每日更新' },
+                  { key: 'random' as const, label: '随机历史' },
+                  { key: 'date' as const, label: '选择日期' },
+                ]).map(({ key, label }) => (
                   <button key={key}
                     onClick={() => { setWallpaperMode(key); if (key === 'random') previewWallpaper({ mode: 'random' }); else if (key === 'latest') previewWallpaper({ mode: 'latest' }) }}
                     style={{
@@ -222,7 +222,7 @@ export default function ProfilePage() {
                       cursor: 'pointer', fontSize: '0.82rem', fontWeight: 500,
                       fontFamily: 'var(--lg-font)', transition: 'all 0.2s ease',
                     }}
-                  >{icon} {label}</button>
+                  >{label}</button>
                 ))}
               </div>
             </div>
@@ -267,7 +267,7 @@ export default function ProfilePage() {
             {wallpaperTitle && (
               <div style={{ marginBottom: '18px', padding: '10px 14px', borderRadius: '10px', background: 'rgba(255,255,255,0.03)', fontSize: '0.78rem', color: 'rgba(255,255,255,0.45)' }}>
                 <div style={{ fontWeight: 500, color: 'rgba(255,255,255,0.65)' }}>{wallpaperTitle}</div>
-                {currentWallpaperDate && <div style={{ marginTop: 2 }}>📅 {currentWallpaperDate}</div>}
+                {currentWallpaperDate && <div style={{ marginTop: 2 }}>{currentWallpaperDate}</div>}
               </div>
             )}
           </>
