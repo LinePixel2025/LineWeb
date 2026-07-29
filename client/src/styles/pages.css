@@ -3824,3 +3824,16 @@ html { --_ac-c: var(--_ac-white); --_ac-c2: var(--_ac-white-sec); --_ac-c3: var(
   padding: 0;
   border-radius: 0;
 }
+
+/* Features card hover */
+.features-card {
+  transition: transform 0.25s var(--ease-out-expo), background 0.25s ease;
+  cursor: pointer;
+}
+.features-card:hover {
+  transform: translateY(-4px);
+}
+.features-card:hover h3 {
+  color: var(--lg-accent);
+  transition: color 0.2s ease;
+}
