@@ -1,114 +1,114 @@
 /* =============================================================
-   Line Web — CSS Variables
+   Line Web — GitHub Primer Design Tokens
    ============================================================= */
 
 :root {
-  /* ===== Dark Mode (default) ===== */
-
-  /* Backgrounds */
-  --lg-bg: #0d0d0f;
-  --lg-bg-secondary: #1a1a1e;
-
-  /* Text */
-  --lg-text-primary: #f5f5f7;
-  --lg-text-secondary: #c7c7cd;
-  --lg-text-tertiary: #98989d;
-
-  /* Article text — always dark-mode */
-  --lg-text-article: #f5f5f7;
-  --lg-text-article-secondary: #c7c7cd;
-
-  /* Accent */
-  --lg-accent: #2997ff;
-  --lg-accent-hover: #40a9ff;
-  --lg-accent-soft: rgba(41, 151, 255, 0.18);
-  --lg-accent-glow: rgba(41, 151, 255, 0.3);
-
-  --lg-accent-secondary: #E8927C;
-  --lg-accent-secondary-hover: #D4785E;
-  --lg-accent-secondary-soft: rgba(232, 146, 124, 0.18);
-  --lg-accent-secondary-glow: rgba(232, 146, 124, 0.3);
-
-  /* States */
-  --lg-danger: #ff3b30;
-  --lg-success: #34c759;
-  --lg-warning: #ff9500;
-
-  /* Glass surface */
-  --lg-glass-bg: rgba(255, 255, 255, 0.07);
-  --lg-glass-border: rgba(255, 255, 255, 0.14);
-  --lg-glass-shadow: rgba(0, 0, 0, 0.5);
+  /* ===== Color Tokens: Light (default) ===== */
+  --gh-bg:                #ffffff;
+  --gh-canvas:            #f6f8fa;
+  --gh-canvas-inset:      #f3f6f8;
+  --gh-border:            #d1d9e0;
+  --gh-border-muted:      #d8dee4;
+  --gh-accent:            #0969da;
+  --gh-accent-hover:      #0550ae;
+  --gh-accent-soft:       rgba(9, 105, 218, 0.15);
+  --gh-text:              #1f2328;
+  --gh-text-secondary:    #59636e;
+  --gh-text-tertiary:     #636c76;
+  --gh-text-placeholder:  #6e7781;
+  --gh-text-disabled:     #8c959f;
+  --gh-success:           #1a7f37;
+  --gh-success-soft:      rgba(26, 127, 55, 0.15);
+  --gh-success-emphasis:  #2da44e;
+  --gh-danger:            #cf222e;
+  --gh-danger-soft:       rgba(207, 34, 46, 0.15);
+  --gh-warning:           #9a6700;
+  --gh-warning-soft:      rgba(154, 103, 0, 0.15);
+  --gh-accent-emphasis:   #0969da;
+  --gh-btn-hover:         rgba(31, 35, 40, 0.04);
+  --gh-btn-active:        rgba(31, 35, 40, 0.08);
 
   /* Typography */
-  --lg-font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
-    'Helvetica Neue', Helvetica, Arial, sans-serif;
-  --lg-font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
-  --lg-font-display: 'Instrument Serif', var(--lg-font);
+  --gh-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans',
+             Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+  --gh-font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
 
   /* Layout */
-  --lg-nav-height: 56px;
-  --lg-max-width: 1120px;
+  --gh-nav-height:           64px;
+  --gh-sidebar-width:        256px;
+  --gh-sidebar-collapsed:    64px;
+  --gh-max-width:            1280px;
+  --gh-content-width:        1012px;
 
-  /* Spacing scale */
-  --lg-space-1: 4px;
-  --lg-space-2: 8px;
-  --lg-space-3: 12px;
-  --lg-space-4: 16px;
-  --lg-space-5: 24px;
-  --lg-space-6: 32px;
-  --lg-space-7: 48px;
-  --lg-space-8: 64px;
-  --lg-space-9: 96px;
+  /* Spacing — 4px base */
+  --gh-space-1:  4px;
+  --gh-space-2:  8px;
+  --gh-space-3:  12px;
+  --gh-space-4:  16px;
+  --gh-space-5:  24px;
+  --gh-space-6:  32px;
+  --gh-space-7:  48px;
+  --gh-space-8:  64px;
 
-  /* Safe area (iOS notch + Home Indicator) */
-  --lg-safe-top: env(safe-area-inset-top, 0px);
-  --lg-safe-bottom: env(safe-area-inset-bottom, 0px);
-  --lg-safe-left: env(safe-area-inset-left, 0px);
-  --lg-safe-right: env(safe-area-inset-right, 0px);
-
-  /* Border radius scale */
-  --lg-radius-sm: 8px;
-  --lg-radius-md: 14px;
-  --lg-radius-lg: 20px;
-  --lg-radius-xl: 28px;
-  --lg-radius-full: 9999px;
-
-  /* Transitions */
-  --lg-transition: 0.35s cubic-bezier(0.25, 0.1, 0.25, 1);
-
-  /* Glass frost presets (backdrop-filter shorthand) */
-  --lg-frost: blur(16.8px) saturate(180%);
-  --lg-frost-heavy: blur(24px) saturate(180%);
-
-  /* Touch targets */
-  --lg-touch-target-min: 44px;
-  --lg-touch-target-min-sm: 36px;
-
-  /* ===== Design System 2026 ===== */
-
-  /* Easing */
-  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-spring:   cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease-in-out:   cubic-bezier(0.65, 0, 0.35, 1);
-
-  /* Spacing */
-  --space-10: 128px;
+  /* Radius — all G2 (8px) */
+  --gh-radius: 8px;
 
   /* Typography scale */
-  --text-xs:   0.75rem;
-  --text-sm:   0.875rem;
-  --text-base: 1rem;
-  --text-lg:   1.125rem;
-  --text-xl:   1.5rem;
-  --text-2xl:  2rem;
-  --text-3xl:  2.5rem;
-  --text-4xl:  clamp(2.4rem, 7vw, 4rem);
+  --gh-text-xs:  0.75rem;
+  --gh-text-sm:  0.875rem;
+  --gh-text-base: 1rem;
+  --gh-text-md:  1rem;
+  --gh-text-lg:  1.125rem;
+  --gh-text-xl:  1.5rem;
+  --gh-text-2xl: 2rem;
+  --gh-text-3xl: 2.5rem;
 
-  /* Glass hover */
-  --lg-glass-hover: rgba(255,255,255,0.08);
+  /* Transitions */
+  --gh-transition: 0.15s ease;
 
-  /* Ambient colors */
-  --ambient-blue:  rgba(41, 151, 255, 0.06);
-  --ambient-coral: rgba(232, 146, 124, 0.05);
-  --ambient-light: rgba(255, 255, 255, 0.03);
+  /* Shadows — minimal, dropdowns only */
+  --gh-shadow-sm: 0 1px 2px rgba(31, 35, 40, 0.04);
+  --gh-shadow-md: 0 3px 6px rgba(31, 35, 40, 0.08);
+  --gh-shadow-lg: 0 8px 24px rgba(31, 35, 40, 0.12);
+  --gh-shadow-xl: 0 12px 32px rgba(31, 35, 40, 0.16);
+
+  /* Focus ring */
+  --gh-focus-ring: 0 0 0 3px rgba(9, 105, 218, 0.3);
+
+  /* Safe area */
+  --gh-safe-top:    env(safe-area-inset-top, 0px);
+  --gh-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --gh-safe-left:   env(safe-area-inset-left, 0px);
+  --gh-safe-right:  env(safe-area-inset-right, 0px);
+}
+
+[data-theme="dark"] {
+  --gh-bg:                #0d1117;
+  --gh-canvas:            #161b22;
+  --gh-canvas-inset:      #010409;
+  --gh-border:            #30363d;
+  --gh-border-muted:      #21262d;
+  --gh-accent:            #2f81f7;
+  --gh-accent-hover:      #409eff;
+  --gh-accent-soft:       rgba(47, 129, 247, 0.15);
+  --gh-text:              #f0f6fc;
+  --gh-text-secondary:    #9198a1;
+  --gh-text-tertiary:     #8b949e;
+  --gh-text-placeholder:  #6e7681;
+  --gh-text-disabled:     #6e7681;
+  --gh-success:           #3fb950;
+  --gh-success-soft:      rgba(63, 185, 80, 0.15);
+  --gh-success-emphasis:  #3fb950;
+  --gh-danger:            #f85149;
+  --gh-danger-soft:       rgba(248, 81, 73, 0.15);
+  --gh-warning:           #d29922;
+  --gh-warning-soft:      rgba(210, 153, 34, 0.15);
+  --gh-accent-emphasis:   #1f6feb;
+  --gh-btn-hover:         rgba(255, 255, 255, 0.06);
+  --gh-btn-active:        rgba(255, 255, 255, 0.1);
+  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --gh-shadow-md: 0 3px 6px rgba(0, 0, 0, 0.4);
+  --gh-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --gh-shadow-xl: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --gh-focus-ring: 0 0 0 3px rgba(47, 129, 247, 0.3);
 }

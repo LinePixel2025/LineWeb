@@ -2,9 +2,8 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './contexts/AuthContext'
+import { ThemeProvider } from './contexts/ThemeContext'
 import { WallpaperProvider } from './contexts/WallpaperContext'
-import { GlassProvider } from './contexts/GlassContext'
-import { ContrastProvider } from './contexts/ContrastContext'
 import { DownloadProvider } from './contexts/DownloadContext'
 import Layout from './components/Layout'
 import { ProtectedRoute, AdminRoute } from './components/Guards'
@@ -46,8 +45,8 @@ const queryClient = new QueryClient({
 
 function RouteLoading() {
   return (
-    <div className="page container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-      <div className="spinner" />
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+      <div className="gh-spinner" />
     </div>
   )
 }
@@ -57,10 +56,9 @@ export default function App() {
     <BrowserRouter>
       <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <WallpaperProvider>
-          <GlassProvider>
-            <ContrastProvider>
-            <DownloadProvider>
+        <ThemeProvider>
+          <WallpaperProvider>
+          <DownloadProvider>
               <Suspense fallback={<RouteLoading />}>
                 <Routes>
                   {/* Main site layout */}
@@ -102,9 +100,8 @@ export default function App() {
               {/* 下载进度弹窗 — 放在 Routes 外层，不随页面切换卸载 */}
               <DownloadToast />
             </DownloadProvider>
-          </ContrastProvider>
-          </GlassProvider>
-        </WallpaperProvider>
+          </WallpaperProvider>
+        </ThemeProvider>
       </AuthProvider>
       </QueryClientProvider>
     </BrowserRouter>

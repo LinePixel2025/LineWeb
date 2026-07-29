@@ -34,7 +34,7 @@ export default function PostPage() {
   }
 
   return (
-    <article className="page container" style={{ maxWidth: '720px' }}>
+    <article className="page container" style={{ maxWidth: '760px' }}>
       <Link to="/posts" className="post-back-link">&larr; 返回文章列表</Link>
 
       <LiquidGlass variant="blur" interactive={false} className="post-content-card">

@@ -1,513 +1,400 @@
 /* =============================================================
-   Line Web — Component Styles
-   Buttons, Inputs, Pagination, Editor, etc.
+   Line Web — Component Styles (GitHub Primer)
    ============================================================= */
 
-/* ============================================================
-   Liquid Button — Design System
-   ============================================================ */
-.liquid-btn {
+/* ===== GitHub Button ===== */
+.gh-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: none;
-  border-radius: 9999px;
-  font-family: var(--lg-font);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  font-family: var(--gh-font);
   font-weight: 500;
   cursor: pointer;
-  transition: transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-              box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-              background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
-              color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+  transition: background var(--gh-transition),
+              color var(--gh-transition),
+              border-color var(--gh-transition),
+              box-shadow var(--gh-transition);
   user-select: none;
   text-decoration: none;
   white-space: nowrap;
-  position: relative;
-  overflow: hidden;
+  line-height: 1.4;
 }
-.liquid-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.gh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.gh-btn:active { transform: scale(0.98); }
+
+.gh-btn--sm { padding: 4px 10px; font-size: var(--gh-text-sm); }
+.gh-btn--md { padding: 6px 14px; font-size: var(--gh-text-sm); }
+.gh-btn--lg { padding: 8px 20px; font-size: var(--gh-text-base); }
+.gh-btn--full { width: 100%; }
+
+.gh-btn--primary {
+  background: var(--gh-accent);
+  color: #fff;
+  border-color: var(--gh-accent);
+}
+.gh-btn--primary:hover:not(:disabled) {
+  background: var(--gh-accent-hover);
+  border-color: var(--gh-accent-hover);
 }
 
-/* Touch scale via CSS, not React state */
-.liquid-btn:active {
-  transform: scale(0.96);
+.gh-btn--secondary {
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+}
+.gh-btn--secondary:hover:not(:disabled) {
+  background: var(--gh-btn-hover);
+  border-color: var(--gh-border-muted);
 }
 
-/* Sizes */
-.liquid-btn.sm { padding: 6px 16px; font-size: 0.82rem; }
-.liquid-btn.md { padding: 10px 24px; font-size: 0.9rem; }
-.liquid-btn.lg { padding: 14px 32px; font-size: 1rem; }
-
-/* Variants */
-.liquid-btn.primary {
-  background-image: linear-gradient(180deg, rgba(255,255,255,0.10) 0%, transparent 50%),
-    linear-gradient(135deg, var(--lg-accent), #40a9ff);
-  color: white;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 12px var(--lg-accent-glow);
+.gh-btn--danger {
+  background: var(--gh-canvas);
+  color: var(--gh-danger);
+  border-color: var(--gh-border);
 }
-.liquid-btn.primary:hover {
-  transform: translateY(-1px) scale(1.02);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 6px 20px var(--lg-accent-glow);
-}
-.liquid-btn.primary:active {
-  transform: translateY(0) scale(0.98);
+.gh-btn--danger:hover:not(:disabled) {
+  background: var(--gh-danger-soft);
+  border-color: var(--gh-danger);
 }
 
-.liquid-btn.glass {
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.10) 0%, transparent 50%),
-    linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04)),
-    rgba(0,0,0,0.15);
-  backdrop-filter: var(--lg-frost);
-  -webkit-backdrop-filter: var(--lg-frost);
-  border: 1px solid rgba(255,255,255,0.18);
-  box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.2), 0 2px 8px rgba(0,0,0,0.15);
-  color: var(--lg-text-primary);
-}
-.liquid-btn.glass:hover {
-  transform: translateY(-1px);
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 50%),
-    linear-gradient(135deg, rgba(255,255,255,0.14), rgba(255,255,255,0.08)),
-    rgba(0,0,0,0.15);
-}
-
-.liquid-btn.ghost {
+.gh-btn--ghost {
   background: transparent;
-  color: var(--lg-text-primary);
+  color: var(--gh-accent);
+  border-color: transparent;
 }
-.liquid-btn.ghost:hover {
-  background: var(--lg-accent-soft);
-}
-
-.liquid-btn.danger {
-  background: linear-gradient(135deg, #ff3b30, #ff6b6b);
-  color: white;
-  box-shadow: 0 4px 12px rgba(255,59,48,0.3);
-}
-.liquid-btn.danger:hover {
-  transform: translateY(-1px) scale(1.02);
+.gh-btn--ghost:hover:not(:disabled) {
+  background: var(--gh-accent-soft);
 }
 
-.liquid-btn.coral {
-  background: linear-gradient(135deg, var(--lg-accent-secondary), var(--lg-accent-secondary-hover));
-  color: white;
-  box-shadow: 0 4px 12px var(--lg-accent-secondary-glow);
-}
-.liquid-btn.coral:hover {
-  transform: translateY(-1px) scale(1.02);
-  box-shadow: 0 6px 20px var(--lg-accent-secondary-glow);
-}
-.liquid-btn.coral:active {
-  transform: translateY(0) scale(0.98);
-}
-
-/* Hover flare overlay */
-.liquid-btn .btn-flare {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-.liquid-btn.primary .btn-flare {
-  background: radial-gradient(circle at 50% 0%, rgba(255,255,255,0.2) 0%, transparent 60%);
-}
-.liquid-btn.glass .btn-flare,
-.liquid-btn.ghost .btn-flare,
-.liquid-btn.danger .btn-flare,
-.liquid-btn.coral .btn-flare {
-  background: radial-gradient(circle at 50% 0%, rgba(255,255,255,0.1) 0%, transparent 60%);
-}
-.liquid-btn:hover .btn-flare {
-  opacity: 1;
-}
-
-/* ============================================================
-   Pagination — 分页控件
-   ============================================================ */
-.pagination-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 1px solid var(--lg-glass-border);
-  cursor: pointer;
-  font-weight: 500;
-  font-family: var(--lg-font);
-  font-size: 0.95rem;
-  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.pagination-btn:active {
-  transform: scale(0.92);
-}
-
-.pagination-btn--active {
-  background: var(--lg-accent) !important;
-  color: white !important;
-}
-
-/* ============================================================
-   Editor Page
-   ============================================================ */
-.editor-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.editor-label {
-  display: block;
-  font-size: 0.78rem;
-  color: var(--lg-text-tertiary);
-  font-weight: 500;
-}
-
-.editor-error {
-  background: linear-gradient(180deg, rgba(255,255,255,0.10) 0%, transparent 50%), rgba(255,59,48,0.12);
-  color: var(--lg-danger);
-  padding: 8px 12px;
-  border-radius: var(--lg-radius-sm);
-  margin-bottom: 8px;
-  font-size: 0.82rem;
-  border: 1px solid rgba(255,59,48,0.2);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-}
-
-.editor-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 8px;
-  flex-wrap: wrap;
-}
-
-.editor-checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-.editor-checkbox input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--lg-accent);
-  cursor: pointer;
-}
-
-.editor-actions {
-  display: flex;
-  gap: 12px;
-}
-
-/* ============================================================
-   Lexical Rich Text Editor
-   ============================================================ */
-
-/* ---- editor shell ---- */
-.lex-editor {
-  border-radius: var(--lg-radius-md);
-  background: var(--lg-glass-bg);
-  backdrop-filter: blur(16.8px);
-  -webkit-backdrop-filter: blur(16.8px);
-  border: 1px solid var(--lg-glass-border);
-  overflow: hidden;
+/* ===== GitHub Input ===== */
+.gh-input-wrap {
   position: relative;
-}
-
-/* ---- toolbar ---- */
-.lex-tb {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--lg-glass-border);
-  background: rgba(255,255,255,0.03);
-  user-select: none;
-}
-
-.lex-grp {
   display: inline-flex;
   align-items: center;
-  gap: 1px;
+}
+.gh-input {
+  padding: 6px 12px;
+  font-size: var(--gh-text-sm);
+  font-family: var(--gh-font);
+  line-height: 1.4;
+  color: var(--gh-text);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  outline: none;
+  transition: border-color var(--gh-transition), box-shadow var(--gh-transition);
+  width: 260px;
+}
+.gh-input--full { width: 100%; }
+.gh-input:focus {
+  border-color: var(--gh-accent);
+  box-shadow: var(--gh-focus-ring);
+}
+.gh-input::placeholder { color: var(--gh-text-placeholder); }
+.gh-input-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--gh-text-tertiary);
+  display: flex;
+  pointer-events: none;
+}
+.gh-input-icon + .gh-input { padding-left: 32px; }
+
+/* ===== GitHub Badge ===== */
+.gh-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: var(--gh-text-xs);
+  font-weight: 500;
+  border-radius: var(--gh-radius);
+  border: 1px solid var(--gh-border);
+  color: var(--gh-text-secondary);
+  background: var(--gh-canvas);
+  line-height: 1.4;
+}
+.gh-badge--success {
+  background: var(--gh-success-soft);
+  color: var(--gh-success);
+  border-color: var(--gh-success-soft);
+}
+.gh-badge--danger {
+  background: var(--gh-danger-soft);
+  color: var(--gh-danger);
+  border-color: var(--gh-danger-soft);
+}
+.gh-badge--warning {
+  background: var(--gh-warning-soft);
+  color: var(--gh-warning);
+  border-color: var(--gh-warning-soft);
+}
+.gh-badge--accent {
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+  border-color: var(--gh-accent-soft);
 }
 
-.lex-div {
-  display: inline-block;
-  width: 1px;
-  height: 22px;
-  background: var(--lg-glass-border);
-  margin: 0 4px;
+/* ===== GitHub Alert ===== */
+.gh-alert {
+  padding: 12px 16px;
+  border-radius: var(--gh-radius);
+  border: 1px solid var(--gh-border);
+  border-left-width: 4px;
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+}
+.gh-alert--info { border-left-color: var(--gh-accent); }
+.gh-alert--success { border-left-color: var(--gh-success-emphasis); }
+.gh-alert--warning { border-left-color: var(--gh-warning); }
+.gh-alert--danger { border-left-color: var(--gh-danger); }
+.gh-alert-title { font-weight: 600; margin-bottom: 4px; }
+.gh-alert-body { font-size: var(--gh-text-sm); }
+
+/* ===== GitHub TabNav ===== */
+.gh-tabnav {
+  display: flex;
+  border-bottom: 1px solid var(--gh-border);
+  margin-bottom: var(--gh-space-5);
+  overflow-x: auto;
+}
+.gh-tabnav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  font-size: var(--gh-text-sm);
+  font-family: var(--gh-font);
+  font-weight: 500;
+  color: var(--gh-text-secondary);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color var(--gh-transition), border-color var(--gh-transition);
+  margin-bottom: -1px;
+  white-space: nowrap;
+}
+.gh-tabnav-item:hover { color: var(--gh-text); }
+.gh-tabnav-item--active {
+  color: var(--gh-text);
+  border-bottom-color: var(--gh-accent);
+}
+.gh-tabnav-count {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+  background: var(--gh-canvas-inset);
+  padding: 1px 6px;
+  border-radius: var(--gh-radius);
+}
+
+/* ===== GitHub Card / Box ===== */
+.gh-box {
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  padding: var(--gh-space-4);
+}
+.gh-box + .gh-box { margin-top: var(--gh-space-4); }
+
+/* ===== GitHub List Item ===== */
+.gh-list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--gh-border-muted);
+  transition: background var(--gh-transition);
+  text-decoration: none;
+  color: inherit;
+}
+.gh-list-item:last-child { border-bottom: none; }
+.gh-list-item:hover { background: var(--gh-canvas-inset); }
+
+/* ===== Repo color circle ===== */
+.gh-repo-circle {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
   flex-shrink: 0;
 }
 
-.lex-btn {
+/* ===== GitHub Dropdown / Popover ===== */
+.gh-popover {
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  box-shadow: var(--gh-shadow-lg);
+  padding: 4px;
+  min-width: 180px;
+  z-index: 1000;
+}
+.gh-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  font-family: var(--gh-font);
+  cursor: pointer;
+  border-radius: var(--gh-radius);
+  text-align: left;
+  transition: background var(--gh-transition);
+  text-decoration: none;
+}
+.gh-popover-item:hover { background: var(--gh-btn-hover); }
+.gh-popover-divider {
+  height: 1px;
+  background: var(--gh-border);
+  margin: 4px 0;
+}
+
+/* ===== GitHub Table ===== */
+.gh-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--gh-text-sm);
+}
+.gh-table th {
+  text-align: left;
+  padding: 10px 16px;
+  font-weight: 500;
+  color: var(--gh-text-secondary);
+  border-bottom: 1px solid var(--gh-border);
+  white-space: nowrap;
+}
+.gh-table td {
+  padding: 10px 16px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--gh-border-muted);
+}
+.gh-table tr:last-child td { border-bottom: none; }
+.gh-table tr:hover td { background: var(--gh-canvas-inset); }
+
+/* ===== GitHub Dialog ===== */
+.gh-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(31, 35, 40, 0.4);
+}
+.gh-dialog {
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  box-shadow: var(--gh-shadow-xl);
+  padding: var(--gh-space-5);
+  width: 90%;
+  max-width: 440px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.gh-dialog-title { font-size: var(--gh-text-base); font-weight: 600; margin-bottom: var(--gh-space-4); }
+.gh-dialog-actions { display: flex; gap: var(--gh-space-2); justify-content: flex-end; margin-top: var(--gh-space-4); }
+
+/* ===== GitHub Page Header ===== */
+.gh-page-header {
+  padding-bottom: var(--gh-space-4);
+  border-bottom: 1px solid var(--gh-border);
+  margin-bottom: var(--gh-space-5);
+}
+.gh-page-header h1 { font-size: var(--gh-text-xl); margin-bottom: var(--gh-space-1); }
+.gh-page-header p { color: var(--gh-text-secondary); font-size: var(--gh-text-sm); }
+
+/* ===== GitHub Actions Row ===== */
+.gh-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  justify-content: flex-end;
+}
+
+/* ===== article content ===== */
+.article-content {
+  line-height: 1.8;
+  color: var(--gh-text);
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.article-content h1, .article-content h2, .article-content h3, .article-content h4 {
+  margin-top: 1.8em; margin-bottom: 0.6em;
+}
+.article-content h1:first-child, .article-content h2:first-child, .article-content h3:first-child {
+  margin-top: 0;
+}
+.article-content p { margin-bottom: 1em; }
+.article-content ul, .article-content ol { margin-bottom: 1em; padding-left: 1.5em; }
+.article-content blockquote {
+  border-left: 4px solid var(--gh-border);
+  padding: 8px 16px;
+  margin: 1em 0;
+  color: var(--gh-text-secondary);
+}
+.article-content code {
+  font-family: var(--gh-font-mono);
+  background: var(--gh-canvas-inset);
+  padding: 2px 8px;
+  border-radius: var(--gh-radius);
+  font-size: 0.9em;
+}
+.article-content pre {
+  background: var(--gh-canvas-inset);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  padding: 16px;
+  overflow-x: auto;
+  margin-bottom: 1em;
+}
+.article-content pre code { background: none; padding: 0; }
+.article-content img { max-width: 100%; border-radius: var(--gh-radius); }
+
+/* ===== Pagination ===== */
+.gh-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--gh-space-5);
+}
+.gh-pagination-btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+  color: var(--gh-text-secondary);
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--gh-transition), color var(--gh-transition);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 30px;
-  height: 30px;
-  padding: 0 6px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--lg-text-secondary);
-  font-size: 0.78rem;
-  cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
+}
+.gh-pagination-btn:hover { background: var(--gh-btn-hover); color: var(--gh-text); }
+.gh-pagination-btn--active { background: var(--gh-accent); color: #fff; border-color: var(--gh-accent); }
+.gh-pagination-btn--active:hover { background: var(--gh-accent-hover); }
+
+/* ===== Mobile / Tablet visibility ===== */
+.gh-visible-mobile { display: none !important; }
+.gh-hidden-mobile {}
+.gh-hidden-tablet {}
+
+@media (max-width: 767px) {
+  .gh-visible-mobile { display: flex !important; }
+  .gh-hidden-mobile { display: none !important; }
 }
 
-@media (hover: hover) {
-  .lex-btn:hover {
-    background: rgba(255,255,255,0.08);
-    color: var(--lg-text-primary);
-  }
-}
-
-.lex-btn--on {
-  background: var(--lg-accent-soft);
-  color: var(--lg-accent);
-}
-
-.lex-btn sub {
-  font-size: 0.6rem;
-}
-
-.lex-btn strong,
-.lex-btn b {
-  font-weight: 700;
-}
-
-.lex-btn em,
-.lex-btn i {
-  font-style: italic;
-}
-
-.lex-btn u {
-  text-decoration: underline;
-}
-
-.lex-btn s {
-  text-decoration: line-through;
-}
-
-/* ---- editor body ---- */
-.lex-body {
-  position: relative;
-}
-
-.lex-content {
-  position: relative;
-  outline: none;
-  resize: vertical;
-  padding: 16px 20px;
-  font-size: 0.92rem;
-  line-height: 1.7;
-  color: var(--lg-text-article);
-  min-height: inherit;
-  overflow-y: auto;
-}
-
-/* ---- placeholder ---- */
-.lex-placeholder {
-  position: absolute;
-  top: 16px;
-  left: 20px;
-  pointer-events: none;
-  color: var(--lg-text-tertiary);
-  font-size: 0.92rem;
-  user-select: none;
-}
-
-/* ---- content typography ---- */
-
-.lex-p {
-  margin: 0 0 0.6em;
-}
-
-.lex-h1 {
-  font-size: 1.6rem;
-  font-weight: 700;
-  margin: 0.8em 0 0.3em;
-  color: var(--lg-text-primary);
-  line-height: 1.3;
-}
-
-.lex-h2 {
-  font-size: 1.3rem;
-  font-weight: 650;
-  margin: 0.7em 0 0.3em;
-  color: var(--lg-text-primary);
-  line-height: 1.35;
-}
-
-.lex-h3 {
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin: 0.6em 0 0.2em;
-  color: var(--lg-text-primary);
-  line-height: 1.4;
-}
-
-.lex-bold {
-  font-weight: 700;
-}
-
-.lex-italic {
-  font-style: italic;
-}
-
-.lex-uline {
-  text-decoration: underline;
-}
-
-.lex-strike {
-  text-decoration: line-through;
-}
-
-/* ---- lists ---- */
-.lex-ul,
-.lex-ol {
-  margin: 0 0 0.6em;
-  padding-left: 1.5em;
-}
-
-.lex-li {
-  margin: 0.2em 0;
-}
-
-.lex-li-nested {
-  list-style-type: circle;
-}
-
-/* ---- quote ---- */
-.lex-quote {
-  border-left: 3px solid var(--lg-accent);
-  padding: 8px 16px;
-  margin: 0.6em 0;
-  color: var(--lg-text-article-secondary);
-  background: var(--lg-accent-soft);
-  border-radius: 0 var(--lg-radius-sm) var(--lg-radius-sm) 0;
-}
-
-/* ---- code ---- */
-.lex-code {
-  background: rgba(0,0,0,0.35);
-  backdrop-filter: blur(8px);
-  border: 1px solid var(--lg-glass-border);
-  border-radius: var(--lg-radius-sm);
-  padding: 16px;
-  margin: 0.6em 0;
-  font-family: var(--lg-font-mono);
-  font-size: 0.82rem;
-  line-height: 1.6;
-  overflow-x: auto;
-  white-space: pre;
-  tab-size: 2;
-}
-
-/* ---- inline code ---- */
-.lex-code-inline {
-  font-family: var(--lg-font-mono);
-  background: var(--lg-accent-soft);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.9em;
-}
-
-/* ---- link ---- */
-.lex-link {
-  color: var(--lg-accent);
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-/* ---- table ---- */
-.lex-table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 0.6em 0;
-  border: 1px solid var(--lg-glass-border);
-  border-radius: var(--lg-radius-sm);
-  overflow: hidden;
-}
-
-.lex-td,
-.lex-th {
-  border: 1px solid var(--lg-glass-border);
-  padding: 8px 12px;
-  text-align: left;
-  font-size: 0.85rem;
-}
-
-.lex-th {
-  background: rgba(255,255,255,0.05);
-  font-weight: 600;
-  color: var(--lg-text-primary);
-}
-
-/* ---- code highlighting tokens ---- */
-.lex-token-comment,
-.lex-token-prolog,
-.lex-token-doctype,
-.lex-token-cdata { color: #6a9955; }
-.lex-token-punctuation { color: #d4d4d4; }
-.lex-token-property,
-.lex-token-tag,
-.lex-token-boolean,
-.lex-token-number,
-.lex-token-constant,
-.lex-token-symbol,
-.lex-token-deleted { color: #b5cea8; }
-.lex-token-selector,
-.lex-token-attr,
-.lex-token-string,
-.lex-token-char,
-.lex-token-builtin,
-.lex-token-inserted { color: #ce9178; }
-.lex-token-operator,
-.lex-token-entity,
-.lex-token-url { color: #d4d4d4; }
-.lex-token-atrule,
-.lex-token-attr-value,
-.lex-token-keyword { color: #569cd6; }
-.lex-token-function,
-.lex-token-class-name { color: #dcdcaa; }
-.lex-token-regex,
-.lex-token-important,
-.lex-token-variable { color: #d16969; }
-
-/* ============================================================
-   Mobile
-   ============================================================ */
-.mobile-menu-btn {
-  display: none;
-  background: none;
-  border: none;
-  color: var(--lg-text-primary);
-  cursor: pointer;
-  width: 44px;
-  height: 44px;
-  align-items: center;
-  justify-content: center;
-}
-
-.mobile-menu-btn:active {
-  opacity: 0.6;
-}
-
-/* Mobile menu open/close animation */
-@keyframes menuSlideIn {
-  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+@media (max-width: 1279px) {
+  .gh-hidden-tablet { display: none !important; }
 }

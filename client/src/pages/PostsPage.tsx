@@ -39,7 +39,7 @@ export default function PostsPage() {
   }
 
   return (
-    <div className="page container" style={{ maxWidth: '720px' }}>
+    <div className="page container" style={{ maxWidth: '860px' }}>
       <h1 style={{ marginBottom: '8px' }}>文章</h1>
       <p className="text-secondary" style={{ marginBottom: '24px' }}>发现 Line Web 的最新内容</p>
 
