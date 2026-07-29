@@ -21,12 +21,12 @@ const ThumbnailGrid = memo(function ThumbnailGrid({ items, size = 'medium' }: Th
   const { getThumbnail } = useThumbnails(fileIds, { size })
 
   return (
-    <div className="thumbnail-grid">
+    <div className="gh-drive-thumbnail-grid">
       {items.map(item => {
         if (item.isFolder) {
           return (
-            <div key={item.id} className="thumbnail-item thumbnail-item--folder">
-              <span className="thumbnail-icon">📁</span>
+            <div key={item.id} className="gh-drive-thumbnail-item gh-drive-thumbnail-item--folder">
+              <span className="gh-drive-thumbnail-icon">📁</span>
             </div>
           )
         }
@@ -36,28 +36,28 @@ const ThumbnailGrid = memo(function ThumbnailGrid({ items, size = 'medium' }: Th
         const isVideo = mime.startsWith('video/')
 
         return (
-          <div key={item.id} className="thumbnail-item">
+          <div key={item.id} className="gh-drive-thumbnail-item">
             {thumbnail.loading ? (
-              <div className="thumbnail-loading">
-                <div className="thumbnail-spinner" />
+              <div className="gh-drive-thumbnail-loading">
+                <div className="gh-spinner" />
               </div>
             ) : thumbnail.url ? (
-              <div className="thumbnail-preview">
+              <div className="gh-drive-thumbnail-preview">
                 <img
                   src={thumbnail.url}
                   alt={item.name}
-                  className="thumbnail-image"
+                  className="gh-drive-thumbnail-image"
                   loading="lazy"
                 />
                 {isVideo && (
-                  <div className="thumbnail-video-badge">
+                  <div className="gh-drive-thumbnail-video-badge">
                     <span>▶</span>
                   </div>
                 )}
               </div>
             ) : (
-              <div className="thumbnail-fallback">
-                <span className="thumbnail-icon">
+              <div className="gh-drive-thumbnail-fallback">
+                <span className="gh-drive-thumbnail-icon">
                   {isVideo ? '🎬' : '📄'}
                 </span>
               </div>

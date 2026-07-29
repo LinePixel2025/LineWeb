@@ -1,6 +1,5 @@
 import { useState, useCallback, memo, useRef, useMemo, forwardRef } from 'react'
 import { VirtuosoGrid } from 'react-virtuoso'
-import LiquidButton from '../glass/LiquidButton'
 import ContextMenu from './ContextMenu'
 import ThumbnailGrid from './ThumbnailGrid'
 import type { DriveItem } from '../../types/drive'
@@ -33,13 +32,12 @@ const DriveGridView = memo(function DriveGridView({
   }, [onSelect])
 
   const handleBlankAreaContextMenu = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('.drive-grid-card')) return
+    if ((e.target as HTMLElement).closest('.gh-drive-grid-card')) return
     e.preventDefault(); onSelect(null); setContextMenu({ position: { x: e.clientX, y: e.clientY } })
   }, [onSelect])
 
   const closeContextMenu = useCallback(() => setContextMenu(null), [])
 
-  // Stable refs for virtualized grid components
   const itemsRef = useRef(items)
   itemsRef.current = items
   const selectedIdRef = useRef(selectedId)
@@ -50,7 +48,7 @@ const DriveGridView = memo(function DriveGridView({
   const gridComponents = useMemo(() => ({
     List: forwardRef<HTMLDivElement, any>(({ style, children, ...props }, ref) => (
       <div ref={ref} {...props}
-        className="drive-grid"
+        className="gh-drive-grid"
         style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', ...style }}
         onContextMenu={(e) => handleBlankAreaContextMenuRef.current(e)}
       >
@@ -66,7 +64,7 @@ const DriveGridView = memo(function DriveGridView({
       const isDraggable = item ? !item.isFolder : false
       return (
         <div {...props}
-          className={`drive-grid-card${isSelected ? ' drive-grid-card--selected' : ''}`}
+          className={`gh-drive-grid-card${isSelected ? ' gh-drive-grid-card--selected' : ''}`}
           style={{ flex: '1 1 160px', minWidth: 0, maxWidth: '1fr' }}
           draggable={isDraggable}
           onDragStart={(e) => {
@@ -99,25 +97,25 @@ const DriveGridView = memo(function DriveGridView({
           return (
             <>
               {!item.isFolder && isMediaItem(item) && (
-                <div className="drive-grid-card-thumbnail">
+                <div className="gh-drive-grid-card-thumbnail">
                   <ThumbnailGrid items={[item]} size="medium" />
                 </div>
               )}
-              <button className="drive-grid-card-body" onClick={() => { onSelect(item); if (item.isFolder) onFolderClick(item) }} onContextMenu={(e) => handleItemContextMenu(e, item)}>
-                <span className="drive-grid-card-icon">{getDriveIcon(item, 32)}</span>
-                <span className="drive-grid-card-name" title={item.name}>{item.name}</span>
-                <span className="drive-grid-card-meta">{item.isFolder ? '文件夹' : formatFileSize(Number(item.size))}</span>
-                <span className="drive-grid-card-date">{formatDate(item.updatedAt)}</span>
+              <button className="gh-drive-grid-card-body" onClick={() => { onSelect(item); if (item.isFolder) onFolderClick(item) }} onContextMenu={(e) => handleItemContextMenu(e, item)}>
+                <span className="gh-drive-grid-card-icon">{getDriveIcon(item, 32)}</span>
+                <span className="gh-drive-grid-card-name" title={item.name}>{item.name}</span>
+                <span className="gh-drive-grid-card-meta">{item.isFolder ? '文件夹' : formatFileSize(Number(item.size))}</span>
+                <span className="gh-drive-grid-card-date">{formatDate(item.updatedAt)}</span>
               </button>
-              <div className="drive-grid-card-actions" onClick={e => e.stopPropagation()}>
+              <div className="gh-drive-grid-card-actions" onClick={e => e.stopPropagation()}>
                 {!item.isFolder && (
                   <>
-                    <LiquidButton size="sm" variant="ghost" onClick={() => onPreview(item)}>预览</LiquidButton>
-                    <LiquidButton size="sm" variant="ghost" onClick={() => onDownload(item)}><DownloadIcon size={14} /></LiquidButton>
+                    <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={() => onPreview(item)}>预览</button>
+                    <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={() => onDownload(item)}><DownloadIcon size={14} /></button>
                   </>
                 )}
-                <LiquidButton size="sm" variant="ghost" onClick={() => onRename(item)}><RenameIcon size={14} /></LiquidButton>
-                <LiquidButton size="sm" variant="danger" onClick={() => onDelete(item)}><DeleteIcon size={14} /></LiquidButton>
+                <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={() => onRename(item)}><RenameIcon size={14} /></button>
+                <button className="gh-btn gh-btn--sm gh-btn--danger" onClick={() => onDelete(item)}><DeleteIcon size={14} /></button>
               </div>
             </>
           )

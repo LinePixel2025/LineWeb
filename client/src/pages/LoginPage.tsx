@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import LiquidGlass from '../components/glass/LiquidGlass'
-import LiquidButton from '../components/glass/LiquidButton'
+import { GitHubButton, GitHubInput } from '../components/ui'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -24,41 +23,31 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="page container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
-      <LiquidGlass variant="strong" chromatic={false} style={{ width: '100%', maxWidth: '400px', padding: '40px 32px' }}>
-        <h2 style={{ textAlign: 'center', marginBottom: '8px' }}>登录</h2>
-        <p className="text-secondary" style={{ textAlign: 'center', marginBottom: '28px', fontSize: '0.88rem' }}>
+    <div className="gh-page-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
+      <div className="gh-box" style={{ width: '100%', maxWidth: '400px', padding: '32px', margin: '60px auto' }}>
+        <h2 style={{ textAlign: 'center', marginBottom: '4px' }}>登录</h2>
+        <p className="gh-text-secondary" style={{ textAlign: 'center', marginBottom: '24px', fontSize: '0.88rem' }}>
           欢迎回到 Line Web
         </p>
 
         {error && (
-          <div style={{
-            background: 'rgba(255,59,48,0.12)',
-            color: 'var(--lg-danger)', padding: '10px 14px',
-            borderRadius: 'var(--lg-radius-md)', marginBottom: '16px', fontSize: '0.88rem',
-          }}>
+          <div className="gh-alert gh-alert--danger" role="alert">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <input className="lg-input" type="email" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} required />
-          <input className="lg-input" type="password" placeholder="密码" value={password} onChange={e => setPassword(e.target.value)} required />
-          <LiquidButton
-            type="submit"
-            variant="primary"
-            size="lg"
-            disabled={loading}
-            style={{ width: '100%', marginTop: '4px' }}
-          >
+          <GitHubInput type="email" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} required fullWidth />
+          <GitHubInput type="password" placeholder="密码" value={password} onChange={e => setPassword(e.target.value)} required fullWidth />
+          <GitHubButton type="submit" variant="primary" size="lg" fullWidth disabled={loading}>
             {loading ? '登录中...' : '登录'}
-          </LiquidButton>
+          </GitHubButton>
         </form>
 
-        <p className="text-tertiary" style={{ textAlign: 'center', marginTop: '20px' }}>
+        <p className="gh-text-tertiary" style={{ textAlign: 'center', marginTop: '20px' }}>
           还没有账号？ <Link to="/register">注册</Link>
         </p>
-      </LiquidGlass>
+      </div>
     </div>
   )
 }

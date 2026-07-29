@@ -107,7 +107,7 @@ const TreeView = memo(function TreeView({ onFolderSelect }: TreeViewProps) {
   }, [navigateToFolder, onFolderSelect])
 
   return (
-    <div className="tree-view">
+    <div className="gh-drive-tree-view">
       <TreeNodeItem
         node={tree}
         level={0}
@@ -117,8 +117,6 @@ const TreeView = memo(function TreeView({ onFolderSelect }: TreeViewProps) {
     </div>
   )
 })
-
-// ---- TreeNodeItem: a proper React component so we can use useState for drag-over ----
 
 interface TreeNodeItemProps {
   node: TreeNode
@@ -144,7 +142,6 @@ const TreeNodeItem = memo(function TreeNodeItem({
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
     setDragOver(true)
-    // Expand the node if collapsed after a short hover
     if (!node.isExpanded && hasChildren) {
       if (expandTimeoutRef.current) clearTimeout(expandTimeoutRef.current)
       const nodeId = node.id
@@ -187,13 +184,13 @@ const TreeNodeItem = memo(function TreeNodeItem({
   const active = state.currentPath.some(p => p.id === node.id)
 
   const nodeContentClass = [
-    'tree-node-content',
-    active ? 'tree-node-content--active' : '',
-    dragOver ? 'tree-node-content--drag-over' : '',
+    'gh-drive-tree-node-content',
+    active ? 'gh-drive-tree-node-content--active' : '',
+    dragOver ? 'gh-drive-tree-node-content--drag-over' : '',
   ].filter(Boolean).join(' ')
 
   return (
-    <div className="tree-node" style={{ paddingLeft: `${level * 16}px` }}>
+    <div className="gh-drive-tree-node" style={{ paddingLeft: `${level * 16}px` }}>
       <div
         className={nodeContentClass}
         onDragOver={handleDragOver}
@@ -202,7 +199,7 @@ const TreeNodeItem = memo(function TreeNodeItem({
       >
         {hasChildren && (
           <button
-            className="tree-node-expand"
+            className="gh-drive-tree-node-expand"
             onClick={(e) => {
               e.stopPropagation()
               onExpand(node)
@@ -212,14 +209,14 @@ const TreeNodeItem = memo(function TreeNodeItem({
             {node.isLoading ? '⏳' : node.isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
           </button>
         )}
-        {!hasChildren && <span className="tree-node-spacer" />}
+        {!hasChildren && <span className="gh-drive-tree-node-spacer" />}
 
         <button
-          className="tree-node-label"
+          className="gh-drive-tree-node-label"
           onClick={() => onFolderClick(node)}
         >
-          <span className="tree-node-icon"><FolderIcon size={14} /></span>
-          <span className="tree-node-name">{node.name}</span>
+          <span className="gh-drive-tree-node-icon"><FolderIcon size={14} /></span>
+          <span className="gh-drive-tree-node-name">{node.name}</span>
         </button>
       </div>
 

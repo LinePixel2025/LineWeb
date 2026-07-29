@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { usePostsList } from '../hooks/useQueries'
-import LiquidGlass from '../components/glass/LiquidGlass'
+import { GitHubButton, GitHubInput } from '../components/ui'
 import Pagination from '../components/Pagination'
 
 interface PostSummary {
@@ -9,6 +9,10 @@ interface PostSummary {
   slug: string; createdAt: string; author: { username: string }
 }
 interface PostsResponse { posts: PostSummary[]; total: number; page: number; totalPages: number }
+
+function RepoCircle({ letter }: { letter: string }) {
+  return <span className="gh-repo-circle">{letter}</span>
+}
 
 export default function PostsPage() {
   const [page, setPage] = useState(1)
@@ -18,109 +22,97 @@ export default function PostsPage() {
 
   const { data, isLoading: loading } = usePostsList(page, sort, search || undefined, 6)
 
-  // 搜索提交
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     setPage(1)
     setSearch(searchInput.trim())
   }
 
-  // 清除搜索
   const handleClearSearch = () => {
     setSearchInput('')
     setSearch('')
     setPage(1)
   }
 
-  // 切换排序
   const toggleSort = () => {
     setPage(1)
     setSort(prev => prev === 'desc' ? 'asc' : 'desc')
   }
 
   return (
-    <div className="page container" style={{ maxWidth: '860px' }}>
-      <h1 style={{ marginBottom: '8px' }}>文章</h1>
-      <p className="text-secondary" style={{ marginBottom: '24px' }}>发现 Line Web 的最新内容</p>
+    <div className="gh-page-container">
+      <div className="gh-page-header">
+        <h1 className="gh-page-title">文章</h1>
+        <p className="gh-text-secondary">发现 Line Web 的最新内容</p>
+      </div>
 
-      {/* 工具栏：搜索 + 排序 */}
-      <LiquidGlass variant="blur" chromatic={false} className="posts-toolbar">
-        <div className="posts-search-wrap">
-          <span className="posts-search-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8" />
-              <path d="m21 21-4.3-4.3" />
-            </svg>
-          </span>
-          <input
-            className="lg-input posts-search-input"
+      <div className="gh-box" style={{ marginBottom: '16px', padding: '12px 16px' }}>
+        <form onSubmit={handleSearch} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: search ? '12px' : '0' }}>
+          <GitHubInput
             type="text"
             placeholder="搜索文章标题…"
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
+            fullWidth
+            icon={
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+              </svg>
+            }
           />
-          <button type="button" className="posts-search-submit" onClick={handleSearch} aria-label="搜索">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
-            </svg>
-          </button>
-          <div className="posts-toolbar-divider" />
-          <button className="posts-sort-btn-inline" onClick={toggleSort}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '4px' }}>
-              <path d="m3 16 4 4 4-4" /><path d="M7 20V4" /><path d="m21 8-4-4-4 4" /><path d="M17 4v16" />
-            </svg>
-            {sort === 'desc' ? '最新' : '最早'}
-          </button>
-        </div>
+          <GitHubButton type="submit" variant="primary" size="sm">搜索</GitHubButton>
+          <GitHubButton type="button" variant="secondary" size="sm" onClick={toggleSort}>
+            {sort === 'desc' ? '最新 ↓' : '最早 ↑'}
+          </GitHubButton>
+        </form>
         {search && (
-          <button type="button" className="liquid-btn ghost sm" onClick={handleClearSearch}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '2px' }}>
-              <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-            </svg>
-            清除
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="gh-text-secondary" style={{ fontSize: '0.85rem' }}>
+              搜索 "{search}" — {data ? `${data.total} 篇结果` : '搜索中…'}
+            </span>
+            <GitHubButton variant="ghost" size="sm" onClick={handleClearSearch}>清除</GitHubButton>
+          </div>
         )}
-      </LiquidGlass>
-
-      {/* 搜索结果提示 */}
-      {search && data && (
-        <p className="text-tertiary" style={{ margin: '16px 0 0', fontSize: '0.88rem' }}>
-          搜索 "{search}" 找到 {data.total} 篇文章
-        </p>
-      )}
+      </div>
 
       {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}><div className="spinner" /></div>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}><div className="gh-spinner" /></div>
       ) : data?.posts.length === 0 ? (
-        <LiquidGlass variant="regular" chromatic={false} style={{ textAlign: 'center', padding: '60px 24px', marginTop: '24px' }}>
-          <p className="text-secondary">{search ? `未找到包含 "${search}" 的文章` : '暂无文章'}</p>
-        </LiquidGlass>
+        <div className="gh-box" style={{ textAlign: 'center', padding: '48px 24px' }}>
+          <p className="gh-text-secondary">{search ? `未找到包含 "${search}" 的文章` : '暂无文章'}</p>
+        </div>
       ) : (
         <>
-          <div className="posts-list">
-            {data?.posts.map((post, i) => (
-              <LiquidGlass key={post.id} variant="blur" chromatic={false} className="fade-in-stagger posts-card" style={{ animationDelay: `${i * 0.05}s` }}>
-                <Link
-                  to={`/posts/${post.slug}`}
-                  style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
-                >
-                  <h3>{post.title}</h3>
-                  {post.summary && <p className="text-secondary" style={{ marginTop: '8px', fontSize: '0.92rem' }}>{post.summary}</p>}
-                  <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
-                    <span className="text-tertiary">{post.author.username}</span>
-                    <span className="text-tertiary">{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {data?.posts.map((post) => (
+              <div key={post.id} className="gh-list-item">
+                <RepoCircle letter={post.title.charAt(0).toUpperCase()} />
+                <div className="gh-list-item-content">
+                  <Link to={`/posts/${post.slug}`} className="gh-list-item-title">
+                    {post.title}
+                  </Link>
+                  {post.summary && (
+                    <p className="gh-text-secondary" style={{ fontSize: '0.82rem', margin: '2px 0 0' }}>
+                      {post.summary}
+                    </p>
+                  )}
+                  <div className="gh-list-item-meta">
+                    <span className="gh-text-tertiary">{post.author.username}</span>
+                    <span className="gh-text-tertiary">{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
                   </div>
-                </Link>
-              </LiquidGlass>
+                </div>
+              </div>
             ))}
           </div>
 
           {data && data.totalPages > 1 && (
-            <Pagination
-              page={page}
-              totalPages={data.totalPages}
-              onPageChange={setPage}
-            />
+            <div className="gh-pagination">
+              <Pagination
+                page={page}
+                totalPages={data.totalPages}
+                onPageChange={setPage}
+              />
+            </div>
           )}
         </>
       )}

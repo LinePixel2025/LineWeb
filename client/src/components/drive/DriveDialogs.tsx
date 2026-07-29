@@ -1,7 +1,5 @@
 import { useState, memo } from 'react'
 import { createPortal } from 'react-dom'
-import LiquidGlass from '../glass/LiquidGlass'
-import LiquidButton from '../glass/LiquidButton'
 import api from '../../lib/api'
 import type { DriveItem } from '../../types/drive'
 
@@ -36,27 +34,25 @@ export const NewFolderDialog = memo(function NewFolderDialog({
   }
 
   return createPortal(
-    <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog" onClick={e => e.stopPropagation()}>
-        <LiquidGlass variant="strong" chromatic={false} className="dialog-inner">
-          <h3 className="dialog-title">新建文件夹</h3>
-          {error && <p className="dialog-error">{error}</p>}
-          <input
-            className="lg-input dialog-input"
-            type="text"
-            placeholder="文件夹名称"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleCreate()}
-            autoFocus
-          />
-          <div className="dialog-actions">
-            <LiquidButton size="sm" variant="ghost" onClick={onClose}>取消</LiquidButton>
-            <LiquidButton size="sm" variant="primary" onClick={handleCreate} disabled={loading || !name.trim()}>
-              {loading ? '创建中...' : '创建'}
-            </LiquidButton>
-          </div>
-        </LiquidGlass>
+    <div className="gh-dialog-overlay" onClick={onClose}>
+      <div className="gh-dialog" onClick={e => e.stopPropagation()}>
+        <h3 className="gh-dialog-title">新建文件夹</h3>
+        {error && <p className="gh-alert gh-alert--danger" style={{ marginBottom: 'var(--gh-space-3)' }}>{error}</p>}
+        <input
+          className="gh-input gh-input--full"
+          type="text"
+          placeholder="文件夹名称"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleCreate()}
+          autoFocus
+        />
+        <div className="gh-dialog-actions">
+          <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={onClose}>取消</button>
+          <button className="gh-btn gh-btn--sm gh-btn--primary" onClick={handleCreate} disabled={loading || !name.trim()}>
+            {loading ? '创建中...' : '创建'}
+          </button>
+        </div>
       </div>
     </div>,
     document.body
@@ -97,26 +93,24 @@ export const RenameDialog = memo(function RenameDialog({
   }
 
   return createPortal(
-    <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog" onClick={e => e.stopPropagation()}>
-        <LiquidGlass variant="strong" chromatic={false} className="dialog-inner">
-          <h3 className="dialog-title">重命名</h3>
-          {error && <p className="dialog-error">{error}</p>}
-          <input
-            className="lg-input dialog-input"
-            type="text"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleRename()}
-            autoFocus
-          />
-          <div className="dialog-actions">
-            <LiquidButton size="sm" variant="ghost" onClick={onClose}>取消</LiquidButton>
-            <LiquidButton size="sm" variant="primary" onClick={handleRename} disabled={loading || !name.trim()}>
-              {loading ? '保存中...' : '保存'}
-            </LiquidButton>
-          </div>
-        </LiquidGlass>
+    <div className="gh-dialog-overlay" onClick={onClose}>
+      <div className="gh-dialog" onClick={e => e.stopPropagation()}>
+        <h3 className="gh-dialog-title">重命名</h3>
+        {error && <p className="gh-alert gh-alert--danger" style={{ marginBottom: 'var(--gh-space-3)' }}>{error}</p>}
+        <input
+          className="gh-input gh-input--full"
+          type="text"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleRename()}
+          autoFocus
+        />
+        <div className="gh-dialog-actions">
+          <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={onClose}>取消</button>
+          <button className="gh-btn gh-btn--sm gh-btn--primary" onClick={handleRename} disabled={loading || !name.trim()}>
+            {loading ? '保存中...' : '保存'}
+          </button>
+        </div>
       </div>
     </div>,
     document.body
@@ -152,23 +146,21 @@ export const DeleteDialog = memo(function DeleteDialog({
   }
 
   return createPortal(
-    <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog" onClick={e => e.stopPropagation()}>
-        <LiquidGlass variant="strong" chromatic={false} className="dialog-inner">
-          <h3 className="dialog-title">确认删除</h3>
-          {error && <p className="dialog-error">{error}</p>}
-          <p className="dialog-desc">
-            确定要删除 {item.isFolder ? '文件夹' : '文件'} <strong>{item.name}</strong> 吗？
-            {item.isFolder && <><br/>文件夹内的所有内容将一并删除。</>}
-          </p>
-          <p className="dialog-warn">此操作不可撤销。</p>
-          <div className="dialog-actions">
-            <LiquidButton size="sm" variant="ghost" onClick={onClose}>取消</LiquidButton>
-            <LiquidButton size="sm" variant="danger" onClick={handleDelete} disabled={loading}>
-              {loading ? '删除中...' : '确认删除'}
-            </LiquidButton>
-          </div>
-        </LiquidGlass>
+    <div className="gh-dialog-overlay" onClick={onClose}>
+      <div className="gh-dialog" onClick={e => e.stopPropagation()}>
+        <h3 className="gh-dialog-title">确认删除</h3>
+        {error && <p className="gh-alert gh-alert--danger" style={{ marginBottom: 'var(--gh-space-3)' }}>{error}</p>}
+        <p className="gh-text-secondary" style={{ fontSize: 'var(--gh-text-sm)', marginBottom: 'var(--gh-space-3)' }}>
+          确定要删除 {item.isFolder ? '文件夹' : '文件'} <strong>{item.name}</strong> 吗？
+          {item.isFolder && <><br/>文件夹内的所有内容将一并删除。</>}
+        </p>
+        <p className="gh-alert gh-alert--warning gh-alert-body">此操作不可撤销。</p>
+        <div className="gh-dialog-actions">
+          <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={onClose}>取消</button>
+          <button className="gh-btn gh-btn--sm gh-btn--danger" onClick={handleDelete} disabled={loading}>
+            {loading ? '删除中...' : '确认删除'}
+          </button>
+        </div>
       </div>
     </div>,
     document.body

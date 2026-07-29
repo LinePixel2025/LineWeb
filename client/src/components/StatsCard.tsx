@@ -1,5 +1,4 @@
 import { memo, useState, useEffect } from 'react'
-import LiquidGlass from './glass/LiquidGlass'
 import api from '../lib/api'
 
 interface StatsData {
@@ -54,10 +53,10 @@ export default memo(function StatsCard({ items, layout, showLabels }: StatsCardP
     return (
       <div style={layoutStyle}>
         {items.map((item) => (
-          <LiquidGlass key={item} variant="blur" interactive={false} chromatic={false} style={itemStyle}>
+          <div key={item} className="gh-box" style={itemStyle}>
             <div className="skeleton" style={{ height: '32px', width: '60px', margin: '0 auto 8px' }} />
             {showLabels && <div className="skeleton" style={{ height: '16px', width: '40px', margin: '0 auto' }} />}
-          </LiquidGlass>
+          </div>
         ))}
       </div>
     )
@@ -67,10 +66,10 @@ export default memo(function StatsCard({ items, layout, showLabels }: StatsCardP
     return (
       <div style={layoutStyle}>
         {items.map((item) => (
-          <LiquidGlass key={item} variant="blur" interactive={false} chromatic={false} style={itemStyle}>
+          <div key={item} className="gh-box" style={itemStyle}>
             <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--lg-text-tertiary)' }}>--</div>
             {showLabels && <div style={{ fontSize: '0.85rem', color: 'var(--lg-text-tertiary)', marginTop: '4px' }}>{LABELS[item]}</div>}
-          </LiquidGlass>
+          </div>
         ))}
       </div>
     )
@@ -79,7 +78,7 @@ export default memo(function StatsCard({ items, layout, showLabels }: StatsCardP
   return (
     <div style={layoutStyle}>
       {items.map((item) => (
-        <LiquidGlass key={item} variant="blur" interactive={false} chromatic={false} style={itemStyle}>
+        <div key={item} className="gh-box" style={itemStyle}>
           <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--lg-accent-secondary)' }}>
             {data[item]}
           </div>
@@ -88,7 +87,7 @@ export default memo(function StatsCard({ items, layout, showLabels }: StatsCardP
               {LABELS[item]}
             </div>
           )}
-        </LiquidGlass>
+        </div>
       ))}
     </div>
   )

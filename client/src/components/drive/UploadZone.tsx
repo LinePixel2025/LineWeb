@@ -1,6 +1,4 @@
 import { useState, useRef, useCallback, memo } from 'react'
-import LiquidGlass from '../glass/LiquidGlass'
-import LiquidButton from '../glass/LiquidButton'
 import { formatSpeed, formatMB, formatETA } from '../../lib/format'
 import { useDragAndDrop } from '../../hooks/useDragAndDrop'
 import type { TransferProgress } from '../../types/drive'
@@ -29,7 +27,6 @@ const UploadZone = memo(function UploadZone({
         const xhr = new XMLHttpRequest()
         xhrRef.current = xhr
         const formData = new FormData()
-        // parentId 必须在 file 之前追加，否则 busboy 先解析 file 事件时 parentId 仍为 null
         if (parentId !== null) formData.append('parentId', String(parentId))
         formData.append('file', file)
 
@@ -40,7 +37,6 @@ const UploadZone = memo(function UploadZone({
           if (e.lengthComputable) {
             const now = Date.now()
             speedLog.push({ time: now, loaded: e.loaded })
-            // 2秒滑动窗口：移除早于2秒的采样
             while (speedLog.length > 1 && speedLog[0].time < now - 2000) {
               speedLog.shift()
             }
@@ -149,93 +145,85 @@ const UploadZone = memo(function UploadZone({
   )
 
   return (
-    <div className="upload-zone-wrapper">
-      <div className="upload-zone-header">
-        <LiquidButton
-          size="sm"
-          variant="primary"
+    <div className="gh-drive-upload-zone-wrapper">
+      <div className="gh-drive-upload-zone-header">
+        <button
+          className="gh-btn gh-btn--sm gh-btn--primary"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
         >
           ⬆ 选择文件
-        </LiquidButton>
+        </button>
         {uploading ? (
-          <LiquidButton size="sm" variant="danger" onClick={handleCancel}>
+          <button className="gh-btn gh-btn--sm gh-btn--danger" onClick={handleCancel}>
             ⏹ 取消
-          </LiquidButton>
+          </button>
         ) : (
-          <LiquidButton size="sm" variant="ghost" onClick={onClose}>
+          <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={onClose}>
             取消
-          </LiquidButton>
+          </button>
         )}
       </div>
 
       {!uploading && failedFiles.length === 0 && (
-        <LiquidGlass variant="blur" interactive={false} className="upload-zone-drop-glass">
-          <div
-            className={`upload-zone-drop ${isDragging ? 'upload-zone-drop--drag' : ''}`}
-            {...dragProps}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <span className="upload-zone-drop-icon">📂</span>
-            <span className="upload-zone-drop-text">拖拽文件到此处或点击选择</span>
-            <span className="upload-zone-drop-hint">支持多文件上传</span>
-          </div>
-        </LiquidGlass>
+        <div
+          className={`gh-drive-upload-zone-drop ${isDragging ? 'gh-drive-upload-zone-drop--drag' : ''}`}
+          {...dragProps}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <span className="gh-drive-upload-zone-drop-icon">📂</span>
+          <span className="gh-drive-upload-zone-drop-text">拖拽文件到此处或点击选择</span>
+          <span className="gh-drive-upload-zone-drop-hint">支持多文件上传</span>
+        </div>
       )}
 
       {uploading && progress && (
-        <LiquidGlass variant="blur" interactive={false} style={{ padding: '16px' }}>
-          <div className="upload-zone-progress">
-            <div className="upload-zone-progress-info">
-              <span>📄 {progress.fileName}</span>
-              <span className="upload-zone-progress-count">
-                {progress.fileIndex}/{progress.totalFiles}
-              </span>
-            </div>
-            <div className="upload-zone-progress-stats">
-              <span>⬆ {formatSpeed(progress.speed)}</span>
-              <span>⏱ {formatETA(progress.eta)}</span>
-              <span>{formatMB(progress.loaded)} / {formatMB(progress.total)}</span>
-            </div>
-            <div className="upload-zone-progress-bar">
-              <div
-                className="upload-zone-progress-fill"
-                style={{ width: `${(progress.loaded / progress.total) * 100}%` }}
-              />
-            </div>
+        <div className="gh-drive-upload-zone-progress" style={{ padding: '16px', background: 'var(--gh-canvas)', borderRadius: 'var(--gh-radius)', border: '1px solid var(--gh-border)' }}>
+          <div className="gh-drive-upload-zone-progress-info">
+            <span>📄 {progress.fileName}</span>
+            <span className="gh-drive-upload-zone-progress-stats" style={{ fontSize: 'var(--gh-text-xs)' }}>
+              {progress.fileIndex}/{progress.totalFiles}
+            </span>
           </div>
-        </LiquidGlass>
+          <div className="gh-drive-upload-zone-progress-stats" style={{ marginBottom: '8px' }}>
+            <span>⬆ {formatSpeed(progress.speed)}</span>
+            <span>⏱ {formatETA(progress.eta)}</span>
+            <span>{formatMB(progress.loaded)} / {formatMB(progress.total)}</span>
+          </div>
+          <div className="gh-drive-upload-zone-progress-bar">
+            <div
+              className="gh-drive-upload-zone-progress-fill"
+              style={{ width: `${(progress.loaded / progress.total) * 100}%` }}
+            />
+          </div>
+        </div>
       )}
 
       {failedFiles.length > 0 && (
-        <LiquidGlass variant="blur" interactive={false} className="upload-zone-failed-glass">
-          <div className="upload-zone-failed">
-            <p>⚠️ 以下文件上传失败：</p>
-            <ul>
-              {failedFiles.map((f, i) => (
-                <li key={i}>{f}</li>
-              ))}
-            </ul>
-            <LiquidButton
-              size="sm"
-              variant="glass"
-              onClick={() => {
-                setFailedFiles([])
-                onUploaded()
-              }}
-            >
-              关闭
-            </LiquidButton>
-          </div>
-        </LiquidGlass>
+        <div className="gh-drive-upload-zone-failed" style={{ padding: '16px', background: 'var(--gh-canvas)', borderRadius: 'var(--gh-radius)', border: '1px solid var(--gh-border)' }}>
+          <p>⚠️ 以下文件上传失败：</p>
+          <ul>
+            {failedFiles.map((f, i) => (
+              <li key={i}>{f}</li>
+            ))}
+          </ul>
+          <button
+            className="gh-btn gh-btn--sm gh-btn--secondary"
+            onClick={() => {
+              setFailedFiles([])
+              onUploaded()
+            }}
+          >
+            关闭
+          </button>
+        </div>
       )}
 
       <input
         ref={fileInputRef}
         type="file"
         multiple
-        className="upload-zone-hidden-input"
+        className="gh-drive-upload-zone-hidden-input"
         onChange={handleFileSelect}
       />
     </div>

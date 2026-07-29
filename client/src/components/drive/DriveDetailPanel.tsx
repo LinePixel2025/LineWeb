@@ -1,6 +1,4 @@
 import { memo, useCallback } from 'react'
-import LiquidGlass from '../glass/LiquidGlass'
-import LiquidButton from '../glass/LiquidButton'
 import type { DriveItem, FavoriteItem } from '../../types/drive'
 import { getFileTypeLabel } from '../../types/drive'
 import FileAttributes from './FileAttributes'
@@ -42,13 +40,11 @@ const DriveDetailPanel = memo(function DriveDetailPanel({
 
   if (!item) {
     return (
-      <aside className="drive-detail-panel drive-detail-panel--empty">
-        <LiquidGlass variant="blur" interactive={false} chromatic={false} className="drive-detail-panel-inner">
-          <div className="drive-detail-empty">
-            <span className="drive-detail-empty-icon">📋</span>
-            <p className="drive-detail-empty-text">选择文件查看详情</p>
-          </div>
-        </LiquidGlass>
+      <aside className="gh-drive-detail-panel gh-drive-detail-panel--empty">
+        <div className="gh-drive-detail-panel-inner gh-drive-detail-empty">
+          <span className="gh-drive-detail-empty-icon">📋</span>
+          <p className="gh-drive-detail-empty-text">选择文件查看详情</p>
+        </div>
       </aside>
     )
   }
@@ -67,32 +63,29 @@ const DriveDetailPanel = memo(function DriveDetailPanel({
   const isFav = isFavorite(item.id)
 
   return (
-    <aside className="drive-detail-panel">
-      <LiquidGlass variant="blur" interactive={false} chromatic={false} className="drive-detail-panel-inner">
-        {/* Header */}
-        <div className="drive-detail-header">
-          <h3 className="drive-detail-title">文件详情</h3>
-          <button className="drive-detail-close" onClick={onClose} aria-label="关闭详情">
+    <aside className="gh-drive-detail-panel">
+      <div className="gh-drive-detail-panel-inner">
+        <div className="gh-drive-detail-header">
+          <h3 className="gh-drive-detail-title">文件详情</h3>
+          <button className="gh-drive-detail-close" onClick={onClose} aria-label="关闭详情">
             ✕
           </button>
         </div>
 
-        {/* Preview Area */}
-        <div className="drive-detail-preview">
-          <div className="drive-detail-preview-icon">
+        <div className="gh-drive-detail-preview">
+          <div className="gh-drive-detail-preview-icon">
             {getDriveIcon(item, 48)}
           </div>
-          <div className="drive-detail-preview-name" title={item.name}>
+          <div className="gh-drive-detail-preview-name" title={item.name}>
             {item.name}
           </div>
-          <div className="drive-detail-preview-type">
+          <div className="gh-drive-detail-preview-type">
             {getFileTypeLabel(item)}
           </div>
         </div>
 
-        {/* Favorite Button */}
         <button
-          className={`drive-detail-fav-btn ${isFav ? 'drive-detail-fav-btn--active' : ''}`}
+          className={`gh-drive-detail-fav-btn ${isFav ? 'gh-drive-detail-fav-btn--active' : ''}`}
           onClick={handleToggleFavorite}
           title={isFav ? '取消收藏' : '加入收藏'}
         >
@@ -100,32 +93,30 @@ const DriveDetailPanel = memo(function DriveDetailPanel({
           <span>{isFav ? '已收藏' : '收藏'}</span>
         </button>
 
-        {/* Quick Actions */}
-        <div className="drive-detail-actions">
+        <div className="gh-drive-detail-actions">
           {isPreviewable && (
-            <LiquidButton size="sm" variant="primary" onClick={() => onPreview(item)}>
+            <button className="gh-btn gh-btn--sm gh-btn--primary" onClick={() => onPreview(item)}>
               预览
-            </LiquidButton>
+            </button>
           )}
           {!item.isFolder && (
-            <LiquidButton size="sm" variant="glass" onClick={() => onDownload(item)}>
+            <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={() => onDownload(item)}>
               <DownloadIcon size={14} /> 下载
-            </LiquidButton>
+            </button>
           )}
-          <LiquidButton size="sm" variant="ghost" onClick={() => onRename(item)}>
+          <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={() => onRename(item)}>
             <RenameIcon size={14} /> 重命名
-          </LiquidButton>
-          <LiquidButton size="sm" variant="ghost" onClick={() => navigator.clipboard.writeText(item.name)}>
+          </button>
+          <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={() => navigator.clipboard.writeText(item.name)}>
             <CopyIcon size={14} /> 复制名称
-          </LiquidButton>
-          <LiquidButton size="sm" variant="danger" onClick={() => onDelete(item)}>
+          </button>
+          <button className="gh-btn gh-btn--sm gh-btn--danger" onClick={() => onDelete(item)}>
             <DeleteIcon size={14} /> 删除
-          </LiquidButton>
+          </button>
         </div>
 
-        {/* File Attributes */}
         <FileAttributes item={item} />
-      </LiquidGlass>
+      </div>
     </aside>
   )
 })

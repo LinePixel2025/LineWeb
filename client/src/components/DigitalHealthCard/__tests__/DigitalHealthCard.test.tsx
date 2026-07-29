@@ -19,10 +19,6 @@ vi.mock('@/lib/api', () => ({
   },
 }))
 
-vi.mock('@/components/glass/LiquidGlass', () => ({
-  default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-}))
-
 function renderWithRouter(ui: React.ReactElement) {
   return render(<MemoryRouter>{ui}</MemoryRouter>)
 }
@@ -36,8 +32,7 @@ describe('DigitalHealthCard', () => {
   it('未登录时不渲染', () => {
     mocks.useAuth.mockReturnValue({ user: null })
     const { container } = renderWithRouter(<DigitalHealthCard />)
-    // 组件在 !user 时返回 null，但 LiquidGlass mock 始终渲染 div
-    // 所以我们检查没有渲染出数字健康标题
+    // 未登录时返回 null，不渲染任何内容
     expect(screen.queryByText('数字健康')).not.toBeInTheDocument()
   })
 

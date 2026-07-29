@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import api from '@/lib/api'
-import LiquidGlass from '@/components/glass/LiquidGlass'
 
 interface ScreenTimeData {
   totalSeconds: number
@@ -72,7 +71,7 @@ export default function DigitalHealthCard() {
       }}
     >
       <div style={{ position: 'relative' }}>
-        <LiquidGlass variant="strong" style={{ padding: 'var(--lg-space-6)' }}>
+        <div className="gh-box" style={{ padding: 'var(--lg-space-6)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div>
             <h2 style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--lg-text-primary)' }}>数字健康</h2>
@@ -177,7 +176,7 @@ export default function DigitalHealthCard() {
             </Link>
           </div>
         )}
-      </LiquidGlass>
+      </div>
         <div
           style={{
             position: 'absolute',

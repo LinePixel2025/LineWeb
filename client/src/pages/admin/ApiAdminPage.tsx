@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import LiquidGlass from '../../components/glass/LiquidGlass'
+import { GitHubButton, GitHubBadge, GitHubAlert } from '../../components/ui'
 import api from '../../lib/api'
 
 interface ApiKey {
@@ -111,233 +111,258 @@ export default function ApiAdminPage() {
     setFormError('')
   }
 
+  const inputStyle: React.CSSProperties = {
+    padding: '6px 12px',
+    fontSize: 'var(--gh-text-sm)',
+    fontFamily: 'var(--gh-font)',
+    color: 'var(--gh-text)',
+    background: 'var(--gh-canvas)',
+    border: '1px solid var(--gh-border)',
+    borderRadius: 'var(--gh-radius)',
+    outline: 'none',
+    width: '100%',
+    boxSizing: 'border-box',
+  }
+
+  const inputFocusStyle = { borderColor: 'var(--gh-accent)', boxShadow: 'var(--gh-focus-ring)' }
+
   return (
-    <div className="admin-page">
-      <div className="admin-page-header">
-        <h1 className="admin-page-title">API 密钥管理</h1>
-        <button
-          className="api-refresh-btn"
-          style={{
-            padding: '8px 20px', borderRadius: '9999px', fontWeight: 500, fontSize: '0.85rem',
-            background: 'linear-gradient(135deg, var(--lg-accent), #40a9ff)',
-            color: '#fff', border: 'none', cursor: 'pointer',
-            fontFamily: 'var(--lg-font)',
-          }}
-          onClick={() => { setShowCreate(true); setFormName(''); setFormExpires(''); setFormError('') }}
-        >
+    <div>
+      <div className="gh-page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <h1>API 密钥管理</h1>
+          <p>创建和管理 API 访问密钥</p>
+        </div>
+        <GitHubButton variant="primary" size="md" onClick={() => { setShowCreate(true); setFormName(''); setFormExpires(''); setFormError('') }}>
           + 创建密钥
-        </button>
+        </GitHubButton>
       </div>
 
       {loading ? (
-        <div className="admin-spinner"><div className="spinner" /></div>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--gh-space-7)' }}>
+          <div className="gh-spinner" />
+        </div>
       ) : keys.length === 0 ? (
-        <LiquidGlass variant="blur" className="admin-page-table-wrap" style={{ padding: '60px 20px', textAlign: 'center' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>🔑</div>
-          <div style={{ color: 'var(--lg-text-tertiary)', fontSize: '0.95rem' }}>
-            暂无 API 密钥
-          </div>
-          <div style={{ color: 'var(--lg-text-tertiary)', fontSize: '0.8rem', marginTop: '6px' }}>
-            点击右上角「创建密钥」生成第一个 API Key
-          </div>
-        </LiquidGlass>
+        <div className="gh-box" style={{ padding: '60px 20px', textAlign: 'center' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 'var(--gh-space-3)' }}>🔑</div>
+          <p className="gh-text-secondary">暂无 API 密钥</p>
+          <p className="gh-text-tertiary" style={{ marginTop: '6px' }}>
+            点击右上角「+ 创建密钥」生成第一个 API Key
+          </p>
+        </div>
       ) : (
-        <LiquidGlass variant="blur" className="admin-page-table-wrap">
-          <table className="admin-table">
+        <div className="gh-box" style={{ padding: 0, overflow: 'hidden' }}>
+          <table className="gh-table">
             <thead>
               <tr>
-                <th className="admin-th" style={{ width: '20%' }}>名称</th>
-                <th className="admin-th" style={{ width: '18%' }}>密钥前缀</th>
-                <th className="admin-th" style={{ width: '10%' }}>创建者</th>
-                <th className="admin-th" style={{ width: '8%' }}>状态</th>
-                <th className="admin-th admin-cell--date" style={{ width: '14%' }}>创建时间</th>
-                <th className="admin-th admin-cell--date" style={{ width: '14%' }}>最后使用</th>
-                <th className="admin-th" style={{ width: '16%' }}>操作</th>
+                <th style={{ width: '20%' }}>名称</th>
+                <th style={{ width: '18%' }}>密钥前缀</th>
+                <th style={{ width: '10%' }}>创建者</th>
+                <th>状态</th>
+                <th style={{ width: '14%' }}>创建时间</th>
+                <th style={{ width: '14%' }}>最后使用</th>
+                <th style={{ width: '16%', textAlign: 'right' }}>操作</th>
               </tr>
             </thead>
             <tbody>
-              {keys.map((key, i) => (
-                <tr key={key.id} className="admin-row fade-in" style={{ animationDelay: `${i * 0.03}s` }}>
-                  <td className="admin-cell" data-label="名称">
-                    <div className="admin-post-title">{key.name}</div>
+              {keys.map((key) => (
+                <tr key={key.id}>
+                  <td>
+                    <div style={{ fontWeight: 500 }}>{key.name}</div>
                   </td>
-                  <td className="admin-cell" data-label="密钥前缀">
+                  <td>
                     <code style={{
-                      padding: '2px 8px', borderRadius: '4px',
-                      background: 'rgba(255,255,255,0.06)', fontSize: '0.8rem',
-                      color: 'var(--lg-text-secondary)', fontFamily: 'monospace',
+                      padding: '2px 8px', borderRadius: 'var(--gh-radius)',
+                      background: 'var(--gh-canvas-inset)', fontSize: 'var(--gh-text-xs)',
+                      color: 'var(--gh-text-secondary)', fontFamily: 'var(--gh-font-mono)',
                     }}>
                       {key.prefix}
                     </code>
                   </td>
-                  <td className="admin-cell" data-label="创建者">
-                    {key.user.username}
-                  </td>
-                  <td className="admin-cell" data-label="状态">
-                    <span
-                      className={`admin-badge ${key.active ? 'admin-badge--published' : 'admin-badge--draft'}`}
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => handleToggleActive(key)}
-                    >
-                      {key.active ? '启用' : '禁用'}
+                  <td>{key.user.username}</td>
+                  <td>
+                    <span style={{ cursor: 'pointer' }} onClick={() => handleToggleActive(key)}>
+                      {key.active ? (
+                        <GitHubBadge variant="success">启用</GitHubBadge>
+                      ) : (
+                        <GitHubBadge variant="danger">禁用</GitHubBadge>
+                      )}
                     </span>
                   </td>
-                  <td className="admin-cell admin-cell--date" data-label="创建时间">
+                  <td className="gh-text-tertiary">
                     {new Date(key.createdAt).toLocaleString('zh-CN')}
                   </td>
-                  <td className="admin-cell admin-cell--date" data-label="最后使用">
+                  <td className="gh-text-tertiary">
                     {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleString('zh-CN') : (
-                      <span style={{ color: 'var(--lg-text-tertiary)' }}>从未使用</span>
+                      <span className="gh-text-tertiary">从未使用</span>
                     )}
                   </td>
-                  <td className="admin-cell" data-label="操作">
-                    <div className="admin-actions">
-                      <button
-                        className="admin-action-btn"
-                        onClick={() => openEdit(key)}
-                      >
+                  <td>
+                    <div className="gh-actions">
+                      <GitHubButton variant="secondary" size="sm" onClick={() => openEdit(key)}>
                         编辑
-                      </button>
-                      <button
-                        className="admin-action-btn admin-action-btn--danger"
-                        onClick={() => handleDelete(key)}
-                      >
+                      </GitHubButton>
+                      <GitHubButton variant="danger" size="sm" onClick={() => handleDelete(key)}>
                         删除
-                      </button>
+                      </GitHubButton>
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </LiquidGlass>
+        </div>
       )}
 
       {/* 创建弹窗 */}
       {showCreate && (
-        <div className="admin-modal-overlay" onClick={() => setShowCreate(false)}>
-          <div onClick={e => e.stopPropagation()}>
-            <LiquidGlass variant="strong" className="admin-modal">
-              <h2 className="admin-modal-title">创建 API 密钥</h2>
-              <div className="admin-modal-body">
-                <label className="admin-modal-label">名称</label>
-                <input
-                  className="admin-modal-input"
-                  type="text"
-                  value={formName}
-                  onChange={e => setFormName(e.target.value)}
-                  placeholder="例如：我的博客客户端"
-                  autoFocus
-                />
-                <label className="admin-modal-label" style={{ marginTop: '16px' }}>过期时间（可选）</label>
-                <input
-                  className="admin-modal-input"
-                  type="date"
-                  value={formExpires}
-                  onChange={e => setFormExpires(e.target.value)}
-                />
-                {formError && <div className="admin-modal-error">{formError}</div>}
+        <div className="gh-dialog-overlay" onClick={() => setShowCreate(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: '440px' }}>
+            <div className="gh-dialog">
+              <h2 className="gh-dialog-title">创建 API 密钥</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gh-space-3)' }}>
+                <div>
+                  <label style={{
+                    display: 'block', marginBottom: 'var(--gh-space-1)',
+                    fontWeight: 600, fontSize: 'var(--gh-text-sm)', color: 'var(--gh-text)',
+                  }}>
+                    名称
+                  </label>
+                  <input
+                    className="gh-input gh-input--full"
+                    type="text"
+                    value={formName}
+                    onChange={e => setFormName(e.target.value)}
+                    placeholder="例如：我的博客客户端"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label style={{
+                    display: 'block', marginBottom: 'var(--gh-space-1)',
+                    fontWeight: 600, fontSize: 'var(--gh-text-sm)', color: 'var(--gh-text)',
+                  }}>
+                    过期时间（可选）
+                  </label>
+                  <input
+                    className="gh-input gh-input--full"
+                    type="date"
+                    value={formExpires}
+                    onChange={e => setFormExpires(e.target.value)}
+                  />
+                </div>
+                {formError && (
+                  <GitHubAlert variant="danger">{formError}</GitHubAlert>
+                )}
               </div>
-              <div className="admin-modal-footer">
-                <button className="admin-modal-btn admin-modal-btn--cancel" onClick={() => setShowCreate(false)}>
+              <div className="gh-dialog-actions">
+                <GitHubButton variant="secondary" size="md" onClick={() => setShowCreate(false)}>
                   取消
-                </button>
-                <button
-                  className="admin-modal-btn admin-modal-btn--confirm"
-                  onClick={handleCreate}
-                  disabled={saving || !formName.trim()}
-                >
+                </GitHubButton>
+                <GitHubButton variant="primary" size="md" onClick={handleCreate} disabled={saving || !formName.trim()}>
                   {saving ? '创建中…' : '创建'}
-                </button>
+                </GitHubButton>
               </div>
-            </LiquidGlass>
+            </div>
           </div>
         </div>
       )}
 
       {/* 创建成功后显示完整密钥 */}
       {newKey && (
-        <div className="admin-modal-overlay" onClick={() => { setNewKey(null); setCopied(false) }}>
-          <div onClick={e => e.stopPropagation()}>
-            <LiquidGlass variant="strong" className="admin-modal">
-              <h2 className="admin-modal-title">密钥已创建</h2>
-              <div className="admin-modal-body">
-                <p style={{ color: 'var(--lg-text-warning)', fontSize: '0.85rem', marginBottom: '12px' }}>
-                  ⚠️ 这是唯一一次显示完整密钥，请立即复制并妥善保存。
-                </p>
-                <div className="admin-modal-key-display">
-                  <code className="admin-modal-key-text">{newKey.key}</code>
+        <div className="gh-dialog-overlay" onClick={() => { setNewKey(null); setCopied(false) }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: '480px' }}>
+            <div className="gh-dialog">
+              <h2 className="gh-dialog-title">密钥已创建</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gh-space-3)' }}>
+                <GitHubAlert variant="warning">
+                  这是唯一一次显示完整密钥，请立即复制并妥善保存。
+                </GitHubAlert>
+                <div style={{
+                  padding: 'var(--gh-space-3)', borderRadius: 'var(--gh-radius)',
+                  background: 'var(--gh-canvas-inset)', border: '1px solid var(--gh-border)',
+                  wordBreak: 'break-all',
+                }}>
+                  <code style={{ fontFamily: 'var(--gh-font-mono)', fontSize: 'var(--gh-text-xs)' }}>
+                    {newKey.key}
+                  </code>
                 </div>
-                <button
-                  className="admin-modal-copy-btn"
-                  onClick={handleCopyKey}
-                >
+                <GitHubButton variant="secondary" size="sm" onClick={handleCopyKey}>
                   {copied ? '✓ 已复制' : '📋 复制密钥'}
-                </button>
+                </GitHubButton>
               </div>
-              <div className="admin-modal-footer">
-                <button
-                  className="admin-modal-btn admin-modal-btn--confirm"
-                  onClick={() => { setNewKey(null); setCopied(false) }}
-                >
+              <div className="gh-dialog-actions">
+                <GitHubButton variant="primary" size="md" onClick={() => { setNewKey(null); setCopied(false) }}>
                   我已安全保存
-                </button>
+                </GitHubButton>
               </div>
-            </LiquidGlass>
+            </div>
           </div>
         </div>
       )}
 
       {/* 编辑弹窗 */}
       {showEdit && (
-        <div className="admin-modal-overlay" onClick={() => setShowEdit(null)}>
-          <div onClick={e => e.stopPropagation()}>
-            <LiquidGlass variant="strong" className="admin-modal">
-              <h2 className="admin-modal-title">编辑密钥</h2>
-              <div className="admin-modal-body">
-                <label className="admin-modal-label">名称</label>
-                <input
-                  className="admin-modal-input"
-                  type="text"
-                  value={formName}
-                  onChange={e => setFormName(e.target.value)}
-                  placeholder="密钥名称"
-                  autoFocus
-                />
-                <label className="admin-modal-label" style={{ marginTop: '16px' }}>过期时间（留空=永不过期）</label>
-                <input
-                  className="admin-modal-input"
-                  type="date"
-                  value={formExpires}
-                  onChange={e => setFormExpires(e.target.value)}
-                />
-                <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="gh-dialog-overlay" onClick={() => setShowEdit(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: '440px' }}>
+            <div className="gh-dialog">
+              <h2 className="gh-dialog-title">编辑密钥</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gh-space-3)' }}>
+                <div>
+                  <label style={{
+                    display: 'block', marginBottom: 'var(--gh-space-1)',
+                    fontWeight: 600, fontSize: 'var(--gh-text-sm)', color: 'var(--gh-text)',
+                  }}>
+                    名称
+                  </label>
+                  <input
+                    className="gh-input gh-input--full"
+                    type="text"
+                    value={formName}
+                    onChange={e => setFormName(e.target.value)}
+                    placeholder="密钥名称"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label style={{
+                    display: 'block', marginBottom: 'var(--gh-space-1)',
+                    fontWeight: 600, fontSize: 'var(--gh-text-sm)', color: 'var(--gh-text)',
+                  }}>
+                    过期时间（留空=永不过期）
+                  </label>
+                  <input
+                    className="gh-input gh-input--full"
+                    type="date"
+                    value={formExpires}
+                    onChange={e => setFormExpires(e.target.value)}
+                  />
+                </div>
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 'var(--gh-space-2)',
+                  fontSize: 'var(--gh-text-sm)', color: 'var(--gh-text-secondary)', cursor: 'pointer',
+                }}>
                   <input
                     type="checkbox"
-                    id="toggle-active"
                     checked={showEdit.active}
                     onChange={() => setShowEdit({ ...showEdit, active: !showEdit.active })}
-                    style={{ accentColor: 'var(--lg-accent)' }}
+                    style={{ accentColor: 'var(--gh-accent)' }}
                   />
-                  <label htmlFor="toggle-active" style={{ color: 'var(--lg-text-secondary)', fontSize: '0.85rem', cursor: 'pointer' }}>
-                    {showEdit.active ? '密钥已启用' : '密钥已禁用'}
-                  </label>
-                </div>
-                {formError && <div className="admin-modal-error">{formError}</div>}
+                  {showEdit.active ? '密钥已启用' : '密钥已禁用'}
+                </label>
+                {formError && (
+                  <GitHubAlert variant="danger">{formError}</GitHubAlert>
+                )}
               </div>
-              <div className="admin-modal-footer">
-                <button className="admin-modal-btn admin-modal-btn--cancel" onClick={() => setShowEdit(null)}>
+              <div className="gh-dialog-actions">
+                <GitHubButton variant="secondary" size="md" onClick={() => setShowEdit(null)}>
                   取消
-                </button>
-                <button
-                  className="admin-modal-btn admin-modal-btn--confirm"
-                  onClick={handleUpdate}
-                  disabled={saving || !formName.trim()}
-                >
+                </GitHubButton>
+                <GitHubButton variant="primary" size="md" onClick={handleUpdate} disabled={saving || !formName.trim()}>
                   {saving ? '保存中…' : '保存'}
-                </button>
+                </GitHubButton>
               </div>
-            </LiquidGlass>
+            </div>
           </div>
         </div>
       )}

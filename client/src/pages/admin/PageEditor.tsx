@@ -72,7 +72,7 @@ const PALETTE_ITEMS: PaletteItem[] = [
     { id: '', type: 'paragraph' as ComponentType, props: { text: '右栏' }, children: [] },
   ] },
   { type: 'list', label: '列表', icon: '☰', defaultProps: { items: ['项目一', '项目二', '项目三'], ordered: false } },
-  { type: 'html', label: '自定义HTML', icon: '</>', defaultProps: { html: '<p style="color:var(--lg-text-secondary)">自定义内容</p>' } },
+  { type: 'html', label: '自定义HTML', icon: '</>', defaultProps: { html: '<p style="color:var(--gh-text-secondary)">自定义内容</p>' } },
   { type: 'stats', label: '统计', icon: '📊', defaultProps: { items: ['posts', 'users', 'comments', 'pages'], layout: 'horizontal', showLabels: true } },
 ]
 
@@ -210,16 +210,16 @@ interface PropsEditorProps {
 function PropsEditor({ comp, onUpdate, onAddChild }: PropsEditorProps) {
   const set = (key: string, value: unknown) => onUpdate(comp.id, { [key]: value })
   const T = (key: string, label: string, ph?: string) => (
-    <div className="pe-field"><label className="pe-field-label">{label}</label><input className="lg-input" type="text" value={(comp.props[key] as string) || ''} onChange={e => set(key, e.target.value)} placeholder={ph} /></div>
+    <div className="pe-field"><label className="pe-field-label">{label}</label><input className="gh-input" type="text" value={(comp.props[key] as string) || ''} onChange={e => set(key, e.target.value)} placeholder={ph} /></div>
   )
   const N = (key: string, label: string, min = 0) => (
-    <div className="pe-field"><label className="pe-field-label">{label}</label><input className="lg-input" type="number" value={(comp.props[key] as number) ?? ''} onChange={e => set(key, parseInt(e.target.value) || min)} min={min} /></div>
+    <div className="pe-field"><label className="pe-field-label">{label}</label><input className="gh-input" type="number" value={(comp.props[key] as number) ?? ''} onChange={e => set(key, parseInt(e.target.value) || min)} min={min} /></div>
   )
   const S = (key: string, label: string, opts: { value: string; label: string }[]) => (
-    <div className="pe-field"><label className="pe-field-label">{label}</label><select className="lg-input" value={(comp.props[key] as string) || opts[0]?.value || ''} onChange={e => set(key, e.target.value)} style={{ cursor: 'pointer' }}>{opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
+    <div className="pe-field"><label className="pe-field-label">{label}</label><select className="gh-input" value={(comp.props[key] as string) || opts[0]?.value || ''} onChange={e => set(key, e.target.value)} style={{ cursor: 'pointer' }}>{opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
   )
   const TA = (key: string, label: string, rows = 4) => (
-    <div className="pe-field"><label className="pe-field-label">{label}</label><textarea className="lg-input" style={{ fontFamily: 'var(--lg-font-mono)', fontSize: '0.82rem', resize: 'vertical', minHeight: 60 }} rows={rows} value={(comp.props[key] as string) || ''} onChange={e => set(key, e.target.value)} /></div>
+    <div className="pe-field"><label className="pe-field-label">{label}</label><textarea className="gh-input" style={{ fontFamily: 'var(--gh-font-mono)', fontSize: '0.82rem', resize: 'vertical', minHeight: 60 }} rows={rows} value={(comp.props[key] as string) || ''} onChange={e => set(key, e.target.value)} /></div>
   )
 
   const render = () => {
@@ -234,11 +234,11 @@ function PropsEditor({ comp, onUpdate, onAddChild }: PropsEditorProps) {
       case 'list': return (
         <div className="pe-fields">
           <label className="pe-field-label" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-            <input type="checkbox" checked={!!comp.props.ordered} onChange={e => set('ordered', e.target.checked)} style={{ accentColor: 'var(--lg-accent)' }} />有序列表
+            <input type="checkbox" checked={!!comp.props.ordered} onChange={e => set('ordered', e.target.checked)} style={{ accentColor: 'var(--gh-accent)' }} />有序列表
           </label>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {((comp.props.items as string[]) || ['']).map((item, ii) => (
-              <input key={ii} className="lg-input" type="text" value={item} onChange={e => { const items = [...((comp.props.items as string[]) || [])]; items[ii] = e.target.value; set('items', items) }} placeholder={`项目 ${ii + 1}`} />
+              <input key={ii} className="gh-input" type="text" value={item} onChange={e => { const items = [...((comp.props.items as string[]) || [])]; items[ii] = e.target.value; set('items', items) }} placeholder={`项目 ${ii + 1}`} />
             ))}
             <button className="pe-add-item-btn" onClick={() => set('items', [...((comp.props.items as string[]) || []), ''])}>+ 添加项目</button>
           </div>
@@ -265,7 +265,7 @@ function PropsEditor({ comp, onUpdate, onAddChild }: PropsEditorProps) {
                           : items.filter(i => i !== item)
                         set('items', newItems)
                       }}
-                      style={{ accentColor: 'var(--lg-accent)' }}
+                      style={{ accentColor: 'var(--gh-accent)' }}
                     />
                     {item === 'posts' ? '文章' : item === 'users' ? '用户' : item === 'comments' ? '评论' : '页面'}
                   </label>
@@ -292,7 +292,7 @@ function PropsEditor({ comp, onUpdate, onAddChild }: PropsEditorProps) {
 }
 
 /* ============================================================
-   PreviewComponent — 纯渲染，所有事件通过 data 属性委托
+   PreviewComponent
    ============================================================ */
 
 interface PreviewProps {
@@ -323,21 +323,28 @@ const PreviewComponent = React.memo(function PreviewComponent({
       case 'image': {
         const src = comp.props.src as string
         return src
-          ? <img src={src} alt={(comp.props.alt as string) || ''} style={{ maxWidth: '100%', borderRadius: 'var(--lg-radius-sm)', display: 'block' }} />
-          : <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 'var(--lg-radius-sm)', padding: 32, textAlign: 'center', color: 'var(--lg-text-tertiary)', fontSize: '0.85rem' }}>点击选择图片</div>
+          ? <img src={src} alt={(comp.props.alt as string) || ''} style={{ maxWidth: '100%', borderRadius: 'var(--gh-radius)', display: 'block' }} />
+          : <div style={{ background: 'var(--gh-canvas-inset)', borderRadius: 'var(--gh-radius)', padding: 32, textAlign: 'center', color: 'var(--gh-text-tertiary)', fontSize: '0.85rem' }}>点击选择图片</div>
       }
       case 'button': {
         const variant = (comp.props.variant as string) || 'primary'
-        return <div className="page-editor-btn-wrap"><span className={`liquid-btn ${variant} md`}>{(comp.props.text as string) || '按钮'}<span className="btn-flare" /></span></div>
+        const variantClass = variant === 'primary' ? 'gh-btn--primary' : variant === 'danger' ? 'gh-btn--danger' : variant === 'ghost' ? 'gh-btn--ghost' : 'gh-btn--secondary'
+        return <div className="page-editor-btn-wrap"><span className={`gh-btn ${variantClass} gh-btn--md`}>{(comp.props.text as string) || '按钮'}</span></div>
       }
-      case 'divider': return <hr style={{ border: 'none', borderTop: '1px solid var(--lg-glass-border)', margin: 0 }} />
+      case 'divider': return <hr style={{ border: 'none', borderTop: '1px solid var(--gh-border)', margin: 0 }} />
       case 'spacer': return <div style={{ height: (comp.props.height as number) || 24 }} />
       case 'card':
         return (
           <div
-            className={`lg-surface ${dropTargetId === comp.id ? 'page-editor-drop-active' : ''} ${isSelected ? 'page-editor-container-selected' : ''}`}
+            className={`${dropTargetId === comp.id ? 'page-editor-drop-active' : ''} ${isSelected ? 'page-editor-container-selected' : ''}`}
             data-component-id={comp.id}
-            style={{ padding: (comp.props.padding as number) || 24, position: 'relative' }}
+            style={{
+              padding: (comp.props.padding as number) || 24,
+              background: 'var(--gh-canvas)',
+              border: '1px solid var(--gh-border)',
+              borderRadius: 'var(--gh-radius)',
+              position: 'relative',
+            }}
             onDragOver={(e) => onChildDragOver(e as unknown as DragEvent<HTMLDivElement>, comp.id)}
             onDrop={(e) => onChildDrop(e as unknown as DragEvent<HTMLDivElement>, comp.id)}
           >
@@ -347,7 +354,7 @@ const PreviewComponent = React.memo(function PreviewComponent({
                     <PreviewComponent key={child.id} comp={child} selectedId={selectedId} dropTargetId={dropTargetId}
                       onChildDragOver={onChildDragOver} onChildDrop={onChildDrop} />
                   ))
-                : <span style={{ color: 'var(--lg-text-tertiary)', fontSize: '0.85rem' }}>拖入组件到此卡片</span>
+                : <span style={{ color: 'var(--gh-text-tertiary)', fontSize: '0.85rem' }}>拖入组件到此卡片</span>
               }
             </div>
             {dropTargetId === comp.id && <div className="page-editor-inner-drop-hint">释放以添加到卡片</div>}
@@ -367,7 +374,7 @@ const PreviewComponent = React.memo(function PreviewComponent({
                       onChildDragOver={onChildDragOver} onChildDrop={onChildDrop} />
                   </div>
                 ))
-              : <div style={{ flex: 1, color: 'var(--lg-text-tertiary)', fontSize: '0.85rem', textAlign: 'center', padding: 24 }}>空列</div>
+              : <div style={{ flex: 1, color: 'var(--gh-text-tertiary)', fontSize: '0.85rem', textAlign: 'center', padding: 24 }}>空列</div>
             }
             {dropTargetId === comp.id && <div className="page-editor-inner-drop-hint">释放以添加到布局</div>}
           </div>
@@ -391,7 +398,7 @@ const PreviewComponent = React.memo(function PreviewComponent({
           />
         )
       }
-      default: return <div style={{ color: 'var(--lg-text-tertiary)' }}>未知组件</div>
+      default: return <div style={{ color: 'var(--gh-text-tertiary)' }}>未知组件</div>
     }
   }
 
@@ -420,7 +427,6 @@ export default function PageEditor() {
   const dragTypeRef = useRef<string | null>(null)
   const selected = (state.selectedId ? findInTree(state.components, state.selectedId) : null) || null
 
-  // Load existing page in edit mode
   useEffect(() => {
     if (!isEditMode) return
     api.get<PageData>(`/pages/${id}`).then(data => dispatch({ type: 'LOAD', data })).catch(() => setPageError('无法加载页面'))
@@ -482,7 +488,6 @@ export default function PageEditor() {
   /* ---- Selection (event delegation on canvas) ---- */
 
   const handleCanvasClick = useCallback((e: React.MouseEvent) => {
-    // 查找最近的 data-component-id 祖先
     let target = e.target as HTMLElement | null
     let compId: string | null = null
     while (target && target !== e.currentTarget) {
@@ -585,8 +590,8 @@ export default function PageEditor() {
 
   /* ---- Render ---- */
 
-  if (pageError) return <div className="admin-page"><div className="editor-error">{pageError}</div></div>
-  if (state.loading) return <div className="admin-page"><div className="admin-spinner"><div className="spinner" /></div></div>
+  if (pageError) return <div><div style={{ padding: 'var(--gh-space-4)', color: 'var(--gh-danger)', background: 'var(--gh-danger-soft)', borderRadius: 'var(--gh-radius)' }}>{pageError}</div></div>
+  if (state.loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--gh-space-7)' }}><div className="gh-spinner" /></div>
 
   const compCount = state.components.length
 
@@ -603,8 +608,8 @@ export default function PageEditor() {
           </div>
           <div className="page-editor-topbar-right">
             {error && <span className="page-editor-error-inline">{error}</span>}
-            <button className="liquid-btn glass md" onClick={() => handleSave(false)} disabled={state.saving}>{state.saving ? '保存中…' : '保存草稿'}<span className="btn-flare" /></button>
-            <button className="liquid-btn primary md" onClick={() => handleSave(true)} disabled={state.saving}>{state.saving ? '发布中…' : '发布'}<span className="btn-flare" /></button>
+            <button className="gh-btn gh-btn--secondary gh-btn--md" onClick={() => handleSave(false)} disabled={state.saving}>{state.saving ? '保存中…' : '保存草稿'}</button>
+            <button className="gh-btn gh-btn--primary gh-btn--md" onClick={() => handleSave(true)} disabled={state.saving}>{state.saving ? '发布中…' : '发布'}</button>
           </div>
         </div>
         {error && <div className="page-editor-error-banner"><span>{error}</span></div>}
@@ -614,14 +619,14 @@ export default function PageEditor() {
             <div className="page-editor-module-setup-desc">设置此页面在功能界面中的展示信息</div>
             <div className="pe-field">
               <label className="pe-field-label">页面标题</label>
-              <input className="lg-input" type="text" value={state.title} onChange={e => dispatch({ type: 'SET_META', title: e.target.value })}
+              <input className="gh-input" type="text" value={state.title} onChange={e => dispatch({ type: 'SET_META', title: e.target.value })}
                 placeholder={validationErrors.title ? '⚠ 必填' : '例如：关于我们'}
                 style={validationErrors.title ? { border: '1px solid rgba(255,59,48,0.3)' } : undefined} />
               {validationErrors.title && <span className="pe-field-err">{validationErrors.title}</span>}
             </div>
             <div className="pe-field">
               <label className="pe-field-label">Slug（URL地址）</label>
-              <input className="lg-input" type="text" value={state.slug} onChange={e => dispatch({ type: 'SET_META', slug: e.target.value })}
+              <input className="gh-input" type="text" value={state.slug} onChange={e => dispatch({ type: 'SET_META', slug: e.target.value })}
                 placeholder={validationErrors.slug ? '⚠ 必填' : 'about-us'} disabled={isEditMode}
                 style={validationErrors.slug ? { border: '1px solid rgba(255,59,48,0.3)' } : undefined} />
               {validationErrors.slug && <span className="pe-field-err">{validationErrors.slug}</span>}
@@ -636,14 +641,14 @@ export default function PageEditor() {
               <div className="pe-featured-fields fade-in-stagger" style={{ animationDuration: '0.3s' }}>
                 <div className="pe-field">
                   <label className="pe-field-label">图标（Emoji）</label>
-                  <input className="lg-input" type="text" value={state.featureEmoji} onChange={e => dispatch({ type: 'SET_META', featureEmoji: e.target.value })}
+                  <input className="gh-input" type="text" value={state.featureEmoji} onChange={e => dispatch({ type: 'SET_META', featureEmoji: e.target.value })}
                     placeholder={validationErrors.featureEmoji ? '⚠ 必填' : '例如：🌟'}
                     style={validationErrors.featureEmoji ? { border: '1px solid rgba(255,59,48,0.3)' } : undefined} />
                   {validationErrors.featureEmoji && <span className="pe-field-err">{validationErrors.featureEmoji}</span>}
                 </div>
                 <div className="pe-field">
                   <label className="pe-field-label">简介</label>
-                  <input className="lg-input" type="text" value={state.featureDesc} onChange={e => dispatch({ type: 'SET_META', featureDesc: e.target.value })}
+                  <input className="gh-input" type="text" value={state.featureDesc} onChange={e => dispatch({ type: 'SET_META', featureDesc: e.target.value })}
                     placeholder={validationErrors.featureDesc ? '⚠ 必填' : '例如：了解我们的故事和愿景'}
                     style={validationErrors.featureDesc ? { border: '1px solid rgba(255,59,48,0.3)' } : undefined} />
                   {validationErrors.featureDesc && <span className="pe-field-err">{validationErrors.featureDesc}</span>}
@@ -652,8 +657,8 @@ export default function PageEditor() {
             )}
             <div className="pe-divider" />
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-              <button className="liquid-btn ghost md" onClick={() => navigate('/admin/pages')}>取消</button>
-              <button className="liquid-btn primary md" onClick={() => dispatch({ type: 'SET_STEP', step: 'editor' })}>下一步：编辑页面内容</button>
+              <button className="gh-btn gh-btn--ghost gh-btn--md" onClick={() => navigate('/admin/pages')}>取消</button>
+              <button className="gh-btn gh-btn--primary gh-btn--md" onClick={() => dispatch({ type: 'SET_STEP', step: 'editor' })}>下一步：编辑页面内容</button>
             </div>
           </div>
         </div>
@@ -677,8 +682,8 @@ export default function PageEditor() {
           {state.featured && <span className="page-editor-module-badge">功能模块</span>}
         </div>
         <div className="page-editor-topbar-right">
-          <button className="liquid-btn glass md" onClick={() => handleSave(false)} disabled={state.saving}>{state.saving ? '保存中…' : '保存草稿'}<span className="btn-flare" /></button>
-          <button className="liquid-btn primary md" onClick={() => handleSave(true)} disabled={state.saving}>{state.saving ? '发布中…' : '发布'}<span className="btn-flare" /></button>
+          <button className="gh-btn gh-btn--secondary gh-btn--md" onClick={() => handleSave(false)} disabled={state.saving}>{state.saving ? '保存中…' : '保存草稿'}</button>
+          <button className="gh-btn gh-btn--primary gh-btn--md" onClick={() => handleSave(true)} disabled={state.saving}>{state.saving ? '发布中…' : '发布'}</button>
         </div>
       </div>
 
@@ -756,14 +761,14 @@ export default function PageEditor() {
               <div className="page-editor-props-body">
                 <div className="pe-field">
                   <label className="pe-field-label">页面标题</label>
-                  <input className="lg-input" type="text" value={state.title} onChange={e => dispatch({ type: 'SET_META', title: e.target.value })}
+                  <input className="gh-input" type="text" value={state.title} onChange={e => dispatch({ type: 'SET_META', title: e.target.value })}
                     placeholder={validationErrors.title ? '⚠ 必填' : '页面标题'}
                     style={validationErrors.title ? { border: '1px solid rgba(255,59,48,0.3)' } : undefined} />
                   {validationErrors.title && <span className="pe-field-err">{validationErrors.title}</span>}
                 </div>
                 <div className="pe-field">
                   <label className="pe-field-label">Slug</label>
-                  <input className="lg-input" type="text" value={state.slug} onChange={e => dispatch({ type: 'SET_META', slug: e.target.value })}
+                  <input className="gh-input" type="text" value={state.slug} onChange={e => dispatch({ type: 'SET_META', slug: e.target.value })}
                     placeholder={validationErrors.slug ? '⚠ 必填' : 'my-page'} disabled={isEditMode}
                     style={validationErrors.slug ? { border: '1px solid rgba(255,59,48,0.3)' } : undefined} />
                   {validationErrors.slug && <span className="pe-field-err">{validationErrors.slug}</span>}
@@ -771,7 +776,7 @@ export default function PageEditor() {
                 </div>
                 <div className="pe-field">
                   <label className="pe-field-label" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={state.published} onChange={e => dispatch({ type: 'SET_META', published: e.target.checked })} style={{ accentColor: 'var(--lg-accent)' }} />已发布
+                    <input type="checkbox" checked={state.published} onChange={e => dispatch({ type: 'SET_META', published: e.target.checked })} style={{ accentColor: 'var(--gh-accent)' }} />已发布
                   </label>
                 </div>
                 <div className="pe-divider" style={{ margin: '12px 0' }} />
@@ -779,7 +784,7 @@ export default function PageEditor() {
                   <input type="checkbox" checked={state.featured} onChange={e => dispatch({ type: 'SET_META', featured: e.target.checked })} />
                   <span className="pe-toggle-slider" /><span className="pe-toggle-label">展示在功能界面</span>
                 </label>
-                {error && <div className="editor-error" style={{ marginTop: 12 }}>{error}</div>}
+                {error && <div style={{ marginTop: 12, color: 'var(--gh-danger)', fontSize: 'var(--gh-text-sm)', padding: '8px', borderRadius: 'var(--gh-radius)', background: 'var(--gh-danger-soft)' }}>{error}</div>}
               </div>
             </>
           )}

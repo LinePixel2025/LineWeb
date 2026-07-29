@@ -6,10 +6,6 @@ export interface PaginationProps {
   onPageChange: (page: number) => void
 }
 
-/**
- * 通用分页组件 — 显示带省略号的翻页按钮
- * 默认显示当前页前后各 2 页 + 首尾页，中间用 … 省略
- */
 const Pagination = memo(function Pagination({
   page,
   totalPages,
@@ -32,14 +28,14 @@ const Pagination = memo(function Pagination({
   }
 
   return (
-    <div className="admin-pagination">
+    <div className="gh-pagination">
       {pages.map((p, i) =>
         p === 0 ? (
-          <span key={`ellipsis-${i}`} className="admin-ellipsis">…</span>
+          <span key={`ellipsis-${i}`} style={{ padding: '0 4px', color: 'var(--gh-text-tertiary)' }}>…</span>
         ) : (
           <button
             key={p}
-            className={`admin-page-btn${p === page ? ' admin-page-btn--active' : ''}`}
+            className={`gh-pagination-btn${p === page ? ' gh-pagination-btn--active' : ''}`}
             onClick={() => onPageChange(p)}
           >
             {p}

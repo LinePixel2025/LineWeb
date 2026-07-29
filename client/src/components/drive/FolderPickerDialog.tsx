@@ -1,7 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import LiquidGlass from '../glass/LiquidGlass'
-import LiquidButton from '../glass/LiquidButton'
 import api from '../../lib/api'
 import type { DriveItem } from '../../types/drive'
 import { FolderIcon, ChevronRight, ChevronDown } from './DriveIcons'
@@ -87,7 +85,6 @@ export default function FolderPickerDialog({
     }
   }, [])
 
-  // Initial load for root node
   useEffect(() => {
     const root: FolderNode = {
       id: null,
@@ -123,24 +120,24 @@ export default function FolderPickerDialog({
     const hasChildren = node.children.length > 0 || !node.hasLoaded
 
     return (
-      <div key={node.id ?? 'root'} className="folder-picker-node" style={{ paddingLeft: `${level * 16}px` }}>
-        <div className="folder-picker-row">
+      <div key={node.id ?? 'root'} className="gh-drive-folder-picker-node" style={{ paddingLeft: `${level * 16}px` }}>
+        <div className="gh-drive-folder-picker-row">
           {hasChildren && (
             <button
-              className="tree-node-expand"
+              className="gh-drive-tree-node-expand"
               onClick={(e) => { e.stopPropagation(); toggleExpand(node) }}
               disabled={node.isLoading}
             >
               {node.isLoading ? '⏳' : node.isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
             </button>
           )}
-          {!hasChildren && <span className="tree-node-spacer" />}
+          {!hasChildren && <span className="gh-drive-tree-node-spacer" />}
           <button
-            className="folder-picker-label"
+            className="gh-drive-folder-picker-label"
             onClick={() => handleSelect(node.id)}
           >
-            <span className="tree-node-icon"><FolderIcon size={14} /></span>
-            <span className="tree-node-name">{node.name}</span>
+            <span className="gh-drive-tree-node-icon"><FolderIcon size={14} /></span>
+            <span className="gh-drive-tree-node-name">{node.name}</span>
           </button>
         </div>
         {node.isExpanded && node.children.map(child => renderNode(child, level + 1))}
@@ -149,23 +146,21 @@ export default function FolderPickerDialog({
   }
 
   return createPortal(
-    <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog" onClick={e => e.stopPropagation()}>
-        <LiquidGlass variant="strong" chromatic={false} className="dialog-inner">
-          <h3 className="dialog-title">{title}</h3>
-          {loading ? (
-            <div className="drive-loading" style={{ padding: '20px' }}>
-              <div className="spinner" />
-            </div>
-          ) : (
-            <div className="folder-picker-tree">
-              {renderNode(tree)}
-            </div>
-          )}
-          <div className="dialog-actions">
-            <LiquidButton size="sm" variant="ghost" onClick={onClose}>取消</LiquidButton>
+    <div className="gh-dialog-overlay" onClick={onClose}>
+      <div className="gh-dialog" onClick={e => e.stopPropagation()}>
+        <h3 className="gh-dialog-title">{title}</h3>
+        {loading ? (
+          <div className="gh-drive-loading" style={{ padding: '20px' }}>
+            <div className="gh-spinner" />
           </div>
-        </LiquidGlass>
+        ) : (
+          <div className="gh-drive-folder-picker-tree">
+            {renderNode(tree)}
+          </div>
+        )}
+        <div className="gh-dialog-actions">
+          <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={onClose}>取消</button>
+        </div>
       </div>
     </div>,
     document.body

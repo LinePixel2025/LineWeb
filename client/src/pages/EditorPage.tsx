@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../lib/api'
-import LiquidButton from '../components/glass/LiquidButton'
+import { GitHubButton } from '../components/ui'
 import LexicalEditor from '../components/editor/LexicalEditor'
 
 /* ---------- helpers ---------- */
@@ -94,26 +94,38 @@ export default function EditorPage() {
   /* ------- loading state ------- */
   if (fetching) {
     return (
-      <div className="admin-spinner">
-        <div className="spinner" />
+      <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--gh-space-7)' }}>
+        <div className="gh-spinner" />
       </div>
     )
   }
 
   return (
-    <div className="admin-page" style={{ maxWidth: 820 }}>
-      <div className="admin-page-header">
-        <h1 className="admin-page-title">{isEdit ? '编辑文章' : '写文章'}</h1>
+    <div style={{ maxWidth: 820 }}>
+      <div className="gh-page-header">
+        <h1>{isEdit ? '编辑文章' : '写文章'}</h1>
       </div>
 
-      {/* error banner */}
-      {error && <div className="editor-error">{error}</div>}
+      {error && (
+        <div style={{
+          padding: '8px 16px', marginBottom: 'var(--gh-space-4)',
+          borderRadius: 'var(--gh-radius)', color: 'var(--gh-danger)',
+          background: 'var(--gh-danger-soft)', fontSize: 'var(--gh-text-sm)',
+        }}>
+          {error}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
-        <div className="editor-field">
-          <label className="editor-label">标题</label>
+        <div style={{ marginBottom: 'var(--gh-space-4)' }}>
+          <label style={{
+            display: 'block', marginBottom: 'var(--gh-space-1)',
+            fontWeight: 600, fontSize: 'var(--gh-text-sm)', color: 'var(--gh-text)',
+          }}>
+            标题
+          </label>
           <input
-            className="lg-input"
+            className="gh-input gh-input--full"
             value={title}
             onChange={e => setTitle(e.target.value)}
             required
@@ -121,28 +133,43 @@ export default function EditorPage() {
           />
         </div>
 
-        <div className="editor-field">
-          <label className="editor-label">Slug</label>
+        <div style={{ marginBottom: 'var(--gh-space-4)' }}>
+          <label style={{
+            display: 'block', marginBottom: 'var(--gh-space-1)',
+            fontWeight: 600, fontSize: 'var(--gh-text-sm)', color: 'var(--gh-text)',
+          }}>
+            Slug
+          </label>
           <input
-            className="lg-input"
+            className="gh-input gh-input--full"
             value={slug}
             onChange={e => setSlug(e.target.value)}
             placeholder={title ? toSlug(title) : 'article-slug'}
           />
         </div>
 
-        <div className="editor-field">
-          <label className="editor-label">摘要</label>
+        <div style={{ marginBottom: 'var(--gh-space-4)' }}>
+          <label style={{
+            display: 'block', marginBottom: 'var(--gh-space-1)',
+            fontWeight: 600, fontSize: 'var(--gh-text-sm)', color: 'var(--gh-text)',
+          }}>
+            摘要
+          </label>
           <input
-            className="lg-input"
+            className="gh-input gh-input--full"
             value={summary}
             onChange={e => setSummary(e.target.value)}
             placeholder="文章摘要（可选）"
           />
         </div>
 
-        <div className="editor-field">
-          <label className="editor-label">内容</label>
+        <div style={{ marginBottom: 'var(--gh-space-4)' }}>
+          <label style={{
+            display: 'block', marginBottom: 'var(--gh-space-1)',
+            fontWeight: 600, fontSize: 'var(--gh-text-sm)', color: 'var(--gh-text)',
+          }}>
+            内容
+          </label>
           <LexicalEditor
             initialHtml={content}
             onChange={html => setContent(html)}
@@ -151,24 +178,30 @@ export default function EditorPage() {
           />
         </div>
 
-        {/* controls */}
-        <div className="editor-controls">
-          <label className="editor-checkbox">
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          paddingTop: 'var(--gh-space-4)', borderTop: '1px solid var(--gh-border)',
+        }}>
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 'var(--gh-space-2)',
+            cursor: 'pointer', fontSize: 'var(--gh-text-sm)', color: 'var(--gh-text)',
+          }}>
             <input
               type="checkbox"
               checked={published}
               onChange={e => setPublished(e.target.checked)}
+              style={{ accentColor: 'var(--gh-accent)' }}
             />
             发布
           </label>
 
-          <div className="editor-actions">
-            <LiquidButton type="submit" variant="primary" size="lg" disabled={saving}>
+          <div style={{ display: 'flex', gap: 'var(--gh-space-2)' }}>
+            <GitHubButton type="submit" variant="primary" size="lg" disabled={saving}>
               {saving ? '保存中…' : isEdit ? '更新文章' : '发布文章'}
-            </LiquidButton>
-            <LiquidButton type="button" variant="glass" size="lg" onClick={() => navigate('/admin')}>
+            </GitHubButton>
+            <GitHubButton type="button" variant="secondary" size="lg" onClick={() => navigate('/admin')}>
               取消
-            </LiquidButton>
+            </GitHubButton>
           </div>
         </div>
       </form>

@@ -41,7 +41,7 @@ describe('TreeView', () => {
 
     const { container } = render(<TreeView />, { wrapper })
 
-    const expandButton = container.querySelector('.tree-node-expand') as HTMLElement
+    const expandButton = container.querySelector('.gh-drive-tree-node-expand') as HTMLElement
     await user.click(expandButton)
 
     await waitFor(() => {
@@ -63,14 +63,14 @@ describe('TreeView', () => {
 
     const { container } = render(<TreeView onFolderSelect={onFolderSelect} />, { wrapper })
 
-    const expandButton = container.querySelector('.tree-node-expand') as HTMLElement
+    const expandButton = container.querySelector('.gh-drive-tree-node-expand') as HTMLElement
     await user.click(expandButton)
 
     await waitFor(() => {
       expect(screen.getByText('文档')).toBeInTheDocument()
     })
 
-    const folderLabel = screen.getByText('文档').closest('.tree-node-label')!
+    const folderLabel = screen.getByText('文档').closest('.gh-drive-tree-node-label')!
     await user.click(folderLabel)
 
     expect(onFolderSelect).toHaveBeenCalledWith(1, '文档')

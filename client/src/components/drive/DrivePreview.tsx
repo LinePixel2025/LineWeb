@@ -20,31 +20,31 @@ const ImagePreview = memo(function ImagePreview({ item, onClose }: DrivePreviewP
   const imgSrc = `/api/drive/download/${item.id}?token=${TOKEN()}`
 
   return createPortal(
-    <div className="preview-overlay" onClick={onClose}>
-      <div className="preview-container" onClick={e => e.stopPropagation()}>
-        <div className="preview-toolbar">
-          <button className="preview-toolbar-btn" onClick={() => setZoom(z => Math.max(0.25, z - 0.25))} title="缩小">−</button>
-          <span className="preview-toolbar-label">{Math.round(zoom * 100)}%</span>
-          <button className="preview-toolbar-btn" onClick={() => setZoom(z => Math.min(4, z + 0.25))} title="放大">+</button>
-          <button className="preview-toolbar-btn" onClick={() => setRotation(r => r - 90)} title="左旋">↺</button>
-          <button className="preview-toolbar-btn" onClick={() => setRotation(r => r + 90)} title="右旋">↻</button>
-          <button className="preview-toolbar-btn" onClick={() => { setZoom(1); setRotation(0) }} title="重置">⟲</button>
+    <div className="gh-drive-preview-overlay" onClick={onClose}>
+      <div className="gh-drive-preview-container" onClick={e => e.stopPropagation()}>
+        <div className="gh-drive-preview-toolbar">
+          <button className="gh-drive-preview-toolbar-btn" onClick={() => setZoom(z => Math.max(0.25, z - 0.25))} title="缩小">−</button>
+          <span className="gh-drive-preview-toolbar-label">{Math.round(zoom * 100)}%</span>
+          <button className="gh-drive-preview-toolbar-btn" onClick={() => setZoom(z => Math.min(4, z + 0.25))} title="放大">+</button>
+          <button className="gh-drive-preview-toolbar-btn" onClick={() => setRotation(r => r - 90)} title="左旋">↺</button>
+          <button className="gh-drive-preview-toolbar-btn" onClick={() => setRotation(r => r + 90)} title="右旋">↻</button>
+          <button className="gh-drive-preview-toolbar-btn" onClick={() => { setZoom(1); setRotation(0) }} title="重置">⟲</button>
         </div>
-        <div className="preview-image-wrap">
-          {loading && <div className="spinner" />}
-          {error && <p className="preview-error">{error}</p>}
+        <div className="gh-drive-preview-image-wrap">
+          {loading && <div className="gh-spinner" />}
+          {error && <p className="gh-drive-preview-error">{error}</p>}
           {!error && (
             <img
               src={imgSrc}
               alt={item.name}
-              className="preview-image"
+              className="gh-drive-preview-image"
               style={{ transform: `scale(${zoom}) rotate(${rotation}deg)` }}
               onLoad={() => setLoading(false)}
               onError={() => { setLoading(false); setError('图片加载失败') }}
             />
           )}
         </div>
-        <button className="preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
+        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
       </div>
     </div>,
     document.body
@@ -58,20 +58,20 @@ const VideoPreview = memo(function VideoPreview({ item, onClose }: DrivePreviewP
   const [loading, setLoading] = useState(true)
   const videoSrc = `/api/drive/download/${item.id}?token=${TOKEN()}`
   return createPortal(
-    <div className="preview-overlay" onClick={onClose}>
-      <div className="preview-container preview-container--video" onClick={e => e.stopPropagation()}>
-        {loading && <div className="spinner" />}
-        {error && <p className="preview-error">{error}</p>}
+    <div className="gh-drive-preview-overlay" onClick={onClose}>
+      <div className="gh-drive-preview-container" onClick={e => e.stopPropagation()}>
+        {loading && <div className="gh-spinner" />}
+        {error && <p className="gh-drive-preview-error">{error}</p>}
         <video
           controls autoPlay
-          className={`preview-video ${loading ? 'preview-video--hidden' : ''}`}
+          className={`gh-drive-preview-video ${loading ? 'gh-drive-preview-video--hidden' : ''}`}
           src={videoSrc}
           onLoadedData={() => setLoading(false)}
           onError={() => { setLoading(false); setError('视频加载失败') }}
         >
           您的浏览器不支持视频播放
         </video>
-        <button className="preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
+        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
       </div>
     </div>,
     document.body
@@ -83,14 +83,16 @@ const VideoPreview = memo(function VideoPreview({ item, onClose }: DrivePreviewP
 const AudioPreview = memo(function AudioPreview({ item, onClose }: DrivePreviewProps) {
   const audioSrc = `/api/drive/download/${item.id}?token=${TOKEN()}`
   return createPortal(
-    <div className="preview-overlay" onClick={onClose}>
-      <div className="preview-container preview-container--audio" onClick={e => e.stopPropagation()}>
-        <div className="preview-audio-icon">🎵</div>
-        <p className="preview-audio-name">{item.name}</p>
-        <audio controls autoPlay className="preview-audio" src={audioSrc}>
-          您的浏览器不支持音频播放
-        </audio>
-        <button className="preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
+    <div className="gh-drive-preview-overlay" onClick={onClose}>
+      <div className="gh-drive-preview-container" onClick={e => e.stopPropagation()}>
+        <div className="gh-drive-preview-audio-wrap">
+          <div className="gh-drive-preview-audio-icon">🎵</div>
+          <p className="gh-drive-preview-audio-name">{item.name}</p>
+          <audio controls autoPlay className="gh-drive-preview-audio" src={audioSrc}>
+            您的浏览器不支持音频播放
+          </audio>
+        </div>
+        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
       </div>
     </div>,
     document.body
@@ -102,14 +104,14 @@ const AudioPreview = memo(function AudioPreview({ item, onClose }: DrivePreviewP
 const PdfPreview = memo(function PdfPreview({ item, onClose }: DrivePreviewProps) {
   const pdfSrc = `/api/drive/download/${item.id}?token=${TOKEN()}`
   return createPortal(
-    <div className="preview-overlay" onClick={onClose}>
-      <div className="preview-container preview-container--pdf" onClick={e => e.stopPropagation()}>
+    <div className="gh-drive-preview-overlay" onClick={onClose}>
+      <div className="gh-drive-preview-container" onClick={e => e.stopPropagation()}>
         <iframe
-          className="preview-pdf"
+          className="gh-drive-preview-pdf"
           src={pdfSrc}
           title={item.name}
         />
-        <button className="preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
+        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
       </div>
     </div>,
     document.body
@@ -136,16 +138,16 @@ const CodePreview = memo(function CodePreview({ item, onClose }: DrivePreviewPro
   }, [item.id])
 
   return createPortal(
-    <div className="preview-overlay" onClick={onClose}>
-      <div className="preview-container preview-container--code" onClick={e => e.stopPropagation()}>
+    <div className="gh-drive-preview-overlay" onClick={onClose}>
+      <div className="gh-drive-preview-container" onClick={e => e.stopPropagation()}>
         {loading ? (
-          <div className="spinner" />
+          <div className="gh-spinner" />
         ) : error ? (
-          <p className="preview-error">{error}</p>
+          <p className="gh-drive-preview-error">{error}</p>
         ) : (
-          <pre className="preview-code"><code>{code}</code></pre>
+          <pre className="gh-drive-preview-code"><code>{code}</code></pre>
         )}
-        <button className="preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
+        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
       </div>
     </div>,
     document.body
@@ -175,14 +177,14 @@ const DrivePreview = memo(function DrivePreview({ item, onClose }: DrivePreviewP
   }
 
   return createPortal(
-    <div className="preview-overlay" onClick={onClose}>
-      <div className="preview-container" onClick={e => e.stopPropagation()}>
-        <div className="preview-unsupported">
-          <span className="preview-unsupported-icon">📄</span>
-          <p className="preview-unsupported-text">此文件类型不支持预览</p>
-          <p className="preview-unsupported-name">{item.name}</p>
+    <div className="gh-drive-preview-overlay" onClick={onClose}>
+      <div className="gh-drive-preview-container" onClick={e => e.stopPropagation()}>
+        <div className="gh-drive-preview-unsupported">
+          <span className="gh-drive-preview-unsupported-icon">📄</span>
+          <p className="gh-drive-preview-unsupported-text">此文件类型不支持预览</p>
+          <p className="gh-drive-preview-unsupported-name">{item.name}</p>
         </div>
-        <button className="preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
+        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
       </div>
     </div>,
     document.body

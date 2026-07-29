@@ -1,5 +1,4 @@
 import { memo, useCallback, useEffect, useState } from 'react'
-import LiquidGlass from '../glass/LiquidGlass'
 import { useDrive } from '../../contexts/DriveContext'
 import { useResponsive } from '../../hooks/useResponsive'
 import TreeView from './TreeView'
@@ -18,7 +17,6 @@ const DriveNavigation = memo(function DriveNavigation({
 }: DriveNavigationProps) {
   const { state, navigateToFolder, removeFavorite, addFavorite } = useDrive()
   const { isMobile } = useResponsive()
-  // API 收藏（优先于 localStorage）
   const [apiFavorites, setApiFavorites] = useState<{ id: number; folderId: number; folderName: string; order: number }[]>([])
 
   useEffect(() => {
@@ -38,7 +36,6 @@ const DriveNavigation = memo(function DriveNavigation({
     try { await api.delete(`/drive/favorites/${folderId}`) } catch { /* ignore */ }
   }, [removeFavorite])
 
-  // 收藏来源：API 优先，回退 localStorage
   const mergedFavorites = apiFavorites.length > 0
     ? apiFavorites
     : state.favorites.map(f => ({ id: 0, folderId: f.folderId, folderName: f.folderName, order: f.order }))
@@ -48,13 +45,13 @@ const DriveNavigation = memo(function DriveNavigation({
   }
 
   return (
-    <aside className={`drive-sidebar ${collapsed ? 'drive-sidebar--collapsed' : ''}`}>
-      <LiquidGlass variant="blur" interactive={false} chromatic={false} className="drive-sidebar-section">
-        <div className="drive-sidebar-header">
-          <h3 className="drive-sidebar-heading">导航</h3>
+    <aside className={`gh-drive-sidebar ${collapsed ? 'gh-drive-sidebar--collapsed' : ''}`}>
+      <div className="gh-drive-sidebar-section">
+        <div className="gh-drive-sidebar-header">
+          <h3 className="gh-drive-sidebar-heading">导航</h3>
           {onToggleCollapse && (
             <button
-              className="drive-sidebar-toggle"
+              className="gh-drive-sidebar-toggle"
               onClick={onToggleCollapse}
               aria-label={collapsed ? '展开导航' : '折叠导航'}
             >
@@ -63,35 +60,35 @@ const DriveNavigation = memo(function DriveNavigation({
           )}
         </div>
 
-        <div className="drive-sidebar-tree">
+        <div className="gh-drive-sidebar-tree">
           <TreeView />
         </div>
-      </LiquidGlass>
+      </div>
 
       {!collapsed && (
         <>
           {state.tabs.length > 1 && (
-            <LiquidGlass variant="blur" interactive={false} chromatic={false} className="drive-sidebar-section">
+            <div className="gh-drive-sidebar-section">
               <TabList />
-            </LiquidGlass>
+            </div>
           )}
 
-          <LiquidGlass variant="blur" interactive={false} chromatic={false} className="drive-sidebar-section">
-            <h3 className="drive-sidebar-heading">收藏夹</h3>
-            <div className="drive-sidebar-favorites">
+          <div className="gh-drive-sidebar-section">
+            <h3 className="gh-drive-sidebar-heading">收藏夹</h3>
+            <div className="gh-drive-sidebar-favorites">
               {mergedFavorites.length === 0 ? (
-                <p className="drive-sidebar-placeholder">暂无收藏</p>
+                <p className="gh-drive-sidebar-placeholder">暂无收藏</p>
               ) : (
                 mergedFavorites.map(fav => (
                   <div
                     key={`${fav.folderId}:${fav.id}`}
-                    className="drive-sidebar-favorite-item"
+                    className="gh-drive-sidebar-favorite-item"
                     onClick={() => handleFavoriteClick(fav.folderId, fav.folderName)}
                   >
                     <FolderIcon size={16} />
-                    <span className="drive-sidebar-fav-name">{fav.folderName}</span>
+                    <span className="gh-drive-sidebar-fav-name">{fav.folderName}</span>
                     <button
-                      className="drive-sidebar-fav-remove"
+                      className="gh-drive-sidebar-fav-remove"
                       onClick={(e) => handleRemoveFavorite(e, fav.folderId)}
                       aria-label="取消收藏"
                     >
@@ -101,7 +98,7 @@ const DriveNavigation = memo(function DriveNavigation({
                 ))
               )}
             </div>
-          </LiquidGlass>
+          </div>
         </>
       )}
     </aside>

@@ -14,15 +14,15 @@ const MobileNav = memo(function MobileNav({ activeTab, onTabChange }: MobileNavP
   ]
 
   return (
-    <nav className="mobile-nav">
+    <nav className="gh-drive-mobile-nav">
       {tabs.map(tab => (
         <button
           key={tab.id}
-          className={`mobile-nav-item ${activeTab === tab.id ? 'mobile-nav-item--active' : ''}`}
+          className={`gh-drive-mobile-nav-item ${activeTab === tab.id ? 'gh-drive-mobile-nav-item--active' : ''}`}
           onClick={() => onTabChange(tab.id)}
         >
-          <span className="mobile-nav-icon">{tab.icon}</span>
-          <span className="mobile-nav-label">{tab.label}</span>
+          <span className="gh-drive-mobile-nav-icon">{tab.icon}</span>
+          <span className="gh-drive-mobile-nav-label">{tab.label}</span>
         </button>
       ))}
     </nav>

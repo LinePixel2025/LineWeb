@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '@/lib/api'
-import LiquidGlass from '@/components/glass/LiquidGlass'
 import DailyGoalSetter from '@/components/DailyGoalSetter'
 
 interface Token {
@@ -87,7 +86,7 @@ export default function DigitalHealthSection() {
 
   return (
     <div id="digital-health" style={{ marginTop: '24px' }}>
-    <LiquidGlass variant="strong" className="profile-card">
+    <div className="gh-box profile-card">
       <h2 style={{ margin: '0 0 22px', fontSize: '1.1rem', fontWeight: 600, color: 'var(--lg-text-primary)' }}>数字健康</h2>
       <p className="text-secondary" style={{ fontSize: '0.9rem', marginBottom: '22px' }}>
         连接 Time Master 以同步屏幕时间。在本地脚本中配置 Token 后，数据会定期推送到 LineWeb。
@@ -151,7 +150,7 @@ export default function DigitalHealthSection() {
         )}
       </div>
       <DailyGoalSetter />
-    </LiquidGlass>
+    </div>
     </div>
   )
 }

@@ -1,4 +1,1632 @@
 /* =============================================================
    Line Web — Drive Styles (GitHub Primer)
-   Placeholder — drive-specific styles added via drive task
    ============================================================= */
+
+/* ===== Drive Page Layout — 3 column grid ===== */
+.gh-drive-layout {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  height: calc(100vh - var(--gh-nav-height));
+  overflow: hidden;
+}
+
+.gh-drive-sidebar {
+  width: var(--gh-sidebar-width);
+  min-width: 200px;
+  border-right: 1px solid var(--gh-border);
+  background: var(--gh-canvas);
+  overflow-y: auto;
+  padding: var(--gh-space-3);
+  transition: width 0.2s ease;
+}
+
+.gh-drive-sidebar--collapsed {
+  width: var(--gh-sidebar-collapsed);
+  min-width: 0;
+  padding: var(--gh-space-2);
+}
+
+.gh-drive-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--gh-space-3);
+}
+
+.gh-drive-sidebar-heading {
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  color: var(--gh-text);
+}
+
+.gh-drive-sidebar-toggle {
+  background: none;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  color: var(--gh-text-secondary);
+  cursor: pointer;
+  padding: 2px 8px;
+  font-size: var(--gh-text-xs);
+  transition: background var(--gh-transition);
+}
+
+.gh-drive-sidebar-toggle:hover {
+  background: var(--gh-btn-hover);
+}
+
+.gh-drive-sidebar-section {
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  padding: var(--gh-space-3);
+  margin-bottom: var(--gh-space-3);
+}
+
+.gh-drive-sidebar-favorites {
+  margin-top: var(--gh-space-2);
+}
+
+.gh-drive-sidebar-placeholder {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-sm);
+  padding: var(--gh-space-2) 0;
+}
+
+.gh-drive-sidebar-favorite-item {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  padding: 6px 8px;
+  border-radius: var(--gh-radius);
+  cursor: pointer;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text);
+  transition: background var(--gh-transition);
+}
+
+.gh-drive-sidebar-favorite-item:hover {
+  background: var(--gh-btn-hover);
+}
+
+.gh-drive-sidebar-fav-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-drive-sidebar-fav-remove {
+  background: none;
+  border: none;
+  color: var(--gh-text-tertiary);
+  cursor: pointer;
+  font-size: var(--gh-text-xs);
+  padding: 2px;
+  opacity: 0;
+  transition: opacity var(--gh-transition);
+}
+
+.gh-drive-sidebar-favorite-item:hover .gh-drive-sidebar-fav-remove {
+  opacity: 1;
+}
+
+.gh-drive-sidebar-tree {
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.gh-drive-main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.gh-drive-content-card {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  margin: var(--gh-space-3);
+}
+
+/* ===== Drive Toolbar ===== */
+.gh-drive-toolbar {
+  background: var(--gh-canvas);
+  border-bottom: 1px solid var(--gh-border);
+  padding: var(--gh-space-3);
+}
+
+.gh-drive-toolbar-top {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  margin-bottom: var(--gh-space-3);
+}
+
+.gh-drive-toolbar-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-1);
+}
+
+.gh-drive-toolbar-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+  color: var(--gh-text-secondary);
+  cursor: pointer;
+  transition: background var(--gh-transition);
+}
+
+.gh-drive-toolbar-nav-btn:hover {
+  background: var(--gh-btn-hover);
+}
+
+.gh-drive-toolbar-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-1);
+  flex: 1;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-size: var(--gh-text-sm);
+}
+
+.gh-drive-breadcrumb-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gh-space-1);
+}
+
+.gh-drive-breadcrumb-current {
+  font-weight: 600;
+  color: var(--gh-text);
+}
+
+.gh-drive-breadcrumb-btn {
+  background: none;
+  border: none;
+  color: var(--gh-accent);
+  cursor: pointer;
+  font-size: var(--gh-text-sm);
+  padding: 2px 4px;
+  border-radius: var(--gh-radius);
+  transition: background var(--gh-transition);
+}
+
+.gh-drive-breadcrumb-btn:hover {
+  background: var(--gh-accent-soft);
+  text-decoration: underline;
+}
+
+.gh-drive-toolbar-search {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  position: relative;
+}
+
+.gh-drive-toolbar-search-input {
+  padding: 5px 10px;
+  font-size: var(--gh-text-sm);
+  font-family: var(--gh-font);
+  color: var(--gh-text);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  outline: none;
+  width: 200px;
+  transition: border-color var(--gh-transition), box-shadow var(--gh-transition);
+}
+
+.gh-drive-toolbar-search-input:focus {
+  border-color: var(--gh-accent);
+  box-shadow: var(--gh-focus-ring);
+}
+
+.gh-drive-toolbar-search-hint {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+  white-space: nowrap;
+}
+
+.gh-drive-toolbar-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gh-drive-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+}
+
+/* ===== Drive Loading & States ===== */
+.gh-drive-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gh-space-7);
+  flex: 1;
+}
+
+.gh-drive-state-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: var(--gh-space-4);
+  padding: var(--gh-space-7);
+  text-align: center;
+}
+
+.gh-drive-state-icon {
+  color: var(--gh-text-tertiary);
+}
+
+.gh-drive-state-text {
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+
+/* ===== Drive Sync Message ===== */
+.gh-drive-sync-message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--gh-space-2) var(--gh-space-4);
+  font-size: var(--gh-text-sm);
+  background: var(--gh-canvas);
+  border-bottom: 1px solid var(--gh-border);
+}
+
+/* ===== Drive Table (List View) ===== */
+.gh-drive-table-wrap {
+  flex: 1;
+  overflow: hidden;
+}
+
+.gh-drive-table {
+  font-size: var(--gh-text-sm);
+}
+
+.gh-drive-table .gh-drive-row {
+  cursor: pointer;
+  transition: background var(--gh-transition);
+}
+
+.gh-drive-table .gh-drive-row:hover {
+  background: var(--gh-canvas-inset);
+}
+
+.gh-drive-table .gh-drive-row--selected {
+  background: var(--gh-accent-soft) !important;
+}
+
+.gh-drive-cell {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--gh-border-muted);
+  vertical-align: middle;
+}
+
+.gh-drive-cell--name {
+  min-width: 250px;
+}
+
+.gh-drive-cell--size {
+  width: 100px;
+  color: var(--gh-text-tertiary);
+}
+
+.gh-drive-cell--date {
+  width: 160px;
+  color: var(--gh-text-tertiary);
+}
+
+.gh-drive-cell--type {
+  width: 80px;
+}
+
+.gh-drive-cell--actions {
+  width: 160px;
+}
+
+.gh-drive-cell-file {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+}
+
+.gh-drive-cell-icon {
+  flex-shrink: 0;
+  color: var(--gh-text-tertiary);
+  display: flex;
+  align-items: center;
+}
+
+.gh-drive-file-name-btn {
+  background: none;
+  border: none;
+  color: var(--gh-accent);
+  cursor: pointer;
+  font-size: var(--gh-text-sm);
+  font-family: var(--gh-font);
+  padding: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-drive-file-name-btn:hover {
+  text-decoration: underline;
+}
+
+.gh-drive-file-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-drive-row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-1);
+  opacity: 0;
+  transition: opacity var(--gh-transition);
+}
+
+.gh-drive-row:hover .gh-drive-row-actions {
+  opacity: 1;
+}
+
+/* Table column headers */
+.gh-drive-col-header {
+  text-align: left;
+  padding: 10px 16px;
+  font-weight: 500;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+  border-bottom: 1px solid var(--gh-border);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--gh-transition);
+}
+
+.gh-drive-col-header:hover {
+  color: var(--gh-text);
+}
+
+.gh-drive-col-header--active {
+  color: var(--gh-accent);
+}
+
+.gh-drive-col-header--right {
+  text-align: right;
+}
+
+.gh-drive-col-header-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.gh-drive-col-header-arrow {
+  font-size: var(--gh-text-xs);
+}
+
+/* ===== Drive Grid View ===== */
+.gh-drive-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-3);
+  align-content: flex-start;
+}
+
+.gh-drive-grid-card {
+  flex: 1 1 160px;
+  min-width: 0;
+  max-width: 1fr;
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color var(--gh-transition), box-shadow var(--gh-transition);
+}
+
+.gh-drive-grid-card:hover {
+  border-color: var(--gh-accent);
+}
+
+.gh-drive-grid-card--selected {
+  border-color: var(--gh-accent);
+  box-shadow: var(--gh-focus-ring);
+  background: var(--gh-accent-soft);
+}
+
+.gh-drive-grid-card-thumbnail {
+  height: 120px;
+  overflow: hidden;
+  background: var(--gh-canvas-inset);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gh-drive-grid-card-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gh-drive-grid-card-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gh-space-1);
+  padding: var(--gh-space-3);
+  background: none;
+  border: none;
+  width: 100%;
+  cursor: pointer;
+  font-family: var(--gh-font);
+  color: var(--gh-text);
+}
+
+.gh-drive-grid-card-icon {
+  color: var(--gh-text-tertiary);
+  display: flex;
+  align-items: center;
+}
+
+.gh-drive-grid-card-name {
+  font-size: var(--gh-text-sm);
+  font-weight: 500;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.gh-drive-grid-card-meta {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+}
+
+.gh-drive-grid-card-date {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+}
+
+.gh-drive-grid-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gh-space-1);
+  padding: var(--gh-space-2);
+  border-top: 1px solid var(--gh-border-muted);
+  opacity: 0;
+  transition: opacity var(--gh-transition);
+}
+
+.gh-drive-grid-card:hover .gh-drive-grid-card-actions {
+  opacity: 1;
+}
+
+/* ===== Drive Detail Panel ===== */
+.gh-drive-detail-panel {
+  width: 280px;
+  min-width: 260px;
+  border-left: 1px solid var(--gh-border);
+  background: var(--gh-canvas);
+  overflow-y: auto;
+}
+
+.gh-drive-detail-panel--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gh-drive-detail-panel-inner {
+  padding: var(--gh-space-4);
+}
+
+.gh-drive-detail-empty {
+  text-align: center;
+  padding: var(--gh-space-5);
+}
+
+.gh-drive-detail-empty-icon {
+  font-size: 2rem;
+  display: block;
+  margin-bottom: var(--gh-space-3);
+}
+
+.gh-drive-detail-empty-text {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-drive-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--gh-space-4);
+}
+
+.gh-drive-detail-title {
+  font-size: var(--gh-text-base);
+  font-weight: 600;
+}
+
+.gh-drive-detail-close {
+  background: none;
+  border: none;
+  color: var(--gh-text-tertiary);
+  cursor: pointer;
+  font-size: var(--gh-text-sm);
+  padding: var(--gh-space-1);
+  border-radius: var(--gh-radius);
+  transition: background var(--gh-transition);
+}
+
+.gh-drive-detail-close:hover {
+  background: var(--gh-btn-hover);
+}
+
+.gh-drive-detail-preview {
+  text-align: center;
+  padding: var(--gh-space-4) 0;
+  margin-bottom: var(--gh-space-4);
+  border-bottom: 1px solid var(--gh-border-muted);
+}
+
+.gh-drive-detail-preview-icon {
+  color: var(--gh-text-tertiary);
+  margin-bottom: var(--gh-space-2);
+  display: flex;
+  justify-content: center;
+}
+
+.gh-drive-detail-preview-name {
+  font-size: var(--gh-text-sm);
+  font-weight: 500;
+  word-break: break-all;
+  margin-bottom: var(--gh-space-1);
+}
+
+.gh-drive-detail-preview-type {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+}
+
+.gh-drive-detail-fav-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  width: 100%;
+  padding: var(--gh-space-2) var(--gh-space-3);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  cursor: pointer;
+  font-size: var(--gh-text-sm);
+  font-family: var(--gh-font);
+  margin-bottom: var(--gh-space-4);
+  transition: background var(--gh-transition);
+}
+
+.gh-drive-detail-fav-btn:hover {
+  background: var(--gh-btn-hover);
+}
+
+.gh-drive-detail-fav-btn--active {
+  background: var(--gh-warning-soft);
+  border-color: var(--gh-warning);
+  color: var(--gh-warning);
+}
+
+.gh-drive-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gh-space-2);
+  margin-bottom: var(--gh-space-4);
+}
+
+.gh-drive-detail-field {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: var(--gh-space-2) 0;
+  border-bottom: 1px solid var(--gh-border-muted);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-drive-detail-field-label {
+  color: var(--gh-text-tertiary);
+  white-space: nowrap;
+}
+
+.gh-drive-detail-field-value {
+  color: var(--gh-text);
+  text-align: right;
+  word-break: break-all;
+  max-width: 60%;
+}
+
+/* ===== Drive Upload Zone ===== */
+.gh-drive-upload-zone-wrapper {
+  border-bottom: 1px solid var(--gh-border-muted);
+  padding: var(--gh-space-3);
+}
+
+.gh-drive-upload-zone-header {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  margin-bottom: var(--gh-space-3);
+}
+
+.gh-drive-upload-zone-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-6);
+  border: 2px dashed var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+  cursor: pointer;
+  transition: border-color var(--gh-transition), background var(--gh-transition);
+}
+
+.gh-drive-upload-zone-drop:hover,
+.gh-drive-upload-zone-drop--drag {
+  border-color: var(--gh-accent);
+  background: var(--gh-accent-soft);
+}
+
+.gh-drive-upload-zone-drop-icon {
+  font-size: 2rem;
+}
+
+.gh-drive-upload-zone-drop-text {
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-drive-upload-zone-drop-hint {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+}
+
+.gh-drive-upload-zone-progress {
+  padding: var(--gh-space-3);
+}
+
+.gh-drive-upload-zone-progress-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text);
+  margin-bottom: var(--gh-space-2);
+}
+
+.gh-drive-upload-zone-progress-stats {
+  display: flex;
+  gap: var(--gh-space-4);
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+  margin-bottom: var(--gh-space-2);
+}
+
+.gh-drive-upload-zone-progress-bar {
+  height: 6px;
+  background: var(--gh-canvas-inset);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.gh-drive-upload-zone-progress-fill {
+  height: 100%;
+  background: var(--gh-success-emphasis);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.gh-drive-upload-zone-failed {
+  padding: var(--gh-space-3);
+}
+
+.gh-drive-upload-zone-failed ul {
+  margin: var(--gh-space-2) 0;
+  padding-left: var(--gh-space-5);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-drive-upload-zone-hidden-input {
+  display: none;
+}
+
+/* ===== Drive Batch Actions ===== */
+.gh-drive-batch-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--gh-space-2) var(--gh-space-4);
+  background: var(--gh-accent-soft);
+  border-bottom: 1px solid var(--gh-accent);
+}
+
+.gh-drive-batch-info {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+}
+
+.gh-drive-batch-count {
+  font-size: var(--gh-text-sm);
+  font-weight: 500;
+  color: var(--gh-accent);
+}
+
+.gh-drive-batch-clear {
+  background: none;
+  border: none;
+  color: var(--gh-accent);
+  cursor: pointer;
+  font-size: var(--gh-text-sm);
+}
+
+.gh-drive-batch-clear:hover {
+  text-decoration: underline;
+}
+
+.gh-drive-batch-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+}
+
+/* ===== Drive Context Menu ===== */
+.gh-drive-context-menu {
+  position: fixed;
+  z-index: 1100;
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  box-shadow: var(--gh-shadow-lg);
+  min-width: 200px;
+  padding: var(--gh-space-1);
+}
+
+.gh-drive-context-menu-header {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-2) var(--gh-space-3);
+  font-size: var(--gh-text-sm);
+  font-weight: 500;
+}
+
+.gh-drive-context-menu-icon {
+  color: var(--gh-text-tertiary);
+  display: flex;
+}
+
+.gh-drive-context-menu-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-drive-context-menu-divider {
+  height: 1px;
+  background: var(--gh-border);
+  margin: var(--gh-space-1) 0;
+}
+
+.gh-drive-context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  width: 100%;
+  padding: var(--gh-space-2) var(--gh-space-3);
+  border: none;
+  background: none;
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  font-family: var(--gh-font);
+  cursor: pointer;
+  border-radius: var(--gh-radius);
+  transition: background var(--gh-transition);
+  text-align: left;
+}
+
+.gh-drive-context-menu-item:hover {
+  background: var(--gh-btn-hover);
+}
+
+.gh-drive-context-menu-item--danger {
+  color: var(--gh-danger);
+}
+
+.gh-drive-context-menu-item--danger:hover {
+  background: var(--gh-danger-soft);
+}
+
+.gh-drive-context-menu-item-icon {
+  display: flex;
+  align-items: center;
+  color: inherit;
+}
+
+.gh-drive-context-menu-item-label {
+  flex: 1;
+}
+
+/* ===== Drive Pagination Info ===== */
+.gh-drive-pagination-info {
+  text-align: center;
+  margin-top: var(--gh-space-3);
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-sm);
+}
+
+/* ===== Drive Navigation — Tab List ===== */
+.gh-drive-tab-list {
+  margin-top: var(--gh-space-2);
+}
+
+.gh-drive-tab-list-heading {
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  color: var(--gh-text-secondary);
+  text-transform: uppercase;
+  margin-bottom: var(--gh-space-2);
+}
+
+.gh-drive-tab-item {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  padding: 6px 8px;
+  border-radius: var(--gh-radius);
+  cursor: pointer;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text);
+  transition: background var(--gh-transition);
+}
+
+.gh-drive-tab-item:hover {
+  background: var(--gh-btn-hover);
+}
+
+.gh-drive-tab-item--active {
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+  font-weight: 500;
+}
+
+.gh-drive-tab-item-icon {
+  flex-shrink: 0;
+}
+
+.gh-drive-tab-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-drive-tab-item-close {
+  background: none;
+  border: none;
+  color: var(--gh-text-tertiary);
+  cursor: pointer;
+  font-size: var(--gh-text-base);
+  padding: 0 2px;
+  opacity: 0;
+  transition: opacity var(--gh-transition);
+}
+
+.gh-drive-tab-item:hover .gh-drive-tab-item-close {
+  opacity: 1;
+}
+
+/* ===== Drive Path Bar ===== */
+.gh-drive-path-bar {
+  display: flex;
+  align-items: center;
+  padding: var(--gh-space-2) var(--gh-space-4);
+  background: var(--gh-canvas);
+  border-bottom: 1px solid var(--gh-border-muted);
+}
+
+.gh-drive-path-bar-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-1);
+  flex: 1;
+  font-size: var(--gh-text-sm);
+}
+
+.gh-drive-path-bar-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gh-space-1);
+}
+
+.gh-drive-path-bar-separator {
+  color: var(--gh-text-tertiary);
+}
+
+.gh-drive-path-bar-current {
+  font-weight: 500;
+  color: var(--gh-text);
+}
+
+.gh-drive-path-bar-link {
+  background: none;
+  border: none;
+  color: var(--gh-accent);
+  cursor: pointer;
+  font-size: var(--gh-text-sm);
+}
+
+.gh-drive-path-bar-link:hover {
+  text-decoration: underline;
+}
+
+.gh-drive-path-bar-edit {
+  flex: 1;
+}
+
+.gh-drive-path-bar-input {
+  width: 100%;
+  padding: 4px 8px;
+  font-size: var(--gh-text-sm);
+  font-family: var(--gh-font);
+  border: 1px solid var(--gh-accent);
+  border-radius: var(--gh-radius);
+  outline: none;
+  box-shadow: var(--gh-focus-ring);
+}
+
+.gh-drive-path-bar-actions {
+  display: flex;
+  gap: var(--gh-space-1);
+}
+
+.gh-drive-path-bar-action {
+  background: none;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  color: var(--gh-text-secondary);
+  cursor: pointer;
+  font-size: var(--gh-text-sm);
+  padding: 4px 10px;
+  transition: background var(--gh-transition);
+}
+
+.gh-drive-path-bar-action:hover {
+  background: var(--gh-btn-hover);
+}
+
+.gh-drive-path-bar-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===== Drive Tree View ===== */
+.gh-drive-tree-view {
+  font-size: var(--gh-text-sm);
+}
+
+.gh-drive-tree-node {
+  user-select: none;
+}
+
+.gh-drive-tree-node-content {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-1);
+  padding: 4px 4px;
+  border-radius: var(--gh-radius);
+  cursor: pointer;
+  transition: background var(--gh-transition);
+  color: var(--gh-text);
+}
+
+.gh-drive-tree-node-content:hover {
+  background: var(--gh-btn-hover);
+}
+
+.gh-drive-tree-node-content--active {
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+  font-weight: 500;
+}
+
+.gh-drive-tree-node-content--drag-over {
+  background: var(--gh-accent-soft);
+  outline: 1px dashed var(--gh-accent);
+}
+
+.gh-drive-tree-node-expand {
+  background: none;
+  border: none;
+  color: var(--gh-text-tertiary);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.gh-drive-tree-node-expand:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gh-drive-tree-node-spacer {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.gh-drive-tree-node-label {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex: 1;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: var(--gh-text-sm);
+  font-family: var(--gh-font);
+  padding: 0;
+  text-align: left;
+  overflow: hidden;
+}
+
+.gh-drive-tree-node-icon {
+  flex-shrink: 0;
+  display: flex;
+  color: var(--gh-text-tertiary);
+}
+
+.gh-drive-tree-node-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===== Drive Preview Overlay ===== */
+.gh-drive-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gh-drive-preview-container {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+.gh-drive-preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  justify-content: center;
+  margin-bottom: var(--gh-space-3);
+}
+
+.gh-drive-preview-toolbar-btn {
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--gh-radius);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+  font-size: var(--gh-text-sm);
+  font-family: var(--gh-font);
+  transition: background var(--gh-transition);
+}
+
+.gh-drive-preview-toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.gh-drive-preview-toolbar-label {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: var(--gh-text-sm);
+  min-width: 50px;
+  text-align: center;
+}
+
+.gh-drive-preview-close {
+  position: absolute;
+  top: calc(var(--gh-space-2) * -3);
+  right: 0;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--gh-radius);
+  color: #fff;
+  cursor: pointer;
+  font-size: var(--gh-text-lg);
+  padding: var(--gh-space-2) var(--gh-space-3);
+  transition: background var(--gh-transition);
+}
+
+.gh-drive-preview-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.gh-drive-preview-error {
+  color: var(--gh-danger);
+  padding: var(--gh-space-4);
+  text-align: center;
+}
+
+.gh-drive-preview-image-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.gh-drive-preview-image {
+  max-width: 85vw;
+  max-height: 80vh;
+  object-fit: contain;
+  transition: transform 0.2s ease;
+}
+
+.gh-drive-preview-video {
+  max-width: 85vw;
+  max-height: 80vh;
+}
+
+.gh-drive-preview-video--hidden {
+  display: none;
+}
+
+.gh-drive-preview-audio-wrap {
+  text-align: center;
+}
+
+.gh-drive-preview-audio-icon {
+  font-size: 4rem;
+  margin-bottom: var(--gh-space-4);
+}
+
+.gh-drive-preview-audio-name {
+  color: #fff;
+  font-size: var(--gh-text-base);
+  margin-bottom: var(--gh-space-4);
+}
+
+.gh-drive-preview-audio {
+  width: 100%;
+  max-width: 400px;
+}
+
+.gh-drive-preview-pdf {
+  width: 85vw;
+  height: 85vh;
+  border: none;
+  border-radius: var(--gh-radius);
+}
+
+.gh-drive-preview-code {
+  max-width: 85vw;
+  max-height: 80vh;
+  overflow: auto;
+  background: var(--gh-bg);
+  color: var(--gh-text);
+  padding: var(--gh-space-4);
+  border-radius: var(--gh-radius);
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-sm);
+  line-height: 1.6;
+}
+
+.gh-drive-preview-code code {
+  white-space: pre;
+}
+
+.gh-drive-preview-unsupported {
+  text-align: center;
+  padding: var(--gh-space-7);
+  color: #fff;
+}
+
+.gh-drive-preview-unsupported-icon {
+  font-size: 3rem;
+  display: block;
+  margin-bottom: var(--gh-space-4);
+}
+
+.gh-drive-preview-unsupported-text {
+  font-size: var(--gh-text-base);
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: var(--gh-space-2);
+}
+
+.gh-drive-preview-unsupported-name {
+  font-size: var(--gh-text-sm);
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* ===== Drive File Attributes ===== */
+.gh-drive-file-attributes {
+  margin-top: var(--gh-space-4);
+}
+
+.gh-drive-file-attributes-heading {
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  color: var(--gh-text);
+  margin-bottom: var(--gh-space-2);
+}
+
+.gh-drive-file-attribute-row {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--gh-space-2) 0;
+  border-bottom: 1px solid var(--gh-border-muted);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-drive-file-attribute-row:last-child {
+  border-bottom: none;
+}
+
+.gh-drive-file-attribute-label {
+  color: var(--gh-text-tertiary);
+}
+
+.gh-drive-file-attribute-value {
+  color: var(--gh-text);
+  text-align: right;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===== Drive Folder Picker Dialog ===== */
+.gh-drive-folder-picker-tree {
+  max-height: 50vh;
+  overflow-y: auto;
+  margin: var(--gh-space-3) 0;
+}
+
+.gh-drive-folder-picker-node {
+  font-size: var(--gh-text-sm);
+}
+
+.gh-drive-folder-picker-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-1);
+  padding: 4px 4px;
+  border-radius: var(--gh-radius);
+  transition: background var(--gh-transition);
+}
+
+.gh-drive-folder-picker-row:hover {
+  background: var(--gh-btn-hover);
+}
+
+.gh-drive-folder-picker-label {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--gh-text);
+  cursor: pointer;
+  font-size: var(--gh-text-sm);
+  font-family: var(--gh-font);
+  padding: 0;
+  text-align: left;
+}
+
+.gh-drive-folder-picker-label:hover {
+  color: var(--gh-accent);
+}
+
+/* ===== Drive Mobile Navigation ===== */
+.gh-drive-mobile-nav {
+  display: flex;
+  background: var(--gh-canvas);
+  border-top: 1px solid var(--gh-border);
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  padding-bottom: var(--gh-safe-bottom);
+}
+
+.gh-drive-mobile-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--gh-space-2);
+  background: none;
+  border: none;
+  color: var(--gh-text-tertiary);
+  cursor: pointer;
+  font-size: var(--gh-text-xs);
+  font-family: var(--gh-font);
+  transition: color var(--gh-transition);
+}
+
+.gh-drive-mobile-nav-item--active {
+  color: var(--gh-accent);
+}
+
+.gh-drive-mobile-nav-icon {
+  font-size: var(--gh-text-lg);
+}
+
+.gh-drive-mobile-nav-label {
+  font-size: 10px;
+}
+
+/* ===== Drive Download Toast ===== */
+.gh-drive-download-toast {
+  position: fixed;
+  bottom: var(--gh-space-4);
+  right: var(--gh-space-4);
+  z-index: 3000;
+  width: 320px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  box-shadow: var(--gh-shadow-lg);
+}
+
+.gh-drive-download-toast-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--gh-space-2) var(--gh-space-3);
+  border-bottom: 1px solid var(--gh-border-muted);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+}
+
+.gh-drive-download-toast-hint {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+  font-weight: 400;
+}
+
+.gh-drive-download-toast-list {
+  padding: var(--gh-space-1);
+}
+
+.gh-drive-download-toast-item {
+  padding: var(--gh-space-2);
+  margin-bottom: var(--gh-space-1);
+  border-radius: var(--gh-radius);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-drive-download-toast-item--downloading {
+  background: var(--gh-canvas-inset);
+}
+
+.gh-drive-download-toast-item--complete {
+  background: var(--gh-success-soft);
+}
+
+.gh-drive-download-toast-item--error {
+  background: var(--gh-danger-soft);
+}
+
+.gh-drive-download-toast-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-2);
+}
+
+.gh-drive-download-toast-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-drive-download-toast-cancel {
+  background: none;
+  border: none;
+  color: var(--gh-text-tertiary);
+  cursor: pointer;
+  font-size: var(--gh-text-sm);
+  padding: 0 2px;
+}
+
+.gh-drive-download-toast-badge {
+  flex-shrink: 0;
+}
+
+.gh-drive-download-toast-progress-bar {
+  height: 4px;
+  background: var(--gh-canvas-inset);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: var(--gh-space-1);
+}
+
+.gh-drive-download-toast-progress-fill {
+  height: 100%;
+  background: var(--gh-accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.gh-drive-download-toast-stats {
+  display: flex;
+  gap: var(--gh-space-3);
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+  margin-top: var(--gh-space-1);
+}
+
+.gh-drive-download-toast-done-text,
+.gh-drive-download-toast-error-text {
+  font-size: var(--gh-text-xs);
+  margin-top: var(--gh-space-1);
+}
+
+.gh-drive-download-toast-done-text {
+  color: var(--gh-success);
+}
+
+.gh-drive-download-toast-error-text {
+  color: var(--gh-danger);
+}
+
+.gh-drive-download-toast-overflow {
+  text-align: center;
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+  padding: var(--gh-space-2);
+}
+
+/* ===== Drive Thumbnail Grid ===== */
+.gh-drive-thumbnail-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gh-space-1);
+}
+
+.gh-drive-thumbnail-item {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gh-canvas-inset);
+  overflow: hidden;
+}
+
+.gh-drive-thumbnail-item--folder {
+  font-size: 1.5rem;
+}
+
+.gh-drive-thumbnail-icon {
+  font-size: 1.5rem;
+}
+
+.gh-drive-thumbnail-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.gh-drive-thumbnail-preview {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.gh-drive-thumbnail-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gh-drive-thumbnail-video-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: var(--gh-text-base);
+  pointer-events: none;
+}
+
+.gh-drive-thumbnail-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+/* ===== Drive Pagination ===== */
+.gh-drive-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  padding: var(--gh-space-4);
+}
+
+.gh-drive-pagination-btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+  color: var(--gh-text-secondary);
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--gh-transition);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gh-drive-pagination-btn:hover {
+  background: var(--gh-btn-hover);
+}
+
+.gh-drive-pagination-btn--active {
+  background: var(--gh-accent);
+  color: #fff;
+  border-color: var(--gh-accent);
+}

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import UserAvatar from '../../components/UserAvatar'
-import LiquidButton from '../../components/glass/LiquidButton'
-import LiquidGlass from '../../components/glass/LiquidGlass'
+import { GitHubButton, GitHubBadge } from '../../components/ui'
 import Pagination from '../../components/Pagination'
 import api from '../../lib/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -27,7 +26,6 @@ export default function UserAdminPage() {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
 
-  // 编辑状态
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editRole, setEditRole] = useState<'user' | 'admin'>('user')
   const [editPassword, setEditPassword] = useState('')
@@ -74,63 +72,70 @@ export default function UserAdminPage() {
   }
 
   return (
-    <div className="admin-page">
-      <div className="admin-page-header">
-        <h1 className="admin-page-title">用户管理</h1>
+    <div>
+      <div className="gh-page-header">
+        <h1>用户管理</h1>
+        <p>管理注册用户和权限</p>
       </div>
 
       {loading ? (
-        <div className="admin-spinner"><div className="spinner" /></div>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--gh-space-7)' }}>
+          <div className="gh-spinner" />
+        </div>
       ) : users.length === 0 ? (
-        <LiquidGlass variant="blur" style={{ padding: '40px', textAlign: 'center' }}>
-          <p style={{ color: 'var(--lg-text-tertiary)' }}>暂无用户</p>
-        </LiquidGlass>
+        <div className="gh-box" style={{ padding: '40px', textAlign: 'center' }}>
+          <p className="gh-text-secondary">暂无用户</p>
+        </div>
       ) : (
-        <LiquidGlass variant="blur" className="admin-page-table-wrap">
-          <table className="admin-table">
+        <div className="gh-box" style={{ padding: 0, overflow: 'hidden' }}>
+          <table className="gh-table">
             <thead>
               <tr>
-                <th className="admin-th admin-th--title">用户名</th>
-                <th className="admin-th" style={{ width: '25%' }}>邮箱</th>
-                <th className="admin-th admin-th--status">角色</th>
-                <th className="admin-th" style={{ width: '90px' }}>网盘</th>
-                <th className="admin-th admin-cell--date">注册时间</th>
-                <th className="admin-th admin-th--actions">操作</th>
+                <th>用户名</th>
+                <th style={{ width: '25%' }}>邮箱</th>
+                <th>角色</th>
+                <th style={{ width: '90px' }}>网盘</th>
+                <th>注册时间</th>
+                <th style={{ textAlign: 'right' }}>操作</th>
               </tr>
             </thead>
             <tbody>
-              {users.map((u, i) => {
+              {users.map((u) => {
                 const isEditing = editingId === u.id
                 return (
-                  <tr key={u.id} className="admin-row fade-in" style={{ animationDelay: `${i * 0.04}s` }}>
-                    <td className="admin-cell admin-cell--title" data-label="用户名">
-                      <div className="admin-post-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <tr key={u.id}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500 }}>
                         <UserAvatar userId={u.id} username={u.username} size="sm" />
                         {u.username}
                       </div>
                     </td>
-                    <td className="admin-cell" data-label="邮箱">
-                      <code style={{ fontSize: '0.8125rem', color: 'var(--lg-text-secondary)' }}>{u.email}</code>
+                    <td>
+                      <code style={{ fontSize: 'var(--gh-text-xs)', color: 'var(--gh-text-secondary)', fontFamily: 'var(--gh-font-mono)' }}>
+                        {u.email}
+                      </code>
                     </td>
-                    <td className="admin-cell admin-cell--status" data-label="角色">
+                    <td>
                       {isEditing ? (
                         <select
-                          className="lg-input"
+                          className="gh-input"
                           value={editRole}
                           onChange={e => setEditRole(e.target.value as 'user' | 'admin')}
-                          style={{ padding: '4px 8px', fontSize: '0.8125rem' }}
+                          style={{ padding: '4px 8px', fontSize: 'var(--gh-text-xs)', width: 'auto' }}
                         >
                           <option value="user">用户</option>
                           <option value="admin">管理员</option>
                         </select>
                       ) : (
-                        <span className={`admin-badge ${u.role === 'admin' ? 'admin-badge--published' : 'admin-badge--draft'}`}>
+                        <GitHubBadge variant={u.role === 'admin' ? 'success' : 'default'}>
                           {u.role === 'admin' ? '管理员' : '用户'}
-                        </span>
+                        </GitHubBadge>
                       )}
                     </td>
-                    <td className="admin-cell" data-label="网盘" style={{ textAlign: 'center' }}>
-                      <button
+                    <td style={{ textAlign: 'center' }}>
+                      <GitHubButton
+                        variant={u.canAccessDrive ? 'primary' : 'secondary'}
+                        size="sm"
                         onClick={async () => {
                           try {
                             await api.put(`/users/${u.id}/drive-access`, { canAccessDrive: !u.canAccessDrive })
@@ -139,36 +144,34 @@ export default function UserAdminPage() {
                             alert(err instanceof Error ? err.message : '操作失败')
                           }
                         }}
-                        className={`drive-toggle ${u.canAccessDrive ? 'drive-toggle--on' : ''}`}
-                        title={u.canAccessDrive ? '点击关闭网盘访问' : '点击开启网盘访问'}
                       >
-                        {u.canAccessDrive ? '✅' : '❌'}
-                      </button>
+                        {u.canAccessDrive ? '已开启' : '未开启'}
+                      </GitHubButton>
                     </td>
-                    <td className="admin-cell admin-cell--date" data-label="注册时间">
+                    <td className="gh-text-tertiary">
                       {new Date(u.createdAt).toLocaleString('zh-CN')}
                     </td>
-                    <td className="admin-cell admin-cell--actions" data-label="操作">
+                    <td>
                       {isEditing ? (
-                        <div className="admin-actions" style={{ flexWrap: 'wrap', gap: '6px' }}>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                           <input
-                            className="lg-input"
+                            className="gh-input"
                             type="password"
                             placeholder="新密码（留空不修改）"
                             value={editPassword}
                             onChange={e => setEditPassword(e.target.value)}
-                            style={{ width: '140px', padding: '4px 8px', fontSize: '0.8125rem' }}
+                            style={{ width: '140px', padding: '4px 8px', fontSize: 'var(--gh-text-xs)' }}
                           />
-                          <LiquidButton size="sm" variant="primary" onClick={() => handleUpdate(u.id)}>保存</LiquidButton>
-                          <LiquidButton size="sm" variant="ghost" onClick={cancelEdit}>取消</LiquidButton>
+                          <GitHubButton variant="primary" size="sm" onClick={() => handleUpdate(u.id)}>保存</GitHubButton>
+                          <GitHubButton variant="ghost" size="sm" onClick={cancelEdit}>取消</GitHubButton>
                         </div>
                       ) : (
-                        <div className="admin-actions">
-                          <LiquidButton size="sm" variant="glass" onClick={() => startEdit(u)}>编辑</LiquidButton>
+                        <div className="gh-actions">
+                          <GitHubButton variant="secondary" size="sm" onClick={() => startEdit(u)}>编辑</GitHubButton>
                           {u.id === authUser?.id ? (
-                            <span className="liquid-btn glass sm" style={{ opacity: 0.5, cursor: 'not-allowed' }} title="不能删除自己">删除</span>
+                            <GitHubButton variant="secondary" size="sm" disabled>删除</GitHubButton>
                           ) : (
-                            <LiquidButton size="sm" variant="danger" onClick={() => handleDelete(u.id, u.username)}>删除</LiquidButton>
+                            <GitHubButton variant="danger" size="sm" onClick={() => handleDelete(u.id, u.username)}>删除</GitHubButton>
                           )}
                         </div>
                       )}
@@ -178,7 +181,7 @@ export default function UserAdminPage() {
               })}
             </tbody>
           </table>
-        </LiquidGlass>
+        </div>
       )}
 
       {totalPages > 1 && (

@@ -1,5 +1,4 @@
 import { memo } from 'react'
-import LiquidButton from '../glass/LiquidButton'
 import { useDrive } from '../../contexts/DriveContext'
 import { DownloadIcon, FolderIcon, StarIcon, DeleteIcon } from './DriveIcons'
 
@@ -25,32 +24,32 @@ const BatchActions = memo(function BatchActions({
   }
 
   return (
-    <div className="batch-actions">
-      <div className="batch-actions-info">
-        <span className="batch-actions-count">
+    <div className="gh-drive-batch-actions">
+      <div className="gh-drive-batch-info">
+        <span className="gh-drive-batch-count">
           已选择 {state.selectedFiles.length} 个文件
         </span>
         <button
-          className="batch-actions-clear"
+          className="gh-drive-batch-clear"
           onClick={onClearSelection}
         >
           取消选择
         </button>
       </div>
 
-      <div className="batch-actions-buttons">
-        <LiquidButton size="sm" variant="glass" onClick={onBatchDownload}>
+      <div className="gh-drive-batch-buttons">
+        <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={onBatchDownload}>
           <DownloadIcon size={14} /> 批量下载
-        </LiquidButton>
-        <LiquidButton size="sm" variant="glass" onClick={onBatchMove}>
+        </button>
+        <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={onBatchMove}>
           <FolderIcon size={14} /> 移动到
-        </LiquidButton>
-        <LiquidButton size="sm" variant="ghost" onClick={onBatchFavorite}>
+        </button>
+        <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={onBatchFavorite}>
           <StarIcon size={14} /> 收藏
-        </LiquidButton>
-        <LiquidButton size="sm" variant="danger" onClick={onBatchDelete}>
+        </button>
+        <button className="gh-btn gh-btn--sm gh-btn--danger" onClick={onBatchDelete}>
           <DeleteIcon size={14} /> 删除
-        </LiquidButton>
+        </button>
       </div>
     </div>
   )

@@ -172,7 +172,7 @@ const ContextMenu = memo(function ContextMenu({
 
   return createPortal(
     <div
-      className="context-menu"
+      className="gh-drive-context-menu"
       style={{
         position: 'fixed',
         left: adjustedPos.x,
@@ -182,25 +182,25 @@ const ContextMenu = memo(function ContextMenu({
       onClick={e => e.stopPropagation()}
     >
       {item && (
-        <div className="context-menu-header">
-          <span className="context-menu-icon">
+        <div className="gh-drive-context-menu-header">
+          <span className="gh-drive-context-menu-icon">
             {getDriveIcon(item, 16)}
           </span>
-          <span className="context-menu-name" title={item.name}>
+          <span className="gh-drive-context-menu-name" title={item.name}>
             {item.name}
           </span>
         </div>
       )}
-      {item && <div className="context-menu-divider" />}
+      {item && <div className="gh-drive-context-menu-divider" />}
       {menuItems.map((menuItem, index) => (
         <button
           key={index}
-          className={`context-menu-item ${menuItem.variant === 'danger' ? 'context-menu-item--danger' : ''}`}
+          className={`gh-drive-context-menu-item ${menuItem.variant === 'danger' ? 'gh-drive-context-menu-item--danger' : ''}`}
           onClick={() => menuItem.action()}
           disabled={menuItem.disabled}
         >
-          <span className="context-menu-item-icon">{menuItem.icon}</span>
-          <span className="context-menu-item-label">{menuItem.label}</span>
+          <span className="gh-drive-context-menu-item-icon">{menuItem.icon}</span>
+          <span className="gh-drive-context-menu-item-label">{menuItem.label}</span>
         </button>
       ))}
     </div>,

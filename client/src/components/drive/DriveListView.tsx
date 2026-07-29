@@ -1,6 +1,5 @@
 import { useState, useCallback, memo, useRef, useMemo, forwardRef } from 'react'
 import { TableVirtuoso } from 'react-virtuoso'
-import LiquidButton from '../glass/LiquidButton'
 import ContextMenu from './ContextMenu'
 import type { DriveItem, SortField, SortDirection } from '../../types/drive'
 import { formatFileSize, formatDate } from '../../lib/format'
@@ -39,29 +38,29 @@ function DriveRow({ item, onFolderClick, onPreview, onDownload, onRename, onDele
 }) {
   return (
     <>
-      <td className="drive-cell drive-cell--name">
-        <span className="drive-cell-file">
-          <span className="drive-cell-icon">{getDriveIcon(item, 18)}</span>
+      <td className="gh-drive-cell gh-drive-cell--name">
+        <span className="gh-drive-cell-file">
+          <span className="gh-drive-cell-icon">{getDriveIcon(item, 18)}</span>
           {item.isFolder ? (
-            <button className="drive-name-btn drive-name-btn--folder" onClick={(e) => { e.stopPropagation(); onFolderClick(item) }} title={item.name}>{item.name}</button>
+            <button className="gh-drive-file-name-btn" onClick={(e) => { e.stopPropagation(); onFolderClick(item) }} title={item.name}>{item.name}</button>
           ) : (
-            <span className="drive-name-text" title={item.name}>{item.name}</span>
+            <span className="gh-drive-file-name-text" title={item.name}>{item.name}</span>
           )}
         </span>
       </td>
-      <td className="drive-cell drive-cell--size">{item.isFolder ? '—' : formatFileSize(Number(item.size))}</td>
-      <td className="drive-cell drive-cell--date">{formatDate(item.updatedAt)}</td>
-      <td className="drive-cell drive-cell--type">{item.isFolder ? '文件夹' : (item.mimeType?.split('/')[0] || '文件')}</td>
-      <td className="drive-cell drive-cell--actions">
-        <div className="drive-row-actions">
+      <td className="gh-drive-cell gh-drive-cell--size">{item.isFolder ? '—' : formatFileSize(Number(item.size))}</td>
+      <td className="gh-drive-cell gh-drive-cell--date">{formatDate(item.updatedAt)}</td>
+      <td className="gh-drive-cell gh-drive-cell--type">{item.isFolder ? '文件夹' : (item.mimeType?.split('/')[0] || '文件')}</td>
+      <td className="gh-drive-cell gh-drive-cell--actions">
+        <div className="gh-drive-row-actions">
           {!item.isFolder && (
             <>
-              <LiquidButton size="sm" variant="ghost" onClick={() => onPreview(item)}>预览</LiquidButton>
-              <LiquidButton size="sm" variant="ghost" onClick={() => onDownload(item)}><DownloadIcon size={14} /></LiquidButton>
+              <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={() => onPreview(item)}>预览</button>
+              <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={() => onDownload(item)}><DownloadIcon size={14} /></button>
             </>
           )}
-          <LiquidButton size="sm" variant="ghost" onClick={() => onRename(item)}><RenameIcon size={14} /></LiquidButton>
-          <LiquidButton size="sm" variant="danger" onClick={() => onDelete(item)}><DeleteIcon size={14} /></LiquidButton>
+          <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={() => onRename(item)}><RenameIcon size={14} /></button>
+          <button className="gh-btn gh-btn--sm gh-btn--danger" onClick={() => onDelete(item)}><DeleteIcon size={14} /></button>
         </div>
       </td>
     </>
@@ -76,13 +75,12 @@ const DriveListView = memo(function DriveListView({ items, selectedId, sortField
   }, [onSelect])
 
   const handleBlankAreaContextMenu = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('.drive-row')) return
+    if ((e.target as HTMLElement).closest('.gh-drive-row')) return
     e.preventDefault(); onSelect(null); setContextMenu({ position: { x: e.clientX, y: e.clientY } })
   }, [onSelect])
 
   const closeContextMenu = useCallback(() => setContextMenu(null), [])
 
-  // Stable refs for virtualized table row component
   const itemsRef = useRef(items)
   itemsRef.current = items
   const selectedIdRef = useRef(selectedId)
@@ -100,7 +98,7 @@ const DriveListView = memo(function DriveListView({ items, selectedId, sortField
     const isDraggable = item ? !item.isFolder : false
     return (
       <tr ref={ref} {...props}
-        className={`drive-row ${item && currentSelectedId === item.id ? 'drive-row--selected' : ''}`}
+        className={`gh-drive-row ${item && currentSelectedId === item.id ? 'gh-drive-row--selected' : ''}`}
         onClick={() => item && onSelectRef.current(item)}
         onContextMenu={(e) => item && handleItemContextMenuRef.current(e, item)}
         draggable={isDraggable}
@@ -117,21 +115,21 @@ const DriveListView = memo(function DriveListView({ items, selectedId, sortField
 
   return (
     <>
-      <div className="drive-table-wrap" onContextMenu={handleBlankAreaContextMenu}>
+      <div className="gh-drive-table-wrap" onContextMenu={handleBlankAreaContextMenu}>
         <TableVirtuoso
-          className="drive-table"
+          className="gh-drive-table"
           style={{ height: 'calc(100vh - 280px)', width: '100%', minHeight: '1px' }}
           totalCount={items.length}
           components={{ TableRow: CustomTableRow }}
           fixedHeaderContent={() => (
             <tr>
               {SORT_COLUMNS.map(col => (
-                <th key={col.field} className={`col-${col.field}${col.align === 'right' ? ' col--right' : ''}${sortField === col.field ? ' col--active' : ''}`} onClick={() => onSortChange?.(col.field)}>
-                  <span className="col-header-label">{col.label}</span>
-                  {sortField === col.field && <span className="col-header-arrow">{sortDirection === 'asc' ? ' ▲' : ' ▼'}</span>}
+                <th key={col.field} className={`gh-drive-col-header${sortField === col.field ? ' gh-drive-col-header--active' : ''}${col.align === 'right' ? ' gh-drive-col-header--right' : ''}`} onClick={() => onSortChange?.(col.field)}>
+                  <span className="gh-drive-col-header-label">{col.label}</span>
+                  {sortField === col.field && <span className="gh-drive-col-header-arrow">{sortDirection === 'asc' ? ' ▲' : ' ▼'}</span>}
                 </th>
               ))}
-              <th className="col-actions">操作</th>
+              <th className="gh-drive-col-header">操作</th>
             </tr>
           )}
           itemContent={(index) => {

@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../lib/api'
-import LiquidGlass from './glass/LiquidGlass'
 import DOMPurify from 'dompurify'
 
 interface ChatMessage {
@@ -182,11 +181,8 @@ export default function AiAssistant() {
 
       {/* 聊天面板 */}
       {open && (
-        <LiquidGlass
-          variant="strong"
-          className="ai-assistant-panel"
-          interactive
-          chromatic
+        <div
+          className="gh-box ai-assistant-panel"
           style={{
             position: 'fixed',
             bottom: '72px',
@@ -279,7 +275,7 @@ export default function AiAssistant() {
               </svg>
             </button>
           </div>
-        </LiquidGlass>
+        </div>
       )}
     </>
   )

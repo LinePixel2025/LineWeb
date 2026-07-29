@@ -3,8 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import api from '../../lib/api'
 import UserAvatar from '../UserAvatar'
-import LiquidGlass from '../glass/LiquidGlass'
-import LiquidButton from '../glass/LiquidButton'
+import { GitHubButton } from '../ui'
 import type { CommentData } from '../../types/comment'
 
 const CONTENT_MAX = 300
@@ -19,9 +18,9 @@ const CollapsibleContent = memo(function CollapsibleContent({ content }: { conte
         {isLong && !showAll ? content.slice(0, CONTENT_MAX) + '…' : content}
       </div>
       {isLong && (
-        <LiquidButton size="sm" variant="ghost" onClick={() => setShowAll(prev => !prev)} style={{ marginTop: '6px' }}>
+        <GitHubButton size="sm" variant="secondary" onClick={() => setShowAll(prev => !prev)} style={{ marginTop: '6px' }}>
           {showAll ? '收起' : '展开全部'}
-        </LiquidButton>
+        </GitHubButton>
       )}
     </div>
   )
@@ -76,12 +75,12 @@ const ReplyForm = memo(function ReplyForm({
       <div className="reply-form-actions">
         <span className="text-tertiary" style={{ fontSize: '0.8rem' }}>{text.length}/2000</span>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <LiquidButton type="button" variant="primary" size="sm" onClick={handleSubmit} disabled={sending || !text.trim()}>
+          <GitHubButton type="button" variant="primary" size="sm" onClick={handleSubmit} disabled={sending || !text.trim()}>
             {sending ? '发送中…' : '回复'}
-          </LiquidButton>
-          <LiquidButton type="button" variant="ghost" size="sm" onClick={onCancel}>
+          </GitHubButton>
+          <GitHubButton type="button" variant="ghost" size="sm" onClick={onCancel}>
             取消
-          </LiquidButton>
+          </GitHubButton>
         </div>
       </div>
     </div>
@@ -104,7 +103,7 @@ const CommentCard = memo(function CommentCard({
 
   return (
     <div className="comment-item">
-      <LiquidGlass variant="regular" interactive={false} chromatic={false} style={{ padding: '16px' }}>
+      <div className="gh-box" style={{ padding: '16px' }}>
         <div className="comment-meta">
           <UserAvatar userId={comment.author.id} username={comment.author.username} size="sm" />
           <span className="comment-author">{comment.author.username}</span>
@@ -114,19 +113,19 @@ const CommentCard = memo(function CommentCard({
 
         <div className="comment-actions">
           {user && (
-            <LiquidButton size="sm" variant="ghost" onClick={() => setShowReplyForm(prev => !prev)}>
+            <GitHubButton size="sm" variant="ghost" onClick={() => setShowReplyForm(prev => !prev)}>
               {showReplyForm ? '取消回复' : '回复'}
-            </LiquidButton>
+            </GitHubButton>
           )}
           {hasReplies && (
-            <LiquidButton
+            <GitHubButton
               size="sm"
               variant="ghost"
               onClick={() => setExpanded(prev => !prev)}
               style={{ color: 'var(--lg-text-tertiary)' }}
             >
               {expanded ? `收起回复 (${comment.replies.length})` : `展开回复 (${comment.replies.length})`}
-            </LiquidButton>
+            </GitHubButton>
           )}
         </div>
 
@@ -153,7 +152,7 @@ const CommentCard = memo(function CommentCard({
             ))}
           </div>
         )}
-      </LiquidGlass>
+      </div>
     </div>
   )
 })
@@ -206,7 +205,7 @@ export default function CommentSection({ postId }: { postId: number }) {
   const totalComments = topLevel.reduce((sum, c) => sum + 1 + c.replies.length, 0)
 
   return (
-    <LiquidGlass variant="blur" interactive={false} style={{ padding: '32px', marginTop: '32px' }}>
+    <div className="gh-box" style={{ padding: '32px', marginTop: '32px' }}>
       <div className="comment-section">
         <h3 className="comment-heading">
           评论
@@ -226,9 +225,9 @@ export default function CommentSection({ postId }: { postId: number }) {
             {error && <p className="comment-error">{error}</p>}
             <div className="comment-form-actions">
               <span className="text-tertiary comment-char-count">{text.length}/2000</span>
-              <LiquidButton type="submit" variant="primary" size="sm" disabled={sending || !text.trim()}>
+              <GitHubButton type="submit" variant="primary" size="sm" disabled={sending || !text.trim()}>
                 {sending ? '发表中…' : '发表评论'}
-              </LiquidButton>
+        </GitHubButton>
             </div>
           </form>
         ) : (
@@ -254,6 +253,6 @@ export default function CommentSection({ postId }: { postId: number }) {
           )}
         </div>
       </div>
-    </LiquidGlass>
+    </div>
   )
 }

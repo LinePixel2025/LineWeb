@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import LiquidGlass from '../../components/glass/LiquidGlass'
+import { GitHubButton } from '../../components/ui'
 import api from '../../lib/api'
 
 interface DeviceInfo {
@@ -45,33 +45,50 @@ export default function DeviceMonitorPage() {
   }, [autoRefresh, fetchData])
 
   const stats = [
-    { label: '当前在线', value: data?.onlineCount ?? 0, color: '#4ade80' },
-    { label: '总记录数', value: data?.totalCount ?? 0, color: '#60a5fa' },
-    { label: '总请求接口', value: data?.allTime.reduce((s, d) => s + d.requestCount, 0) ?? 0, color: '#f59e0b' },
+    { label: '当前在线', value: data?.onlineCount ?? 0, color: '#3fb950' },
+    { label: '总记录数', value: data?.totalCount ?? 0, color: '#2f81f7' },
+    { label: '总请求接口', value: data?.allTime.reduce((s, d) => s + d.requestCount, 0) ?? 0, color: '#d29922' },
   ]
 
   const renderDeviceRow = (device: DeviceInfo, index: number) => (
-    <tr key={device.id} className="admin-row fade-in" style={{ animationDelay: `${index * 0.03}s` }}>
-      <td className="admin-cell" data-label="IP 地址">
-        <code className="api-cell-ip">{device.ip}</code>
+    <tr key={device.id}>
+      <td>
+        <code style={{
+          padding: '2px 8px', borderRadius: 'var(--gh-radius)',
+          background: 'var(--gh-canvas-inset)', fontSize: 'var(--gh-text-xs)',
+          color: 'var(--gh-text-secondary)', fontFamily: 'var(--gh-font-mono)',
+        }}>
+          {device.ip}
+        </code>
       </td>
-      <td className="admin-cell" data-label="设备类型">
-        <span className="api-device-badge">{device.deviceType}</span>
+      <td>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', padding: '2px 8px',
+          fontSize: 'var(--gh-text-xs)', fontWeight: 500,
+          borderRadius: 'var(--gh-radius)',
+          background: 'var(--gh-canvas-inset)', color: 'var(--gh-text-secondary)',
+        }}>
+          {device.deviceType}
+        </span>
       </td>
-      <td className="admin-cell" data-label="操作系统">
-        {device.os}
-      </td>
-      <td className="admin-cell" data-label="浏览器">
-        {device.browser}
-      </td>
-      <td className="admin-cell admin-cell--date" data-label="首次访问">
+      <td>{device.os}</td>
+      <td>{device.browser}</td>
+      <td className="gh-text-tertiary">
         {new Date(device.firstSeen).toLocaleString('zh-CN')}
       </td>
-      <td className="admin-cell admin-cell--date" data-label="最后访问">
+      <td className="gh-text-tertiary">
         {new Date(device.lastSeen).toLocaleString('zh-CN')}
       </td>
-      <td className="admin-cell" data-label="请求次数" style={{ textAlign: 'center' }}>
-        <span className="api-request-count">{device.requestCount}</span>
+      <td style={{ textAlign: 'center' }}>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          minWidth: '32px', height: '22px', padding: '0 6px',
+          fontSize: 'var(--gh-text-xs)', fontWeight: 600,
+          borderRadius: 'var(--gh-radius)',
+          background: 'var(--gh-accent-soft)', color: 'var(--gh-accent)',
+        }}>
+          {device.requestCount}
+        </span>
       </td>
     </tr>
   )
@@ -80,58 +97,81 @@ export default function DeviceMonitorPage() {
   const historyDevices = data?.allTime?.filter(d => !activeDevices.some(a => a.id === d.id)) ?? []
 
   return (
-    <div className="admin-page">
-      <div className="admin-page-header">
-        <h1 className="admin-page-title">设备监控</h1>
-        <div className="api-header-controls">
-          <label className="api-auto-refresh-label">
+    <div>
+      <div className="gh-page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <h1>设备监控</h1>
+          <p>实时监控网站访问设备</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gh-space-3)' }}>
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 'var(--gh-space-2)',
+            fontSize: 'var(--gh-text-sm)', color: 'var(--gh-text-secondary)', cursor: 'pointer',
+          }}>
             <input
               type="checkbox"
-              className="api-auto-refresh-checkbox"
               checked={autoRefresh}
               onChange={e => setAutoRefresh(e.target.checked)}
+              style={{ accentColor: 'var(--gh-accent)' }}
             />
             自动刷新 (10s)
           </label>
-          <button className="api-refresh-btn" onClick={() => { setLoading(true); fetchData() }}>
+          <GitHubButton variant="secondary" size="sm" onClick={() => { setLoading(true); fetchData() }}>
             刷新
-          </button>
+          </GitHubButton>
         </div>
       </div>
 
       {loading ? (
-        <div className="admin-spinner"><div className="spinner" /></div>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--gh-space-7)' }}>
+          <div className="gh-spinner" />
+        </div>
       ) : (
         <>
-          <div className="api-stat-cards">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 'var(--gh-space-3)', marginBottom: 'var(--gh-space-5)' }}>
             {stats.map(s => (
-              <LiquidGlass key={s.label} variant="blur" className="api-stat-card">
-                <div className="api-stat-card-value" style={{ color: s.color }}>{s.value}</div>
-                <div className="api-stat-card-label">{s.label}</div>
-              </LiquidGlass>
+              <div key={s.label} className="gh-box" style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 'var(--gh-text-2xl)', fontWeight: 700, color: s.color }}>
+                  {s.value}
+                </div>
+                <div className="gh-text-tertiary" style={{ marginTop: '4px' }}>
+                  {s.label}
+                </div>
+              </div>
             ))}
           </div>
 
-          <LiquidGlass variant="blur" className="admin-page-table-wrap" style={{ marginTop: '24px' }}>
-            <div className="api-section-title">
+          <div className="gh-box" style={{ padding: 0, overflow: 'hidden', marginBottom: 'var(--gh-space-4)' }}>
+            <div style={{
+              padding: 'var(--gh-space-3) var(--gh-space-4)',
+              fontWeight: 600, fontSize: 'var(--gh-text-sm)',
+              borderBottom: '1px solid var(--gh-border)',
+              display: 'flex', alignItems: 'center', gap: 'var(--gh-space-2)',
+            }}>
               <span>在线设备</span>
-              <span className="api-section-badge">{activeDevices.length}</span>
+              <span style={{
+                fontSize: 'var(--gh-text-xs)', fontWeight: 500,
+                background: 'var(--gh-canvas-inset)', color: 'var(--gh-text-secondary)',
+                padding: '1px 8px', borderRadius: 'var(--gh-radius)',
+              }}>
+                {activeDevices.length}
+              </span>
             </div>
             {activeDevices.length === 0 ? (
-              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--lg-text-tertiary)' }}>
+              <div style={{ padding: '40px', textAlign: 'center' }} className="gh-text-tertiary">
                 暂无在线设备
               </div>
             ) : (
-              <table className="admin-table">
+              <table className="gh-table">
                 <thead>
                   <tr>
-                    <th className="admin-th" style={{ width: '15%' }}>IP 地址</th>
-                    <th className="admin-th" style={{ width: '12%' }}>设备类型</th>
-                    <th className="admin-th" style={{ width: '10%' }}>操作系统</th>
-                    <th className="admin-th" style={{ width: '10%' }}>浏览器</th>
-                    <th className="admin-th admin-cell--date" style={{ width: '16%' }}>首次访问</th>
-                    <th className="admin-th admin-cell--date" style={{ width: '16%' }}>最后访问</th>
-                    <th className="admin-th" style={{ width: '8%', textAlign: 'center' }}>请求次数</th>
+                    <th style={{ width: '15%' }}>IP 地址</th>
+                    <th style={{ width: '12%' }}>设备类型</th>
+                    <th style={{ width: '10%' }}>操作系统</th>
+                    <th style={{ width: '10%' }}>浏览器</th>
+                    <th style={{ width: '16%' }}>首次访问</th>
+                    <th style={{ width: '16%' }}>最后访问</th>
+                    <th style={{ width: '8%', textAlign: 'center' }}>请求次数</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -139,34 +179,45 @@ export default function DeviceMonitorPage() {
                 </tbody>
               </table>
             )}
-          </LiquidGlass>
+          </div>
 
           {historyDevices.length > 0 && (
-            <LiquidGlass variant="blur" className="admin-page-table-wrap" style={{ marginTop: '20px' }}>
-              <div className="api-section-title">
+            <div className="gh-box" style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{
+                padding: 'var(--gh-space-3) var(--gh-space-4)',
+                fontWeight: 600, fontSize: 'var(--gh-text-sm)',
+                borderBottom: '1px solid var(--gh-border)',
+                display: 'flex', alignItems: 'center', gap: 'var(--gh-space-2)',
+              }}>
                 <span>离线历史</span>
-                <span className="api-section-badge api-section-badge--offline">{historyDevices.length}</span>
+                <span style={{
+                  fontSize: 'var(--gh-text-xs)', fontWeight: 500,
+                  background: 'var(--gh-danger-soft)', color: 'var(--gh-danger)',
+                  padding: '1px 8px', borderRadius: 'var(--gh-radius)',
+                }}>
+                  {historyDevices.length}
+                </span>
               </div>
-              <table className="admin-table">
+              <table className="gh-table">
                 <thead>
                   <tr>
-                    <th className="admin-th" style={{ width: '15%' }}>IP 地址</th>
-                    <th className="admin-th" style={{ width: '12%' }}>设备类型</th>
-                    <th className="admin-th" style={{ width: '10%' }}>操作系统</th>
-                    <th className="admin-th" style={{ width: '10%' }}>浏览器</th>
-                    <th className="admin-th admin-cell--date" style={{ width: '16%' }}>首次访问</th>
-                    <th className="admin-th admin-cell--date" style={{ width: '16%' }}>最后访问</th>
-                    <th className="admin-th" style={{ width: '8%', textAlign: 'center' }}>请求次数</th>
+                    <th style={{ width: '15%' }}>IP 地址</th>
+                    <th style={{ width: '12%' }}>设备类型</th>
+                    <th style={{ width: '10%' }}>操作系统</th>
+                    <th style={{ width: '10%' }}>浏览器</th>
+                    <th style={{ width: '16%' }}>首次访问</th>
+                    <th style={{ width: '16%' }}>最后访问</th>
+                    <th style={{ width: '8%', textAlign: 'center' }}>请求次数</th>
                   </tr>
                 </thead>
                 <tbody>
                   {historyDevices.map(renderDeviceRow)}
                 </tbody>
               </table>
-            </LiquidGlass>
+            </div>
           )}
 
-          <div style={{ marginTop: '12px', textAlign: 'right', fontSize: '0.75rem', color: 'var(--lg-text-tertiary)', opacity: 0.6 }}>
+          <div style={{ marginTop: 'var(--gh-space-3)', textAlign: 'right', fontSize: 'var(--gh-text-xs)', color: 'var(--gh-text-tertiary)' }}>
             30 分钟无活动自动标记为离线 · 每 10 秒自动刷新
           </div>
         </>

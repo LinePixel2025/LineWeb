@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
-import LiquidButton from '../components/glass/LiquidButton'
-import LiquidGlass from '../components/glass/LiquidGlass'
+import { GitHubButton, GitHubBadge } from '../components/ui'
 import api from '../lib/api'
 import Pagination from '../components/Pagination'
 
@@ -44,58 +43,65 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="admin-page">
-      <div className="admin-page-header">
-        <h1 className="admin-page-title">文章管理</h1>
-        <LiquidButton to="/admin/new" variant="primary" size="md">写文章</LiquidButton>
+    <div>
+      <div className="gh-page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <h1>文章管理</h1>
+          <p>管理所有文章的状态</p>
+        </div>
+        <GitHubButton variant="primary" size="md" href="/admin/new">
+          写文章
+        </GitHubButton>
       </div>
 
       {loading ? (
-        <div className="admin-spinner">
-          <div className="spinner" />
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--gh-space-7)' }}>
+          <div className="gh-spinner" />
         </div>
       ) : (
-        <LiquidGlass variant="blur" className="admin-page-table-wrap">
-          <table className="admin-table">
+        <div className="gh-box" style={{ padding: 0, overflow: 'hidden' }}>
+          <table className="gh-table">
             <thead>
               <tr>
-                <th className="admin-th admin-th--title">标题</th>
-                <th className="admin-th admin-th--status">状态</th>
-                <th className="admin-th admin-th--actions">操作</th>
+                <th style={{ width: '50%' }}>标题</th>
+                <th>状态</th>
+                <th style={{ textAlign: 'right' }}>操作</th>
               </tr>
             </thead>
             <tbody>
-              {data?.posts.map((post, i) => (
-                <tr key={post.id} className="admin-row fade-in" style={{ animationDelay: `${i * 0.04}s` }}>
-                  <td className="admin-cell admin-cell--title" data-label="标题">
-                    <div className="admin-post-title">{post.title}</div>
-                    <div className="admin-post-date">
+              {data?.posts.map((post) => (
+                <tr key={post.id}>
+                  <td>
+                    <div style={{ fontWeight: 500 }}>{post.title}</div>
+                    <div className="gh-text-tertiary" style={{ fontSize: 'var(--gh-text-xs)' }}>
                       {new Date(post.createdAt).toLocaleDateString('zh-CN')}
                     </div>
                   </td>
-                  <td className="admin-cell admin-cell--status" data-label="状态">
-                    <span className={`admin-badge ${post.published ? 'admin-badge--published' : 'admin-badge--draft'}`}>
-                      {post.published ? '已发布' : '草稿'}
-                    </span>
+                  <td>
+                    {post.published ? (
+                      <GitHubBadge variant="success">已发布</GitHubBadge>
+                    ) : (
+                      <GitHubBadge>草稿</GitHubBadge>
+                    )}
                   </td>
-                  <td className="admin-cell admin-cell--actions" data-label="操作">
-                    <div className="admin-actions">
-                      <LiquidButton size="sm" variant="glass" onClick={() => handleToggle(post)}>
+                  <td>
+                    <div className="gh-actions">
+                      <GitHubButton variant="secondary" size="sm" onClick={() => handleToggle(post)}>
                         {post.published ? '下架' : '发布'}
-                      </LiquidButton>
-                      <LiquidButton size="sm" variant="glass" to={`/admin/edit/${post.id}`}>
+                      </GitHubButton>
+                      <GitHubButton variant="secondary" size="sm" href={`/admin/edit/${post.id}`}>
                         编辑
-                      </LiquidButton>
-                      <LiquidButton size="sm" variant="danger" onClick={() => handleDelete(post.id)}>
+                      </GitHubButton>
+                      <GitHubButton variant="danger" size="sm" onClick={() => handleDelete(post.id)}>
                         删除
-                      </LiquidButton>
+                      </GitHubButton>
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </LiquidGlass>
+        </div>
       )}
 
       {data && data.totalPages > 1 && (

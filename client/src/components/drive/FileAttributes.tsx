@@ -10,7 +10,6 @@ const FileAttributes = memo(function FileAttributes({ item }: FileAttributesProp
   const getFileInfo = () => {
     const info: { label: string; value: string }[] = []
 
-    // 基本信息
     if (!item.isFolder) {
       info.push({ label: '大小', value: formatFileSize(Number(item.size)) })
     }
@@ -26,7 +25,6 @@ const FileAttributes = memo(function FileAttributes({ item }: FileAttributesProp
       info.push({ label: '上传者', value: item.uploadedBy.username })
     }
 
-    // 图片特有信息
     const mime = (item.mimeType || '').toLowerCase()
     const ext = item.name.split('.').pop()?.toLowerCase() || ''
 
@@ -34,17 +32,14 @@ const FileAttributes = memo(function FileAttributes({ item }: FileAttributesProp
       info.push({ label: '类型', value: '图片' })
     }
 
-    // 视频特有信息
     if (mime.startsWith('video/') || ['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext)) {
       info.push({ label: '类型', value: '视频' })
     }
 
-    // 音频特有信息
     if (mime.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'flac'].includes(ext)) {
       info.push({ label: '类型', value: '音频' })
     }
 
-    // 文档特有信息
     if (['pdf'].includes(ext)) {
       info.push({ label: '类型', value: 'PDF 文档' })
     } else if (['doc', 'docx'].includes(ext)) {
@@ -55,12 +50,10 @@ const FileAttributes = memo(function FileAttributes({ item }: FileAttributesProp
       info.push({ label: '类型', value: 'PPT 演示' })
     }
 
-    // 压缩包特有信息
     if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
       info.push({ label: '类型', value: '压缩包' })
     }
 
-    // 代码文件特有信息
     if (['js', 'ts', 'py', 'java', 'go', 'rs', 'c', 'cpp', 'html', 'css'].includes(ext)) {
       info.push({ label: '类型', value: '代码文件' })
     }
@@ -71,13 +64,13 @@ const FileAttributes = memo(function FileAttributes({ item }: FileAttributesProp
   const fileInfo = getFileInfo()
 
   return (
-    <div className="file-attributes">
-      <h4 className="file-attributes-heading">文件信息</h4>
-      <div className="file-attributes-list">
+    <div className="gh-drive-file-attributes">
+      <h4 className="gh-drive-file-attributes-heading">文件信息</h4>
+      <div>
         {fileInfo.map((info, index) => (
-          <div key={index} className="file-attribute-row">
-            <span className="file-attribute-label">{info.label}</span>
-            <span className="file-attribute-value">{info.value}</span>
+          <div key={index} className="gh-drive-file-attribute-row">
+            <span className="gh-drive-file-attribute-label">{info.label}</span>
+            <span className="gh-drive-file-attribute-value">{info.value}</span>
           </div>
         ))}
       </div>

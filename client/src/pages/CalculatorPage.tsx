@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import LiquidGlass from '../components/glass/LiquidGlass'
 
 type Operator = '+' | '-' | '*' | '/' | null
 
@@ -16,7 +15,6 @@ function calc(a: number, b: number, op: Operator): number {
 function formatDisplay(n: number): string {
   if (!isFinite(n)) return 'Error'
   const s = String(n)
-  // Use scientific notation for very large/small numbers
   if (s.length > 14) return n.toExponential(6)
   return s
 }
@@ -30,7 +28,6 @@ export default function CalculatorPage() {
   const [justCalculated, setJustCalculated] = useState(false)
   const displayRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll display to show the rightmost digits
   useEffect(() => {
     if (displayRef.current) {
       displayRef.current.scrollLeft = displayRef.current.scrollWidth
@@ -143,7 +140,6 @@ export default function CalculatorPage() {
 
   const percentage = useCallback(() => {
     const v = parseFloat(display)
-    // If there's a pending operation, treat % as percentage of prevValue
     if (prevValue !== null && operator) {
       const pct = prevValue * (v / 100)
       setDisplay(formatDisplay(pct))
@@ -159,7 +155,6 @@ export default function CalculatorPage() {
     setJustCalculated(false)
   }, [display])
 
-  // Keyboard support
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return
@@ -179,19 +174,17 @@ export default function CalculatorPage() {
   }, [inputDigit, inputDecimal, performOperation, equals, backspace, clear, percentage])
 
   return (
-    <div className="page calc-page">
-      <LiquidGlass variant="blur" chromatic={false} className="calc-container" style={{ padding: '20px' }}>
-        {/* Display */}
+    <div className="gh-page-container">
+      <div className="gh-box" style={{ maxWidth: '360px', margin: '0 auto', padding: '20px' }}>
         <div className="calc-display-wrap">
           <div className="calc-expression">
-            {expression || ' '}
+            {expression || '\u00A0'}
           </div>
           <div className="calc-display" ref={displayRef}>
             {display}
           </div>
         </div>
 
-        {/* Buttons */}
         <div className="calc-grid">
           <CalcBtn label="AC" onClick={clear} variant="fn" />
           <CalcBtn label="⌫" onClick={backspace} variant="fn" />
@@ -218,7 +211,7 @@ export default function CalculatorPage() {
           <CalcBtn label="." onClick={inputDecimal} />
           <CalcBtn label="=" onClick={equals} variant="eq" />
         </div>
-      </LiquidGlass>
+      </div>
     </div>
   )
 }

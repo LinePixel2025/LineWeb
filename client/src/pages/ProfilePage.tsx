@@ -1,333 +1,140 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { useWallpaper } from '../contexts/WallpaperContext'
 import { useNavigate } from 'react-router-dom'
 import UserAvatar from '../components/UserAvatar'
 import DigitalHealthSection from '../components/DigitalHealthSection'
-import LiquidGlass from '../components/glass/LiquidGlass'
-import LiquidButton from '../components/glass/LiquidButton'
+import { GitHubButton, GitHubBadge, GitHubAlert, GitHubTabNav } from '../components/ui'
 import api from '../lib/api'
-import { useGlass } from '../contexts/GlassContext'
-
-const DEFAULT_COLOR = '#0d0d0f'
 
 export default function ProfilePage() {
-  const { user, logout, updateSettings } = useAuth()
-  const { wallpaperTitle, wallpaperDate: currentWallpaperDate,
-    previewWallpaper, history, loadHistory, historyLoading } = useWallpaper()
-  const { glassEnabled, toggleGlass } = useGlass()
+  const { user, logout } = useAuth()
   const navigate = useNavigate()
-
-  const [bgType, setBgType] = useState<'wallpaper' | 'solid'>('wallpaper')
-  const [solidColor, setSolidColor] = useState(DEFAULT_COLOR)
-  const [wallpaperMode, setWallpaperMode] = useState<'latest' | 'random' | 'date'>('latest')
-  const [selectedDate, setSelectedDate] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (!user?.settings) return
-    try {
-      const parsed = JSON.parse(user.settings)
-      const bg = parsed?.background
-      if (!bg) return
-      if (bg.type === 'solid') {
-        setBgType('solid')
-        setSolidColor(bg.solidColor || DEFAULT_COLOR)
-        setWallpaperMode('latest')
-      } else {
-        setBgType('wallpaper')
-        setWallpaperMode(bg.wallpaperMode || 'latest')
-        if (bg.wallpaperDate) setSelectedDate(bg.wallpaperDate)
-      }
-    } catch { /* ignore */ }
-  }, [user?.settings])
-
-  useEffect(() => {
-    if (history.length === 0 && !historyLoading) loadHistory()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleSave = async () => {
-    setSaving(true)
-    setError('')
-    setSaved(false)
-    try {
-      const bg: Record<string, unknown> = { type: bgType }
-      if (bgType === 'solid') {
-        bg.solidColor = solidColor
-      } else {
-        bg.wallpaperMode = wallpaperMode
-        if (wallpaperMode === 'date' && selectedDate) bg.wallpaperDate = selectedDate
-      }
-      await updateSettings(JSON.stringify({ background: bg }))
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '保存失败')
-    } finally {
-      setSaving(false)
-    }
-  }
+  const [activeTab, setActiveTab] = useState('overview')
+  const [saveSuccess, setSaveSuccess] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   const handleLogout = () => { logout(); navigate('/') }
 
-  const handleSelectHistory = (item: { date: string; title: string; copyright: string; image_url_4k?: string; image_url_1080?: string; image_url?: string }) => {
-    setWallpaperMode('date')
-    setSelectedDate(item.date)
-    previewWallpaper({ mode: 'date', date: item.date })
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) {
+      alert('文件大小不能超过 2MB')
+      return
+    }
+    try {
+      const formData = new FormData()
+      formData.append('avatar', file)
+      const res = await fetch('/api/auth/avatar', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('lineweb_token')}` },
+        body: formData,
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || '上传失败')
+      }
+      window.location.reload()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '上传失败')
+    }
+    e.target.value = ''
   }
 
-  const isSelected = (date: string) => wallpaperMode === 'date' && selectedDate === date
+  const handleAvatarRemove = async () => {
+    try {
+      await api.delete('/auth/avatar')
+      window.location.reload()
+    } catch {
+      alert('删除失败')
+    }
+  }
 
   return (
-    <div className="page container profile-page" style={{ maxWidth: '520px', position: 'relative' }}>
-      {/* Page-level dark backdrop */}
-      <div style={{ position: 'fixed', inset: 0, zIndex: -1, background: 'rgba(0,0,0,0.45)', pointerEvents: 'none' }} />
+    <div className="gh-page-container" style={{ maxWidth: '900px' }}>
+      <div className="gh-page-header">
+        <h1 className="gh-page-title">个人资料</h1>
+      </div>
 
-      <h1 style={{ marginBottom: '28px', color: 'var(--lg-text-primary)', fontSize: '1.6rem', fontWeight: 600, letterSpacing: '-0.01em' }}>个人资料</h1>
-
-      {/* 资料卡片 */}
-      <LiquidGlass variant="strong" chromatic={false} style={{ marginBottom: '24px' }} className="profile-card">
-        <div style={{ marginBottom: '22px' }}>
-          <span className="profile-label">用户名</span>
-          <span style={{ fontSize: '1.1rem', fontWeight: 500, color: 'var(--lg-text-primary)' }}>{user?.username}</span>
-        </div>
-        <div style={{ marginBottom: '22px' }}>
-          <span className="profile-label">邮箱</span>
-          <span style={{ fontSize: '1rem', color: 'var(--lg-text-secondary)' }}>{user?.email}</span>
-        </div>
-        <div style={{ marginBottom: '28px' }}>
-          <span className="profile-label">角色</span>
-          <span style={{ fontSize: '1rem', color: user?.role === 'admin' ? 'var(--lg-accent)' : 'var(--lg-text-secondary)' }}>
-            {user?.role === 'admin' ? '管理员' : '用户'}
-          </span>
-        </div>
-        <div style={{ marginBottom: '22px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <UserAvatar userId={user!.id} username={user!.username} size="xl" />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label className="liquid-btn glass sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 16px' }}>
-              上传头像
-              <input
-                type="file"
-                accept="image/*"
-                style={{ display: 'none' }}
-                onChange={async (e) => {
-                  const file = e.target.files?.[0]
-                  if (!file) return
-                  if (file.size > 2 * 1024 * 1024) {
-                    alert('文件大小不能超过 2MB')
-                    return
-                  }
-                  const formData = new FormData()
-                  formData.append('avatar', file)
-                  try {
-                    const res = await fetch('/api/auth/avatar', {
-                      method: 'POST',
-                      headers: { 'Authorization': `Bearer ${localStorage.getItem('lineweb_token')}` },
-                      body: formData,
-                    })
-                    if (!res.ok) {
-                      const data = await res.json().catch(() => ({}))
-                      throw new Error(data.error || '上传失败')
-                    }
-                    window.location.reload()
-                  } catch (err) {
-                    alert(err instanceof Error ? err.message : '上传失败')
-                  }
-                  e.target.value = ''
-                }}
-              />
-            </label>
-            <LiquidButton size="sm" variant="ghost" onClick={async () => {
-              try {
-                await api.delete('/auth/avatar')
-                window.location.reload()
-              } catch {
-                alert('删除失败')
-              }
-            }}>
-              移除头像
-            </LiquidButton>
-          </div>
-        </div>
-        <LiquidButton variant="danger" size="md" onClick={handleLogout}>
-          退出登录
-        </LiquidButton>
-      </LiquidGlass>
-
-      {/* 网站个性化设置 */}
-      <LiquidGlass variant="strong" chromatic={false} className="profile-card">
-        <h2 style={{ margin: '0 0 22px', fontSize: '1.1rem', fontWeight: 600, color: 'var(--lg-text-primary)' }}>网站个性化设置</h2>
-
-        {/* 背景类型切换 */}
-        <div style={{ marginBottom: '22px' }}>
-          <span className="profile-label">背景样式</span>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            {(['wallpaper', 'solid'] as const).map(t => (
-              <button key={t}
-                onClick={() => setBgType(t)}
-                style={{
-                  flex: 1, padding: '10px 16px', borderRadius: '12px', border: '1px solid',
-                  borderColor: bgType === t ? 'var(--lg-accent)' : 'rgba(255,255,255,0.10)',
-                  background: bgType === t ? 'rgba(41,151,255,0.10)' : 'rgba(255,255,255,0.04)',
-                  color: bgType === t ? 'var(--lg-accent)' : 'var(--lg-text-secondary)',
-                  cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500,
-                  fontFamily: 'var(--lg-font)', transition: 'all 0.2s ease',
-                }}
-              >
-                {t === 'wallpaper' ? '每日壁纸' : '纯色背景'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* 纯色背景选项 */}
-        {bgType === 'solid' && (
-          <div style={{ marginBottom: '22px' }}>
-            <span className="profile-label">选择颜色</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              <input type="color" value={solidColor}
-                onChange={(e) => setSolidColor(e.target.value)}
-                style={{ width: '44px', height: '44px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.10)', padding: 0, cursor: 'pointer', background: 'none' }}
-              />
-              <input type="text" value={solidColor}
-                onChange={(e) => setSolidColor(e.target.value)}
-                style={{ flex: 1, padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.10)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontFamily: 'var(--lg-font)', fontSize: '0.85rem', outline: 'none' }}
-                placeholder="#000000"
-              />
-              <div style={{ width: '38px', height: '38px', borderRadius: '8px', background: solidColor, border: '1px solid rgba(255,255,255,0.15)', flexShrink: 0 }} />
+      <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+        {/* Left: Profile Info */}
+        <div style={{ flex: '0 0 auto', minWidth: '240px' }}>
+          <div className="gh-box" style={{ textAlign: 'center' }}>
+            <UserAvatar userId={user!.id} username={user!.username} size="xl" />
+            <h2 style={{ fontSize: '1.25rem', margin: '12px 0 4px' }}>{user?.username}</h2>
+            <p className="gh-text-secondary" style={{ fontSize: '0.88rem' }}>{user?.email}</p>
+            <div style={{ marginTop: '12px' }}>
+              <GitHubBadge variant={user?.role === 'admin' ? 'accent' : 'default'}>
+                {user?.role === 'admin' ? '管理员' : '用户'}
+              </GitHubBadge>
+            </div>
+            <div style={{ marginTop: '20px', display: 'flex', gap: '8px', flexDirection: 'column', alignItems: 'center' }}>
+              <label style={{ cursor: 'pointer', display: 'inline-flex' }}>
+                <span className="gh-btn gh-btn--secondary gh-btn--sm">上传头像</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={handleAvatarUpload}
+                />
+              </label>
+              <GitHubButton variant="ghost" size="sm" onClick={handleAvatarRemove}>
+                移除头像
+              </GitHubButton>
+              <div style={{ borderTop: '1px solid var(--gh-color-border-default)', width: '100%', margin: '8px 0' }} />
+              <GitHubButton variant="danger" size="sm" onClick={handleLogout}>
+                退出登录
+              </GitHubButton>
             </div>
           </div>
-        )}
+        </div>
 
-        {/* 壁纸模式选项 */}
-        {bgType === 'wallpaper' && (
-          <>
-            <div style={{ marginBottom: '18px' }}>
-              <span className="profile-label">壁纸来源</span>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {([
-                  { key: 'latest' as const, label: '每日更新' },
-                  { key: 'random' as const, label: '随机历史' },
-                  { key: 'date' as const, label: '选择日期' },
-                ]).map(({ key, label }) => (
-                  <button key={key}
-                    onClick={() => { setWallpaperMode(key); if (key === 'random') previewWallpaper({ mode: 'random' }); else if (key === 'latest') previewWallpaper({ mode: 'latest' }) }}
-                    style={{
-                      padding: '8px 16px', borderRadius: '9999px', border: '1px solid',
-                      borderColor: wallpaperMode === key ? 'var(--lg-accent)' : 'rgba(255,255,255,0.10)',
-                      background: wallpaperMode === key ? 'rgba(41,151,255,0.10)' : 'rgba(255,255,255,0.04)',
-                      color: wallpaperMode === key ? 'var(--lg-accent)' : 'var(--lg-text-secondary)',
-                      cursor: 'pointer', fontSize: '0.82rem', fontWeight: 500,
-                      fontFamily: 'var(--lg-font)', transition: 'all 0.2s ease',
-                    }}
-                  >{label}</button>
-                ))}
-              </div>
-            </div>
+        {/* Right: Content Tabs */}
+        <div style={{ flex: '1 1 400px', minWidth: 0 }}>
+          <GitHubTabNav
+            tabs={[
+              { value: 'overview', label: '概览' },
+            ]}
+            active={activeTab}
+            onChange={setActiveTab}
+          />
 
-            {/* 历史壁纸选择 */}
-            {wallpaperMode === 'date' && (
-              <div style={{ marginBottom: '22px' }}>
-                <span className="profile-label">
-                  挑选一张历史壁纸
-                  <span style={{ color: 'rgba(255,255,255,0.25)', marginLeft: 6, textTransform: 'none', letterSpacing: 0 }}>（点击预览）</span>
-                </span>
-                {historyLoading ? (
-                  <div style={{ textAlign: 'center', padding: '28px', color: 'rgba(255,255,255,0.3)', fontSize: '0.85rem' }}>加载中…</div>
-                ) : history.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '28px', color: 'rgba(255,255,255,0.3)', fontSize: '0.85rem' }}>暂无历史壁纸</div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: '10px', maxHeight: '300px', overflowY: 'auto', padding: '2px' }}>
-                    {history.map((item) => {
-                      const sel = isSelected(item.date)
-                      return (
-                        <button key={item.date}
-                          onClick={() => handleSelectHistory(item)}
-                          title={`${item.title || item.date}\n${item.copyright || ''}`}
-                          style={{
-                            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
-                            padding: '6px', borderRadius: '10px',
-                            border: sel ? '2px solid var(--lg-accent)' : '1px solid rgba(255,255,255,0.08)',
-                            background: sel ? 'rgba(41,151,255,0.08)' : 'rgba(255,255,255,0.02)',
-                            cursor: 'pointer', transition: 'all 0.2s ease', fontFamily: 'var(--lg-font)',
-                          }}
-                        >
-                          <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: '6px', background: item.image_url_4k ? `url(${item.image_url_4k}) center/cover no-repeat` : 'rgba(255,255,255,0.04)' }} />
-                          <span style={{ fontSize: '0.62rem', color: sel ? 'var(--lg-accent)' : 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{item.date}</span>
-                        </button>
-                      )
-                    })}
+          <div style={{ marginTop: '16px' }}>
+            {activeTab === 'overview' && (
+              <>
+                <div className="gh-box">
+                  <h3 style={{ fontSize: '1rem', margin: '0 0 16px' }}>账号信息</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div>
+                      <span className="gh-text-secondary" style={{ fontSize: '0.78rem' }}>用户名</span>
+                      <div style={{ fontSize: '0.95rem' }}>{user?.username}</div>
+                    </div>
+                    <div>
+                      <span className="gh-text-secondary" style={{ fontSize: '0.78rem' }}>邮箱</span>
+                      <div style={{ fontSize: '0.95rem' }}>{user?.email}</div>
+                    </div>
+                    <div>
+                      <span className="gh-text-secondary" style={{ fontSize: '0.78rem' }}>角色</span>
+                      <div style={{ fontSize: '0.95rem' }}>{user?.role === 'admin' ? '管理员' : '用户'}</div>
+                    </div>
                   </div>
+                </div>
+
+                {saveSuccess && (
+                  <GitHubAlert variant="success">设置已保存</GitHubAlert>
                 )}
-              </div>
-            )}
+                {saveError && (
+                  <GitHubAlert variant="danger">{saveError}</GitHubAlert>
+                )}
 
-            {wallpaperTitle && (
-              <div style={{ marginBottom: '18px', padding: '10px 14px', borderRadius: '10px', background: 'rgba(255,255,255,0.03)', fontSize: '0.78rem', color: 'rgba(255,255,255,0.45)' }}>
-                <div style={{ fontWeight: 500, color: 'rgba(255,255,255,0.65)' }}>{wallpaperTitle}</div>
-                {currentWallpaperDate && <div style={{ marginTop: 2 }}>{currentWallpaperDate}</div>}
-              </div>
+                <div style={{ marginTop: '16px' }}>
+                  <DigitalHealthSection />
+                </div>
+              </>
             )}
-          </>
-        )}
-
-        {/* 液态玻璃效果 */}
-        <div style={{ marginBottom: '22px' }}>
-          <span className="profile-label">液态玻璃效果</span>
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '14px 18px', borderRadius: '14px',
-            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-          }}>
-            <div>
-              <div style={{ fontSize: '0.95rem', fontWeight: 500, color: 'var(--lg-text-primary)', marginBottom: '2px' }}>
-                液态玻璃
-              </div>
-              <div style={{ fontSize: '0.78rem', color: 'var(--lg-text-tertiary)' }}>
-                {glassEnabled ? 'SVG 折射 + 交互高光 + 色差' : '关闭后仅保留毛玻璃'}
-              </div>
-            </div>
-            <button
-              onClick={toggleGlass}
-              style={{
-                position: 'relative', width: '48px', height: '28px', borderRadius: '14px',
-                border: '1px solid', flexShrink: 0, cursor: 'pointer',
-                borderColor: glassEnabled ? 'var(--lg-accent)' : 'rgba(255,255,255,0.15)',
-                background: glassEnabled ? 'var(--lg-accent)' : 'rgba(255,255,255,0.08)',
-                transition: 'all 0.25s ease',
-              }}
-            >
-              <span style={{
-                position: 'absolute', top: '2px',
-                left: glassEnabled ? '22px' : '2px',
-                width: '22px', height: '22px', borderRadius: '50%',
-                background: '#fff',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-                transition: 'left 0.25s ease',
-              }} />
-            </button>
           </div>
         </div>
-
-        {/* 保存 */}
-        <div className="profile-btn-row" style={{ marginTop: '6px' }}>
-          <button onClick={handleSave} disabled={saving}
-            style={{
-              padding: '10px 28px', borderRadius: '9999px', fontWeight: 500, fontSize: '0.9rem',
-              background: 'linear-gradient(135deg, var(--lg-accent), #40a9ff)',
-              color: '#fff', border: 'none', cursor: saving ? 'not-allowed' : 'pointer',
-              opacity: saving ? 0.6 : 1, boxShadow: '0 4px 12px rgba(41,151,255,0.3)',
-              fontFamily: 'var(--lg-font)',
-            }}
-          >{saving ? '保存中…' : '保存设置'}</button>
-          {saved && <span style={{ color: 'var(--lg-success)', fontSize: '0.85rem', fontWeight: 500 }}>✓ 已保存</span>}
-          {error && <span style={{ color: 'var(--lg-danger)', fontSize: '0.85rem' }}>{error}</span>}
-        </div>
-      </LiquidGlass>
-
-      <DigitalHealthSection />
+      </div>
     </div>
   )
 }

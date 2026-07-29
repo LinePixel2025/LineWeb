@@ -4,7 +4,6 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { type ReactNode } from 'react'
 import PostPage from '../PostPage'
 import { usePost } from '../../hooks/useQueries'
-import { GlassProvider } from '../../contexts/GlassContext'
 import { AuthProvider } from '../../contexts/AuthContext'
 
 vi.mock('../../hooks/useQueries', () => ({
@@ -27,11 +26,9 @@ function Wrapper({ children }: { children: ReactNode }) {
   return (
     <MemoryRouter initialEntries={['/posts/fsgf']}>
       <AuthProvider>
-        <GlassProvider>
           <Routes>
             <Route path="/posts/:slug" element={children} />
           </Routes>
-        </GlassProvider>
       </AuthProvider>
     </MemoryRouter>
   )
@@ -62,7 +59,7 @@ describe('PostPage', () => {
 
     render(<PostPage />, { wrapper: Wrapper })
 
-    expect(document.querySelector('.spinner')).toBeInTheDocument()
+    expect(document.querySelector('.gh-spinner')).toBeInTheDocument()
   })
 
   it('错误时显示 文章未找到', () => {
@@ -96,7 +93,7 @@ describe('PostPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('fsgf顺丰')).toBeInTheDocument()
-      expect(screen.getByText('Line')).toBeInTheDocument()
+      expect(screen.getByText('Line', { selector: '.gh-text-secondary' })).toBeInTheDocument()
       expect(screen.getByText('哥哥')).toBeInTheDocument()
     })
   })
@@ -115,12 +112,10 @@ describe('PostPage', () => {
     render(
       <MemoryRouter initialEntries={['/posts/']}>
         <AuthProvider>
-          <GlassProvider>
             <Routes>
               <Route path="/posts/:slug" element={<PostPage />} />
               <Route path="*" element={<div>文章未找到</div>} />
             </Routes>
-          </GlassProvider>
         </AuthProvider>
       </MemoryRouter>,
     )

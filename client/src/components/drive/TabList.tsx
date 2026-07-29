@@ -23,20 +23,20 @@ const TabList = memo(function TabList({ onTabSelect }: TabListProps) {
   }
 
   return (
-    <div className="tab-list">
-      <h4 className="tab-list-heading">打开的标签</h4>
-      <div className="tab-list-items">
+    <div className="gh-drive-tab-list">
+      <h4 className="gh-drive-tab-list-heading">打开的标签</h4>
+      <div>
         {state.tabs.map(tab => (
           <div
             key={tab.id}
-            className={`tab-item ${tab.id === state.activeTabId ? 'tab-item--active' : ''}`}
+            className={`gh-drive-tab-item ${tab.id === state.activeTabId ? 'gh-drive-tab-item--active' : ''}`}
             onClick={() => handleTabClick(tab.id)}
           >
-            <span className="tab-item-icon">📁</span>
-            <span className="tab-item-name">{tab.folderName}</span>
+            <span className="gh-drive-tab-item-icon">📁</span>
+            <span className="gh-drive-tab-item-name">{tab.folderName}</span>
             {state.tabs.length > 1 && (
               <button
-                className="tab-item-close"
+                className="gh-drive-tab-item-close"
                 onClick={(e) => handleCloseClick(e, tab.id)}
                 aria-label={`关闭${tab.folderName}标签`}
               >

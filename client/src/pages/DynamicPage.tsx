@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import DOMPurify from 'dompurify'
 import { usePageBySlug } from '../hooks/useQueries'
-import LiquidButton from '../components/glass/LiquidButton'
+import { GitHubButton } from '../components/ui'
 
 interface PageSchema {
   id: number
@@ -25,21 +25,18 @@ export default function DynamicPage() {
 
   if (loading) {
     return (
-      <div className="page container" style={{ display: 'flex', justifyContent: 'center', paddingTop: '120px' }}>
-        <div className="spinner" />
+      <div className="gh-page-container" style={{ display: 'flex', justifyContent: 'center', paddingTop: '120px' }}>
+        <div className="gh-spinner" />
       </div>
     )
   }
 
   if (error || !page) {
     return (
-      <div className="page container" style={{ textAlign: 'center', paddingTop: '120px' }}>
+      <div className="gh-page-container" style={{ textAlign: 'center', paddingTop: '120px' }}>
         <h2 style={{ marginBottom: 16 }}>页面未找到</h2>
-        <p className="text-secondary" style={{ marginBottom: 24 }}>{error || '该页面不存在或尚未发布'}</p>
-        <Link to="/features" className="liquid-btn glass md" target="_blank" rel="noopener noreferrer">
-          ← 返回功能界面
-          <span className="btn-flare" />
-        </Link>
+        <p className="gh-text-secondary" style={{ marginBottom: 24 }}>{error || '该页面不存在或尚未发布'}</p>
+        <GitHubButton href="/features" variant="secondary">&larr; 返回功能界面</GitHubButton>
       </div>
     )
   }
@@ -48,13 +45,15 @@ export default function DynamicPage() {
   try { components = JSON.parse(page.schema) } catch { components = [] }
 
   return (
-    <div className="page container" style={{ maxWidth: '800px', paddingTop: 'calc(var(--lg-nav-height) + 60px)' }}>
+    <div className="gh-page-container" style={{ maxWidth: '800px' }}>
       <div style={{ marginBottom: 32 }}>
-        <Link to="/features" className="text-tertiary" style={{ fontSize: '0.85rem' }} target="_blank" rel="noopener noreferrer">
-          ← 返回功能界面
-        </Link>
+        <Link to="/features" className="gh-text-tertiary" style={{ fontSize: '0.85rem' }}>&larr; 返回功能界面</Link>
       </div>
-      <h1 style={{ marginBottom: 32 }}>{page.title}</h1>
+
+      <div className="gh-page-header">
+        <h1 className="gh-page-title">{page.title}</h1>
+      </div>
+
       <RenderComponents components={components} />
     </div>
   )
@@ -69,7 +68,6 @@ function RenderComponents({ components }: { components: ComponentData[] }) {
 }
 
 function RenderComponent({ comp }: { comp: ComponentData }) {
-  // useMemo 必须在 switch 之前调用，不能在 case 内条件调用（React Hooks 规则）
   const sanitizedHtml = useMemo(
     () => comp.type === 'html' ? DOMPurify.sanitize((comp.props.html as string) || '') : '',
     [comp.type, comp.props.html],
@@ -90,25 +88,25 @@ function RenderComponent({ comp }: { comp: ComponentData }) {
     case 'image': {
       const src = comp.props.src as string
       return src
-        ? <img src={src} alt={(comp.props.alt as string) || ''} loading="lazy" style={{ maxWidth: '100%', borderRadius: 'var(--lg-radius-md)' }} />
+        ? <img src={src} alt={(comp.props.alt as string) || ''} loading="lazy" style={{ maxWidth: '100%', borderRadius: '6px' }} />
         : null
     }
     case 'button': {
-      const variant = ((comp.props.variant as string) || 'primary') as 'primary' | 'glass' | 'ghost' | 'danger'
+      const variant = ((comp.props.variant as string) || 'primary') as 'primary' | 'secondary' | 'danger' | 'ghost'
       const link = comp.props.link as string
       const text = (comp.props.text as string) || '按钮'
       if (link) {
-        return <LiquidButton href={link} variant={variant} size="md">{text}</LiquidButton>
+        return <GitHubButton href={link} variant={variant}>{text}</GitHubButton>
       }
-      return <LiquidButton variant={variant} size="md">{text}</LiquidButton>
+      return <GitHubButton variant={variant}>{text}</GitHubButton>
     }
     case 'divider':
-      return <hr style={{ border: 'none', borderTop: '1px solid var(--lg-glass-border)', margin: 0 }} />
+      return <hr style={{ border: 'none', borderTop: '1px solid var(--gh-color-border-default)', margin: 0 }} />
     case 'spacer':
       return <div style={{ height: (comp.props.height as number) || 24 }} />
     case 'card':
       return (
-        <div className="lg-surface" style={{ padding: (comp.props.padding as number) || 24 }}>
+        <div className="gh-box" style={{ padding: (comp.props.padding as number) || 24 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {comp.children.length > 0
               ? comp.children.map(child => <RenderComponent key={child.id} comp={child} />)

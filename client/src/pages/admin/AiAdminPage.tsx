@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import LiquidGlass from '../../components/glass/LiquidGlass'
+import { GitHubButton, GitHubAlert } from '../../components/ui'
 import api from '../../lib/api'
 
 interface AiConfigData {
   id: number
   provider: string
   model: string
-  apiKey: string       // 脱敏后的 key（sk-…xxxx）
+  apiKey: string
   baseUrl: string | null
   systemPrompt: string
   isEnabled: boolean
@@ -27,7 +27,6 @@ export default function AiAdminPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  // 表单状态
   const [provider, setProvider] = useState('openai')
   const [model, setModel] = useState('gpt-4o-mini')
   const [apiKey, setApiKey] = useState('')
@@ -37,7 +36,6 @@ export default function AiAdminPage() {
   const [formError, setFormError] = useState('')
   const [savedMsg, setSavedMsg] = useState('')
 
-  // 是否显示 API Key 明文输入（保存后脱敏，用户再加新 chunk 才能改）
   const [apiKeyModified, setApiKeyModified] = useState(false)
 
   const fetchConfig = useCallback(() => {
@@ -62,7 +60,6 @@ export default function AiAdminPage() {
 
   useEffect(() => { fetchConfig() }, [fetchConfig])
 
-  // 切换提供商时自动填充默认 Base URL 和模型
   const handleProviderChange = (value: string) => {
     setProvider(value)
     const preset = PROVIDER_PRESETS.find(p => p.value === value)
@@ -84,9 +81,6 @@ export default function AiAdminPage() {
       setFormError('请输入模型名称')
       return
     }
-    if (!apiKey.trim() && !apiKeyModified) {
-      // apiKey 为空且未修改，说明原配置就没有 key
-    }
     setSaving(true)
     setFormError('')
     setSavedMsg('')
@@ -103,7 +97,6 @@ export default function AiAdminPage() {
       } else {
         body.baseUrl = null
       }
-      // 如果用户修改了 API Key（输入了新值），才发送
       if (apiKeyModified && apiKey.trim()) {
         body.apiKey = apiKey.trim()
       }
@@ -112,7 +105,7 @@ export default function AiAdminPage() {
       setConfig(result)
       setApiKey(result.apiKey)
       setApiKeyModified(false)
-      setSavedMsg('✅ 配置已保存')
+      setSavedMsg('配置已保存')
       setTimeout(() => setSavedMsg(''), 3000)
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : '保存失败')
@@ -123,8 +116,8 @@ export default function AiAdminPage() {
 
   if (loading) {
     return (
-      <div className="admin-page">
-        <div className="admin-spinner"><div className="spinner" /></div>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--gh-space-7)' }}>
+        <div className="gh-spinner" />
       </div>
     )
   }
@@ -134,32 +127,51 @@ export default function AiAdminPage() {
     ? preset.models
     : (model ? [model] : [])
 
+  const labelStyle: React.CSSProperties = {
+    display: 'block', marginBottom: 'var(--gh-space-2)',
+    fontWeight: 600, fontSize: 'var(--gh-text-sm)', color: 'var(--gh-text)',
+  }
+
+  const inputStyle: React.CSSProperties = {
+    padding: '6px 12px',
+    fontSize: 'var(--gh-text-sm)',
+    fontFamily: 'var(--gh-font)',
+    color: 'var(--gh-text)',
+    background: 'var(--gh-canvas)',
+    border: '1px solid var(--gh-border)',
+    borderRadius: 'var(--gh-radius)',
+    outline: 'none',
+    width: '100%',
+    boxSizing: 'border-box',
+  }
+
   return (
-    <div className="admin-page">
-      <div className="admin-page-header">
-        <h1 className="admin-page-title">AI 助手配置</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span
-            style={{
-              fontSize: '0.8rem',
-              padding: '3px 10px',
-              borderRadius: '9999px',
-              background: isEnabled ? 'rgba(82,196,26,0.2)' : 'rgba(255,255,255,0.06)',
-              color: isEnabled ? '#52c41a' : 'var(--lg-text-tertiary)',
-              fontWeight: 500,
-            }}
-          >
-            {isEnabled ? '已启用' : '已禁用'}
-          </span>
+    <div>
+      <div className="gh-page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <h1>AI 助手配置</h1>
+          <p>配置网站 AI 聊天助手</p>
         </div>
+        <span style={{
+          fontSize: 'var(--gh-text-xs)', fontWeight: 500, padding: '3px 10px',
+          borderRadius: 'var(--gh-radius)',
+          background: isEnabled ? 'var(--gh-success-soft)' : 'var(--gh-canvas-inset)',
+          color: isEnabled ? 'var(--gh-success)' : 'var(--gh-text-tertiary)',
+        }}>
+          {isEnabled ? '已启用' : '已禁用'}
+        </span>
       </div>
 
-      <LiquidGlass variant="blur" className="admin-page-table-wrap" style={{ padding: 'var(--lg-space-6)' }}>
+      <div className="gh-box">
         {/* 启用开关 */}
-        <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: 'var(--gh-space-5)', paddingBottom: 'var(--gh-space-4)',
+          borderBottom: '1px solid var(--gh-border-muted)',
+        }}>
           <div>
-            <div style={{ fontWeight: 600, marginBottom: '4px' }}>启用 AI 助手</div>
-            <div style={{ fontSize: '0.85rem', color: 'var(--lg-text-tertiary)' }}>
+            <div style={{ fontWeight: 600 }}>启用 AI 助手</div>
+            <div className="gh-text-tertiary" style={{ fontSize: 'var(--gh-text-xs)' }}>
               开启后，网站首页右下角将显示 AI 聊天按钮
             </div>
           </div>
@@ -167,8 +179,8 @@ export default function AiAdminPage() {
             onClick={() => setIsEnabled(!isEnabled)}
             style={{
               width: '52px', height: '28px', borderRadius: '14px', border: 'none', cursor: 'pointer',
-              background: isEnabled ? 'var(--lg-accent)' : 'rgba(255,255,255,0.12)',
-              position: 'relative', transition: 'background var(--lg-transition)',
+              background: isEnabled ? 'var(--gh-accent)' : 'var(--gh-border)',
+              position: 'relative', transition: 'background var(--gh-transition)',
               flexShrink: 0,
             }}
             aria-label={isEnabled ? '禁用 AI 助手' : '启用 AI 助手'}
@@ -179,7 +191,7 @@ export default function AiAdminPage() {
                 left: isEnabled ? '27px' : '3px',
                 width: '22px', height: '22px', borderRadius: '50%',
                 background: '#fff',
-                transition: 'left var(--lg-transition)',
+                transition: 'left var(--gh-transition)',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
               }}
             />
@@ -187,24 +199,23 @@ export default function AiAdminPage() {
         </div>
 
         {/* 提供商选择 */}
-        <div style={{ marginBottom: '20px' }}>
+        <div style={{ marginBottom: 'var(--gh-space-4)' }}>
           <label style={labelStyle}>AI 提供商</label>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 'var(--gh-space-2)', flexWrap: 'wrap' }}>
             {PROVIDER_PRESETS.map(p => (
               <button
                 key={p.value}
                 onClick={() => handleProviderChange(p.value)}
                 style={{
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  border: provider === p.value ? '1.5px solid var(--lg-accent)' : '1px solid rgba(255,255,255,0.1)',
-                  background: provider === p.value ? 'rgba(41,151,255,0.1)' : 'rgba(255,255,255,0.04)',
-                  color: provider === p.value ? 'var(--lg-accent)' : 'var(--lg-text-secondary)',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
+                  padding: '6px 14px',
+                  borderRadius: 'var(--gh-radius)',
+                  border: provider === p.value ? '1.5px solid var(--gh-accent)' : '1px solid var(--gh-border)',
+                  background: provider === p.value ? 'var(--gh-accent-soft)' : 'var(--gh-canvas)',
+                  color: provider === p.value ? 'var(--gh-accent)' : 'var(--gh-text-secondary)',
+                  cursor: 'pointer', fontSize: 'var(--gh-text-sm)',
                   fontWeight: provider === p.value ? 600 : 400,
-                  transition: 'all var(--lg-transition)',
-                  fontFamily: 'var(--lg-font)',
+                  fontFamily: 'var(--gh-font)',
+                  transition: 'all var(--gh-transition)',
                 }}
               >
                 {p.label}
@@ -214,46 +225,44 @@ export default function AiAdminPage() {
         </div>
 
         {/* 模型名称 */}
-        <div style={{ marginBottom: '20px' }}>
+        <div style={{ marginBottom: 'var(--gh-space-4)' }}>
           <label style={labelStyle}>模型</label>
-          {modelOptions.length > 0 ? (
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+          {modelOptions.length > 0 && (
+            <div style={{ display: 'flex', gap: 'var(--gh-space-2)', flexWrap: 'wrap', marginBottom: 'var(--gh-space-2)' }}>
               {modelOptions.map(m => (
                 <button
                   key={m}
                   onClick={() => setModel(m)}
                   style={{
-                    padding: '6px 14px',
-                    borderRadius: '6px',
-                    border: model === m ? '1.5px solid var(--lg-accent)' : '1px solid rgba(255,255,255,0.1)',
-                    background: model === m ? 'rgba(41,151,255,0.1)' : 'rgba(255,255,255,0.04)',
-                    color: model === m ? 'var(--lg-accent)' : 'var(--lg-text-secondary)',
-                    cursor: 'pointer',
-                    fontSize: '0.85rem',
-                    fontFamily: 'var(--lg-font-mono), monospace',
-                    transition: 'all var(--lg-transition)',
+                    padding: '5px 12px',
+                    borderRadius: 'var(--gh-radius)',
+                    border: model === m ? '1.5px solid var(--gh-accent)' : '1px solid var(--gh-border)',
+                    background: model === m ? 'var(--gh-accent-soft)' : 'var(--gh-canvas)',
+                    color: model === m ? 'var(--gh-accent)' : 'var(--gh-text-secondary)',
+                    cursor: 'pointer', fontSize: 'var(--gh-text-xs)',
+                    fontFamily: 'var(--gh-font-mono)',
+                    transition: 'all var(--gh-transition)',
                   }}
                 >
                   {m}
                 </button>
               ))}
             </div>
-          ) : null}
+          )}
           <input
-            className="admin-modal-input"
+            className="gh-input gh-input--full"
             type="text"
             value={model}
             onChange={e => setModel(e.target.value)}
             placeholder={provider === 'custom' ? '输入模型名称，如 gpt-4o-mini' : '自定义模型名（可选）'}
-            style={{ marginTop: modelOptions.length > 0 ? '0' : '0' }}
           />
         </div>
 
         {/* API Key */}
-        <div style={{ marginBottom: '20px' }}>
+        <div style={{ marginBottom: 'var(--gh-space-4)' }}>
           <label style={labelStyle}>API Key</label>
           <input
-            className="admin-modal-input"
+            className="gh-input gh-input--full"
             type="password"
             value={apiKey}
             onChange={e => {
@@ -268,7 +277,7 @@ export default function AiAdminPage() {
             }}
             placeholder={config?.apiKey && !apiKeyModified ? '已设置（点击输入新 Key 替换）' : '输入 API Key'}
           />
-          <div style={{ fontSize: '0.78rem', color: 'var(--lg-text-tertiary)', marginTop: '4px' }}>
+          <div style={{ fontSize: 'var(--gh-text-xs)', color: 'var(--gh-text-tertiary)', marginTop: '4px' }}>
             {config?.apiKey && !apiKeyModified
               ? `当前: ${config.apiKey}`
               : 'API Key 仅保存在服务器，不会暴露给前端'}
@@ -276,75 +285,58 @@ export default function AiAdminPage() {
         </div>
 
         {/* Base URL */}
-        <div style={{ marginBottom: '20px' }}>
+        <div style={{ marginBottom: 'var(--gh-space-4)' }}>
           <label style={labelStyle}>Base URL（可选）</label>
           <input
-            className="admin-modal-input"
+            className="gh-input gh-input--full"
             type="text"
             value={baseUrl}
             onChange={e => setBaseUrl(e.target.value)}
             placeholder={provider === 'openai' ? '默认 https://api.openai.com/v1' : '自定义 API 端点（用于代理/中转）'}
           />
-          <div style={{ fontSize: '0.78rem', color: 'var(--lg-text-tertiary)', marginTop: '4px' }}>
+          <div style={{ fontSize: 'var(--gh-text-xs)', color: 'var(--gh-text-tertiary)', marginTop: '4px' }}>
             留空使用官方默认端点；使用代理时填写中转地址
           </div>
         </div>
 
         {/* System Prompt */}
-        <div style={{ marginBottom: '24px' }}>
+        <div style={{ marginBottom: 'var(--gh-space-5)' }}>
           <label style={labelStyle}>System Prompt</label>
           <textarea
-            className="admin-modal-input"
+            className="gh-input gh-input--full"
             value={systemPrompt}
             onChange={e => setSystemPrompt(e.target.value)}
             rows={5}
-            style={{ resize: 'vertical', minHeight: '100px', fontFamily: 'var(--lg-font)' }}
+            style={{ resize: 'vertical', minHeight: '100px', fontFamily: 'var(--gh-font)' }}
             placeholder="输入系统提示词…"
           />
-          <div style={{ fontSize: '0.78rem', color: 'var(--lg-text-tertiary)', marginTop: '4px' }}>
+          <div style={{ fontSize: 'var(--gh-text-xs)', color: 'var(--gh-text-tertiary)', marginTop: '4px' }}>
             系统会自动在末尾拼接当前网站的文章列表和页面信息作为上下文
           </div>
         </div>
 
         {/* 错误 & 成功提示 */}
         {formError && (
-          <div style={{ color: 'var(--lg-text-danger)', fontSize: '0.85rem', marginBottom: '16px', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,77,79,0.1)' }}>
-            {formError}
-          </div>
+          <GitHubAlert variant="danger">{formError}</GitHubAlert>
         )}
         {savedMsg && (
-          <div style={{ color: '#52c41a', fontSize: '0.85rem', marginBottom: '16px' }}>
-            {savedMsg}
-          </div>
+          <GitHubAlert variant="success">{savedMsg}</GitHubAlert>
         )}
 
         {/* 保存按钮 */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button
-            onClick={handleSave}
-            disabled={saving || !model.trim()}
-            style={{
-              padding: '10px 28px',
-              borderRadius: '9999px',
-              fontWeight: 600,
-              fontSize: '0.9rem',
-              background: saving ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg, var(--lg-accent), #40a9ff)',
-              color: '#fff',
-              border: 'none',
-              cursor: saving ? 'not-allowed' : 'pointer',
-              fontFamily: 'var(--lg-font)',
-              opacity: saving ? 0.6 : 1,
-            }}
-          >
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--gh-space-4)' }}>
+          <GitHubButton variant="primary" size="md" onClick={handleSave} disabled={saving || !model.trim()}>
             {saving ? '保存中…' : '保存配置'}
-          </button>
+          </GitHubButton>
         </div>
-      </LiquidGlass>
+      </div>
 
       {/* 提示信息 */}
-      <LiquidGlass variant="blur" style={{ padding: 'var(--lg-space-5)', marginTop: '20px' }}>
-        <div style={{ fontSize: '0.85rem', color: 'var(--lg-text-tertiary)', lineHeight: 1.7 }}>
-          <div style={{ fontWeight: 600, color: 'var(--lg-text-secondary)', marginBottom: '8px' }}>💡 配置说明</div>
+      <div className="gh-box" style={{ marginTop: 'var(--gh-space-4)' }}>
+        <div style={{ fontSize: 'var(--gh-text-sm)', color: 'var(--gh-text-secondary)', lineHeight: 1.7 }}>
+          <div style={{ fontWeight: 600, color: 'var(--gh-text)', marginBottom: 'var(--gh-space-2)' }}>
+            💡 配置说明
+          </div>
           <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <li><strong>OpenAI</strong>：使用 OpenAI 官方 API，需在 platform.openai.com 获取 Key</li>
             <li><strong>DeepSeek</strong>：国产高性价比模型，在 platform.deepseek.com 获取 Key</li>
@@ -354,15 +346,7 @@ export default function AiAdminPage() {
             <li>AI 会自动获取网站的公开文章和页面信息作为回答上下文</li>
           </ul>
         </div>
-      </LiquidGlass>
+      </div>
     </div>
   )
-}
-
-const labelStyle: React.CSSProperties = {
-  display: 'block',
-  marginBottom: '6px',
-  fontWeight: 600,
-  fontSize: '0.9rem',
-  color: 'var(--lg-text-secondary)',
 }

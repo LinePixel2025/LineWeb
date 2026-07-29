@@ -4,7 +4,6 @@ import { type ReactNode } from 'react'
 import StatsCard from '../StatsCard'
 import api from '../../lib/api'
 import { AuthProvider } from '../../contexts/AuthContext'
-import { GlassProvider } from '../../contexts/GlassContext'
 
 vi.mock('../../lib/api', () => ({
   default: { get: vi.fn() },
@@ -15,9 +14,7 @@ const mockApi = vi.mocked(api)
 function Wrapper({ children }: { children: ReactNode }) {
   return (
     <AuthProvider>
-      <GlassProvider>
-        {children}
-      </GlassProvider>
+      {children}
     </AuthProvider>
   )
 }

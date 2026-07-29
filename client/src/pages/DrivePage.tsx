@@ -1,7 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import LiquidGlass from '../components/glass/LiquidGlass'
-import LiquidButton from '../components/glass/LiquidButton'
 import DriveToolbar from '../components/drive/DriveToolbar'
 import DriveNavigation from '../components/drive/DriveNavigation'
 import MobileNav from '../components/drive/MobileNav'
@@ -40,25 +38,19 @@ function DrivePageInner() {
 
   const currentParentId = breadcrumbs[breadcrumbs.length - 1]?.id ?? null
 
-  // 数据
   const { items, loading, error, total, page, totalPages, fetchItems, invalidate } =
     useDriveFiles(currentParentId, ctx.sort, ctx.categoryFilter)
 
-  // 搜索
   const search = useDriveSearch()
 
-  // 同步
   const syncOpts = useDriveSync()
 
-  // 对话框
   const dialogs = useDriveDialogs()
 
-  // 初始加载 + 路径切换
   useEffect(() => {
     fetchItems(1)
   }, [currentParentId, fetchItems])
 
-  // 导航
   const navigateToFolder = useCallback((item: DriveItem) => {
     if (!item.isFolder) return
     setBreadcrumbs(prev => [...prev, { id: item.id, name: item.name }])
@@ -68,10 +60,8 @@ function DrivePageInner() {
     setBreadcrumbs(prev => prev.slice(0, index + 1))
   }, [])
 
-  // 刷新
   const refresh = useCallback(() => { invalidate() }, [invalidate])
 
-  // 预览 / 下载
   const handlePreview = useCallback((item: DriveItem) => {
     if (item.isFolder) return
     const mime = (item.mimeType || '').toLowerCase()
@@ -90,7 +80,6 @@ function DrivePageInner() {
     }
   }, [startDownload, dialogs])
 
-  // 显示数据
   const displayItems = useMemo(() => {
     let src = search.isSearchActive ? (search.results ?? []) : items
 
@@ -122,7 +111,6 @@ function DrivePageInner() {
     })
   }, [items, search.results, search.isSearchActive, ctx.categoryFilter, ctx.sort])
 
-  // 键盘快捷键
   useKeyboardShortcuts({
     selectedFileIds: batchSelected,
     currentPathLength: breadcrumbs.length,
@@ -149,7 +137,6 @@ function DrivePageInner() {
     },
   })
 
-  // 选中文件
   const selectedItem = useMemo(() => {
     if (batchSelected.length === 0) return null
     return displayItems.find(item => item.id === batchSelected[0]) || null
@@ -164,13 +151,11 @@ function DrivePageInner() {
     setBatchSelected([item.id])
   }, [clearSelection])
 
-  // 上传完成
   const handleUploaded = useCallback(() => {
     refresh()
     dialogs.closeUpload()
   }, [refresh, dialogs])
 
-  // 批量移动
   const handleBatchMove = useCallback(() => {
     if (batchSelected.length === 0) return
     setPendingMoveIds(batchSelected)
@@ -190,7 +175,7 @@ function DrivePageInner() {
   }, [pendingMoveIds, clearSelection, invalidate])
 
   return (
-    <div className="page drive-page">
+    <div className="gh-drive-layout">
       {isDesktop && (
         <DriveNavigation
           collapsed={sidebarCollapsed}
@@ -198,8 +183,8 @@ function DrivePageInner() {
         />
       )}
 
-      <div className="drive-main">
-        <LiquidGlass variant="blur" interactive={false} className="page-card drive-content-card">
+      <div className="gh-drive-main">
+        <div className="gh-drive-content-card">
           <DriveToolbar
             breadcrumbs={breadcrumbs}
             searchQuery={search.query}
@@ -215,18 +200,15 @@ function DrivePageInner() {
           />
 
           {syncOpts.message && (
-            <div className="drive-sync-message" style={{
-              padding: '8px 16px', fontSize: '0.85rem',
+            <div className="gh-drive-sync-message" style={{
               color: syncOpts.message.includes('失败') || syncOpts.message.includes('错误')
-                ? 'var(--lg-text-danger)' : 'var(--lg-text-secondary)',
-              background: 'var(--lg-surface)', borderRadius: '8px', marginBottom: '8px',
+                ? 'var(--gh-danger)' : 'var(--gh-text-secondary)',
             }}>
               {syncOpts.message}
-              <button onClick={syncOpts.clearMessage} style={{ marginLeft: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lg-text-tertiary)' }}>✕</button>
+              <button onClick={syncOpts.clearMessage} style={{ marginLeft: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gh-text-tertiary)' }}>✕</button>
             </div>
           )}
 
-          {/* Batch Actions */}
           {batchSelected.length > 0 && (
             <BatchActions
               onBatchDownload={() => {
@@ -257,31 +239,29 @@ function DrivePageInner() {
             />
           )}
 
-          {/* Upload Zone */}
           {dialogs.showUpload && (
             <UploadZone parentId={currentParentId} onUploaded={handleUploaded} onClose={dialogs.closeUpload} />
           )}
 
-          {/* Content */}
           {loading ? (
-            <div className="drive-loading">
-              <div className="spinner" />
-              <p style={{ marginTop: '12px', color: 'var(--lg-text-tertiary)', fontSize: '0.85rem' }}>
+            <div className="gh-drive-loading">
+              <div className="gh-spinner" />
+              <p style={{ marginTop: '12px', color: 'var(--gh-text-tertiary)', fontSize: '0.85rem' }}>
                 正在加载...
               </p>
             </div>
           ) : error ? (
-            <LiquidGlass variant="blur" className="drive-state-card">
-              <p className="drive-state-text">⚠️ {error}</p>
-              <LiquidButton size="sm" variant="glass" onClick={() => fetchItems(page, true)}>重试</LiquidButton>
-            </LiquidGlass>
+            <div className="gh-drive-state-card">
+              <p className="gh-drive-state-text">⚠️ {error}</p>
+              <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={() => fetchItems(page, true)}>重试</button>
+            </div>
           ) : displayItems.length === 0 ? (
-            <LiquidGlass variant="blur" interactive={false} className="drive-state-card">
-              <span className="drive-state-icon"><FolderIcon size={40} /></span>
-              <p className="drive-state-text">
+            <div className="gh-drive-state-card">
+              <span className="gh-drive-state-icon"><FolderIcon size={40} /></span>
+              <p className="gh-drive-state-text">
                 {search.isSearchActive ? '未找到匹配的文件' : '网盘为空，点击上方按钮上传文件'}
               </p>
-            </LiquidGlass>
+            </div>
           ) : ctx.viewMode === 'list' ? (
             <DriveListView
               items={displayItems}
@@ -318,7 +298,6 @@ function DrivePageInner() {
             />
           )}
 
-          {/* 翻页 */}
           {!search.isSearchActive && totalPages > 1 && (
             <>
               <Pagination
@@ -326,15 +305,14 @@ function DrivePageInner() {
                 totalPages={totalPages}
                 onPageChange={(p) => fetchItems(p)}
               />
-              <div style={{ textAlign: 'center', marginTop: '12px', color: 'var(--lg-text-tertiary)', fontSize: '0.85rem' }}>
+              <div className="gh-drive-pagination-info">
                 第 {page}/{totalPages} 页，共 {total} 项
               </div>
             </>
           )}
-        </LiquidGlass>
+        </div>
       </div>
 
-      {/* Detail Panel */}
       {isDesktop && (
         <DriveDetailPanel
           item={selectedItem}
@@ -346,10 +324,8 @@ function DrivePageInner() {
         />
       )}
 
-      {/* Mobile Nav */}
       {isMobile && <MobileNav activeTab={mobileTab} onTabChange={setMobileTab} />}
 
-      {/* Modals */}
       {dialogs.previewItem && (
         <DrivePreview item={dialogs.previewItem} onClose={dialogs.closePreview} />
       )}
@@ -375,7 +351,6 @@ function DrivePageInner() {
         />
       )}
 
-      {/* Folder Picker for batch move */}
       {showFolderPicker && (
         <FolderPickerDialog
           title={`移动 ${pendingMoveIds.length} 个文件到...`}
