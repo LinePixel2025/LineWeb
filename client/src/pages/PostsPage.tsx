@@ -46,7 +46,12 @@ export default function PostsPage() {
       {/* 工具栏：搜索 + 排序 */}
       <LiquidGlass variant="blur" chromatic={false} className="posts-toolbar">
         <div className="posts-search-wrap">
-          <span className="posts-search-icon">🔍</span>
+          <span className="posts-search-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+          </span>
           <input
             className="lg-input posts-search-input"
             type="text"
@@ -54,15 +59,25 @@ export default function PostsPage() {
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
           />
-          <button type="button" className="posts-search-submit" onClick={handleSearch} aria-label="搜索">→</button>
+          <button type="button" className="posts-search-submit" onClick={handleSearch} aria-label="搜索">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
+            </svg>
+          </button>
           <div className="posts-toolbar-divider" />
           <button className="posts-sort-btn-inline" onClick={toggleSort}>
-            {sort === 'desc' ? '🕐 最新' : '🕐 最早'}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '4px' }}>
+              <path d="m3 16 4 4 4-4" /><path d="M7 20V4" /><path d="m21 8-4-4-4 4" /><path d="M17 4v16" />
+            </svg>
+            {sort === 'desc' ? '最新' : '最早'}
           </button>
         </div>
         {search && (
           <button type="button" className="liquid-btn ghost sm" onClick={handleClearSearch}>
-            ✕ 清除
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '2px' }}>
+              <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+            </svg>
+            清除
           </button>
         )}
       </LiquidGlass>

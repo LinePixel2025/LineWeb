@@ -192,6 +192,18 @@
   padding: 24px;
 }
 
+/* PostsPage card hover */
+.posts-card {
+  transition: background 0.25s ease, transform 0.2s ease;
+}
+.posts-card:hover {
+  background: rgba(255,255,255,0.08) !important;
+}
+.posts-card:hover h3 {
+  color: var(--lg-accent);
+  transition: color 0.2s ease;
+}
+
 /* ============================================================
    Post Page — 文章详情
    ============================================================ */
