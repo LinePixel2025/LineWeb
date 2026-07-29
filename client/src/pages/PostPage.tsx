@@ -28,14 +28,14 @@ export default function PostPage() {
       <div className="page container" style={{ textAlign: 'center', paddingTop: '120px' }}>
         <h2>文章未找到</h2>
         <p className="text-secondary" style={{ marginTop: '8px' }}>{error instanceof Error ? error.message : (error || '请检查链接是否正确')}</p>
-        <Link to="/posts" className="liquid-btn glass" style={{ marginTop: '20px', display: 'inline-block', padding: '10px 24px', borderRadius: '9999px', background: 'var(--lg-glass-bg)', border: '1px solid var(--lg-glass-border)', textDecoration: 'none', color: 'var(--lg-text-primary)' }} target="_blank" rel="noopener noreferrer">返回文章列表</Link>
+        <Link to="/posts" className="liquid-btn glass" style={{ marginTop: '20px', display: 'inline-block', padding: '10px 24px', borderRadius: '9999px', background: 'var(--lg-glass-bg)', border: '1px solid var(--lg-glass-border)', textDecoration: 'none', color: 'var(--lg-text-primary)' }}>返回文章列表</Link>
       </div>
     )
   }
 
   return (
     <article className="page container" style={{ maxWidth: '720px' }}>
-      <Link to="/posts" className="post-back-link" target="_blank" rel="noopener noreferrer">&larr; 返回文章列表</Link>
+      <Link to="/posts" className="post-back-link">&larr; 返回文章列表</Link>
 
       <LiquidGlass variant="blur" interactive={false} className="post-content-card">
         <h1 className="post-title">{post.title}</h1>
