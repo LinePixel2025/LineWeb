@@ -57,7 +57,7 @@ export default function RegisterPage() {
         </form>
 
         <p className="text-tertiary" style={{ textAlign: 'center', marginTop: '20px' }}>
-          已有账号？ <Link to="/login" target="_blank" rel="noopener noreferrer">登录</Link>
+          已有账号？ <Link to="/login">登录</Link>
         </p>
       </LiquidGlass>
     </div>

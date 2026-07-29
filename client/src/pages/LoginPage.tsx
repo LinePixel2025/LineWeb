@@ -56,7 +56,7 @@ export default function LoginPage() {
         </form>
 
         <p className="text-tertiary" style={{ textAlign: 'center', marginTop: '20px' }}>
-          还没有账号？ <Link to="/register" target="_blank" rel="noopener noreferrer">注册</Link>
+          还没有账号？ <Link to="/register">注册</Link>
         </p>
       </LiquidGlass>
     </div>
