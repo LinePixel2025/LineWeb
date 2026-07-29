@@ -33,8 +33,12 @@ export default memo(function UserAvatar({ userId, username, size = 'md' }: UserA
     setFailed(false)
     const controller = new AbortController()
 
+    const token = localStorage.getItem('lineweb_token')
+    const headers: Record<string, string> = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
     fetch(`/api/auth/avatar/${userId}`, {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('lineweb_token')}` },
+      headers,
       signal: controller.signal,
     })
       .then(res => {

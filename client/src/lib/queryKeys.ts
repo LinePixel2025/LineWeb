@@ -17,7 +17,6 @@ export const queryKeys = {
   drive: {
     files: (parentId: number | null, page: number) => ['drive', 'files', parentId, page] as const,
   },
-  wallpaper: ['wallpaper'] as const,
   health: {
     screenTime: ['health', 'screenTime'] as const,
   },

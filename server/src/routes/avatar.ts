@@ -6,9 +6,8 @@ import { getErrorMessage, getErrorStatus } from '../lib/utils.js'
 
 const router = Router()
 
-router.use(authenticate)
-
-router.post('/', async (req: Request, res: Response) => {
+// 上传和删除需要认证
+router.post('/', authenticate, async (req: Request, res: Response) => {
   const userId = req.user!.userId
 
   let fileBuffer: Buffer | null = null
@@ -53,7 +52,7 @@ router.post('/', async (req: Request, res: Response) => {
   }
 })
 
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', authenticate, async (req: Request, res: Response) => {
   const userId = req.user!.userId
   try {
     const avatarPath = await getAvatarPathByUserId(userId)
@@ -101,7 +100,7 @@ router.get('/:userId', async (req: Request, res: Response) => {
   }
 })
 
-router.delete('/', async (req: Request, res: Response) => {
+router.delete('/', authenticate, async (req: Request, res: Response) => {
   const userId = req.user!.userId
   try {
     await deleteAvatar(userId)

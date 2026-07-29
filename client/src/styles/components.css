@@ -385,6 +385,91 @@
 .gh-pagination-btn--active { background: var(--gh-accent); color: #fff; border-color: var(--gh-accent); }
 .gh-pagination-btn--active:hover { background: var(--gh-accent-hover); }
 
+/* ===== Avatar Crop Dialog ===== */
+.gh-dialog--crop {
+  max-width: 560px;
+}
+
+.gh-crop-container {
+  position: relative;
+  width: 100%;
+  height: 340px;
+  background: var(--gh-canvas-inset);
+  border-radius: var(--gh-radius);
+  overflow: hidden;
+  margin-bottom: var(--gh-space-3);
+}
+
+.gh-crop-zoom-slider {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  margin-bottom: var(--gh-space-3);
+}
+
+.gh-crop-zoom-slider label {
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+  white-space: nowrap;
+}
+
+/* ===== Range Input (Zoom Slider) ===== */
+.gh-range-input {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 6px;
+  background: var(--gh-canvas-inset);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.gh-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--gh-accent);
+  border: 2px solid var(--gh-canvas);
+  box-shadow: var(--gh-shadow-sm);
+  cursor: pointer;
+  transition: transform var(--gh-transition);
+}
+
+.gh-range-input::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.gh-range-input::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--gh-accent);
+  border: 2px solid var(--gh-canvas);
+  box-shadow: var(--gh-shadow-sm);
+  cursor: pointer;
+}
+
+/* ===== Crop Upload Progress ===== */
+.gh-crop-upload-progress {
+  padding: var(--gh-space-6) var(--gh-space-4);
+  text-align: center;
+}
+
+.gh-crop-upload-progress-text {
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+  margin-bottom: var(--gh-space-4);
+}
+
+.gh-crop-upload-progress-pct {
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+  margin-top: var(--gh-space-2);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ===== Mobile / Tablet visibility ===== */
 .gh-visible-mobile { display: none !important; }
 .gh-hidden-mobile {}

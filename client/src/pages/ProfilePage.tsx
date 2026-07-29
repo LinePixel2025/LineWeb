@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import UserAvatar from '../components/UserAvatar'
+import AvatarCropDialog from '../components/AvatarCropDialog'
 import DigitalHealthSection from '../components/DigitalHealthSection'
 import { GitHubButton, GitHubBadge, GitHubAlert, GitHubTabNav } from '../components/ui'
 import api from '../lib/api'
@@ -10,34 +11,21 @@ export default function ProfilePage() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('overview')
+  const [cropFile, setCropFile] = useState<File | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [saveError, setSaveError] = useState('')
 
   const handleLogout = () => { logout(); navigate('/') }
 
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     if (file.size > 2 * 1024 * 1024) {
       alert('文件大小不能超过 2MB')
+      e.target.value = ''
       return
     }
-    try {
-      const formData = new FormData()
-      formData.append('avatar', file)
-      const res = await fetch('/api/auth/avatar', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('lineweb_token')}` },
-        body: formData,
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || '上传失败')
-      }
-      window.location.reload()
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '上传失败')
-    }
+    setCropFile(file)
     e.target.value = ''
   }
 
@@ -75,7 +63,7 @@ export default function ProfilePage() {
                   type="file"
                   accept="image/*"
                   style={{ display: 'none' }}
-                  onChange={handleAvatarUpload}
+                  onChange={handleFileSelect}
                 />
               </label>
               <GitHubButton variant="ghost" size="sm" onClick={handleAvatarRemove}>
@@ -135,6 +123,10 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {cropFile && (
+        <AvatarCropDialog file={cropFile} onClose={() => setCropFile(null)} />
+      )}
     </div>
   )
 }

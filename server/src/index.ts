@@ -9,7 +9,6 @@ import rateLimit from 'express-rate-limit'
 import { config } from './config/index.js'
 import authRoutes from './routes/auth.js'
 import postRoutes from './routes/posts.js'
-import bingRoutes from './routes/bing.js'
 import pageRoutes from './routes/pages.js'
 import commentRoutes from './routes/comments.js'
 import userRoutes from './routes/users.js'
@@ -96,7 +95,7 @@ app.use('/api', (req, _res, next) => {
 
 // 全局认证中间件 — 除公开路径外，所有 API 请求必须携带 JWT 或 API Key
 // 注意：req.path 在 /api 中间件中不含 /api 前缀（如 /auth/login 而非 /api/auth/login）
-const publicApiPaths = ['/auth/login', '/auth/register', '/health', '/health/push', '/posts', '/pages/featured', '/pages/slug', '/bing-wallpaper', '/stats/public', '/version', '/comments/post', '/ai/chat']
+const publicApiPaths = ['/auth/login', '/auth/register', '/auth/avatar', '/health', '/health/push', '/posts', '/pages/featured', '/pages/slug', '/stats/public', '/version', '/comments/post', '/ai/chat']
 app.use('/api', (req, res, next) => {
   if (publicApiPaths.some(p => req.path === p || req.path.startsWith(p + '/'))) {
     next()
@@ -126,7 +125,6 @@ app.use('/api/pages', cachePublic(300), pageRoutes)
 app.use('/api/comments', cachePublic(300), commentRoutes)
 app.use('/api/stats', cachePublic(60), statsRoutes)
 app.use('/api/auth', authRoutes)
-app.use('/api/bing-wallpaper', cachePublic(600), bingRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/drive', driveRoutes)
 app.use('/api/drive/favorites', driveFavoritesRoutes)
@@ -149,7 +147,7 @@ app.get('/api', (_req, res) => {
       settings: { method: 'PUT', path: '/api/auth/settings', auth: true, description: '更新用户设置' },
       avatarUpload: { method: 'POST', path: '/api/auth/avatar', auth: true, description: '上传/更新头像 (multipart/form-data)' },
       avatarGet: { method: 'GET', path: '/api/auth/avatar', auth: true, description: '获取当前用户头像' },
-      avatarGetById: { method: 'GET', path: '/api/auth/avatar/:userId', auth: true, description: '获取指定用户头像' },
+      avatarGetById: { method: 'GET', path: '/api/auth/avatar/:userId', auth: 'public', description: '获取指定用户头像' },
       avatarDelete: { method: 'DELETE', path: '/api/auth/avatar', auth: true, description: '删除头像' },
     },
     posts: {
@@ -178,10 +176,6 @@ app.get('/api', (_req, res) => {
       detail: { method: 'GET', path: '/api/pages/:id', auth: 'admin', description: '管理：按 ID 获取页面' },
       update: { method: 'PUT', path: '/api/pages/:id', auth: 'admin', description: '更新页面' },
       delete: { method: 'DELETE', path: '/api/pages/:id', auth: 'admin', description: '删除页面' },
-    },
-    bingWallpaper: {
-      get: { method: 'GET', path: '/api/bing-wallpaper?mode=&date=&history=', auth: true, description: '获取 Bing 每日壁纸（需认证）' },
-      proxy: { method: 'GET', path: '/api/bing-wallpaper/proxy?url=', auth: true, description: '代理壁纸图片（需认证）' },
     },
     drive: {
       list: { method: 'GET', path: '/api/drive/files?parentId=&page=&limit=', auth: 'drive', description: '文件列表（分页，文件夹优先）' },

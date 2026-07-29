@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
-import { WallpaperProvider } from './contexts/WallpaperContext'
 import { DownloadProvider } from './contexts/DownloadContext'
 import Layout from './components/Layout'
 import { ProtectedRoute, AdminRoute } from './components/Guards'
@@ -56,7 +55,6 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <ThemeProvider>
-          <WallpaperProvider>
           <DownloadProvider>
               <Suspense fallback={<RouteLoading />}>
                 <Routes>
@@ -98,7 +96,6 @@ export default function App() {
               {/* 下载进度弹窗 — 放在 Routes 外层，不随页面切换卸载 */}
               <DownloadToast />
             </DownloadProvider>
-          </WallpaperProvider>
         </ThemeProvider>
       </AuthProvider>
       </QueryClientProvider>

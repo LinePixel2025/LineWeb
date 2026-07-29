@@ -116,14 +116,6 @@ export function usePublicStats() {
   })
 }
 
-export function useWallpaperQuery() {
-  return useQuery({
-    queryKey: queryKeys.wallpaper,
-    queryFn: () => api.get<unknown>('/bing-wallpaper'),
-    staleTime: 60 * 60 * 1000,
-  })
-}
-
 export function useScreenTime() {
   return useQuery({
     queryKey: queryKeys.health.screenTime,
