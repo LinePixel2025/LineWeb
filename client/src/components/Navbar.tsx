@@ -88,7 +88,7 @@ export default memo(function Navbar() {
                   className={`navbar-link ${location.pathname === '/drive' ? 'active' : ''}`}
                   onClick={closeMenu}
                 >
-                  ☁️ 网盘
+                  网盘
                 </Link>
               )}
               {isAdmin && (

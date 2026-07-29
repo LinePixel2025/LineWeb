@@ -103,8 +103,6 @@ export default function PostsPage() {
                 <Link
                   to={`/posts/${post.slug}`}
                   style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
-                  target="_blank"
-                  rel="noopener noreferrer"
                 >
                   <h3>{post.title}</h3>
                   {post.summary && <p className="text-secondary" style={{ marginTop: '8px', fontSize: '0.92rem' }}>{post.summary}</p>}
