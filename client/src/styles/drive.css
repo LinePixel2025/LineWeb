@@ -1,4 +1,4 @@
-/* =============================================================
+﻿/* =============================================================
    LineWeb Drive - GitHub Files workspace
    ============================================================= */
 
@@ -1464,48 +1464,6 @@
   color: inherit;
 }
 
-/* Mobile navigation and contextual panels */
-.gh-drive-mobile-nav {
-  display: none;
-}
-
-.gh-drive-mobile-panel {
-  margin: var(--gh-space-3) var(--gh-space-3) 0;
-  padding: var(--gh-space-3);
-  border: 1px solid var(--gh-border);
-  border-radius: 6px;
-  background: var(--gh-canvas);
-}
-
-.gh-drive-mobile-panel-heading {
-  margin-bottom: var(--gh-space-2);
-  color: var(--gh-text);
-  font-size: var(--gh-text-sm);
-  font-weight: 600;
-}
-
-.gh-drive-mobile-panel p {
-  margin-top: 4px;
-  color: var(--gh-text-secondary);
-  font-size: var(--gh-text-sm);
-}
-
-.gh-drive-mobile-favorite {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  gap: var(--gh-space-2);
-  padding: 8px 0;
-  border: 0;
-  border-top: 1px solid var(--gh-border-muted);
-  background: transparent;
-  color: var(--gh-accent);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--gh-text-sm);
-  text-align: left;
-}
-
 /* Preview and file transfer overlays */
 .gh-drive-preview-overlay {
   position: fixed;
@@ -1943,10 +1901,6 @@
 }
 
 @media (max-width: 767px) {
-  .gh-drive-page {
-    padding-bottom: calc(68px + var(--gh-safe-bottom));
-  }
-
   .gh-drive-repo-header {
     align-items: stretch;
     flex-direction: column;
@@ -2111,48 +2065,7 @@
     padding: var(--gh-space-4);
   }
 
-  .gh-drive-mobile-nav {
-    position: fixed;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 1100;
-    display: flex;
-    padding: 4px 8px var(--gh-safe-bottom);
-    border-top: 1px solid var(--gh-border);
-    background: var(--gh-bg);
-  }
-
-  .gh-drive-mobile-nav-item {
-    display: flex;
-    align-items: center;
-    min-height: 52px;
-    flex: 1;
-    flex-direction: column;
-    justify-content: center;
-    gap: 2px;
-    border: 0;
-    background: transparent;
-    color: var(--gh-text-tertiary);
-    cursor: pointer;
-    font: inherit;
-  }
-
-  .gh-drive-mobile-nav-item--active {
-    color: var(--gh-accent);
-  }
-
-  .gh-drive-mobile-nav-label {
-    font-size: 10px;
-  }
-
-  .gh-drive-download-toast {
-    right: 8px;
-    bottom: calc(68px + var(--gh-safe-bottom));
-    width: calc(100vw - 16px);
-  }
 }
-
 @media (prefers-reduced-motion: reduce) {
   .gh-drive-search-status,
   .gh-drive-row-actions,

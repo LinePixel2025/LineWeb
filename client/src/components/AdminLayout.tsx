@@ -1,8 +1,7 @@
-import { memo, useState, useRef, useEffect } from 'react'
+﻿import { memo, useState, useRef, useEffect } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { GitHubButton } from './ui'
-import { AdminBottomTabBar, AdminMoreMenu } from './admin/AdminMobileNav'
 
 const navItems = [
   { path: '/admin', label: '文章管理', icon: (
@@ -48,7 +47,6 @@ export default memo(function AdminLayout() {
   })
   const sidebarRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
-  const [moreOpen, setMoreOpen] = useState(false)
 
   const closeMobile = () => setMobileOpen(false)
 
@@ -154,9 +152,6 @@ export default memo(function AdminLayout() {
         </div>
       </aside>
 
-      {/* Mobile bottom tab bar */}
-      <AdminBottomTabBar onMoreClick={() => setMoreOpen(true)} />
-      <AdminMoreMenu open={moreOpen} onClose={() => setMoreOpen(false)} />
 
       {/* Main content area */}
       <div className={`gh-content ${collapsed ? 'gh-content--collapsed' : ''}`}>

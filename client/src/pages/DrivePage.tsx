@@ -1,7 +1,6 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
+﻿import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import DriveToolbar from '../components/drive/DriveToolbar'
 import DriveNavigation from '../components/drive/DriveNavigation'
-import MobileNav from '../components/drive/MobileNav'
 import DriveDetailPanel from '../components/drive/DriveDetailPanel'
 import DriveListView from '../components/drive/DriveListView'
 import DriveGridView from '../components/drive/DriveGridView'
@@ -14,7 +13,6 @@ import Pagination from '../components/Pagination'
 import api from '../lib/api'
 import { useDownload } from '../contexts/DownloadContext'
 import { DriveProvider, useDrive } from '../contexts/DriveContext'
-import { useResponsive } from '../hooks/useResponsive'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { useDriveFiles } from '../hooks/useDriveFiles'
 import { useDriveSearch } from '../hooks/useDriveSearch'
@@ -38,9 +36,7 @@ function DrivePageInner() {
     navigateToBreadcrumb: navigateToBreadcrumbInContext,
   } = useDrive()
   const { startDownload } = useDownload()
-  const { isMobile } = useResponsive()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [mobileTab, setMobileTab] = useState<'files' | 'favorites' | 'search' | 'settings'>('files')
   const [showFolderPicker, setShowFolderPicker] = useState(false)
   const [pendingMoveIds, setPendingMoveIds] = useState<number[]>([])
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -169,12 +165,6 @@ function DrivePageInner() {
     setShowFolderPicker(false)
   }, [pendingMoveIds, clearSelection, invalidate])
 
-  const handleMobileTabChange = useCallback((tab: 'files' | 'favorites' | 'search' | 'settings') => {
-    setMobileTab(tab)
-    if (tab === 'search') {
-      window.setTimeout(() => searchInputRef.current?.focus(), 0)
-    }
-  }, [])
 
   return (
     <div className="gh-drive-page">
@@ -248,36 +238,6 @@ function DrivePageInner() {
               showActions={false}
             />
 
-            {isMobile && mobileTab === 'favorites' && (
-              <div className="gh-drive-mobile-panel">
-                <div className="gh-drive-mobile-panel-heading">收藏夹</div>
-                {ctx.favorites.length === 0 ? (
-                  <p>暂无收藏的文件夹</p>
-                ) : ctx.favorites.map(favorite => (
-                  <button
-                    key={favorite.id}
-                    className="gh-drive-mobile-favorite"
-                    onClick={() => {
-                      navigateToFolderInContext(favorite.folderId, favorite.folderName)
-                      setMobileTab('files')
-                    }}
-                  >
-                    <FolderIcon size={16} /> {favorite.folderName}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {isMobile && mobileTab === 'settings' && (
-              <div className="gh-drive-mobile-panel gh-drive-mobile-panel--info">
-                <div className="gh-drive-mobile-panel-heading">网盘状态</div>
-                <p>当前目录：{breadcrumbs[breadcrumbs.length - 1]?.name}</p>
-                <p>本页项目：{displayItems.length}</p>
-                <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={syncOpts.sync} disabled={syncOpts.syncing}>
-                  <RefreshIcon size={14} /> {syncOpts.syncing ? '同步中…' : '立即同步'}
-                </button>
-              </div>
-            )}
 
             {syncOpts.message && (
               <div className={`gh-drive-sync-message${syncOpts.message.includes('失败') || syncOpts.message.includes('错误') ? ' gh-drive-sync-message--error' : ''}`}>
@@ -383,7 +343,6 @@ function DrivePageInner() {
         )}
       </div>
 
-      {isMobile && <MobileNav activeTab={mobileTab} onTabChange={handleMobileTabChange} />}
 
       {dialogs.previewItem && <DrivePreview item={dialogs.previewItem} onClose={dialogs.closePreview} />}
       {dialogs.showNewFolder && (

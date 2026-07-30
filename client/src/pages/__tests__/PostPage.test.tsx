@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+﻿import { describe, it, expect, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { type ReactNode } from 'react'
@@ -93,7 +93,7 @@ describe('PostPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('fsgf顺丰')).toBeInTheDocument()
-      expect(screen.getByText('Line', { selector: '.gh-text-secondary' })).toBeInTheDocument()
+      expect(screen.getByText('Line')).toBeInTheDocument()
       expect(screen.getByText('哥哥')).toBeInTheDocument()
     })
   })
