@@ -63,10 +63,13 @@ export default memo(function GitHubHeader({ onMenuToggle }: Props) {
           </svg>
         </button>
         <Link to="/" className="gh-header-logo">
-          <svg width="24" height="24" viewBox="0 0 16 16" fill="var(--gh-accent)" aria-hidden="true">
-            <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.46-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--gh-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M5 4.5A2.5 2.5 0 0 1 7.5 2h7L19 6.5v11A2.5 2.5 0 0 1 16.5 20h-9A2.5 2.5 0 0 1 5 17.5z" />
+            <path d="M14 2v5h5M8.5 11h7M8.5 15h4" />
+            <circle cx="5" cy="17.5" r="1.5" fill="var(--gh-canvas)" />
+            <path d="M5 16V13.5l3.5-2.5" />
           </svg>
-          <span className="gh-hidden-tablet">Line Web</span>
+          <span className="gh-header-brand-name">LineWeb</span>
         </Link>
         <nav className="gh-header-nav gh-hidden-mobile">
           {navItems.map(item => (

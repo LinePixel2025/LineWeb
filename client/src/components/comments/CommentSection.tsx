@@ -205,7 +205,7 @@ export default function CommentSection({ postId }: { postId: number }) {
   const totalComments = topLevel.reduce((sum, c) => sum + 1 + c.replies.length, 0)
 
   return (
-    <div className="gh-box" style={{ padding: '32px', marginTop: '32px' }}>
+    <div className="gh-comment-thread">
       <div className="comment-section">
         <h3 className="comment-heading">
           评论

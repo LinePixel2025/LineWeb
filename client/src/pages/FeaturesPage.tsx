@@ -49,7 +49,7 @@ export default function FeaturesPage() {
         <p className="gh-text-secondary">探索 Line Web 提供的各种工具与功能</p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+      <div className="gh-feature-grid">
         {features.map((item) => (
           <Link
             key={item.path}
@@ -73,7 +73,13 @@ export default function FeaturesPage() {
           </Link>
         ))}
 
-        {customPages.map((item) => (
+      </div>
+
+      {customPages.length > 0 && (
+        <section className="gh-feature-custom-pages" aria-labelledby="custom-pages-heading">
+          <h2 id="custom-pages-heading" className="gh-feature-custom-pages-title">自定义页面</h2>
+          <div className="gh-feature-grid">
+            {customPages.map((item) => (
           <Link
             key={item.slug}
             to={`/page/${item.slug}`}
@@ -97,8 +103,10 @@ export default function FeaturesPage() {
               )}
             </div>
           </Link>
-        ))}
-      </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {isSuccess && customPages.length === 0 && (
         <p className="gh-text-tertiary" style={{ textAlign: 'center', marginTop: '24px' }}>

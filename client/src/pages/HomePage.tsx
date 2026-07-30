@@ -70,7 +70,7 @@ export default function HomePage() {
           {stats && (
             <div className="gh-box" style={{ marginTop: '16px' }}>
               <h4 className="gh-text-secondary" style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 8px' }}>站点统计</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div className="gh-stats-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                 {[
                   { label: '文章', count: stats.posts },
                   { label: '页面', count: stats.pages },

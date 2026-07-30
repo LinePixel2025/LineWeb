@@ -39,33 +39,20 @@ export default function PostPage() {
   }
 
   return (
-    <article className="gh-page-container" style={{ maxWidth: '760px' }}>
-      <Link to="/posts" className="gh-text-secondary" style={{ fontSize: '0.85rem', display: 'inline-block', marginBottom: '16px' }}>&larr; 返回文章列表</Link>
+    <article className="gh-page-container gh-post-detail">
+      <Link to="/posts" className="gh-post-back">&larr; 返回文章列表</Link>
 
-      <div className="gh-page-header">
+      <header className="gh-post-header">
         <h1 className="gh-page-title">{post.title}</h1>
-        <div style={{ display: 'flex', gap: '16px', marginTop: '8px' }}>
-          <span className="gh-text-secondary">{post.author.username}</span>
-          <span className="gh-text-tertiary">{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
+        <div className="gh-post-meta">
+          <div className="gh-post-author-avatar">{post.author.username.charAt(0).toUpperCase()}</div>
+          <span><strong>{post.author.username}</strong> 发布于 {new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
         </div>
-      </div>
+      </header>
 
-      <div className="gh-post-layout">
-        <div className="gh-post-author">
-          <div className="gh-post-author-avatar">
-            {post.author.username.charAt(0).toUpperCase()}
-          </div>
-          <div className="gh-post-author-info">
-            <span className="gh-post-author-name">{post.author.username}</span>
-            <span className="gh-text-tertiary" style={{ fontSize: '0.78rem' }}>作者</span>
-          </div>
-        </div>
-        <div className="gh-post-body">
-          <div className="gh-box" style={{ padding: '24px' }}>
-            <div className="article-content" dangerouslySetInnerHTML={{ __html: sanitizedContent }} />
-          </div>
-        </div>
-      </div>
+      <section className="gh-post-content">
+        <div className="article-content" dangerouslySetInnerHTML={{ __html: sanitizedContent }} />
+      </section>
 
       <div style={{ marginTop: '32px', borderTop: '1px solid var(--gh-color-border-default)', paddingTop: '24px' }}>
         <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}><div className="gh-spinner" /></div>}>

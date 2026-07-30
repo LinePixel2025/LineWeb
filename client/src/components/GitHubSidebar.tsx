@@ -11,6 +11,17 @@ interface Props {
 
 interface SidebarItem { path: string; label: string; icon: string }
 
+function SidebarIcon({ path }: { path: string }) {
+  const icon = path.startsWith('/admin/new') ? <><path d="M4 12h8" /><path d="m5 9.5 5.8-5.8a1.4 1.4 0 0 1 2 2L7 11.5 4.5 12z" /><path d="m10 4.5 1.5 1.5" /></>
+    : path === '/' ? <><rect x="3" y="3" width="10" height="10" rx="2" /><path d="M5.5 10 7.5 8l1.5 1.5L11.5 6" /></>
+    : path === '/posts' ? <><path d="M3.5 3.5h8a1.5 1.5 0 0 1 1.5 1.5v7.5h-8A1.5 1.5 0 0 0 3.5 14z" /><path d="M3.5 3.5v10.5M6 6.5h4M6 9h4" /></>
+    : path === '/drive' ? <path d="M2.5 5.5A1.5 1.5 0 0 1 4 4h3l1.2 1.5H12A1.5 1.5 0 0 1 13.5 7v5A1.5 1.5 0 0 1 12 13.5H4A1.5 1.5 0 0 1 2.5 12z" />
+    : path === '/features' ? <><circle cx="8" cy="8" r="5" /><path d="m9.8 6.2-1 2.6-2.6 1 1-2.6z" /></>
+    : <><circle cx="8" cy="5.5" r="2.5" /><path d="M3.5 13a4.5 4.5 0 0 1 9 0" /></>
+
+  return <svg className="gh-sidebar-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{icon}</svg>
+}
+
 const sections = [
   {
     title: 'Home',
@@ -72,9 +83,7 @@ export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onT
                     className={`gh-sidebar-item ${isActive(item.path) ? 'gh-sidebar-item--active' : ''}`}
                     onClick={onClose}
                   >
-                    <svg className="gh-sidebar-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                      <path d={item.icon} />
-                    </svg>
+                    <SidebarIcon path={item.path} />
                     <span className="gh-sidebar-label">{item.label}</span>
                   </Link>
                 ))}
@@ -84,8 +93,8 @@ export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onT
         </nav>
         <div className="gh-sidebar-footer">
           <button className="gh-sidebar-item gh-sidebar-collapse-btn" onClick={onToggleCollapse} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
-            <svg className="gh-sidebar-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-              <path d={collapsed ? 'M6.354.646a.5.5 0 0 1 .708 0l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L10.043 5 6.354 1.354a.5.5 0 0 1 0-.708Z' : 'M9.646 1.646a.5.5 0 0 1 .708.708L6.707 6l3.647 3.646a.5.5 0 0 1-.708.708l-4-4a.5.5 0 0 1 0-.708l4-4Z'} />
+            <svg className="gh-sidebar-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d={collapsed ? 'm6 3.5 4 4.5-4 4.5' : 'm10 3.5-4 4.5 4 4.5'} />
             </svg>
             <span className="gh-sidebar-label">{collapsed ? 'Expand' : 'Collapse'}</span>
           </button>
