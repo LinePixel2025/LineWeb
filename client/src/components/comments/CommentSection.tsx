@@ -8,17 +8,27 @@ import type { CommentData } from '../../types/comment'
 
 const CONTENT_MAX = 300
 
+function formatCommentTime(value: string) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
 const CollapsibleContent = memo(function CollapsibleContent({ content }: { content: string }) {
   const [showAll, setShowAll] = useState(false)
   const isLong = content.length > CONTENT_MAX
 
   return (
-    <div>
+    <div className="comment-copy">
       <div className="comment-content">
         {isLong && !showAll ? content.slice(0, CONTENT_MAX) + '…' : content}
       </div>
       {isLong && (
-        <GitHubButton size="sm" variant="secondary" onClick={() => setShowAll(prev => !prev)} style={{ marginTop: '6px' }}>
+        <GitHubButton className="comment-expand-button" size="sm" variant="secondary" onClick={() => setShowAll(prev => !prev)}>
           {showAll ? '收起' : '展开全部'}
         </GitHubButton>
       )}
@@ -29,11 +39,13 @@ const CollapsibleContent = memo(function CollapsibleContent({ content }: { conte
 const ReplyForm = memo(function ReplyForm({
   parentId,
   postId,
+  replyTo,
   onReply,
   onCancel,
 }: {
   parentId: number
   postId: number
+  replyTo: string
   onReply: (reply: CommentData) => void
   onCancel: () => void
 }) {
@@ -62,24 +74,26 @@ const ReplyForm = memo(function ReplyForm({
 
   return (
     <div className="reply-form">
+      <div className="reply-form-header">回复 <strong>@{replyTo}</strong></div>
       <textarea
         className="gh-input gh-input--full reply-input"
         value={text}
         onChange={e => setText(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="写下你的回复..."
-        rows={2}
+        placeholder="写下回复"
+        aria-label={`回复 ${replyTo}`}
+        rows={3}
         maxLength={2000}
       />
       {error && <p className="comment-error">{error}</p>}
       <div className="reply-form-actions">
-        <span className="text-tertiary" style={{ fontSize: '0.8rem' }}>{text.length}/2000</span>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <GitHubButton type="button" variant="primary" size="sm" onClick={handleSubmit} disabled={sending || !text.trim()}>
-            {sending ? '发送中…' : '回复'}
-          </GitHubButton>
+        <span className="comment-char-count">{text.length}/2000</span>
+        <div className="reply-form-buttons">
           <GitHubButton type="button" variant="ghost" size="sm" onClick={onCancel}>
             取消
+          </GitHubButton>
+          <GitHubButton type="button" variant="primary" size="sm" onClick={handleSubmit} disabled={sending || !text.trim()}>
+            {sending ? '发送中…' : '回复'}
           </GitHubButton>
         </div>
       </div>
@@ -103,17 +117,23 @@ const CommentCard = memo(function CommentCard({
 
   return (
     <div className="comment-item">
-      <div className="gh-box" style={{ padding: '16px' }}>
-        <div className="comment-meta">
-          <UserAvatar userId={comment.author.id} username={comment.author.username} size="sm" />
-          <span className="comment-author">{comment.author.username}</span>
-          <span className="comment-time">{new Date(comment.createdAt).toLocaleString('zh-CN')}</span>
+      <div className="comment-avatar">
+        <UserAvatar userId={comment.author.id} username={comment.author.username} size="md" />
+      </div>
+      <article className="comment-card">
+        <header className="comment-meta">
+          <strong className="comment-author">{comment.author.username}</strong>
+          <span className="comment-time">
+            评论于 <time dateTime={comment.createdAt}>{formatCommentTime(comment.createdAt)}</time>
+          </span>
+        </header>
+        <div className="comment-body">
+          <CollapsibleContent content={comment.content} />
         </div>
-        <CollapsibleContent content={comment.content} />
 
         <div className="comment-actions">
           {user && (
-            <GitHubButton size="sm" variant="ghost" onClick={() => setShowReplyForm(prev => !prev)}>
+            <GitHubButton className="comment-action-button" size="sm" variant="ghost" onClick={() => setShowReplyForm(prev => !prev)}>
               {showReplyForm ? '取消回复' : '回复'}
             </GitHubButton>
           )}
@@ -121,8 +141,8 @@ const CommentCard = memo(function CommentCard({
             <GitHubButton
               size="sm"
               variant="ghost"
+              className="comment-action-button"
               onClick={() => setExpanded(prev => !prev)}
-              style={{ color: 'var(--gh-text-tertiary)' }}
             >
               {expanded ? `收起回复 (${comment.replies.length})` : `展开回复 (${comment.replies.length})`}
             </GitHubButton>
@@ -133,6 +153,7 @@ const CommentCard = memo(function CommentCard({
           <ReplyForm
             parentId={comment.id}
             postId={postId}
+            replyTo={comment.author.username}
             onReply={r => { onReplyAdded(comment.id, r); setShowReplyForm(false) }}
             onCancel={() => setShowReplyForm(false)}
           />
@@ -142,17 +163,23 @@ const CommentCard = memo(function CommentCard({
           <div className="replies-section">
             {comment.replies.map(reply => (
               <div key={reply.id} className="reply-item">
-                <div className="comment-meta">
+                <div className="reply-avatar">
                   <UserAvatar userId={reply.author.id} username={reply.author.username} size="sm" />
-                  <span className="comment-author">{reply.author.username}</span>
-                  <span className="comment-time">{new Date(reply.createdAt).toLocaleString('zh-CN')}</span>
                 </div>
-                <CollapsibleContent content={reply.content} />
+                <div className="reply-body">
+                  <div className="reply-meta">
+                    <strong className="comment-author">{reply.author.username}</strong>
+                    <span className="comment-time">
+                      回复于 <time dateTime={reply.createdAt}>{formatCommentTime(reply.createdAt)}</time>
+                    </span>
+                  </div>
+                  <CollapsibleContent content={reply.content} />
+                </div>
               </div>
             ))}
           </div>
         )}
-      </div>
+      </article>
     </div>
   )
 })
@@ -184,8 +211,8 @@ export default function CommentSection({ postId }: { postId: number }) {
       const newComment = await api.post<CommentData>('/comments', { content: text, postId })
       setTopLevel(prev => [...prev, { ...newComment, replies: [] }])
       setText('')
-    } catch (err: any) {
-      setError(err.message || '发表评论失败')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '发表评论失败')
     } finally {
       setSending(false)
     }
@@ -205,34 +232,45 @@ export default function CommentSection({ postId }: { postId: number }) {
   const totalComments = topLevel.reduce((sum, c) => sum + 1 + c.replies.length, 0)
 
   return (
-    <div className="gh-comment-thread">
+    <section className="gh-comment-thread" aria-labelledby="comments-heading">
       <div className="comment-section">
-        <h3 className="comment-heading">
-          评论
-          {totalComments > 0 && <span className="comment-count">{totalComments}</span>}
-        </h3>
+        <div className="comment-section-header">
+          <h2 className="comment-heading" id="comments-heading">评论</h2>
+          <span className="comment-count">{totalComments} 条讨论</span>
+        </div>
 
         {user ? (
-          <form className="comment-form" onSubmit={handleSubmit}>
-            <textarea
-              className="gh-input gh-input--full comment-input"
-              value={text}
-              onChange={e => setText(e.target.value)}
-              placeholder="写下你的评论..."
-              rows={3}
-              maxLength={2000}
-            />
-            {error && <p className="comment-error">{error}</p>}
-            <div className="comment-form-actions">
-              <span className="text-tertiary comment-char-count">{text.length}/2000</span>
-              <GitHubButton type="submit" variant="primary" size="sm" disabled={sending || !text.trim()}>
-                {sending ? '发表中…' : '发表评论'}
-        </GitHubButton>
+          <div className="comment-composer-row">
+            <div className="comment-composer-avatar">
+              <UserAvatar userId={user.id} username={user.username} size="md" />
             </div>
-          </form>
+            <form className="comment-form" onSubmit={handleSubmit}>
+              <div className="comment-form-tabs">
+                <span className="comment-form-tab--active">撰写</span>
+              </div>
+              <div className="comment-form-body">
+                <textarea
+                  className="gh-input gh-input--full comment-input"
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  placeholder="写下你的评论"
+                  aria-label="评论内容"
+                  rows={5}
+                  maxLength={2000}
+                />
+              </div>
+              {error && <p className="comment-error">{error}</p>}
+              <div className="comment-form-actions">
+                <span className="comment-char-count">{text.length}/2000</span>
+                <GitHubButton type="submit" variant="primary" size="sm" disabled={sending || !text.trim()}>
+                  {sending ? '发表中…' : '发表评论'}
+                </GitHubButton>
+              </div>
+            </form>
+          </div>
         ) : (
           <div className="comment-login-prompt">
-            <Link to="/login" target="_blank" rel="noopener noreferrer">登录</Link> 后可以发表评论
+            <Link to="/login">登录</Link> 后参与讨论
           </div>
         )}
 
@@ -253,6 +291,6 @@ export default function CommentSection({ postId }: { postId: number }) {
           )}
         </div>
       </div>
-    </div>
+    </section>
   )
 }
