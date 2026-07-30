@@ -1,5 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react'
-import { createPortal } from 'react-dom'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import DriveToolbar from '../components/drive/DriveToolbar'
 import DriveNavigation from '../components/drive/DriveNavigation'
 import MobileNav from '../components/drive/MobileNav'
@@ -21,30 +20,37 @@ import { useDriveFiles } from '../hooks/useDriveFiles'
 import { useDriveSearch } from '../hooks/useDriveSearch'
 import { useDriveSync } from '../hooks/useDriveSync'
 import { useDriveDialogs } from '../hooks/useDriveDialogs'
-import type { DriveItem, Breadcrumb, SortField } from '../types/drive'
+import type { DriveItem, SortField } from '../types/drive'
 import { getFileCategory } from '../types/drive'
-import { FolderIcon } from '../components/drive/DriveIcons'
+import { CloseIcon, FolderIcon, RefreshIcon, UploadIcon, NewFolderIcon } from '../components/drive/DriveIcons'
 
 function DrivePageInner() {
-  const { state: ctx, setSort, selectAll, clearSelection } = useDrive()
+  const {
+    state: ctx,
+    setSort,
+    setViewMode,
+    setCategoryFilter,
+    selectAll,
+    selectFile,
+    clearSelection,
+    addFavorite,
+    navigateToFolder: navigateToFolderInContext,
+    navigateToBreadcrumb: navigateToBreadcrumbInContext,
+  } = useDrive()
   const { startDownload } = useDownload()
-  const { isDesktop, isMobile } = useResponsive()
-  const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([{ id: null, name: '根目录' }])
+  const { isMobile } = useResponsive()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileTab, setMobileTab] = useState<'files' | 'favorites' | 'search' | 'settings'>('files')
-  const [batchSelected, setBatchSelected] = useState<number[]>([])
   const [showFolderPicker, setShowFolderPicker] = useState(false)
   const [pendingMoveIds, setPendingMoveIds] = useState<number[]>([])
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
 
+  const breadcrumbs = ctx.currentPath
   const currentParentId = breadcrumbs[breadcrumbs.length - 1]?.id ?? null
-
   const { items, loading, error, total, page, totalPages, fetchItems, invalidate } =
     useDriveFiles(currentParentId, ctx.sort, ctx.categoryFilter)
-
   const search = useDriveSearch()
-
   const syncOpts = useDriveSync()
-
   const dialogs = useDriveDialogs()
 
   useEffect(() => {
@@ -52,28 +58,27 @@ function DrivePageInner() {
   }, [currentParentId, fetchItems])
 
   const navigateToFolder = useCallback((item: DriveItem) => {
-    if (!item.isFolder) return
-    setBreadcrumbs(prev => [...prev, { id: item.id, name: item.name }])
-  }, [])
+    if (item.isFolder) navigateToFolderInContext(item.id, item.name)
+  }, [navigateToFolderInContext])
 
   const navigateToBreadcrumb = useCallback((index: number) => {
-    setBreadcrumbs(prev => prev.slice(0, index + 1))
-  }, [])
+    navigateToBreadcrumbInContext(index)
+  }, [navigateToBreadcrumbInContext])
 
-  const refresh = useCallback(() => { invalidate() }, [invalidate])
+  const refresh = useCallback(() => invalidate(), [invalidate])
 
   const handlePreview = useCallback((item: DriveItem) => {
     if (item.isFolder) return
     const mime = (item.mimeType || '').toLowerCase()
     const ext = item.name.includes('.') ? item.name.split('.').pop()!.toLowerCase() : ''
-    const previewableExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp',
+    const previewableExts = [
+      'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp',
       'mp4', 'webm', 'avi', 'mov', 'mkv',
       'mp3', 'wav', 'ogg', 'flac', 'aac',
-      'pdf',
-      'js', 'ts', 'jsx', 'tsx', 'py', 'java', 'go', 'rs', 'c', 'cpp',
-      'html', 'css', 'json', 'xml', 'yaml', 'yml', 'toml', 'md', 'sql', 'sh']
-    if (mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/') ||
-        mime.includes('pdf') || previewableExts.includes(ext)) {
+      'pdf', 'js', 'ts', 'jsx', 'tsx', 'py', 'java', 'go', 'rs', 'c', 'cpp',
+      'html', 'css', 'json', 'xml', 'yaml', 'yml', 'toml', 'md', 'sql', 'sh',
+    ]
+    if (mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/') || mime.includes('pdf') || previewableExts.includes(ext)) {
       dialogs.openPreview(item)
     } else {
       startDownload(item)
@@ -81,75 +86,67 @@ function DrivePageInner() {
   }, [startDownload, dialogs])
 
   const displayItems = useMemo(() => {
-    let src = search.isSearchActive ? (search.results ?? []) : items
-
+    let source = search.isSearchActive ? (search.results ?? []) : items
     if (ctx.categoryFilter !== 'all') {
-      src = src.filter(item => {
-        if (search.isSearchActive && item.isFolder) return getFileCategory(item) === ctx.categoryFilter
-        if (item.isFolder) return true
-        return getFileCategory(item) === ctx.categoryFilter
-      })
+      source = source.filter(item => item.isFolder || getFileCategory(item) === ctx.categoryFilter)
     }
 
-    return [...src].sort((a, b) => {
+    return [...source].sort((a, b) => {
       if (a.isFolder && !b.isFolder) return -1
       if (!a.isFolder && b.isFolder) return 1
-      const { field, direction } = ctx.sort
-      const mul = direction === 'asc' ? 1 : -1
-      switch (field) {
-        case 'name': return mul * a.name.localeCompare(b.name, 'zh-CN')
-        case 'size': return mul * (Number(a.size) - Number(b.size))
-        case 'updatedAt': return mul * (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime())
-        case 'createdAt': return mul * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      const multiplier = ctx.sort.direction === 'asc' ? 1 : -1
+      switch (ctx.sort.field) {
+        case 'name': return multiplier * a.name.localeCompare(b.name, 'zh-CN')
+        case 'size': return multiplier * (Number(a.size) - Number(b.size))
+        case 'updatedAt': return multiplier * (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime())
+        case 'createdAt': return multiplier * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
         case 'type': {
-          const ea = a.name.split('.').pop()?.toLowerCase() || ''
-          const eb = b.name.split('.').pop()?.toLowerCase() || ''
-          return mul * ea.localeCompare(eb)
+          const extA = a.name.split('.').pop()?.toLowerCase() || ''
+          const extB = b.name.split('.').pop()?.toLowerCase() || ''
+          return multiplier * extA.localeCompare(extB)
         }
         default: return 0
       }
     })
   }, [items, search.results, search.isSearchActive, ctx.categoryFilter, ctx.sort])
 
+  const handleSelectAll = useCallback(() => {
+    const everyItemSelected = displayItems.length > 0 && displayItems.every(item => ctx.selectedFiles.includes(item.id))
+    if (everyItemSelected) clearSelection()
+    else selectAll(displayItems.map(item => item.id))
+  }, [displayItems, ctx.selectedFiles, clearSelection, selectAll])
+
   useKeyboardShortcuts({
-    selectedFileIds: batchSelected,
+    selectedFileIds: ctx.selectedFiles,
     currentPathLength: breadcrumbs.length,
     onDelete: () => {
-      if (batchSelected.length > 0) {
-        const item = displayItems.find(i => i.id === batchSelected[0])
-        if (item) dialogs.openDelete(item)
-      }
+      const item = displayItems.find(candidate => candidate.id === ctx.selectedFiles[0])
+      if (item) dialogs.openDelete(item)
     },
     onRename: () => {
-      if (batchSelected.length > 0) {
-        const item = displayItems.find(i => i.id === batchSelected[0])
-        if (item) dialogs.openRename(item)
-      }
+      const item = displayItems.find(candidate => candidate.id === ctx.selectedFiles[0])
+      if (item) dialogs.openRename(item)
     },
     onNewFolder: dialogs.openNewFolder,
     onUpload: dialogs.openUpload,
     onRefresh: refresh,
-    onClearSelection: () => { clearSelection(); setBatchSelected([]) },
-    onNavigateBack: () => navigateToBreadcrumb(breadcrumbs.length - 2),
-    onSelectAll: () => {
-      setBatchSelected(displayItems.map(i => i.id))
-      selectAll(displayItems.map(i => i.id))
-    },
+    onClearSelection: clearSelection,
+    onNavigateBack: () => navigateToBreadcrumb(Math.max(0, breadcrumbs.length - 2)),
+    onSelectAll: handleSelectAll,
   })
 
   const selectedItem = useMemo(() => {
-    if (batchSelected.length === 0) return null
-    return displayItems.find(item => item.id === batchSelected[0]) || null
-  }, [batchSelected, displayItems])
+    if (ctx.selectedFiles.length === 0) return null
+    return displayItems.find(item => item.id === ctx.selectedFiles[0]) || null
+  }, [ctx.selectedFiles, displayItems])
 
-  const handleSelect = useCallback((item: DriveItem | null) => {
+  const handleSelect = useCallback((item: DriveItem | null, multiSelect = false) => {
     if (!item) {
       clearSelection()
-      setBatchSelected([])
       return
     }
-    setBatchSelected([item.id])
-  }, [clearSelection])
+    selectFile(item.id, multiSelect)
+  }, [clearSelection, selectFile])
 
   const handleUploaded = useCallback(() => {
     refresh()
@@ -157,203 +154,250 @@ function DrivePageInner() {
   }, [refresh, dialogs])
 
   const handleBatchMove = useCallback(() => {
-    if (batchSelected.length === 0) return
-    setPendingMoveIds(batchSelected)
+    if (ctx.selectedFiles.length === 0) return
+    setPendingMoveIds(ctx.selectedFiles)
     setShowFolderPicker(true)
-  }, [batchSelected])
+  }, [ctx.selectedFiles])
 
   const handleFolderPick = useCallback(async (targetFolderId: number | null) => {
-    try {
-      await Promise.allSettled(
-        pendingMoveIds.map(fileId => api.put(`/drive/files/${fileId}`, { parentId: targetFolderId }))
-      )
-      clearSelection()
-      setBatchSelected([])
-      invalidate()
-    } catch { /* ignore */ }
+    await Promise.allSettled(
+      pendingMoveIds.map(fileId => api.put(`/drive/files/${fileId}`, { parentId: targetFolderId }))
+    )
+    clearSelection()
+    setPendingMoveIds([])
+    invalidate()
     setShowFolderPicker(false)
   }, [pendingMoveIds, clearSelection, invalidate])
 
+  const handleMobileTabChange = useCallback((tab: 'files' | 'favorites' | 'search' | 'settings') => {
+    setMobileTab(tab)
+    if (tab === 'search') {
+      window.setTimeout(() => searchInputRef.current?.focus(), 0)
+    }
+  }, [])
+
   return (
-    <div className="gh-drive-layout">
-      {isDesktop && (
+    <div className="gh-drive-page">
+      <header className="gh-drive-repo-header">
+        <div className="gh-drive-repo-heading">
+          <span className="gh-drive-repo-mark"><FolderIcon size={24} /></span>
+          <div>
+            <div className="gh-drive-repo-path">LineWeb <span>/</span> Drive</div>
+            <h1>网盘</h1>
+            <p>你的文件工作区</p>
+          </div>
+        </div>
+        <div className="gh-drive-repo-actions">
+          <span className="gh-drive-repo-status"><span /> 私有工作区</span>
+          <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={dialogs.openNewFolder}>
+            <NewFolderIcon size={14} /> 新建文件夹
+          </button>
+          <button className="gh-btn gh-btn--sm gh-btn--primary" onClick={dialogs.openUpload}>
+            <UploadIcon size={14} /> 上传
+          </button>
+          <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={syncOpts.sync} disabled={syncOpts.syncing}>
+            <RefreshIcon size={14} /> {syncOpts.syncing ? '同步中…' : '同步'}
+          </button>
+        </div>
+      </header>
+
+      <div className="gh-drive-subnav" role="tablist" aria-label="网盘视图">
+        <button className="gh-drive-subnav-item gh-drive-subnav-item--active" role="tab" aria-selected="true">
+          <FolderIcon size={15} /> 文件
+        </button>
+        <span className="gh-drive-subnav-note">{breadcrumbs.length > 1 ? `位于 ${breadcrumbs[breadcrumbs.length - 1].name}` : '根目录'}</span>
+      </div>
+
+      <div className={`gh-drive-workspace${selectedItem ? ' gh-drive-workspace--with-detail' : ''}${sidebarCollapsed ? ' gh-drive-workspace--sidebar-collapsed' : ''}`}>
         <DriveNavigation
           collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onToggleCollapse={() => setSidebarCollapsed(value => !value)}
         />
-      )}
 
-      <div className="gh-drive-main">
-        <div className="gh-drive-content-card">
-          <DriveToolbar
-            breadcrumbs={breadcrumbs}
-            searchQuery={search.query}
-            searching={search.searching}
-            searchResultCount={search.results?.length ?? null}
-            onSearch={search.setQuery}
-            onNavigate={navigateToBreadcrumb}
-            onNewFolder={dialogs.openNewFolder}
-            onUpload={dialogs.openUpload}
-            onSync={syncOpts.sync}
-            syncing={syncOpts.syncing}
-            onParentFolder={() => navigateToBreadcrumb(breadcrumbs.length - 2)}
-          />
-
-          {syncOpts.message && (
-            <div className="gh-drive-sync-message" style={{
-              color: syncOpts.message.includes('失败') || syncOpts.message.includes('错误')
-                ? 'var(--gh-danger)' : 'var(--gh-text-secondary)',
-            }}>
-              {syncOpts.message}
-              <button onClick={syncOpts.clearMessage} style={{ marginLeft: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gh-text-tertiary)' }}>✕</button>
-            </div>
-          )}
-
-          {batchSelected.length > 0 && (
-            <BatchActions
-              onBatchDownload={() => {
-                displayItems.filter(i => batchSelected.includes(i.id) && !i.isFolder)
-                  .forEach(i => startDownload(i))
-              }}
-              onBatchMove={handleBatchMove}
-              onBatchDelete={() => {
-                const item = displayItems.find(i => batchSelected.includes(i.id))
-                if (item) dialogs.openDelete(item)
-              }}
-              onBatchFavorite={() => {
-                displayItems.filter(i => batchSelected.includes(i.id) && i.isFolder)
-                  .forEach(item => {
-                    try {
-                      const raw = localStorage.getItem('lineweb_favorites')
-                      const favorites = raw ? JSON.parse(raw) : []
-                      if (!favorites.some((f: { folderId: number }) => f.folderId === item.id)) {
-                        favorites.push({ id: `fav-${item.id}`, folderId: item.id, folderName: item.name, order: Date.now() })
-                        localStorage.setItem('lineweb_favorites', JSON.stringify(favorites))
-                      }
-                    } catch { /* ignore */ }
-                  })
-                clearSelection()
-                setBatchSelected([])
-              }}
-              onClearSelection={() => { clearSelection(); setBatchSelected([]) }}
-            />
-          )}
-
-          {dialogs.showUpload && (
-            <UploadZone parentId={currentParentId} onUploaded={handleUploaded} onClose={dialogs.closeUpload} />
-          )}
-
-          {loading ? (
-            <div className="gh-drive-loading">
-              <div className="gh-spinner" />
-              <p style={{ marginTop: '12px', color: 'var(--gh-text-tertiary)', fontSize: '0.85rem' }}>
-                正在加载...
-              </p>
-            </div>
-          ) : error ? (
-            <div className="gh-drive-state-card">
-              <p className="gh-drive-state-text">⚠️ {error}</p>
-              <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={() => fetchItems(page, true)}>重试</button>
-            </div>
-          ) : displayItems.length === 0 ? (
-            <div className="gh-drive-state-card">
-              <span className="gh-drive-state-icon"><FolderIcon size={40} /></span>
-              <p className="gh-drive-state-text">
-                {search.isSearchActive ? '未找到匹配的文件' : '网盘为空，点击上方按钮上传文件'}
-              </p>
-            </div>
-          ) : ctx.viewMode === 'list' ? (
-            <DriveListView
-              items={displayItems}
-              selectedId={batchSelected[0] ?? null}
+        <main className="gh-drive-main">
+          <div className="gh-drive-files-card">
+            <DriveToolbar
+              breadcrumbs={breadcrumbs}
+              searchQuery={search.query}
+              searching={search.searching}
+              searchResultCount={search.results?.length ?? null}
+              onSearch={search.setQuery}
+              onClearSearch={search.clearSearch}
+              searchInputRef={searchInputRef}
+              onNavigate={navigateToBreadcrumb}
+              onNewFolder={dialogs.openNewFolder}
+              onUpload={dialogs.openUpload}
+              onSync={syncOpts.sync}
+              syncing={syncOpts.syncing}
+              onParentFolder={() => navigateToBreadcrumb(Math.max(0, breadcrumbs.length - 2))}
+              viewMode={ctx.viewMode}
+              itemCount={displayItems.length}
+              onViewModeChange={setViewMode}
+              categoryFilter={ctx.categoryFilter}
+              onCategoryFilterChange={setCategoryFilter}
               sortField={ctx.sort.field}
               sortDirection={ctx.sort.direction}
               onSortChange={(field: SortField) => {
-                const direction = ctx.sort.field === field && ctx.sort.direction === 'asc' ? 'desc' : 'asc'
-                setSort({ field, direction })
+                if (ctx.sort.field === field) {
+                  setSort({ field, direction: ctx.sort.direction === 'asc' ? 'desc' : 'asc' })
+                } else {
+                  setSort({ field, direction: 'asc' })
+                }
               }}
-              onFolderClick={navigateToFolder}
-              onPreview={handlePreview}
-              onDownload={startDownload}
-              onRename={(item) => dialogs.openRename(item)}
-              onDelete={(item) => dialogs.openDelete(item)}
-              onSelect={(item) => handleSelect(item)}
-              onNewFolder={dialogs.openNewFolder}
-              onUpload={dialogs.openUpload}
-              onRefresh={refresh}
+              onSortDirectionChange={() => setSort({ field: ctx.sort.field, direction: ctx.sort.direction === 'asc' ? 'desc' : 'asc' })}
+              showActions={false}
             />
-          ) : (
-            <DriveGridView
-              items={displayItems}
-              selectedId={batchSelected[0] ?? null}
-              onFolderClick={navigateToFolder}
-              onPreview={handlePreview}
-              onDownload={startDownload}
-              onRename={(item) => dialogs.openRename(item)}
-              onDelete={(item) => dialogs.openDelete(item)}
-              onSelect={(item) => handleSelect(item)}
-              onNewFolder={dialogs.openNewFolder}
-              onUpload={dialogs.openUpload}
-              onRefresh={refresh}
-            />
-          )}
 
-          {!search.isSearchActive && totalPages > 1 && (
-            <>
-              <Pagination
-                page={page}
-                totalPages={totalPages}
-                onPageChange={(p) => fetchItems(p)}
-              />
-              <div className="gh-drive-pagination-info">
-                第 {page}/{totalPages} 页，共 {total} 项
+            {isMobile && mobileTab === 'favorites' && (
+              <div className="gh-drive-mobile-panel">
+                <div className="gh-drive-mobile-panel-heading">收藏夹</div>
+                {ctx.favorites.length === 0 ? (
+                  <p>暂无收藏的文件夹</p>
+                ) : ctx.favorites.map(favorite => (
+                  <button
+                    key={favorite.id}
+                    className="gh-drive-mobile-favorite"
+                    onClick={() => {
+                      navigateToFolderInContext(favorite.folderId, favorite.folderName)
+                      setMobileTab('files')
+                    }}
+                  >
+                    <FolderIcon size={16} /> {favorite.folderName}
+                  </button>
+                ))}
               </div>
-            </>
-          )}
-        </div>
+            )}
+
+            {isMobile && mobileTab === 'settings' && (
+              <div className="gh-drive-mobile-panel gh-drive-mobile-panel--info">
+                <div className="gh-drive-mobile-panel-heading">网盘状态</div>
+                <p>当前目录：{breadcrumbs[breadcrumbs.length - 1]?.name}</p>
+                <p>本页项目：{displayItems.length}</p>
+                <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={syncOpts.sync} disabled={syncOpts.syncing}>
+                  <RefreshIcon size={14} /> {syncOpts.syncing ? '同步中…' : '立即同步'}
+                </button>
+              </div>
+            )}
+
+            {syncOpts.message && (
+              <div className={`gh-drive-sync-message${syncOpts.message.includes('失败') || syncOpts.message.includes('错误') ? ' gh-drive-sync-message--error' : ''}`}>
+                <span>{syncOpts.message}</span>
+                <button onClick={syncOpts.clearMessage} aria-label="关闭同步提示" title="关闭提示"><CloseIcon size={14} /></button>
+              </div>
+            )}
+
+            {ctx.selectedFiles.length > 0 && (
+              <BatchActions
+                onBatchDownload={() => displayItems.filter(item => ctx.selectedFiles.includes(item.id) && !item.isFolder).forEach(item => startDownload(item))}
+                onBatchMove={handleBatchMove}
+                onBatchDelete={() => {
+                  const item = displayItems.find(candidate => ctx.selectedFiles.includes(candidate.id))
+                  if (item) dialogs.openDelete(item)
+                }}
+                onBatchFavorite={() => {
+                  displayItems.filter(item => ctx.selectedFiles.includes(item.id) && item.isFolder)
+                    .forEach(item => addFavorite(item.id, item.name))
+                  clearSelection()
+                }}
+                onClearSelection={clearSelection}
+              />
+            )}
+
+            {dialogs.showUpload && (
+              <UploadZone parentId={currentParentId} onUploaded={handleUploaded} onClose={dialogs.closeUpload} />
+            )}
+
+            {loading ? (
+              <div className="gh-drive-loading" role="status" aria-live="polite">
+                <div className="gh-spinner" />
+                <p>正在加载文件…</p>
+              </div>
+            ) : error ? (
+              <div className="gh-drive-state-card gh-drive-state-card--error">
+                <p className="gh-drive-state-text">{error}</p>
+                <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={() => fetchItems(page, true)}>重试</button>
+              </div>
+            ) : displayItems.length === 0 ? (
+              <div className="gh-drive-state-card">
+                <span className="gh-drive-state-icon"><FolderIcon size={34} /></span>
+                <p className="gh-drive-state-text">{search.isSearchActive ? '没有匹配的文件' : '这个目录还是空的'}</p>
+                <span className="gh-drive-state-hint">上传文件或新建文件夹开始整理</span>
+              </div>
+            ) : ctx.viewMode === 'list' ? (
+              <DriveListView
+                items={displayItems}
+                selectedId={ctx.selectedFiles[0] ?? null}
+                selectedIds={ctx.selectedFiles}
+                sortField={ctx.sort.field}
+                sortDirection={ctx.sort.direction}
+                onSortChange={(field: SortField) => {
+                  setSort({ field, direction: ctx.sort.field === field && ctx.sort.direction === 'asc' ? 'desc' : 'asc' })
+                }}
+                onFolderClick={navigateToFolder}
+                onPreview={handlePreview}
+                onDownload={startDownload}
+                onRename={dialogs.openRename}
+                onDelete={dialogs.openDelete}
+                onSelect={handleSelect}
+                onNewFolder={dialogs.openNewFolder}
+                onUpload={dialogs.openUpload}
+                onRefresh={refresh}
+                onSelectAll={handleSelectAll}
+              />
+            ) : (
+              <DriveGridView
+                items={displayItems}
+                selectedId={ctx.selectedFiles[0] ?? null}
+                selectedIds={ctx.selectedFiles}
+                onFolderClick={navigateToFolder}
+                onPreview={handlePreview}
+                onDownload={startDownload}
+                onRename={dialogs.openRename}
+                onDelete={dialogs.openDelete}
+                onSelect={handleSelect}
+                onNewFolder={dialogs.openNewFolder}
+                onUpload={dialogs.openUpload}
+                onRefresh={refresh}
+                onSelectAll={handleSelectAll}
+              />
+            )}
+
+            {!search.isSearchActive && totalPages > 1 && (
+              <div className="gh-drive-pagination-wrap">
+                <Pagination page={page} totalPages={totalPages} onPageChange={targetPage => fetchItems(targetPage)} />
+                <div className="gh-drive-pagination-info">第 {page}/{totalPages} 页，共 {total} 项</div>
+              </div>
+            )}
+          </div>
+        </main>
+
+        {selectedItem && (
+          <DriveDetailPanel
+            item={selectedItem}
+            onClose={clearSelection}
+            onDownload={startDownload}
+            onRename={dialogs.openRename}
+            onDelete={dialogs.openDelete}
+            onPreview={handlePreview}
+          />
+        )}
       </div>
 
-      {isDesktop && (
-        <DriveDetailPanel
-          item={selectedItem}
-          onClose={() => handleSelect(null)}
-          onDownload={startDownload}
-          onRename={(item) => dialogs.openRename(item)}
-          onDelete={(item) => dialogs.openDelete(item)}
-          onPreview={handlePreview}
-        />
-      )}
+      {isMobile && <MobileNav activeTab={mobileTab} onTabChange={handleMobileTabChange} />}
 
-      {isMobile && <MobileNav activeTab={mobileTab} onTabChange={setMobileTab} />}
-
-      {dialogs.previewItem && (
-        <DrivePreview item={dialogs.previewItem} onClose={dialogs.closePreview} />
-      )}
+      {dialogs.previewItem && <DrivePreview item={dialogs.previewItem} onClose={dialogs.closePreview} />}
       {dialogs.showNewFolder && (
-        <NewFolderDialog
-          parentId={currentParentId}
-          onCreated={() => { refresh(); dialogs.closeNewFolder() }}
-          onClose={dialogs.closeNewFolder}
-        />
+        <NewFolderDialog parentId={currentParentId} onCreated={() => { refresh(); dialogs.closeNewFolder() }} onClose={dialogs.closeNewFolder} />
       )}
       {dialogs.renameItem && (
-        <RenameDialog
-          item={dialogs.renameItem}
-          onRenamed={() => { dialogs.closeRename(); refresh() }}
-          onClose={dialogs.closeRename}
-        />
+        <RenameDialog item={dialogs.renameItem} onRenamed={() => { dialogs.closeRename(); refresh() }} onClose={dialogs.closeRename} />
       )}
       {dialogs.deleteItem && (
-        <DeleteDialog
-          item={dialogs.deleteItem}
-          onDeleted={() => { dialogs.closeDelete(); refresh() }}
-          onClose={dialogs.closeDelete}
-        />
+        <DeleteDialog item={dialogs.deleteItem} onDeleted={() => { dialogs.closeDelete(); refresh(); clearSelection() }} onClose={dialogs.closeDelete} />
       )}
-
       {showFolderPicker && (
         <FolderPickerDialog
-          title={`移动 ${pendingMoveIds.length} 个文件到...`}
+          title={`移动 ${pendingMoveIds.length} 个项目到…`}
           onSelect={handleFolderPick}
           onClose={() => setShowFolderPicker(false)}
         />

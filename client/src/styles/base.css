@@ -128,3 +128,40 @@ h4 { font-size: var(--gh-text-base); font-weight: 600; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Route-level fallback for lazy module and chunk failures. */
+.gh-route-error {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: var(--gh-space-6);
+  background: var(--gh-bg);
+}
+
+.gh-route-error-card {
+  width: min(100%, 480px);
+  padding: var(--gh-space-6);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-md);
+  text-align: center;
+}
+
+.gh-route-error-eyebrow {
+  margin-bottom: var(--gh-space-2);
+  color: var(--gh-danger);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+}
+
+.gh-route-error-title {
+  margin-bottom: var(--gh-space-3);
+  font-size: var(--gh-text-xl);
+}
+
+.gh-route-error-message {
+  margin-bottom: var(--gh-space-5);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}

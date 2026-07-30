@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { Component, lazy, Suspense, type ReactNode } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './contexts/AuthContext'
@@ -49,6 +49,35 @@ function RouteLoading() {
   )
 }
 
+interface RouteErrorBoundaryState {
+  error: Error | null
+}
+
+class RouteErrorBoundary extends Component<{ children: ReactNode }, RouteErrorBoundaryState> {
+  state: RouteErrorBoundaryState = { error: null }
+
+  static getDerivedStateFromError(error: Error): RouteErrorBoundaryState {
+    return { error }
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children
+
+    return (
+      <main className="gh-route-error" role="alert">
+        <div className="gh-route-error-card">
+          <p className="gh-route-error-eyebrow">页面加载失败</p>
+          <h1 className="gh-route-error-title">暂时无法打开这个页面</h1>
+          <p className="gh-route-error-message">请重新加载页面。若问题持续，请先重启开发服务或清理浏览器缓存。</p>
+          <button className="gh-btn gh-btn--primary" onClick={() => window.location.reload()}>
+            重新加载
+          </button>
+        </div>
+      </main>
+    )
+  }
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -56,8 +85,9 @@ export default function App() {
       <AuthProvider>
         <ThemeProvider>
           <DownloadProvider>
-              <Suspense fallback={<RouteLoading />}>
-                <Routes>
+              <RouteErrorBoundary>
+                <Suspense fallback={<RouteLoading />}>
+                  <Routes>
                   {/* Main site layout */}
                   <Route element={<Layout />}>
                     <Route path="/" element={<HomePage />} />
@@ -90,8 +120,9 @@ export default function App() {
                     <Route path="/admin/devices" element={<DeviceMonitorPage />} />
                     <Route path="/admin/ai" element={<AiAdminPage />} />
                   </Route>
-                </Routes>
-              </Suspense>
+                  </Routes>
+                </Suspense>
+              </RouteErrorBoundary>
 
               {/* 下载进度弹窗 — 放在 Routes 外层，不随页面切换卸载 */}
               <DownloadToast />

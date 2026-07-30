@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, memo } from 'react'
 import { formatSpeed, formatMB, formatETA } from '../../lib/format'
 import { useDragAndDrop } from '../../hooks/useDragAndDrop'
 import type { TransferProgress } from '../../types/drive'
+import { CloseIcon, FileIcon, UploadIcon } from './DriveIcons'
 
 export interface UploadZoneProps {
   parentId: number | null
@@ -152,11 +153,11 @@ const UploadZone = memo(function UploadZone({
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
         >
-          ⬆ 选择文件
+          <UploadIcon size={14} /> 选择文件
         </button>
         {uploading ? (
           <button className="gh-btn gh-btn--sm gh-btn--danger" onClick={handleCancel}>
-            ⏹ 取消
+            <CloseIcon size={14} /> 取消
           </button>
         ) : (
           <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={onClose}>
@@ -171,7 +172,7 @@ const UploadZone = memo(function UploadZone({
           {...dragProps}
           onClick={() => fileInputRef.current?.click()}
         >
-          <span className="gh-drive-upload-zone-drop-icon">📂</span>
+          <span className="gh-drive-upload-zone-drop-icon"><UploadIcon size={28} /></span>
           <span className="gh-drive-upload-zone-drop-text">拖拽文件到此处或点击选择</span>
           <span className="gh-drive-upload-zone-drop-hint">支持多文件上传</span>
         </div>
@@ -180,14 +181,14 @@ const UploadZone = memo(function UploadZone({
       {uploading && progress && (
         <div className="gh-drive-upload-zone-progress" style={{ padding: '16px', background: 'var(--gh-canvas)', borderRadius: 'var(--gh-radius)', border: '1px solid var(--gh-border)' }}>
           <div className="gh-drive-upload-zone-progress-info">
-            <span>📄 {progress.fileName}</span>
+            <span><FileIcon size={14} /> {progress.fileName}</span>
             <span className="gh-drive-upload-zone-progress-stats" style={{ fontSize: 'var(--gh-text-xs)' }}>
               {progress.fileIndex}/{progress.totalFiles}
             </span>
           </div>
           <div className="gh-drive-upload-zone-progress-stats" style={{ marginBottom: '8px' }}>
-            <span>⬆ {formatSpeed(progress.speed)}</span>
-            <span>⏱ {formatETA(progress.eta)}</span>
+            <span>{formatSpeed(progress.speed)}</span>
+            <span>剩余 {formatETA(progress.eta)}</span>
             <span>{formatMB(progress.loaded)} / {formatMB(progress.total)}</span>
           </div>
           <div className="gh-drive-upload-zone-progress-bar">
@@ -201,7 +202,7 @@ const UploadZone = memo(function UploadZone({
 
       {failedFiles.length > 0 && (
         <div className="gh-drive-upload-zone-failed" style={{ padding: '16px', background: 'var(--gh-canvas)', borderRadius: 'var(--gh-radius)', border: '1px solid var(--gh-border)' }}>
-          <p>⚠️ 以下文件上传失败：</p>
+          <p>以下文件上传失败：</p>
           <ul>
             {failedFiles.map((f, i) => (
               <li key={i}>{f}</li>

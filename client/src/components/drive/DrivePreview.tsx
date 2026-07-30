@@ -1,6 +1,7 @@
 import { useState, memo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import type { DriveItem } from '../../types/drive'
+import { AudioIcon, CloseIcon, FileIcon } from './DriveIcons'
 
 export interface DrivePreviewProps {
   item: DriveItem
@@ -44,7 +45,7 @@ const ImagePreview = memo(function ImagePreview({ item, onClose }: DrivePreviewP
             />
           )}
         </div>
-        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
+        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览"><CloseIcon size={16} /></button>
       </div>
     </div>,
     document.body
@@ -71,7 +72,7 @@ const VideoPreview = memo(function VideoPreview({ item, onClose }: DrivePreviewP
         >
           您的浏览器不支持视频播放
         </video>
-        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
+        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览"><CloseIcon size={16} /></button>
       </div>
     </div>,
     document.body
@@ -86,13 +87,13 @@ const AudioPreview = memo(function AudioPreview({ item, onClose }: DrivePreviewP
     <div className="gh-drive-preview-overlay" onClick={onClose}>
       <div className="gh-drive-preview-container" onClick={e => e.stopPropagation()}>
         <div className="gh-drive-preview-audio-wrap">
-          <div className="gh-drive-preview-audio-icon">🎵</div>
+          <div className="gh-drive-preview-audio-icon"><AudioIcon size={48} /></div>
           <p className="gh-drive-preview-audio-name">{item.name}</p>
           <audio controls autoPlay className="gh-drive-preview-audio" src={audioSrc}>
             您的浏览器不支持音频播放
           </audio>
         </div>
-        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
+        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览"><CloseIcon size={16} /></button>
       </div>
     </div>,
     document.body
@@ -111,7 +112,7 @@ const PdfPreview = memo(function PdfPreview({ item, onClose }: DrivePreviewProps
           src={pdfSrc}
           title={item.name}
         />
-        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
+        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览"><CloseIcon size={16} /></button>
       </div>
     </div>,
     document.body
@@ -147,7 +148,7 @@ const CodePreview = memo(function CodePreview({ item, onClose }: DrivePreviewPro
         ) : (
           <pre className="gh-drive-preview-code"><code>{code}</code></pre>
         )}
-        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
+        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览"><CloseIcon size={16} /></button>
       </div>
     </div>,
     document.body
@@ -180,11 +181,11 @@ const DrivePreview = memo(function DrivePreview({ item, onClose }: DrivePreviewP
     <div className="gh-drive-preview-overlay" onClick={onClose}>
       <div className="gh-drive-preview-container" onClick={e => e.stopPropagation()}>
         <div className="gh-drive-preview-unsupported">
-          <span className="gh-drive-preview-unsupported-icon">📄</span>
+          <span className="gh-drive-preview-unsupported-icon"><FileIcon size={48} /></span>
           <p className="gh-drive-preview-unsupported-text">此文件类型不支持预览</p>
           <p className="gh-drive-preview-unsupported-name">{item.name}</p>
         </div>
-        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览">✕</button>
+        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览"><CloseIcon size={16} /></button>
       </div>
     </div>,
     document.body
