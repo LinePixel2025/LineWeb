@@ -39,6 +39,7 @@ export default memo(function UserAvatar({ userId, username, size = 'md' }: UserA
 
     fetch(`/api/auth/avatar/${userId}`, {
       headers,
+      cache: 'no-store',
       signal: controller.signal,
     })
       .then(res => {

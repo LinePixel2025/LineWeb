@@ -64,7 +64,8 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     }
     const stream = await getAvatarStream(avatarPath)
     res.setHeader('Content-Type', 'image/webp')
-    res.setHeader('Cache-Control', 'public, max-age=86400')
+    // 头像上传、更新或删除后必须立即反映，避免缓存旧图片或 204 响应。
+    res.setHeader('Cache-Control', 'no-store')
     for await (const chunk of stream) {
       res.write(chunk)
     }
@@ -90,7 +91,8 @@ router.get('/:userId', async (req: Request, res: Response) => {
     }
     const stream = await getAvatarStream(avatarPath)
     res.setHeader('Content-Type', 'image/webp')
-    res.setHeader('Cache-Control', 'public, max-age=86400')
+    // 头像上传、更新或删除后必须立即反映，避免缓存旧图片或 204 响应。
+    res.setHeader('Cache-Control', 'no-store')
     for await (const chunk of stream) {
       res.write(chunk)
     }
