@@ -19,8 +19,16 @@ jobs:
             set -e
             cd /home/Lineweb
 
-            echo "=== [1/6] 拉取最新代码 ==="
-            git fetch origin master
+            echo "=== [1/6] 拉取最新代码（带重试） ==="
+            # 降低 HTTP/2 优先级以缓解 SSL 超时问题
+            git config --global http.version HTTP/1.1
+            for i in 1 2 3; do
+              echo "尝试 #$i: git fetch origin master"
+              git fetch origin master && break
+              [ $i -eq 3 ] && exit 1
+              echo "拉取失败，等待 10 秒后重试..."
+              sleep 10
+            done
             git reset --hard origin/master
             echo "当前 HEAD: $(git log --oneline -1)"
 
