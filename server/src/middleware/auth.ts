@@ -68,9 +68,11 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       const payload = jwt.verify(token, config.jwtSecret) as AuthPayload & { iat?: number }
 
       // JWT 失效校验：token 签发时间必须 >= user.tokenValidAfter
+      // 注意：iat 是秒级整数，tokenValidAfter 含毫秒，统一按秒比较，
+      // 避免同一秒内签发的新 token（如注册/改密码后立即返回的 token）被误判失效
       if (payload.iat && payload.userId) {
         const validAfter = await getTokenValidAfter(payload.userId)
-        if (payload.iat * 1000 < validAfter.getTime()) {
+        if (payload.iat < Math.floor(validAfter.getTime() / 1000)) {
           res.status(401).json({ error: 'Token 已失效，请重新登录' })
           return
         }
@@ -97,7 +99,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       const payload = jwt.verify(queryToken, config.jwtSecret) as AuthPayload & { iat?: number }
       if (payload.iat && payload.userId) {
         const validAfter = await getTokenValidAfter(payload.userId)
-        if (payload.iat * 1000 < validAfter.getTime()) {
+        if (payload.iat < Math.floor(validAfter.getTime() / 1000)) {
           res.status(401).json({ error: 'Token 已失效' })
           return
         }

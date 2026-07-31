@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { GitHubButton, GitHubInput } from '../components/ui'
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -18,7 +18,7 @@ export default function LoginPage() {
     e.preventDefault()
     setError(''); setLoading(true)
     try {
-      await login(email, password)
+      await login(identifier, password)
       navigate(redirectTo, { replace: true })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '登录失败')
@@ -40,7 +40,7 @@ export default function LoginPage() {
         )}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <GitHubInput type="email" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} required fullWidth />
+          <GitHubInput type="text" placeholder="邮箱或用户名" value={identifier} onChange={e => setIdentifier(e.target.value)} required fullWidth />
           <GitHubInput type="password" placeholder="密码" value={password} onChange={e => setPassword(e.target.value)} required fullWidth />
           <GitHubButton type="submit" variant="primary" size="lg" fullWidth disabled={loading}>
             {loading ? '登录中...' : '登录'}

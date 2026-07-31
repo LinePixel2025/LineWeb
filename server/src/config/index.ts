@@ -42,8 +42,12 @@ export const registerSchema = z.object({
 })
 
 export const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string(),
+  identifier: z.string().min(1).max(100).optional(),
+  email: z.string().email().optional(),
+  username: z.string().min(1).max(50).optional(),
+  password: z.string().min(1).max(100),
+}).refine((d) => d.identifier || d.email || d.username, {
+  message: '请输入邮箱或用户名',
 })
 
 export const postSchema = z.object({
@@ -70,6 +74,14 @@ export const pageUpdateSchema = pageSchema.partial()
 
 export const updateSettingsSchema = z.object({
   settings: z.string().min(1, '设置不能为空'),
+})
+
+export const updateProfileSchema = z.object({
+  username: z.string().min(2).max(50).optional(),
+  currentPassword: z.string().min(1).max(100).optional(),
+  newPassword: z.string().min(6).max(100).optional(),
+}).refine((d) => d.username || d.newPassword, {
+  message: '请提供要修改的用户名或新密码',
 })
 
 export const commentSchema = z.object({

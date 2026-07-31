@@ -60,17 +60,20 @@ export async function registerUser(username: string, email: string, password: st
 }
 
 /**
- * 用户登录
+ * 用户登录 —— 支持用户名或邮箱
  */
-export async function loginUser(email: string, password: string): Promise<TokenResponse> {
-  const user = await prisma.user.findUnique({ where: { email } })
+export async function loginUser(identifier: string, password: string): Promise<TokenResponse> {
+  let user = await prisma.user.findUnique({ where: { username: identifier } })
   if (!user) {
-    throw Object.assign(new Error('邮箱或密码错误'), { status: 401 })
+    user = await prisma.user.findUnique({ where: { email: identifier } })
+  }
+  if (!user) {
+    throw Object.assign(new Error('用户名或邮箱与密码不匹配'), { status: 401 })
   }
 
   const valid = await bcrypt.compare(password, user.password)
   if (!valid) {
-    throw Object.assign(new Error('邮箱或密码错误'), { status: 401 })
+    throw Object.assign(new Error('用户名或邮箱与密码不匹配'), { status: 401 })
   }
 
   return buildTokenResponse(user)
@@ -95,6 +98,58 @@ export async function updateUserSettings(userId: number, settings: string) {
     data: { settings },
     select: { id: true, username: true, email: true, role: true, settings: true, canAccessDrive: true },
   })
+}
+
+export interface UpdateProfileInput {
+  username?: string
+  currentPassword?: string
+  newPassword?: string
+}
+
+/**
+ * 更新个人资料（用户名 / 登录密码）
+ * 修改密码后使所有旧 token 失效，并返回新 token 保持当前会话
+ */
+export async function updateUserProfile(userId: number, input: UpdateProfileInput) {
+  const user = await prisma.user.findUnique({ where: { id: userId } })
+  if (!user) {
+    throw Object.assign(new Error('用户不存在'), { status: 404 })
+  }
+
+  const data: { username?: string; password?: string } = {}
+
+  if (input.username && input.username !== user.username) {
+    const exists = await prisma.user.findUnique({ where: { username: input.username } })
+    if (exists) {
+      throw Object.assign(new Error('用户名已被使用'), { status: 409 })
+    }
+    data.username = input.username
+  }
+
+  if (input.newPassword) {
+    if (!input.currentPassword) {
+      throw Object.assign(new Error('请输入当前密码'), { status: 400 })
+    }
+    const valid = await bcrypt.compare(input.currentPassword, user.password)
+    if (!valid) {
+      throw Object.assign(new Error('当前密码错误'), { status: 400 })
+    }
+    data.password = await bcrypt.hash(input.newPassword, 10)
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data,
+    select: { id: true, username: true, email: true, role: true, settings: true, canAccessDrive: true },
+  })
+
+  // 修改密码后使所有旧 token 立即失效，并签发新 token 保持当前登录
+  if (input.newPassword) {
+    await invalidateUserTokens(userId)
+    return { user: updated, token: signToken(updated) }
+  }
+
+  return { user: updated }
 }
 
 /**

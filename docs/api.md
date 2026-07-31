@@ -161,8 +161,11 @@ Content-Type: application/json
 
 | 字段 | 类型 | 必填 |
 |---|---|---|
-| email | string | 是 |
+| identifier | string | 是（邮箱或用户名） |
+| email | string | 否（兼容旧客户端，与 identifier 二选一） |
 | password | string | 是 |
+
+> 支持用 **用户名** 或 **邮箱** 登录，例如 `{"identifier":"admin","password":"admin123"}` 或 `{"identifier":"admin@lineweb.dev","password":"admin123"}`。
 
 **成功响应（200）：**
 
@@ -210,7 +213,41 @@ Authorization: Bearer <token>
 }
 ```
 
-### 3.4 更新用户设置
+### 3.4 更新个人资料（用户名 / 密码）
+
+```
+PUT /api/auth/profile
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**请求体：**
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| username | string | 否 | 新用户名（2-50 字符，需唯一） |
+| currentPassword | string | 改密码时必填 | 当前密码，用于验证身份 |
+| newPassword | string | 否 | 新密码（至少 6 位） |
+
+可单独修改用户名或密码，也可同时修改。修改密码后，该用户的所有旧 Token 立即失效，响应中会返回新 Token 以保持当前会话：
+
+```json
+{
+  "user": {
+    "id": 1,
+    "username": "admin",
+    "email": "admin@lineweb.dev",
+    "role": "admin",
+    "canAccessDrive": true,
+    "settings": null
+  },
+  "token": "eyJhbGciOiJIUzI1NiIs..."
+}
+```
+
+> 仅修改用户名时不会返回 `token`。
+
+### 3.5 更新用户设置
 
 ```
 PUT /api/auth/settings

@@ -15,11 +15,12 @@ interface User {
 interface AuthContextType {
   user: User | null
   loading: boolean
-  login: (email: string, password: string) => Promise<void>
+  login: (identifier: string, password: string) => Promise<void>
   register: (username: string, email: string, password: string) => Promise<void>
   logout: () => void
   isAdmin: boolean
   updateSettings: (settings: string) => Promise<void>
+  updateProfile: (input: { username?: string; currentPassword?: string; newPassword?: string }) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -47,8 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false))
   }, [])
 
-  const login = useCallback(async (email: string, password: string) => {
-    const data = await api.post<{ token: string; user: User }>('/auth/login', { email, password })
+  const login = useCallback(async (identifier: string, password: string) => {
+    const data = await api.post<{ token: string; user: User }>('/auth/login', { identifier, password })
     setToken(data.token)
     setUser(data.user)
   }, [])
@@ -69,6 +70,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user)
   }, [])
 
+  const updateProfile = useCallback(async (input: { username?: string; currentPassword?: string; newPassword?: string }) => {
+    const data = await api.put<{ user: User; token?: string }>('/auth/profile', input)
+    if (data.token) setToken(data.token)
+    setUser(data.user)
+  }, [])
+
   const isAdmin = user?.role === 'admin'
 
   const value = useMemo<AuthContextType>(() => ({
@@ -79,7 +86,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     isAdmin,
     updateSettings,
-  }), [user, loading, login, register, logout, isAdmin, updateSettings])
+    updateProfile,
+  }), [user, loading, login, register, logout, isAdmin, updateSettings, updateProfile])
 
   return (
     <AuthContext.Provider value={value}>
