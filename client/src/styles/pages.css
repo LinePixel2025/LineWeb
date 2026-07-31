@@ -194,6 +194,129 @@
 .digital-health-overview__skeleton-value { width: min(100%, 132px); height: 30px; }
 .digital-health-overview__skeleton-meta { width: 92px; height: 12px; }
 
+/* Digital health: usage heatmap (home sidebar) */
+.digital-health-heatmap {
+  padding: var(--gh-space-4);
+  border-top: 1px solid var(--gh-border);
+}
+.digital-health-heatmap__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gh-space-2);
+}
+.digital-health-heatmap__heading { min-width: 0; }
+.digital-health-heatmap__heading h3 { margin: 0; font-size: var(--gh-text-sm); line-height: 1.35; }
+.digital-health-heatmap__heading p { margin: 2px 0 0; color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+.digital-health-heatmap__toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--gh-border);
+  border-radius: 6px;
+  background: var(--gh-canvas-inset);
+}
+.digital-health-heatmap__toggle-btn {
+  min-width: 28px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--gh-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  transition: color var(--gh-transition), background var(--gh-transition), box-shadow var(--gh-transition);
+}
+.digital-health-heatmap__toggle-btn:hover:not(.digital-health-heatmap__toggle-btn--active) { color: var(--gh-text); }
+.digital-health-heatmap__toggle-btn--active {
+  background: var(--gh-bg);
+  color: var(--gh-accent);
+  box-shadow: var(--gh-shadow-sm);
+}
+.digital-health-heatmap__toggle-btn:focus-visible { outline: none; box-shadow: var(--gh-focus-ring); }
+.digital-health-heatmap__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: var(--gh-space-3);
+  transition: opacity 150ms ease-out;
+}
+.digital-health-heatmap__grid--loading { opacity: .55; }
+.digital-health-heatmap__cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  min-width: 0;
+  border-radius: 4px;
+  background: var(--gh-canvas-inset);
+}
+.digital-health-heatmap__cell--l1 { background: color-mix(in srgb, var(--gh-accent) 25%, var(--gh-canvas-inset)); }
+.digital-health-heatmap__cell--l2 { background: color-mix(in srgb, var(--gh-accent) 45%, var(--gh-canvas-inset)); }
+.digital-health-heatmap__cell--l3 { background: color-mix(in srgb, var(--gh-accent) 70%, var(--gh-canvas-inset)); }
+.digital-health-heatmap__cell--l4 { background: color-mix(in srgb, var(--gh-accent) 100%, var(--gh-canvas-inset)); }
+.digital-health-heatmap__cell--today { outline: 1.5px solid var(--gh-text-secondary); outline-offset: 1px; }
+.digital-health-heatmap__date {
+  color: var(--gh-text-tertiary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.digital-health-heatmap__cell--l3 .digital-health-heatmap__date,
+.digital-health-heatmap__cell--l4 .digital-health-heatmap__date { color: #fff; }
+.digital-health-heatmap__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 4px;
+}
+.digital-health-heatmap__weekdays span {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  text-align: center;
+}
+.digital-health-heatmap__summary {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--gh-space-2);
+  margin-top: var(--gh-space-3);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+}
+.digital-health-heatmap__empty-hint {
+  margin: var(--gh-space-3) 0 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.5;
+}
+.digital-health-heatmap__legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  margin-top: var(--gh-space-2);
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+.digital-health-heatmap__legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.digital-health-heatmap__message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+  min-height: 96px;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+.digital-health-heatmap__message--error { color: var(--gh-danger); }
+
 .digital-health-settings { padding-top: var(--gh-space-1); }
 .digital-health-settings__intro { display: flex; align-items: flex-start; gap: var(--gh-space-3); padding-bottom: var(--gh-space-5); border-bottom: 1px solid var(--gh-border); }
 .digital-health-settings__title-mark { width: 36px; height: 36px; }

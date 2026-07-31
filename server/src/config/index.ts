@@ -124,6 +124,20 @@ export const setDailyGoalSchema = z.object({
   goalSeconds: z.number().int().min(0).max(86400).nullable(),
 })
 
+export const screenTimeRangeSchema = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+}).refine(({ from, to }) => to >= from, {
+  message: '结束日期不能早于起始日期',
+  path: ['to'],
+}).refine(({ from, to }) => {
+  const spanDays = Math.round((Date.parse(to) - Date.parse(from)) / 86400000)
+  return spanDays <= 62
+}, {
+  message: '查询跨度不能超过 62 天',
+  path: ['to'],
+})
+
 // === AI 助手 Schemas ===
 
 export const aiChatSchema = z.object({

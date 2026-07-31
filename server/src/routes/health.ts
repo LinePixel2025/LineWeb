@@ -5,6 +5,7 @@ import {
   createScreenTimeTokenSchema,
   pushScreenTimeSchema,
   setDailyGoalSchema,
+  screenTimeRangeSchema,
 } from '../config/index.js'
 import {
   createScreenTimeToken,
@@ -14,6 +15,7 @@ import {
   getTodayScreenTime,
   setDailyGoal,
   getDailyGoal,
+  getScreenTimeRange,
 } from '../services/screenTimeService.js'
 
 const router = Router()
@@ -34,6 +36,20 @@ router.get('/screen-time', authenticate, async (req: Request, res: Response) => 
   const userId = req.user!.userId
   const data = await getTodayScreenTime(userId, getTodayDate())
   res.json(data)
+})
+
+// 获取日期范围内的屏幕时间历史（JWT 登录态，供首页热力图使用）
+router.get('/screen-time/range', authenticate, async (req: Request, res: Response) => {
+  const parsed = screenTimeRangeSchema.safeParse(req.query)
+  if (!parsed.success) {
+    res.status(400).json({ error: '输入数据无效', details: parsed.error.flatten() })
+    return
+  }
+
+  const userId = req.user!.userId
+  const { from, to } = parsed.data
+  const logs = await getScreenTimeRange(userId, from, to)
+  res.json({ logs })
 })
 
 // 获取屏幕时间数据（Token 认证，供第三方应用调用）

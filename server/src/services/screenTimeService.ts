@@ -109,3 +109,16 @@ export async function getDailyGoal(userId: number, date: string) {
   })
   return { dailyGoalSeconds: log?.dailyGoalSeconds ?? null, date }
 }
+
+export async function getScreenTimeRange(userId: number, from: string, to: string) {
+  const logs = await prisma.screenTimeLog.findMany({
+    where: { userId, date: { gte: from, lte: to } },
+    orderBy: { date: 'asc' },
+    select: {
+      date: true,
+      totalSeconds: true,
+      dailyGoalSeconds: true,
+    },
+  })
+  return logs
+}

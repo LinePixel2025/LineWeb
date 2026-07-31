@@ -214,6 +214,7 @@ app.get('/api', (_req, res) => {
     },
     health: {
       screenTime: { method: 'GET', path: '/api/health/screen-time', auth: true, description: '获取今日屏幕时间' },
+      screenTimeRange: { method: 'GET', path: '/api/health/screen-time/range?from=&to=', auth: true, description: '获取日期范围内的屏幕时间历史' },
       push: { method: 'POST', path: '/api/health/push', auth: 'X-Screen-Time-Token', description: '推送屏幕时间' },
       createToken: { method: 'POST', path: '/api/health/tokens', auth: true, description: '生成屏幕时间 Token' },
       listTokens: { method: 'GET', path: '/api/health/tokens', auth: true, description: '列出屏幕时间 Token' },

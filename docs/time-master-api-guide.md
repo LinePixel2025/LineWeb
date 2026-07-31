@@ -128,6 +128,50 @@ GET /api/health/daily-goal/data
 |--------|------|
 | 401 | Token 无效或已过期 |
 
+### 3. 读取历史屏幕时间（网页端内部使用）
+
+```
+GET /api/health/screen-time/range?from=2026-07-01&to=2026-07-31
+```
+
+按日期范围读取该用户的屏幕使用时间历史，供 LineWeb 首页「数字健康」热力图使用。
+Time Master 客户端无需调用此接口——只需持续推送当日时长，服务端会逐日写入数据库，
+历史数据会从首次同步起自动累积。
+
+**认证**：JWT（`Authorization: Bearer <token>`），非公开接口
+
+**查询参数**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `from` | string | 起始日期，格式 YYYY-MM-DD |
+| `to` | string | 结束日期，格式 YYYY-MM-DD；不得早于 from，跨度不超过 62 天 |
+
+**成功响应** (200)：
+
+```json
+{
+  "logs": [
+    { "date": "2026-07-01", "totalSeconds": 5400, "dailyGoalSeconds": 7200 },
+    { "date": "2026-07-02", "totalSeconds": 7200, "dailyGoalSeconds": null }
+  ]
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `logs` | array | 范围内的已有记录，按日期升序；缺失日期视为 0（未推送） |
+| `logs[].date` | string | 日期 YYYY-MM-DD |
+| `logs[].totalSeconds` | number | 当日累计使用秒数 |
+| `logs[].dailyGoalSeconds` | number \| null | 当日使用目标秒数，null 表示未设置 |
+
+**错误响应**：
+
+| 状态码 | 说明 |
+|--------|------|
+| 400 | from/to 格式错误、结束早于起始或跨度超过 62 天 |
+| 401 | 未登录或 Token 无效 |
+
 ## 完整示例
 
 ### Bash (curl)
