@@ -1,0 +1,434 @@
+/* =============================================================
+   Line Web — AI Assistant (GitHub Primer)
+   ============================================================= */
+
+/* ===== 浮动按钮（FAB） ===== */
+.gh-ai-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 24px;
+  z-index: 999;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gh-accent);
+  background: var(--gh-bg);
+  border: 1px solid var(--gh-border);
+  border-radius: 50%;
+  box-shadow: var(--gh-shadow-md);
+  cursor: pointer;
+  transition: transform var(--gh-transition),
+              border-color var(--gh-transition),
+              color var(--gh-transition),
+              box-shadow var(--gh-transition);
+}
+.gh-ai-fab:hover {
+  color: var(--gh-accent-hover);
+  border-color: var(--gh-accent);
+  box-shadow: var(--gh-shadow-lg);
+  transform: translateY(-2px);
+}
+.gh-ai-fab:active {
+  transform: translateY(0) scale(0.96);
+}
+.gh-ai-fab:focus-visible {
+  outline: none;
+  box-shadow: var(--gh-focus-ring);
+}
+.gh-ai-fab-dot {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--gh-success-emphasis);
+  border: 2px solid var(--gh-bg);
+  box-shadow: 0 0 0 1px var(--gh-border);
+}
+
+/* ===== 聊天面板 ===== */
+.gh-ai-panel {
+  background: var(--gh-bg);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  box-shadow: var(--gh-shadow-xl);
+}
+
+@keyframes gh-ai-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ===== 头部 ===== */
+.gh-ai-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--gh-space-3) var(--gh-space-4);
+  border-bottom: 1px solid var(--gh-border-muted);
+  flex-shrink: 0;
+}
+.gh-ai-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  min-width: 0;
+}
+.gh-ai-header-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  color: var(--gh-accent);
+  background: var(--gh-accent-soft);
+  border-radius: 50%;
+}
+.gh-ai-header-title {
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  color: var(--gh-text);
+  white-space: nowrap;
+}
+.gh-ai-header-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--gh-text-xs);
+  color: var(--gh-success);
+  background: var(--gh-success-soft);
+  padding: 1px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.gh-ai-header-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.gh-ai-header-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  flex-shrink: 0;
+  color: var(--gh-text-tertiary);
+  background: transparent;
+  border: none;
+  border-radius: var(--gh-radius);
+  cursor: pointer;
+  transition: background var(--gh-transition),
+              color var(--gh-transition);
+}
+.gh-ai-header-btn:hover {
+  color: var(--gh-text);
+  background: var(--gh-btn-hover);
+}
+.gh-ai-header-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--gh-focus-ring);
+}
+
+/* ===== 消息列表 ===== */
+.gh-ai-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--gh-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+  background: var(--gh-canvas-inset);
+  scrollbar-width: thin;
+}
+
+/* 空状态 */
+.gh-ai-empty {
+  margin: auto;
+  text-align: center;
+  max-width: 260px;
+  padding: var(--gh-space-6) 0;
+}
+.gh-ai-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: var(--gh-space-3);
+  color: var(--gh-text-disabled);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 50%;
+}
+.gh-ai-empty-title {
+  font-size: var(--gh-text-base);
+  font-weight: 600;
+  color: var(--gh-text);
+  margin-bottom: var(--gh-space-2);
+}
+.gh-ai-empty-text {
+  font-size: var(--gh-text-sm);
+  line-height: 1.55;
+  color: var(--gh-text-secondary);
+}
+
+/* 消息行 */
+.gh-ai-message {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gh-space-2);
+}
+.gh-ai-message--user {
+  justify-content: flex-end;
+}
+.gh-ai-message-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--gh-accent);
+  background: var(--gh-bg);
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 50%;
+}
+
+/* 气泡 */
+.gh-ai-bubble {
+  max-width: 85%;
+  padding: var(--gh-space-2) var(--gh-space-3);
+  font-size: var(--gh-text-sm);
+  line-height: 1.55;
+  color: var(--gh-text);
+  background: var(--gh-bg);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  box-shadow: var(--gh-shadow-sm);
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+.gh-ai-message--ai .gh-ai-bubble {
+  border-top-left-radius: 2px;
+}
+.gh-ai-message--user .gh-ai-bubble {
+  color: #fff;
+  background: var(--gh-accent);
+  border-color: var(--gh-accent);
+  border-top-right-radius: 2px;
+}
+
+/* 打字指示器 */
+.gh-ai-typing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gh-space-1);
+  min-width: 76px;
+}
+.gh-ai-typing-label {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+  margin-right: 2px;
+}
+.gh-ai-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--gh-text-tertiary);
+  animation: gh-ai-dot-bounce 1.2s infinite ease-in-out;
+}
+.gh-ai-dot:nth-child(3) { animation-delay: 0.15s; }
+.gh-ai-dot:nth-child(4) { animation-delay: 0.3s; }
+
+@keyframes gh-ai-dot-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+
+/* ===== 输入区域 ===== */
+.gh-ai-input-area {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-3);
+  border-top: 1px solid var(--gh-border-muted);
+  background: var(--gh-bg);
+  flex-shrink: 0;
+}
+.gh-ai-input {
+  flex: 1;
+  resize: none;
+  min-height: 34px;
+  max-height: 110px;
+  padding: 7px 12px;
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-sm);
+  line-height: 1.45;
+  color: var(--gh-text);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  outline: none;
+  transition: border-color var(--gh-transition),
+              box-shadow var(--gh-transition),
+              background var(--gh-transition);
+}
+.gh-ai-input:focus {
+  border-color: var(--gh-accent);
+  background: var(--gh-bg);
+  box-shadow: var(--gh-focus-ring);
+}
+.gh-ai-input::placeholder {
+  color: var(--gh-text-placeholder);
+}
+.gh-ai-input:disabled {
+  opacity: 0.65;
+}
+.gh-ai-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  flex-shrink: 0;
+  color: #fff;
+  background: var(--gh-accent);
+  border: 1px solid var(--gh-accent);
+  border-radius: var(--gh-radius);
+  cursor: pointer;
+  transition: background var(--gh-transition),
+              border-color var(--gh-transition);
+}
+.gh-ai-send:hover:not(:disabled) {
+  background: var(--gh-accent-hover);
+  border-color: var(--gh-accent-hover);
+}
+.gh-ai-send:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.gh-ai-send:focus-visible {
+  outline: none;
+  box-shadow: var(--gh-focus-ring);
+}
+
+/* ===== Markdown 渲染 ===== */
+.gh-ai-markdown {
+  font-size: var(--gh-text-sm);
+  line-height: 1.55;
+  white-space: normal;
+}
+.gh-ai-markdown > :first-child { margin-top: 0; }
+.gh-ai-markdown > :last-child { margin-bottom: 0; }
+.gh-ai-markdown p {
+  margin: 0 0 var(--gh-space-2);
+}
+.gh-ai-markdown h1,
+.gh-ai-markdown h2,
+.gh-ai-markdown h3,
+.gh-ai-markdown h4 {
+  margin: var(--gh-space-4) 0 var(--gh-space-2);
+  font-weight: 600;
+  color: var(--gh-text);
+}
+.gh-ai-markdown h1 { font-size: 1.05rem; }
+.gh-ai-markdown h2 { font-size: 1rem; }
+.gh-ai-markdown h3,
+.gh-ai-markdown h4 { font-size: 0.925rem; }
+.gh-ai-markdown ul,
+.gh-ai-markdown ol {
+  margin: 0 0 var(--gh-space-2);
+  padding-left: var(--gh-space-5);
+}
+.gh-ai-markdown li {
+  margin: 2px 0;
+}
+.gh-ai-markdown a {
+  color: var(--gh-accent);
+  text-decoration: none;
+}
+.gh-ai-markdown a:hover {
+  text-decoration: underline;
+}
+.gh-ai-markdown code {
+  font-family: var(--gh-font-mono);
+  font-size: 0.85em;
+  padding: 2px 5px;
+  color: var(--gh-text);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 5px;
+}
+.gh-ai-markdown pre {
+  margin: var(--gh-space-2) 0;
+  padding: var(--gh-space-3);
+  overflow-x: auto;
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+}
+.gh-ai-markdown pre code {
+  display: block;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--gh-text);
+}
+.gh-ai-markdown strong {
+  font-weight: 600;
+}
+
+/* 用户气泡内的 markdown 需要反色处理 */
+.gh-ai-message--user .gh-ai-bubble .gh-ai-markdown a {
+  color: #fff;
+  text-decoration: underline;
+}
+.gh-ai-message--user .gh-ai-bubble .gh-ai-markdown code {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.32);
+  color: #fff;
+}
+.gh-ai-message--user .gh-ai-bubble .gh-ai-markdown pre {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 767px) {
+  .gh-ai-fab {
+    right: var(--gh-space-4);
+    bottom: var(--gh-space-4);
+  }
+  .gh-ai-panel {
+    left: var(--gh-space-3);
+    right: var(--gh-space-3);
+    bottom: var(--gh-space-3);
+    width: auto;
+    height: calc(100dvh - 24px);
+    max-height: none;
+  }
+  .gh-ai-message {
+    gap: var(--gh-space-2);
+  }
+  .gh-ai-bubble {
+    max-width: 88%;
+  }
+}

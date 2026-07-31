@@ -10,6 +10,76 @@ interface ChatMessage {
 
 let nextId = 1
 
+/* ============================================================
+   GitHub Primer 风格图标（全部手绘 SVG，不使用 emoji）
+   ============================================================ */
+
+/** AI 星标图标 — 仿 GitHub Copilot 星形 */
+function AiIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M8 .5l1.66 5.84L15.5 8l-5.84 1.66L8 15.5l-1.66-5.84L.5 8l5.84-1.66L8 .5z" />
+      <circle cx="8" cy="8" r="1.7" fill="var(--gh-canvas)" />
+    </svg>
+  )
+}
+
+/** 聊天气泡图标 */
+function CommentIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M1.75 1h12.5c.966 0 1.75.784 1.75 1.75v9.5A1.75 1.75 0 0 1 14.25 14H8.06l-2.57 2.57A1.46 1.46 0 0 1 3 15.54V14H1.75A1.75 1.75 0 0 1 0 12.25v-9.5C0 1.78.78 1 1.75 1Zm-.25 11.25c0 .14.11.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.75.75 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25h-12.5a.25.25 0 0 0-.25.25v9.5Z" />
+    </svg>
+  )
+}
+
+/** 关闭图标 */
+function XIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 0 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
+    </svg>
+  )
+}
+
+/** 发送图标 — 纸飞机 */
+function SendIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M22 2 11 13" />
+      <path d="M22 2 15 22l-4-9-9-4 20-7Z" />
+    </svg>
+  )
+}
+
 /** 轻量 markdown → HTML 渲染器 */
 function renderMarkdown(text: string): string {
   // 1. HTML 转义
@@ -90,7 +160,7 @@ function renderMarkdown(text: string): string {
   if (inUl) html += '</ul>\n'
   if (inOl) html += '</ol>\n'
 
-  return DOMPurify.sanitize(`<div class="ai-markdown">${html}</div>`)
+  return DOMPurify.sanitize(`<div class="gh-ai-markdown">${html}</div>`)
 }
 
 export default function AiAssistant() {
@@ -170,66 +240,81 @@ export default function AiAssistant() {
       {/* 浮动按钮 */}
       {!open && (
         <button
-          className="ai-assistant-fab gh-box"
+          className="gh-ai-fab"
           onClick={() => setOpen(true)}
-          aria-label="AI 助手"
+          aria-label="打开 AI 助手"
           title="AI 助手"
         >
-          <span className="ai-assistant-fab-icon">🤖</span>
+          <AiIcon size={22} />
+          <span className="gh-ai-fab-dot" aria-hidden="true" />
         </button>
       )}
 
       {/* 聊天面板 */}
       {open && (
         <div
-          className="gh-box ai-assistant-panel"
+          className="gh-ai-panel"
+          role="dialog"
+          aria-label="AI 助手"
           style={{
             position: 'fixed',
-            bottom: '72px',
+            bottom: '24px',
             right: '20px',
             zIndex: 1000,
-            width: '360px',
-            height: '500px',
-            maxHeight: 'calc(100dvh - 100px)',
+            width: '380px',
+            height: '540px',
+            maxHeight: 'calc(100dvh - 48px)',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            animation: 'ai-panel-in 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)',
+            animation: 'gh-ai-panel-in 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)',
             padding: 0,
           }}
         >
           {/* 头部 */}
-          <div className="ai-assistant-header">
-            <div className="ai-assistant-header-left">
-              <span className="ai-assistant-header-icon">🤖</span>
-              <span className="ai-assistant-header-title">AI 助手</span>
+          <div className="gh-ai-header">
+            <div className="gh-ai-header-left">
+              <span className="gh-ai-header-icon">
+                <AiIcon size={16} />
+              </span>
+              <span className="gh-ai-header-title">AI 助手</span>
+              <span className="gh-ai-header-status" aria-label="在线">在线</span>
             </div>
             <button
-              className="ai-assistant-close"
+              className="gh-ai-header-btn"
               onClick={() => setOpen(false)}
               aria-label="关闭 AI 助手"
             >
-              ✕
+              <XIcon size={16} />
             </button>
           </div>
 
           {/* 消息列表 */}
-          <div className="ai-chat-messages">
+          <div className="gh-ai-messages">
             {messages.length === 0 && (
-              <div className="ai-chat-empty">
-                <div className="ai-chat-empty-icon">💬</div>
-                <div className="ai-chat-empty-text">
-                  你好！我是 LineWeb 的 AI 助手。<br />
-                  我可以回答关于网站内容、文章、功能等问题。
+              <div className="gh-ai-empty">
+                <span className="gh-ai-empty-icon">
+                  <CommentIcon size={28} />
+                </span>
+                <div className="gh-ai-empty-title">开始对话</div>
+                <div className="gh-ai-empty-text">
+                  你好！我是 LineWeb 的 AI 助手，
+                  <br />
+                  可以回答关于网站内容、文章、功能等问题。
                 </div>
               </div>
             )}
             {messages.map(msg => (
               <div
                 key={msg.id}
-                className={`ai-chat-message ${msg.role === 'user' ? 'ai-chat-message--user' : 'ai-chat-message--ai'}`}
+                className={`gh-ai-message ${msg.role === 'user' ? 'gh-ai-message--user' : 'gh-ai-message--ai'}`}
               >
-                <div className="ai-chat-bubble">
+                {msg.role === 'assistant' && (
+                  <span className="gh-ai-message-avatar" aria-hidden="true">
+                    <AiIcon size={13} />
+                  </span>
+                )}
+                <div className="gh-ai-bubble">
                   {msg.role === 'assistant' ? (
                     <div dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
                   ) : (
@@ -239,12 +324,15 @@ export default function AiAssistant() {
               </div>
             ))}
             {loading && (
-              <div className="ai-chat-message ai-chat-message--ai">
-                <div className="ai-chat-bubble ai-chat-typing">
-                  <span className="ai-chat-typing-label">思考中</span>
-                  <span className="ai-chat-dot" />
-                  <span className="ai-chat-dot" />
-                  <span className="ai-chat-dot" />
+              <div className="gh-ai-message gh-ai-message--ai">
+                <span className="gh-ai-message-avatar" aria-hidden="true">
+                  <AiIcon size={13} />
+                </span>
+                <div className="gh-ai-bubble gh-ai-typing">
+                  <span className="gh-ai-typing-label">思考中</span>
+                  <span className="gh-ai-dot" />
+                  <span className="gh-ai-dot" />
+                  <span className="gh-ai-dot" />
                 </div>
               </div>
             )}
@@ -252,10 +340,10 @@ export default function AiAssistant() {
           </div>
 
           {/* 输入区域 */}
-          <div className="ai-chat-input-area">
+          <div className="gh-ai-input-area">
             <textarea
               ref={inputRef}
-              className="ai-chat-input gh-input gh-input--full"
+              className="gh-ai-input"
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -264,15 +352,12 @@ export default function AiAssistant() {
               disabled={loading}
             />
             <button
-              className="ai-chat-send"
+              className="gh-ai-send"
               onClick={handleSend}
               disabled={loading || !input.trim()}
               aria-label="发送"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13" />
-                <polygon points="22 2 15 22 11 13 2 9 22 2" />
-              </svg>
+              <SendIcon size={16} />
             </button>
           </div>
         </div>
