@@ -23,11 +23,11 @@ services:
   server:
     build: .
     ports:
-      - "${PORT:-3001}:3001"
+      - "3001:3001"
     environment:
       DATABASE_URL: ${DATABASE_URL:?请在 .env 中设置 DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET:?请在 .env 中设置 JWT_SECRET}
-      PORT: ${PORT:-3001}
+      PORT: 3001
       NODE_ENV: production
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       STORAGE_NODE_TOKEN: ${STORAGE_NODE_TOKEN:-}
@@ -38,6 +38,8 @@ services:
       - default
       - 1panel
     restart: unless-stopped
+    volumes:
+      - lineweb-init:/var/lib/lineweb
     # 资源限制 — 防止容器耗尽宿主机资源
     deploy:
       resources:
@@ -65,3 +67,6 @@ networks:
   1panel:
     external: true
     name: 1panel-network
+
+volumes:
+  lineweb-init:

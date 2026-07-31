@@ -12,6 +12,9 @@ from pathlib import Path
 # 配置
 CONFIG_PATH = Path(__file__).parent / "config.json"
 config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+config["serverUrl"] = os.environ.get("LINEWEB_STORAGE_SERVER_URL", config["serverUrl"])
+config["token"] = os.environ.get("LINEWEB_STORAGE_TOKEN", config["token"])
+config["storagePath"] = os.environ.get("LINEWEB_STORAGE_PATH", config["storagePath"])
 
 # 日志
 logging.basicConfig(
@@ -27,15 +30,24 @@ ROOT = Path(config["storagePath"])
 ROOT.mkdir(parents=True, exist_ok=True)
 
 # 当前活跃的写入临时文件（单线程缓存，同一时间只处理一个上传）
-_active_write_file: dict = {}  # { "path": ..., "fd": ..., "tmp_path": ... }
+_active_write_files: dict[str, dict] = {}
 
 active_streams: dict = {}  # { stream_id: { "type": "write", "file": f, "sha256": h, "bytes_written": int } }
+
+def resolve_safe_path(raw_path: str) -> Path:
+    if not isinstance(raw_path, str) or not raw_path:
+        raise ValueError("非法路径")
+    normalized = raw_path.replace('\\', '/')
+    root = ROOT.resolve()
+    candidate = (ROOT / normalized).resolve()
+    if candidate != root and root not in candidate.parents:
+        raise ValueError("非法路径")
+    return candidate
 
 # === 文件操作函数 ===
 
 def handle_write_file(cmd: dict) -> dict:
     """初始化分块写入 — 单块直接写入，或多块打开 .tmp 准备接收数据。"""
-    global _active_write_file
     path = cmd.get("path", "")
     total_size = cmd.get("totalSize", 0)
     data_b64 = cmd.get("data", "")
@@ -45,25 +57,18 @@ def handle_write_file(cmd: dict) -> dict:
     # P16: Single-chunk base64 overhead acceptable for files <64KB; larger files use chunked mode
     if data_b64 and is_last:
         data = base64.b64decode(data_b64)
-        abs_path = ROOT / path
+        abs_path = resolve_safe_path(path)
         abs_path.parent.mkdir(parents=True, exist_ok=True)
         abs_path.write_bytes(data)
         log.info(f"Wrote {len(data)} bytes to {path} (inline single chunk)")
         return {"success": True, "data": {"size": len(data)}}
 
     # 多块模式 — 打开 .tmp 文件准备接收分块数据
-    tmp_path = ROOT / (path + ".tmp")
+    tmp_path = resolve_safe_path(path + ".tmp")
     tmp_path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_BINARY)
 
-    # 关闭之前的活跃句柄（异常情况保护）
-    if _active_write_file.get("fd") is not None:
-        try:
-            os.close(_active_write_file["fd"])
-        except OSError:
-            pass
-
-    _active_write_file = {
+    _active_write_files[path] = {
         "path": path,
         "fd": fd,
         "tmp_path": tmp_path,
@@ -75,17 +80,17 @@ def handle_write_file(cmd: dict) -> dict:
 
 def handle_write_file_data(cmd: dict) -> dict:
     """每个分块到达时立即追加写入 .tmp 文件。"""
-    global _active_write_file
     path = cmd.get("path", "")
     data_b64 = cmd.get("data", "")
     is_last = cmd.get("isLast", False)
 
     # 检查活跃文件是否匹配
-    if _active_write_file.get("path") != path or _active_write_file.get("fd") is None:
+    active = _active_write_files.get(path)
+    if not active or active.get("fd") is None:
         log.warning(f"write_file_data: 未找到活跃写入文件 (path={path})")
         return {"success": False, "error": "未找到活跃写入文件"}
 
-    fd = _active_write_file["fd"]
+    fd = active["fd"]
     try:
         data = base64.b64decode(data_b64)
         os.write(fd, data)
@@ -93,9 +98,9 @@ def handle_write_file_data(cmd: dict) -> dict:
         if is_last:
             os.fsync(fd)  # P15: 仅最后一块强制落盘，确保文件完整性
             os.close(fd)
-            final_path = ROOT / path
-            os.rename(str(_active_write_file["tmp_path"]), str(final_path))
-            _active_write_file = {}
+            final_path = resolve_safe_path(path)
+            os.rename(str(active["tmp_path"]), str(final_path))
+            _active_write_files.pop(path, None)
             log.info(f"Wrote {len(data)} bytes final chunk to {path}, file complete")
         else:
             log.info(f"Wrote {len(data)} bytes chunk to {path}.tmp")
@@ -108,7 +113,7 @@ def handle_write_file_data(cmd: dict) -> dict:
             os.close(fd)
         except OSError:
             pass
-        _active_write_file = {}
+        _active_write_files.pop(path, None)
         return {"success": False, "error": str(e)}
 
 
@@ -118,7 +123,7 @@ def handle_read_file(cmd: dict) -> dict:
     offset = cmd.get("offset", 0)
     length = cmd.get("length", 0)
 
-    abs_path = ROOT / path
+    abs_path = resolve_safe_path(path)
     if not abs_path.exists():
         return {"success": False, "error": "文件不存在"}
 
@@ -172,7 +177,7 @@ async def handle_read_file_stream(ws, cmd):
     offset = cmd.get("offset", 0)
     length = cmd.get("length")  # None = 读到文件末尾
 
-    abs_path = ROOT / path
+    abs_path = resolve_safe_path(path)
     if not abs_path.exists():
         await ws.send(json.dumps({
             "id": cmd_id,
@@ -231,7 +236,8 @@ def handle_write_file_stream(cmd):
     path = cmd.get("path", "")
     total_size = cmd.get("totalSize", 0)
 
-    tmp_path = ROOT / (path + ".tmp")
+    resolve_safe_path(path)
+    tmp_path = resolve_safe_path(path + ".tmp")
     tmp_path.parent.mkdir(parents=True, exist_ok=True)
     f = open(str(tmp_path), "wb")
 
@@ -276,7 +282,7 @@ async def handle_stream_eof(ws, cmd):
         match = actual_sha256 == expected_sha256
 
         if match:
-            final_path = str(ROOT / stream["path"])
+            final_path = str(resolve_safe_path(stream["path"]))
             os.rename(stream["tmp_path"], final_path)
             log.info(f"Binary stream write complete: {stream['path']} ({stream['bytes_written']} bytes)")
         else:
@@ -309,7 +315,7 @@ async def handle_stream_eof(ws, cmd):
 
 
 def handle_delete_file(path: str) -> dict:
-    abs_path = ROOT / path
+    abs_path = resolve_safe_path(path)
     if abs_path.is_dir():
         shutil.rmtree(abs_path)
     else:
@@ -319,28 +325,30 @@ def handle_delete_file(path: str) -> dict:
 
 
 def handle_mkdir(path: str) -> dict:
-    abs_path = ROOT / path
+    abs_path = resolve_safe_path(path)
     abs_path.mkdir(parents=True, exist_ok=True)
     return {"success": True}
 
 
 def handle_move(path: str, new_path: str) -> dict:
-    src = ROOT / path
-    dst = ROOT / new_path
+    src = resolve_safe_path(path)
+    dst = resolve_safe_path(new_path)
     dst.parent.mkdir(parents=True, exist_ok=True)
     src.rename(dst)
     return {"success": True}
 
 
 def handle_rename(path: str, new_name: str) -> dict:
-    src = ROOT / path
+    src = resolve_safe_path(path)
+    if not new_name or Path(new_name).name != new_name or new_name in ('.', '..'):
+        raise ValueError("非法文件名")
     dst = src.parent / new_name
     src.rename(dst)
     return {"success": True}
 
 
 def handle_stat(path: str) -> dict:
-    abs_path = ROOT / path
+    abs_path = resolve_safe_path(path)
     if not abs_path.exists():
         return {"success": False, "error": "不存在"}
     st = abs_path.stat()
@@ -353,7 +361,7 @@ def handle_stat(path: str) -> dict:
 
 
 def handle_list_dir(path: str) -> dict:
-    abs_path = ROOT / path
+    abs_path = resolve_safe_path(path)
     if not abs_path.is_dir():
         return {"success": False, "error": "不是目录"}
     items = []
@@ -393,12 +401,18 @@ async def handle_command(cmd: dict, ws) -> dict | None:
 
     # 处理新的流式命令（不在 HANDLERS 字典中，需优先路由）
     if cmd_type == "read_file_stream":
+        resolve_safe_path(cmd.get("path", ""))
         await handle_read_file_stream(ws, cmd)
         return None  # 异步处理，不返回同步响应
     if cmd_type == "write_file_stream":
+        resolve_safe_path(cmd.get("path", ""))
         result = handle_write_file_stream(cmd)
         return {"id": cmd_id, **result}
     if cmd_type == "stream_eof":
+        stream = active_streams.get(cmd.get("streamId"))
+        if not stream:
+            return {"id": cmd_id, "success": False, "error": "无效的 streamId"}
+        resolve_safe_path(stream.get("path", ""))
         await handle_stream_eof(ws, cmd)
         return None
 
@@ -408,9 +422,11 @@ async def handle_command(cmd: dict, ws) -> dict | None:
 
     # 安全校验：防止路径遍历
     raw_path = cmd.get("path", "")
-    path = Path(raw_path).as_posix()
-    if ".." in path.split("/") or path.startswith("/"):
-        return {"id": cmd_id, "success": False, "error": "非法路径"}
+    path = Path(raw_path.replace('\\', '/')).as_posix()
+    try:
+        resolve_safe_path(path)
+    except ValueError as exc:
+        return {"id": cmd_id, "success": False, "error": str(exc)}
 
     try:
         if cmd_type == "write_file":
@@ -431,6 +447,7 @@ async def handle_command(cmd: dict, ws) -> dict | None:
             return {"id": cmd_id, "success": False, "error": result.get("error", "读取失败")}
         elif cmd_type == "move":
             new_path = Path(cmd.get("newPath", "")).as_posix()
+            resolve_safe_path(new_path)
             result = handler(path, new_path)
         elif cmd_type == "rename":
             result = handler(path, cmd.get("newName", ""))

@@ -24,6 +24,7 @@ export const config = {
   port: parseInt(process.env.PORT || '3001', 10),
   jwtSecret: requireEnv('JWT_SECRET', process.env.NODE_ENV === 'production' ? undefined : 'lineweb-dev-secret'),
   jwtExpiresIn: '7d' as const,
+  downloadTicketExpiresIn: '5m' as const,
   corsOrigin: parseCorsOrigins(process.env.CORS_ORIGIN),
   storageNodeToken: requireEnv('STORAGE_NODE_TOKEN', process.env.NODE_ENV === 'production' ? undefined : 'lineweb-storage-node-secret'),
   maxFileSizeMB: parseInt(process.env.MAX_FILE_SIZE_MB || '500', 10),

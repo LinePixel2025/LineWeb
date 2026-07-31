@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useRef, useMemo, type ReactNode } from 'react'
 import type { DownloadTask, DriveItem } from '../types/drive'
+import api from '../lib/api'
 
 interface DownloadContextValue {
   tasks: DownloadTask[]
@@ -21,13 +22,18 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const directDownload = useCallback((item: DriveItem) => {
-    const token = localStorage.getItem('lineweb_token')
-    const a = document.createElement('a')
-    a.href = `/api/drive/download/${item.id}?token=${encodeURIComponent(token!)}`
-    a.download = item.name
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    void api.post<{ ticket: string }>(`/drive/download-ticket/${item.id}`)
+      .then(({ ticket }) => {
+        const a = document.createElement('a')
+        a.href = `/api/drive/download/${item.id}?token=${encodeURIComponent(ticket)}`
+        a.download = item.name
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+      })
+      .catch(() => {
+        // 大文件下载失败由现有下载 UI 负责反馈；不泄露长期 token
+      })
   }, [])
 
   const streamDownloadWithProgress = useCallback(async (item: DriveItem) => {

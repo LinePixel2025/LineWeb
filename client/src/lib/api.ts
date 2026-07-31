@@ -108,6 +108,20 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 }
 
+async function requestText(path: string): Promise<string> {
+  const token = getToken()
+  const headers: Record<string, string> = token
+    ? { Authorization: `Bearer ${token}`, 'Cache-Control': 'no-cache' }
+    : {}
+  const res = await fetch(`${API_BASE}${path}`, { headers })
+  if (!res.ok) {
+    if (res.status === 401) handleUnauthorized(false)
+    const data = await res.json().catch(() => ({}))
+    throw new ApiError(data.error || `请求失败 (${res.status})`, res.status)
+  }
+  return res.text()
+}
+
 export const api = {
   get: <T>(path: string, opts?: { signal?: AbortSignal; noRedirect?: boolean }) =>
     request<T>(path, { signal: opts?.signal, noRedirect: opts?.noRedirect }),
@@ -115,6 +129,7 @@ export const api = {
     request<T>(path, { method: 'POST', body, noRedirect: opts?.noRedirect }),
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  text: (path: string) => requestText(path),
 }
 
 export { ApiError }

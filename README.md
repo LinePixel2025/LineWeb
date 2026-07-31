@@ -205,6 +205,8 @@ npm run docker:restart   # 重启 server 容器
 
 ## Docker 部署
 
+当前服务器部署约束为 HTTP、端口 3001。完整步骤请参阅 [HTTP + 3001 部署指南](docs/DEPLOYMENT_HTTP_3001.md)。
+
 ```bash
 # 构建并启动
 docker compose up -d --build

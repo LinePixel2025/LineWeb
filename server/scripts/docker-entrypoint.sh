@@ -45,7 +45,8 @@ prepare_pg_schema() {
 }
 
 # ---- 数据库初始化 ----
-INIT_FLAG="/app/server/prisma/.db-initialized"
+INIT_FLAG="/var/lib/lineweb/.db-initialized"
+mkdir -p "$(dirname "$INIT_FLAG")"
 
 if [ ! -f "$INIT_FLAG" ]; then
   echo "🔧 首次运行 — 初始化数据库..."

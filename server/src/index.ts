@@ -64,7 +64,7 @@ app.use(cors({
     : config.corsOrigin,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Screen-Time-Token'],
 }))
 
 // 压缩响应 — compression supports gzip/deflate/brotli based on Accept-Encoding

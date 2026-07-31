@@ -7,6 +7,9 @@ import { config } from '../config/index.js'
 export interface AuthPayload {
   userId: number
   role: string
+  type?: string
+  downloadFileId?: number
+  downloadNonce?: string
 }
 
 declare global {
@@ -20,7 +23,8 @@ declare global {
 // === JWT 失效校验缓存 ===
 // 避免每请求查 DB：缓存 user.tokenValidAfter，60s TTL
 const tokenValidAfterCache = new Map<number, { value: Date; expireAt: number }>()
-const TOKEN_VALID_AFTER_TTL_MS = 60 * 1000
+// 失效时间以数据库为唯一事实来源，避免多实例间缓存不一致。
+const TOKEN_VALID_AFTER_TTL_MS = 0
 
 // 定期清理过期缓存条目
 const cacheCleanupInterval = setInterval(() => {

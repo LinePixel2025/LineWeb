@@ -17,7 +17,7 @@ interface AuthContextType {
   loading: boolean
   login: (identifier: string, password: string) => Promise<void>
   register: (username: string, email: string, password: string) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
   isAdmin: boolean
   updateSettings: (settings: string) => Promise<void>
   updateProfile: (input: { username?: string; currentPassword?: string; newPassword?: string }) => Promise<void>
@@ -60,9 +60,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user)
   }, [])
 
-  const logout = useCallback(() => {
-    setToken(null)
-    setUser(null)
+  const logout = useCallback(async () => {
+    try {
+      await api.post('/auth/logout', undefined, { noRedirect: true })
+    } catch {
+      // 本地会话必须在服务端失败时也能退出
+    } finally {
+      setToken(null)
+      setUser(null)
+    }
   }, [])
 
   const updateSettings = useCallback(async (settings: string) => {

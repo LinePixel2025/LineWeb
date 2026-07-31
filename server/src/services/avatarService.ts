@@ -1,7 +1,7 @@
 import sharp from 'sharp'
 import { Readable } from 'stream'
 import prisma from '../lib/prisma.js'
-import { streamWrite, streamRead, sendCommand, isNodeConnected } from './storageTunnel.js'
+import { streamWriteBinary, streamRead, sendCommand, isNodeConnected } from './storageTunnel.js'
 
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const MAX_FILE_SIZE = 2 * 1024 * 1024
@@ -73,10 +73,7 @@ export async function uploadAvatar(userId: number, buffer: Buffer, mimeType: str
   const processed = await processAvatar(buffer)
   const avatarPath = getAvatarPath(userId)
   const chunks = (async function* () { yield processed })()
-  const resp = await streamWrite(avatarPath, chunks, processed.length)
-  if (!resp.success) {
-    throw Object.assign(new Error('头像上传失败'), { status: 500 })
-  }
+  await streamWriteBinary(avatarPath, chunks, processed.length)
   await prisma.user.update({
     where: { id: userId },
     data: { avatarPath },

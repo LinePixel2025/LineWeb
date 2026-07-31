@@ -156,6 +156,11 @@ class PendingStream {
 
   awaitChecksum(): Promise<void> {
     return new Promise((resolve, reject) => {
+      if (this.done) {
+        if (this.error) reject(this.error)
+        else resolve()
+        return
+      }
       this.checksumResolve = resolve
       this.checksumReject = reject
     })

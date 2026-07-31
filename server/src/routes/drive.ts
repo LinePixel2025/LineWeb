@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express'
 import busboy from 'busboy'
+import jwt from 'jsonwebtoken'
+import crypto from 'crypto'
 import prisma from '../lib/prisma.js'
 import { parseId, parsePagination } from '../lib/utils.js'
 import { authenticate } from '../middleware/auth.js'
@@ -80,7 +82,8 @@ function transformSizeList<T extends { size: bigint }>(files: T[]): WithSize<T>[
 
 // === canAccessDrive 内存缓存（60s TTL，避免每请求查 DB） ===
 const driveAccessCache = new Map<number, { value: boolean; expireAt: number }>()
-const DRIVE_ACCESS_TTL_MS = 60 * 1000
+// 网盘权限以数据库为唯一事实来源，避免多实例权限漂移。
+const DRIVE_ACCESS_TTL_MS = 0
 
 // 定期清理过期缓存条目
 const driveAccessCleanupInterval = setInterval(() => {
@@ -150,6 +153,20 @@ async function assertFileOwnership(
   return file
 }
 
+async function assertParentFolderAccess(
+  parentId: number | null,
+  user: { userId: number; role: string },
+): Promise<{ id: number; storagePath: string } | null> {
+  if (parentId === null) return { id: 0, storagePath: '' }
+  const parent = await prisma.driveFile.findUnique({
+    where: { id: parentId },
+    select: { id: true, isFolder: true, storagePath: true, uploadedById: true },
+  })
+  if (!parent || !parent.isFolder) return null
+  if (user.role !== 'admin' && parent.uploadedById !== user.userId) return null
+  return { id: parent.id, storagePath: parent.storagePath }
+}
+
 // 所有路由需要登录 + canAccessDrive
 router.use(authenticate, async (req: Request, res: Response, next) => {
   try {
@@ -162,6 +179,27 @@ router.use(authenticate, async (req: Request, res: Response, next) => {
   } catch {
     res.status(500).json({ error: '权限校验失败' })
   }
+})
+
+router.post('/download-ticket/:id', async (req: Request, res: Response) => {
+  const id = parseId(req.params.id)
+  if (id === null) {
+    res.status(400).json({ error: '无效的文件 ID' })
+    return
+  }
+  const file = await assertFileOwnership(id, req.user!)
+  if (!file || file.isFolder) {
+    res.status(404).json({ error: '文件不存在或无权访问' })
+    return
+  }
+  const ticket = jwt.sign({
+    type: 'download',
+    userId: req.user!.userId,
+    role: req.user!.role,
+    downloadFileId: id,
+    downloadNonce: crypto.randomBytes(16).toString('hex'),
+  }, config.jwtSecret, { expiresIn: config.downloadTicketExpiresIn })
+  res.json({ ticket, expiresIn: 300 })
 })
 
 /* ---------- 获取文件列表（支持分页） ---------- */
@@ -316,7 +354,7 @@ router.get('/fts-search', async (req: Request, res: Response) => {
 async function handleCreateFolder(
   name: string | undefined,
   parentIdRaw: unknown,
-  userId: number,
+  user: { userId: number; role: string },
   res: Response,
 ): Promise<void> {
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -347,9 +385,9 @@ async function handleCreateFolder(
   // 如果指定了 parentId，验证父文件夹存在
   let storagePath = name.trim()
   if (resolvedParentId) {
-    const parent = await prisma.driveFile.findUnique({ where: { id: resolvedParentId } })
-    if (!parent || !parent.isFolder) {
-      res.status(404).json({ error: '父文件夹不存在' })
+    const parent = await assertParentFolderAccess(resolvedParentId, user)
+    if (!parent) {
+      res.status(403).json({ error: '无权写入目标文件夹' })
       return
     }
     storagePath = `${parent.storagePath}/${name.trim()}`
@@ -365,13 +403,17 @@ async function handleCreateFolder(
   }
 
   // 通知存储节点创建目录
-  if (isNodeConnected()) {
-    try {
-      await sendCommand({ type: 'mkdir', path: storagePath })
-    } catch (wsErr) {
-      console.error('存储节点创建目录失败:', wsErr)
-      // 即使节点未响应也继续（目录仅DB记录不强制节点存在）
-    }
+  if (!isNodeConnected()) {
+    res.status(503).json({ error: '存储节点未连接' })
+    return
+  }
+  try {
+    const mkdirResp = await sendCommand({ type: 'mkdir', path: storagePath })
+    if (!mkdirResp.success) throw new Error(mkdirResp.error || 'mkdir failed')
+  } catch (wsErr) {
+    console.error('存储节点创建目录失败:', wsErr)
+    res.status(502).json({ error: '存储节点创建目录失败' })
+    return
   }
 
   const folder = await prisma.driveFile.create({
@@ -381,7 +423,7 @@ async function handleCreateFolder(
       parentId: resolvedParentId,
       storagePath,
       size: 0n,
-      uploadedById: userId,
+      uploadedById: user.userId,
     },
     select: {
       id: true,
@@ -405,7 +447,7 @@ async function handleCreateFolder(
 router.post('/folders', async (req: Request, res: Response) => {
   try {
     const { name, parentId } = req.body
-    await handleCreateFolder(name, parentId, req.user!.userId, res)
+    await handleCreateFolder(name, parentId, req.user!, res)
   } catch (err) {
     console.error('创建文件夹失败:', err)
     if (!res.headersSent) {
@@ -418,7 +460,7 @@ router.post('/folders', async (req: Request, res: Response) => {
 router.post('/files', async (req: Request, res: Response) => {
   try {
     const { name, parentId } = req.body as { name?: string; parentId?: unknown }
-    await handleCreateFolder(name, parentId, req.user!.userId, res)
+    await handleCreateFolder(name, parentId, req.user!, res)
   } catch (err) {
     console.error('创建文件夹失败:', err)
     if (!res.headersSent) {
@@ -461,10 +503,8 @@ router.post('/upload', async (req: Request, res: Response) => {
         // 解析父文件夹路径
         let parentPath = ''
         if (parentId) {
-          const parent = await prisma.driveFile.findUnique({ where: { id: parentId } })
-          if (!parent || !parent.isFolder) {
-            throw new Error('父文件夹不存在')
-          }
+          const parent = await assertParentFolderAccess(parentId, req.user!)
+          if (!parent) throw new Error('无权写入目标文件夹')
           parentPath = parent.storagePath + '/'
         }
 
@@ -525,12 +565,15 @@ router.post('/upload', async (req: Request, res: Response) => {
           const { bytesWritten } = await streamWriteBinary(storagePath, stream)
           writeSucceeded = true
 
-          await prisma.driveFile.update({
+          const updatedFile = await prisma.driveFile.update({
             where: { id: file.id },
             data: { size: BigInt(bytesWritten) },
+            select: {
+              id: true, name: true, size: true, mimeType: true, createdAt: true,
+            },
           })
 
-          res.status(201).json(transformSize(file))
+          res.status(201).json(transformSize(updatedFile))
 
           // 异步更新 FTS 索引
           syncFTSIndex([file.id]).catch(() => {})
@@ -594,6 +637,13 @@ async function handleDownload(req: Request, res: Response): Promise<void> {
       return
     }
 
+    if (req.user!.type === 'download') {
+      if (req.user!.downloadFileId !== id || !req.user!.downloadNonce) {
+        res.status(403).json({ error: '下载票据与文件不匹配' })
+        return
+      }
+    }
+
     if (!isNodeConnected()) {
       res.status(503).json({ error: '存储节点未连接' })
       return
@@ -625,16 +675,21 @@ async function handleDownload(req: Request, res: Response): Promise<void> {
       res.setHeader('Accept-Ranges', 'bytes')
 
       try {
+        let streamedBytes = 0
         for await (const chunk of streamReadBinary(file.storagePath, start, len)) {
+          streamedBytes += chunk.length
           const canContinue = res.write(chunk)
           if (!canContinue) {
             await new Promise<void>(resolve => res.once('drain', resolve))
           }
         }
+        if (streamedBytes !== len) {
+          throw new Error(`下载长度不完整: expected=${len}, actual=${streamedBytes}`)
+        }
         res.end()
       } catch (streamErr: unknown) {
         console.error('下载流中断:', streamErr)
-        if (!res.writableEnded) res.end()
+        if (!res.writableEnded) res.destroy(streamErr instanceof Error ? streamErr : undefined)
       }
       return
     }
@@ -648,16 +703,21 @@ async function handleDownload(req: Request, res: Response): Promise<void> {
     res.setHeader('Accept-Ranges', 'bytes')
 
     try {
+      let streamedBytes = 0
       for await (const chunk of streamReadBinary(file.storagePath)) {
+        streamedBytes += chunk.length
         const canContinue = res.write(chunk)
         if (!canContinue) {
           await new Promise<void>(resolve => res.once('drain', resolve))
         }
       }
+      if (streamedBytes !== contentLength) {
+        throw new Error(`下载长度不完整: expected=${contentLength}, actual=${streamedBytes}`)
+      }
       res.end()
     } catch (streamErr: unknown) {
       console.error('下载流中断:', streamErr)
-      if (!res.writableEnded) res.end()
+      if (!res.writableEnded) res.destroy(streamErr instanceof Error ? streamErr : undefined)
     }
   } catch (err) {
     console.error('下载文件失败:', err)
@@ -690,6 +750,11 @@ router.put('/files/:id', async (req: Request, res: Response) => {
 
     const { name, parentId } = req.body as { name?: string; parentId?: number | null }
 
+    if (name !== undefined && parentId !== undefined) {
+      res.status(400).json({ error: '重命名和移动请分开操作' })
+      return
+    }
+
     // 收集所有 DB 变更，通过事务原子执行
     const updates: any[] = []
 
@@ -705,17 +770,21 @@ router.put('/files/:id', async (req: Request, res: Response) => {
       }
 
       // 通知存储节点重命名
-      if (isNodeConnected()) {
-        try {
-          await sendCommand({
-            type: 'rename',
-            path: file.storagePath,
-            newName: name.trim(),
-          })
-        } catch (wsErr) {
-          console.error('存储节点重命名失败:', wsErr)
-          // 继续更新 DB
-        }
+      if (!isNodeConnected()) {
+        res.status(503).json({ error: '存储节点未连接' })
+        return
+      }
+      try {
+        const renameResp = await sendCommand({
+          type: 'rename',
+          path: file.storagePath,
+          newName: name.trim(),
+        })
+        if (!renameResp.success) throw new Error(renameResp.error || 'rename failed')
+      } catch (wsErr) {
+        console.error('存储节点重命名失败:', wsErr)
+        res.status(502).json({ error: '存储节点重命名失败' })
+        return
       }
 
       // 计算新 storagePath
@@ -757,9 +826,9 @@ router.put('/files/:id', async (req: Request, res: Response) => {
       }
 
       if (newParentId !== null) {
-        const newParent = await prisma.driveFile.findUnique({ where: { id: newParentId } })
-        if (!newParent || !newParent.isFolder) {
-          res.status(404).json({ error: '目标文件夹不存在' })
+        const newParent = await assertParentFolderAccess(newParentId, req.user!)
+        if (!newParent) {
+          res.status(403).json({ error: '无权移动到目标文件夹' })
           return
         }
 
@@ -776,14 +845,20 @@ router.put('/files/:id', async (req: Request, res: Response) => {
         // 通知存储节点移动
         if (isNodeConnected()) {
           try {
-            await sendCommand({
+            const moveResp = await sendCommand({
               type: 'move',
               path: file.storagePath,
               newPath: newStoragePath,
             })
+            if (!moveResp.success) throw new Error(moveResp.error || 'move failed')
           } catch (wsErr) {
             console.error('存储节点移动失败:', wsErr)
+            res.status(502).json({ error: '存储节点移动失败' })
+            return
           }
+        } else {
+          res.status(503).json({ error: '存储节点未连接' })
+          return
         }
 
         // 收集父记录更新
@@ -814,14 +889,20 @@ router.put('/files/:id', async (req: Request, res: Response) => {
 
         if (isNodeConnected()) {
           try {
-            await sendCommand({
+            const moveResp = await sendCommand({
               type: 'move',
               path: file.storagePath,
               newPath: newStoragePath,
             })
+            if (!moveResp.success) throw new Error(moveResp.error || 'move failed')
           } catch (wsErr) {
             console.error('存储节点移动失败:', wsErr)
+            res.status(502).json({ error: '存储节点移动失败' })
+            return
           }
+        } else {
+          res.status(503).json({ error: '存储节点未连接' })
+          return
         }
 
         // 收集父记录更新

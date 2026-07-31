@@ -2,13 +2,26 @@ import { useState, memo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import type { DriveItem } from '../../types/drive'
 import { AudioIcon, CloseIcon, FileIcon } from './DriveIcons'
+import api from '../../lib/api'
 
 export interface DrivePreviewProps {
   item: DriveItem
   onClose: () => void
 }
 
-const TOKEN = () => encodeURIComponent(localStorage.getItem('lineweb_token') || '')
+function useDownloadUrl(itemId: number) {
+  const [url, setUrl] = useState('')
+  useEffect(() => {
+    let cancelled = false
+    api.post<{ ticket: string }>(`/drive/download-ticket/${itemId}`)
+      .then(({ ticket }) => {
+        if (!cancelled) setUrl(`/api/drive/download/${itemId}?token=${encodeURIComponent(ticket)}`)
+      })
+      .catch(() => { if (!cancelled) setUrl('') })
+    return () => { cancelled = true }
+  }, [itemId])
+  return url
+}
 
 /* ---------- Image Preview ---------- */
 
@@ -18,7 +31,7 @@ const ImagePreview = memo(function ImagePreview({ item, onClose }: DrivePreviewP
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const imgSrc = `/api/drive/download/${item.id}?token=${TOKEN()}`
+  const imgSrc = useDownloadUrl(item.id)
 
   return createPortal(
     <div className="gh-drive-preview-overlay" onClick={onClose}>
@@ -34,7 +47,7 @@ const ImagePreview = memo(function ImagePreview({ item, onClose }: DrivePreviewP
         <div className="gh-drive-preview-image-wrap">
           {loading && <div className="gh-spinner" />}
           {error && <p className="gh-drive-preview-error">{error}</p>}
-          {!error && (
+          {!error && imgSrc && (
             <img
               src={imgSrc}
               alt={item.name}
@@ -57,13 +70,13 @@ const ImagePreview = memo(function ImagePreview({ item, onClose }: DrivePreviewP
 const VideoPreview = memo(function VideoPreview({ item, onClose }: DrivePreviewProps) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const videoSrc = `/api/drive/download/${item.id}?token=${TOKEN()}`
+  const videoSrc = useDownloadUrl(item.id)
   return createPortal(
     <div className="gh-drive-preview-overlay" onClick={onClose}>
       <div className="gh-drive-preview-container" onClick={e => e.stopPropagation()}>
         {loading && <div className="gh-spinner" />}
         {error && <p className="gh-drive-preview-error">{error}</p>}
-        <video
+        {videoSrc && <video
           controls autoPlay
           className={`gh-drive-preview-video ${loading ? 'gh-drive-preview-video--hidden' : ''}`}
           src={videoSrc}
@@ -71,7 +84,7 @@ const VideoPreview = memo(function VideoPreview({ item, onClose }: DrivePreviewP
           onError={() => { setLoading(false); setError('视频加载失败') }}
         >
           您的浏览器不支持视频播放
-        </video>
+        </video>}
         <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览"><CloseIcon size={16} /></button>
       </div>
     </div>,
@@ -82,16 +95,16 @@ const VideoPreview = memo(function VideoPreview({ item, onClose }: DrivePreviewP
 /* ---------- Audio Preview ---------- */
 
 const AudioPreview = memo(function AudioPreview({ item, onClose }: DrivePreviewProps) {
-  const audioSrc = `/api/drive/download/${item.id}?token=${TOKEN()}`
+  const audioSrc = useDownloadUrl(item.id)
   return createPortal(
     <div className="gh-drive-preview-overlay" onClick={onClose}>
       <div className="gh-drive-preview-container" onClick={e => e.stopPropagation()}>
         <div className="gh-drive-preview-audio-wrap">
           <div className="gh-drive-preview-audio-icon"><AudioIcon size={48} /></div>
           <p className="gh-drive-preview-audio-name">{item.name}</p>
-          <audio controls autoPlay className="gh-drive-preview-audio" src={audioSrc}>
+          {audioSrc && <audio controls autoPlay className="gh-drive-preview-audio" src={audioSrc}>
             您的浏览器不支持音频播放
-          </audio>
+          </audio>}
         </div>
         <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览"><CloseIcon size={16} /></button>
       </div>
@@ -103,13 +116,13 @@ const AudioPreview = memo(function AudioPreview({ item, onClose }: DrivePreviewP
 /* ---------- PDF Preview ---------- */
 
 const PdfPreview = memo(function PdfPreview({ item, onClose }: DrivePreviewProps) {
-  const pdfSrc = `/api/drive/download/${item.id}?token=${TOKEN()}`
+  const pdfSrc = useDownloadUrl(item.id)
   return createPortal(
     <div className="gh-drive-preview-overlay" onClick={onClose}>
       <div className="gh-drive-preview-container" onClick={e => e.stopPropagation()}>
         <iframe
           className="gh-drive-preview-pdf"
-          src={pdfSrc}
+          src={pdfSrc || undefined}
           title={item.name}
         />
         <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览"><CloseIcon size={16} /></button>
@@ -128,11 +141,7 @@ const CodePreview = memo(function CodePreview({ item, onClose }: DrivePreviewPro
 
   useEffect(() => {
     let cancelled = false
-    const token = localStorage.getItem('lineweb_token')
-    fetch(`/api/drive/download/${item.id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(r => r.text())
+    api.text(`/drive/download/${item.id}`)
       .then(text => { if (!cancelled) { setCode(text); setLoading(false) } })
       .catch(e => { if (!cancelled) { setError(e.message); setLoading(false) } })
     return () => { cancelled = true }
