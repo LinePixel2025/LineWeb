@@ -46,18 +46,6 @@
   margin-right: var(--gh-space-4);
   flex-shrink: 0;
 }
-.gh-header-nav { display: flex; align-items: center; gap: 2px; }
-.gh-header-link {
-  padding: var(--gh-space-2) var(--gh-space-3);
-  font-size: var(--gh-text-sm);
-  font-weight: 500;
-  color: var(--gh-text-secondary);
-  text-decoration: none;
-  border-radius: var(--gh-radius);
-  transition: background var(--gh-transition), color var(--gh-transition);
-}
-.gh-header-link:hover { background: var(--gh-btn-hover); color: var(--gh-text); }
-.gh-header-link--active { color: var(--gh-text); }
 .gh-header-spacer { flex: 1; }
 .gh-header-actions { display: flex; align-items: center; gap: var(--gh-space-2); }
 .gh-header-username { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

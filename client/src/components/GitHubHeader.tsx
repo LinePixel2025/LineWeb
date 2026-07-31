@@ -1,15 +1,8 @@
 import { memo, useState, useRef, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 import UserAvatar from './UserAvatar'
-
-const navItems = [
-  { path: '/', label: 'Overview' },
-  { path: '/posts', label: 'Repositories' },
-  { path: '/drive', label: 'Drive' },
-  { path: '/features', label: 'About' },
-]
 
 interface Props {
   onMenuToggle: () => void
@@ -18,7 +11,6 @@ interface Props {
 export default memo(function GitHubHeader({ onMenuToggle }: Props) {
   const { user, isAdmin, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
-  const location = useLocation()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -71,17 +63,6 @@ export default memo(function GitHubHeader({ onMenuToggle }: Props) {
           </svg>
           <span className="gh-header-brand-name">LineWeb</span>
         </Link>
-        <nav className="gh-header-nav gh-hidden-mobile">
-          {navItems.map(item => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`gh-header-link ${location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path)) ? 'gh-header-link--active' : ''}`}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
         <div className="gh-header-spacer" />
         <div className="gh-header-actions">
           <button className="gh-btn gh-btn--ghost gh-btn--sm gh-header-theme-btn" onClick={toggleTheme} title={`Theme: ${theme}`} aria-label="切换主题">
