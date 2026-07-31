@@ -190,7 +190,7 @@ export default function CommentAdminPage() {
             <p className="gh-text-secondary">暂无评论</p>
           </div>
         ) : (
-          <div className="gh-box" style={{ padding: 0, overflow: 'hidden' }}>
+          <div className="gh-box gh-table-wrap" style={{ padding: 0 }}>
             <table className="gh-table">
               <thead>
                 <tr>
@@ -247,7 +247,7 @@ export default function CommentAdminPage() {
           <p className="gh-text-secondary">该文章暂无评论</p>
         </div>
       ) : (
-        <div className="gh-box" style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="gh-box gh-table-wrap" style={{ padding: 0 }}>
           <table className="gh-table">
             <thead>
               <tr>

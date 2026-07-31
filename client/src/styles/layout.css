@@ -8,7 +8,8 @@
   top: 0;
   left: 0;
   right: 0;
-  height: var(--gh-nav-height);
+  height: calc(var(--gh-nav-height) + var(--gh-safe-top));
+  padding-top: var(--gh-safe-top);
   background: var(--gh-canvas-inset);
   border-bottom: 1px solid var(--gh-border);
   z-index: 300;
@@ -17,7 +18,7 @@
   display: flex;
   align-items: center;
   height: 100%;
-  padding: 0 var(--gh-space-4);
+  padding: 0 calc(var(--gh-space-4) + var(--gh-safe-right)) 0 calc(var(--gh-space-4) + var(--gh-safe-left));
   max-width: 1600px;
   margin: 0 auto;
 }
@@ -30,6 +31,8 @@
   padding: var(--gh-space-2);
   margin-right: var(--gh-space-2);
   border-radius: var(--gh-radius);
+  min-width: 44px;
+  min-height: 44px;
 }
 .gh-header-menu-btn:hover { background: var(--gh-btn-hover); }
 .gh-header-logo {
@@ -71,6 +74,7 @@
   font-family: var(--gh-font);
   cursor: pointer;
   transition: background var(--gh-transition);
+  min-height: 40px;
 }
 .gh-header-user-btn:hover { background: var(--gh-btn-hover); }
 

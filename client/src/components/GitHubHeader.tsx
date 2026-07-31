@@ -57,7 +57,7 @@ export default memo(function GitHubHeader({ onMenuToggle }: Props) {
   return (
     <header className="gh-header">
       <div className="gh-header-inner">
-        <button className="gh-header-menu-btn gh-visible-mobile" onClick={onMenuToggle} aria-label="Toggle menu">
+        <button className="gh-header-menu-btn gh-visible-mobile" onClick={onMenuToggle} aria-label="打开导航菜单">
           <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
             <path d="M1 2.75A.75.75 0 0 1 1.75 2h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 2.75Zm0 5A.75.75 0 0 1 1.75 7h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 7.75ZM1.75 12a.75.75 0 0 0 0 1.5h12.5a.75.75 0 0 0 0-1.5H1.75Z"/>
           </svg>
@@ -84,12 +84,12 @@ export default memo(function GitHubHeader({ onMenuToggle }: Props) {
         </nav>
         <div className="gh-header-spacer" />
         <div className="gh-header-actions">
-          <button className="gh-btn gh-btn--ghost gh-btn--sm" onClick={toggleTheme} title={`Theme: ${theme}`} aria-label="Toggle theme">
+          <button className="gh-btn gh-btn--ghost gh-btn--sm gh-header-theme-btn" onClick={toggleTheme} title={`Theme: ${theme}`} aria-label="切换主题">
             {themeIcon}
           </button>
           {user ? (
             <div ref={menuRef} style={{ position: 'relative' }}>
-              <button className="gh-header-user-btn" onClick={() => setUserMenuOpen(prev => !prev)}>
+              <button className="gh-header-user-btn" onClick={() => setUserMenuOpen(prev => !prev)} aria-expanded={userMenuOpen} aria-label="打开用户菜单">
                 <UserAvatar userId={user.id} username={user.username} size="sm" />
                 <span className="gh-hidden-mobile gh-header-username">{user.username}</span>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true" className="gh-hidden-mobile">

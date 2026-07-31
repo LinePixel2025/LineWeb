@@ -1,11 +1,30 @@
-import { memo, useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { memo, useEffect, useState } from 'react'
+import { Outlet, useLocation } from 'react-router-dom'
 import GitHubHeader from './GitHubHeader'
 import GitHubSidebar from './GitHubSidebar'
 
 export default memo(function Layout() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const location = useLocation()
+
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    if (!mobileOpen) return
+    const previousOverflow = document.body.style.overflow
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileOpen(false)
+    }
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', handleEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [mobileOpen])
 
   return (
     <div className="gh-layout-root">

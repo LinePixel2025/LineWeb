@@ -29,6 +29,19 @@ export default function AvatarCropDialog({ file, onClose }: AvatarCropDialogProp
     return () => URL.revokeObjectURL(url)
   }, [file])
 
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && step !== 'upload') onClose()
+    }
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', handleEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [onClose, step])
+
   const handleCropComplete = (_croppedArea: Area, pixels: Area) => {
     setCroppedAreaPixels(pixels)
   }

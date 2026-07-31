@@ -26,10 +26,10 @@
 @media (max-width: 767px) {
   .gh-content {
     margin-left: 0 !important;
-    padding: calc(var(--gh-nav-height) + var(--gh-space-4)) var(--gh-space-4) var(--gh-space-4);
+    padding: calc(var(--gh-nav-height) + var(--gh-safe-top) + var(--gh-space-4)) calc(var(--gh-space-4) + var(--gh-safe-right)) calc(var(--gh-space-4) + var(--gh-safe-bottom)) calc(var(--gh-space-4) + var(--gh-safe-left));
   }
   .gh-layout-root--admin .gh-content {
-    padding-top: var(--gh-space-4);
+    padding: calc(var(--gh-space-4) + var(--gh-safe-top)) calc(var(--gh-space-4) + var(--gh-safe-right)) calc(var(--gh-space-4) + var(--gh-safe-bottom)) calc(var(--gh-space-4) + var(--gh-safe-left));
   }
   .gh-sidebar {
     transform: translateX(-100%);
@@ -44,15 +44,74 @@
   }
   .gh-sidebar.gh-sidebar--open .gh-sidebar-item {
     justify-content: flex-start;
+    min-height: 44px;
     padding: var(--gh-space-2) var(--gh-space-3);
   }
+  .gh-sidebar.gh-sidebar--open .gh-sidebar-collapse-btn { min-height: 44px; }
   .gh-sidebar-overlay {
     display: block;
   }
 
   .gh-table-wrap {
     overflow-x: auto;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
   }
+
+  .gh-btn--sm,
+  .gh-btn--md,
+  .gh-btn--lg,
+  .gh-popover-item,
+  .gh-tabnav-item,
+  .gh-pagination-btn { min-height: 44px; }
+
+  .gh-pagination { max-width: 100%; overflow-x: auto; justify-content: flex-start; padding-bottom: 4px; }
+  .gh-pagination-btn { min-width: 44px; }
+
+  .gh-dialog-overlay {
+    align-items: flex-end;
+    padding: var(--gh-safe-top) var(--gh-safe-right) 0 var(--gh-safe-left);
+  }
+  .gh-dialog {
+    width: 100%;
+    max-width: none;
+    max-height: calc(100dvh - var(--gh-safe-top) - 12px);
+    padding: var(--gh-space-4) var(--gh-space-4) calc(var(--gh-space-4) + var(--gh-safe-bottom));
+    border-radius: var(--gh-radius) var(--gh-radius) 0 0;
+  }
+  .gh-dialog-actions { flex-wrap: wrap; }
+  .gh-dialog-actions .gh-btn { flex: 1; }
+
+  .gh-sidebar {
+    top: calc(var(--gh-nav-height) + var(--gh-safe-top));
+    padding-left: var(--gh-safe-left);
+  }
+  .gh-layout-root--admin .gh-sidebar {
+    top: 0;
+    padding-top: var(--gh-safe-top);
+  }
+  .gh-sidebar-nav { overscroll-behavior: contain; }
+
+  .gh-header-theme-btn { width: 44px; padding: 0; }
+  .gh-header-user-btn { min-width: 44px; min-height: 44px; justify-content: center; padding: 4px; }
+  .gh-popover { max-width: calc(100vw - 32px - var(--gh-safe-left) - var(--gh-safe-right)); }
+
+  .gh-layout-root--admin header {
+    min-width: 0;
+  }
+  .gh-admin-topbar-title { font-size: var(--gh-text-lg) !important; }
+  .gh-admin-topbar-username { display: none; }
+
+  .gh-editor-actions {
+    align-items: stretch !important;
+    flex-direction: column;
+    gap: var(--gh-space-3);
+  }
+  .gh-editor-actions > div:last-child {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+  }
+  .gh-editor-actions .gh-btn { min-width: 0; white-space: normal; text-align: center; }
 
   .gh-footer-links {
     flex-direction: column;

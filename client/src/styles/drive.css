@@ -1523,6 +1523,50 @@
   padding: 6px 12px;
 }
 
+@media (max-width: 767px) {
+  .gh-drive-preview-overlay {
+    align-items: stretch;
+    padding: calc(52px + var(--gh-safe-top)) calc(8px + var(--gh-safe-right)) calc(8px + var(--gh-safe-bottom)) calc(8px + var(--gh-safe-left));
+  }
+
+  .gh-drive-preview-container {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+  }
+
+  .gh-drive-preview-close {
+    top: calc(-48px - var(--gh-safe-top));
+    right: 0;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+  }
+
+  .gh-drive-preview-toolbar { min-height: 44px; overflow-x: auto; justify-content: flex-start; }
+  .gh-drive-preview-toolbar-btn { min-height: 44px; min-width: 44px; }
+  .gh-drive-preview-image { max-width: 100%; max-height: calc(100dvh - 120px - var(--gh-safe-top) - var(--gh-safe-bottom)); }
+  .gh-drive-preview-video { width: 100%; max-width: 100%; max-height: calc(100dvh - 88px - var(--gh-safe-top) - var(--gh-safe-bottom)); }
+  .gh-drive-preview-pdf { width: 100%; height: calc(100dvh - 76px - var(--gh-safe-top) - var(--gh-safe-bottom)); }
+  .gh-drive-preview-code { width: 100%; max-width: 100%; max-height: calc(100dvh - 76px - var(--gh-safe-top) - var(--gh-safe-bottom)); }
+  .gh-drive-preview-audio-wrap { min-width: 0; width: 100%; padding: var(--gh-space-5) var(--gh-space-3); }
+
+  .gh-drive-download-toast {
+    right: calc(8px + var(--gh-safe-right));
+    bottom: calc(8px + var(--gh-safe-bottom));
+    left: calc(8px + var(--gh-safe-left));
+    width: auto;
+    max-width: none;
+  }
+  .gh-drive-download-toast-count { display: none; }
+  .gh-drive-download-toast-toggle,
+  .gh-drive-download-toast-cancel { min-width: 44px; min-height: 44px; }
+
+  .gh-drive-folder-picker-row { min-height: 44px; }
+  .gh-drive-folder-picker-label { min-height: 44px; }
+  .gh-drive-tree-node-expand { min-width: 44px; min-height: 44px; }
+}
+
 .gh-drive-preview-error,
 .gh-drive-preview-unsupported {
   color: #fff;
@@ -1678,7 +1722,7 @@
   bottom: max(16px, var(--gh-safe-bottom));
   z-index: 3000;
   width: min(360px, calc(100vw - 32px));
-  max-height: min(420px, calc(100vh - 32px));
+  max-height: min(420px, calc(100dvh - 32px));
   overflow: hidden;
   border: 1px solid var(--gh-border);
   border-radius: 7px;
@@ -2081,6 +2125,18 @@
   display: none;
 }
 
+@media (orientation: landscape) and (max-height: 500px) and (min-width: 768px) {
+  .gh-drive-toolbar { padding: var(--gh-space-3); }
+  .gh-drive-control-row { flex-wrap: wrap; }
+  .gh-drive-search-field { flex-basis: 100%; }
+  .gh-drive-control-group {
+    max-width: 100%;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    overscroll-behavior-x: contain;
+  }
+}
+
 @media (max-width: 767px) {
   .gh-drive-page--mobile {
     width: 100%;
@@ -2109,7 +2165,7 @@
 
   .gh-drive-mobile-titlebar {
     display: grid;
-    grid-template-columns: 40px minmax(0, 1fr) 40px 40px;
+    grid-template-columns: 44px minmax(0, 1fr) 44px 44px;
     align-items: center;
     gap: 4px;
     min-height: 60px;
@@ -2123,9 +2179,9 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    min-width: 40px;
-    height: 40px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
     padding: 0;
     border: 1px solid transparent;
     border-radius: 6px;
@@ -2279,9 +2335,9 @@
   }
 
   .gh-drive-mobile-search-field > button {
-    width: 36px;
-    min-width: 36px;
-    height: 36px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
   }
 
   .gh-drive-mobile-search-status {
@@ -2319,8 +2375,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     flex: 0 0 auto;
     padding: 0;
     border: 0;
@@ -2347,7 +2403,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    min-height: 36px;
+    min-height: 44px;
     padding: 0 7px;
     border: 0;
     border-radius: 6px;
@@ -2378,7 +2434,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    min-height: 40px;
+    min-height: 44px;
     margin: 0 0 4px -4px;
     padding: 0 8px 0 4px;
     border: 0;
@@ -2504,6 +2560,52 @@
     color: var(--gh-text);
   }
 
+  .gh-drive-mobile-file-list--grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+
+  .gh-drive-mobile-file-list--grid .gh-drive-mobile-file-row {
+    position: relative;
+    min-height: 146px;
+    align-items: stretch;
+    border: 1px solid var(--gh-border);
+    border-radius: 6px;
+  }
+
+  .gh-drive-mobile-file-list--grid .gh-drive-mobile-file-main {
+    min-height: 144px;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px 40px 14px 14px;
+  }
+
+  .gh-drive-mobile-file-list--grid .gh-drive-mobile-file-copy { width: 100%; }
+  .gh-drive-mobile-file-list--grid .gh-drive-mobile-file-more {
+    position: absolute;
+    top: 4px;
+    right: 0;
+    margin: 0;
+  }
+
+  .gh-drive-mobile-file-list--grid .gh-drive-mobile-checkbox {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 1;
+    margin: 0;
+  }
+
+  .gh-drive-mobile-file-list--grid .gh-drive-mobile-checkbox + .gh-drive-mobile-file-main {
+    padding-top: 42px;
+  }
+
   .gh-drive-mobile-loading,
   .gh-drive-mobile-empty {
     display: flex;
@@ -2559,7 +2661,7 @@
   }
 
   .gh-drive-mobile-pagination button {
-    min-height: 36px;
+    min-height: 44px;
     padding: 0 10px;
     border: 1px solid var(--gh-border);
     border-radius: 6px;
@@ -2779,4 +2881,19 @@
     width: 100%;
     justify-content: center;
   }
+
+  /* Keep preview sizing last so desktop defaults above cannot override it. */
+  .gh-drive-preview-overlay {
+    align-items: stretch;
+    padding: calc(52px + var(--gh-safe-top)) calc(8px + var(--gh-safe-right)) calc(8px + var(--gh-safe-bottom)) calc(8px + var(--gh-safe-left));
+  }
+  .gh-drive-preview-container { width: 100%; max-width: none; max-height: none; }
+  .gh-drive-preview-close { top: calc(-48px - var(--gh-safe-top)); right: 0; min-width: 44px; min-height: 44px; padding: 0; }
+  .gh-drive-preview-toolbar { min-height: 44px; overflow-x: auto; justify-content: flex-start; }
+  .gh-drive-preview-toolbar-btn { min-width: 44px; min-height: 44px; }
+  .gh-drive-preview-image { max-width: 100%; max-height: calc(100dvh - 120px - var(--gh-safe-top) - var(--gh-safe-bottom)); }
+  .gh-drive-preview-video { width: 100%; max-width: 100%; max-height: calc(100dvh - 88px - var(--gh-safe-top) - var(--gh-safe-bottom)); }
+  .gh-drive-preview-pdf { width: 100%; height: calc(100dvh - 76px - var(--gh-safe-top) - var(--gh-safe-bottom)); }
+  .gh-drive-preview-code { width: 100%; max-width: 100%; max-height: calc(100dvh - 76px - var(--gh-safe-top) - var(--gh-safe-bottom)); }
+  .gh-drive-preview-audio-wrap { width: 100%; min-width: 0; padding: var(--gh-space-5) var(--gh-space-3); }
 }

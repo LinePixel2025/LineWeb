@@ -46,11 +46,12 @@ export default function PostsPage() {
         <p className="gh-text-secondary">发现 Line Web 的最新内容</p>
       </div>
 
-      <div className="gh-box" style={{ marginBottom: '16px', padding: '12px 16px' }}>
-        <form onSubmit={handleSearch} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: search ? '12px' : '0' }}>
+      <div className="gh-box gh-posts-tools" style={{ marginBottom: '16px', padding: '12px 16px' }}>
+        <form className="gh-posts-search-form" onSubmit={handleSearch} style={{ marginBottom: search ? '12px' : '0' }}>
           <GitHubInput
             type="text"
             placeholder="搜索文章标题…"
+            aria-label="搜索文章标题"
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             fullWidth
@@ -66,7 +67,7 @@ export default function PostsPage() {
           </GitHubButton>
         </form>
         {search && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="gh-posts-search-summary">
             <span className="gh-text-secondary" style={{ fontSize: '0.85rem' }}>
               搜索 "{search}" — {data ? `${data.total} 篇结果` : '搜索中…'}
             </span>

@@ -133,7 +133,7 @@ function RenderComponent({ comp }: { comp: ComponentData }) {
       return <Tag style={{ margin: 0, paddingLeft: 20 }}>{items.map((item, ii) => <li key={ii}>{item}</li>)}</Tag>
     }
     case 'html':
-      return <div dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />
+      return <div className="article-content gh-dynamic-html" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />
     default:
       return null
   }

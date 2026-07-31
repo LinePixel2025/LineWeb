@@ -83,6 +83,19 @@ export default memo(function AdminLayout() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [mobileOpen])
 
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    if (!mobileOpen) return
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileOpen(false)
+    }
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [mobileOpen])
+
   const isActive = (path: string) => {
     if (path === '/admin') return location.pathname === '/admin'
     return location.pathname.startsWith(path)
@@ -172,14 +185,14 @@ export default memo(function AdminLayout() {
             </svg>
           </button>
 
-          <h1 style={{ fontSize: 'var(--gh-text-xl)', fontWeight: 600, margin: 0 }}>管理面板</h1>
+          <h1 className="gh-admin-topbar-title" style={{ fontSize: 'var(--gh-text-xl)', fontWeight: 600, margin: 0 }}>管理面板</h1>
 
           <div style={{ flex: 1 }} />
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gh-space-2)' }}>
             {user && (
               <>
-                <span className="gh-text-secondary" style={{ fontSize: 'var(--gh-text-sm)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span className="gh-text-secondary gh-admin-topbar-username" style={{ fontSize: 'var(--gh-text-sm)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {user.username}
                 </span>
                 <GitHubButton variant="ghost" size="sm" onClick={handleLogout}>

@@ -21,6 +21,24 @@ body {
   line-height: 1.5;
   min-height: 100dvh;
   -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: var(--gh-focus-ring);
 }
 
 a {
@@ -76,6 +94,8 @@ h4 { font-size: var(--gh-text-base); font-weight: 600; }
 }
 
 .gh-page-container {
+  width: 100%;
+  min-width: 0;
   max-width: var(--gh-max-width);
   margin: 0 auto;
 }

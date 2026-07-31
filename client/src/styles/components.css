@@ -73,6 +73,7 @@
   position: relative;
   display: inline-flex;
   align-items: center;
+  min-width: 0;
 }
 .gh-input {
   padding: 6px 12px;
@@ -88,6 +89,14 @@
   width: 260px;
 }
 .gh-input--full { width: 100%; }
+.gh-form-field {
+  display: grid;
+  gap: 6px;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+}
+.gh-form-field > .gh-input-wrap { width: 100%; }
 .gh-input:focus {
   border-color: var(--gh-accent);
   box-shadow: var(--gh-focus-ring);
@@ -355,6 +364,11 @@
 }
 .article-content pre code { background: none; padding: 0; }
 .article-content img { max-width: 100%; border-radius: var(--gh-radius); }
+.article-content table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.article-content iframe,
+.article-content video,
+.article-content audio { max-width: 100%; }
+.article-content iframe { width: 100%; }
 
 /* ===== Pagination ===== */
 .gh-pagination {

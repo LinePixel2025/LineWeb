@@ -34,6 +34,93 @@
   font-size: var(--gh-text-lg);
 }
 
+.gh-auth-page {
+  display: flex;
+  min-height: min(80vh, 720px);
+  align-items: center;
+  justify-content: center;
+}
+
+.gh-auth-card {
+  width: min(100%, 400px);
+  margin: var(--gh-space-7) auto;
+  padding: var(--gh-space-6);
+}
+
+.gh-posts-search-form,
+.gh-posts-search-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+}
+
+.gh-posts-search-form .gh-input-wrap { flex: 1; }
+.gh-dynamic-html { min-width: 0; }
+
+/* Calculator */
+.calc-display-wrap {
+  min-width: 0;
+  margin-bottom: var(--gh-space-4);
+  padding: var(--gh-space-4);
+  overflow: hidden;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-bg);
+  text-align: right;
+}
+
+.calc-expression {
+  min-height: 20px;
+  overflow: hidden;
+  color: var(--gh-text-tertiary);
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calc-display {
+  overflow-x: auto;
+  color: var(--gh-text);
+  font-family: var(--gh-font-mono);
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1.35;
+  scrollbar-width: none;
+  white-space: nowrap;
+}
+
+.calc-display::-webkit-scrollbar { display: none; }
+
+.calc-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--gh-space-2);
+}
+
+.calc-btn {
+  min-width: 0;
+  min-height: 52px;
+  padding: 0;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-bg);
+  color: var(--gh-text);
+  cursor: pointer;
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-lg);
+  font-weight: 500;
+  transition: background var(--gh-transition), border-color var(--gh-transition), color var(--gh-transition);
+}
+
+.calc-btn:hover { background: var(--gh-btn-hover); border-color: var(--gh-border-muted); }
+.calc-btn:active { background: var(--gh-btn-active); }
+.calc-btn--fn { color: var(--gh-text-secondary); background: var(--gh-canvas-inset); }
+.calc-btn--op { color: var(--gh-accent); background: var(--gh-accent-soft); border-color: transparent; }
+.calc-btn--eq { color: #fff; background: var(--gh-accent); border-color: var(--gh-accent); }
+.calc-btn--eq:hover { color: #fff; background: var(--gh-accent-hover); border-color: var(--gh-accent-hover); }
+
 /* Digital health: overview belongs to the home sidebar; setup belongs to profile. */
 .digital-health-overview {
   margin-top: var(--gh-space-4);
@@ -260,6 +347,37 @@
 }
 
 @media (max-width: 767px) {
+  .gh-input { min-height: 44px; font-size: 16px; }
+
+  .gh-auth-page { min-height: auto; align-items: flex-start; }
+  .gh-auth-card { margin: var(--gh-space-4) auto; padding: var(--gh-space-5) var(--gh-space-4); }
+
+  .gh-posts-search-form { flex-wrap: wrap; }
+  .gh-posts-search-form .gh-input-wrap { flex-basis: 100%; }
+  .gh-posts-search-form .gh-btn { flex: 1; }
+  .gh-posts-search-summary { align-items: flex-start; justify-content: space-between; }
+
+  .gh-post-content { padding: var(--gh-space-4); }
+  .gh-post-meta { align-items: flex-start; }
+
+  .calc-btn { min-height: 56px; }
+
+  .gh-crop-container { height: min(340px, 46dvh); min-height: 220px; }
+
+  .lex-tb { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; }
+  .lex-grp { flex: 0 0 auto; }
+  .lex-btn { min-width: 44px; height: 44px; }
+
+  .gh-layout-root--admin .gh-page-header {
+    align-items: stretch !important;
+    flex-direction: column;
+    gap: var(--gh-space-3);
+  }
+
+  .gh-layout-root--admin .gh-page-header > .gh-btn { align-self: flex-start; }
+  .gh-layout-root--admin .gh-table { min-width: 680px; }
+  .gh-layout-root--admin .gh-actions { justify-content: flex-start; }
+
   .gh-feature-grid {
     grid-template-columns: 1fr;
   }

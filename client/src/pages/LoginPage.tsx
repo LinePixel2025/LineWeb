@@ -26,8 +26,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="gh-page-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
-      <div className="gh-box" style={{ width: '100%', maxWidth: '400px', padding: '32px', margin: '60px auto' }}>
+    <div className="gh-page-container gh-auth-page">
+      <div className="gh-box gh-auth-card">
         <h2 style={{ textAlign: 'center', marginBottom: '4px' }}>登录</h2>
         <p className="gh-text-secondary" style={{ textAlign: 'center', marginBottom: '24px', fontSize: '0.88rem' }}>
           欢迎回到 Line Web
@@ -40,8 +40,14 @@ export default function LoginPage() {
         )}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <GitHubInput type="text" placeholder="邮箱或用户名" value={identifier} onChange={e => setIdentifier(e.target.value)} required fullWidth />
-          <GitHubInput type="password" placeholder="密码" value={password} onChange={e => setPassword(e.target.value)} required fullWidth />
+          <label className="gh-form-field">
+            <span>邮箱或用户名</span>
+            <GitHubInput type="text" placeholder="邮箱或用户名" value={identifier} onChange={e => setIdentifier(e.target.value)} autoComplete="username" required fullWidth />
+          </label>
+          <label className="gh-form-field">
+            <span>密码</span>
+            <GitHubInput type="password" placeholder="密码" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" required fullWidth />
+          </label>
           <GitHubButton type="submit" variant="primary" size="lg" fullWidth disabled={loading}>
             {loading ? '登录中...' : '登录'}
           </GitHubButton>

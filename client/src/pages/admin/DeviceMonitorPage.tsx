@@ -141,7 +141,7 @@ export default function DeviceMonitorPage() {
             ))}
           </div>
 
-          <div className="gh-box" style={{ padding: 0, overflow: 'hidden', marginBottom: 'var(--gh-space-4)' }}>
+          <div className="gh-box gh-table-wrap" style={{ padding: 0, marginBottom: 'var(--gh-space-4)' }}>
             <div style={{
               padding: 'var(--gh-space-3) var(--gh-space-4)',
               fontWeight: 600, fontSize: 'var(--gh-text-sm)',
@@ -182,7 +182,7 @@ export default function DeviceMonitorPage() {
           </div>
 
           {historyDevices.length > 0 && (
-            <div className="gh-box" style={{ padding: 0, overflow: 'hidden' }}>
+            <div className="gh-box gh-table-wrap" style={{ padding: 0 }}>
               <div style={{
                 padding: 'var(--gh-space-3) var(--gh-space-4)',
                 fontWeight: 600, fontSize: 'var(--gh-text-sm)',

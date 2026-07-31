@@ -151,7 +151,7 @@ export default function ApiAdminPage() {
           </p>
         </div>
       ) : (
-        <div className="gh-box" style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="gh-box gh-table-wrap" style={{ padding: 0 }}>
           <table className="gh-table">
             <thead>
               <tr>

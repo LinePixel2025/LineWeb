@@ -107,7 +107,7 @@ export default function EditorPage() {
       </div>
 
       {error && (
-        <div style={{
+        <div className="gh-editor-actions" style={{
           padding: '8px 16px', marginBottom: 'var(--gh-space-4)',
           borderRadius: 'var(--gh-radius)', color: 'var(--gh-danger)',
           background: 'var(--gh-danger-soft)', fontSize: 'var(--gh-text-sm)',

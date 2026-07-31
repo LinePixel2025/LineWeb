@@ -160,6 +160,26 @@ const MobileDriveShell = memo(function MobileDriveShell({
     if (searchOpen) window.requestAnimationFrame(() => searchInputRef.current?.focus())
   }, [searchOpen])
 
+  const sheetOpen = Boolean(actionItem || showMore || showFilters)
+
+  useEffect(() => {
+    if (!sheetOpen) return
+    const previousOverflow = document.body.style.overflow
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActionItem(null)
+        setShowMore(false)
+        setShowFilters(false)
+      }
+    }
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', handleEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [sheetOpen])
+
   const closeSheets = useCallback(() => {
     setActionItem(null)
     setShowMore(false)
@@ -336,7 +356,7 @@ const MobileDriveShell = memo(function MobileDriveShell({
             {view === 'files' && !searchOpen && !searchQuery && <button className="gh-btn gh-btn--sm gh-btn--primary" onClick={onUpload}><UploadIcon size={14} /> 上传文件</button>}
           </div>
         ) : (
-          <div className="gh-drive-mobile-file-list" role="list" aria-label={title}>
+          <div className={`gh-drive-mobile-file-list gh-drive-mobile-file-list--${viewMode}`} role="list" aria-label={title}>
             {visibleItems.map(item => {
               const selected = selectedIds.includes(item.id)
               return (

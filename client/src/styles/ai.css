@@ -390,9 +390,14 @@
     bottom: calc(var(--gh-space-3) + var(--gh-safe-bottom));
     left: calc(var(--gh-space-3) + var(--gh-safe-left));
     width: auto;
-    height: min(680px, calc(100dvh - 24px - var(--gh-safe-bottom)));
+    top: calc(var(--gh-space-3) + var(--gh-safe-top));
+    height: auto;
   }
 
   .gh-ai-messages { padding: var(--gh-space-4) var(--gh-space-3); }
   .gh-ai-bubble { max-width: 88%; }
+  .gh-ai-header-btn,
+  .gh-ai-send,
+  .gh-ai-suggestions button { min-width: 44px; min-height: 44px; }
+  .gh-ai-input { min-height: 44px; font-size: 16px; }
 }

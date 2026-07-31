@@ -174,10 +174,16 @@ function DrivePageInner() {
       .forEach(item => startDownload(item))
   }, [ctx.selectedFiles, displayItems, startDownload])
 
-  const handleBatchDelete = useCallback(() => {
-    const item = displayItems.find(candidate => ctx.selectedFiles.includes(candidate.id))
-    if (item) dialogs.openDelete(item)
-  }, [ctx.selectedFiles, displayItems, dialogs])
+  const handleBatchDelete = useCallback(async () => {
+    const selectedIds = [...ctx.selectedFiles]
+    if (selectedIds.length === 0 || !window.confirm(`确定删除选中的 ${selectedIds.length} 个项目吗？此操作不可撤销。`)) return
+
+    const results = await Promise.allSettled(selectedIds.map(fileId => api.delete(`/drive/files/${fileId}`)))
+    const failedCount = results.filter(result => result.status === 'rejected').length
+    clearSelection()
+    invalidate()
+    if (failedCount > 0) window.alert(`${failedCount} 个项目删除失败，请刷新后重试。`)
+  }, [clearSelection, ctx.selectedFiles, invalidate])
 
   const handleBatchFavorite = useCallback(() => {
     displayItems

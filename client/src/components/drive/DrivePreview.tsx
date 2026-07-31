@@ -158,6 +158,19 @@ const CodePreview = memo(function CodePreview({ item, onClose }: DrivePreviewPro
 /* ---------- DrivePreview Router ---------- */
 
 const DrivePreview = memo(function DrivePreview({ item, onClose }: DrivePreviewProps) {
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', handleEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [onClose])
+
   const mime = (item.mimeType || '').toLowerCase()
   const ext = item.name.includes('.') ? item.name.split('.').pop()!.toLowerCase() : ''
 
