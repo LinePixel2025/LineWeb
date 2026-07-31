@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import api from '@/lib/api'
@@ -14,25 +14,39 @@ interface ScreenTimeData {
 function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
+
   if (hours > 0 && minutes > 0) return `${hours} 小时 ${minutes} 分钟`
   if (hours > 0) return `${hours} 小时`
   return `${minutes} 分钟`
 }
 
-function getGoalProgressColor(percent: number): string {
-  if (percent >= 100) return 'var(--gh-danger)'
-  if (percent >= 75) return '#f59e0b'
-  return 'var(--gh-success)'
-}
-
 function timeAgo(iso: string | null): string {
   if (!iso) return '尚未同步'
-  const diff = Date.now() - new Date(iso).getTime()
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes} 分钟前`
+
+  const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (minutes < 1) return '刚刚同步'
+  if (minutes < 60) return `${minutes} 分钟前同步`
+
   const hours = Math.floor(minutes / 60)
-  return `${hours} 小时前`
+  return `${hours} 小时前同步`
+}
+
+function getGoalStatus(progress: number) {
+  if (progress >= 100) {
+    return { label: '已达到上限', className: 'digital-health-progress--over' }
+  }
+  if (progress >= 75) {
+    return { label: '接近上限', className: 'digital-health-progress--warning' }
+  }
+  return { label: '在计划内', className: 'digital-health-progress--good' }
+}
+
+function RefreshIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13.5 4.5V1.75m0 0h-2.75m2.75 0A6.25 6.25 0 0 0 2.34 5.2M2.5 11.5v2.75m0 0h2.75M2.5 14.25A6.25 6.25 0 0 0 13.66 10.8" />
+    </svg>
+  )
 }
 
 export default function DigitalHealthCard() {
@@ -45,8 +59,7 @@ export default function DigitalHealthCard() {
     try {
       setLoading(true)
       setError(false)
-      const res = await api.get<ScreenTimeData>('/health/screen-time')
-      setData(res)
+      setData(await api.get<ScreenTimeData>('/health/screen-time'))
     } catch {
       setError(true)
     } finally {
@@ -61,112 +74,83 @@ export default function DigitalHealthCard() {
 
   if (!user) return null
 
+  const hasUsage = (data?.totalSeconds ?? 0) > 0
+  const hasGoal = (data?.dailyGoalSeconds ?? 0) > 0
+  const progress = hasGoal && data ? Math.round((data.totalSeconds / data.dailyGoalSeconds!) * 100) : 0
+  const goalStatus = getGoalStatus(progress)
+
   return (
-    <section className="home-health-section" style={{ width: '100%', marginBottom: 'var(--gh-space-4)' }}>
-      <div style={{ position: 'relative' }}>
-        <div className="gh-box" style={{ padding: 'var(--gh-space-5)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-          <div>
-            <h2 style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--gh-text)' }}>数字健康</h2>
-            <p className="gh-text-secondary" style={{ fontSize: '0.85rem', marginTop: '4px' }}>今日电脑屏幕使用时间</p>
-          </div>
-          <button
-            onClick={fetchData}
-            disabled={loading}
-            className="gh-btn gh-btn--secondary gh-btn--sm"
-            aria-label="刷新"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: loading ? 'rotate(360deg)' : undefined, transition: 'transform 1s linear' }}>
-              <polyline points="23 4 23 10 17 10" />
-              <polyline points="1 20 1 14 7 14" />
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+    <section className="digital-health-overview gh-box" aria-labelledby="digital-health-overview-title">
+      <div className="digital-health-overview__header">
+        <div className="digital-health-overview__heading">
+          <span className="digital-health-overview__icon" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 14.25s-5.5-3.4-5.5-8.1A2.65 2.65 0 0 1 7.1 4.32L8 5.2l.9-.88a2.65 2.65 0 0 1 4.6 1.83c0 4.7-5.5 8.1-5.5 8.1Z" />
             </svg>
-          </button>
+          </span>
+          <div>
+            <h2 id="digital-health-overview-title">数字健康</h2>
+            <p>今日屏幕使用情况</p>
+          </div>
         </div>
+        <button
+          type="button"
+          className="digital-health-icon-button"
+          onClick={fetchData}
+          disabled={loading}
+          aria-label="刷新今日屏幕时间"
+          title="刷新"
+        >
+          <span className={loading ? 'digital-health-refresh--spinning' : undefined}><RefreshIcon /></span>
+        </button>
+      </div>
+
+      <div className="digital-health-overview__body" aria-live="polite">
+        {loading && !data && (
+          <div className="digital-health-overview__loading" aria-label="正在加载屏幕时间">
+            <div className="gh-skeleton digital-health-overview__skeleton-value" />
+            <div className="gh-skeleton digital-health-overview__skeleton-meta" />
+          </div>
+        )}
 
         {error && (
-          <div style={{ color: 'var(--gh-danger)', fontSize: '0.9rem' }}>
-            获取失败，请稍后重试。
+          <div className="digital-health-overview__message digital-health-overview__message--error" role="alert">
+            <span>暂时无法获取数据。</span>
+            <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm" onClick={fetchData}>重试</button>
           </div>
         )}
 
-        {!error && loading && !data && (
-          <div className="gh-skeleton" style={{ height: '40px', width: '160px', borderRadius: '8px' }} />
-        )}
-
-        {!error && !loading && data && data.totalSeconds > 0 && (
+        {!loading && !error && data && hasUsage && (
           <>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '2.4rem', fontWeight: 700, color: 'var(--gh-accent)' }}>
-                {formatDuration(data.totalSeconds)}
-              </span>
-              <span className="gh-text-tertiary" style={{ fontSize: '0.85rem' }}>
-                上次更新：{timeAgo(data.reportedAt)}
-              </span>
+            <div className="digital-health-overview__usage">
+              <span className="digital-health-overview__eyebrow">今日已使用</span>
+              <strong>{formatDuration(data.totalSeconds)}</strong>
+              <span className="digital-health-overview__updated">{timeAgo(data.reportedAt)}</span>
             </div>
-            {data.dailyGoalSeconds != null && data.dailyGoalSeconds > 0 && (
-              <div style={{ marginTop: '14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--gh-text-secondary)' }}>
-                    今日目标：{formatDuration(data.dailyGoalSeconds)}
-                  </span>
-                  <span style={{
-                    fontSize: '0.82rem', fontWeight: 600,
-                    color: getGoalProgressColor(Math.round((data.totalSeconds / data.dailyGoalSeconds) * 100)),
-                  }}>
-                    {Math.round((data.totalSeconds / data.dailyGoalSeconds) * 100)}%
-                  </span>
+
+            {hasGoal ? (
+              <div className="digital-health-progress">
+                <div className="digital-health-progress__meta">
+                  <span>目标 {formatDuration(data.dailyGoalSeconds!)}</span>
+                  <span className={goalStatus.className}>{goalStatus.label} · {progress}%</span>
                 </div>
-                <div style={{
-                  width: '100%', height: '6px', borderRadius: '3px',
-                  background: 'var(--gh-canvas-inset)', overflow: 'hidden',
-                }}>
-                  <div style={{
-                    width: `${Math.min(100, Math.round((data.totalSeconds / data.dailyGoalSeconds) * 100))}%`,
-                    height: '100%', borderRadius: '3px',
-                    background: getGoalProgressColor(Math.round((data.totalSeconds / data.dailyGoalSeconds) * 100)),
-                    transition: 'width 0.5s ease',
-                  }} />
+                <div className="digital-health-progress__track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(progress, 100)} aria-label={`今日已使用目标的 ${progress}%`}>
+                  <span className={goalStatus.className} style={{ width: `${Math.min(progress, 100)}%` }} />
                 </div>
               </div>
+            ) : (
+              <Link className="digital-health-overview__setup-link" to="/profile#digital-health">设置今日目标</Link>
             )}
           </>
         )}
 
-        {!error && !loading && data && data.totalSeconds === 0 && data.dailyGoalSeconds != null && data.dailyGoalSeconds > 0 && (
-          <div>
-            <p className="gh-text-secondary" style={{ fontSize: '0.95rem', marginBottom: '8px' }}>
-              今日目标：{formatDuration(data.dailyGoalSeconds)}
-            </p>
-            <p className="gh-text-secondary" style={{ fontSize: '0.95rem', marginBottom: '12px' }}>
-              还没有屏幕时间数据。连接 Time Master 后开始同步。
-            </p>
-            <Link
-              to="/profile#digital-health"
-              className="gh-btn gh-btn--secondary gh-btn--sm"
-              style={{ textDecoration: 'none' }}
-            >
-              去连接
-            </Link>
-          </div>
-        )}
-
-        {!error && !loading && data && data.totalSeconds === 0 && (data.dailyGoalSeconds == null || data.dailyGoalSeconds === 0) && (
-          <div>
-            <p className="gh-text-secondary" style={{ fontSize: '0.95rem', marginBottom: '12px' }}>
-              还没有屏幕时间数据。连接 Time Master 后开始同步。
-            </p>
-            <Link
-              to="/profile#digital-health"
-              className="gh-btn gh-btn--secondary gh-btn--sm"
-              style={{ textDecoration: 'none' }}
-            >
-              去连接
-            </Link>
+        {!loading && !error && data && !hasUsage && (
+          <div className="digital-health-overview__empty">
+            <p>{hasGoal ? `今日目标为 ${formatDuration(data.dailyGoalSeconds!)}，等待首次同步。` : '还没有屏幕时间数据。连接 Time Master 后开始同步。'}</p>
+            <Link className="gh-btn gh-btn--secondary gh-btn--sm" to="/profile#digital-health">去连接</Link>
           </div>
         )}
       </div>
-    </div>
     </section>
   )
 }

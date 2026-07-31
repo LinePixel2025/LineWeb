@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import UserAvatar from '../components/UserAvatar'
 import AvatarCropDialog from '../components/AvatarCropDialog'
 import DigitalHealthSection from '../components/DigitalHealthSection'
@@ -10,10 +10,15 @@ import api from '../lib/api'
 export default function ProfilePage() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('overview')
+  const location = useLocation()
+  const [activeTab, setActiveTab] = useState(() => location.hash === '#digital-health' ? 'digital-health' : 'overview')
   const [cropFile, setCropFile] = useState<File | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [saveError, setSaveError] = useState('')
+
+  useEffect(() => {
+    if (location.hash === '#digital-health') setActiveTab('digital-health')
+  }, [location.hash])
 
   const handleLogout = () => { logout(); navigate('/') }
 
@@ -82,6 +87,7 @@ export default function ProfilePage() {
           <GitHubTabNav
             tabs={[
               { value: 'overview', label: '概览' },
+              { value: 'digital-health', label: '数字健康' },
             ]}
             active={activeTab}
             onChange={setActiveTab}
@@ -115,11 +121,9 @@ export default function ProfilePage() {
                   <GitHubAlert variant="danger">{saveError}</GitHubAlert>
                 )}
 
-                <div style={{ marginTop: '16px' }}>
-                  <DigitalHealthSection />
-                </div>
               </>
             )}
+            {activeTab === 'digital-health' && <DigitalHealthSection />}
           </div>
         </div>
       </div>

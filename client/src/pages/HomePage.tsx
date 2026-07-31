@@ -68,6 +68,8 @@ export default function HomePage() {
             )}
           </div>
 
+          <DigitalHealthCard />
+
           {stats && (
             <div className="gh-box" style={{ marginTop: '16px' }}>
               <h4 className="gh-text-secondary" style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 8px' }}>站点统计</h4>
@@ -93,9 +95,6 @@ export default function HomePage() {
           <div className="gh-page-header">
             <h2 className="gh-page-title">首页</h2>
           </div>
-
-          {/* DigitalHealth Section (logged-in only) */}
-          <DigitalHealthCard />
 
           {recentPosts.length === 0 ? (
             <div className="gh-box" style={{ textAlign: 'center', padding: '48px 24px' }}>

@@ -34,6 +34,122 @@
   font-size: var(--gh-text-lg);
 }
 
+/* Digital health: overview belongs to the home sidebar; setup belongs to profile. */
+.digital-health-overview {
+  margin-top: var(--gh-space-4);
+  padding: 0;
+  overflow: hidden;
+}
+.digital-health-overview__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-4);
+  border-bottom: 1px solid var(--gh-border);
+  background: var(--gh-canvas);
+}
+.digital-health-overview__heading { display: flex; min-width: 0; gap: 10px; }
+.digital-health-overview__icon, .digital-health-settings__title-mark {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  color: var(--gh-accent);
+  background: var(--gh-accent-soft);
+}
+.digital-health-overview__heading h2, .digital-health-settings__intro h2 { margin: 0; font-size: var(--gh-text-base); line-height: 1.35; }
+.digital-health-overview__heading p, .digital-health-settings__intro p, .digital-health-settings__section-header p { margin: 3px 0 0; color: var(--gh-text-secondary); font-size: var(--gh-text-sm); line-height: 1.5; }
+.digital-health-icon-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--gh-radius);
+  color: var(--gh-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  transition: color var(--gh-transition), background var(--gh-transition), border-color var(--gh-transition);
+}
+.digital-health-icon-button:hover:not(:disabled) { color: var(--gh-accent); background: var(--gh-accent-soft); border-color: var(--gh-border); }
+.digital-health-icon-button:focus-visible { outline: none; box-shadow: var(--gh-focus-ring); }
+.digital-health-icon-button:disabled { cursor: wait; opacity: .65; }
+.digital-health-refresh--spinning { display: inline-flex; animation: digital-health-spin .8s linear infinite; }
+.digital-health-overview__body { min-height: 136px; padding: var(--gh-space-4); }
+.digital-health-overview__usage { display: grid; gap: 3px; }
+.digital-health-overview__eyebrow, .digital-health-overview__updated { color: var(--gh-text-secondary); font-size: var(--gh-text-xs); }
+.digital-health-overview__usage strong { color: var(--gh-text); font-size: 1.5rem; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.digital-health-progress { margin-top: var(--gh-space-4); }
+.digital-health-progress__meta { display: flex; align-items: baseline; justify-content: space-between; gap: var(--gh-space-2); color: var(--gh-text-secondary); font-size: var(--gh-text-xs); }
+.digital-health-progress__meta span:last-child { font-weight: 600; text-align: right; }
+.digital-health-progress__track { height: 7px; margin-top: 7px; overflow: hidden; border-radius: 4px; background: var(--gh-canvas-inset); }
+.digital-health-progress__track span { display: block; height: 100%; border-radius: inherit; transition: width 200ms ease-out; }
+.digital-health-progress--good { color: var(--gh-success); background: var(--gh-success-emphasis); }
+.digital-health-progress--warning { color: var(--gh-warning); background: var(--gh-warning); }
+.digital-health-progress--over { color: var(--gh-danger); background: var(--gh-danger); }
+.digital-health-progress__meta .digital-health-progress--good, .digital-health-progress__meta .digital-health-progress--warning, .digital-health-progress__meta .digital-health-progress--over { background: transparent; }
+.digital-health-overview__setup-link { display: inline-block; margin-top: var(--gh-space-4); color: var(--gh-accent); font-size: var(--gh-text-sm); font-weight: 500; }
+.digital-health-overview__setup-link:hover { color: var(--gh-accent-hover); text-decoration: none; }
+.digital-health-overview__empty { display: grid; gap: var(--gh-space-3); align-content: center; min-height: 104px; }
+.digital-health-overview__empty p { margin: 0; color: var(--gh-text-secondary); font-size: var(--gh-text-sm); line-height: 1.55; }
+.digital-health-overview__empty .gh-btn { justify-self: start; }
+.digital-health-overview__message { display: flex; align-items: center; justify-content: space-between; gap: var(--gh-space-3); min-height: 104px; color: var(--gh-text-secondary); font-size: var(--gh-text-sm); }
+.digital-health-overview__message--error { color: var(--gh-danger); }
+.digital-health-overview__loading { display: grid; align-content: center; gap: var(--gh-space-3); min-height: 104px; }
+.digital-health-overview__skeleton-value { width: min(100%, 132px); height: 30px; }
+.digital-health-overview__skeleton-meta { width: 92px; height: 12px; }
+
+.digital-health-settings { padding-top: var(--gh-space-1); }
+.digital-health-settings__intro { display: flex; align-items: flex-start; gap: var(--gh-space-3); padding-bottom: var(--gh-space-5); border-bottom: 1px solid var(--gh-border); }
+.digital-health-settings__title-mark { width: 36px; height: 36px; }
+.digital-health-settings__section { padding: var(--gh-space-5) 0; border-bottom: 1px solid var(--gh-border); }
+.digital-health-settings__section:last-of-type { border-bottom: 0; }
+.digital-health-settings__section-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--gh-space-4); }
+.digital-health-settings__section-header h3 { margin: 0; font-size: var(--gh-text-base); }
+.digital-health-settings__loading { padding: var(--gh-space-4) 0; color: var(--gh-text-tertiary); font-size: var(--gh-text-sm); }
+.digital-health-goal-form { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--gh-space-4); flex-wrap: wrap; margin-top: var(--gh-space-4); }
+.digital-health-goal-form__fields, .digital-health-token-form { display: flex; flex-wrap: wrap; gap: var(--gh-space-3); }
+.digital-health-goal-form label, .digital-health-token-form label { display: grid; gap: 6px; color: var(--gh-text-secondary); font-size: var(--gh-text-xs); font-weight: 600; }
+.digital-health-goal-form .gh-input { width: 92px; font-variant-numeric: tabular-nums; }
+.digital-health-goal-form__actions { display: flex; align-items: center; gap: var(--gh-space-2); min-height: 32px; }
+.digital-health-form-status { min-width: 42px; color: var(--gh-success); font-size: var(--gh-text-xs); font-weight: 600; }
+.digital-health-form-error { margin: var(--gh-space-3) 0 0; color: var(--gh-danger); font-size: var(--gh-text-sm); }
+.digital-health-token-reveal { display: grid; gap: var(--gh-space-3); margin-top: var(--gh-space-4); padding: var(--gh-space-4); border: 1px solid var(--gh-accent); border-radius: var(--gh-radius); background: var(--gh-accent-soft); }
+.digital-health-token-reveal strong { font-size: var(--gh-text-sm); }
+.digital-health-token-reveal p { margin: 3px 0 0; color: var(--gh-text-secondary); font-size: var(--gh-text-xs); }
+.digital-health-token-reveal__value { display: flex; align-items: center; gap: var(--gh-space-2); min-width: 0; }
+.digital-health-token-reveal code { flex: 1; min-width: 0; padding: 7px 8px; overflow-x: auto; border: 1px solid var(--gh-border); border-radius: 6px; color: var(--gh-text); background: var(--gh-bg); font-family: var(--gh-font-mono); font-size: var(--gh-text-xs); white-space: nowrap; }
+.digital-health-token-form { align-items: flex-end; margin-top: var(--gh-space-4); }
+.digital-health-token-form .gh-input { width: 220px; }
+.digital-health-token-form select.gh-input { width: 132px; }
+.digital-health-token-list { margin-top: var(--gh-space-5); overflow: hidden; border: 1px solid var(--gh-border); border-radius: var(--gh-radius); }
+.digital-health-token-list__header { display: flex; align-items: center; justify-content: space-between; padding: 9px var(--gh-space-3); border-bottom: 1px solid var(--gh-border); color: var(--gh-text-secondary); background: var(--gh-canvas-inset); font-size: var(--gh-text-xs); font-weight: 600; }
+.digital-health-token-list__header span:last-child { font-variant-numeric: tabular-nums; }
+.digital-health-token-list__empty { padding: var(--gh-space-4); color: var(--gh-text-tertiary); font-size: var(--gh-text-sm); }
+.digital-health-token-list .digital-health-settings__loading { padding: var(--gh-space-4); }
+.digital-health-token-row { display: flex; align-items: center; justify-content: space-between; gap: var(--gh-space-3); padding: var(--gh-space-3); }
+.digital-health-token-row + .digital-health-token-row { border-top: 1px solid var(--gh-border-muted); }
+.digital-health-token-row > div { min-width: 0; }
+.digital-health-token-row strong, .digital-health-token-row span { display: block; }
+.digital-health-token-row strong { color: var(--gh-text); font-size: var(--gh-text-sm); }
+.digital-health-token-row span { margin-top: 3px; overflow-wrap: anywhere; color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+.digital-health-token-row code { font-family: var(--gh-font-mono); }
+
+@keyframes digital-health-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .digital-health-refresh--spinning { animation: none; }
+  .digital-health-progress__track span { transition: none; }
+}
+
 /* Post detail layout */
 .gh-post-detail { max-width: 1280px; }
 .gh-post-back { display: inline-block; margin-bottom: var(--gh-space-4); color: var(--gh-text-secondary); font-size: var(--gh-text-sm); }
@@ -146,6 +262,42 @@
 @media (max-width: 767px) {
   .gh-feature-grid {
     grid-template-columns: 1fr;
+  }
+
+  .digital-health-overview__body {
+    min-height: 128px;
+  }
+  .digital-health-settings__section-header {
+    flex-direction: column;
+    gap: var(--gh-space-2);
+  }
+  .digital-health-goal-form {
+    align-items: stretch;
+  }
+  .digital-health-goal-form__actions {
+    min-height: 40px;
+  }
+  .digital-health-token-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .digital-health-token-form .gh-input,
+  .digital-health-token-form select.gh-input {
+    width: 100%;
+  }
+  .digital-health-token-form .gh-btn {
+    align-self: flex-start;
+  }
+  .digital-health-token-reveal__value {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .digital-health-token-reveal__value .gh-btn {
+    align-self: flex-start;
+  }
+  .digital-health-token-row {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .comment-composer-row,

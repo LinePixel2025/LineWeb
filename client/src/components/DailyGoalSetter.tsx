@@ -1,9 +1,18 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import api from '@/lib/api'
 
 interface DailyGoalData {
   dailyGoalSeconds: number | null
   date: string
+}
+
+function formatGoal(seconds: number): string {
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+
+  if (hours > 0 && minutes > 0) return `${hours} 小时 ${minutes} 分钟`
+  if (hours > 0) return `${hours} 小时`
+  return `${minutes} 分钟`
 }
 
 export default function DailyGoalSetter() {
@@ -19,14 +28,14 @@ export default function DailyGoalSetter() {
     try {
       setLoading(true)
       setError('')
-      const res = await api.get<DailyGoalData>('/health/daily-goal')
-      setData(res)
-      if (res.dailyGoalSeconds != null) {
-        setHours(Math.floor(res.dailyGoalSeconds / 3600))
-        setMinutes(Math.floor((res.dailyGoalSeconds % 3600) / 60))
+      const result = await api.get<DailyGoalData>('/health/daily-goal')
+      setData(result)
+      if (result.dailyGoalSeconds != null) {
+        setHours(Math.floor(result.dailyGoalSeconds / 3600))
+        setMinutes(Math.floor((result.dailyGoalSeconds % 3600) / 60))
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败')
+      setError(err instanceof Error ? err.message : '加载目标失败，请稍后重试。')
     } finally {
       setLoading(false)
     }
@@ -36,126 +45,62 @@ export default function DailyGoalSetter() {
     fetchGoal()
   }, [fetchGoal])
 
-  const handleSave = async () => {
+  const updateGoal = async (goalSeconds: number | null) => {
     setSaving(true)
     setError('')
     setSaved(false)
-    const goalSeconds = hours * 3600 + minutes * 60
     try {
-      const res = await api.put<DailyGoalData>('/health/daily-goal', { goalSeconds })
-      setData(res)
+      const result = await api.put<DailyGoalData>('/health/daily-goal', { goalSeconds })
+      setData(result)
       setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
+      window.setTimeout(() => setSaved(false), 2500)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存失败')
+      setError(err instanceof Error ? err.message : '保存目标失败，请稍后重试。')
     } finally {
       setSaving(false)
     }
   }
 
-  const handleClear = async () => {
-    setSaving(true)
-    setError('')
-    setSaved(false)
-    try {
-      const res = await api.put<DailyGoalData>('/health/daily-goal', { goalSeconds: null })
-      setData(res)
-      setHours(0)
-      setMinutes(0)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '清除失败')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const formatGoal = (seconds: number): string => {
-    const h = Math.floor(seconds / 3600)
-    const m = Math.floor((seconds % 3600) / 60)
-    if (h > 0 && m > 0) return `${h} 小时 ${m} 分钟`
-    if (h > 0) return `${h} 小时`
-    return `${m} 分钟`
-  }
+  const goalSeconds = hours * 3600 + minutes * 60
+  const hasCurrentGoal = (data?.dailyGoalSeconds ?? 0) > 0
 
   return (
-    <div style={{ marginTop: '28px', paddingTop: '24px', borderTop: '1px solid var(--gh-border)' }}>
-      <span className="profile-label">今日使用目标</span>
+    <section className="digital-health-settings__section" aria-labelledby="daily-goal-title">
+      <div className="digital-health-settings__section-header">
+        <div>
+          <h3 id="daily-goal-title">今日使用目标</h3>
+          <p>达到上限时，首页会提示你暂时离开屏幕。</p>
+        </div>
+        {hasCurrentGoal && <span className="gh-badge gh-badge--accent">当前目标：{formatGoal(data!.dailyGoalSeconds!)}</span>}
+      </div>
 
       {loading && !data ? (
-        <div style={{ padding: '12px 0', fontSize: '0.85rem', color: 'var(--gh-text-tertiary)' }}>
-          加载中…
-        </div>
+        <div className="digital-health-settings__loading">加载中…</div>
       ) : (
-        <>
-          {data?.dailyGoalSeconds != null && data.dailyGoalSeconds > 0 && (
-            <div style={{
-              marginBottom: '16px', padding: '10px 14px', borderRadius: '10px',
-              background: 'rgba(41,151,255,0.06)', border: '1px solid rgba(41,151,255,0.15)',
-              fontSize: '0.9rem', color: 'var(--gh-accent)', fontWeight: 500,
-            }}>
-              当前目标：{formatGoal(data.dailyGoalSeconds)}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <input
-                type="number"
-                min={0}
-                max={23}
-                value={hours}
-                onChange={(e) => setHours(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))}
-                className="gh-input"
-              />
-              <span style={{ fontSize: '0.85rem', color: 'var(--gh-text-secondary)' }}>小时</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <input
-                type="number"
-                min={0}
-                max={59}
-                value={minutes}
-                onChange={(e) => setMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
-                className="gh-input"
-              />
-              <span style={{ fontSize: '0.85rem', color: 'var(--gh-text-secondary)' }}>分钟</span>
-            </div>
+        <div className="digital-health-goal-form">
+          <div className="digital-health-goal-form__fields">
+            <label>
+              <span>小时</span>
+              <input type="number" min={0} max={23} value={hours} onChange={(event) => setHours(Math.max(0, Math.min(23, parseInt(event.target.value, 10) || 0)))} className="gh-input" inputMode="numeric" />
+            </label>
+            <label>
+              <span>分钟</span>
+              <input type="number" min={0} max={59} value={minutes} onChange={(event) => setMinutes(Math.max(0, Math.min(59, parseInt(event.target.value, 10) || 0)))} className="gh-input" inputMode="numeric" />
+            </label>
           </div>
-
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <button
-              onClick={handleSave}
-              disabled={saving || (hours === 0 && minutes === 0)}
-              className="gh-btn gh-btn--primary gh-btn--sm"
-              style={{ opacity: (saving || (hours === 0 && minutes === 0)) ? 0.5 : 1 }}
-            >
+          <div className="digital-health-goal-form__actions">
+            <button type="button" onClick={() => updateGoal(goalSeconds)} disabled={saving || goalSeconds === 0} className="gh-btn gh-btn--primary gh-btn--sm">
               {saving ? '保存中…' : '保存目标'}
             </button>
-            {data?.dailyGoalSeconds != null && data.dailyGoalSeconds > 0 && (
-              <button
-                onClick={handleClear}
-                disabled={saving}
-                className="gh-btn gh-btn--ghost gh-btn--sm"
-              >
-                清除目标
-              </button>
+            {hasCurrentGoal && (
+              <button type="button" onClick={() => { setHours(0); setMinutes(0); updateGoal(null) }} disabled={saving} className="gh-btn gh-btn--ghost gh-btn--sm">清除目标</button>
             )}
-            {saved && (
-              <span style={{ color: 'var(--gh-success)', fontSize: '0.85rem', fontWeight: 500 }}>
-                ✓ 已保存
-              </span>
-            )}
+            <span className="digital-health-form-status" aria-live="polite">{saved ? '✓ 已保存' : ''}</span>
           </div>
-        </>
-      )}
-
-      {error && (
-        <div style={{ color: 'var(--gh-danger)', fontSize: '0.85rem', marginTop: '10px' }}>
-          {error}
         </div>
       )}
-    </div>
+
+      {error && <p className="digital-health-form-error" role="alert">{error}</p>}
+    </section>
   )
 }
