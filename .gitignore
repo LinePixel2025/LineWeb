@@ -37,6 +37,7 @@ Thumbs.db
 # IDE & AI 工具
 .agents/
 .claude/
+CLAUDE.md
 .trae/
 .superpowers/
 .vscode/
@@ -58,3 +59,4 @@ scripts/lineweb-screen-time-api.md
 scripts/lineweb-screen-time-read-api.md
 scripts/time-master-guide.md
 deploy-package.tar.gz
+client/admin-new.png
