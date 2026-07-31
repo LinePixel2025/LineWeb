@@ -62,20 +62,13 @@ export default function DigitalHealthCard() {
   if (!user) return null
 
   return (
-    <section
-      className="home-health-section"
-      style={{
-        maxWidth: '720px',
-        margin: '0 auto',
-        padding: 'var(--gh-space-7) var(--gh-space-5) var(--gh-space-7)',
-      }}
-    >
+    <section className="home-health-section" style={{ width: '100%', marginBottom: 'var(--gh-space-4)' }}>
       <div style={{ position: 'relative' }}>
-        <div className="gh-box" style={{ padding: 'var(--gh-space-6)' }}>
+        <div className="gh-box" style={{ padding: 'var(--gh-space-5)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div>
             <h2 style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--gh-text)' }}>数字健康</h2>
-            <p className="text-secondary" style={{ fontSize: '0.85rem', marginTop: '4px' }}>今日电脑屏幕使用时间</p>
+            <p className="gh-text-secondary" style={{ fontSize: '0.85rem', marginTop: '4px' }}>今日电脑屏幕使用时间</p>
           </div>
           <button
             onClick={fetchData}
@@ -98,7 +91,7 @@ export default function DigitalHealthCard() {
         )}
 
         {!error && loading && !data && (
-          <div className="skeleton" style={{ height: '40px', width: '160px', borderRadius: '8px' }} />
+          <div className="gh-skeleton" style={{ height: '40px', width: '160px', borderRadius: '8px' }} />
         )}
 
         {!error && !loading && data && data.totalSeconds > 0 && (
@@ -107,7 +100,7 @@ export default function DigitalHealthCard() {
               <span style={{ fontSize: '2.4rem', fontWeight: 700, color: 'var(--gh-accent)' }}>
                 {formatDuration(data.totalSeconds)}
               </span>
-              <span className="text-tertiary" style={{ fontSize: '0.85rem' }}>
+              <span className="gh-text-tertiary" style={{ fontSize: '0.85rem' }}>
                 上次更新：{timeAgo(data.reportedAt)}
               </span>
             </div>
@@ -142,10 +135,10 @@ export default function DigitalHealthCard() {
 
         {!error && !loading && data && data.totalSeconds === 0 && data.dailyGoalSeconds != null && data.dailyGoalSeconds > 0 && (
           <div>
-            <p className="text-secondary" style={{ fontSize: '0.95rem', marginBottom: '8px' }}>
+            <p className="gh-text-secondary" style={{ fontSize: '0.95rem', marginBottom: '8px' }}>
               今日目标：{formatDuration(data.dailyGoalSeconds)}
             </p>
-            <p className="text-secondary" style={{ fontSize: '0.95rem', marginBottom: '12px' }}>
+            <p className="gh-text-secondary" style={{ fontSize: '0.95rem', marginBottom: '12px' }}>
               还没有屏幕时间数据。连接 Time Master 后开始同步。
             </p>
             <Link
@@ -160,7 +153,7 @@ export default function DigitalHealthCard() {
 
         {!error && !loading && data && data.totalSeconds === 0 && (data.dailyGoalSeconds == null || data.dailyGoalSeconds === 0) && (
           <div>
-            <p className="text-secondary" style={{ fontSize: '0.95rem', marginBottom: '12px' }}>
+            <p className="gh-text-secondary" style={{ fontSize: '0.95rem', marginBottom: '12px' }}>
               还没有屏幕时间数据。连接 Time Master 后开始同步。
             </p>
             <Link

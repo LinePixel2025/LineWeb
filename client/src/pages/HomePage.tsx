@@ -3,6 +3,7 @@ import { usePostsList, usePublicStats, useFeaturedPages } from '../hooks/useQuer
 import { useAuth } from '../contexts/AuthContext'
 import { GitHubButton } from '../components/ui'
 import UserAvatar from '../components/UserAvatar'
+import DigitalHealthCard from '../components/DigitalHealthCard/DigitalHealthCard'
 
 interface PostPreview {
   id: number
@@ -92,6 +93,9 @@ export default function HomePage() {
           <div className="gh-page-header">
             <h2 className="gh-page-title">首页</h2>
           </div>
+
+          {/* DigitalHealth Section (logged-in only) */}
+          <DigitalHealthCard />
 
           {recentPosts.length === 0 ? (
             <div className="gh-box" style={{ textAlign: 'center', padding: '48px 24px' }}>
