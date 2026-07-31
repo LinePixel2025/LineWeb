@@ -4,6 +4,7 @@ import DriveNavigation from '../components/drive/DriveNavigation'
 import DriveDetailPanel from '../components/drive/DriveDetailPanel'
 import DriveListView from '../components/drive/DriveListView'
 import DriveGridView from '../components/drive/DriveGridView'
+import MobileDriveShell from '../components/drive/MobileDriveShell'
 import UploadZone from '../components/drive/UploadZone'
 import DrivePreview from '../components/drive/DrivePreview'
 import BatchActions from '../components/drive/BatchActions'
@@ -18,6 +19,7 @@ import { useDriveFiles } from '../hooks/useDriveFiles'
 import { useDriveSearch } from '../hooks/useDriveSearch'
 import { useDriveSync } from '../hooks/useDriveSync'
 import { useDriveDialogs } from '../hooks/useDriveDialogs'
+import { useResponsive } from '../hooks/useResponsive'
 import type { DriveItem, SortField } from '../types/drive'
 import { getFileCategory } from '../types/drive'
 import { CloseIcon, FolderIcon, RefreshIcon, UploadIcon, NewFolderIcon } from '../components/drive/DriveIcons'
@@ -36,6 +38,7 @@ function DrivePageInner() {
     navigateToBreadcrumb: navigateToBreadcrumbInContext,
   } = useDrive()
   const { startDownload } = useDownload()
+  const { isMobile } = useResponsive()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showFolderPicker, setShowFolderPicker] = useState(false)
   const [pendingMoveIds, setPendingMoveIds] = useState<number[]>([])
@@ -165,9 +168,28 @@ function DrivePageInner() {
     setShowFolderPicker(false)
   }, [pendingMoveIds, clearSelection, invalidate])
 
+  const handleBatchDownload = useCallback(() => {
+    displayItems
+      .filter(item => ctx.selectedFiles.includes(item.id) && !item.isFolder)
+      .forEach(item => startDownload(item))
+  }, [ctx.selectedFiles, displayItems, startDownload])
+
+  const handleBatchDelete = useCallback(() => {
+    const item = displayItems.find(candidate => ctx.selectedFiles.includes(candidate.id))
+    if (item) dialogs.openDelete(item)
+  }, [ctx.selectedFiles, displayItems, dialogs])
+
+  const handleBatchFavorite = useCallback(() => {
+    displayItems
+      .filter(item => ctx.selectedFiles.includes(item.id) && item.isFolder)
+      .forEach(item => addFavorite(item.id, item.name))
+    clearSelection()
+  }, [addFavorite, clearSelection, ctx.selectedFiles, displayItems])
+
 
   return (
-    <div className="gh-drive-page">
+    <div className={`gh-drive-page${isMobile ? ' gh-drive-page--mobile' : ''}`}>
+      <div className="gh-drive-desktop-shell">
       <header className="gh-drive-repo-header">
         <div className="gh-drive-repo-heading">
           <span className="gh-drive-repo-mark"><FolderIcon size={24} /></span>
@@ -248,17 +270,10 @@ function DrivePageInner() {
 
             {ctx.selectedFiles.length > 0 && (
               <BatchActions
-                onBatchDownload={() => displayItems.filter(item => ctx.selectedFiles.includes(item.id) && !item.isFolder).forEach(item => startDownload(item))}
+                onBatchDownload={handleBatchDownload}
                 onBatchMove={handleBatchMove}
-                onBatchDelete={() => {
-                  const item = displayItems.find(candidate => ctx.selectedFiles.includes(candidate.id))
-                  if (item) dialogs.openDelete(item)
-                }}
-                onBatchFavorite={() => {
-                  displayItems.filter(item => ctx.selectedFiles.includes(item.id) && item.isFolder)
-                    .forEach(item => addFavorite(item.id, item.name))
-                  clearSelection()
-                }}
+                onBatchDelete={handleBatchDelete}
+                onBatchFavorite={handleBatchFavorite}
                 onClearSelection={clearSelection}
               />
             )}
@@ -343,6 +358,58 @@ function DrivePageInner() {
         )}
       </div>
 
+      </div>
+
+      <MobileDriveShell
+        breadcrumbs={breadcrumbs}
+        items={displayItems}
+        loading={loading}
+        error={error}
+        total={total}
+        page={page}
+        totalPages={totalPages}
+        searchQuery={search.query}
+        searching={search.searching}
+        searchResultCount={search.results?.length ?? null}
+        onSearch={search.setQuery}
+        onClearSearch={search.clearSearch}
+        onNavigate={navigateToBreadcrumb}
+        onParentFolder={() => navigateToBreadcrumb(Math.max(0, breadcrumbs.length - 2))}
+        onNewFolder={dialogs.openNewFolder}
+        onUpload={dialogs.openUpload}
+        onSync={syncOpts.sync}
+        syncing={syncOpts.syncing}
+        onRefresh={refresh}
+        onPageChange={targetPage => fetchItems(targetPage)}
+        viewMode={ctx.viewMode}
+        onViewModeChange={setViewMode}
+        categoryFilter={ctx.categoryFilter}
+        onCategoryFilterChange={setCategoryFilter}
+        sortField={ctx.sort.field}
+        sortDirection={ctx.sort.direction}
+        onSortChange={(field: SortField) => {
+          if (ctx.sort.field === field) {
+            setSort({ field, direction: ctx.sort.direction === 'asc' ? 'desc' : 'asc' })
+          } else {
+            setSort({ field, direction: 'asc' })
+          }
+        }}
+        onSortDirectionChange={() => setSort({ field: ctx.sort.field, direction: ctx.sort.direction === 'asc' ? 'desc' : 'asc' })}
+        favorites={ctx.favorites}
+        selectedIds={ctx.selectedFiles}
+        onFolderClick={navigateToFolder}
+        onPreview={handlePreview}
+        onDownload={startDownload}
+        onRename={dialogs.openRename}
+        onDelete={dialogs.openDelete}
+        onSelect={handleSelect}
+        onClearSelection={clearSelection}
+        onSelectAll={handleSelectAll}
+        onBatchDownload={handleBatchDownload}
+        onBatchMove={handleBatchMove}
+        onBatchDelete={handleBatchDelete}
+        onBatchFavorite={handleBatchFavorite}
+      />
 
       {dialogs.previewItem && <DrivePreview item={dialogs.previewItem} onClose={dialogs.closePreview} />}
       {dialogs.showNewFolder && (
