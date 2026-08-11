@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express'
-import { authenticate, requireAdmin } from '../middleware/auth.js'
+import { authenticate, requireAdmin, optionalAuthenticate } from '../middleware/auth.js'
 import { asyncHandler } from '../lib/asyncHandler.js'
 import { aiChatSchema, aiConfigUpdateSchema } from '../config/index.js'
 import { getAiConfig, updateAiConfig, maskApiKey, chat } from '../services/aiService.js'
@@ -23,18 +23,19 @@ router.get('/chat/public', asyncHandler(async (_req: Request, res: Response) => 
 
 /**
  * POST /api/ai/chat
- * 公开接口：发送消息给 AI 并获取回复
+ * 公开接口：发送消息给 AI 并获取回复（可选认证——登录用户携带 JWT 时，
+ * 可注入其屏幕使用时间上下文；游客无额外上下文）
  * 请求体: { message: string, history?: { role: 'user'|'assistant', content: string }[] }
  * 响应: { reply: string, model: string }
  */
-router.post('/chat', asyncHandler(async (req: Request, res: Response) => {
+router.post('/chat', optionalAuthenticate, asyncHandler(async (req: Request, res: Response) => {
   const parsed = aiChatSchema.safeParse(req.body)
   if (!parsed.success) {
     throw new AppError('请求参数无效: ' + parsed.error.errors.map(e => e.message).join('; '), 400)
   }
 
   const { message, history } = parsed.data
-  const result = await chat(message, history as { role: 'user' | 'assistant'; content: string }[])
+  const result = await chat(message, history as { role: 'user' | 'assistant'; content: string }[], req.user?.userId)
   res.json(result)
 }))
 

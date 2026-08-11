@@ -172,3 +172,37 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   }
   next()
 }
+
+/**
+ * 可选认证中间件：解析 JWT，成功时挂载 req.user，失败时不拦截（游客照常放行）
+ * 用于 /api/ai/chat 等公开端点——登录用户可获得额外上下文（如屏幕使用时间）
+ * 仅处理 Bearer token；API Key 与 ?token= 场景无需支持
+ */
+export async function optionalAuthenticate(req: Request, res: Response, next: NextFunction) {
+  const header = req.headers.authorization
+
+  if (header?.startsWith('Bearer ')) {
+    try {
+      const token = header.slice(7)
+      const payload = jwt.verify(token, config.jwtSecret) as AuthPayload & { iat?: number }
+
+      // JWT 失效校验：与 authenticate 逻辑一致
+      if (payload.iat && payload.userId) {
+        const validAfter = await getTokenValidAfter(payload.userId)
+        if (payload.iat < Math.floor(validAfter.getTime() / 1000)) {
+          // token 已失效 — 视为游客
+          next()
+          return
+        }
+      }
+
+      req.user = payload
+      next()
+      return
+    } catch {
+      // token 无效 — 视为游客，继续放行
+    }
+  }
+
+  next()
+}

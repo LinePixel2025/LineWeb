@@ -11,7 +11,9 @@ interface ChatMessage {
 const SUGGESTED_QUESTIONS = [
   '这个网站有哪些功能？',
   '推荐几篇值得阅读的文章',
-  '我可以在这里做什么？',
+  '这个网站最近有哪些评论？',
+  '我最近用电脑多长时间？',
+  '这个网站有多少篇文章？',
 ]
 
 let nextId = 1
@@ -274,7 +276,7 @@ export default function AiAssistant() {
                 <span className="gh-ai-empty-icon" aria-hidden="true"><CommentIcon size={24} /></span>
                 <p className="gh-ai-empty-kicker">站点问答</p>
                 <h2 id="gh-ai-empty-title" className="gh-ai-empty-title">想了解 LineWeb 的什么？</h2>
-                <p className="gh-ai-empty-text">我可以帮你查找站点内容、文章和功能信息。</p>
+                <p className="gh-ai-empty-text">我可以帮你查找站点内容、文章、功能、评论和屏幕使用时间信息。</p>
                 <div className="gh-ai-suggestions" aria-label="推荐问题">
                   {SUGGESTED_QUESTIONS.map(question => (
                     <button key={question} type="button" onClick={() => handleSuggestion(question)}>{question}</button>
@@ -321,7 +323,7 @@ export default function AiAssistant() {
                   resizeInput(event.currentTarget)
                 }}
                 onKeyDown={handleKeyDown}
-                placeholder="问问文章、功能或站点信息"
+                placeholder="问问文章、功能、评论或站点信息"
                 rows={1}
                 disabled={loading}
               />

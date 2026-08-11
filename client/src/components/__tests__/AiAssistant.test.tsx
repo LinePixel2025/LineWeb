@@ -51,6 +51,27 @@ describe('AiAssistant', () => {
     expect(screen.queryByRole('button', { name: '清空对话' })).not.toBeInTheDocument()
   })
 
+  it('提供新增的信息类建议问题', async () => {
+    const user = userEvent.setup()
+    render(<AiAssistant />)
+
+    const openButton = await screen.findByRole('button', { name: '打开 AI 助手' })
+    await user.click(openButton)
+
+    const suggestion = screen.getByRole('button', { name: '这个网站最近有哪些评论？' })
+    await user.click(suggestion)
+
+    const input = screen.getByLabelText('向 LineWeb AI 提问')
+    expect(input).toHaveValue('这个网站最近有哪些评论？')
+
+    await user.click(screen.getByRole('button', { name: '发送消息' }))
+
+    await waitFor(() => expect(mockedApi.post).toHaveBeenCalledWith('/ai/chat', {
+      message: '这个网站最近有哪些评论？',
+      history: [],
+    }))
+  })
+
   it('按 Escape 关闭面板并把焦点还给入口', async () => {
     const user = userEvent.setup()
     render(<AiAssistant />)

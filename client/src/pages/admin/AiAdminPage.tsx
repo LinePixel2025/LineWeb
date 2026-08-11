@@ -311,7 +311,7 @@ export default function AiAdminPage() {
             placeholder="输入系统提示词…"
           />
           <div style={{ fontSize: 'var(--gh-text-xs)', color: 'var(--gh-text-tertiary)', marginTop: '4px' }}>
-            系统会自动在末尾拼接当前网站的文章列表和页面信息作为上下文
+            系统会自动在末尾拼接当前网站的文章列表、页面信息、站点统计和最近评论作为上下文；提问涉及具体文章时还会检索该文章正文；登录用户的屏幕使用时间也会注入（游客无此上下文）
           </div>
         </div>
 
