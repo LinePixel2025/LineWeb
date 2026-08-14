@@ -300,13 +300,16 @@ export async function* streamReadBinary(
   resetTimeout()
 
   try {
-    await sendCommand({
+    const resp = await sendCommand({
       type: 'read_file_stream',
       path,
       streamId,
       offset,
       length,
     })
+    if (!resp.success) {
+      throw new Error(`下载流初始化失败: ${resp.error || '未知错误'}`)
+    }
 
     for await (const chunk of stream) {
       resetTimeout()

@@ -31,10 +31,16 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         a.click()
         document.body.removeChild(a)
       })
-      .catch(() => {
-        // 大文件下载失败由现有下载 UI 负责反馈；不泄露长期 token
+      .catch((err: unknown) => {
+        // 直链 <a> 下载本身失败浏览器不会上报，这里至少反馈票据获取阶段的错误
+        const id = `dl-${++downloadIdRef.current}`
+        setTasks(prev => [...prev, {
+          id, fileName: item.name, loaded: 0, total: 0, speed: 0, status: 'error' as const,
+          error: err instanceof Error ? `大文件下载失败: ${err.message}` : '大文件下载失败，请重试',
+        }])
+        removeTaskAfter(id, 5000)
       })
-  }, [])
+  }, [removeTaskAfter])
 
   const streamDownloadWithProgress = useCallback(async (item: DriveItem) => {
     const id = `dl-${++downloadIdRef.current}`

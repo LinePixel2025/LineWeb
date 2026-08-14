@@ -122,10 +122,10 @@ async def handle_read_file_stream(ws, cmd):
 
     abs_path = resolve_safe_path(path)
     if not abs_path.exists():
+        # 普通命令错误响应（不带 type:stream_end）— 带双重语义时会被服务端
+        # 当作命令 ack 消费掉，PendingStream 永远收不到结束信号，下载挂到 120s 超时
         await ws.send(json.dumps({
             "id": cmd_id,
-            "type": "stream_end",
-            "streamId": stream_id,
             "success": False,
             "error": "文件不存在",
         }))
