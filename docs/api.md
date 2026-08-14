@@ -5,36 +5,54 @@
 - [1. 概述](#1-概述)
 - [2. 快速开始](#2-快速开始)
 - [3. 认证](#3-认证)
-- [4. 公共 API](#4-公共-api)
-- [5. 文章](#5-文章)
-- [6. 评论](#6-评论)
-- [7. 页面](#7-页面)
-- [8. Bing 壁纸](#8-bing-壁纸)
+- [4. 头像](#4-头像)
+- [5. 公共 API](#5-公共-api)
+- [6. 文章](#6-文章)
+- [7. 评论](#7-评论)
+- [8. 页面](#8-页面)
 - [9. 网盘（Drive）](#9-网盘drive)
 - [10. 管理 API](#10-管理-api)
-  - [10.4 API 密钥管理](#104-api-密钥管理)
-- [11. 通用模式](#11-通用模式)
-  - [11.4 API Key 认证](#114-api-key-认证)
-- [12. 错误处理](#12-错误处理)
-- [13. CORS 配置](#13-cors-配置)
-- [14. 代码示例](#14-代码示例)
+- [11. API 密钥管理](#11-api-密钥管理)
+- [12. AI 助手](#12-ai-助手)
+- [13. 屏幕时间 / 数字健康](#13-屏幕时间--数字健康)
+- [14. 通用模式](#14-通用模式)
+- [15. 错误处理](#15-错误处理)
+- [16. CORS 配置](#16-cors-配置)
+- [17. 代码示例](#17-代码示例)
 
 ---
 
 ## 1. 概述
 
-LineWeb API 提供个人网站/CMS 的全部功能，包括 **认证、文章、评论、页面管理、Bing 每日壁纸、网盘文件存储** 以及 **管理面板** 接口。
+LineWeb API 提供个人网站/CMS 的全部功能，包括 **认证、文章、评论、页面管理、网盘文件存储、AI 助手、屏幕时间追踪** 以及 **管理面板** 接口。
 
 | 属性 | 值 |
 |---|---|
-| 基础 URL | `https://lineweb-production.up.railway.app/api`（生产）/ `https://lineweb-production.up.railway.app/api`（开发） |
+| 基础 URL | 生产 `http://服务器地址:3001/api` / 开发 `http://localhost:3001/api` |
 | 数据格式 | JSON（请求 `Content-Type: application/json`，响应 `application/json`） |
-| 认证方式 | JWT Bearer Token 或 API Key（`X-API-Key` 请求头） |
+| 认证方式 | JWT Bearer Token、API Key（`X-API-Key`）或屏幕时间 Token（`X-Screen-Time-Token`） |
 | 分页 | 统一 `page` + `limit` 参数，响应含 `total` / `page` / `pageCount` |
 
-> **安全策略**：除 `POST /api/auth/login`（登录）、`POST /api/auth/register`（注册）和 `GET /api/health`（健康检查）外，**所有 API 端点均需身份认证**。每次请求必须携带有效的 JWT Token 或 API Key，否则返回 `401`。
+> **部署约束**：当前服务器仅使用 **HTTP + 3001 端口**（无 HTTPS/WSS），详见 `docs/DEPLOYMENT_HTTP_3001.md`。
 
-**API 自描述端点**：访问 `GET /api`（需携带认证凭证）可获取所有可用路由的完整清单。
+**安全策略**：除公开路径外，**所有 API 端点均需身份认证**。每次请求必须携带有效的 JWT Token 或 API Key，否则返回 `401`。
+
+**公开端点（免认证，共 12 类）**：
+
+| 端点 | 说明 |
+|---|---|
+| `POST /api/auth/login`、`POST /api/auth/register` | 登录 / 注册 |
+| `GET /api/auth/avatar/:userId` | 获取指定用户头像 |
+| `GET /api/health` | 服务健康检查 |
+| `POST /api/health/push` | 屏幕时间推送（用 `X-Screen-Time-Token`） |
+| `GET /api/posts`、`GET /api/posts/:slug` | 已发布文章列表 / 详情 |
+| `GET /api/pages/featured`、`GET /api/pages/slug/:slug` | Featured 页面 / 页面详情 |
+| `GET /api/stats/public` | 公开统计数据 |
+| `GET /api/version` | 部署版本信息 |
+| `GET /api/comments/post/:postId` | 文章评论树 |
+| `GET /api/ai/chat/public`、`POST /api/ai/chat` | AI 启用状态 / AI 对话 |
+
+> **API 自描述端点**：访问 `GET /api`（需携带认证凭证）可获取所有可用路由的完整清单。
 
 ---
 
@@ -43,34 +61,33 @@ LineWeb API 提供个人网站/CMS 的全部功能，包括 **认证、文章、
 ### 2.1 使用 curl 测试 API
 
 ```bash
-# 1. 健康检查
-curl https://lineweb-production.up.railway.app/api/health
+# 1. 健康检查（公开）
+curl http://服务器地址:3001/api/health
 
 # 2. 登录获取 Token
-curl -X POST https://lineweb-production.up.railway.app/api/auth/login \
+curl -X POST http://服务器地址:3001/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@lineweb.dev","password":"admin123"}'
+  -d '{"identifier":"admin@lineweb.dev","password":"admin123"}'
 
 # 3. 使用 Token 获取个人信息（替换 YOUR_TOKEN）
-curl https://lineweb-production.up.railway.app/api/auth/me \
+curl http://服务器地址:3001/api/auth/me \
   -H "Authorization: Bearer YOUR_TOKEN"
 
-# 4. 获取文章列表（需认证）
-curl https://lineweb-production.up.railway.app/api/posts?page=1&limit=10 \
-  -H "Authorization: Bearer YOUR_TOKEN"
+# 4. 获取文章列表（公开）
+curl "http://服务器地址:3001/api/posts?page=1&limit=10"
 ```
 
 ### 2.2 使用 JavaScript/TypeScript（浏览器环境）
 
 ```typescript
 // 项目已经封装好 api.ts，这里展示底层 fetch 用法
-const API_BASE = 'https://lineweb-production.up.railway.app/api'
+const API_BASE = 'http://服务器地址:3001/api'
 
-async function login(email: string, password: string) {
+async function login(identifier: string, password: string) {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ identifier, password }),
   })
   if (!res.ok) throw new Error(await res.json().then(r => r.error))
   return res.json()  // { token, user }
@@ -95,12 +112,12 @@ console.log(me)
 ```python
 import requests
 
-API_BASE = 'https://lineweb-production.up.railway.app/api'
+API_BASE = 'http://服务器地址:3001/api'
 
 # 登录
 resp = requests.post(f'{API_BASE}/auth/login', json={
-    'email': 'admin@lineweb.dev',
-    'password': 'admin123'
+    'identifier': 'admin@lineweb.dev',
+    'password': 'admin123',
 })
 data = resp.json()
 token = data['token']
@@ -149,6 +166,8 @@ Content-Type: application/json
 ```json
 { "error": "邮箱已被注册" }
 ```
+
+> 登录/注册端点有独立速率限制：每 IP 每 15 分钟最多 **20 次**。
 
 ### 3.2 登录
 
@@ -269,18 +288,72 @@ settings 支持的格式（示例）：
 }
 ```
 
-背景类型选项：
-- `type: "wallpaper"` — Bing 每日壁纸
-  - `wallpaperMode`: `"latest"`（每日更新）| `"random"`（随机历史）| `"date"`（指定日期）
-  - `wallpaperDate`: 当 mode 为 `date` 时指定，格式 `YYYY-MM-DD`
-- `type: "solid"` — 纯色背景
-  - `solidColor`: 十六进制颜色值，如 `"#0d0d0f"`
+### 3.6 登出
+
+```
+POST /api/auth/logout
+Authorization: Bearer <token>
+```
+
+使该用户的**所有** JWT 立即失效（数据库记录失效时间，即使 Token 未过期也无法再通过校验）。响应：
+
+```json
+{ "message": "已登出" }
+```
 
 ---
 
-## 4. 公用 API
+## 4. 头像
 
-### 4.1 健康检查（无需认证）
+头像由 sharp 处理后以 **WebP** 格式存储，读写走存储节点。
+
+### 4.1 上传 / 更新自己的头像
+
+```
+POST /api/auth/avatar
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+```
+
+文件字段名为 `file`。服务端自动裁剪压缩，存储为 WebP。
+
+**成功响应：**
+
+```json
+{ "avatarPath": "avatars/1.webp" }
+```
+
+### 4.2 获取自己的头像（需认证）
+
+```
+GET /api/auth/avatar
+Authorization: Bearer <token>
+```
+
+返回 `image/webp` 二进制流；未设置头像时返回 `204 No Content`。响应带 `Cache-Control: no-store`，避免缓存旧头像。
+
+### 4.3 获取指定用户头像（公开）
+
+```
+GET /api/auth/avatar/:userId
+```
+
+无需认证，返回指定用户的头像二进制流（同样 `no-store`，未设置返回 204）。
+
+### 4.4 删除头像
+
+```
+DELETE /api/auth/avatar
+Authorization: Bearer <token>
+```
+
+**响应：** `{ "message": "头像已删除" }`
+
+---
+
+## 5. 公共 API
+
+### 5.1 健康检查（无需认证）
 
 ```
 GET /api/health
@@ -291,11 +364,32 @@ GET /api/health
 ```json
 {
   "status": "ok",
+  "db": "connected",
+  "storageNode": "connected",
   "timestamp": "2026-07-04T10:00:00.000Z"
 }
 ```
 
-### 4.2 API 端点列表（需认证）
+> `db` 为数据库连通性；`storageNode` 为存储节点（Python 进程）在线状态。
+
+### 5.2 部署版本（无需认证）
+
+```
+GET /api/version
+```
+
+```json
+{
+  "version": "e531fda",
+  "nodeVersion": "v22.11.0",
+  "nodeEnv": "production",
+  "timestamp": "2026-07-04T10:00:00.000Z"
+}
+```
+
+> `version` 来自 `GIT_SHA` 环境变量，用于 CI/CD 验证部署是否成功。
+
+### 5.3 API 端点列表（需认证）
 
 ```
 GET /api
@@ -304,17 +398,28 @@ Authorization: Bearer <token> 或 X-API-Key: <key>
 
 返回完整 API 路由清单，包含每个端点的 `method`、`path`、`auth` 级别和 `description`。
 
----
-
-## 5. 文章
-
-文章（Post）模块提供博客内容管理，包含需认证的读取接口和管理接口。
-
-### 5.1 获取文章列表（分页）
+### 5.4 公开统计（无需认证）
 
 ```
-GET /api/posts?page=1&limit=10
-Authorization: Bearer <token> 或 X-API-Key: <key>
+GET /api/stats/public
+```
+
+```json
+{ "posts": 15, "users": 8, "comments": 42, "pages": 3 }
+```
+
+> 响应缓存 5 分钟。
+
+---
+
+## 6. 文章
+
+文章（Post）模块提供博客内容管理。
+
+### 6.1 获取文章列表（分页，公开）
+
+```
+GET /api/posts?page=1&limit=10&sort=desc&search=关键词
 ```
 
 **查询参数：**
@@ -323,6 +428,8 @@ Authorization: Bearer <token> 或 X-API-Key: <key>
 |---|---|---|---|
 | page | number | 1 | 页码 |
 | limit | number | 10 | 每页条数 |
+| sort | string | `desc` | `asc` 或 `desc`，按创建时间 |
+| search | string | — | 标题关键词搜索 |
 
 **响应：**
 
@@ -345,11 +452,10 @@ Authorization: Bearer <token> 或 X-API-Key: <key>
 }
 ```
 
-### 5.2 按 slug 获取文章
+### 6.2 按 slug 获取文章（公开）
 
 ```
 GET /api/posts/:slug
-Authorization: Bearer <token> 或 X-API-Key: <key>
 ```
 
 **路径参数：**
@@ -375,7 +481,7 @@ Authorization: Bearer <token> 或 X-API-Key: <key>
 
 > 注意：只能获取已发布文章（`published: true`）。
 
-### 5.3 创建文章（管理员）
+### 6.3 创建文章（管理员）
 
 ```
 POST /api/posts
@@ -406,7 +512,9 @@ Content-Type: application/json
 }
 ```
 
-### 5.4 更新文章（管理员）
+> slug 已存在时返回 **409**。
+
+### 6.4 更新文章（管理员）
 
 ```
 PUT /api/posts/:id
@@ -425,7 +533,7 @@ Content-Type: application/json
 
 **响应：** 返回更新后的文章对象。
 
-### 5.5 删除文章（管理员）
+### 6.5 删除文章（管理员）
 
 ```
 DELETE /api/posts/:id
@@ -438,7 +546,7 @@ Authorization: Bearer <admin_token>
 { "message": "已删除" }
 ```
 
-### 5.6 管理：获取所有文章（含未发布）
+### 6.6 管理：获取所有文章（含未发布）
 
 ```
 GET /api/posts/admin/all?page=1&limit=20
@@ -447,7 +555,7 @@ Authorization: Bearer <admin_token>
 
 与公开列表相同结构，但包含未发布的草稿。
 
-### 5.7 管理：按 ID 获取文章
+### 6.7 管理：按 ID 获取文章
 
 ```
 GET /api/posts/admin/:id
@@ -458,13 +566,12 @@ Authorization: Bearer <admin_token>
 
 ---
 
-## 6. 评论
+## 7. 评论
 
-### 6.1 获取文章评论（树状结构）
+### 7.1 获取文章评论（树状结构，公开）
 
 ```
 GET /api/comments/post/:postId
-Authorization: Bearer <token> 或 X-API-Key: <key>
 ```
 
 **路径参数：**
@@ -497,15 +604,16 @@ Authorization: Bearer <token> 或 X-API-Key: <key>
 
 > 仅支持一级嵌套（`comment → replies`），replies 不能再有子回复。
 
-### 6.2 获取评论列表（扁平分页）
+### 7.2 获取评论列表（扁平分页，需认证）
 
 ```
 GET /api/comments?postId=1&page=1&limit=20
+Authorization: Bearer <token>
 ```
 
 返回扁平化的分页评论列表（不含 replies 嵌套）。
 
-### 6.3 发表评论
+### 7.3 发表评论（需认证）
 
 ```
 POST /api/comments
@@ -534,7 +642,7 @@ Content-Type: application/json
 }
 ```
 
-### 6.4 管理评论接口（需要管理员权限）
+### 7.4 管理评论接口（需要管理员权限）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -545,15 +653,14 @@ Content-Type: application/json
 
 ---
 
-## 7. 页面
+## 8. 页面
 
 Page 模块提供动态页面管理（基于 Schema 的控件树）。
 
-### 7.1 获取 Featured 页面列表
+### 8.1 获取 Featured 页面列表（公开）
 
 ```
 GET /api/pages/featured
-Authorization: Bearer <token> 或 X-API-Key: <key>
 ```
 
 返回所有标记为 featured 的已发布页面：
@@ -570,11 +677,10 @@ Authorization: Bearer <token> 或 X-API-Key: <key>
 ]
 ```
 
-### 7.2 按 slug 获取页面
+### 8.2 按 slug 获取页面（公开）
 
 ```
 GET /api/pages/slug/:slug
-Authorization: Bearer <token> 或 X-API-Key: <key>
 ```
 
 返回已发布页面的完整内容（含 schema）：
@@ -588,7 +694,7 @@ Authorization: Bearer <token> 或 X-API-Key: <key>
 }
 ```
 
-### 7.3 管理页面接口（需要管理员权限）
+### 8.3 管理页面接口（需要管理员权限）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -612,64 +718,9 @@ Authorization: Bearer <token> 或 X-API-Key: <key>
 
 ---
 
-## 8. Bing 壁纸
-
-### 8.1 获取壁纸
-
-```
-GET /api/bing-wallpaper?mode=latest&date=2026-07-01&history=true
-Authorization: Bearer <token> 或 X-API-Key: <key>
-```
-
-**查询参数（全部可选）：**
-
-| 参数 | 类型 | 默认 | 说明 |
-|---|---|---|---|
-| mode | string | `latest` | `latest`（今日壁纸）\| `random`（随机历史）\| `date`（指定日期） |
-| date | string | — | 指定日期，格式 `YYYY-MM-DD`，mode=date 时必填 |
-| history | boolean | — | 设为 `true` 时返回壁纸历史列表 |
-
-**获取今日壁纸：**
-
-```json
-{
-  "url": "https://www.bing.com/th?id=OHR.xxx_ZH-CNxxx_1920x1080.jpg",
-  "copyright": "© 版权信息",
-  "title": "壁纸标题",
-  "date": "2026-07-04"
-}
-```
-
-**获取历史列表（`?history=true`）：**
-
-```json
-{
-  "items": [
-    {
-      "date": "2026-07-04",
-      "title": "壁纸标题",
-      "copyright": "© 版权信息",
-      "image_url_4k": "https://www.bing.com/th?id=OHR.xxx_ZH-CNxxx_UHD.jpg",
-      "image_url_1080": "https://www.bing.com/th?id=OHR.xxx_ZH-CNxxx_1920x1080.jpg",
-      "image_url": "https://www.bing.com/th?id=OHR.xxx_ZH-CNxxx_1920x1080.jpg"
-    }
-  ]
-}
-```
-
-### 8.2 壁纸图片代理
-
-```
-GET /api/bing-wallpaper/proxy?url=https://www.bing.com/th?id=OHR.xxx.jpg
-```
-
-代理 Bing CDN 图片流，解决 Canvas CORS 限制问题。响应为图片二进制流，缓存 1 天。
-
----
-
 ## 9. 网盘（Drive）
 
-Drive 模块提供文件存储和管理功能。所有端点需要 **登录 + `canAccessDrive` 权限**。
+Drive 模块提供文件存储和管理功能。所有端点需要 **登录 + `canAccessDrive` 权限**（未开通返回 403）。普通用户只能访问**自己上传**的文件，管理员可访问全部。
 
 ### 9.1 获取文件列表（分页）
 
@@ -726,7 +777,7 @@ GET /api/drive/files/:id
 Authorization: Bearer <token>
 ```
 
-### 9.3 搜索文件
+### 9.3 搜索文件（名称模糊匹配）
 
 ```
 GET /api/drive/search?q=关键词
@@ -739,7 +790,35 @@ Authorization: Bearer <token>
 |---|---|---|---|
 | q | string | 是 | 文件名搜索关键词（模糊匹配，最多 50 条） |
 
-### 9.4 创建文件夹
+### 9.4 全文搜索（FTS5）
+
+```
+GET /api/drive/fts-search?q=关键词
+Authorization: Bearer <token>
+```
+
+基于 SQLite FTS5 全文索引的搜索（服务启动时自动建表），比 `search` 更适合内容型匹配。返回结构与文件列表一致。
+
+### 9.5 解析路径为面包屑
+
+```
+GET /api/drive/resolve-path?path=文档/子文件夹
+Authorization: Bearer <token>
+```
+
+将路径字符串逐段解析为面包屑数组：
+
+```json
+[
+  { "id": null, "name": "根目录" },
+  { "id": 5, "name": "文档" },
+  { "id": 9, "name": "子文件夹" }
+]
+```
+
+路径为空时仅返回根目录。某段不存在时返回 **404**。
+
+### 9.6 创建文件夹
 
 ```
 POST /api/drive/folders
@@ -767,7 +846,9 @@ Content-Type: application/json
 }
 ```
 
-### 9.5 上传文件
+> 兼容路径：`POST /api/drive/files` 也可用于创建文件夹。
+
+### 9.7 上传文件
 
 ```
 POST /api/drive/upload?parentId=1
@@ -775,7 +856,7 @@ Authorization: Bearer <token>
 Content-Type: multipart/form-data
 ```
 
-使用 **multipart/form-data** 格式上传。支持通过查询参数 `parentId` 或表单字段 `parentId` 指定目标文件夹。
+使用 **multipart/form-data** 格式上传，文件字段名为 `file`。支持通过查询参数 `parentId` 或表单字段 `parentId` 指定目标文件夹。
 
 **功能特性：**
 - 流式上传：边收边转发到存储节点，内存峰值 ~64KB
@@ -794,7 +875,7 @@ Content-Type: multipart/form-data
 }
 ```
 
-### 9.6 下载文件
+### 9.8 下载文件（流式）
 
 ```
 GET /api/drive/download/:id
@@ -811,11 +892,24 @@ Authorization: Bearer <token>
 | X-Content-Length | 前端兼容：文件总大小 |
 | X-Chunk-Size | 下载块大小（默认 256KB） |
 
-> 流式下载：逐块从存储节点拉取并写入响应，内存峰值 ~256KB。
+> 流式下载：逐块从存储节点拉取并写入响应，内存峰值 ~256KB。兼容路径：`GET /api/drive/files/:id/download`。
 
-兼容路径：`GET /api/drive/files/:id/download`
+### 9.9 生成下载直链 Ticket
 
-### 9.7 重命名/移动文件
+```
+POST /api/drive/download-ticket/:id
+Authorization: Bearer <token>
+```
+
+生成一个短时（300 秒）下载凭证，配合 `?token=` 查询参数可直接在浏览器地址栏/`<a>` 标签中下载，无需 JS 请求头：
+
+```json
+{ "ticket": "eyJhbGciOiJIUzI1NiIs...", "expiresIn": 300 }
+```
+
+用法：`GET /api/drive/download/:id?token=<ticket>`
+
+### 9.10 重命名/移动文件
 
 ```
 PUT /api/drive/files/:id
@@ -830,7 +924,7 @@ Content-Type: application/json
 | name | string | 新文件名。重命名文件夹时会递归更新子文件的 storagePath |
 | parentId | number 或 null | 目标父文件夹 ID。`null` 表示移动到根目录。不能移动到自身或子文件夹内 |
 
-### 9.8 删除文件/文件夹
+### 9.11 删除文件/文件夹
 
 ```
 DELETE /api/drive/files/:id
@@ -839,14 +933,23 @@ Authorization: Bearer <token>
 
 **递归删除**：删除文件夹时，其所有子文件和子文件夹也会被删除。
 
-### 9.9 手动触发文件同步
+### 9.12 手动触发文件同步
 
 ```
 POST /api/drive/sync
 Authorization: Bearer <token>
 ```
 
-对比存储节点文件系统与数据库记录：清理孤立文件 + 创建缺失记录。
+对比存储节点文件系统与数据库记录：清理孤立文件 + 创建缺失记录。返回同步报告。
+
+### 9.13 文件夹收藏
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/drive/favorites` | 获取当前用户所有收藏（按 order 升序） |
+| POST | `/api/drive/favorites` | 添加收藏 `{folderId, folderName}`（已存在时直接返回） |
+| DELETE | `/api/drive/favorites/:folderId` | 移除收藏 |
+| PUT | `/api/drive/favorites/reorder` | 重排序 `{favorites: [{id, order}]}` |
 
 ---
 
@@ -877,7 +980,8 @@ Authorization: Bearer <admin_token>
   ],
   "total": 2,
   "page": 1,
-  "pageCount": 1
+  "limit": 20,
+  "totalPages": 1
 }
 ```
 
@@ -909,7 +1013,17 @@ Authorization: Bearer <admin_token>
 Content-Type: application/json
 ```
 
-请求体：`{ "canAccessDrive": true }`
+请求体：`{ "canAccessDrive": true }`。权限变更即时生效（会清除权限缓存）。
+
+#### 管理员设置用户头像
+
+```
+PUT /api/users/:id/avatar
+Authorization: Bearer <admin_token>
+Content-Type: multipart/form-data
+```
+
+文件字段名为 `file`。响应：`{ "avatarPath": "avatars/3.webp" }`
 
 #### 删除用户
 
@@ -918,7 +1032,7 @@ DELETE /api/users/:id
 Authorization: Bearer <admin_token>
 ```
 
-**注意**：不能删除自己。删除用户会同时删除其评论和文章（事务操作）。
+**注意**：不能删除自己。删除用户会同时删除其评论、文章和存储节点头像文件（事务操作）。
 
 ### 10.2 设备监控（需要管理员权限）
 
@@ -976,13 +1090,15 @@ Authorization: Bearer <admin_token>
 }
 ```
 
+> 60 秒内存缓存（避免每次打开 dashboard 触发 11 个并发查询）。
+
 ---
 
-### 10.4 API 密钥管理（需要管理员权限）
+## 11. API 密钥管理（需要管理员权限）
 
 API Key 管理端点，用于创建和管理外部程序访问 API 的密钥。
 
-#### 创建 API Key
+### 11.1 创建 API Key
 
 ```
 POST /api/api-keys
@@ -1014,7 +1130,7 @@ Content-Type: application/json
 
 > **重要**：`key` 字段仅在创建时返回一次，之后无法再次获取完整密钥。请立即复制并妥善保存。
 
-#### 列出所有 API Key
+### 11.2 列出所有 API Key
 
 ```
 GET /api/api-keys
@@ -1038,14 +1154,14 @@ Authorization: Bearer <admin_token>
 ]
 ```
 
-#### 获取单个 API Key 详情
+### 11.3 获取单个 API Key 详情
 
 ```
 GET /api/api-keys/:id
 Authorization: Bearer <admin_token>
 ```
 
-#### 更新 API Key
+### 11.4 更新 API Key
 
 ```
 PUT /api/api-keys/:id
@@ -1061,7 +1177,7 @@ Content-Type: application/json
 | active | boolean | 启用（`true`）或禁用（`false`） |
 | expiresAt | string 或 null | 过期时间，设为 `null` 取消过期 |
 
-#### 删除 API Key
+### 11.5 删除 API Key
 
 ```
 DELETE /api/api-keys/:id
@@ -1070,9 +1186,75 @@ Authorization: Bearer <admin_token>
 
 ---
 
-## 11. 通用模式
+## 12. AI 助手
 
-### 11.1 分页
+AI 助手走 OpenAI 兼容接口（`AiConfig` 表配置 provider/model/baseUrl/apiKey）。
+
+### 12.1 查询 AI 是否启用（公开）
+
+```
+GET /api/ai/chat/public
+```
+
+```json
+{ "enabled": true }
+```
+
+用于前端判断是否显示聊天按钮；数据库异常时兜底返回 `false`。
+
+### 12.2 AI 对话（公开，POST）
+
+```
+POST /api/ai/chat
+Content-Type: application/json
+```
+
+**请求体：**
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| message | string | 是 | 用户消息，1-2000 字符 |
+| history | array | 否 | 历史消息，最多 20 条；每项 `{role: 'user'\|'assistant', content}` |
+
+**成功响应：**
+
+```json
+{ "reply": "这是 AI 的回复", "model": "gpt-4o-mini" }
+```
+
+> ⚠️ 该端点为公开接口（无认证），会消耗 API key 配额，注意防滥用。
+
+### 12.3 管理 AI 配置（需要管理员权限）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/ai/config` | 查看配置（API Key 脱敏为 `sk-…xxxx`） |
+| PUT | `/api/ai/config` | 更新配置：`{provider?, model?, apiKey?, baseUrl?, systemPrompt?, isEnabled?}` |
+
+> PUT 时若 `apiKey` 传入的是脱敏值（`sk-…` 开头）则忽略该项，保留原 key。
+
+---
+
+## 13. 屏幕时间 / 数字健康
+
+数字健康模块跟踪用户每日电脑使用时间（Asia/Shanghai 时区）。完整接入指南见 **[`docs/health-api.md`](health-api.md)** 和 **`docs/time-master-api-guide.md`**。
+
+| 方法 | 路径 | 认证 | 说明 |
+|---|---|---|---|
+| POST | `/api/health/push` | `st_` Token | 第三方推送当日秒数 `{totalSeconds, date}` |
+| GET | `/api/health/screen-time` | JWT | 我的今日屏幕时间 |
+| GET | `/api/health/screen-time/range?from=&to=` | JWT | 日期范围历史（跨度 ≤ 62 天） |
+| GET | `/api/health/screen-time/data` | `st_` Token | 第三方读取今日屏幕时间 |
+| PUT/GET | `/api/health/daily-goal` | JWT | 设置/读取今日使用目标 |
+| GET | `/api/health/daily-goal/data` | `st_` Token | 第三方读取每日目标 |
+| POST/GET | `/api/health/tokens` | JWT | 生成/列出屏幕时间 Token |
+| DELETE | `/api/health/tokens/:id` | JWT | 删除屏幕时间 Token |
+
+---
+
+## 14. 通用模式
+
+### 14.1 分页
 
 所有列表接口统一使用以下查询参数：
 
@@ -1092,16 +1274,17 @@ Authorization: Bearer <admin_token>
 }
 ```
 
-### 11.2 认证级别
+### 14.2 认证级别
 
 | 值 | 说明 | 如何访问 |
 |---|---|---|
-| `public` | 无需认证 | 直接请求（仅限 `login`、`register`、`health`） |
+| `public` | 无需认证 | 直接请求（见[第 1 章公开端点清单](#1-概述)） |
 | `auth: true` | 需登录 | 请求头加 `Authorization: Bearer <token>` 或 `X-API-Key: <key>` |
 | `auth: admin` | 需管理员权限 | 同上，且用户 role 必须为 `admin` |
 | `auth: drive` | 需登录 + 网盘权限 | 同上，且用户 `canAccessDrive` 必须为 `true` |
+| `auth: st_token` | 需屏幕时间 Token | 请求头加 `X-Screen-Time-Token: <st_...>` |
 
-### 11.3 请求头
+### 14.3 请求头
 
 所有 API 请求建议携带：
 
@@ -1110,8 +1293,9 @@ Authorization: Bearer <admin_token>
 | `Content-Type` | `application/json` | POST/PUT 请求（上传文件用 `multipart/form-data`） |
 | `Authorization` | `Bearer <token>` | JWT 认证 |
 | `X-API-Key` | `<api_key>` | API Key 认证（外部程序调用时使用） |
+| `X-Screen-Time-Token` | `<st_token>` | 屏幕时间推送/读取（第三方） |
 
-### 11.4 API Key 认证
+### 14.4 API Key 认证
 
 API Key 认证是为外部程序/第三方应用设计的认证方式，与 JWT 双轨并行。
 
@@ -1122,7 +1306,7 @@ X-API-Key: lw_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6
 
 **认证流程：**
 1. 请求先检查 `Authorization: Bearer <jwt>` — 有则走 JWT 验证
-2. 无 JWT 时检查 `X-API-Key` 请求头 — 有则查数据库验证
+2. 无 JWT 时检查 `X-API-Key` 请求头 — 有则查数据库验证（sha256 哈希比对）
 3. 两者都没有 → 401 未授权
 
 **创建 API Key：**
@@ -1142,7 +1326,7 @@ X-API-Key: lw_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6
 
 ---
 
-## 12. 错误处理
+## 15. 错误处理
 
 所有错误响应统一格式：
 
@@ -1156,8 +1340,9 @@ X-API-Key: lw_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6
 |---|---|---|
 | 200 | 成功 | GET/PUT/DELETE 请求成功 |
 | 201 | 创建成功 | POST 创建资源 |
+| 204 | 无内容 | 头像未设置、空响应 |
 | 400 | 请求参数错误 | Zod 校验失败，无效 ID，非法字符等 |
-| 401 | 未登录 | 缺少或无效的 Token |
+| 401 | 未登录 | 缺少或无效的 Token / API Key |
 | 403 | 权限不足 | 需要管理员/网盘权限 |
 | 404 | 资源不存在 | 文章/文件/用户不存在 |
 | 409 | 冲突 | 邮箱/用户名/slug 已存在 |
@@ -1165,9 +1350,9 @@ X-API-Key: lw_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6
 
 ---
 
-## 13. CORS 配置
+## 16. CORS 配置
 
-### 13.1 环境变量配置
+### 16.1 环境变量配置
 
 通过 `CORS_ORIGIN` 环境变量控制跨域访问：
 
@@ -1176,37 +1361,39 @@ X-API-Key: lw_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6
 CORS_ORIGIN="http://localhost:5173"
 
 # 多个源（逗号分隔）
-CORS_ORIGIN="http://localhost:5173,https://myapp.com"
+CORS_ORIGIN="http://localhost:5173,http://myapp.com"
 
 # 允许所有源（生产环境慎用）
 CORS_ORIGIN="*"
 ```
 
-### 13.2 外部应用接入
+> 生产环境默认同源（Express 直接 serve 前端，不反射任意源）。
+
+### 16.2 外部应用接入
 
 如果要从外部应用（HarmonyOS、iOS、第三方网站等）调用 API：
 
 1. **部署后端**：将 LineWeb 后端部署到可公开访问的服务器
 2. **配置 CORS**：设置 `CORS_ORIGIN` 环境变量为你的应用域名
-3. **获取 Token**：调用 `/api/auth/login` 获取 JWT
-4. **调用 API**：在请求头中携带 `Authorization: Bearer <token>`
+3. **获取凭证**：调用 `/api/auth/login` 获取 JWT，或由管理员创建 API Key
+4. **调用 API**：在请求头中携带 `Authorization: Bearer <token>` 或 `X-API-Key: <key>`
 
 ---
 
-## 14. 代码示例
+## 17. 代码示例
 
-### 14.1 完整的工作流：文章发布
+### 17.1 完整的工作流：文章发布
 
 ```javascript
 // Node.js / 浏览器环境
 async function publishArticle() {
-  const API = 'https://lineweb-production.up.railway.app/api'
+  const API = 'http://服务器地址:3001/api'
 
   // 1. 登录
   const loginRes = await fetch(`${API}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'admin@lineweb.dev', password: 'admin123' }),
+    body: JSON.stringify({ identifier: 'admin@lineweb.dev', password: 'admin123' }),
   })
   const { token } = await loginRes.json()
 
@@ -1230,7 +1417,7 @@ async function publishArticle() {
   const post = await postRes.json()
   console.log('文章已创建:', post.id)
 
-  // 3. 查看文章
+  // 3. 查看文章（公开）
   const viewRes = await fetch(`${API}/posts/my-new-post`)
   const viewed = await viewRes.json()
   console.log('标题:', viewed.title)
@@ -1251,7 +1438,7 @@ async function publishArticle() {
 }
 ```
 
-### 14.2 文件上传（Node.js + FormData）
+### 17.2 文件上传（Node.js + FormData）
 
 ```javascript
 import { createReadStream } from 'fs'
@@ -1262,7 +1449,7 @@ async function uploadFile(token, filePath, parentId) {
   form.set('file', new File([createReadStream(filePath)], 'photo.jpg'))
   if (parentId) form.set('parentId', String(parentId))
 
-  const res = await fetch('https://lineweb-production.up.railway.app/api/drive/upload', {
+  const res = await fetch('http://服务器地址:3001/api/drive/upload', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: form,
@@ -1271,11 +1458,11 @@ async function uploadFile(token, filePath, parentId) {
 }
 ```
 
-### 14.3 文件下载（流式）
+### 17.3 文件下载（流式）
 
 ```javascript
 async function downloadFile(token, fileId) {
-  const res = await fetch(`https://lineweb-production.up.railway.app/api/drive/download/${fileId}`, {
+  const res = await fetch(`http://服务器地址:3001/api/drive/download/${fileId}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
   const reader = res.body.getReader()
@@ -1295,7 +1482,20 @@ async function downloadFile(token, fileId) {
 }
 ```
 
-### 14.4 Python 完整示例
+### 17.4 使用 API Key 调用（无需登录态）
+
+```python
+import requests
+
+API = 'http://服务器地址:3001/api'
+API_KEY = 'lw_a1b2...'  # 管理员创建
+
+headers = {'X-API-Key': API_KEY}
+resp = requests.get(f'{API}/auth/me', headers=headers)
+print(resp.json())
+```
+
+### 17.5 Python 完整示例
 
 ```python
 import requests
@@ -1305,9 +1505,9 @@ class LineWebAPI:
         self.base_url = base_url.rstrip('/')
         self.token = None
 
-    def login(self, email: str, password: str):
+    def login(self, identifier: str, password: str):
         resp = requests.post(f'{self.base_url}/auth/login', json={
-            'email': email, 'password': password,
+            'identifier': identifier, 'password': password,
         })
         data = resp.json()
         self.token = data['token']
@@ -1330,13 +1530,6 @@ class LineWebAPI:
             json={'title': title, 'slug': slug, 'content': content,
                   'summary': summary, 'published': published},
             headers={**self._headers(), 'Content-Type': 'application/json'},
-        )
-        return resp.json()
-
-    def get_wallpaper(self, mode='latest'):
-        resp = requests.get(
-            f'{self.base_url}/bing-wallpaper',
-            params={'mode': mode},
         )
         return resp.json()
 
@@ -1371,7 +1564,7 @@ class LineWebAPI:
 
 
 # 使用示例
-api = LineWebAPI('https://lineweb-production.up.railway.app/api')
+api = LineWebAPI('http://服务器地址:3001/api')
 user = api.login('admin@lineweb.dev', 'admin123')
 print(f'登录成功: {user["username"]}')
 
@@ -1384,27 +1577,23 @@ print(f'网盘文件数: {stats["drive"]["files"]}')
 # 获取文章列表
 posts = api.get_posts()
 print(f'文章列表: {len(posts["posts"])} 篇')
-
-# 获取壁纸
-wallpaper = api.get_wallpaper()
-print(f'今日壁纸: {wallpaper.get("title", "")}')
 ```
 
-### 14.5 使用 curl 的完整工作流
+### 17.6 使用 curl 的完整工作流
 
 ```bash
 # === 1. 登录 ===
-TOKEN=$(curl -s -X POST https://lineweb-production.up.railway.app/api/auth/login \
+TOKEN=$(curl -s -X POST http://服务器地址:3001/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@lineweb.dev","password":"admin123"}' | \
+  -d '{"identifier":"admin@lineweb.dev","password":"admin123"}' | \
   python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
 
 # === 2. 获取 Dashboard 统计 ===
-curl -s https://lineweb-production.up.railway.app/api/stats \
+curl -s http://服务器地址:3001/api/stats \
   -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 
 # === 3. 创建文章 ===
-curl -s -X POST https://lineweb-production.up.railway.app/api/posts \
+curl -s -X POST http://服务器地址:3001/api/posts \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{
@@ -1415,20 +1604,20 @@ curl -s -X POST https://lineweb-production.up.railway.app/api/posts \
     "published": true
   }' | python3 -m json.tool
 
-# === 4. 查看文章（需认证） ===
-curl -s https://lineweb-production.up.railway.app/api/posts/api-post \
+# === 4. 查看文章（公开） ===
+curl -s http://服务器地址:3001/api/posts/api-post | python3 -m json.tool
+
+# === 5. 获取文件列表 ===
+curl -s "http://服务器地址:3001/api/drive/files?page=1&limit=10" \
   -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 
-# === 5. 获取今日壁纸（需认证） ===
-curl -s https://lineweb-production.up.railway.app/api/bing-wallpaper \
-  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
-
-# === 6. 获取文件列表 ===
-curl -s "https://lineweb-production.up.railway.app/api/drive/files?page=1&limit=10" \
-  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+# === 6. AI 对话（公开） ===
+curl -s -X POST http://服务器地址:3001/api/ai/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"你好"}' | python3 -m json.tool
 
 # === 7. 删除文章 ===
-curl -s -X DELETE https://lineweb-production.up.railway.app/api/posts/1 \
+curl -s -X DELETE http://服务器地址:3001/api/posts/1 \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -1436,19 +1625,23 @@ curl -s -X DELETE https://lineweb-production.up.railway.app/api/posts/1 \
 
 ## 附录：端点快速索引
 
-| 模块 | 端点数 | 公开 | 需认证 | 需管理员 | 需网盘权限 |
-|---|---|---|---|---|---|
-| 系统 | 2 | 1 | 1 | 0 | 0 |
-| 认证 | 4 | 2 | 2 | 0 | 0 |
-| 文章 | 7 | 0 | 2 | 5 | 0 |
-| 评论 | 7 | 0 | 3 | 4 | 0 |
-| 页面 | 7 | 0 | 2 | 5 | 0 |
-| 壁纸 | 2 | 0 | 2 | 0 | 0 |
-| 网盘 | 11 | 0 | 0 | 0 | 11 |
-| 用户 | 5 | 0 | 0 | 5 | 0 |
-| 设备 | 1 | 0 | 0 | 1 | 0 |
-| 统计 | 1 | 0 | 0 | 1 | 0 |
-| API 密钥 | 5 | 0 | 0 | 5 | 0 |
-| **总计** | **52** | **3** | **10** | **26** | **11** |
+| 模块 | 端点数 | 公开 | 需认证 | 需管理员 | 需网盘权限 | 需屏幕时间 Token |
+|---|---|---|---|---|---|---|
+| 系统 | 3 | 2 | 1 | 0 | 0 | 0 |
+| 认证 + 头像 | 10 | 3 | 7 | 0 | 0 | 0 |
+| 文章 | 7 | 2 | 0 | 5 | 0 | 0 |
+| 评论 | 7 | 1 | 2 | 4 | 0 | 0 |
+| 页面 | 7 | 2 | 0 | 5 | 0 | 0 |
+| 网盘 | 14 | 0 | 0 | 0 | 14 | 0 |
+| 网盘收藏 | 4 | 0 | 0 | 0 | 4 | 0 |
+| 用户 | 6 | 0 | 0 | 6 | 0 | 0 |
+| 设备 | 1 | 0 | 0 | 1 | 0 | 0 |
+| 统计 | 2 | 1 | 0 | 1 | 0 | 0 |
+| API 密钥 | 5 | 0 | 0 | 5 | 0 | 0 |
+| AI 助手 | 3 | 2 | 0 | 1 | 0 | 0 |
+| 屏幕时间 | 10 | 1 | 6 | 0 | 0 | 3 |
+| **总计** | **79** | **14** | **16** | **28** | **18** | **3** |
 
-> **认证说明**：「需认证」= 登录或 API Key 任一即可；「需管理员」= 需管理员权限；「需网盘权限」= 需登录 + canAccessDrive。只有 health / login / register 三个端点为公开（无需任何凭证）。
+> **认证说明**：「公开」= 无需任何凭证；「需认证」= 登录或 API Key 任一即可；「需管理员」= 需管理员权限；「需网盘权限」= 需登录 + `canAccessDrive`；「需屏幕时间 Token」= 需 `X-Screen-Time-Token: st_...`。
+
+> **缓存说明**：公开 GET 端点有服务端缓存（posts/pages/comments 5 分钟、stats 1 分钟）；管理端点（`/admin/*`）不缓存；认证 API 一律 `Cache-Control: no-store`。
