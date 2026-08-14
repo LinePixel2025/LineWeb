@@ -7,6 +7,8 @@ import logging
 import shutil
 import struct
 import hashlib
+import ctypes
+import platform
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
@@ -452,12 +454,59 @@ async def connect():
         delay = min(delay * 2, config.get("maxReconnectDelay", 60))
 
 
+class KeepAwake:
+    """运行期间阻止系统休眠（仅 Windows，通过 SetThreadExecutionState 实现）。
+
+    - ES_CONTINUOUS：使设置持续生效（否则仅对下一次睡眠请求有效一次）
+    - ES_SYSTEM_REQUIRED：阻止系统进入睡眠，但允许显示器正常关闭
+    程序退出或调用 disable() 后恢复默认电源行为；即便进程被强杀，
+    SetThreadExecutionState 绑定线程，线程终止时系统也会自动清除该设置。
+    """
+
+    ES_CONTINUOUS = 0x80000000
+    ES_SYSTEM_REQUIRED = 0x00000001
+
+    def __init__(self) -> None:
+        self._kernel32 = None
+
+    def enable(self) -> None:
+        if platform.system() != "Windows":
+            log.info("非 Windows 平台，跳过阻止休眠")
+            return
+        try:
+            kernel32 = ctypes.windll.kernel32
+            kernel32.SetThreadExecutionState.restype = ctypes.c_uint
+            kernel32.SetThreadExecutionState.argtypes = [ctypes.c_uint]
+            kernel32.SetThreadExecutionState(
+                self.ES_CONTINUOUS | self.ES_SYSTEM_REQUIRED
+            )
+            self._kernel32 = kernel32
+            log.info("已启用阻止休眠（系统睡眠被抑制，显示器可正常关闭）")
+        except Exception as exc:
+            log.warning(f"启用阻止休眠失败: {exc}")
+
+    def disable(self) -> None:
+        if self._kernel32 is None:
+            return
+        try:
+            # 仅传 ES_CONTINUOUS（不再含 SYSTEM_REQUIRED）即清除阻止休眠标志
+            self._kernel32.SetThreadExecutionState(self.ES_CONTINUOUS)
+            self._kernel32 = None
+            log.info("已恢复系统休眠设置")
+        except Exception as exc:
+            log.warning(f"恢复休眠设置失败: {exc}")
+
+
 def main():
     log.info(f"存储节点启动 — 根目录: {ROOT}, 服务器: {config['serverUrl']}")
+    keep_awake = KeepAwake()
+    keep_awake.enable()
     try:
         asyncio.run(connect())
     except KeyboardInterrupt:
         log.info("用户终止")
+    finally:
+        keep_awake.disable()
 
 
 if __name__ == "__main__":
