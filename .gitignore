@@ -45,6 +45,7 @@ CLAUDE.md
 .mcp.json
 .codegraph/
 .omo/
+.zcode/
 docs/superpowers/
 
 # AI 生成内容

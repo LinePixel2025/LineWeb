@@ -8,8 +8,7 @@ const CHUNK_SIZE = config.uploadChunkKB * 1024 || 32768
 
 interface NodeCommand {
   id: string
-  type: 'write_file' | 'write_file_data' | 'write_file_end'
-       | 'read_file' | 'read_file_stream' | 'write_file_stream' | 'stream_eof'
+  type: 'read_file' | 'read_file_stream' | 'write_file_stream' | 'stream_eof'
        | 'delete_file' | 'mkdir'
        | 'move' | 'stat' | 'list_dir' | 'rename'
   path: string
@@ -226,132 +225,6 @@ export function sendCommand(command: Omit<NodeCommand, 'id'> & { id?: string }):
       reject(new Error(`发送命令失败: ${err instanceof Error ? err.message : String(err)}`))
     }
   })
-}
-
-/**
- * 流式分块写入 — 接收 AsyncIterable<Buffer>，边收边转发
- * 相比旧版等整个 Buffer 再 base64 分块，此版本将内存峰值从
- * "文件大小 + base64 膨胀 33%" 降为 "单个 chunk base64"
- */
-export async function streamWrite(
-  path: string,
-  chunks: AsyncIterable<Buffer>,
-  totalSize?: number,
-): Promise<NodeResponse> {
-  const batchId = 'w-' + generateId()
-
-  if (!activeNode || !nodeConnected) {
-    throw new Error('存储节点未连接')
-  }
-
-  const knownSize = totalSize && totalSize > 0 ? totalSize : undefined
-  const initCmd: NodeCommand = {
-    id: batchId, type: 'write_file', path,
-    totalSize: knownSize ?? 0,
-    isLast: false,
-  }
-
-  // 整体 try/catch — 任何失败都清理 .tmp 残片
-  try {
-    // init 命令等待 ack — 确保节点已准备好接收数据
-    const initResp = await sendCommand(initCmd)
-    if (!initResp.success) {
-      throw new Error(`初始化写入失败: ${initResp.error || '未知错误'}`)
-    }
-
-    let chunkIndex = 0
-    let lastChunk: Buffer | null = null
-
-    for await (const rawChunk of chunks) {
-      if (lastChunk) {
-        // 发送上一个非最终块 — 用 try/catch 防止 send 抛异常导致状态不一致
-        const base64Data = lastChunk.toString('base64')
-        const dCmd: NodeCommand = {
-          id: batchId, type: 'write_file_data', path,
-          data: base64Data, isLast: false,
-        }
-        try {
-          if (!activeNode || !nodeConnected) {
-            throw new Error('存储节点已断开')
-          }
-          // P8: 等待缓冲区排空再发送下一个分块，防止内存堆积
-          await waitForDrain(WS_MAX_BUFFER)
-          activeNode.send(JSON.stringify(dCmd))
-        } catch (err: unknown) {
-          // 中间块发送失败 — 清理 .tmp 残片
-          await cleanupTempFile(path).catch(() => {})
-          throw new Error(`发送数据块 ${chunkIndex} 失败: ${err instanceof Error ? err.message : String(err)}`)
-        }
-      }
-      lastChunk = rawChunk
-      chunkIndex++
-    }
-
-    // 最后一块 — 等待确认
-    if (!lastChunk) throw new Error('空流')
-
-    // 如果只有一个 chunk，用 write_file_data 追加到 init 已打开的 .tmp 文件
-    if (chunkIndex === 1) {
-      const resp = await sendCommand({
-        id: batchId,
-        type: 'write_file_data' as const,
-        path,
-        data: lastChunk.toString('base64'),
-        isLast: true,
-      })
-      if (!resp.success) {
-        await cleanupTempFile(path).catch(() => {})
-        throw new Error(`写入最后一块失败: ${resp.error || '未知错误'}`)
-      }
-      return resp
-    }
-
-    const finalResp = await new Promise<NodeResponse>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        pendingCommands.delete(batchId)
-        reject(new Error(`写入超时: ${path}`))
-      }, 120000)  // 大文件写超时 2 分钟
-
-      pendingCommands.set(batchId, { resolve, reject, timer })
-
-      const finalBase64 = lastChunk!.toString('base64')
-      const lastCmd: NodeCommand = {
-        id: batchId, type: 'write_file_data', path,
-        data: finalBase64, isLast: true,
-      }
-      try {
-        if (!activeNode || !nodeConnected) {
-          throw new Error('存储节点已断开')
-        }
-        activeNode.send(JSON.stringify(lastCmd))
-      } catch (err: unknown) {
-        pendingCommands.delete(batchId)
-        clearTimeout(timer)
-        reject(new Error(`发送最后一块失败: ${err instanceof Error ? err.message : String(err)}`))
-      }
-    })
-
-    if (!finalResp.success) {
-      await cleanupTempFile(path).catch(() => {})
-      throw new Error(`写入完成确认失败: ${finalResp.error || '未知错误'}`)
-    }
-
-    return finalResp
-  } catch (err) {
-    // 整体失败 — 尝试清理 .tmp 残片
-    await cleanupTempFile(path).catch(() => {})
-    throw err
-  }
-}
-
-/** 清理写入失败时的 .tmp 残片 */
-async function cleanupTempFile(path: string): Promise<void> {
-  if (!activeNode || !nodeConnected) return
-  try {
-    await sendCommand({ type: 'delete_file', path: path + '.tmp' })
-  } catch {
-    // 静默失败 — .tmp 可能不存在
-  }
 }
 
 /**

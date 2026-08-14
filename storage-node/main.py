@@ -8,6 +8,7 @@ import shutil
 import struct
 import hashlib
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 # 配置
 CONFIG_PATH = Path(__file__).parent / "config.json"
@@ -29,10 +30,21 @@ log = logging.getLogger("storage-node")
 ROOT = Path(config["storagePath"])
 ROOT.mkdir(parents=True, exist_ok=True)
 
-# 当前活跃的写入临时文件（单线程缓存，同一时间只处理一个上传）
-_active_write_files: dict[str, dict] = {}
-
+# 活跃的二进制流写入（stream_id → 流状态）。每个流拥有独立的文件句柄与 SHA-256 上下文，
+# 因此多个上传可以并发进行。旧 base64 分块写入路径（write_file/write_file_data）已移除。
 active_streams: dict = {}  # { stream_id: { "type": "write", "file": f, "sha256": h, "bytes_written": int } }
+
+# === 阻塞 I/O 线程池化 — 防止 fsync/rmtree/目录遍历等同步操作卡死事件循环 ===
+# 方案 B：重 I/O 丢线程池执行；方案 C：信号量限流，防止并发重操作打满磁盘 I/O。
+_io_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="storage-io")
+_io_sem = asyncio.Semaphore(2)  # 同时最多 2 个重 I/O 操作
+
+
+async def run_io(fn, *args):
+    """在限流 + 线程池中执行同步阻塞 I/O，返回其返回值。"""
+    async with _io_sem:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(_io_executor, fn, *args)
 
 def resolve_safe_path(raw_path: str) -> Path:
     if not isinstance(raw_path, str) or not raw_path:
@@ -45,77 +57,6 @@ def resolve_safe_path(raw_path: str) -> Path:
     return candidate
 
 # === 文件操作函数 ===
-
-def handle_write_file(cmd: dict) -> dict:
-    """初始化分块写入 — 单块直接写入，或多块打开 .tmp 准备接收数据。"""
-    path = cmd.get("path", "")
-    total_size = cmd.get("totalSize", 0)
-    data_b64 = cmd.get("data", "")
-    is_last = cmd.get("isLast", False)
-
-    # 单块模式：data + isLast → 直接写入最终文件（兼容新旧 Express 代码）
-    # P16: Single-chunk base64 overhead acceptable for files <64KB; larger files use chunked mode
-    if data_b64 and is_last:
-        data = base64.b64decode(data_b64)
-        abs_path = resolve_safe_path(path)
-        abs_path.parent.mkdir(parents=True, exist_ok=True)
-        abs_path.write_bytes(data)
-        log.info(f"Wrote {len(data)} bytes to {path} (inline single chunk)")
-        return {"success": True, "data": {"size": len(data)}}
-
-    # 多块模式 — 打开 .tmp 文件准备接收分块数据
-    tmp_path = resolve_safe_path(path + ".tmp")
-    tmp_path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_BINARY)
-
-    _active_write_files[path] = {
-        "path": path,
-        "fd": fd,
-        "tmp_path": tmp_path,
-    }
-
-    log.info(f"Start chunked write: {path} ({total_size} bytes)")
-    return {"success": True}
-
-
-def handle_write_file_data(cmd: dict) -> dict:
-    """每个分块到达时立即追加写入 .tmp 文件。"""
-    path = cmd.get("path", "")
-    data_b64 = cmd.get("data", "")
-    is_last = cmd.get("isLast", False)
-
-    # 检查活跃文件是否匹配
-    active = _active_write_files.get(path)
-    if not active or active.get("fd") is None:
-        log.warning(f"write_file_data: 未找到活跃写入文件 (path={path})")
-        return {"success": False, "error": "未找到活跃写入文件"}
-
-    fd = active["fd"]
-    try:
-        data = base64.b64decode(data_b64)
-        os.write(fd, data)
-
-        if is_last:
-            os.fsync(fd)  # P15: 仅最后一块强制落盘，确保文件完整性
-            os.close(fd)
-            final_path = resolve_safe_path(path)
-            os.rename(str(active["tmp_path"]), str(final_path))
-            _active_write_files.pop(path, None)
-            log.info(f"Wrote {len(data)} bytes final chunk to {path}, file complete")
-        else:
-            log.info(f"Wrote {len(data)} bytes chunk to {path}.tmp")
-
-        return {"success": True}
-    except Exception as e:
-        log.error(f"写入分块失败: {e}")
-        # 异常时尝试关闭句柄
-        try:
-            os.close(fd)
-        except OSError:
-            pass
-        _active_write_files.pop(path, None)
-        return {"success": False, "error": str(e)}
-
 
 def handle_read_file(cmd: dict) -> dict:
     """按 offset + length 读取文件的一个分块。"""
@@ -255,8 +196,38 @@ def handle_write_file_stream(cmd):
     return {"success": True}
 
 
+def _commit_stream(stream: dict, expected_sha256: str) -> dict:
+    """同步执行流提交：flush + fsync + close + rename/unlink + SHA-256 校验。
+
+    在线程池中运行，避免 fsync（强制刷盘）阻塞事件循环。
+    """
+    f = stream["file"]
+    f.flush()
+    os.fsync(f.fileno())
+    f.close()
+
+    actual_sha256 = stream["sha256"].hexdigest()
+    match = actual_sha256 == expected_sha256
+
+    if match:
+        final_path = str(resolve_safe_path(stream["path"]))
+        os.rename(stream["tmp_path"], final_path)
+        log.info(f"Binary stream write complete: {stream['path']} ({stream['bytes_written']} bytes)")
+    else:
+        os.unlink(stream["tmp_path"])
+        log.error(f"Binary stream SHA-256 mismatch: {stream['path']} (expected={expected_sha256[:8]}..., actual={actual_sha256[:8]}...)")
+
+    return {
+        "sha256": actual_sha256,
+        "bytesWritten": stream["bytes_written"],
+        "success": match,
+        "checksumMatch": match,
+        "error": None if match else "SHA-256 校验不匹配",
+    }
+
+
 async def handle_stream_eof(ws, cmd):
-    """流结束 — fsync + close + rename + SHA-256 校验。"""
+    """流结束 — 在线程池中执行 fsync + close + rename + SHA-256 校验。"""
     stream_id = cmd.get("streamId", 0)
     cmd_id = cmd.get("id", "")
     expected_sha256 = cmd.get("sha256", "")
@@ -273,31 +244,12 @@ async def handle_stream_eof(ws, cmd):
         return
 
     try:
-        f = stream["file"]
-        f.flush()
-        os.fsync(f.fileno())
-        f.close()
-
-        actual_sha256 = stream["sha256"].hexdigest()
-        match = actual_sha256 == expected_sha256
-
-        if match:
-            final_path = str(resolve_safe_path(stream["path"]))
-            os.rename(stream["tmp_path"], final_path)
-            log.info(f"Binary stream write complete: {stream['path']} ({stream['bytes_written']} bytes)")
-        else:
-            os.unlink(stream["tmp_path"])
-            log.error(f"Binary stream SHA-256 mismatch: {stream['path']} (expected={expected_sha256[:8]}..., actual={actual_sha256[:8]}...)")
-
+        result = await run_io(_commit_stream, stream, expected_sha256)
         await ws.send(json.dumps({
             "id": cmd_id,
             "type": "stream_end",
             "streamId": stream_id,
-            "sha256": actual_sha256,
-            "bytesWritten": stream["bytes_written"],
-            "success": match,
-            "checksumMatch": match,
-            "error": None if match else "SHA-256 校验不匹配",
+            **result,
         }))
     except Exception as e:
         log.error(f"stream_eof 失败 (stream {stream_id}): {e}")
@@ -379,15 +331,13 @@ def handle_list_dir(path: str) -> dict:
 # === 命令分发 ===
 
 HANDLERS = {
-    "write_file":      handle_write_file,
-    "write_file_data": handle_write_file_data,
-    "read_file":       handle_read_file,
-    "delete_file":     handle_delete_file,
-    "mkdir":           handle_mkdir,
-    "move":            handle_move,
-    "rename":          handle_rename,
-    "stat":            handle_stat,
-    "list_dir":        handle_list_dir,
+    "read_file":   handle_read_file,
+    "delete_file": handle_delete_file,
+    "mkdir":       handle_mkdir,
+    "move":        handle_move,
+    "rename":      handle_rename,
+    "stat":        handle_stat,
+    "list_dir":    handle_list_dir,
 }
 
 
@@ -429,11 +379,7 @@ async def handle_command(cmd: dict, ws) -> dict | None:
         return {"id": cmd_id, "success": False, "error": str(exc)}
 
     try:
-        if cmd_type == "write_file":
-            result = handler(cmd)
-        elif cmd_type == "write_file_data":
-            result = handler(cmd)
-        elif cmd_type == "read_file":
+        if cmd_type == "read_file":
             result = handle_read_file(cmd)
             if result.get("success"):
                 return {
@@ -451,6 +397,9 @@ async def handle_command(cmd: dict, ws) -> dict | None:
             result = handler(path, new_path)
         elif cmd_type == "rename":
             result = handler(path, cmd.get("newName", ""))
+        elif cmd_type in ("delete_file", "list_dir"):
+            # 重 I/O（rmtree / 目录遍历 + stat）：线程池 + 限流执行，避免阻塞事件循环
+            result = await run_io(handler, path)
         else:
             result = handler(path)
 
