@@ -13,6 +13,7 @@ import {
   cmdOpen,
   cmdSetup,
 } from './commands'
+import { cmdAutoUpdate } from './autoupdate'
 
 // 由 esbuild define 注入；tsx 开发模式下未定义则回退 dev
 declare const CLI_VERSION: string | undefined
@@ -63,6 +64,8 @@ async function dispatch(
       return cmdStatus(ctx)
     case 'update':
       return cmdUpdate(ctx, { yes: flags.yes, interactive })
+    case 'autoupdate':
+      return cmdAutoUpdate(ctx, args, { interactive })
     case 'logs': {
       const target = args.find((a) => (LOG_TARGETS as string[]).includes(a)) as
         | ServiceName

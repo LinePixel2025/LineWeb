@@ -277,13 +277,43 @@ export async function cmdStatus(ctx: Context): Promise<boolean> {
 
 // ============================== 数据库同步（setup / update 共用） ==============================
 
+/** 备份 server/prisma/ 下所有 SQLite 库文件到 .lineweb-cli/db-backups/，保留最近 5 份 */
+function backupSqlite(ctx: Context): void {
+  try {
+    const backupDir = path.join(ctx.stateDir, 'db-backups')
+    fs.mkdirSync(backupDir, { recursive: true })
+    const prismaDir = path.join(ctx.serverDir, 'prisma')
+    const dbs = fs.readdirSync(prismaDir).filter((f) => f.endsWith('.db'))
+    for (const db of dbs) {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const target = path.join(backupDir, `${db}.${stamp}`)
+      fs.copyFileSync(path.join(prismaDir, db), target)
+      const backups = fs
+        .readdirSync(backupDir)
+        .filter((f) => f.startsWith(`${db}.`))
+        .sort()
+      for (const old of backups.slice(0, Math.max(0, backups.length - 5))) {
+        fs.rmSync(path.join(backupDir, old), { force: true })
+      }
+    }
+    info(`已备份数据库（${dbs.join(', ')} → ${backupDir}）`)
+  } catch {
+    // 备份失败不阻断主流程
+  }
+}
+
 /**
  * prisma db push --accept-data-loss。
  * 服务器运行时会创建 FTS5 虚拟表（drive_files_fts），不在 Prisma schema 中，
  * db push 尝试逐张删除其影子表时会失败（虚拟表删除后影子表级联消失）。
  * 因此先显式 DROP 虚拟表（服务启动时 ensureFTSTable 会从 drive_files 重建索引）。
+ *
+ * 执行前将 SQLite 库文件备份到 .lineweb-cli/db-backups/（保留最近 5 份），
+ * db push --accept-data-loss 有破坏性，生产数据需可回滚。
  */
 function pushDatabase(ctx: Context): boolean {
+  backupSqlite(ctx)
+
   try {
     const sqlFile = path.join(ctx.stateDir, 'drop-fts.sql')
     fs.writeFileSync(sqlFile, 'DROP TABLE IF EXISTS drive_files_fts;', 'utf-8')
@@ -325,8 +355,9 @@ export interface SyncResult {
 }
 
 /**
- * git fetch + reset --hard origin/master（同 CI 部署策略）。
- * 有本地改动时列出并要求确认（assumeYes 跳过确认）。
+ * git fetch + reset --hard（同 CI 部署策略）。
+ * 仓库地址与 setup 克隆一致（REPO_URL，默认 HTTPS，可用 LINEWEB_REPO_URL 覆盖），
+ * 不依赖本地 origin 配置；有本地改动时列出并要求确认（assumeYes 跳过确认）。
  */
 export async function syncToRemote(
   ctx: Context,
@@ -340,11 +371,11 @@ export async function syncToRemote(
       stdio: ['ignore', 'pipe', 'pipe'],
     })?.toString() ?? ''
 
-  info('正在从 GitHub 获取最新代码...')
+  info(`正在从 ${REPO_URL} 获取最新代码...`)
   let fetched = false
   for (let i = 1; i <= 3; i++) {
     try {
-      exec('git fetch origin master')
+      exec(`git fetch "${REPO_URL}" master`)
       fetched = true
       break
     } catch {
@@ -355,18 +386,18 @@ export async function syncToRemote(
     }
   }
   if (!fetched) {
-    err('无法连接 GitHub，请检查网络后重试')
+    err('无法连接代码仓库，请检查网络后重试')
     return { status: 'failed' }
   }
 
   const oldHead = exec('git rev-parse HEAD').trim()
-  const behind = Number(exec('git rev-list HEAD..origin/master --count').trim())
+  const behind = Number(exec('git rev-list HEAD..FETCH_HEAD --count').trim())
   if (!Number.isFinite(behind) || behind <= 0) {
     ok(`已是最新版本（${oldHead.slice(0, 7)}）`)
     return { status: 'up-to-date', oldHead, newHead: oldHead }
   }
 
-  const incoming = exec('git log --oneline HEAD..origin/master').trim().split('\n')
+  const incoming = exec('git log --oneline HEAD..FETCH_HEAD').trim().split('\n')
   info(`共 ${behind} 个新更新：`)
   for (const line of incoming.slice(0, 20)) console.log(`    ${c.dim}${line}${c.reset}`)
   if (behind > 20) console.log(`    ${c.dim}... 其余 ${behind - 20} 条省略${c.reset}`)
@@ -386,9 +417,9 @@ export async function syncToRemote(
     }
   }
 
-  info('正在更新代码（git reset --hard origin/master）...')
+  info('正在更新代码（git reset --hard FETCH_HEAD）...')
   try {
-    exec('git reset --hard origin/master')
+    exec('git reset --hard FETCH_HEAD')
   } catch {
     err('git reset 失败，请手动检查仓库状态')
     return { status: 'failed', oldHead }
@@ -412,45 +443,69 @@ export async function cmdUpdate(
       stdio: inherit ? 'inherit' : ['ignore', 'pipe', 'pipe'],
     })?.toString() ?? ''
 
-  const state0 = readState(ctx.stateFile)
-  const storageRunning = state0.storage ? isProcessAlive(state0.storage.pid) : false
-  const wasRunning = isPortListening(PORTS.server) || isPortListening(PORTS.client)
-  if (wasRunning || storageRunning) info('检测到服务正在运行，更新完成后将自动重启')
-
-  const sync = await syncToRemote(ctx, { interactive: opts.interactive, assumeYes: opts.yes })
-  if (sync.status === 'cancelled' || sync.status === 'failed') return false
-
-  // 安装依赖（根 postinstall 级联安装 server/client）
-  info('正在安装依赖（npm install）...')
+  // 互斥锁：防止手动 update 与自动更新（autoupdate）并发执行
+  const lockFile = path.join(ctx.stateDir, 'update.lock')
   try {
-    exec('npm install', true)
+    if (fs.existsSync(lockFile)) {
+      const pid = Number(fs.readFileSync(lockFile, 'utf-8'))
+      if (pid > 0 && isProcessAlive(pid)) {
+        warn(`已有更新正在进行（PID ${pid}），本次跳过`)
+        return true
+      }
+      info('检测到残留的更新锁，清理后继续')
+    }
+    fs.writeFileSync(lockFile, String(process.pid), 'utf-8')
   } catch {
-    err('依赖安装失败，请手动执行 npm install 后重试')
-    return false
+    // 锁文件不可写时不阻断主流程（无并发保护）
   }
-  ok('依赖安装完成')
 
-  // 同步数据库结构（本地 SQLite 开发库）
-  info('正在同步数据库结构（prisma db push）...')
-  if (pushDatabase(ctx)) ok('数据库同步完成')
-  else warn('数据库同步失败，请手动执行 npm run db:push 检查')
+  try {
+    const state0 = readState(ctx.stateFile)
+    const storageRunning = state0.storage ? isProcessAlive(state0.storage.pid) : false
+    const wasRunning = isPortListening(PORTS.server) || isPortListening(PORTS.client)
+    if (wasRunning || storageRunning) info('检测到服务正在运行，更新完成后将自动重启')
 
-  // 提示 CLI 自身是否有更新
-  if (sync.status === 'updated' && sync.oldHead) {
+    const sync = await syncToRemote(ctx, { interactive: opts.interactive, assumeYes: opts.yes })
+    if (sync.status === 'cancelled' || sync.status === 'failed') return false
+
+    // 安装依赖（根 postinstall 级联安装 server/client）
+    info('正在安装依赖（npm install）...')
     try {
-      const cliChanged = exec(`git diff --name-only ${sync.oldHead} HEAD -- cli/`).trim()
-      if (cliChanged) warn('本次更新包含 CLI 代码变更，请执行 npm run build:cli 重新构建 exe')
+      exec('npm install', true)
     } catch {
-      // 忽略，不影响主流程
+      err('依赖安装失败，请手动执行 npm install 后重试')
+      return false
+    }
+    ok('依赖安装完成')
+
+    // 同步数据库结构（本地 SQLite 开发库）
+    info('正在同步数据库结构（prisma db push）...')
+    if (pushDatabase(ctx)) ok('数据库同步完成')
+    else warn('数据库同步失败，请手动执行 npm run db:push 检查')
+
+    // 提示 CLI 自身是否有更新
+    if (sync.status === 'updated' && sync.oldHead) {
+      try {
+        const cliChanged = exec(`git diff --name-only ${sync.oldHead} HEAD -- cli/`).trim()
+        if (cliChanged) warn('本次更新包含 CLI 代码变更，请执行 npm run build:cli 重新构建 exe')
+      } catch {
+        // 忽略，不影响主流程
+      }
+    }
+
+    // 更新前在运行则自动重启
+    if (wasRunning || storageRunning) {
+      return cmdRestart(ctx, { storage: storageRunning })
+    }
+    info('更新前服务未在运行，需要时执行 start 启动')
+    return true
+  } finally {
+    try {
+      fs.rmSync(lockFile, { force: true })
+    } catch {
+      // 忽略
     }
   }
-
-  // 更新前在运行则自动重启
-  if (wasRunning || storageRunning) {
-    return cmdRestart(ctx, { storage: storageRunning })
-  }
-  info('更新前服务未在运行，需要时执行 start 启动')
-  return true
 }
 
 // ============================== setup ==============================

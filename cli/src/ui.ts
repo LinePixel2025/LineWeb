@@ -34,6 +34,7 @@ export const HELP_TEXT = `
   ${c.bold}restart${c.reset} [--no-storage]      重启所有服务
   ${c.bold}status${c.reset}                      查看服务运行状态
   ${c.bold}update${c.reset} [--yes]              从 GitHub 拉取最新版本并重装依赖
+  ${c.bold}autoupdate${c.reset} [on|off|status] [--interval 6h]   定时自动执行 update（默认每 6 小时，m/h/d）
   ${c.bold}logs${c.reset} [server|client|storage] [-f]   查看日志（-f 持续跟踪）
   ${c.bold}open${c.reset}                        打开浏览器访问前端页面
   ${c.bold}help${c.reset}                        显示本帮助
