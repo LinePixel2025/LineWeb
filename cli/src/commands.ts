@@ -102,10 +102,43 @@ function formatTime(iso: string): string {
 
 // ============================== start ==============================
 
+// ============================== 前端构建 ==============================
+
+/** 构建前端（cd client && npm run build，含 tsc 类型检查）。成功返回 true */
+function buildFrontend(ctx: Context): boolean {
+  info('正在构建前端（npm run build，可能需要一两分钟）...')
+  try {
+    execSync('npm run build', {
+      cwd: ctx.clientDir,
+      encoding: 'utf-8',
+      windowsHide: true,
+      stdio: 'inherit',
+    })
+    ok('前端构建完成')
+    return true
+  } catch {
+    err('前端构建失败，请检查 client 源码或依赖后重试')
+    return false
+  }
+}
+
+/** 检测前端是否已构建（dist/index.html 存在），缺失则自动构建 */
+function ensureFrontendBuilt(ctx: Context): boolean {
+  const entry = path.join(ctx.clientDir, 'dist', 'index.html')
+  if (fs.existsSync(entry)) return true
+  warn('检测到前端未构建（缺少 client/dist/index.html），正在自动构建...')
+  return buildFrontend(ctx)
+}
+
+// ============================== start ==============================
+
 export async function cmdStart(ctx: Context, opts: { storage: boolean }): Promise<boolean> {
   const state = readState(ctx.stateFile)
   const started: ServiceName[] = []
   const nodeExe = findNodeExe()
+
+  // 确保前端有构建产物（缺失时自动构建），供生产/静态托管场景使用
+  ensureFrontendBuilt(ctx)
 
   for (const svc of SERVICES) {
     if (svc.name === 'storage' && !opts.storage) {
@@ -371,24 +404,37 @@ export async function syncToRemote(
       stdio: ['ignore', 'pipe', 'pipe'],
     })?.toString() ?? ''
 
-  info(`正在从 ${REPO_URL} 获取最新代码...`)
+  const sources: { label: string; url: string }[] = [
+    { label: '直连 GitHub', url: REPO_URL },
+    ...(REPO_URL.startsWith('https://github.com/')
+      ? [{ label: 'gh-proxy 镜像', url: `https://gh-proxy.com/${REPO_URL}` }]
+      : []),
+  ]
+
   let fetched = false
-  for (let i = 1; i <= 3; i++) {
-    try {
-      exec(`git fetch "${REPO_URL}" master`)
-      fetched = true
-      break
-    } catch {
-      if (i < 3) {
-        warn(`fetch 失败（第 ${i}/3 次），5 秒后重试...`)
-        await sleep(5000)
+  let fetchSource = ''
+  for (const src of sources) {
+    info(`正在从 ${src.label}（${src.url}）获取最新代码...`)
+    for (let i = 1; i <= 3; i++) {
+      try {
+        exec(`git fetch "${src.url}" master`)
+        fetched = true
+        fetchSource = src.label
+        break
+      } catch {
+        if (i < 3) {
+          warn(`fetch 失败（第 ${i}/3 次），5 秒后重试...`)
+          await sleep(5000)
+        }
       }
     }
+    if (fetched) break
   }
   if (!fetched) {
-    err('无法连接代码仓库，请检查网络后重试')
+    err('无法连接代码仓库（直连与镜像均失败），请检查网络后重试')
     return { status: 'failed' }
   }
+  if (fetchSource !== '直连 GitHub') info(`fetch 成功（来源：${fetchSource}）`)
 
   const oldHead = exec('git rev-parse HEAD').trim()
   const behind = Number(exec('git rev-list HEAD..FETCH_HEAD --count').trim())
@@ -468,6 +514,12 @@ export async function cmdUpdate(
     const sync = await syncToRemote(ctx, { interactive: opts.interactive, assumeYes: opts.yes })
     if (sync.status === 'cancelled' || sync.status === 'failed') return false
 
+    // 已是最新版本：无代码变更，跳过依赖安装/数据库同步/前端构建/服务重启
+    if (sync.status === 'up-to-date') {
+      info('代码已是最新，跳过依赖安装、数据库同步、前端构建与服务重启')
+      return true
+    }
+
     // 安装依赖（根 postinstall 级联安装 server/client）
     info('正在安装依赖（npm install）...')
     try {
@@ -482,6 +534,9 @@ export async function cmdUpdate(
     info('正在同步数据库结构（prisma db push）...')
     if (pushDatabase(ctx)) ok('数据库同步完成')
     else warn('数据库同步失败，请手动执行 npm run db:push 检查')
+
+    // 更新包含前端源码变更，重新构建前端
+    buildFrontend(ctx)
 
     // 提示 CLI 自身是否有更新
     if (sync.status === 'updated' && sync.oldHead) {
