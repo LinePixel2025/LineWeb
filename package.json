@@ -11,6 +11,7 @@
     "postinstall": "cd server && npm install && cd ../client && npm install",
     "start": "npm run build && cd server && node scripts/generate-pg-schema.js && NODE_ENV=production npx tsx src/index.ts",
     "build": "cd client && npx vite build",
+    "build:cli": "cd cli && npm run build",
     "db:migrate": "cd server && npx prisma migrate dev",
     "db:push": "cd server && npx prisma db push",
     "db:seed": "cd server && npx prisma db seed",

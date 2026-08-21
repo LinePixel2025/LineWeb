@@ -86,6 +86,16 @@ npm run dev:client   # vite 端口 5173
 cd storage-node && python main.py
 ```
 
+### LineWeb CLI（本地管理工具）
+
+`cli/` 子项目提供一键管理本地服务的命令行工具，构建后双击 `LineWebCLI.exe` 即可交互使用：
+
+```bash
+npm run build:cli        # 构建 cli/dist/LineWebCLI.exe
+```
+
+支持 `setup`（新机器一键安装并启动）、`start` / `stop` / `restart` / `status` / `update`（从 GitHub 拉取最新版本）/ `logs` 等命令，详见 [cli/README.md](cli/README.md)。
+
 ### 数据库
 
 ```bash
@@ -144,6 +154,7 @@ lineweb/
 │   │   └── lib/         # Prisma 单例、工具函数
 │   └── prisma/          # 数据库 schema、种子数据
 ├── storage-node/        # Python 3 WebSocket 文件存储节点
+├── cli/                 # LineWeb CLI 本地管理工具（打包为 exe）
 ├── scripts/             # 运维脚本（14 个）
 ├── docs/                # API 文档、部署指南、设计系统文档
 ├── .github/workflows/   # GitHub Actions CI/CD
@@ -163,6 +174,7 @@ npm run dev:client       # vite
 
 # 构建 & 生产
 npm run build            # vite 构建 client
+npm run build:cli        # 构建 LineWeb CLI（cli/dist/LineWebCLI.exe）
 npm run start            # 构建 client → 生成 PG schema → 启动 server
 
 # 数据库
