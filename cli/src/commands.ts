@@ -27,14 +27,23 @@ interface LaunchSpec {
   cwd: string
   /** 用于展示的命令行描述 */
   display: string
+  /** 附加环境变量（如 NODE_ENV=production） */
+  env?: NodeJS.ProcessEnv
 }
+
+/** 运行模式：dev = tsx watch + vite dev；prod = 后端托管构建产物 */
+export type RunMode = 'dev' | 'prod'
 
 interface ServiceDef {
   name: ServiceName
   title: string
   port?: number
   /** 生成启动配置；缺少运行条件时返回 error */
-  prepare: (ctx: Context, nodeExe: string | null) => { spec?: LaunchSpec; error?: string }
+  prepare: (
+    ctx: Context,
+    nodeExe: string | null,
+    mode: RunMode
+  ) => { spec?: LaunchSpec; error?: string }
 }
 
 const SERVICES: ServiceDef[] = [
@@ -42,10 +51,23 @@ const SERVICES: ServiceDef[] = [
     name: 'server',
     title: '后端服务 (Express)',
     port: PORTS.server,
-    prepare: (ctx, nodeExe) => {
+    prepare: (ctx, nodeExe, mode) => {
       if (!nodeExe) return { error: '未检测到 Node.js，无法启动后端（请安装 Node 18+ 并加入 PATH）' }
       const tsxEntry = path.join(ctx.serverDir, 'node_modules', 'tsx', 'dist', 'cli.mjs')
       if (!fs.existsSync(tsxEntry)) return { error: '后端依赖未安装（缺少 tsx），请先执行 npm install' }
+      if (mode === 'prod') {
+        // 生产模式：不监听文件变化，NODE_ENV=production 让后端托管 client/dist
+        // tsx 需 --env-file=.env 加载 JWT_SECRET/STORAGE_NODE_TOKEN（tsx 默认不加载 .env）
+        return {
+          spec: {
+            file: nodeExe,
+            args: [tsxEntry, '--env-file=.env', 'src/index.ts'],
+            cwd: ctx.serverDir,
+            display: 'node tsx --env-file=.env src/index.ts (production)',
+            env: { NODE_ENV: 'production' },
+          },
+        }
+      }
       return {
         spec: {
           file: nodeExe,
@@ -60,7 +82,11 @@ const SERVICES: ServiceDef[] = [
     name: 'client',
     title: '前端开发服务 (Vite)',
     port: PORTS.client,
-    prepare: (ctx, nodeExe) => {
+    prepare: (ctx, nodeExe, mode) => {
+      if (mode === 'prod') {
+        // 生产模式：前端由后端从 client/dist 托管，无需 vite
+        return { error: '生产模式由后端托管前端（client/dist），无需启动 Vite' }
+      }
       if (!nodeExe) return { error: '未检测到 Node.js，无法启动前端（请安装 Node 18+ 并加入 PATH）' }
       const viteEntry = path.join(ctx.clientDir, 'node_modules', 'vite', 'bin', 'vite.js')
       if (!fs.existsSync(viteEntry)) return { error: '前端依赖未安装（缺少 vite），请先执行 npm install' }
@@ -132,12 +158,19 @@ function ensureFrontendBuilt(ctx: Context): boolean {
 
 // ============================== start ==============================
 
-export async function cmdStart(ctx: Context, opts: { storage: boolean }): Promise<boolean> {
+export async function cmdStart(
+  ctx: Context,
+  opts: { storage: boolean; mode?: RunMode }
+): Promise<boolean> {
+  const mode: RunMode = opts.mode ?? 'prod'
   const state = readState(ctx.stateFile)
   const started: ServiceName[] = []
   const nodeExe = findNodeExe()
 
-  // 确保前端有构建产物（缺失时自动构建），供生产/静态托管场景使用
+  if (mode === 'prod') info('生产模式：后端托管前端构建产物（client/dist）')
+  else info('开发模式：tsx watch + vite dev（热重载）')
+
+  // 确保前端有构建产物（缺失时自动构建），生产模式必须、开发模式可选
   ensureFrontendBuilt(ctx)
 
   for (const svc of SERVICES) {
@@ -157,8 +190,12 @@ export async function cmdStart(ctx: Context, opts: { storage: boolean }): Promis
       continue
     }
 
-    const { spec, error } = svc.prepare(ctx, nodeExe)
+    const { spec, error } = svc.prepare(ctx, nodeExe, mode)
     if (!spec) {
+      if (svc.name === 'client' && mode === 'prod') {
+        info('生产模式不启动 Vite（前端由后端托管）')
+        continue
+      }
       warn(error ?? `${svc.title}无法启动`)
       continue
     }
@@ -169,6 +206,7 @@ export async function cmdStart(ctx: Context, opts: { storage: boolean }): Promis
       file: spec.file,
       args: spec.args,
       logFile: logPath(ctx, svc.name),
+      env: spec.env,
     })
     if (pid <= 0) {
       err(`${svc.title}启动失败`)
@@ -210,8 +248,12 @@ export async function cmdStart(ctx: Context, opts: { storage: boolean }): Promis
   }
 
   console.log()
-  console.log(`  前端：${c.cyan}http://localhost:${PORTS.client}${c.reset}`)
-  console.log(`  后端：${c.cyan}http://localhost:${PORTS.server}${c.reset}`)
+  if (mode === 'prod') {
+    console.log(`  站点：${c.cyan}http://localhost:${PORTS.server}${c.reset}（后端托管前端 + API）`)
+  } else {
+    console.log(`  前端：${c.cyan}http://localhost:${PORTS.client}${c.reset}`)
+    console.log(`  后端：${c.cyan}http://localhost:${PORTS.server}${c.reset}`)
+  }
   console.log(`  ${c.dim}提示：logs 查看日志，stop 停止服务${c.reset}`)
   return true
 }
@@ -254,7 +296,10 @@ export async function cmdStop(ctx: Context): Promise<boolean> {
 
 // ============================== restart ==============================
 
-export async function cmdRestart(ctx: Context, opts: { storage: boolean }): Promise<boolean> {
+export async function cmdRestart(
+  ctx: Context,
+  opts: { storage: boolean; mode?: RunMode }
+): Promise<boolean> {
   info('重启所有服务...')
   const stopped = await cmdStop(ctx)
   if (!stopped) warn('停止阶段未完全清理，仍尝试继续启动...')
@@ -550,7 +595,7 @@ export async function cmdUpdate(
 
     // 更新前在运行则自动重启
     if (wasRunning || storageRunning) {
-      return cmdRestart(ctx, { storage: storageRunning })
+      return cmdRestart(ctx, { storage: storageRunning, mode: 'prod' })
     }
     info('更新前服务未在运行，需要时执行 start 启动')
     return true
@@ -710,18 +755,33 @@ export async function cmdSetup(
     warn('种子数据初始化失败，请手动执行 npm run db:seed 检查')
   }
 
-  // 6. 启动服务
+  // 6. 启动服务（默认生产模式：后端托管前端构建产物）
   info('正在启动服务...')
-  const started = await cmdStart(ctx, { storage: opts.storage })
+  const started = await cmdStart(ctx, { storage: opts.storage, mode: 'prod' })
   console.log()
   if (storageToken) {
     console.log(`  ${c.bold}网盘存储节点 Token：${c.reset}${c.cyan}${storageToken}${c.reset}`)
     console.log(`  ${c.dim}存储节点 config.json 的 token 字段（或环境变量 LINEWEB_STORAGE_TOKEN）需与此一致${c.reset}`)
   }
   if (started) {
-    console.log(`  ${c.dim}管理后台：http://localhost:${PORTS.client}/admin（admin@lineweb.dev / admin123）${c.reset}`)
+    console.log(`  ${c.dim}管理后台：http://localhost:${PORTS.server}/admin（admin@lineweb.dev / admin123）${c.reset}`)
   }
   return started
+}
+
+// ============================== token ==============================
+
+/** 查询网盘存储节点 Token（server/.env 的 STORAGE_NODE_TOKEN） */
+export function cmdToken(ctx: Context): boolean {
+  const envPath = path.join(ctx.serverDir, '.env')
+  const token = readEnvValue(envPath, 'STORAGE_NODE_TOKEN')
+  if (token) {
+    console.log(`  网盘存储节点 Token：${c.cyan}${c.bold}${token}${c.reset}`)
+    console.log(`  ${c.dim}存储节点 config.json 的 token 字段（或环境变量 LINEWEB_STORAGE_TOKEN）需与此一致${c.reset}`)
+    return true
+  }
+  err(`未找到 STORAGE_NODE_TOKEN（${envPath} 中未配置）`)
+  return false
 }
 
 // ============================== logs ==============================

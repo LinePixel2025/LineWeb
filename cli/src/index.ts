@@ -13,6 +13,7 @@ import {
   cmdLogs,
   cmdOpen,
   cmdSetup,
+  cmdToken,
 } from './commands'
 import { cmdAutoUpdate } from './autoupdate'
 
@@ -33,6 +34,7 @@ interface Flags {
   yes: boolean
   noStorage: boolean
   follow: boolean
+  dev: boolean
 }
 
 function parseFlags(args: string[]): Flags {
@@ -40,6 +42,7 @@ function parseFlags(args: string[]): Flags {
     yes: args.includes('--yes') || args.includes('-y'),
     noStorage: args.includes('--no-storage'),
     follow: args.includes('-f') || args.includes('--follow'),
+    dev: args.includes('--dev'),
   }
 }
 
@@ -56,17 +59,19 @@ async function dispatch(
     case 'setup':
       return cmdSetup(ctx, { storage: !flags.noStorage, interactive })
     case 'start':
-      return cmdStart(ctx, { storage: !flags.noStorage })
+      return cmdStart(ctx, { storage: !flags.noStorage, mode: flags.dev ? 'dev' : 'prod' })
     case 'stop':
       return cmdStop(ctx)
     case 'restart':
-      return cmdRestart(ctx, { storage: !flags.noStorage })
+      return cmdRestart(ctx, { storage: !flags.noStorage, mode: flags.dev ? 'dev' : 'prod' })
     case 'status':
       return cmdStatus(ctx)
     case 'update':
       return cmdUpdate(ctx, { yes: flags.yes, interactive })
     case 'autoupdate':
       return cmdAutoUpdate(ctx, args, { interactive })
+    case 'token':
+      return cmdToken(ctx)
     case 'logs': {
       const target = args.find((a) => (LOG_TARGETS as string[]).includes(a)) as
         | ServiceName

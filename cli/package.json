@@ -1,6 +1,6 @@
 {
   "name": "lineweb-cli",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "private": true,
   "description": "LineWeb 本地管理命令行工具（启动/停止/重启/更新）",
   "type": "module",

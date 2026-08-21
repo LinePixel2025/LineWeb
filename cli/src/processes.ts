@@ -86,6 +86,8 @@ export interface SpawnOptions {
   args: string[]
   /** 追加写入的日志文件 */
   logFile: string
+  /** 附加环境变量（合并到当前进程环境，如 NODE_ENV） */
+  env?: NodeJS.ProcessEnv
 }
 
 /**
@@ -100,7 +102,7 @@ export function startDetached(opts: SpawnOptions): number {
       detached: true,
       windowsHide: true,
       stdio: ['ignore', fd, fd],
-      env: { ...process.env },
+      env: { ...process.env, ...opts.env },
     })
     child.unref()
     child.on('error', () => {
