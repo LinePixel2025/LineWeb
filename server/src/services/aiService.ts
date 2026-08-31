@@ -56,6 +56,50 @@ export function maskApiKey(key: string): string {
 }
 
 /**
+ * 读取 AI 配置并校验可用性（对话与写作功能共用 AI 设置页填写的 API）
+ */
+async function assertAiReady(): Promise<AiConfigData> {
+  const config = await getAiConfig()
+  if (!config.isEnabled) {
+    throw new AppError('AI 助手未启用，请先在 AI 设置中开启', 503)
+  }
+  if (!config.apiKey) {
+    throw new AppError('AI 未配置 API Key，请在 AI 设置中填写', 503)
+  }
+  return config
+}
+
+/**
+ * 按配置创建 OpenAI 客户端（baseUrl 兼容各家 API 格式）
+ */
+function createClient(config: AiConfigData, timeoutMs = 30_000): OpenAI {
+  return new OpenAI({
+    apiKey: config.apiKey,
+    baseURL: config.baseUrl || undefined,
+    timeout: timeoutMs,
+    maxRetries: 1,
+  })
+}
+
+/**
+ * 统一映射上游 AI 服务异常为 AppError
+ */
+function toAiError(err: unknown, label: string): AppError {
+  const errMsg = err instanceof Error ? err.message : 'Unknown error'
+  console.error(`[AI ${label}] 调用失败:`, errMsg)
+  if (errMsg.includes('401') || errMsg.includes('Incorrect API key')) {
+    return new AppError('AI API Key 无效，请联系管理员检查配置', 502)
+  }
+  if (errMsg.includes('429') || errMsg.includes('Rate limit')) {
+    return new AppError('AI 服务请求过于频繁，请稍后再试', 429)
+  }
+  if (errMsg.includes('timeout') || errMsg.includes('ETIMEDOUT')) {
+    return new AppError('AI 服务响应超时，请稍后再试', 504)
+  }
+  return new AppError('AI 服务暂时不可用，请稍后再试', 502)
+}
+
+/**
  * 获取指定日期的日期键（YYYY-MM-DD，Asia/Shanghai UTC+8，无夏令时）
  */
 function getDateKey(offsetDays: number): string {
@@ -201,26 +245,12 @@ export async function chat(
   history: { role: 'user' | 'assistant'; content: string }[] = [],
   userId?: number,
 ): Promise<{ reply: string; model: string }> {
-  const config = await getAiConfig()
-
-  if (!config.isEnabled) {
-    throw new AppError('AI 助手未启用', 503)
-  }
-
-  if (!config.apiKey) {
-    throw new AppError('AI 助手未配置 API Key，请联系管理员', 503)
-  }
+  const config = await assertAiReady()
 
   // 构建完整的 system prompt（含网站内容）
   const systemPrompt = await buildSystemPrompt(config.systemPrompt, message, userId)
 
-  // 初始化 OpenAI 客户端
-  const client = new OpenAI({
-    apiKey: config.apiKey,
-    baseURL: config.baseUrl || undefined,
-    timeout: 30_000,
-    maxRetries: 1,
-  })
+  const client = createClient(config)
 
   // 组装消息
   const messages: ChatMessage[] = [
@@ -244,20 +274,162 @@ export async function chat(
       model: config.model,
     }
   } catch (err: unknown) {
-    const errMsg = err instanceof Error ? err.message : 'Unknown error'
-    console.error('[AI Chat] 调用失败:', errMsg)
-
-    // 区分常见错误类型
-    if (errMsg.includes('401') || errMsg.includes('Incorrect API key')) {
-      throw new AppError('AI API Key 无效，请联系管理员检查配置', 502)
-    }
-    if (errMsg.includes('429') || errMsg.includes('Rate limit')) {
-      throw new AppError('AI 服务请求过于频繁，请稍后再试', 429)
-    }
-    if (errMsg.includes('timeout') || errMsg.includes('ETIMEDOUT')) {
-      throw new AppError('AI 服务响应超时，请稍后再试', 504)
-    }
-
-    throw new AppError('AI 服务暂时不可用，请稍后再试', 502)
+    throw toAiError(err, 'Chat')
   }
+}
+
+/* ============================================================
+   写作 AI — 辅助文章创作（摘要 / 润色 / 标题 / 起稿）
+   复用 AI 设置页配置的 API；system prompt 为写作专用，
+   不注入站点问答上下文（文章列表、评论、屏幕时间等）。
+   ============================================================ */
+
+export type PolishAction = 'polish' | 'expand' | 'fix'
+
+const POLISH_INSTRUCTIONS: Record<PolishAction, string> = {
+  polish: '在保持原意的前提下润色这段文字：提升流畅度与文采，消除口语化和冗余表达。',
+  expand: '对这段文字进行扩写：补充细节、例证或解释，使内容更充实，篇幅约为原文的 1.5-2 倍。',
+  fix: '修正这段文字中的错别字、标点和语法错误，不改变原有表达风格和用词习惯。',
+}
+
+async function completeForWriting(
+  systemPrompt: string,
+  userPrompt: string,
+  opts: { maxTokens: number; temperature: number; label: string },
+): Promise<{ text: string; model: string }> {
+  const config = await assertAiReady()
+  const client = createClient(config)
+  try {
+    const completion = await client.chat.completions.create({
+      model: config.model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      max_tokens: opts.maxTokens,
+      temperature: opts.temperature,
+    })
+    return { text: completion.choices[0]?.message?.content?.trim() || '', model: config.model }
+  } catch (err: unknown) {
+    throw toAiError(err, opts.label)
+  }
+}
+
+/** AI 生成文章摘要（120 字以内） */
+export async function aiSummarize(contentHtml: string): Promise<{ summary: string; model: string }> {
+  const text = stripHtmlForWriting(contentHtml)
+  if (!text) throw new AppError('文章正文为空，无法生成摘要', 400)
+  const { text: summary, model } = await completeForWriting(
+    '你是一名专业的中文编辑。请为用户提供的文章正文生成一段摘要：不超过 120 字，准确概括主题与核心观点，不要照抄开头句子，不要加任何前缀或引号，直接输出摘要文本。',
+    `文章正文：\n\n${text}`,
+    { maxTokens: 300, temperature: 0.5, label: 'Write/Summary' },
+  )
+  if (!summary) throw new AppError('AI 未返回摘要，请重试', 502)
+  return { summary: summary.slice(0, 500), model }
+}
+
+/** AI 润色/扩写/纠错选中文字 */
+export async function aiPolish(text: string, action: PolishAction): Promise<{ text: string; model: string }> {
+  const { text: result, model } = await completeForWriting(
+    `你是一名专业的中文写作助手。${POLISH_INSTRUCTIONS[action]}只输出处理后的文本本身，不要解释、不要加引号或前后缀。如果输入是 HTML 片段，请保持相同的 HTML 标签结构输出。`,
+    `待处理文本：\n\n${text}`,
+    { maxTokens: 1500, temperature: 0.6, label: 'Write/Polish' },
+  )
+  if (!result) throw new AppError('AI 未返回结果，请重试', 502)
+  return { text: result, model }
+}
+
+/** AI 生成标题建议（3-5 个） */
+export async function aiTitles(contentHtml: string, summary?: string): Promise<{ titles: string[]; model: string }> {
+  const text = stripHtmlForWriting(contentHtml)
+  if (!text) throw new AppError('文章正文为空，无法生成标题', 400)
+  const { text: raw, model } = await completeForWriting(
+    '你是一名擅长起标题的中文编辑。根据文章内容生成 5 个风格各异、吸引人的文章标题：每行一个，不加编号、引号、书名号或解释。',
+    (summary ? `摘要：${summary}\n\n` : '') + `文章正文：\n\n${text}`,
+    { maxTokens: 400, temperature: 0.9, label: 'Write/Titles' },
+  )
+  const titles = raw
+    .split('\n')
+    .map(line => line.replace(/^[\d\-.•]+\s*/, '').replace(/^《|》$/g, '').trim())
+    .filter(Boolean)
+    .slice(0, 5)
+  if (titles.length === 0) throw new AppError('AI 未返回标题，请重试', 502)
+  return { titles, model }
+}
+
+/** AI 起稿（流式）：根据主题/提纲生成 Markdown 文章草稿 */
+export async function streamDraft(
+  input: { prompt: string; outline?: string; tone?: string; length?: string },
+  handlers: { onChunk: (delta: string) => void; onDone: (model: string) => void; onError: (message: string) => void },
+): Promise<void> {
+  let config: AiConfigData
+  try {
+    config = await assertAiReady()
+  } catch (err) {
+    handlers.onError(err instanceof AppError ? err.message : 'AI 服务暂不可用')
+    return
+  }
+
+  const TONES: Record<string, string> = {
+    formal: '正式、严谨',
+    casual: '轻松、口语化',
+    tech: '技术向、准确、多用代码示例',
+    story: '叙事性强、生动',
+  }
+  const LENGTHS: Record<string, string> = {
+    short: '600-900 字',
+    medium: '1200-1800 字',
+    long: '2500-3500 字',
+  }
+
+  const systemPrompt = [
+    '你是一名专业的中文文章作者。根据用户提供的主题与要求撰写一篇结构完整的文章。',
+    '使用 Markdown 格式输出：用 ## 划分小节标题，正文用段落组织，可适当使用列表、引用和代码块。',
+    '只输出文章本身（Markdown），不要输出任何与文章无关的说明、前言或总结性客套。',
+    input.tone && TONES[input.tone] ? `文风要求：${TONES[input.tone]}。` : '',
+    input.length && LENGTHS[input.length] ? `篇幅要求：约${LENGTHS[input.length]}。` : '',
+  ].filter(Boolean).join('\n')
+
+  const userPrompt = [
+    `主题与要求：${input.prompt}`,
+    input.outline ? `大纲（供参考，可酌情调整）：\n${input.outline}` : '',
+  ].filter(Boolean).join('\n\n')
+
+  const client = createClient(config, 120_000)
+
+  try {
+    const stream = await client.chat.completions.create({
+      model: config.model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      max_tokens: 4000,
+      temperature: 0.7,
+      stream: true,
+    })
+
+    for await (const part of stream) {
+      const delta = part.choices[0]?.delta?.content
+      if (delta) handlers.onChunk(delta)
+    }
+    handlers.onDone(config.model)
+  } catch (err: unknown) {
+    handlers.onError(toAiError(err, 'Write/Draft').message)
+  }
+}
+
+/** 去 HTML 标签用于送入写作模型（限制长度防止 token 浪费） */
+function stripHtmlForWriting(html: string, maxChars = 6000): string {
+  const text = html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return text.length > maxChars ? text.slice(0, maxChars) + '…' : text
 }

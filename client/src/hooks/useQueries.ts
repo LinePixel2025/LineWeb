@@ -10,6 +10,11 @@ interface PostsListItem {
   summary: string | null
   slug: string
   createdAt: string
+  updatedAt?: string
+  /** 服务端计算的纯文本摘要（summary 优先，否则正文截断） */
+  excerpt: string
+  /** 预估阅读时长（分钟） */
+  readingTime: number
   author: { username: string }
 }
 

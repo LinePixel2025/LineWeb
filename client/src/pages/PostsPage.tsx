@@ -1,18 +1,8 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { usePostsList } from '../hooks/useQueries'
 import { GitHubButton, GitHubInput } from '../components/ui'
 import Pagination from '../components/Pagination'
-
-interface PostSummary {
-  id: number; title: string; summary: string | null
-  slug: string; createdAt: string; author: { username: string }
-}
-interface PostsResponse { posts: PostSummary[]; total: number; page: number; totalPages: number }
-
-function RepoCircle({ letter }: { letter: string }) {
-  return <span className="gh-repo-circle">{letter}</span>
-}
+import PostListItem, { type PostListItemData } from '../components/PostListItem'
 
 export default function PostsPage() {
   const [page, setPage] = useState(1)
@@ -84,25 +74,9 @@ export default function PostsPage() {
         </div>
       ) : (
         <>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div className="gh-post-list">
             {data?.posts.map((post) => (
-              <div key={post.id} className="gh-list-item">
-                <RepoCircle letter={post.title.charAt(0).toUpperCase()} />
-                <div className="gh-list-item-content">
-                  <Link to={`/posts/${post.slug}`} className="gh-list-item-title">
-                    {post.title}
-                  </Link>
-                  {post.summary && (
-                    <p className="gh-text-secondary" style={{ fontSize: '0.82rem', margin: '2px 0 0' }}>
-                      {post.summary}
-                    </p>
-                  )}
-                  <div className="gh-list-item-meta">
-                    <span className="gh-text-tertiary">{post.author.username}</span>
-                    <span className="gh-text-tertiary">{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
-                  </div>
-                </div>
-              </div>
+              <PostListItem key={post.id} post={post as PostListItemData} />
             ))}
           </div>
 

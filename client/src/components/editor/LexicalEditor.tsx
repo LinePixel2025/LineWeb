@@ -7,6 +7,8 @@ import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary'
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin'
 import { ListPlugin } from '@lexical/react/LexicalListPlugin'
 import { LinkPlugin } from '@lexical/react/LexicalLinkPlugin'
+import { MarkdownShortcutPlugin } from '@lexical/react/LexicalMarkdownShortcutPlugin'
+import { TRANSFORMERS } from '@lexical/markdown'
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from '@lexical/html'
 import { $createParagraphNode, $getRoot } from 'lexical'
 import { HeadingNode, QuoteNode } from '@lexical/rich-text'
@@ -99,6 +101,8 @@ export default function LexicalEditor({
         <ListPlugin />
         <LinkPlugin />
         <CodeHighlightPlugin />
+        {/* Markdown 快捷语法：输入 # 、- 、1. 、> 等即时转换 */}
+        <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
       </div>
     </LexicalComposer>
   )

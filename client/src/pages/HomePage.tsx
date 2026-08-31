@@ -5,15 +5,7 @@ import { GitHubButton } from '../components/ui'
 import UserAvatar from '../components/UserAvatar'
 import DigitalHealthCard from '../components/DigitalHealthCard/DigitalHealthCard'
 import AiAssistant from '../components/AiAssistant'
-
-interface PostPreview {
-  id: number
-  title: string
-  summary: string | null
-  slug: string
-  createdAt: string
-  author: { username: string }
-}
+import PostListItem, { PostFeaturedCard, type PostListItemData } from '../components/PostListItem'
 
 interface FeaturedPage {
   id: number
@@ -23,16 +15,12 @@ interface FeaturedPage {
   featureDesc: string | null
 }
 
-function RepoCircle({ letter }: { letter: string }) {
-  return <span className="gh-repo-circle">{letter}</span>
-}
-
 export default function HomePage() {
   const { user } = useAuth()
   const { data: postsData } = usePostsList(1, undefined, undefined, 3)
   const { data: statsData } = usePublicStats()
   const { data: featuredData } = useFeaturedPages()
-  const recentPosts = (postsData?.posts ?? []) as PostPreview[]
+  const recentPosts = (postsData?.posts ?? []) as PostListItemData[]
   const stats = statsData as { posts: number; users: number; comments: number; pages: number } | undefined
   const featuredPages = (featuredData?.pages ?? []) as FeaturedPage[]
 
@@ -85,30 +73,19 @@ export default function HomePage() {
                 <GitHubButton variant="ghost" href="/posts" style={{ marginTop: '8px' }}>浏览文章库</GitHubButton>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {recentPosts.map((post) => (
-                  <div key={post.id} className="gh-list-item">
-                    <RepoCircle letter={post.title.charAt(0).toUpperCase()} />
-                    <div className="gh-list-item-content">
-                      <Link to={`/posts/${post.slug}`} className="gh-list-item-title">
-                        {post.title}
-                      </Link>
-                      {post.summary && (
-                        <p className="gh-text-secondary" style={{ fontSize: '0.82rem', margin: '2px 0 0' }}>
-                          {post.summary}
-                        </p>
-                      )}
-                      <div className="gh-list-item-meta">
-                        <span className="gh-text-tertiary">{post.author.username}</span>
-                        <span className="gh-text-tertiary">{new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
-                      </div>
-                    </div>
+              <>
+                <PostFeaturedCard post={recentPosts[0]} />
+                {recentPosts.length > 1 && (
+                  <div className="gh-post-list">
+                    {recentPosts.slice(1).map(post => (
+                      <PostListItem key={post.id} post={post} />
+                    ))}
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
 
-            <div style={{ marginTop: '12px' }}>
+            <div>
               <GitHubButton variant="ghost" href="/posts" size="sm">查看全部文章 →</GitHubButton>
             </div>
           </div>
@@ -117,48 +94,48 @@ export default function HomePage() {
           <div className="gh-dashboard-sidebar">
             {stats && (
               <div className="gh-box">
-                <h4 className="gh-text-secondary" style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 8px' }}>站点统计</h4>
-                <div className="gh-stats-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <h4 className="gh-box-heading">站点统计</h4>
+                <div className="gh-stats-grid">
                   {[
                     { label: '文章', count: stats.posts },
                     { label: '页面', count: stats.pages },
                     { label: '用户', count: stats.users },
                     { label: '评论', count: stats.comments },
                   ].map(({ label, count }) => (
-                    <div key={label} className="gh-box" style={{ textAlign: 'center', padding: '10px' }}>
-                      <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{count}</div>
-                      <div className="gh-text-tertiary" style={{ fontSize: '0.75rem' }}>{label}</div>
+                    <div key={label} className="gh-stat-cell">
+                      <div className="gh-stat-cell-count">{count}</div>
+                      <div className="gh-stat-cell-label">{label}</div>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            <div className="gh-box" style={{ marginTop: '16px' }}>
-              <h4 className="gh-text-secondary" style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px' }}>快捷导航</h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <Link to="/posts" className="gh-btn gh-btn--ghost gh-btn--full" style={{ justifyContent: 'flex-start' } as React.CSSProperties}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px', flexShrink: 0 }}>
+            <div className="gh-box">
+              <h4 className="gh-box-heading">快捷导航</h4>
+              <div className="gh-nav-links">
+                <Link to="/posts" className="gh-btn gh-btn--ghost gh-btn--full gh-nav-link">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
                   </svg>
                   文章列表
                 </Link>
-                <Link to="/features" className="gh-btn gh-btn--ghost gh-btn--full" style={{ justifyContent: 'flex-start' } as React.CSSProperties}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px', flexShrink: 0 }}>
+                <Link to="/features" className="gh-btn gh-btn--ghost gh-btn--full gh-nav-link">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
                   </svg>
                   功能页面
                 </Link>
                 {user && (
-                  <Link to="/profile" className="gh-btn gh-btn--ghost gh-btn--full" style={{ justifyContent: 'flex-start' } as React.CSSProperties}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px', flexShrink: 0 }}>
+                  <Link to="/profile" className="gh-btn gh-btn--ghost gh-btn--full gh-nav-link">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 1 0-16 0" />
                     </svg>
                     个人中心
                   </Link>
                 )}
-                <Link to="/calculator" className="gh-btn gh-btn--ghost gh-btn--full" style={{ justifyContent: 'flex-start' } as React.CSSProperties}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px', flexShrink: 0 }}>
+                <Link to="/calculator" className="gh-btn gh-btn--ghost gh-btn--full gh-nav-link">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="4" y="2" width="16" height="20" rx="2" /><line x1="8" y1="6" x2="16" y2="6" />
                   </svg>
                   计算器
@@ -167,22 +144,15 @@ export default function HomePage() {
             </div>
 
             {featuredPages.length > 0 && (
-              <div className="gh-box" style={{ marginTop: '16px' }}>
-                <h4 className="gh-text-secondary" style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px' }}>推荐功能</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div className="gh-box">
+                <h4 className="gh-box-heading">推荐功能</h4>
+                <div className="gh-featured-list">
                   {featuredPages.map((page) => (
-                    <Link
-                      key={page.id}
-                      to={`/page/${page.slug}`}
-                      className="gh-list-item"
-                      style={{ textDecoration: 'none', color: 'inherit' }}
-                    >
-                      <span style={{ fontSize: '1.1rem' }}>{page.featureEmoji || '📄'}</span>
+                    <Link key={page.id} to={`/page/${page.slug}`} className="gh-list-item gh-featured-item">
+                      <span className="gh-featured-emoji">{page.featureEmoji || '📄'}</span>
                       <div className="gh-list-item-content">
                         <span className="gh-list-item-title">{page.title}</span>
-                        {page.featureDesc && (
-                          <span className="gh-text-tertiary" style={{ fontSize: '0.75rem' }}>{page.featureDesc}</span>
-                        )}
+                        {page.featureDesc && <span className="gh-featured-desc">{page.featureDesc}</span>}
                       </div>
                     </Link>
                   ))}

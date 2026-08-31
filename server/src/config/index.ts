@@ -157,3 +157,26 @@ export const aiConfigUpdateSchema = z.object({
   systemPrompt: z.string().max(3000).optional(),
   isEnabled: z.boolean().optional(),
 })
+
+// === AI 写作辅助 Schemas（/ai/write/*，管理端专用） ===
+
+export const aiWriteSummarySchema = z.object({
+  content: z.string().min(1, '正文不能为空').max(20000, '正文过长，请缩减后重试'),
+})
+
+export const aiWritePolishSchema = z.object({
+  text: z.string().min(1, '请先选中要处理的文字').max(6000, '选中文字过长'),
+  action: z.enum(['polish', 'expand', 'fix']).optional().default('polish'),
+})
+
+export const aiWriteTitlesSchema = z.object({
+  content: z.string().min(1, '正文不能为空').max(20000, '正文过长，请缩减后重试'),
+  summary: z.string().max(500).optional(),
+})
+
+export const aiWriteDraftSchema = z.object({
+  prompt: z.string().min(1, '请输入主题或要求').max(2000, '描述过长'),
+  outline: z.string().max(2000).optional(),
+  tone: z.enum(['formal', 'casual', 'tech', 'story']).optional(),
+  length: z.enum(['short', 'medium', 'long']).optional(),
+})

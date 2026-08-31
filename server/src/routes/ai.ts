@@ -1,8 +1,24 @@
 import { Router, Request, Response } from 'express'
 import { authenticate, requireAdmin, optionalAuthenticate } from '../middleware/auth.js'
 import { asyncHandler } from '../lib/asyncHandler.js'
-import { aiChatSchema, aiConfigUpdateSchema } from '../config/index.js'
-import { getAiConfig, updateAiConfig, maskApiKey, chat } from '../services/aiService.js'
+import {
+  aiChatSchema,
+  aiConfigUpdateSchema,
+  aiWriteSummarySchema,
+  aiWritePolishSchema,
+  aiWriteTitlesSchema,
+  aiWriteDraftSchema,
+} from '../config/index.js'
+import {
+  getAiConfig,
+  updateAiConfig,
+  maskApiKey,
+  chat,
+  aiSummarize,
+  aiPolish,
+  aiTitles,
+  streamDraft,
+} from '../services/aiService.js'
 import { AppError } from '../middleware/errorHandler.js'
 
 const router = Router()
@@ -37,6 +53,80 @@ router.post('/chat', optionalAuthenticate, asyncHandler(async (req: Request, res
   const { message, history } = parsed.data
   const result = await chat(message, history as { role: 'user' | 'assistant'; content: string }[], req.user?.userId)
   res.json(result)
+}))
+
+/**
+ * POST /api/ai/write/summary
+ * 管理员接口：AI 根据文章正文生成摘要
+ * 请求体: { content: string }  响应: { summary, model }
+ */
+router.post('/write/summary', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const parsed = aiWriteSummarySchema.safeParse(req.body)
+  if (!parsed.success) {
+    throw new AppError('请求参数无效: ' + parsed.error.errors.map(e => e.message).join('; '), 400)
+  }
+  res.json(await aiSummarize(parsed.data.content))
+}))
+
+/**
+ * POST /api/ai/write/polish
+ * 管理员接口：AI 润色/扩写/纠错选中文字
+ * 请求体: { text, action }  响应: { text, model }
+ */
+router.post('/write/polish', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const parsed = aiWritePolishSchema.safeParse(req.body)
+  if (!parsed.success) {
+    throw new AppError('请求参数无效: ' + parsed.error.errors.map(e => e.message).join('; '), 400)
+  }
+  res.json(await aiPolish(parsed.data.text, parsed.data.action))
+}))
+
+/**
+ * POST /api/ai/write/titles
+ * 管理员接口：AI 根据正文生成标题建议
+ * 请求体: { content, summary? }  响应: { titles: string[], model }
+ */
+router.post('/write/titles', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const parsed = aiWriteTitlesSchema.safeParse(req.body)
+  if (!parsed.success) {
+    throw new AppError('请求参数无效: ' + parsed.error.errors.map(e => e.message).join('; '), 400)
+  }
+  res.json(await aiTitles(parsed.data.content, parsed.data.summary))
+}))
+
+/**
+ * POST /api/ai/write/draft
+ * 管理员接口：AI 流式起稿（SSE）
+ * 请求体: { prompt, outline?, tone?, length? }
+ * 响应: text/event-stream，事件 data 为 { delta } | { done, model } | { error }
+ */
+router.post('/write/draft', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const parsed = aiWriteDraftSchema.safeParse(req.body)
+  if (!parsed.success) {
+    throw new AppError('请求参数无效: ' + parsed.error.errors.map(e => e.message).join('; '), 400)
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+  res.setHeader('Cache-Control', 'no-cache, no-transform')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no') // 禁用 nginx 缓冲
+  res.flushHeaders()
+
+  const send = (payload: unknown) => {
+    res.write(`data: ${JSON.stringify(payload)}\n\n`)
+  }
+
+  await streamDraft(parsed.data, {
+    onChunk: delta => send({ delta }),
+    onDone: model => {
+      send({ done: true, model })
+      res.end()
+    },
+    onError: message => {
+      send({ error: message })
+      res.end()
+    },
+  })
 }))
 
 /**

@@ -68,7 +68,8 @@ app.use(cors({
 }))
 
 // 压缩响应 — compression supports gzip/deflate/brotli based on Accept-Encoding
-app.use(compression({ threshold: '2kb', filter: (req, _res) => !req.path.includes('/proxy') && !req.path.includes('/download') }))
+// 跳过 /proxy、/download（流式）与 /ai/write/draft（SSE 不能被压缩缓冲）
+app.use(compression({ threshold: '2kb', filter: (req, _res) => !req.path.includes('/proxy') && !req.path.includes('/download') && !req.path.includes('/ai/write/draft') }))
 
 app.set('trust proxy', 1)  // 信任反向代理，用于 rate-limiter 正确获取客户端 IP
 

@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma.js'
 import { parsePagination, parseId } from '../lib/utils.js'
+import { buildExcerpt, calcReadingTime } from '../lib/textStats.js'
 import type { Prisma } from '@prisma/client'
 
 export interface PostCreateInput {
@@ -26,6 +27,7 @@ export interface PaginatedPosts {
   totalPages: number
 }
 
+// 列表查询：content 仅用于服务端计算 excerpt/readingTime，不返回给客户端
 const postSelectPublic = {
   id: true,
   title: true,
@@ -33,6 +35,7 @@ const postSelectPublic = {
   slug: true,
   createdAt: true,
   updatedAt: true,
+  content: true,
   author: { select: { username: true } },
 } satisfies Prisma.PostSelect
 
@@ -73,7 +76,13 @@ export async function getPublishedPosts(
     prisma.post.count({ where }),
   ])
 
-  return { posts, total, page, limit, totalPages: Math.ceil(total / limit) }
+  const mapped = posts.map(({ content, ...rest }) => ({
+    ...rest,
+    excerpt: buildExcerpt(rest.summary, content),
+    readingTime: calcReadingTime(content),
+  }))
+
+  return { posts: mapped, total, page, limit, totalPages: Math.ceil(total / limit) }
 }
 
 /**
