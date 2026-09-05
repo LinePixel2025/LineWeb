@@ -53,17 +53,25 @@ function OnChangePlugin({ onChange }: { onChange: (html: string) => void }) {
    LexicalEditor — 主组件
    =========================================================== */
 
+export interface LexicalEditorProps {
+  initialHtml?: string
+  onChange?: (html: string) => void
+  placeholder?: string
+  /**
+   * 仅在「外部整体替换正文」时递增（如恢复本地草稿），迫使 Composer 重建。
+   * 不能由 initialHtml 派生 key：编辑器自身的 onChange 回写会让 key 翻转，
+   * 新建文章敲第一个字就会重挂载，导致丢焦点、滚动位置归零。
+   */
+  resetKey?: number
+}
+
+/* 高度等布局全部交给 CSS（.lex-* / .article-editor-work）控制，组件不设内联尺寸 */
 export default function LexicalEditor({
   initialHtml = '',
   onChange,
   placeholder = '开始写作...',
-  height = 420,
-}: {
-  initialHtml?: string
-  onChange?: (html: string) => void
-  placeholder?: string
-  height?: number | string
-}) {
+  resetKey = 0,
+}: LexicalEditorProps) {
   // editorState 工厂：LexicalComposer 创建时执行一次。
   // 工厂接收 editor 作为参数，此时处于 editor.update() 上下文。
   const editorState: InitialConfigType['editorState'] = initialHtml
@@ -86,12 +94,12 @@ export default function LexicalEditor({
   }
 
   return (
-    <LexicalComposer key={initialHtml ? 'inited' : 'blank'} initialConfig={config}>
+    <LexicalComposer key={`article-${resetKey}`} initialConfig={config}>
       <div className="lex-editor">
         <EditorToolbar />
-        <div className="lex-body" style={{ minHeight: height }}>
+        <div className="lex-body">
           <RichTextPlugin
-            contentEditable={<ContentEditable className="lex-content" style={{ minHeight: height }} />}
+            contentEditable={<ContentEditable className="lex-content" />}
             placeholder={<div className="lex-placeholder">{placeholder}</div>}
             ErrorBoundary={LexicalErrorBoundary}
           />

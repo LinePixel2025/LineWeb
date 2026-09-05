@@ -69,6 +69,7 @@ export default function EditorPage() {
   const [pendingDraft, setPendingDraft] = useState<DraftSnapshot | null>(null)
   const [aiLoading, setAiLoading] = useState<'' | 'summary' | 'titles'>('')
   const [titleIdeas, setTitleIdeas] = useState<string[]>([])
+  const [editorReset, setEditorReset] = useState(0)
   const loadedRef = useRef(false)
   const flashTimer = useRef<number | undefined>(undefined)
 
@@ -128,6 +129,8 @@ export default function EditorPage() {
     setTitle(d.title); setSlug(d.slug); setManualSlug(d.manualSlug)
     setSummary(d.summary); setContent(d.content); setPublished(d.published)
     setPendingDraft(null)
+    // 草稿是「外部整体替换正文」，需重建 Composer 才会读入新内容
+    setEditorReset(n => n + 1)
     loadedRef.current = true
   }
 
@@ -280,7 +283,7 @@ export default function EditorPage() {
               initialHtml={content}
               onChange={html => setContent(html)}
               placeholder="开始写作…（输入 # 、- 、1. 、> 可快捷排版）"
-              height="calc(100vh - 300px)"
+              resetKey={editorReset}
             />
           )}
         </form>
