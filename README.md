@@ -15,8 +15,8 @@ React 19 SPA 前端 + Express 4 REST API 后端 + Python 3 WebSocket 文件存�
 - 📊 **屏幕时间追踪** — 跨设备使用统计与目标管理
 - 🌓 **智能主题** — 亮色/暗色模式，跟随系统或手动切换
 - 📱 **响应式设计** — 桌面端与移动端完美适配
-- 🐳 **Docker 部署** — 多阶段构建，Nginx 反代 + Brotli 压缩
-- 🔄 **CI/CD** — GitHub Actions 自动部署
+- 🖥️ **本地部署** — Windows 本地服务器运行，LineWeb CLI 一键管理
+- 🌐 **Cloudflare 内网穿透** — 公网域名直连本地服务，无需云服务器
 
 ## 技术栈
 
@@ -24,10 +24,10 @@ React 19 SPA 前端 + Express 4 REST API 后端 + Python 3 WebSocket 文件存�
 |------|------|
 | 前端 | React 19, Vite 6, TypeScript, React Router 7, TanStack React Query |
 | 后端 | Express 4, Prisma 6, JWT, Zod, tsx 运行时 |
-| 数据库 | SQLite（开发）/ PostgreSQL（生产），自动转换 |
+| 数据库 | SQLite（本地文件，开发与生产一致） |
 | 存储节点 | Python 3 + websockets 库，WebSocket 二进制流传输 |
 | 设计 | GitHub Primer 风格，CSS 变量令牌、`.gh-*` BEM 组件和 light/dark/auto 主题 |
-| 部署 | Docker + Nginx + GitHub Actions → 云服务器 |
+| 部署 | 本地 Windows 服务器 + Cloudflare Tunnel（内网穿透） |
 
 ## 架构
 
@@ -40,8 +40,8 @@ React 19 SPA 前端 + Express 4 REST API 后端 + Python 3 WebSocket 文件存�
                                    └──────────────────┘
 
 开发：  Vite :5173 → 代理 /api → Express :3001
-生产：  Nginx /assets/ 直连静态文件 → Express 仅处理 /api + SPA fallback
-Docker：Nginx → Express → PostgreSQL（1Panel/Ubuntu）
+生产：  Express 本地 :3001，直接提供 client/dist（静态资源 + SPA fallback）
+公网：  Cloudflare Tunnel（cloudflared）→ HTTPS 域名 → 本地 :3001（含 WebSocket）
 ```
 
 ## 快速开始
@@ -50,7 +50,7 @@ Docker：Nginx → Express → PostgreSQL（1Panel/Ubuntu）
 
 - Node.js 18+
 - Python 3.10+（存储节点）
-- 可选：Docker（生产部署）
+- 可选：cloudflared（Cloudflare Tunnel，公网访问本地服务）
 
 ### 安装
 
@@ -157,10 +157,9 @@ lineweb/
 ├── cli/                 # LineWeb CLI 本地管理工具（打包为 exe）
 ├── scripts/             # 运维脚本（14 个）
 ├── docs/                # API 文档、部署指南、设计系统文档
-├── .github/workflows/   # GitHub Actions CI/CD
-├── Dockerfile           # 多阶段构建
-├── docker-compose.yml   # 生产编排
-├── nginx.conf           # Nginx 反向代理 + Brotli
+├── Dockerfile           # ⚠️ 已废弃：Docker 镜像构建（存档）
+├── docker-compose.yml   # ⚠️ 已废弃：容器编排（存档）
+├── nginx.conf           # ⚠️ 已废弃：Nginx 反向代理（存档）
 └── .npmrc              # npmmirror.com 镜像
 ```
 
@@ -173,9 +172,9 @@ npm run dev:server       # tsx watch server
 npm run dev:client       # vite
 
 # 构建 & 生产
-npm run build            # vite 构建 client
+npm run build            # vite 构建 client → client/dist
 npm run build:cli        # 构建 LineWeb CLI（cli/dist/LineWebCLI.exe）
-npm run start            # 构建 client → 生成 PG schema → 启动 server
+npm run start            # ⚠️ 旧云服务器流程（生成 PG schema）；本地 SQLite 部署见「部署」章节
 
 # 数据库
 npm run db:push          # prisma db push
@@ -186,7 +185,7 @@ npm run db:studio        # prisma studio GUI
 cd client && npm run test        # vitest run（14 个测试文件）
 cd client && npm run test:watch  # vitest watch
 
-# Docker
+# ⚠️ 以下为旧云服务器部署命令（Docker），已废弃，脚本保留存档
 npm run docker:up        # docker compose up -d
 npm run docker:down      # docker compose down
 npm run docker:build     # docker compose build
@@ -215,21 +214,31 @@ npm run docker:restart   # 重启 server 容器
 | **必应壁纸** | `GET /bing-wallpaper` | 每日必应壁纸 |
 | **版本** | `GET /version` | 部署版本信息 |
 
-## Docker 部署
+## 部署（本地 Windows + Cloudflare Tunnel）
 
-当前服务器部署约束为 HTTP、端口 3001。完整步骤请参阅 [HTTP + 3001 部署指南](docs/DEPLOYMENT_HTTP_3001.md)。
+**已废除**所有 Railway / 云服务器（Docker + Nginx / 1Panel）部署方式 —— 服务全部运行在本地 Windows 服务器上，通过 Cloudflare Tunnel 内网穿透对外提供公网访问，无需公网 IP 或任何云服务器。
 
 ```bash
-# 构建并启动
-docker compose up -d --build
+# 1. 构建前端（产物 client/dist，由 Express 直接提供）
+npm run build
 
-# 查看状态
-docker compose ps
-docker compose logs -f server
+# 2. 启动后端（生产模式，:3001；本地 SQLite，无需外部数据库）
+cd server && NODE_ENV=production npx tsx src/index.ts
+
+# 3. 启动存储节点（文件存于 D:/LineWebDrive，仅本机）
+python storage-node/main.py
+
+# 4. (可选) LineWeb CLI 一键管理本地服务
+LineWebCLI.exe start|stop|status|update   # 详见 cli/README.md
+
+# 5. 公网暴露：Cloudflare Tunnel 映射本地 :3001 → HTTPS 域名
+cloudflared tunnel run <tunnel-name>      # 或临时快速隧道: cloudflared tunnel --url http://localhost:3001
 ```
 
-生产环境使用 1Panel 面板管理容器，Nginx 反向代理 HTTPS。
-GitHub Actions 配置了自动部署：push master → SSH 连接云服务器 → `git reset --hard` → `docker compose up -d --force-recreate`。
+- 服务器无需公网 IP：浏览器 → Cloudflare 边缘 → 隧道 → 本地 `127.0.0.1:3001`
+- WebSocket（`/ws/storage`）经隧道正常传输（Cloudflare Tunnel 原生支持）
+- 代码更新走本地：CLI `update`（`git reset --hard` 拉取 + 重装依赖）或 `autoupdate` 计划任务
+- ⚠️ 历史遗留（保留存档）：Railway 部署（`docs/DRIVE_SETUP.md`）、Docker + Nginx 云服务器部署（`Dockerfile` / `docker-compose.yml` / `nginx.conf` / `docs/DEPLOYMENT_HTTP_3001.md`）；原 GitHub Actions 自动部署 workflow（`.github/workflows/deploy.yml`）**已删除**
 
 ## 设计系统
 

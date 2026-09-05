@@ -1,5 +1,7 @@
 # LineWeb HTTP + 3001 部署指南
 
+> ⚠️ **已废弃（2026-09）**：本指南对应旧的云服务器 Docker + Nginx 部署方式，现仅作历史存档。当前部署为**本地 Windows 服务器运行 + Cloudflare Tunnel 内网穿透**（`cloudflared` 自动提供 HTTPS），参见 [README](../README.md#部署本地-windows--cloudflare-tunnel) 与 [DRIVE_SETUP.md](DRIVE_SETUP.md)。
+
 本项目的服务器部署约束如下：
 
 - 只使用 HTTP，不配置 HTTPS、TLS 或 WSS。

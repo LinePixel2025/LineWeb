@@ -6,7 +6,7 @@
 
 ## 概述
 
-个人网站/CMS 单体仓库，GitHub Primer 风格的纯 CSS 前端设计系统（`.gh-*` BEM，已全面改版完成）。React 19 SPA 前端，Express 4 REST API 后端，Python 3 WebSocket 文件存储节点，以及打包为 exe 的 LineWeb CLI 本地管理工具。SQLite 本地开发，PostgreSQL 生产环境。功能：文章/评论、动态页面构建器、网盘、计算器、屏幕时间追踪（数字健康卡片，含电脑使用热力图）、AI 助手、头像裁剪上传、用户名登录、PWA。
+个人网站/CMS 单体仓库，GitHub Primer 风格的纯 CSS 前端设计系统（`.gh-*` BEM，已全面改版完成）。React 19 SPA 前端，Express 4 REST API 后端，Python 3 WebSocket 文件存储节点，以及打包为 exe 的 LineWeb CLI 本地管理工具。SQLite 本地开发与运行（生产即本地 Windows 服务器）。功能：文章/评论、动态页面构建器、网盘、计算器、屏幕时间追踪（数字健康卡片，含电脑使用热力图）、AI 助手、头像裁剪上传、用户名登录、PWA。**部署：本地 Windows 服务器运行 + Cloudflare Tunnel 内网穿透；Railway / 云服务器（Docker+Nginx）部署已全部废除。**
 
 ## 目录结构
 
@@ -27,12 +27,13 @@ lineweb/
 │
 ├── package.json      # 单体仓库根 — concurrently 编排 client + server；build:cli 构建 CLI
 ├── CLAUDE.md         # 用户维护的 Claude Code 指令文件（已 gitignore，与 AGENTS.md 并存）
-├── ecosystem.config.js # ⚠️ 已弃用的 PM2 配置（历史遗留，仅供宝塔面板参考，现用 Docker Compose）
-├── Dockerfile        # 多阶段构建：构建 client dist → Node 22 Alpine server
-├── docker-compose.yml
-├── .github/workflows/ # GitHub Actions CI/CD（push master → 自动部署）
-├── nginx.conf        # Nginx 反向代理配置（Docker Compose 用，引用上游 serve:3001）
+├── ecosystem.config.js # ⚠️ 已废弃的 PM2 配置（历史遗留，宝塔面板/云服务器部署存档）
+├── Dockerfile        # ⚠️ 已废弃：Docker 镜像构建（云服务器部署存档）
+├── docker-compose.yml # ⚠️ 已废弃：容器编排（云服务器部署存档）
+├── nginx.conf        # ⚠️ 已废弃：Nginx 反向代理配置（云服务器部署存档）
 └── .npmrc            # 中文 npm 镜像
+
+> `.github/workflows/deploy.yml`（云服务器自动部署）已删除；`.github/` 目录仅剩默认配置。
 ```
 
 ### 子项目 AGENTS.md
@@ -51,9 +52,9 @@ lineweb/
 | 跨模块关注点 | 位置 | 说明 |
 |----------------------|----------|-------|
 | 单体仓库编排 | `package.json` | `concurrently` 同时运行前后端；`postinstall` 级联安装子目录依赖 |
-| 部署流水线 | `.github/workflows/deploy.yml` | push master → SSH 至 `secrets.SSH_HOST`（123.207.8.77）`/home/Lineweb`；`git fetch` 失败自动重试 ×3 + 强制 HTTP/1.1；`reset --hard` → `build --no-cache --pull`（先构建不中断服务）→ `down` → `up --force-recreate`；`command_timeout: 30m`；`set -e` 任意失败立即退出 |
-| 数据库结构 | `server/prisma/schema.prisma` | **10 个模型**：User、Post、Comment、Page、DriveFile、DriveFavorite、ApiKey、ScreenTimeToken、ScreenTimeLog、AiConfig；SQLite 开发，PostgreSQL Docker（自动转换） |
-| 数据库连接池 | `server/src/lib/prisma.ts` | Prisma 单例；生产 PostgreSQL 自动注入 `connection_limit=10&pool_timeout=30`（`DATABASE_POOL_SIZE`/`DATABASE_POOL_TIMEOUT` 可覆盖） |
+| 部署方式 | 本地 Windows + Cloudflare Tunnel | 服务运行在本机（Express :3001 + 存储节点），`cloudflared tunnel run` 将本地端口映射为公网 HTTPS 域名；无公网 IP 要求；代码更新走本地 CLI `update`（`git reset --hard`）；Railway / 云服务器（Docker+Nginx+GitHub Actions）已废弃，`.github/workflows/deploy.yml` 已删除 |
+| 数据库结构 | `server/prisma/schema.prisma` | **10 个模型**：User、Post、Comment、Page、DriveFile、DriveFavorite、ApiKey、ScreenTimeToken、ScreenTimeLog、AiConfig；SQLite（本地开发与运行，生产即本地） |
+| 数据库连接池 | `server/src/lib/prisma.ts` | Prisma 单例；仅旧 PostgreSQL 部署会注入 `connection_limit=10&pool_timeout=30`（已废弃，SQLite 单机无池） |
 | 认证（JWT + API Key） | `server/src/middleware/auth.ts` | 双认证 + `?token=` 查询参数；**12 个公开路径**在 `index.ts` 白名单；新增公开端点必须同步改白名单；另有 `optionalAuthenticate`（有 token 则解析、无则匿名放行，用于 AI chat） |
 | 登录/个人资料 | `server/src/routes/auth.ts` | 登录支持 `identifier`（用户名或邮箱，兼容 email）；`PUT /auth/profile` 修改用户名（唯一性校验）/密码（验证当前密码，改密后旧 token 全失效并重签） |
 | 屏幕时间认证 | `server/src/middleware/screenTimeAuth.ts` | `X-Screen-Time-Token` 头单独认证，用于 `/api/health/push` |
@@ -65,8 +66,8 @@ lineweb/
 | 设计系统 | `client/src/styles/`（9 个 CSS 文件，含 `ai.css`） | `globals.css` 仅 import 聚合器；`drive.css` 最大（约 2900 行）；无 Tailwind、无 CSS-in-JS |
 | 本地管理 CLI | `cli/src/`（commands/autoupdate/processes/ui） | `setup` 新机器一键安装、`start` 默认生产模式、`update` GitHub 拉取（镜像降级）、`token` 查询存储节点 Key、`autoupdate` S4U 计划任务无人值守更新；构建 `npm run build:cli` → `cli/dist/LineWebCLI.exe` |
 | PWA | `client/index.html` + `client/public/manifest.json` | theme-color、apple-touch-icon、manifest 已配置 |
-| 环境配置 | `server/.env`（开发）+ `.env.docker`（生产，复制为 `.env`） | `JWT_SECRET`、`DATABASE_URL`、`STORAGE_NODE_TOKEN`、`MAX_FILE_SIZE_MB` |
-| Nginx 反向代理 | `nginx.conf`（Docker）+ 1Panel 面板 | 1Panel 管理外部 HTTPS 反代 → 容器 3001 端口；静态资源 `/assets/` 直连 + Brotli 压缩 |
+| 环境配置 | `server/.env` | `JWT_SECRET`、`DATABASE_URL`（`file:./lineweb.db`）、`STORAGE_NODE_TOKEN`、`MAX_FILE_SIZE_MB`；`.env.docker` 已随云服务器部署废弃 |
+| 内网穿透 | `cloudflared`（Cloudflare Tunnel） | `cloudflared tunnel run <name>` 将本地 :3001 映射为公网 HTTPS 域名，原生支持 WebSocket；无公网 IP 要求；与原 Docker/Nginx（nginx.conf + 1Panel 反代）完全无关 |
 | API 缓存策略 | `server/src/index.ts` cachePublic 中间件 | posts/pages/comments 5min、stats 1min；**bing 壁纸已移除** |
 
 ## 架构
@@ -80,8 +81,8 @@ lineweb/
                                    └──────────────────┘
 
 开发：  Vite :5173 → 代理 /api → Express :3001
-生产：  Nginx /assets/ 直连静态文件 → Express 仅处理 /api + SPA fallback
-Docker：Nginx → Express → PostgreSQL（运行于 1Panel/Ubuntu）
+生产：  Express 本地 :3001，直接提供 client/dist（静态资源 + SPA fallback）
+公网：  Cloudflare Tunnel（cloudflared）→ HTTPS 域名 → 本地 :3001（含 WebSocket）
 ```
 
 ### 启动流程
@@ -102,21 +103,21 @@ server.listen(3001)
   └── 设备追踪清理（30 分钟不活跃超时）
 ```
 
-## 部署流程（GitHub Actions）
+## 部署流程（本地 Windows + Cloudflare Tunnel）
 
 ```
-git push origin master
-   → GitHub Actions SSH 至 123.207.8.77 /home/Lineweb（command_timeout 30m）
-      → set -e（任意步骤失败立即退出，防止静默回退旧版本）
-      → git config http.version HTTP/1.1（缓解 SSL 超时）
-      → git fetch origin master 重试 ×3（失败退出）
-      → git reset --hard origin/master     # 强制覆盖（.env 在 .gitignore 不受影响）
-      → docker compose build --no-cache --pull  # 先构建，不中断线上服务
-      → docker compose down               # 构建成功后才停旧容器
-      → docker compose up -d --force-recreate  # 启动新容器
-      → docker restart 1Panel-openresty（清 Nginx/OpenResty 静态缓存；失败则回退 nginx -s reload，再失败则跳过）
-      → docker compose ps + logs → curl /api/health + chunk 文件验证
-      → docker image prune + builder prune --filter "until=24h"  # 仅清理 24h+ 旧缓存
+本地 Windows 服务器：
+  1. npm run build                 # 构建前端 → client/dist
+  2. NODE_ENV=production tsx src/index.ts   # Express :3001（SQLite + client/dist + /api）
+  3. python storage-node/main.py   # 存储节点（D:/LineWebDrive）
+  4. 管理：LineWebCLI.exe start/stop/status/update | autoupdate（S4U 计划任务）
+
+公网暴露（无需公网 IP）：
+  cloudflared tunnel run <tunnel-name>
+     → Cloudflare 边缘 → HTTPS 域名 → http://127.0.0.1:3001（WebSocket 原生支持）
+
+代码更新（本地执行，不走 CI）：
+  LineWebCLI.exe update --yes   # git reset --hard origin/master → 重装依赖 → db push → 自动重启
 ```
 
 ## 约定
@@ -189,7 +190,7 @@ git push origin master
 
 - **无迁移** — 仅使用 `prisma db push`；无回滚能力
 - **`$queryRawUnsafe`**（3 处）— 去重脚本中的原始 SQL（已参数化，但绕过了类型安全）
-- **双数据库策略** — SQLite 开发，PostgreSQL Docker（容器启动时自动转换 schema）
+- **单数据库策略** — 本地运行统一 SQLite（开发与生产一致）；PostgreSQL 转换脚本（`generate-pg-schema.js`、`docker-entrypoint.sh`）仅为已废弃的云服务器部署保留
 
 ### 安全
 
@@ -229,24 +230,26 @@ cd storage-node && python main.py   # token 需与 server/.env 的 STORAGE_NODE_
 cd cli && npm run dev             # tsx 运行
 cd cli && npm run typecheck       # tsc --noEmit
 
-# 部署
-docker compose up -d --build   # Docker Compose（1Panel/Ubuntu 生产环境）
+# 部署（本地 Windows + Cloudflare Tunnel）
+npm run build                                  # 构建前端 → client/dist
+cd server && NODE_ENV=production npx tsx src/index.ts   # 生产模式 :3001
+cd storage-node && python main.py              # 存储节点
+cloudflared tunnel run <tunnel-name>           # 公网暴露（可选；临时可用 --url http://localhost:3001）
+LineWebCLI.exe update --yes                    # 代码更新（git reset --hard，同旧 CI 策略）
 
-# 自动部署（GitHub Actions）
-# git push origin master → SSH → fetch 重试+reset --hard → build --no-cache --pull →
-#   down → up --force-recreate → 重启 1Panel-openresty → 验证（chunk hash + health）
-# 服务器：123.207.8.77，项目路径：/home/Lineweb
+# 已废弃（旧云服务器部署，存档）：docker compose 等 docker:* 脚本
+#   原 GitHub Actions SSH 自动部署 workflow（.github/workflows/deploy.yml）已删除
 ```
 
 ## 注意事项
 
 - **Server 运行时使用 tsx** — 生产环境从不编译为 JS。根目录 `npm run build` 仅构建 client（且不做类型检查）。
-- **Docker 将 SQLite schema 转换为 PostgreSQL** — `docker-entrypoint.sh` 通过 Node 脚本将 `provider = "sqlite"` 改写为 `"postgresql"`，然后执行 `prisma db push`。
+- **Docker schema 转换已废弃** — 原 `docker-entrypoint.sh` 将 SQLite schema 改写为 PostgreSQL 后 `prisma db push` 的机制随云服务器部署废除；本地统一 SQLite，无需转换脚本。
 - **Storage node 是外部进程** — Python 进程运行在本地 Windows 机器上，未容器化。通过 WebSocket 以指数退避重连（最长 60s）方式连接到 `/ws/storage`；认证 5s 超时、心跳 30s。运行期间通过 `SetThreadExecutionState` 阻止系统休眠；文件 I/O 走线程池避免阻塞事件循环。
 - **LineWeb CLI** — `cli/` 子项目打包为单文件 exe，双击即交互式管理本地服务（setup/start/stop/restart/status/update/logs/token）；`start` 默认生产模式；`autoupdate` 通过 Windows S4U 计划任务无人值守拉取更新；构建依赖 pkg 的 node22 基础二进制（缓存于 `~/.pkg-cache/v3.6`，丢失时需通过镜像下载）。
 - **中文友好默认配置** — `.npmrc` 设置 npmmirror.com 镜像；文档使用中文。
-- **部署强制覆盖** — 使用 `git reset --hard origin/master` 而非 `git pull`，避免服务器本地改动导致合并冲突。
-- **Docker 重建顺序** — 先 `build --no-cache --pull` 再 `down`，确保构建失败时旧容器继续运行不中断服务；`set -e` 确保任何步骤失败时脚本立即退出，避免静默回退旧版本。
+- **更新强制覆盖** — CLI `update` 使用 `git reset --hard origin/master` 而非 `git pull`，避免本地改动导致更新冲突；未跟踪文件（`server/.env` 等）不受影响。
+- **Cloudflare Tunnel 特点** — 隧道进程运行在本地 Windows，公网流量经 Cloudflare 边缘进入 `127.0.0.1:3001`（无需公网 IP/端口映射）；原生支持 WebSocket（网盘存储隧道、AI 流式响应均可用）；隧道中断不影响本地服务与 CLI 管理。
 - **Server 无测试** — `server/` 中零测试基础设施。Playwright 是 client 依赖但无配置或测试。
 - **认证中间件跳过 12 个路径**：`/auth/login`、`/auth/register`、`/auth/avatar`、`/health`、`/health/push`、`/posts`、`/pages/featured`、`/pages/slug`、`/stats/public`、`/version`、`/comments/post`、`/ai/chat`。白名单匹配用 `req.path === p || req.path.startsWith(p + '/')`（`req.path` 不含 `/api` 前缀），因此 `/ai/chat` 也覆盖 `/ai/chat/public`。
 - **认证 API 禁缓存** — 除公开路径外，全局认证中间件设置 `Cache-Control: no-store` 并清空 ETag，避免 304 导致旧数据。
