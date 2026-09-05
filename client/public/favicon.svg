@@ -1,11 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <defs>
-    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0071e3"/>
-      <stop offset="100%" stop-color="#2997ff"/>
-    </linearGradient>
-  </defs>
-  <rect width="32" height="32" rx="8" fill="url(#g)" opacity="0.9"/>
-  <text x="16" y="22" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif"
-        font-size="18" font-weight="700" fill="white">L</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="7" fill="#f6f8fa" stroke="#d1d9e0"/>
+  <g transform="translate(3 3) scale(1.0833)" fill="none" stroke="#0969da" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 4.5A2.5 2.5 0 0 1 7.5 2h7L19 6.5v11A2.5 2.5 0 0 1 16.5 20h-9A2.5 2.5 0 0 1 5 17.5z"/>
+    <path d="M14 2v5h5"/>
+    <path d="M8.5 11h7M8.5 15h4"/>
+    <circle cx="5" cy="17.5" r="1.5" fill="#f6f8fa"/>
+    <path d="M5 16V13.5l3.5-2.5"/>
+  </g>
 </svg>

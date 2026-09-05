@@ -12,7 +12,7 @@ interface Props {
 interface SidebarItem { path: string; label: string; icon: string }
 
 function SidebarIcon({ path }: { path: string }) {
-  const icon = path.startsWith('/admin/new') ? <><path d="M4 12h8" /><path d="m5 9.5 5.8-5.8a1.4 1.4 0 0 1 2 2L7 11.5 4.5 12z" /><path d="m10 4.5 1.5 1.5" /></>
+  const icon = path.startsWith('/admin') ? <><rect x="2.5" y="2.5" width="11" height="11" rx="2.5" /><path d="M2.5 6.25h11" /><path d="M5.25 9h5.5" /><path d="M5.25 11.25h3" /></>
     : path === '/' ? <><rect x="3" y="3" width="10" height="10" rx="2" /><path d="M5.5 10 7.5 8l1.5 1.5L11.5 6" /></>
     : path === '/posts' ? <><path d="M3.5 3.5h8a1.5 1.5 0 0 1 1.5 1.5v7.5h-8A1.5 1.5 0 0 0 3.5 14z" /><path d="M3.5 3.5v10.5M6 6.5h4M6 9h4" /></>
     : path === '/drive' ? <path d="M2.5 5.5A1.5 1.5 0 0 1 4 4h3l1.2 1.5H12A1.5 1.5 0 0 1 13.5 7v5A1.5 1.5 0 0 1 12 13.5H4A1.5 1.5 0 0 1 2.5 12z" />
@@ -30,9 +30,9 @@ const sections = [
     ]
   },
   {
-    title: 'Create', requireAuth: true,
+    title: 'Manage', requireAuth: true,
     items: [
-      { path: '/admin/new', label: '写文章', icon: 'M2.5 1.75a.25.25 0 0 1 .25-.25h10.5a.25.25 0 0 1 .25.25v10.5a.25.25 0 0 1-.25.25H2.75a.25.25 0 0 1-.25-.25V1.75ZM2.75 0A1.75 1.75 0 0 0 1 1.75v10.5C1 13.216 1.784 14 2.75 14h10.5A1.75 1.75 0 0 0 15 12.25V1.75A1.75 1.75 0 0 0 13.25 0H2.75ZM8 4.5a.75.75 0 0 1 .75.75v2h2a.75.75 0 0 1 0 1.5h-2v2a.75.75 0 0 1-1.5 0v-2h-2a.75.75 0 0 1 0-1.5h2v-2A.75.75 0 0 1 8 4.5Z' },
+      { path: '/admin', label: '管理面板', icon: 'M2.75 0A1.75 1.75 0 0 0 1 1.75v12.5C1 15.216 1.784 16 2.75 16h10.5A1.75 1.75 0 0 0 15 14.25V1.75A1.75 1.75 0 0 0 13.25 0ZM3.25 4.5a.75.75 0 0 1 .75-.75h8a.75.75 0 0 1 0 1.5H4a.75.75 0 0 1-.75-.75Zm0 3.5a.75.75 0 0 1 .75-.75h8a.75.75 0 0 1 0 1.5H4a.75.75 0 0 1-.75-.75Zm0 3.5a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5H4a.75.75 0 0 1-.75-.75Z' },
     ]
   },
   {
