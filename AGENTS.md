@@ -53,11 +53,12 @@ lineweb/
 |----------------------|----------|-------|
 | 单体仓库编排 | `package.json` | `concurrently` 同时运行前后端；`postinstall` 级联安装子目录依赖 |
 | 部署方式 | 本地 Windows + Cloudflare Tunnel | 服务运行在本机（Express :3001 + 存储节点），`cloudflared tunnel run` 将本地端口映射为公网 HTTPS 域名；无公网 IP 要求；代码更新走本地 CLI `update`（`git reset --hard`）；Railway / 云服务器（Docker+Nginx+GitHub Actions）已废弃，`.github/workflows/deploy.yml` 已删除 |
-| 数据库结构 | `server/prisma/schema.prisma` | **10 个模型**：User、Post、Comment、Page、DriveFile、DriveFavorite、ApiKey、ScreenTimeToken、ScreenTimeLog、AiConfig；SQLite（本地开发与运行，生产即本地） |
+| 数据库结构 | `server/prisma/schema.prisma` | **8 个模型**：User、Post、Comment、Page、DriveFile、DriveFavorite、ScreenTimeLog、AiConfig（`ApiKey`、`ScreenTimeToken` 已随统一登录移除）；SQLite（本地开发与运行，生产即本地） |
 | 数据库连接池 | `server/src/lib/prisma.ts` | Prisma 单例；仅旧 PostgreSQL 部署会注入 `connection_limit=10&pool_timeout=30`（已废弃，SQLite 单机无池） |
-| 认证（JWT + API Key） | `server/src/middleware/auth.ts` | 双认证 + `?token=` 查询参数；**12 个公开路径**在 `index.ts` 白名单；新增公开端点必须同步改白名单；另有 `optionalAuthenticate`（有 token 则解析、无则匿名放行，用于 AI chat） |
-| 登录/个人资料 | `server/src/routes/auth.ts` | 登录支持 `identifier`（用户名或邮箱，兼容 email）；`PUT /auth/profile` 修改用户名（唯一性校验）/密码（验证当前密码，改密后旧 token 全失效并重签） |
-| 屏幕时间认证 | `server/src/middleware/screenTimeAuth.ts` | `X-Screen-Time-Token` 头单独认证，用于 `/api/health/push` |
+| 认证（账号登录令牌） | `server/src/middleware/auth.ts` | **单一凭证**：`POST /api/auth/login` 换取 JWT（`Authorization: Bearer`，下载直链兼容 `?token=`）；**11 个公开路径**在 `index.ts` 白名单；新增公开端点必须同步改白名单；`optionalAuthenticate`（有 token 则解析、无则匿名放行，用于 AI chat） |
+| 角色能力矩阵 | `server/src/lib/permissions.ts` | 角色 `user`/`admin` → 能力（`content:write`、`comment:moderate`、`user:manage`、`stats:view`、`device:view`、`ai:configure`、`drive:all`）；admin 自动全权；路由用 `requireCapability()` 守卫；令牌只签 `{userId, role, ts}`，能力与网盘开关逐请求从 DB 解析 → 角色变更即时生效 |
+| 登录/个人资料 | `server/src/routes/auth.ts` | 登录支持 `identifier`（用户名或邮箱，兼容 email）与 `rememberDays`（1–90 天设备长期令牌）；`PUT /auth/profile` 修改用户名（唯一性校验）/密码（验证当前密码，改密后旧 token 全失效并重签） |
+| 屏幕时间推送 | `server/src/routes/health.ts` | `/api/health/push`、`/screen-time*`、`/daily-goal*` 统一用登录令牌（仅本人数据）；`X-Screen-Time-Token` 已移除 |
 | AI 助手 | `server/src/routes/ai.ts` + `services/aiService.ts` | OpenAI SDK + 兼容 baseUrl；`AiConfig` 单行表存 key（脱敏显示）；**`/api/ai/chat` 公开（POST）但走 `optionalAuthenticate`**——登录用户额外注入站点统计、最近评论、全部已发布页面、按需检索文章正文（≤2 篇×1500 字）、近 14 天屏幕时间；`/chat/public` GET 取站点内容；管理端 `/admin/ai` 配置；chat() 错误统一 `AppError` |
 | 存储架构 | `server/src/services/storageTunnel.ts` ↔ `storage-node/main.py` | WebSocket 隧道；服务器代理命令到 Python 节点；节点 10 命令（7 个 HANDLERS + 流式 read/write/eof）、阻塞 I/O 线程池化、运行期间 `SetThreadExecutionState` 阻止 Windows 休眠 |
 | 头像服务 | `server/src/services/avatarService.ts` | sharp 处理 + 存储节点读写；`GET /api/auth/avatar/:userId` 公开（头像可匿名访问） |
@@ -92,7 +93,7 @@ server.listen(3001)
   ├── helmet(CSP) → cors → compression（跳过 /proxy、/download）
   ├── body parser 限定 /api（1mb，避免静态文件请求触发解析）
   ├── rate-limit(600/15min，代码注释里的 200 是过期的) → 设备追踪 → 全局认证检查
-  ├── cachePublic 中间件 → 13 个路由组挂载于 /api/*
+  ├── cachePublic 中间件 → 12 个路由组挂载于 /api/*
   ├── [生产] express.static(client/dist, maxAge 1y+immutable, HTML 不缓存) + SPA fallback
   └── errorHandler
 
@@ -159,7 +160,7 @@ server.listen(3001)
 ### 工具链缺失（值得注意）
 
 - **无 ESLint、Prettier、Biome 或 EditorConfig** — 代码格式未强制执行
-- **根目录无 `npm test`** — 仅在 `client/` 中有测试（17 个文件，7 个 `__tests__/` 目录）；server 零测试
+- **根目录无 `npm test`** — 仅在 `client/` 中有测试（21 个文件，`__tests__/` 目录）；server 零测试
 - **不使用 `prisma migrate`** — 约定仅使用 `prisma db push`（根 `db:migrate` 脚本存在但 `prisma/migrations/` 目录不存在，属备用入口）
 - **测试约定**：源文件旁 `__tests__/` 目录、`.test.{ts,tsx}` 命名、`vi.mock()`（无 MSW）
 - **验证期望**（源自 CLAUDE.md）：前端改动至少跑 `npx tsc --noEmit` + `vite build`；涉及认证、数据库、网盘上传下载、存储 WebSocket 或权限的服务端改动，需启动服务做 API 或浏览器手动验证
@@ -181,8 +182,8 @@ server.listen(3001)
 
 - **死依赖**：`@fontsource/instrument-serif` 仍在 package.json 但客户端无任何 import（字体已改系统字体栈）
 - **超大文件**：`drive.ts`（约 1080 行）、`drive.css`（约 2900 行）、`PageEditor.tsx`（约 810 行，位于 `client/src/pages/admin/`）
-- **跨模块耦合**：`users.ts` 从 `drive.ts` 导入 `clearDriveAccessCache`
-- **服务层不一致**：部分路由使用 service 层（auth、posts、avatar、ai），其他直接调用 Prisma（comments、pages、stats、apiKeys、driveFavorites）
+- **跨模块耦合已消除**：`users.ts` 不再从 `drive.ts` 导入 `clearDriveAccessCache`（网盘权限改为逐请求从 `req.user.canAccessDrive` 读取）
+- **服务层不一致**：部分路由使用 service 层（auth、posts、avatar、ai），其他直接调用 Prisma（comments、pages、stats、driveFavorites）
 - **React Query 层已使用** — `QueryClientProvider` 在 App.tsx 中配置，公开页面通过 `useQueries.ts` 使用 React Query，管理页面仍手写 `useState+useEffect`
 - **顶部导航快捷方式已移除** — 导航统一由侧边栏提供；首页站点统计移至右侧侧边栏，AI 助手在首页
 
@@ -251,7 +252,9 @@ LineWebCLI.exe update --yes                    # 代码更新（git reset --hard
 - **更新强制覆盖** — CLI `update` 使用 `git reset --hard origin/master` 而非 `git pull`，避免本地改动导致更新冲突；未跟踪文件（`server/.env` 等）不受影响。
 - **Cloudflare Tunnel 特点** — 隧道进程运行在本地 Windows，公网流量经 Cloudflare 边缘进入 `127.0.0.1:3001`（无需公网 IP/端口映射）；原生支持 WebSocket（网盘存储隧道、AI 流式响应均可用）；隧道中断不影响本地服务与 CLI 管理。
 - **Server 无测试** — `server/` 中零测试基础设施。Playwright 是 client 依赖但无配置或测试。
-- **认证中间件跳过 12 个路径**：`/auth/login`、`/auth/register`、`/auth/avatar`、`/health`、`/health/push`、`/posts`、`/pages/featured`、`/pages/slug`、`/stats/public`、`/version`、`/comments/post`、`/ai/chat`。白名单匹配用 `req.path === p || req.path.startsWith(p + '/')`（`req.path` 不含 `/api` 前缀），因此 `/ai/chat` 也覆盖 `/ai/chat/public`。
+- **认证中间件跳过 11 个路径**：`/auth/login`、`/auth/register`、`/auth/avatar`、`/health`、`/posts`、`/pages/featured`、`/pages/slug`、`/stats/public`、`/version`、`/comments/post`、`/ai/chat`。白名单匹配用 `req.path === p || req.path.startsWith(p + '/')`（`req.path` 不含 `/api` 前缀），因此 `/health` 覆盖全部 `/health/*`（路由内部仍要求登录令牌），`/ai/chat` 也覆盖 `/ai/chat/public`。
+- **唯一凭证是账号登录令牌** — API Key（`X-API-Key`）与屏幕时间 Token（`X-Screen-Time-Token`）已彻底移除（含 `ApiKey` / `ScreenTimeToken` 两张表与 `/api/api-keys`、`/api/health/tokens` 端点）；第三方设备登录同一账号后使用同一 JWT，可用 `rememberDays`（1–90）申请长期令牌。
+- **令牌失效精确到毫秒** — 签发时写入自签 `ts` claim 与 `user.tokenValidAfter` 直接比较，因此登出/改密后同一秒内的旧令牌也会立即 401。
 - **认证 API 禁缓存** — 除公开路径外，全局认证中间件设置 `Cache-Control: no-store` 并清空 ETag，避免 304 导致旧数据。
 - **新增公开端点必须同步两处** — `index.ts` 的 `publicApiPaths` 白名单 + `cachePublic` 缓存策略。
 - **`/api` 自描述端点** — `GET /api` 返回全部路由清单（需认证），排查路由问题时先看这里。

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import api, { setToken, ApiError } from '../lib/api'
+import { hasCapability, hasAnyCapability, type Capability } from '../lib/permissions'
 
 const TOKEN_KEY = 'lineweb_token'
 
@@ -8,6 +9,8 @@ interface User {
   username: string
   email: string
   role: string
+  /** 角色能力清单（服务端按角色解析），权限判断唯一依据 */
+  capabilities?: string[]
   settings?: string  // JSON: 用户个性化设置
   canAccessDrive?: boolean
 }
@@ -19,6 +22,8 @@ interface AuthContextType {
   register: (username: string, email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   isAdmin: boolean
+  hasAdminAccess: boolean
+  can: (capability: Capability) => boolean
   updateSettings: (settings: string) => Promise<void>
   updateProfile: (input: { username?: string; currentPassword?: string; newPassword?: string }) => Promise<void>
 }
@@ -83,6 +88,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const isAdmin = user?.role === 'admin'
+  // 是否可进入 /admin：具备任意管理能力即可（为未来新增角色留出扩展点）
+  const hasAdminAccess = hasAnyCapability(user)
+  const can = useCallback((capability: Capability) => hasCapability(user, capability), [user])
 
   const value = useMemo<AuthContextType>(() => ({
     user,
@@ -91,9 +99,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     register,
     logout,
     isAdmin,
+    hasAdminAccess,
+    can,
     updateSettings,
     updateProfile,
-  }), [user, loading, login, register, logout, isAdmin, updateSettings, updateProfile])
+  }), [user, loading, login, register, logout, isAdmin, hasAdminAccess, can, updateSettings, updateProfile])
 
   return (
     <AuthContext.Provider value={value}>

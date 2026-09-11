@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express'
-import { authenticate, requireAdmin, optionalAuthenticate } from '../middleware/auth.js'
+import { authenticate, requireCapability, optionalAuthenticate } from '../middleware/auth.js'
 import { asyncHandler } from '../lib/asyncHandler.js'
 import {
   aiChatSchema,
@@ -60,7 +60,7 @@ router.post('/chat', optionalAuthenticate, asyncHandler(async (req: Request, res
  * 管理员接口：AI 根据文章正文生成摘要
  * 请求体: { content: string }  响应: { summary, model }
  */
-router.post('/write/summary', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.post('/write/summary', authenticate, requireCapability('content:write'), asyncHandler(async (req: Request, res: Response) => {
   const parsed = aiWriteSummarySchema.safeParse(req.body)
   if (!parsed.success) {
     throw new AppError('请求参数无效: ' + parsed.error.errors.map(e => e.message).join('; '), 400)
@@ -73,7 +73,7 @@ router.post('/write/summary', authenticate, requireAdmin, asyncHandler(async (re
  * 管理员接口：AI 润色/扩写/纠错选中文字
  * 请求体: { text, action }  响应: { text, model }
  */
-router.post('/write/polish', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.post('/write/polish', authenticate, requireCapability('content:write'), asyncHandler(async (req: Request, res: Response) => {
   const parsed = aiWritePolishSchema.safeParse(req.body)
   if (!parsed.success) {
     throw new AppError('请求参数无效: ' + parsed.error.errors.map(e => e.message).join('; '), 400)
@@ -86,7 +86,7 @@ router.post('/write/polish', authenticate, requireAdmin, asyncHandler(async (req
  * 管理员接口：AI 根据正文生成标题建议
  * 请求体: { content, summary? }  响应: { titles: string[], model }
  */
-router.post('/write/titles', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.post('/write/titles', authenticate, requireCapability('content:write'), asyncHandler(async (req: Request, res: Response) => {
   const parsed = aiWriteTitlesSchema.safeParse(req.body)
   if (!parsed.success) {
     throw new AppError('请求参数无效: ' + parsed.error.errors.map(e => e.message).join('; '), 400)
@@ -100,7 +100,7 @@ router.post('/write/titles', authenticate, requireAdmin, asyncHandler(async (req
  * 请求体: { prompt, outline?, tone?, length? }
  * 响应: text/event-stream，事件 data 为 { delta } | { done, model } | { error }
  */
-router.post('/write/draft', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.post('/write/draft', authenticate, requireCapability('content:write'), asyncHandler(async (req: Request, res: Response) => {
   const parsed = aiWriteDraftSchema.safeParse(req.body)
   if (!parsed.success) {
     throw new AppError('请求参数无效: ' + parsed.error.errors.map(e => e.message).join('; '), 400)
@@ -133,7 +133,7 @@ router.post('/write/draft', authenticate, requireAdmin, asyncHandler(async (req:
  * GET /api/ai/config
  * 管理员接口：获取 AI 配置（API Key 脱敏处理）
  */
-router.get('/config', authenticate, requireAdmin, asyncHandler(async (_req: Request, res: Response) => {
+router.get('/config', authenticate, requireCapability('ai:configure'), asyncHandler(async (_req: Request, res: Response) => {
   const config = await getAiConfig()
   res.json({
     id: config.id,
@@ -152,7 +152,7 @@ router.get('/config', authenticate, requireAdmin, asyncHandler(async (_req: Requ
  * 管理员接口：更新 AI 配置
  * 请求体: { provider?, model?, apiKey?, baseUrl?, systemPrompt?, isEnabled? }
  */
-router.put('/config', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.put('/config', authenticate, requireCapability('ai:configure'), asyncHandler(async (req: Request, res: Response) => {
   const parsed = aiConfigUpdateSchema.safeParse(req.body)
   if (!parsed.success) {
     throw new AppError('请求参数无效: ' + parsed.error.errors.map(e => e.message).join('; '), 400)

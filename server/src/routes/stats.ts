@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import prisma from '../lib/prisma.js'
-import { authenticate, requireAdmin } from '../middleware/auth.js'
+import { authenticate, requireCapability } from '../middleware/auth.js'
 
 const router = Router()
 
@@ -48,8 +48,8 @@ async function computeStats() {
   }
 }
 
-/* ---------- Dashboard 统计汇总（需要管理员权限） ---------- */
-router.get('/', authenticate, requireAdmin, async (_req: Request, res: Response) => {
+/* ---------- Dashboard 统计汇总（需要 stats:view 能力） ---------- */
+router.get('/', authenticate, requireCapability('stats:view'), async (_req: Request, res: Response) => {
   try {
     const cacheKey = 'admin_stats'
     const now = Date.now()

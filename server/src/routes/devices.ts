@@ -1,10 +1,10 @@
 import { Router, Request, Response } from 'express'
-import { authenticate, requireAdmin } from '../middleware/auth.js'
+import { authenticate, requireCapability } from '../middleware/auth.js'
 import { getDevices, getAllDevices, getOnlineCount, getTotalCount } from '../services/deviceTracker.js'
 
 const router = Router()
 
-router.use(authenticate, requireAdmin)
+router.use(authenticate, requireCapability('device:view'))
 
 router.get('/', (_req: Request, res: Response) => {
   const devices = getDevices()

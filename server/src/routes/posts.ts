@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppError } from '../middleware/errorHandler.js'
-import { authenticate, requireAdmin } from '../middleware/auth.js'
+import { authenticate, requireCapability } from '../middleware/auth.js'
 import { postSchema, postUpdateSchema } from '../config/index.js'
 import { parsePagination } from '../lib/utils.js'
 import { asyncHandler } from '../lib/asyncHandler.js'
@@ -34,14 +34,14 @@ router.get('/:slug', asyncHandler(async (req: Request, res: Response) => {
 }))
 
 // 管理面板：获取所有文章（含未发布）
-router.get('/admin/all', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.get('/admin/all', authenticate, requireCapability('content:write'), asyncHandler(async (req: Request, res: Response) => {
   const { page, limit, skip } = parsePagination(req.query)
   const result = await getAllPosts(page, limit, skip)
   res.json(result)
 }))
 
 // 管理面板：获取单篇文章
-router.get('/admin/:id', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.get('/admin/:id', authenticate, requireCapability('content:write'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(req.params.id)
   if (isNaN(id)) {
     throw new AppError('无效 ID', 400)
@@ -56,7 +56,7 @@ router.get('/admin/:id', authenticate, requireAdmin, asyncHandler(async (req: Re
 }))
 
 // 创建文章
-router.post('/', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.post('/', authenticate, requireCapability('content:write'), asyncHandler(async (req: Request, res: Response) => {
   const parsed = postSchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: '输入数据无效', details: parsed.error.flatten() })
@@ -73,7 +73,7 @@ router.post('/', authenticate, requireAdmin, asyncHandler(async (req: Request, r
 }))
 
 // 更新文章
-router.put('/:id', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.put('/:id', authenticate, requireCapability('content:write'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(req.params.id)
   if (isNaN(id)) {
     throw new AppError('无效 ID', 400)
@@ -97,7 +97,7 @@ router.put('/:id', authenticate, requireAdmin, asyncHandler(async (req: Request,
 }))
 
 // 删除文章
-router.delete('/:id', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id', authenticate, requireCapability('content:write'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(req.params.id)
   if (isNaN(id)) {
     throw new AppError('无效 ID', 400)

@@ -1,31 +1,33 @@
-﻿import { memo, useState, useRef, useEffect } from 'react'
+import { memo, useState, useRef, useEffect } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { GitHubButton } from './ui'
+import type { Capability } from '../lib/permissions'
 
-const navItems = [
-  { path: '/admin', label: '文章管理', icon: (
+/** 导航项按能力过滤：账号缺少对应能力时该项不显示；未声明能力的项对所有管理区账号可见 */
+const navItems: { path: string; label: string; capability?: Capability; icon: React.ReactNode }[] = [
+  { path: '/admin', label: '文章管理', capability: 'content:write', icon: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 1.75A.75.75 0 01.75 1h4.253c1.227 0 2.317.59 3 1.501A3.744 3.744 0 0111.006 1h4.245a.75.75 0 01.75.75v10.5a.75.75 0 01-.75.75h-4.507a2.25 2.25 0 00-1.591.659l-.622.621a.75.75 0 01-1.06 0l-.622-.621A2.25 2.25 0 005.258 13H.75a.75.75 0 01-.75-.75V1.75zm8.755 3a3 3 0 01-2.154.886H1.5V11.5h3.753a3.73 3.73 0 012.502 1.067V4.75zm1.5 0v7.817A3.73 3.73 0 0112.747 11.5h3.253V2.5H10.9a3.745 3.745 0 00-2.645 1.136z"/></svg>
   ) },
-  { path: '/admin/new', label: '写文章', icon: (
+  { path: '/admin/new', label: '写文章', capability: 'content:write', icon: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 012.474 0l1.086 1.086a1.75 1.75 0 010 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 01-.927-.928l.929-3.25a1.75 1.75 0 01.445-.758l8.61-8.61zm1.414 1.06a.25.25 0 00-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 000-.354l-1.086-1.086zM11.189 6.25L9.75 4.81l-6.286 6.287a.25.25 0 00-.064.108l-.558 1.953 1.953-.558a.249.249 0 00.108-.064l6.286-6.286z"/></svg>
   ) },
-  { path: '/admin/comments', label: '评论管理', icon: (
+  { path: '/admin/comments', label: '评论管理', capability: 'comment:moderate', icon: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0113.25 12H9.06l-2.573 2.573A1.457 1.457 0 014 13.543V12H2.75A1.75 1.75 0 011 10.25v-7.5zM2.75 2.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 01.75.75v2.19l2.72-2.72a.75.75 0 01.53-.22h4.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25H2.75z"/></svg>
   ) },
-  { path: '/admin/pages', label: '页面管理', icon: (
+  { path: '/admin/pages', label: '页面管理', capability: 'content:write', icon: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v12.5A1.75 1.75 0 0114.25 16H1.75A1.75 1.75 0 010 14.25V1.75zM1.75 1.5a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25V1.75a.25.25 0 00-.25-.25H1.75zM4 4.75A.75.75 0 014.75 4h6.5a.75.75 0 010 1.5h-6.5A.75.75 0 014 4.75zm0 3a.75.75 0 01.75-.75h6.5a.75.75 0 010 1.5h-6.5A.75.75 0 014 7.75zm0 3a.75.75 0 01.75-.75h3.5a.75.75 0 010 1.5h-3.5a.75.75 0 01-.75-.75z"/></svg>
   ) },
-  { path: '/admin/users', label: '用户管理', icon: (
+  { path: '/admin/users', label: '用户管理', capability: 'user:manage', icon: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 3.5a2.75 2.75 0 115.5 0 2.75 2.75 0 01-5.5 0zm2.75-1.25a1.25 1.25 0 100 2.5 1.25 1.25 0 000-2.5zM3.5 12.477a3.854 3.854 0 015.814-3.354 3.854 3.854 0 013.186 0c.537.3.98.763 1.215 1.334.235.57.328 1.207.326 1.848a.75.75 0 01-1.5 0c.002-.515-.09-1.013-.273-1.458a2.37 2.37 0 00-.809-1.013 2.357 2.357 0 00-2.518 0A2.37 2.37 0 008.04 10.847c-.183.445-.275.943-.273 1.458a.75.75 0 01-1.5 0c.002-.641.095-1.278.326-1.848.235-.571.678-1.034 1.215-1.334a3.855 3.855 0 00-4.309-.003.75.75 0 01-.621-1.364c1.22-.558 2.644-.77 4.008-.587.335-.18.689-.326 1.057-.437 1.002-.302 2.06-.302 3.062 0l.003.001a.75.75 0 01.003.001c.367.111.72.257 1.054.436 1.365-.183 2.789.029 4.008.587a.75.75 0 01-.621 1.364 3.855 3.855 0 00-4.308.003.75.75 0 01-.604-1.374c.543-.234 1.138-.234 1.682 0a2.354 2.354 0 01.72.393v-.425a1.75 1.75 0 00-1.75-1.75H3.75A1.75 1.75 0 002 11.625v.425c.173-.175.418-.314.72-.393.544-.234 1.139-.234 1.683 0 .486.21.934.586 1.174 1.079.241.493.365 1.06.365 1.627a.75.75 0 01-1.5 0 1.88 1.88 0 00-.25-.934 1.88 1.88 0 00-.717-.674 2.355 2.355 0 00-2.204-.001.75.75 0 01-.605-1.374c.555-.24 1.164-.241 1.721-.002a.755.755 0 01.008.003z"/></svg>
   ) },
-  { path: '/admin/api', label: 'API 密钥', icon: (
+  { path: '/admin/api', label: 'API 接入', icon: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v2.794l2.22 1.2a.75.75 0 010 1.345L14 10.039v2.461a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 12.5v-2.794L.28 8.706a.75.75 0 010-1.345L2 6.161V3.5zm1.5 0v3.294l-.22-.12A.75.75 0 013.5 6.5h1a.75.75 0 01.75.75v2.25a.75.75 0 01-.75.75h-1a.75.75 0 010-1.5h.25V8h-.25a.75.75 0 010-1.5h.25V6h-.25a.75.75 0 01-.22-.174L3.5 3.5zm0 0h9v2.661h.25a.75.75 0 010 1.5h-.25V8h.25a.75.75 0 010 1.5h-.25v.75h.25a.75.75 0 010 1.5h.25V3.5zm0 9a.25.25 0 00.25.25h9a.25.25 0 00.25-.25v-2.294l2.22-1.2a.75.75 0 000-1.345l-2.22-1.2V3.5a.25.25 0 00-.25-.25h-9a.25.25 0 00-.25.25v2.294L1.78 6.961a.75.75 0 000 1.345l2.22 1.2V12.5z"/></svg>
   ) },
-  { path: '/admin/devices', label: '设备监控', icon: (
+  { path: '/admin/devices', label: '设备监控', capability: 'device:view', icon: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4.75 0A2.75 2.75 0 002 2.75v5.5A2.75 2.75 0 004.75 11h2.5v2H5.5a.75.75 0 000 1.5h5a.75.75 0 000-1.5h-1.75v-2h2.5A2.75 2.75 0 0014 8.25v-5.5A2.75 2.75 0 0011.25 0h-6.5zM3.5 2.75c0-.69.56-1.25 1.25-1.25h6.5c.69 0 1.25.56 1.25 1.25v5.5c0 .69-.56 1.25-1.25 1.25h-6.5c-.69 0-1.25-.56-1.25-1.25v-5.5z"/></svg>
   ) },
-  { path: '/admin/ai', label: 'AI 助手', icon: (
+  { path: '/admin/ai', label: 'AI 助手', capability: 'ai:configure', icon: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 110 16A8 8 0 018 0zm0 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm0 7.75a.75.75 0 01.75.75v1.25h.5a.75.75 0 010 1.5h-2.5a.75.75 0 010-1.5h.5V10a.75.75 0 01.75-.75zM8 4a1.5 1.5 0 110 3 1.5 1.5 0 010-3z"/></svg>
   ) },
 ]
@@ -33,7 +35,7 @@ const navItems = [
 const SIDEBAR_COLLAPSED_KEY = 'lineweb_admin_sidebar_collapsed'
 
 export default memo(function AdminLayout() {
-  const { user, logout } = useAuth()
+  const { user, logout, can } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -130,7 +132,9 @@ export default memo(function AdminLayout() {
         </div>
 
         <nav className="gh-sidebar-nav">
-          {navItems.map(item => (
+          {navItems
+            .filter(item => !item.capability || can(item.capability))
+            .map(item => (
             <Link
               key={item.path}
               to={item.path}

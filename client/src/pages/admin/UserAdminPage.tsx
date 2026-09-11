@@ -16,6 +16,13 @@ interface UserItem {
   createdAt: string
 }
 
+/* ---------- role → capability 说明（与 server/src/lib/permissions.ts 一致） ---------- */
+
+const ROLE_HINTS: Record<string, string> = {
+  admin: '拥有全部能力：内容编辑、评论管理、用户管理、站点统计、设备监控、AI 配置、网盘全量访问（自动通过网盘开关）',
+  user: '无管理能力：可浏览内容、发表评论、使用个人功能（数字健康、个人资料）；网盘受「网盘权限」开关约束',
+}
+
 /* ---------- main component ---------- */
 
 export default function UserAdminPage() {
@@ -130,6 +137,15 @@ export default function UserAdminPage() {
                         <GitHubBadge variant={u.role === 'admin' ? 'success' : 'default'}>
                           {u.role === 'admin' ? '管理员' : '用户'}
                         </GitHubBadge>
+                      )}
+                      {isEditing ? (
+                        <p className="gh-text-tertiary" style={{ fontSize: 'var(--gh-text-xs)', margin: '6px 0 0', maxWidth: 260 }}>
+                          {ROLE_HINTS[editRole]}
+                        </p>
+                      ) : (
+                        <p className="gh-text-tertiary" style={{ fontSize: 'var(--gh-text-xs)', margin: '6px 0 0', maxWidth: 260 }}>
+                          {u.role === 'admin' ? '全部能力（7 项）' : '仅基础访问'}
+                        </p>
                       )}
                     </td>
                     <td style={{ textAlign: 'center' }}>

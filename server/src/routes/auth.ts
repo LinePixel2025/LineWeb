@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import rateLimit from 'express-rate-limit'
 import { AppError } from '../middleware/errorHandler.js'
-import { authenticate, clearTokenValidAfterCache } from '../middleware/auth.js'
+import { authenticate } from '../middleware/auth.js'
 import { registerUser, loginUser, getUserById, updateUserSettings, updateUserProfile, invalidateUserTokens } from '../services/authService.js'
 import { registerSchema, loginSchema, updateSettingsSchema, updateProfileSchema } from '../config/index.js'
 import { getErrorMessage, getErrorStatus } from '../lib/utils.js'
@@ -46,10 +46,10 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
     return
   }
 
-  const { identifier, email, username, password } = parsed.data
+  const { identifier, email, username, password, rememberDays } = parsed.data
   const loginIdentifier = identifier || email || username || ''
   try {
-    const data = await loginUser(loginIdentifier, password)
+    const data = await loginUser(loginIdentifier, password, rememberDays)
     res.json(data)
   } catch (err: unknown) {
     if (getErrorStatus(err) === 401) {
@@ -79,10 +79,7 @@ router.put('/profile', authenticate, async (req: Request, res: Response) => {
 
   try {
     const result = await updateUserProfile(req.user!.userId, parsed.data)
-    // 修改密码后清除 token 失效时间缓存，使旧 token 立即失效
-    if (parsed.data.newPassword) {
-      clearTokenValidAfterCache(req.user!.userId)
-    }
+    // 修改密码会使 tokenValidAfter 前移，旧 token 在下一次请求即失效（无需清缓存）
     res.json(result)
   } catch (err: unknown) {
     const status = getErrorStatus(err)
@@ -115,12 +112,10 @@ router.put('/settings', authenticate, async (req: Request, res: Response) => {
   res.json({ user })
 })
 
-// 登出 — 使该用户的所有 JWT 立即失效
+// 登出 — 使该用户的所有登录令牌立即失效
 router.post('/logout', authenticate, async (req: Request, res: Response) => {
   try {
     await invalidateUserTokens(req.user!.userId)
-    // 清除内存缓存，使下次请求立即校验失败
-    clearTokenValidAfterCache(req.user!.userId)
     res.json({ message: '已登出' })
   } catch (err) {
     console.error('登出失败:', err)

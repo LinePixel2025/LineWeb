@@ -26,7 +26,7 @@ const CommentAdminPage = lazy(() => import('./pages/admin/CommentAdminPage'))
 const PageList = lazy(() => import('./pages/admin/PageList'))
 const PageEditor = lazy(() => import('./pages/admin/PageEditor'))
 const UserAdminPage = lazy(() => import('./pages/admin/UserAdminPage'))
-const ApiAdminPage = lazy(() => import('./pages/admin/ApiAdminPage'))
+const ApiDocsPage = lazy(() => import('./pages/admin/ApiDocsPage'))
 const DeviceMonitorPage = lazy(() => import('./pages/admin/DeviceMonitorPage'))
 const AiAdminPage = lazy(() => import('./pages/admin/AiAdminPage'))
 
@@ -116,7 +116,7 @@ export default function App() {
                     <Route path="/admin/pages/new" element={<PageEditor />} />
                     <Route path="/admin/pages/:id/edit" element={<PageEditor />} />
                     <Route path="/admin/users" element={<UserAdminPage />} />
-                    <Route path="/admin/api" element={<ApiAdminPage />} />
+                    <Route path="/admin/api" element={<ApiDocsPage />} />
                     <Route path="/admin/devices" element={<DeviceMonitorPage />} />
                     <Route path="/admin/ai" element={<AiAdminPage />} />
                   </Route>

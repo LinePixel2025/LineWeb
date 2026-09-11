@@ -12,7 +12,7 @@
 - [8. 页面](#8-页面)
 - [9. 网盘（Drive）](#9-网盘drive)
 - [10. 管理 API](#10-管理-api)
-- [11. API 密钥管理](#11-api-密钥管理)
+- [11. API 接入与能力矩阵](#11-api-接入与能力矩阵)
 - [12. AI 助手](#12-ai-助手)
 - [13. 屏幕时间 / 数字健康](#13-屏幕时间--数字健康)
 - [14. 通用模式](#14-通用模式)
@@ -30,27 +30,32 @@ LineWeb API 提供个人网站/CMS 的全部功能，包括 **认证、文章、
 |---|---|
 | 基础 URL | 生产 `http://服务器地址:3001/api` / 开发 `http://localhost:3001/api` |
 | 数据格式 | JSON（请求 `Content-Type: application/json`，响应 `application/json`） |
-| 认证方式 | JWT Bearer Token、API Key（`X-API-Key`）或屏幕时间 Token（`X-Screen-Time-Token`） |
+| 认证方式 | 只有一种：**账号登录令牌**（`Authorization: Bearer <token>`），由 `POST /api/auth/login` 签发 |
 | 分页 | 统一 `page` + `limit` 参数，响应含 `total` / `page` / `pageCount` |
 
 > **部署约束**：当前服务器仅使用 **HTTP + 3001 端口**（无 HTTPS/WSS），详见 `docs/DEPLOYMENT_HTTP_3001.md`。
 
-**安全策略**：除公开路径外，**所有 API 端点均需身份认证**。每次请求必须携带有效的 JWT Token 或 API Key，否则返回 `401`。
+> **凭证变更（2026-09）**：API Key（`X-API-Key` / `lw_` 前缀、`/api/api-keys` 全部端点）与屏幕时间 Token（`X-Screen-Time-Token` / `st_` 前缀、`/api/health/tokens`、`/api/health/screen-time/data`、`/api/health/daily-goal/data`）**已全部移除**，数据库表 `api_keys`、`screen_time_tokens` 已删除，旧密钥一律失效。第三方程序请改为账号登录换取令牌。
 
-**公开端点（免认证，共 12 类）**：
+**安全策略**：除公开路径外，**所有 API 端点均需身份认证**。每次请求必须携带有效的登录令牌，否则返回 `401`。
+
+**公开端点（免认证，共 11 条白名单路径）**：
 
 | 端点 | 说明 |
 |---|---|
 | `POST /api/auth/login`、`POST /api/auth/register` | 登录 / 注册 |
 | `GET /api/auth/avatar/:userId` | 获取指定用户头像 |
 | `GET /api/health` | 服务健康检查 |
-| `POST /api/health/push` | 屏幕时间推送（用 `X-Screen-Time-Token`） |
 | `GET /api/posts`、`GET /api/posts/:slug` | 已发布文章列表 / 详情 |
 | `GET /api/pages/featured`、`GET /api/pages/slug/:slug` | Featured 页面 / 页面详情 |
 | `GET /api/stats/public` | 公开统计数据 |
 | `GET /api/version` | 部署版本信息 |
 | `GET /api/comments/post/:postId` | 文章评论树 |
 | `GET /api/ai/chat/public`、`POST /api/ai/chat` | AI 启用状态 / AI 对话 |
+
+> `/health/*` 前缀整体位于白名单中（`GET /api/health` 公开），但 `POST /api/health/push`、`GET /api/health/screen-time` 等路由**内部仍强制要求登录令牌**，不携带令牌无法使用。
+>
+> `POST /api/ai/chat` 走 `optionalAuthenticate`：匿名可调用，登录后额外注入站点上下文。
 
 > **API 自描述端点**：访问 `GET /api`（需携带认证凭证）可获取所有可用路由的完整清单。
 
@@ -178,13 +183,16 @@ Content-Type: application/json
 
 **请求体：**
 
-| 字段 | 类型 | 必填 |
-|---|---|---|
-| identifier | string | 是（邮箱或用户名） |
-| email | string | 否（兼容旧客户端，与 identifier 二选一） |
-| password | string | 是 |
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| identifier | string | 是（邮箱或用户名） | 账号标识，用户名或邮箱 |
+| username / email | string | 否（兼容旧客户端，与 identifier 三选一） | 用 `username` 或 `email` 字段代替 `identifier` |
+| password | string | 是 | 账号密码 |
+| rememberDays | integer | 否 | 设备长期登录：令牌有效期天数 **1–90**，默认 `7`。仍是同一登录令牌，不引入第二套凭证 |
 
 > 支持用 **用户名** 或 **邮箱** 登录，例如 `{"identifier":"admin","password":"admin123"}` 或 `{"identifier":"admin@lineweb.dev","password":"admin123"}`。
+>
+> 桌面客户端 / 脚本可传 `"rememberDays": 90` 申请长期令牌，避免频繁重新登录。
 
 **成功响应（200）：**
 
@@ -196,20 +204,28 @@ Content-Type: application/json
     "username": "admin",
     "email": "admin@lineweb.dev",
     "role": "admin",
+    "capabilities": [
+      "content:write",
+      "comment:moderate",
+      "user:manage",
+      "stats:view",
+      "device:view",
+      "ai:configure",
+      "drive:all"
+    ],
     "canAccessDrive": true,
     "settings": null
   }
 }
 ```
 
-> **注意**：Token 有效期 **7 天**。过期后需重新登录。所有受保护的 API 需要在 HTTP 头中携带：
+> **注意**：Token 默认有效期 **7 天**（`rememberDays` 可放宽到 1–90 天），过期后需重新登录。所有受保护的 API 需要在 HTTP 头中携带：
 > ```
 > Authorization: Bearer <token>
 > ```
-> 或
-> ```
-> X-API-Key: <api_key>
-> ```
+> 令牌只签 `{ userId, role }`：**能力与网盘开关每次请求都从数据库重新解析**，因此改角色、开关网盘权限即时生效，无需重新登录；而登出或改密码会让该账号的**所有旧令牌立即失效**。
+>
+> 登录端点限流：**20 次 / 15 分钟**（按 IP）。第三方设备应缓存令牌，并在收到 `401` 时重新登录一次。
 
 ### 3.3 获取当前用户
 
@@ -393,7 +409,7 @@ GET /api/version
 
 ```
 GET /api
-Authorization: Bearer <token> 或 X-API-Key: <key>
+Authorization: Bearer <token>
 ```
 
 返回完整 API 路由清单，包含每个端点的 `method`、`path`、`auth` 级别和 `description`。
@@ -481,11 +497,11 @@ GET /api/posts/:slug
 
 > 注意：只能获取已发布文章（`published: true`）。
 
-### 6.3 创建文章（管理员）
+### 6.3 创建文章（需要 `content:write` 能力）
 
 ```
 POST /api/posts
-Authorization: Bearer <admin_token>
+Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -514,11 +530,11 @@ Content-Type: application/json
 
 > slug 已存在时返回 **409**。
 
-### 6.4 更新文章（管理员）
+### 6.4 更新文章（需要 `content:write` 能力）
 
 ```
 PUT /api/posts/:id
-Authorization: Bearer <admin_token>
+Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -533,11 +549,11 @@ Content-Type: application/json
 
 **响应：** 返回更新后的文章对象。
 
-### 6.5 删除文章（管理员）
+### 6.5 删除文章（需要 `content:write` 能力）
 
 ```
 DELETE /api/posts/:id
-Authorization: Bearer <admin_token>
+Authorization: Bearer <token>
 ```
 
 **响应：**
@@ -550,7 +566,7 @@ Authorization: Bearer <admin_token>
 
 ```
 GET /api/posts/admin/all?page=1&limit=20
-Authorization: Bearer <admin_token>
+Authorization: Bearer <token>
 ```
 
 与公开列表相同结构，但包含未发布的草稿。
@@ -559,7 +575,7 @@ Authorization: Bearer <admin_token>
 
 ```
 GET /api/posts/admin/:id
-Authorization: Bearer <admin_token>
+Authorization: Bearer <token>
 ```
 
 返回完整文章对象（含未发布状态的）。
@@ -642,7 +658,7 @@ Content-Type: application/json
 }
 ```
 
-### 7.4 管理评论接口（需要管理员权限）
+### 7.4 管理评论接口（需要 `comment:moderate` 能力）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -694,7 +710,7 @@ GET /api/pages/slug/:slug
 }
 ```
 
-### 8.3 管理页面接口（需要管理员权限）
+### 8.3 管理页面接口（需要 `content:write` 能力）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -720,7 +736,7 @@ GET /api/pages/slug/:slug
 
 ## 9. 网盘（Drive）
 
-Drive 模块提供文件存储和管理功能。所有端点需要 **登录 + `canAccessDrive` 权限**（未开通返回 403）。普通用户只能访问**自己上传**的文件，管理员可访问全部。
+Drive 模块提供文件存储和管理功能。所有端点需要 **登录 + 网盘访问权**（`canAccessDrive = true`，或具备 `drive:all` 能力；都不满足返回 403）。默认只能访问**自己上传**的文件，具备 `drive:all` 的账号（如 `admin`）可访问全部。
 
 ### 9.1 获取文件列表（分页）
 
@@ -955,13 +971,13 @@ Authorization: Bearer <token>
 
 ## 10. 管理 API
 
-### 10.1 用户管理（需要管理员权限）
+### 10.1 用户管理（需要 `user:manage` 能力）
 
 #### 用户列表
 
 ```
 GET /api/users?page=1&limit=20
-Authorization: Bearer <admin_token>
+Authorization: Bearer <token>
 ```
 
 **响应：**
@@ -989,14 +1005,14 @@ Authorization: Bearer <admin_token>
 
 ```
 GET /api/users/:id
-Authorization: Bearer <admin_token>
+Authorization: Bearer <token>
 ```
 
 #### 更新用户
 
 ```
 PUT /api/users/:id
-Authorization: Bearer <admin_token>
+Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -1009,7 +1025,7 @@ Content-Type: application/json
 
 ```
 PUT /api/users/:id/drive-access
-Authorization: Bearer <admin_token>
+Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -1019,7 +1035,7 @@ Content-Type: application/json
 
 ```
 PUT /api/users/:id/avatar
-Authorization: Bearer <admin_token>
+Authorization: Bearer <token>
 Content-Type: multipart/form-data
 ```
 
@@ -1029,16 +1045,16 @@ Content-Type: multipart/form-data
 
 ```
 DELETE /api/users/:id
-Authorization: Bearer <admin_token>
+Authorization: Bearer <token>
 ```
 
 **注意**：不能删除自己。删除用户会同时删除其评论、文章和存储节点头像文件（事务操作）。
 
-### 10.2 设备监控（需要管理员权限）
+### 10.2 设备监控（需要 `device:view` 能力）
 
 ```
 GET /api/devices
-Authorization: Bearer <admin_token>
+Authorization: Bearer <token>
 ```
 
 返回所有 API 请求来源的设备信息：
@@ -1067,11 +1083,11 @@ Authorization: Bearer <admin_token>
 
 > 设备追踪在内存中维护，30 分钟无活动自动标记为离线。
 
-### 10.3 Dashboard 统计汇总（需要管理员权限）
+### 10.3 Dashboard 统计汇总（需要 `stats:view` 能力）
 
 ```
 GET /api/stats
-Authorization: Bearer <admin_token>
+Authorization: Bearer <token>
 ```
 
 **响应：**
@@ -1094,95 +1110,73 @@ Authorization: Bearer <admin_token>
 
 ---
 
-## 11. API 密钥管理（需要管理员权限）
+## 11. API 接入与能力矩阵
 
-API Key 管理端点，用于创建和管理外部程序访问 API 的密钥。
+> **自 2026-09 起统一为账号登录令牌：API Key（`X-API-Key`、`lw_` 前缀）与屏幕时间 Token（`X-Screen-Time-Token`、`st_` 前缀）已移除。** 原「API 密钥管理」章节（`POST/GET/PUT/DELETE /api/api-keys`）及其数据表 `api_keys`、`screen_time_tokens` 已删除，旧密钥全部失效，服务端不再提供任何密钥创建接口。外部程序一律通过账号登录换取令牌。
 
-### 11.1 创建 API Key
+管理面板的 **`/admin/api`** 页面已由「API 密钥管理」改为「**API 接入**」指南页：展示当前账号的角色与能力、curl / Python 登录与推送示例、常用端点表，不再能创建密钥。
 
-```
-POST /api/api-keys
-Authorization: Bearer <admin_token>
-Content-Type: application/json
-```
+### 11.1 获取令牌（唯一接入方式）
 
-**请求体：**
+```bash
+# 1. 账号登录换取令牌（设备可传 rememberDays 申请长期令牌，1–90 天）
+curl -X POST http://服务器地址:3001/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"identifier":"admin","password":"你的密码","rememberDays":90}'
 
-| 字段 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| name | string | 是 | 密钥名称（1-100 字符） |
-| expiresAt | string | 否 | 过期时间，ISO 日期格式（如 `2027-01-01`） |
-
-**成功响应（201）：**
-
-```json
-{
-  "id": 1,
-  "name": "我的博客客户端",
-  "key": "lw_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6",
-  "prefix": "lw_a1b2...",
-  "active": true,
-  "expiresAt": null,
-  "createdAt": "2026-07-04T10:00:00.000Z",
-  "user": { "id": 1, "username": "admin" }
-}
+# 2. 之后所有请求携带同一个令牌
+curl http://服务器地址:3001/api/auth/me \
+  -H "Authorization: Bearer <token>"
 ```
 
-> **重要**：`key` 字段仅在创建时返回一次，之后无法再次获取完整密钥。请立即复制并妥善保存。
+```python
+import requests
 
-### 11.2 列出所有 API Key
+BASE = "http://服务器地址:3001"
 
-```
-GET /api/api-keys
-Authorization: Bearer <admin_token>
-```
+token = requests.post(f"{BASE}/api/auth/login", json={
+    "identifier": "admin",
+    "password": "你的密码",
+    "rememberDays": 90,          # 可选：设备长期令牌（1–90 天），默认 7 天
+}).json()["token"]
 
-返回列表**不含完整密钥**，只含前缀用于识别：
-
-```json
-[
-  {
-    "id": 1,
-    "name": "我的博客客户端",
-    "prefix": "lw_a1b2...",
-    "active": true,
-    "lastUsedAt": "2026-07-04T12:00:00.000Z",
-    "expiresAt": null,
-    "createdAt": "2026-07-04T10:00:00.000Z",
-    "user": { "id": 1, "username": "admin" }
-  }
-]
+# 推送屏幕时间：设备只需账号令牌，无需任何额外密钥
+requests.post(f"{BASE}/api/health/push",
+              json={"totalSeconds": 3600, "date": "2026-09-01"},
+              headers={"Authorization": f"Bearer {token}"})
 ```
 
-### 11.3 获取单个 API Key 详情
+### 11.2 角色与能力矩阵
 
-```
-GET /api/api-keys/:id
-Authorization: Bearer <admin_token>
-```
+角色只有两种：`user` 与 `admin`。**`admin` 自动拥有全部能力；`user` 不具备任何管理能力**（仍可访问全部非管理端点，例如发表评论、读写自己的屏幕时间数据）。
 
-### 11.4 更新 API Key
-
-```
-PUT /api/api-keys/:id
-Authorization: Bearer <admin_token>
-Content-Type: application/json
-```
-
-**请求体（全部可选）：**
-
-| 字段 | 类型 | 说明 |
+| 能力 | 说明 | 对应端点 |
 |---|---|---|
-| name | string | 新名称 |
-| active | boolean | 启用（`true`）或禁用（`false`） |
-| expiresAt | string 或 null | 过期时间，设为 `null` 取消过期 |
+| `content:write` | 内容编辑（文章 / 页面 + AI 写作辅助） | posts `/admin/*` 与 POST/PUT/DELETE；pages 全部管理端点；ai `/write/*` |
+| `comment:moderate` | 评论管理 | comments `/admin/*`、`PUT /api/comments/:id`、`DELETE /api/comments/:id`（POST 发表评论仅需登录） |
+| `user:manage` | 用户管理 | users 全部端点 |
+| `stats:view` | 站点统计 | `GET /api/stats` |
+| `device:view` | 设备监控 | devices 全部端点 |
+| `ai:configure` | AI 配置 | ai `/config` 的 GET / PUT |
+| `drive:all` | 网盘全量访问（豁免 `canAccessDrive` 开关 + 可操作他人文件） | drive 全部端点 |
 
-### 11.5 删除 API Key
+> 能力定义在服务端 `server/src/lib/permissions.ts`；登录响应与 `GET /api/auth/me` 中的 `capabilities` 字段即当前账号的能力清单。
 
-```
-DELETE /api/api-keys/:id
-Authorization: Bearer <admin_token>
-```
+### 11.3 接入流程
+
+**认证流程（单轨）：**
+
+1. 请求检查 `Authorization: Bearer <jwt>` —— 缺失或无效直接返回 `401`
+2. 校验令牌签名与失效时间（登出 / 改密码后签发的旧令牌一律拒绝）
+3. **每次请求**重新解析该账号在数据库中的最新 `role`、`capabilities` 与 `canAccessDrive`
+4. 按端点所需能力判定，不满足返回 `403`
+
+**第三方设备接入建议：**
+
+- 用一次账号登录换取的令牌长期复用（`rememberDays` 最大 90 天），无需为每个客户端发放独立密钥
+- 本地缓存令牌；收到 `401` 时重新登录一次（注意登录限流 20 次 / 15 分钟）
+- 账号登出或改密码会使旧令牌立即失效，此时必须重新登录
+- 参考实现：`scripts/time-master-push.py`
 
 ---
 
@@ -1224,11 +1218,11 @@ Content-Type: application/json
 
 > ⚠️ 该端点为公开接口（无认证），会消耗 API key 配额，注意防滥用。
 
-### 12.3 管理 AI 配置（需要管理员权限）
+### 12.3 管理 AI 配置（需要 `ai:configure` 能力）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/ai/config` | 查看配置（API Key 脱敏为 `sk-…xxxx`） |
+| GET | `/api/ai/config` | 查看配置（AI 服务商密钥脱敏为 `sk-…xxxx`） |
 | PUT | `/api/ai/config` | 更新配置：`{provider?, model?, apiKey?, baseUrl?, systemPrompt?, isEnabled?}` |
 
 > PUT 时若 `apiKey` 传入的是脱敏值（`sk-…` 开头）则忽略该项，保留原 key。
@@ -1241,14 +1235,14 @@ Content-Type: application/json
 
 | 方法 | 路径 | 认证 | 说明 |
 |---|---|---|---|
-| POST | `/api/health/push` | `st_` Token | 第三方推送当日秒数 `{totalSeconds, date}` |
-| GET | `/api/health/screen-time` | JWT | 我的今日屏幕时间 |
-| GET | `/api/health/screen-time/range?from=&to=` | JWT | 日期范围历史（跨度 ≤ 62 天） |
-| GET | `/api/health/screen-time/data` | `st_` Token | 第三方读取今日屏幕时间 |
-| PUT/GET | `/api/health/daily-goal` | JWT | 设置/读取今日使用目标 |
-| GET | `/api/health/daily-goal/data` | `st_` Token | 第三方读取每日目标 |
-| POST/GET | `/api/health/tokens` | JWT | 生成/列出屏幕时间 Token |
-| DELETE | `/api/health/tokens/:id` | JWT | 删除屏幕时间 Token |
+| POST | `/api/health/push` | 登录令牌 | 推送当日秒数 `{totalSeconds, date}`，只能写入登录账号自己的数据 |
+| GET | `/api/health/screen-time` | 登录令牌 | 我的今日屏幕时间 |
+| GET | `/api/health/screen-time/range?from=&to=` | 登录令牌 | 日期范围历史（跨度 ≤ 62 天） |
+| PUT/GET | `/api/health/daily-goal` | 登录令牌 | 设置/读取今日使用目标 |
+
+> 健康模块**全部端点都使用账号登录令牌**（`Authorization: Bearer <token>`），只要求登录、不要求任何管理能力，且只能读写**登录账号本人**的数据。
+>
+> **已移除**（2026-09）：`GET /api/health/screen-time/data`、`GET /api/health/daily-goal/data`（第三方专用读取端点，请直接改用上面的 `/api/health/screen-time` 与 `/api/health/daily-goal`），以及 `POST/GET/DELETE /api/health/tokens`（屏幕时间 Token 管理）。第三方设备改用 `POST /api/health/push` + 同一个登录令牌。
 
 ---
 
@@ -1279,10 +1273,9 @@ Content-Type: application/json
 | 值 | 说明 | 如何访问 |
 |---|---|---|
 | `public` | 无需认证 | 直接请求（见[第 1 章公开端点清单](#1-概述)） |
-| `auth: true` | 需登录 | 请求头加 `Authorization: Bearer <token>` 或 `X-API-Key: <key>` |
-| `auth: admin` | 需管理员权限 | 同上，且用户 role 必须为 `admin` |
-| `auth: drive` | 需登录 + 网盘权限 | 同上，且用户 `canAccessDrive` 必须为 `true` |
-| `auth: st_token` | 需屏幕时间 Token | 请求头加 `X-Screen-Time-Token: <st_...>` |
+| `auth: true` | 需登录 | 请求头加 `Authorization: Bearer <token>`，不要求任何管理能力 |
+| `auth: admin` | 需管理员能力 | 同上，且账号需具备该端点对应的能力（`admin` 自动拥有全部能力） |
+| `auth: drive` | 需登录 + 网盘访问权 | 同上，且 `canAccessDrive = true` 或具备 `drive:all` 能力 |
 
 ### 14.3 请求头
 
@@ -1291,38 +1284,40 @@ Content-Type: application/json
 | 头 | 值 | 适用场景 |
 |---|---|---|
 | `Content-Type` | `application/json` | POST/PUT 请求（上传文件用 `multipart/form-data`） |
-| `Authorization` | `Bearer <token>` | JWT 认证 |
-| `X-API-Key` | `<api_key>` | API Key 认证（外部程序调用时使用） |
-| `X-Screen-Time-Token` | `<st_token>` | 屏幕时间推送/读取（第三方） |
+| `Authorization` | `Bearer <token>` | **唯一的认证方式**，值为 `POST /api/auth/login` 返回的登录令牌 |
 
-### 14.4 API Key 认证
+> 已移除的请求头（2026-09 起不再识别，也不会被服务端解析）：`X-API-Key`、`X-Screen-Time-Token`。
 
-API Key 认证是为外部程序/第三方应用设计的认证方式，与 JWT 双轨并行。
+### 14.4 认证流程（单一登录令牌）
 
-**使用方式：**
-```
-X-API-Key: lw_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6
-```
+LineWeb 只保留一种凭证：`POST /api/auth/login` 签发的**账号登录令牌**。既没有 API Key，也没有独立的屏幕时间 Token。
 
-**认证流程：**
-1. 请求先检查 `Authorization: Bearer <jwt>` — 有则走 JWT 验证
-2. 无 JWT 时检查 `X-API-Key` 请求头 — 有则查数据库验证（sha256 哈希比对）
-3. 两者都没有 → 401 未授权
+1. 请求检查 `Authorization: Bearer <jwt>` —— 有则验证签名与失效时间，无则 `401`
+2. 令牌载荷只有 `{ userId, role }`；**能力、角色与网盘开关每次请求都从数据库重新解析**
+3. 按端点所需能力判定，不满足返回 `403`
+4. 公开路径不经过上述校验，直接放行
 
-**创建 API Key：**
-- 通过管理面板 `/admin/api` 创建
-- 或调用 API：`POST /api/api-keys`（需管理员权限）
+**端点 → 能力对照：**
 
-**特性：**
-- API Key 继承创建者的角色权限（管理员创建的 key 拥有管理员权限）
-- 可在管理面板启用/禁用，无需重新生成
-- 可设置过期时间，过期后自动失效
-- 最后使用时间自动记录，方便审计
+| 端点 | 登录即可 | 需要的能力 |
+|---|---|---|
+| posts `/admin/*`、POST/PUT/DELETE；pages 全部管理端点 | | `content:write` |
+| comments `POST /api/comments`（发表评论） | ✓ | |
+| comments `/admin/*`、`PUT`/`DELETE /api/comments/:id` | | `comment:moderate` |
+| users 全部端点 | | `user:manage` |
+| devices 全部端点 | | `device:view` |
+| `GET /api/stats` | | `stats:view` |
+| ai `/write/*` | | `content:write` |
+| ai `/config` GET/PUT | | `ai:configure` |
+| drive 全部端点 | | `canAccessDrive = true` 或 `drive:all` |
+| health 屏幕时间相关端点（含 `push`） | ✓（只能读写本人数据） | |
 
-**最佳实践：**
-- 为每个客户端创建独立的 API Key，方便管理
-- 定期轮换密钥，设置合理的过期时间
-- 不再使用的密钥及时吊销（禁用或删除）
+**令牌生命周期：**
+
+- **有效期**：默认 7 天；登录时可传 `rememberDays`（整数 1–90）申请更长期限，供设备长期登录使用
+- **权限即时生效**：管理员改动角色 / 能力 / 网盘开关后，旧令牌无需重新登录即按新权限执行
+- **失效**：登出或修改密码会让该账号的**所有**旧令牌立即失效
+- **限流**：登录端点 20 次 / 15 分钟（按 IP）；客户端应缓存令牌并在 `401` 时重新登录
 
 ---
 
@@ -1342,7 +1337,7 @@ X-API-Key: lw_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6
 | 201 | 创建成功 | POST 创建资源 |
 | 204 | 无内容 | 头像未设置、空响应 |
 | 400 | 请求参数错误 | Zod 校验失败，无效 ID，非法字符等 |
-| 401 | 未登录 | 缺少或无效的 Token / API Key |
+| 401 | 未登录 | 缺少或无效的登录令牌（令牌过期 / 已登出 / 改密码后失效） |
 | 403 | 权限不足 | 需要管理员/网盘权限 |
 | 404 | 资源不存在 | 文章/文件/用户不存在 |
 | 409 | 冲突 | 邮箱/用户名/slug 已存在 |
@@ -1375,8 +1370,8 @@ CORS_ORIGIN="*"
 
 1. **部署后端**：将 LineWeb 后端部署到可公开访问的服务器
 2. **配置 CORS**：设置 `CORS_ORIGIN` 环境变量为你的应用域名
-3. **获取凭证**：调用 `/api/auth/login` 获取 JWT，或由管理员创建 API Key
-4. **调用 API**：在请求头中携带 `Authorization: Bearer <token>` 或 `X-API-Key: <key>`
+3. **获取凭证**：调用 `POST /api/auth/login` 换取登录令牌（传 `rememberDays` 可申请 1–90 天的长期令牌）
+4. **调用 API**：在请求头中携带 `Authorization: Bearer <token>`
 
 ---
 
@@ -1482,18 +1477,48 @@ async function downloadFile(token, fileId) {
 }
 ```
 
-### 17.4 使用 API Key 调用（无需登录态）
+### 17.4 设备长期令牌（`rememberDays`，无需每次交互登录）
+
+第三方设备（桌面客户端、脚本、定时任务）不需要任何独立密钥，用账号登录换取一个长期令牌即可，并在收到 `401` 时重新登录一次：
 
 ```python
 import requests
 
 API = 'http://服务器地址:3001/api'
-API_KEY = 'lw_a1b2...'  # 管理员创建
+USERNAME = 'admin'
+PASSWORD = '你的密码'
 
-headers = {'X-API-Key': API_KEY}
+
+def login() -> str:
+    resp = requests.post(f'{API}/auth/login', json={
+        'identifier': USERNAME,
+        'password': PASSWORD,
+        'rememberDays': 90,        # 长期令牌：1–90 天，默认 7 天
+    })
+    resp.raise_for_status()
+    return resp.json()['token']
+
+
+token = login()
+headers = {'Authorization': f'Bearer {token}'}
+
+# 读取当前账号信息（含角色与 capabilities 能力清单）
 resp = requests.get(f'{API}/auth/me', headers=headers)
 print(resp.json())
+
+# 设备推送屏幕时间：同一个令牌，写入的永远是登录账号自己的数据
+resp = requests.post(f'{API}/health/push',
+                     json={'totalSeconds': 5400, 'date': '2026-09-01'},
+                     headers=headers)
+if resp.status_code == 401:          # 令牌过期 / 账号改密 → 重新登录一次
+    headers = {'Authorization': f'Bearer {login()}'}
+    resp = requests.post(f'{API}/health/push',
+                         json={'totalSeconds': 5400, 'date': '2026-09-01'},
+                         headers=headers)
+print(resp.json())
 ```
+
+> 可直接运行的参考脚本：`scripts/time-master-push.py`（默认每 15 分钟推送一次，`--now` 立即推送）。
 
 ### 17.5 Python 完整示例
 
@@ -1625,23 +1650,25 @@ curl -s -X DELETE http://服务器地址:3001/api/posts/1 \
 
 ## 附录：端点快速索引
 
-| 模块 | 端点数 | 公开 | 需认证 | 需管理员 | 需网盘权限 | 需屏幕时间 Token |
-|---|---|---|---|---|---|---|
-| 系统 | 3 | 2 | 1 | 0 | 0 | 0 |
-| 认证 + 头像 | 10 | 3 | 7 | 0 | 0 | 0 |
-| 文章 | 7 | 2 | 0 | 5 | 0 | 0 |
-| 评论 | 7 | 1 | 2 | 4 | 0 | 0 |
-| 页面 | 7 | 2 | 0 | 5 | 0 | 0 |
-| 网盘 | 14 | 0 | 0 | 0 | 14 | 0 |
-| 网盘收藏 | 4 | 0 | 0 | 0 | 4 | 0 |
-| 用户 | 6 | 0 | 0 | 6 | 0 | 0 |
-| 设备 | 1 | 0 | 0 | 1 | 0 | 0 |
-| 统计 | 2 | 1 | 0 | 1 | 0 | 0 |
-| API 密钥 | 5 | 0 | 0 | 5 | 0 | 0 |
-| AI 助手 | 3 | 2 | 0 | 1 | 0 | 0 |
-| 屏幕时间 | 10 | 1 | 6 | 0 | 0 | 3 |
-| **总计** | **79** | **14** | **16** | **28** | **18** | **3** |
+| 模块 | 端点数 | 公开 | 需登录 | 需管理能力 | 需网盘权限 |
+|---|---|---|---|---|---|
+| 系统 | 3 | 2 | 1 | 0 | 0 |
+| 认证 + 头像 | 10 | 3 | 7 | 0 | 0 |
+| 文章 | 7 | 2 | 0 | 5 | 0 |
+| 评论 | 7 | 1 | 2 | 4 | 0 |
+| 页面 | 7 | 2 | 0 | 5 | 0 |
+| 网盘 | 14 | 0 | 0 | 0 | 14 |
+| 网盘收藏 | 4 | 0 | 0 | 0 | 4 |
+| 用户 | 6 | 0 | 0 | 6 | 0 |
+| 设备 | 1 | 0 | 0 | 1 | 0 |
+| 统计 | 2 | 1 | 0 | 1 | 0 |
+| AI 助手 | 3 | 2 | 0 | 1 | 0 |
+| 屏幕时间 | 5 | 0 | 5 | 0 | 0 |
+| **总计** | **69** | **13** | **15** | **23** | **18** |
 
-> **认证说明**：「公开」= 无需任何凭证；「需认证」= 登录或 API Key 任一即可；「需管理员」= 需管理员权限；「需网盘权限」= 需登录 + `canAccessDrive`；「需屏幕时间 Token」= 需 `X-Screen-Time-Token: st_...`。
+> **认证说明**：所有认证都使用**同一个账号登录令牌**（`Authorization: Bearer <token>`），没有第二套凭证。
+> 「公开」= 无需任何凭证；「需登录」= 有有效登录令牌即可；「需管理能力」= 需具备该端点对应的能力（`content:write` / `comment:moderate` / `user:manage` / `stats:view` / `device:view` / `ai:configure`，`admin` 自动全具备）；「需网盘权限」= 需登录且 `canAccessDrive = true` 或具备 `drive:all`。
+>
+> 原「API 密钥」模块（5 个端点）与屏幕时间 Token 相关端点（`/api/health/tokens` 3 个、`/api/health/screen-time/data`、`/api/health/daily-goal/data`）已于 2026-09 随 API Key / 屏幕时间 Token 一并移除。
 
 > **缓存说明**：公开 GET 端点有服务端缓存（posts/pages/comments 5 分钟、stats 1 分钟）；管理端点（`/admin/*`）不缓存；认证 API 一律 `Cache-Control: no-store`。

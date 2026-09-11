@@ -23,8 +23,6 @@ model User {
   comments         Comment[]
   driveFiles       DriveFile[] // 上传的文件
   driveFavorites   DriveFavorite[]
-  apiKeys          ApiKey[]
-  screenTimeTokens ScreenTimeToken[]
   screenTimeLogs   ScreenTimeLog[]
 
   @@map("users")
@@ -118,38 +116,6 @@ model DriveFavorite {
   @@unique([userId, folderId])
   @@index([userId])
   @@map("drive_favorites")
-}
-
-model ApiKey {
-  id          Int       @id @default(autoincrement())
-  name        String
-  key         String    // 掩码（如 lw_abc...），仅用于展示；认证时用 keyHash 查询
-  keyHash     String    @unique @map("key_hash") // sha256(fullKey)，DB 不存完整 key 防泄漏
-  prefix      String    @default("lw_")
-  userId      Int       @map("user_id")
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  active      Boolean   @default(true)
-  lastUsedAt  DateTime? @map("last_used_at")
-  expiresAt   DateTime? @map("expires_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-
-  @@index([userId])
-  @@map("api_keys")
-}
-
-model ScreenTimeToken {
-  id        Int       @id @default(autoincrement())
-  userId    Int       @map("user_id")
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String    @unique
-  name      String    @default("Time Master")
-  expiresAt DateTime? @map("expires_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-
-  @@index([userId])
-  @@map("screen_time_tokens")
 }
 
 model ScreenTimeLog {

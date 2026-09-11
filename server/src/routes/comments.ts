@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express'
 import prisma from '../lib/prisma.js'
 import { parsePagination, parseId } from '../lib/utils.js'
 import { commentSchema, commentUpdateSchema } from '../config/index.js'
-import { authenticate, requireAdmin } from '../middleware/auth.js'
+import { authenticate, requireCapability } from '../middleware/auth.js'
 
 const router = Router()
 
@@ -140,7 +140,7 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
 })
 
 // 管理面板：获取有评论的文章列表（按文章分组）
-router.get('/admin/posts', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.get('/admin/posts', authenticate, requireCapability('comment:moderate'), async (req: Request, res: Response) => {
   const comments = await prisma.comment.groupBy({
     by: ['postId'],
     _count: { id: true },
@@ -171,7 +171,7 @@ router.get('/admin/posts', authenticate, requireAdmin, async (req: Request, res:
 })
 
 // 管理面板：获取某篇文章的全部评论（树状结构）
-router.get('/admin/post/:postId', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.get('/admin/post/:postId', authenticate, requireCapability('comment:moderate'), async (req: Request, res: Response) => {
   const postId = parseId(req.params.postId)
   if (postId === null) {
     res.status(400).json({ error: '无效的文章 ID' })
@@ -198,7 +198,7 @@ router.get('/admin/post/:postId', authenticate, requireAdmin, async (req: Reques
 })
 
 // 编辑评论（管理员）
-router.put('/:id', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.put('/:id', authenticate, requireCapability('comment:moderate'), async (req: Request, res: Response) => {
   const id = parseId(req.params.id)
   if (id === null) {
     res.status(400).json({ error: '无效 ID' })
@@ -234,7 +234,7 @@ router.put('/:id', authenticate, requireAdmin, async (req: Request, res: Respons
 })
 
 // 删除评论（管理员）
-router.delete('/:id', authenticate, requireAdmin, async (req: Request, res: Response) => {
+router.delete('/:id', authenticate, requireCapability('comment:moderate'), async (req: Request, res: Response) => {
   const id = parseId(req.params.id)
   if (id === null) {
     res.status(400).json({ error: '无效 ID' })

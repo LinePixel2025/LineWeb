@@ -10,7 +10,7 @@ React 19 SPA 前端 + Express 4 REST API 后端 + Python 3 WebSocket 文件存�
 - 📝 **文章系统** — Markdown 写作、发布与管理
 - ☁️ **网盘** — 文件上传/下载/预览/搜索，文件夹管理，批量操作，收藏夹跨设备同步
 - 🧮 **在线计算器** — 基础运算与科学计算
-- 🔐 **认证系统** — JWT + API Key 双认证，管理员面板
+- 🔐 **认证系统** — 账号登录令牌（JWT）单一认证 + 角色能力矩阵，管理员面板
 - 🖼️ **页面构建器** — 可视化控件树，自定义功能页面
 - 📊 **屏幕时间追踪** — 跨设备使用统计与目标管理
 - 🌓 **智能主题** — 亮色/暗色模式，跟随系统或手动切换
@@ -148,7 +148,7 @@ lineweb/
 ├── server/              # Express 4 + Prisma API
 │   ├── src/
 │   │   ├── config/      # Zod 校验 schema、环境变量
-│   │   ├── middleware/   # 认证（JWT + API Key）、错误处理
+│   │   ├── middleware/   # 认证（账号登录令牌）、错误处理
 │   │   ├── routes/      # 12 个路由模块（全部前缀 /api）
 │   │   ├── services/    # 业务逻辑（auth、drive、storage 等）
 │   │   └── lib/         # Prisma 单例、工具函数
@@ -195,22 +195,24 @@ npm run docker:restart   # 重启 server 容器
 
 ## API 概览
 
-所有 API 前缀 `/api`。认证方式：`Authorization: Bearer <JWT>` 或 `X-API-Key: <key>`。
+所有 API 前缀 `/api`。认证方式只有一种：**账号登录令牌** —— 先 `POST /api/auth/login` 换取 `token`，之后所有请求携带 `Authorization: Bearer <token>`。令牌只签 `{ userId, role }`，能力与网盘开关每次请求从数据库解析，因此角色变更即时生效。
+
+> 自 2026-09 起统一为账号登录令牌：API Key（`X-API-Key`、`lw_` 前缀）与屏幕时间 Token（`X-Screen-Time-Token`、`st_` 前缀）已移除，相关端点与数据表均已删除，旧密钥全部失效。第三方设备（如 Time Master）改为账号登录，可用 `rememberDays`（1–90 天）申请长期令牌。
 
 | 路由模块 | 主要端点 | 说明 |
 |---------|---------|------|
 | **认证** | `POST /auth/login|register`、`GET /auth/me` | 登录/注册/个人信息 |
-| **文章** | `GET /posts`、`GET/POST/PUT/DELETE /posts/:id` | 公开列表 + admin CRUD |
+| **文章** | `GET /posts`、`GET/POST/PUT/DELETE /posts/:id` | 公开列表 + 内容编辑（`content:write`）CRUD |
 | **评论** | `GET/POST /comments/post/:id`、嵌套回复 | 树形评论系统 |
-| **页面** | `GET /pages/featured|slug/:slug`、admin CRUD | 可视化页面构建器 |
+| **页面** | `GET /pages/featured|slug/:slug`、管理端 CRUD | 可视化页面构建器（`content:write`） |
 | **网盘** | `GET/POST /drive/files`、`POST /drive/upload`、`GET /drive/files/:id/download` | 完整文件管理 |
 | **网盘收藏** | `GET/POST/DELETE /drive/favorites` | 文件夹收藏跨设备同步 |
 | **头像** | `POST/GET/DELETE /avatar` | 用户头像上传 |
 | **用户管理** | `GET/PUT /users`、`PUT /users/:id/drive-access` | admin 用户管理 |
-| **API 密钥** | `CRUD /api-keys` | API Key 管理 |
+| **API 接入** | `GET /api` | 自描述端点清单；管理面板 `/admin/api` 为账号登录接入指南页 |
 | **统计** | `GET /stats/public`、`GET /stats` | 公开/管理统计 |
 | **设备** | `GET /devices` | 在线设备追踪（admin） |
-| **健康** | `GET /health`、`POST /health/push` | 健康检查 + 屏幕时间推送 |
+| **健康** | `GET /health`、`GET/PUT /health/daily-goal`、`POST /health/push` | 健康检查 + 屏幕时间读写（第三方推送用同一登录令牌） |
 | **必应壁纸** | `GET /bing-wallpaper` | 每日必应壁纸 |
 | **版本** | `GET /version` | 部署版本信息 |
 

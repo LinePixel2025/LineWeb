@@ -1,12 +1,25 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
-import crypto from 'crypto'
 import prisma from '../lib/prisma.js'
 import { config } from '../config/index.js'
+import {
+  capabilitiesForRole,
+  roleHasCapability,
+  type Capability,
+} from '../lib/permissions.js'
 
+/**
+ * 认证上下文 — 挂载到 req.user
+ *
+ * 注意：JWT 只签 `{ userId, role }`，能力（capabilities）与 canAccessDrive
+ * 每次请求都从数据库解析，因此角色调整即时生效，且无法通过伪造令牌获得能力。
+ */
 export interface AuthPayload {
   userId: number
   role: string
+  capabilities: Capability[]
+  canAccessDrive: boolean
+  // 下载票据相关（由 /api/drive/download-ticket/:id 签发）
   type?: string
   downloadFileId?: number
   downloadNonce?: string
@@ -20,189 +33,145 @@ declare global {
   }
 }
 
-// === JWT 失效校验缓存 ===
-// 避免每请求查 DB：缓存 user.tokenValidAfter，60s TTL
-const tokenValidAfterCache = new Map<number, { value: Date; expireAt: number }>()
-// 失效时间以数据库为唯一事实来源，避免多实例间缓存不一致。
-const TOKEN_VALID_AFTER_TTL_MS = 0
-
-// 定期清理过期缓存条目
-const cacheCleanupInterval = setInterval(() => {
-  const now = Date.now()
-  for (const [key, entry] of tokenValidAfterCache.entries()) {
-    if (now >= entry.expireAt) tokenValidAfterCache.delete(key)
-  }
-}, 60_000)
-cacheCleanupInterval.unref()
-
-/** 清除指定用户的 tokenValidAfter 缓存（登出/改密时调用） */
-export function clearTokenValidAfterCache(userId: number): void {
-  tokenValidAfterCache.delete(userId)
+interface TokenClaims {
+  userId: number
+  role: string
+  iat?: number
+  /** 毫秒级签发时间（自签 claim）——用于与 tokenValidAfter 精确比较，避免同秒宽限 */
+  ts?: number
+  type?: string
+  downloadFileId?: number
+  downloadNonce?: string
 }
 
-async function getTokenValidAfter(userId: number): Promise<Date> {
-  const cached = tokenValidAfterCache.get(userId)
-  if (cached && Date.now() < cached.expireAt) {
-    return cached.value
+/**
+ * 解析令牌 → 认证上下文
+ *
+ * 单次数据库查询同时完成三件事：
+ *   1. tokenValidAfter 失效校验（登出 / 改密后旧令牌立即失效）
+ *   2. 取角色并展开为能力矩阵
+ *   3. 取网盘权限开关
+ *
+ * 返回 null 表示令牌无效（用户不存在 / 已失效 / 签名错误）。
+ */
+async function resolveAuthContext(token: string): Promise<
+  | { ok: true; user: AuthPayload }
+  | { ok: false; reason: string }
+> {
+  let claims: TokenClaims
+  try {
+    claims = jwt.verify(token, config.jwtSecret) as TokenClaims
+  } catch {
+    return { ok: false, reason: 'Token 无效' }
   }
+
+  if (!claims?.userId) return { ok: false, reason: 'Token 无效' }
+
   const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { tokenValidAfter: true },
+    where: { id: claims.userId },
+    select: { tokenValidAfter: true, role: true, canAccessDrive: true },
   })
-  if (!user) {
-    // 用户不存在 — 返回当前时间使所有 token 失效
-    return new Date()
+  if (!user) return { ok: false, reason: '账号不存在或已注销，请重新登录' }
+
+  // 失效校验：优先用毫秒级 ts claim（登出/改密后同一秒内也能立即失效）；
+  // 旧令牌没有 ts 时回退到 iat（秒级），与 tokenValidAfter 同粒度比较
+  const issuedAtMs = typeof claims.ts === 'number'
+    ? claims.ts
+    : (claims.iat ?? 0) * 1000
+  if (issuedAtMs < user.tokenValidAfter.getTime()) {
+    return { ok: false, reason: 'Token 已失效，请重新登录' }
   }
-  const value = user.tokenValidAfter
-  tokenValidAfterCache.set(userId, { value, expireAt: Date.now() + TOKEN_VALID_AFTER_TTL_MS })
-  return value
+
+  return {
+    ok: true,
+    user: {
+      userId: claims.userId,
+      role: user.role,
+      capabilities: capabilitiesForRole(user.role),
+      canAccessDrive: !!user.canAccessDrive,
+      type: claims.type,
+      downloadFileId: claims.downloadFileId,
+      downloadNonce: claims.downloadNonce,
+    },
+  }
 }
 
-/** 计算 API Key 的 sha256 哈希 */
-export function hashApiKey(key: string): string {
-  return crypto.createHash('sha256').update(key).digest('hex')
-}
-
+/**
+ * 全局认证中间件 — 仅接受账号登录令牌
+ *
+ * 凭证来源（都是同一个登录 JWT）：
+ *   1. `Authorization: Bearer <jwt>`
+ *   2. `?token=<jwt>`（下载直链，浏览器无法设置请求头）
+ *
+ * 幂等：全局中间件已解析过时，路由内再次调用 authenticate 直接放行。
+ */
 export async function authenticate(req: Request, res: Response, next: NextFunction) {
-  const header = req.headers.authorization
-
-  if (header?.startsWith('Bearer ')) {
-    try {
-      const token = header.slice(7)
-      const payload = jwt.verify(token, config.jwtSecret) as AuthPayload & { iat?: number }
-
-      // JWT 失效校验：token 签发时间必须 >= user.tokenValidAfter
-      // 注意：iat 是秒级整数，tokenValidAfter 含毫秒，统一按秒比较，
-      // 避免同一秒内签发的新 token（如注册/改密码后立即返回的 token）被误判失效
-      if (payload.iat && payload.userId) {
-        const validAfter = await getTokenValidAfter(payload.userId)
-        if (payload.iat < Math.floor(validAfter.getTime() / 1000)) {
-          res.status(401).json({ error: 'Token 已失效，请重新登录' })
-          return
-        }
-      }
-
-      req.user = payload
-      next()
-      return
-    } catch {
-      // JWT 无效，尝试 API Key
-    }
-  }
-
-  const apiKey = req.headers['x-api-key'] as string | undefined
-  if (apiKey) {
-    authenticateWithApiKeyAndSetUser(req, res, next, apiKey)
+  if (req.user) {
+    next()
     return
   }
 
-  // ——— 最后回退：?token= 查询参数（下载直链使用） ———
-  const queryToken = req.query.token as string | undefined
-  if (queryToken) {
-    try {
-      const payload = jwt.verify(queryToken, config.jwtSecret) as AuthPayload & { iat?: number }
-      if (payload.iat && payload.userId) {
-        const validAfter = await getTokenValidAfter(payload.userId)
-        if (payload.iat < Math.floor(validAfter.getTime() / 1000)) {
-          res.status(401).json({ error: 'Token 已失效' })
-          return
-        }
-      }
-      req.user = payload
-      next()
-      return
-    } catch {
-      res.status(401).json({ error: 'Token 无效' })
-      return
-    }
+  const header = req.headers.authorization
+  const bearer = header?.startsWith('Bearer ') ? header.slice(7).trim() : ''
+  const queryToken = typeof req.query.token === 'string' ? req.query.token : ''
+  const token = bearer || queryToken
+
+  if (!token) {
+    res.status(401).json({ error: '未登录' })
+    return
   }
 
-  res.status(401).json({ error: '未登录' })
-}
-
-async function authenticateWithApiKeyAndSetUser(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-  apiKey: string,
-) {
   try {
-    // 用 sha256 哈希查询 — DB 不存明文 key
-    const keyRecord = await prisma.apiKey.findUnique({
-      where: { keyHash: hashApiKey(apiKey) },
-      select: {
-        id: true,
-        userId: true,
-        active: true,
-        expiresAt: true,
-        user: { select: { role: true } },
-      },
-    })
-
-    if (!keyRecord || !keyRecord.active) {
-      res.status(401).json({ error: 'API Key 无效或已禁用' })
+    const result = await resolveAuthContext(token)
+    if (!result.ok) {
+      res.status(401).json({ error: queryToken && !bearer ? 'Token 无效' : result.reason })
       return
     }
-
-    if (keyRecord.expiresAt && keyRecord.expiresAt < new Date()) {
-      res.status(401).json({ error: 'API Key 已过期' })
-      return
-    }
-
-    req.user = { userId: keyRecord.userId, role: keyRecord.user.role }
-
-    prisma.apiKey.update({
-      where: { id: keyRecord.id },
-      data: { lastUsedAt: new Date() },
-    }).catch((err) => {
-      console.error(`[Auth] 更新 API Key lastUsedAt 失败 (id=${keyRecord.id}):`, err.message)
-    })
-
+    req.user = result.user
     next()
   } catch (err) {
-    console.error('[Auth] API Key 验证错误:', err)
+    console.error('[Auth] 认证失败:', err)
     res.status(500).json({ error: '认证服务异常' })
   }
 }
 
-export function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  if (req.user?.role !== 'admin') {
-    res.status(403).json({ error: '需要管理员权限' })
+/**
+ * 能力守卫 — 需要指定能力之一（admin 拥有全部能力，因此自动通过）
+ * 用法：router.use(authenticate, requireCapability('user:manage'))
+ */
+export function requireCapability(...required: Capability[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const role = req.user?.role
+    if (!role || !required.some((cap) => roleHasCapability(role, cap))) {
+      res.status(403).json({ error: '权限不足', required })
+      return
+    }
+    next()
+  }
+}
+
+/**
+ * 可选认证中间件：解析登录令牌，成功时挂载 req.user，失败时不拦截（游客照常放行）
+ * 用于 /api/ai/chat 等公开端点——登录用户可获得额外上下文（如屏幕使用时间）
+ */
+export async function optionalAuthenticate(req: Request, res: Response, next: NextFunction) {
+  const header = req.headers.authorization
+  if (!header?.startsWith('Bearer ') || req.user) {
+    next()
     return
+  }
+
+  try {
+    const result = await resolveAuthContext(header.slice(7).trim())
+    if (result.ok) req.user = result.user
+  } catch (err) {
+    console.error('[Auth] 可选认证解析失败（按游客处理）:', err)
   }
   next()
 }
 
-/**
- * 可选认证中间件：解析 JWT，成功时挂载 req.user，失败时不拦截（游客照常放行）
- * 用于 /api/ai/chat 等公开端点——登录用户可获得额外上下文（如屏幕使用时间）
- * 仅处理 Bearer token；API Key 与 ?token= 场景无需支持
- */
-export async function optionalAuthenticate(req: Request, res: Response, next: NextFunction) {
-  const header = req.headers.authorization
-
-  if (header?.startsWith('Bearer ')) {
-    try {
-      const token = header.slice(7)
-      const payload = jwt.verify(token, config.jwtSecret) as AuthPayload & { iat?: number }
-
-      // JWT 失效校验：与 authenticate 逻辑一致
-      if (payload.iat && payload.userId) {
-        const validAfter = await getTokenValidAfter(payload.userId)
-        if (payload.iat < Math.floor(validAfter.getTime() / 1000)) {
-          // token 已失效 — 视为游客
-          next()
-          return
-        }
-      }
-
-      req.user = payload
-      next()
-      return
-    } catch {
-      // token 无效 — 视为游客，继续放行
-    }
-  }
-
-  next()
+/** 角色是否具备能力（供路由内部做数据范围判断，如网盘越权豁免） */
+export function currentUserHasCapability(req: Request, capability: Capability): boolean {
+  const role = req.user?.role
+  return !!role && roleHasCapability(role, capability)
 }

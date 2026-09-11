@@ -6,13 +6,12 @@ import busboy from 'busboy'
 import { adminSetAvatar } from '../services/avatarService.js'
 import { sendCommand, isNodeConnected } from '../services/storageTunnel.js'
 import { updateUserSchema } from '../config/index.js'
-import { authenticate, requireAdmin } from '../middleware/auth.js'
-import { clearDriveAccessCache } from './drive.js'
+import { authenticate, requireCapability } from '../middleware/auth.js'
 
 const router = Router()
 
-// 所有路由需要管理员权限
-router.use(authenticate, requireAdmin)
+// 所有路由需要 user:manage 能力（admin 自动具备）
+router.use(authenticate, requireCapability('user:manage'))
 
 // 列出用户（分页）
 router.get('/', async (req: Request, res: Response) => {
@@ -152,8 +151,7 @@ router.put('/:id/drive-access', async (req: Request, res: Response) => {
     },
   })
 
-  // 清除该用户的 drive 访问缓存，使权限变更即时生效
-  clearDriveAccessCache(id)
+  // 网盘权限以数据库为唯一事实来源，逐请求从 req.user 读取，无需清缓存
 
   res.json(updated)
 })

@@ -5,6 +5,7 @@ import crypto from 'crypto'
 import prisma from '../lib/prisma.js'
 import { parseId, parsePagination } from '../lib/utils.js'
 import { authenticate } from '../middleware/auth.js'
+import { roleHasCapability } from '../lib/permissions.js'
 import { sendCommand, streamRead, streamReadBinary, streamWriteBinary, isNodeConnected } from '../services/storageTunnel.js'
 import { syncDriveFiles } from '../services/storageSync.js'
 import { config } from '../config/index.js'
@@ -80,43 +81,17 @@ function transformSizeList<T extends { size: bigint }>(files: T[]): WithSize<T>[
   return files.map(transformSize)
 }
 
-// === canAccessDrive 内存缓存（60s TTL，避免每请求查 DB） ===
-const driveAccessCache = new Map<number, { value: boolean; expireAt: number }>()
-// 网盘权限以数据库为唯一事实来源，避免多实例权限漂移。
-const DRIVE_ACCESS_TTL_MS = 0
-
-// 定期清理过期缓存条目
-const driveAccessCleanupInterval = setInterval(() => {
-  const now = Date.now()
-  for (const [key, entry] of driveAccessCache.entries()) {
-    if (now >= entry.expireAt) driveAccessCache.delete(key)
-  }
-}, 60_000)
-driveAccessCleanupInterval.unref()
-
-/** 清除指定用户的 canAccessDrive 缓存（权限变更时调用） */
-export function clearDriveAccessCache(userId: number): void {
-  driveAccessCache.delete(userId)
-}
-
-async function checkDriveAccess(userId: number): Promise<boolean> {
-  const cached = driveAccessCache.get(userId)
-  if (cached && Date.now() < cached.expireAt) {
-    return cached.value
-  }
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { canAccessDrive: true },
-  })
-  const value = !!user?.canAccessDrive
-  driveAccessCache.set(userId, { value, expireAt: Date.now() + DRIVE_ACCESS_TTL_MS })
-  return value
+// === 网盘访问权限 ===
+// canAccessDrive 开关由管理员在用户管理页控制；具备 drive:all 能力的角色（admin）自动通过。
+// 权限值随每次认证从数据库解析（见 middleware/auth.ts），因此变更即时生效，无需缓存。
+function hasDriveAccess(user: { role: string; canAccessDrive: boolean }): boolean {
+  return user.canAccessDrive || roleHasCapability(user.role, 'drive:all')
 }
 
 // === 文件所有权校验 — 防止用户越权操作他人文件 ===
 /**
  * 校验当前用户是否拥有指定文件的操作权限。
- * 管理员豁免；普通用户仅能操作自己上传的文件。
+ * 具备 drive:all 能力者豁免；普通用户仅能操作自己上传的文件。
  * 返回文件记录（含 storagePath / isFolder 等），或 null 表示无权访问/不存在。
  */
 async function assertFileOwnership(
@@ -146,8 +121,8 @@ async function assertFileOwnership(
     },
   })
   if (!file) return null
-  // 管理员豁免
-  if (user.role === 'admin') return file
+  // 具备 drive:all 能力者豁免
+  if (roleHasCapability(user.role, 'drive:all')) return file
   // 普通用户必须为上传者
   if (file.uploadedById !== user.userId) return null
   return file
@@ -163,22 +138,17 @@ async function assertParentFolderAccess(
     select: { id: true, isFolder: true, storagePath: true, uploadedById: true },
   })
   if (!parent || !parent.isFolder) return null
-  if (user.role !== 'admin' && parent.uploadedById !== user.userId) return null
+  if (!roleHasCapability(user.role, 'drive:all') && parent.uploadedById !== user.userId) return null
   return { id: parent.id, storagePath: parent.storagePath }
 }
 
-// 所有路由需要登录 + canAccessDrive
-router.use(authenticate, async (req: Request, res: Response, next) => {
-  try {
-    const hasAccess = await checkDriveAccess(req.user!.userId)
-    if (!hasAccess) {
-      res.status(403).json({ error: '无网盘访问权限' })
-      return
-    }
-    next()
-  } catch {
-    res.status(500).json({ error: '权限校验失败' })
+// 所有路由需要登录 + 网盘访问权限（canAccessDrive 开关或 drive:all 能力）
+router.use(authenticate, (req: Request, res: Response, next) => {
+  if (!req.user || !hasDriveAccess(req.user)) {
+    res.status(403).json({ error: '无网盘访问权限' })
+    return
   }
+  next()
 })
 
 router.post('/download-ticket/:id', async (req: Request, res: Response) => {
@@ -209,8 +179,8 @@ router.get('/files', async (req: Request, res: Response) => {
     const parentId = parentIdStr ? parseId(parentIdStr) : null
     const { page, limit, skip } = parsePagination(req.query)
 
-    // 所有权过滤：管理员看全部，普通用户仅看自己上传的文件
-    const isAdmin = req.user!.role === 'admin'
+    // 所有权过滤：具备 drive:all 能力者看全部，普通用户仅看自己上传的文件
+    const isAdmin = roleHasCapability(req.user!.role, 'drive:all')
     const where: { parentId: number | null; uploadedById?: number } = { parentId }
     if (!isAdmin) {
       where.uploadedById = req.user!.userId
@@ -277,7 +247,7 @@ router.get('/search', async (req: Request, res: Response) => {
     }
 
     // 所有权过滤：管理员搜全部，普通用户仅搜自己的文件
-    const isAdmin = req.user!.role === 'admin'
+    const isAdmin = roleHasCapability(req.user!.role, 'drive:all')
     const where: { name: { contains: string }; uploadedById?: number } = {
       name: { contains: q },
     }
@@ -319,7 +289,7 @@ router.get('/fts-search', async (req: Request, res: Response) => {
       return
     }
 
-    const isAdmin = req.user!.role === 'admin'
+    const isAdmin = roleHasCapability(req.user!.role, 'drive:all')
     const results = await searchFTS(q, isAdmin, req.user!.userId)
 
     // 查询完整文件信息

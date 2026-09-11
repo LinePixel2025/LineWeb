@@ -9,14 +9,14 @@ client/src/
 ├── App.tsx              # 路由中枢 — 6 层 Provider + 19 个 lazy() 页面
 ├── main.tsx             # ReactDOM.createRoot 入口
 ├── contexts/            # 6 个 Context（状态管理核心）
-│   ├── AuthContext.tsx       # JWT 认证状态（user/loading/isAdmin/login/register/logout）
+│   ├── AuthContext.tsx       # 账号登录状态（user/loading/isAdmin/hasAdminAccess/can()/login/register/logout）
 │   ├── WallpaperContext.tsx  # Bing 壁纸（依赖 AuthContext）
 │   ├── ContrastContext.tsx   # 高对比度模式（依赖 WallpaperContext）
 │   ├── DownloadContext.tsx   # 文件下载队列
 │   └── DriveContext.tsx      # 网盘导航状态（365 行，useReducer）
 ├── components/          # 43 个组件
 │   ├── Layout.tsx / AdminLayout.tsx  # 布局 + Navbar + Outlet
-│   ├── Guards.tsx            # ProtectedRoute + AdminRoute
+│   ├── Guards.tsx            # ProtectedRoute + AdminRoute（按能力清单放行）
 │   ├── Navbar.tsx / UserAvatar.tsx
 │   ├── drive/               # 网盘 UI（20 组件，最大模块）— 见下方
 │   ├── editor/              # Lexical 编辑器
@@ -27,9 +27,9 @@ client/src/
 │   ├── HomePage / LoginPage / RegisterPage / PostsPage / PostPage
 │   ├── ProfilePage / DrivePage / CalculatorPage / FeaturesPage
 │   ├── DynamicPage / EditorPage / AdminPage
-│   └── admin/              # 6 个管理页面（CommentAdmin/PageEditor/UserAdmin/ApiAdmin/DeviceMonitor/PageList）
+│   └── admin/              # 6 个管理页面（CommentAdmin/PageEditor/UserAdmin/ApiDocs/DeviceMonitor/PageList）
 ├── hooks/               # useThumbnails / useKeyboardShortcuts / useDragAndDrop / useResponsive
-├── lib/                 # api.ts（HTTP 客户端 + JWT + 401 处理）+ format.ts
+├── lib/                 # api.ts（HTTP 客户端 + Bearer token + 401 处理）+ permissions.ts（能力常量）+ format.ts
 ├── styles/              # 7 个 CSS 文件（无 Tailwind，无 CSS-in-JS）
 └── types/               # drive.ts + comment.ts
 ```
@@ -39,8 +39,8 @@ client/src/
 | 任务 | 位置 | 说明 |
 |------|------|------|
 | 加新页面 | `pages/` 创建 → `App.tsx` 加 `lazy()` + Route | 公开页放 `<Layout>`，管理页放 `<AdminRoute><AdminLayout>` |
-| 改认证/登录流 | `contexts/AuthContext.tsx` + `lib/api.ts` | api.ts 统一 401 处理 |
-| 改路由守卫 | `components/Guards.tsx` | ProtectedRoute（需登录）/ AdminRoute（需 admin） |
+| 改认证/登录流 | `contexts/AuthContext.tsx` + `lib/api.ts` | api.ts 统一 401 处理；登录返回的 `user.capabilities` 驱动 `can()` |
+| 改路由守卫 | `components/Guards.tsx` + `lib/permissions.ts` | ProtectedRoute（需登录）/ AdminRoute（需任意管理能力） |
 | 加全局状态 | `contexts/` 新建 Context | 6 层 Provider 嵌套在 App.tsx |
 | 加 API 调用 | `lib/api.ts` 已封装 get/post/put/del | 自动附 Bearer token，30s 超时 |
 | 网盘功能 | `components/drive/` + `contexts/DriveContext.tsx` + `pages/DrivePage.tsx` | 双 reducer 架构 |
@@ -49,13 +49,14 @@ client/src/
 ## 认证流程
 
 ```
-localStorage.lineweb_token → AuthContext 初始化时读 token → GET /api/auth/me 验证
+localStorage.lineweb_token（账号登录令牌）→ AuthContext 初始化时读 token → GET /api/auth/me
 → 401 时 api.ts handleUnauthorized() 清 token + 跳 /login
 → ProtectedRoute 检查 user 是否存在 → 无则重定向 /login
-→ AdminRoute 检查 isAdmin → 非 admin 重定向 /
+→ AdminRoute 检查 hasAdminAccess（user.capabilities 非空）→ 否则重定向 /
+→ 页面/侧边栏用 can('user:manage') 等能力判断可见性（admin 自动拥有全部能力）
 ```
 
-**特殊**：`/login`、`/register`、`/auth/me` 路径不触发 401 重定向。
+**特殊**：`/login`、`/register`、`/auth/me` 路径不触发 401 重定向。能力常量与后端 `server/src/lib/permissions.ts` 一一对应。
 
 ## Provider 嵌套顺序
 
@@ -102,7 +103,7 @@ useEffect(() => {
 - Vitest + jsdom + `@testing-library/react`
 - `src/test-setup.ts` → 仅 `import '@testing-library/jest-dom'`
 - `__tests__/` 与源代码同目录
-- **仅 client 有测试**（13 个文件），server 无
+- **仅 client 有测试**（21 个文件），server 无
 - 无 MSW，全部用 `vi.mock()` 模拟 API
 - `npm run test` 在 client/ 目录下运行
 

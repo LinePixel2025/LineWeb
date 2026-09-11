@@ -16,7 +16,6 @@ import driveRoutes from './routes/drive.js'
 import driveFavoritesRoutes from './routes/driveFavorites.js'
 import deviceRoutes from './routes/devices.js'
 import statsRoutes from './routes/stats.js'
-import apiKeyRoutes from './routes/apiKeys.js'
 import avatarRoutes from './routes/avatar.js'
 import healthRoutes from './routes/health.js'
 import aiRoutes from './routes/ai.js'
@@ -64,7 +63,7 @@ app.use(cors({
     : config.corsOrigin,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Screen-Time-Token'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }))
 
 // 压缩响应 — compression supports gzip/deflate/brotli based on Accept-Encoding
@@ -94,9 +93,9 @@ app.use('/api', (req, _res, next) => {
   next()
 })
 
-// 全局认证中间件 — 除公开路径外，所有 API 请求必须携带 JWT 或 API Key
+// 全局认证中间件 — 除公开路径外，所有 API 请求必须携带账号登录令牌
 // 注意：req.path 在 /api 中间件中不含 /api 前缀（如 /auth/login 而非 /api/auth/login）
-const publicApiPaths = ['/auth/login', '/auth/register', '/auth/avatar', '/health', '/health/push', '/posts', '/pages/featured', '/pages/slug', '/stats/public', '/version', '/comments/post', '/ai/chat']
+const publicApiPaths = ['/auth/login', '/auth/register', '/auth/avatar', '/health', '/posts', '/pages/featured', '/pages/slug', '/stats/public', '/version', '/comments/post', '/ai/chat']
 app.use('/api', (req, res, next) => {
   if (publicApiPaths.some(p => req.path === p || req.path.startsWith(p + '/'))) {
     next()
@@ -130,7 +129,6 @@ app.use('/api/users', userRoutes)
 app.use('/api/drive', driveRoutes)
 app.use('/api/drive/favorites', driveFavoritesRoutes)
 app.use('/api/devices', deviceRoutes)
-app.use('/api/api-keys', apiKeyRoutes)
 app.use('/api/auth/avatar', avatarRoutes)
 app.use('/api/health', healthRoutes)
 app.use('/api/ai', aiRoutes)
@@ -142,9 +140,9 @@ app.get('/api', (_req, res) => {
     version: '1.0.0',
     baseUrl: '/api',
     auth: {
-      login: { method: 'POST', path: '/api/auth/login', auth: 'public', description: '用户登录（唯一公开端点之一）' },
-      register: { method: 'POST', path: '/api/auth/register', auth: 'public', description: '用户注册（唯一公开端点之一）' },
-      me: { method: 'GET', path: '/api/auth/me', auth: true, description: '获取当前用户信息' },
+      login: { method: 'POST', path: '/api/auth/login', auth: 'public', description: '账号登录，返回访问令牌（可选 rememberDays 申请最多 90 天有效期）' },
+      register: { method: 'POST', path: '/api/auth/register', auth: 'public', description: '用户注册（默认 user 角色）' },
+      me: { method: 'GET', path: '/api/auth/me', auth: true, description: '获取当前用户信息（含角色与 capabilities 能力清单）' },
       settings: { method: 'PUT', path: '/api/auth/settings', auth: true, description: '更新用户设置' },
       avatarUpload: { method: 'POST', path: '/api/auth/avatar', auth: true, description: '上传/更新头像 (multipart/form-data)' },
       avatarGet: { method: 'GET', path: '/api/auth/avatar', auth: true, description: '获取当前用户头像' },
@@ -206,25 +204,19 @@ app.get('/api', (_req, res) => {
       dashboard: { method: 'GET', path: '/api/stats', auth: 'admin', description: 'Dashboard 统计汇总' },
       public: { method: 'GET', path: '/api/stats/public', auth: 'public', description: '公开统计数据（文章/用户/评论/页面数量）' },
     },
-    apiKeys: {
-      create: { method: 'POST', path: '/api/api-keys', auth: 'admin', description: '创建 API Key（返回完整 key 仅此一次）' },
-      list: { method: 'GET', path: '/api/api-keys', auth: 'admin', description: '列出所有 API Key' },
-      detail: { method: 'GET', path: '/api/api-keys/:id', auth: 'admin', description: '获取 API Key 详情' },
-      update: { method: 'PUT', path: '/api/api-keys/:id', auth: 'admin', description: '更新 API Key（名称/状态/过期）' },
-      delete: { method: 'DELETE', path: '/api/api-keys/:id', auth: 'admin', description: '删除 API Key' },
-    },
+    apiKeys: '已废弃 —— LineWeb 只使用账号登录令牌访问全部端点，不再提供 API Key。',
+
     health: {
       screenTime: { method: 'GET', path: '/api/health/screen-time', auth: true, description: '获取今日屏幕时间' },
       screenTimeRange: { method: 'GET', path: '/api/health/screen-time/range?from=&to=', auth: true, description: '获取日期范围内的屏幕时间历史' },
-      push: { method: 'POST', path: '/api/health/push', auth: 'X-Screen-Time-Token', description: '推送屏幕时间' },
-      createToken: { method: 'POST', path: '/api/health/tokens', auth: true, description: '生成屏幕时间 Token' },
-      listTokens: { method: 'GET', path: '/api/health/tokens', auth: true, description: '列出屏幕时间 Token' },
-      deleteToken: { method: 'DELETE', path: '/api/health/tokens/:id', auth: true, description: '删除屏幕时间 Token' },
+      push: { method: 'POST', path: '/api/health/push', auth: true, description: '推送屏幕时间（设备登录后的同一令牌）' },
+      dailyGoal: { method: 'GET', path: '/api/health/daily-goal', auth: true, description: '获取今日使用目标' },
+      setDailyGoal: { method: 'PUT', path: '/api/health/daily-goal', auth: true, description: '设置今日使用目标' },
     },
     system: {
-      health: { method: 'GET', path: '/api/health', auth: 'public', description: '服务健康检查（唯一公开端点之一）' },
+      health: { method: 'GET', path: '/api/health', auth: 'public', description: '服务健康检查（公开端点之一）' },
       apiIndex: { method: 'GET', path: '/api', auth: true, description: 'API 端点列表（需认证）' },
-      authMethods: '支持 JWT (Authorization: Bearer <token>) 和 API Key (X-API-Key: <key>) 两种认证方式。所有端点（除 login/register/health 外）均需认证。',
+      authMethods: '仅支持账号登录令牌：POST /api/auth/login → Authorization: Bearer <token>。权限由账号角色的 capabilities 决定（admin 自动拥有全部能力；普通账号可访问全部非管理端点，网盘受 canAccessDrive 开关约束）。不再支持 API Key 与屏幕时间 Token。',
     },
   })
 })

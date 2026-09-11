@@ -18,10 +18,11 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 export function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading, isAdmin } = useAuth()
+  const { user, loading, hasAdminAccess } = useAuth()
   const location = useLocation()
   if (loading) return <LoadingSpinner />
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />
-  if (!isAdmin) return <Navigate to="/" replace />
+  // 管理区入口：账号需具备任意管理能力（admin 拥有全部能力）
+  if (!hasAdminAccess) return <Navigate to="/" replace />
   return <>{children}</>
 }

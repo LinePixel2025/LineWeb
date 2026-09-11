@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { USER_ROLES } from '../lib/permissions.js'
 
 function parseCorsOrigins(raw: string | undefined): string | string[] | boolean {
   if (!raw) return 'http://localhost:5173'
@@ -32,8 +33,6 @@ export const config = {
   downloadChunkKB: parseInt(process.env.DOWNLOAD_CHUNK_KB || '256', 10),
   streamChunkKB: parseInt(process.env.STREAM_CHUNK_KB || '4096', 10),
   driveSyncIntervalMs: parseInt(process.env.DRIVE_SYNC_INTERVAL_MS || '300000', 10),
-  apiKeyPrefix: 'lw_',
-  apiKeyLength: 48,
 }
 
 export const registerSchema = z.object({
@@ -47,6 +46,8 @@ export const loginSchema = z.object({
   email: z.string().email().optional(),
   username: z.string().min(1).max(50).optional(),
   password: z.string().min(1).max(100),
+  // 设备长期登录：第三方脚本/桌面应用可申请更长的令牌有效期（仍是同一个账号登录令牌）
+  rememberDays: z.number().int().min(1).max(90).optional(),
 }).refine((d) => d.identifier || d.email || d.username, {
   message: '请输入邮箱或用户名',
 })
@@ -96,24 +97,8 @@ export const commentUpdateSchema = z.object({
 })
 
 export const updateUserSchema = z.object({
-  role: z.enum(['user', 'admin']).optional(),
+  role: z.enum(USER_ROLES).optional(),
   password: z.string().min(6).max(100).optional(),
-})
-
-export const createApiKeySchema = z.object({
-  name: z.string().min(1, '名称不能为空').max(100),
-  expiresAt: z.string().optional(),
-})
-
-export const updateApiKeySchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  active: z.boolean().optional(),
-  expiresAt: z.string().nullable().optional(),
-})
-
-export const createScreenTimeTokenSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  expiresAt: z.string().optional(),
 })
 
 export const pushScreenTimeSchema = z.object({
