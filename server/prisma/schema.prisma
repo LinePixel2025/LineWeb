@@ -24,6 +24,8 @@ model User {
   driveFiles       DriveFile[] // 上传的文件
   driveFavorites   DriveFavorite[]
   screenTimeLogs   ScreenTimeLog[]
+  oauthGrants      OAuthGrant[] // 该用户授权过的第三方应用
+  createdOAuthClients OAuthClient[] @relation("OAuthClientCreatedBy")
 
   @@map("users")
 }
@@ -145,4 +147,89 @@ model AiConfig {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("ai_config")
+}
+
+// === 第三方应用授权（OAuth 2.0 授权码 + PKCE） ===
+
+model OAuthClient {
+  id            Int      @id @default(autoincrement())
+  clientId      String   @unique @map("client_id")      // 公开标识，形如 lw_xxxxx
+  clientSecret  String?  @map("client_secret")          // bcrypt 哈希；公开客户端为 null
+  clientType    String   @default("confidential") @map("client_type") // confidential | public
+  name          String
+  description   String?
+  homepage      String?
+  redirectUris  String   @map("redirect_uris")          // JSON 数组字符串，回调地址需精确匹配
+  allowedScopes String   @map("allowed_scopes")         // JSON 数组字符串：管理员允许该应用申请的最大 scope 集
+  isActive      Boolean  @default(true) @map("is_active")
+  createdById   Int?     @map("created_by_id")
+  createdBy     User?    @relation("OAuthClientCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  grants        OAuthGrant[]
+  codes         OAuthCode[]
+  refreshTokens OAuthRefreshToken[]
+
+  @@index([isActive])
+  @@map("oauth_clients")
+}
+
+model OAuthGrant {
+  id         Int       @id @default(autoincrement())
+  userId     Int       @map("user_id")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId   Int       @map("client_id")
+  client     OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  scopes     String    // JSON 数组字符串：用户实际同意的 scope
+  revokedAt  DateTime? @map("revoked_at")    // 非空 = 用户已撤销授权
+  lastUsedAt DateTime? @map("last_used_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  codes         OAuthCode[]
+  refreshTokens OAuthRefreshToken[]
+
+  @@unique([userId, clientId])
+  @@index([userId])
+  @@map("oauth_grants")
+}
+
+model OAuthCode {
+  id                  Int         @id @default(autoincrement())
+  codeHash            String      @unique @map("code_hash")   // 仅存 sha256，明文只回传给应用一次
+  grantId             Int         @map("grant_id")
+  grant               OAuthGrant  @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  clientId            Int         @map("client_id")
+  client              OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  userId              Int         @map("user_id")
+  redirectUri         String      @map("redirect_uri")
+  scopes              String      // JSON 数组字符串
+  codeChallenge       String      @map("code_challenge")
+  codeChallengeMethod String      @default("S256") @map("code_challenge_method")
+  expiresAt           DateTime    @map("expires_at")
+  usedAt              DateTime?   @map("used_at")            // 一次性核销标记（防重放）
+  createdAt           DateTime    @default(now()) @map("created_at")
+
+  @@index([grantId])
+  @@map("oauth_codes")
+}
+
+model OAuthRefreshToken {
+  id             Int         @id @default(autoincrement())
+  tokenHash      String      @unique @map("token_hash")      // 仅存 sha256
+  grantId        Int         @map("grant_id")
+  grant          OAuthGrant  @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  clientId       Int         @map("client_id")
+  client         OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  userId         Int         @map("user_id")
+  scopes         String      // JSON 数组字符串
+  expiresAt      DateTime    @map("expires_at")
+  revokedAt      DateTime?   @map("revoked_at")
+  replacedByHash String?     @map("replaced_by_hash")        // 轮换后继任令牌的哈希
+  lastUsedAt     DateTime?   @map("last_used_at")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  @@index([grantId])
+  @@map("oauth_refresh_tokens")
 }

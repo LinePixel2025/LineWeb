@@ -1,8 +1,10 @@
 # LineWeb 登录认证 API 接入文档
 
 > 适用版本：2026-09 起（认证已统一为「账号登录令牌 + 角色能力矩阵」）
-> 相关文档：[`api.md`](./api.md)（全部端点详解）、[`health-api.md`](./health-api.md)（屏幕时间/数字健康）、[`time-master-api-guide.md`](./time-master-api-guide.md)（设备接入）
+> 相关文档：[`api.md`](./api.md)（全部端点详解）、[`app-auth-api.md`](./app-auth-api.md)（**第三方应用授权**，OAuth 2.0 授权码 + PKCE）、[`health-api.md`](./health-api.md)（屏幕时间/数字健康）、[`time-master-api-guide.md`](./time-master-api-guide.md)（设备接入）
 > 服务端实现：`server/src/middleware/auth.ts`、`server/src/lib/permissions.ts`、`server/src/routes/auth.ts`
+
+> **给第三方应用开发者**：如果你的应用需要代表用户访问 LineWeb API，请优先使用 [`app-auth-api.md`](./app-auth-api.md) 描述的 OAuth 授权流程 —— 用户不必把密码交给你，令牌权限也能被限制在最小范围。本文档描述的账号登录令牌适合浏览器前端、自用脚本等「用户自己直接持有凭据」的场景。
 
 ---
 

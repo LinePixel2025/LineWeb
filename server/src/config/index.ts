@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { USER_ROLES } from '../lib/permissions.js'
+import { APP_SCOPES } from '../lib/appScopes.js'
 
 function parseCorsOrigins(raw: string | undefined): string | string[] | boolean {
   if (!raw) return 'http://localhost:5173'
@@ -26,6 +27,13 @@ export const config = {
   jwtSecret: requireEnv('JWT_SECRET', process.env.NODE_ENV === 'production' ? undefined : 'lineweb-dev-secret'),
   jwtExpiresIn: '7d' as const,
   downloadTicketExpiresIn: '5m' as const,
+  // === 第三方应用授权（OAuth 2.0 授权码 + PKCE）时效 ===
+  oauthCodeTtlMs: 5 * 60 * 1000,           // 授权码 5 分钟有效，且只能使用一次
+  oauthAccessTokenTtl: '1h' as const,      // 应用访问令牌 1 小时（短期，靠刷新令牌续期）
+  oauthAccessTokenTtlSeconds: 3600,
+  oauthRefreshTokenTtlMs: 30 * 24 * 60 * 60 * 1000, // 刷新令牌 30 天
+  oauthRefreshTokenTtlSeconds: 2592000,
+  oauthAccessTokenType: 'app' as const,    // 应用令牌的 type claim，用于与下载票据区分
   corsOrigin: parseCorsOrigins(process.env.CORS_ORIGIN),
   storageNodeToken: requireEnv('STORAGE_NODE_TOKEN', process.env.NODE_ENV === 'production' ? undefined : 'lineweb-storage-node-secret'),
   maxFileSizeMB: parseInt(process.env.MAX_FILE_SIZE_MB || '500', 10),
@@ -164,4 +172,58 @@ export const aiWriteDraftSchema = z.object({
   outline: z.string().max(2000).optional(),
   tone: z.enum(['formal', 'casual', 'tech', 'story']).optional(),
   length: z.enum(['short', 'medium', 'long']).optional(),
+})
+
+// === 第三方应用授权 Schemas（/oauth/*） ===
+
+/** 授权页参数：应用名下的 client_id + 回调地址 + 申请的 scope + 防 CSRF 的 state */
+export const oauthAuthorizeQuerySchema = z.object({
+  client_id: z.string().min(1).max(100),
+  redirect_uri: z.string().min(1).max(500),
+  scope: z.string().min(1).max(500),
+  state: z.string().max(200).optional(),
+})
+
+/** 用户在授权页的最终决定 */
+export const oauthAuthorizeDecisionSchema = oauthAuthorizeQuerySchema.extend({
+  decision: z.enum(['approve', 'deny']),
+})
+
+/** 令牌端点：授权码换令牌 / 刷新令牌轮换，字段按 grant_type 在路由内分别校验 */
+export const oauthTokenSchema = z.object({
+  grant_type: z.enum(['authorization_code', 'refresh_token']),
+  client_id: z.string().min(1).max(100),
+  client_secret: z.string().max(200).optional(),
+  code: z.string().max(200).optional(),
+  redirect_uri: z.string().max(500).optional(),
+  code_verifier: z.string().max(200).optional(),
+  refresh_token: z.string().max(200).optional(),
+})
+
+/** 撤销端点 */
+export const oauthRevokeSchema = z.object({
+  client_id: z.string().min(1).max(100),
+  client_secret: z.string().max(200).optional(),
+  token: z.string().min(1).max(200),
+})
+
+/** 管理员注册应用 */
+export const oauthClientCreateSchema = z.object({
+  name: z.string().min(1).max(60),
+  description: z.string().max(200).optional(),
+  homepage: z.string().max(300).optional(),
+  redirectUris: z.array(z.string().min(1).max(500)).min(1).max(20),
+  allowedScopes: z.array(z.enum(APP_SCOPES)).min(1),
+  clientType: z.enum(['confidential', 'public']).default('confidential'),
+})
+
+/** 管理员更新应用（可停用 / 启用） */
+export const oauthClientUpdateSchema = z.object({
+  name: z.string().min(1).max(60).optional(),
+  description: z.string().max(200).optional(),
+  homepage: z.string().max(300).optional(),
+  redirectUris: z.array(z.string().min(1).max(500)).min(1).max(20).optional(),
+  allowedScopes: z.array(z.enum(APP_SCOPES)).min(1).optional(),
+  clientType: z.enum(['confidential', 'public']).optional(),
+  isActive: z.boolean().optional(),
 })

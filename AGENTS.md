@@ -17,7 +17,7 @@ lineweb/
 ├── storage-node/     # Python 3 WebSocket 文件存储客户端（10 个命令）→ D:/LineWebDrive，仅本地
 ├── cli/              # LineWeb CLI 本地管理工具（TS + esbuild + pkg → LineWebCLI.exe，v2.1.0）
 ├── scripts/          # 14 个运维脚本（部署、开发启动/停止、webhook、截图、屏幕时间推送）
-├── docs/             # 登录认证接入（auth-api.md）、API 参考、Drive 部署指南、屏幕时间 API 指南、健康系统 API 指南、HTTP 直连部署指南
+├── docs/             # 登录认证接入（auth-api.md）、第三方应用授权（app-auth-api.md）、API 参考、Drive 部署指南、屏幕时间 API 指南、健康系统 API 指南、HTTP 直连部署指南
 ├── .omo/             # OpenCode 会话续传数据
 ├── .trae/            # Trae IDE 配置、项目规则
 ├── .superpowers/     # SDD 任务产物
@@ -53,10 +53,12 @@ lineweb/
 |----------------------|----------|-------|
 | 单体仓库编排 | `package.json` | `concurrently` 同时运行前后端；`postinstall` 级联安装子目录依赖 |
 | 部署方式 | 本地 Windows + Cloudflare Tunnel | 服务运行在本机（Express :3001 + 存储节点），`cloudflared tunnel run` 将本地端口映射为公网 HTTPS 域名；无公网 IP 要求；代码更新走本地 CLI `update`（`git reset --hard`）；Railway / 云服务器（Docker+Nginx+GitHub Actions）已废弃，`.github/workflows/deploy.yml` 已删除 |
-| 数据库结构 | `server/prisma/schema.prisma` | **8 个模型**：User、Post、Comment、Page、DriveFile、DriveFavorite、ScreenTimeLog、AiConfig（`ApiKey`、`ScreenTimeToken` 已随统一登录移除）；SQLite（本地开发与运行，生产即本地） |
+| 数据库结构 | `server/prisma/schema.prisma` | **12 个模型**：User、Post、Comment、Page、DriveFile、DriveFavorite、ScreenTimeLog、AiConfig、OAuthClient、OAuthGrant、OAuthCode、OAuthRefreshToken（`ApiKey`、`ScreenTimeToken` 已随统一登录移除）；SQLite（本地开发与运行，生产即本地） |
 | 数据库连接池 | `server/src/lib/prisma.ts` | Prisma 单例；仅旧 PostgreSQL 部署会注入 `connection_limit=10&pool_timeout=30`（已废弃，SQLite 单机无池） |
-| 认证（账号登录令牌） | `server/src/middleware/auth.ts` | **单一凭证**：`POST /api/auth/login` 换取 JWT（`Authorization: Bearer`，下载直链兼容 `?token=`）；**11 个公开路径**在 `index.ts` 白名单；新增公开端点必须同步改白名单；`optionalAuthenticate`（有 token 则解析、无则匿名放行，用于 AI chat） |
-| 角色能力矩阵 | `server/src/lib/permissions.ts` | 角色 `user`/`admin` → 能力（`content:write`、`comment:moderate`、`user:manage`、`stats:view`、`device:view`、`ai:configure`、`drive:all`）；admin 自动全权；路由用 `requireCapability()` 守卫；令牌只签 `{userId, role, ts}`，能力与网盘开关逐请求从 DB 解析 → 角色变更即时生效 |
+| 认证（账号登录令牌） | `server/src/middleware/auth.ts` | **账号凭证**：`POST /api/auth/login` 换取 JWT（`Authorization: Bearer`，下载直链兼容 `?token=`）；**13 个公开路径**在 `index.ts` 白名单；新增公开端点必须同步改白名单；`optionalAuthenticate`（有 token 则解析、无则匿名放行，用于 AI chat；应用令牌与下载票据按游客处理） |
+| 第三方应用授权 | `server/src/routes/oauth.ts` + `services/oauthService.ts` | **OAuth 2.0 授权码 + PKCE（强制 S256）**：管理员在 `/admin/apps` 注册应用取得 `client_id`（机密客户端另有 `client_secret`，仅返回一次）；第三方应用跳转前端 `/authorize` 让用户确认授权（`AuthorizePage.tsx`），授权码 5 分钟且一次性核销（防重放），换得 `access_token`(1h) + `refresh_token`(30d，每次刷新轮换，重放即吊销整条授权)；撤销入口在个人资料页 |
+| 应用令牌（scope） | `server/src/lib/appScopes.ts` | **scope 与端点白名单的唯一真相源**：9 个 scope（`profile:read`、`content:read`、`comment:write`、`health:read/write`、`drive:read/write`、`content:write`、`comment:moderate`）；`APP_ENDPOINT_RULES` 是应用令牌唯一可达的 API 面，**未列入一律 403**（`/api/users`、`/api/devices`、`/api/stats`、`/api/ai/config`、`/api/oauth/*`、`/api/auth/logout|profile|settings` 等永不可达）；应用令牌 `role:'app'`（未知角色 → 全部角色型检查自动为假），能力派生 scope 逐请求与账号当前能力取交集 → 降权即时生效；前端副本 `client/src/lib/appScopes.ts`，`__tests__/appScopes.test.ts` 跨端断言一致 |
+| 角色能力矩阵 | `server/src/lib/permissions.ts` | 角色 `user`/`admin` → 能力（`content:write`、`comment:moderate`、`user:manage`、`stats:view`、`device:view`、`ai:configure`、`drive:all`、`app:manage`）；admin 自动全权；路由用 `requireCapability()` 守卫（读认证阶段解析好的 `req.user.capabilities`，故对应用令牌精确生效）；令牌只签 `{userId, role, ts}`，能力与网盘开关逐请求从 DB 解析 → 角色变更即时生效 |
 | 登录/个人资料 | `server/src/routes/auth.ts` | 登录支持 `identifier`（用户名或邮箱，兼容 email）与 `rememberDays`（1–90 天设备长期令牌）；`PUT /auth/profile` 修改用户名（唯一性校验）/密码（验证当前密码，改密后旧 token 全失效并重签） |
 | 屏幕时间推送 | `server/src/routes/health.ts` | `/api/health/push`、`/screen-time*`、`/daily-goal*` 统一用登录令牌（仅本人数据）；`X-Screen-Time-Token` 已移除 |
 | AI 助手 | `server/src/routes/ai.ts` + `services/aiService.ts` | OpenAI SDK + 兼容 baseUrl；`AiConfig` 单行表存 key（脱敏显示）；**`/api/ai/chat` 公开（POST）但走 `optionalAuthenticate`**——登录用户额外注入站点统计、最近评论、全部已发布页面、按需检索文章正文（≤2 篇×1500 字）、近 14 天屏幕时间；`/chat/public` GET 取站点内容；管理端 `/admin/ai` 配置；chat() 错误统一 `AppError` |
@@ -93,7 +95,7 @@ server.listen(3001)
   ├── helmet(CSP) → cors → compression（跳过 /proxy、/download）
   ├── body parser 限定 /api（1mb，避免静态文件请求触发解析）
   ├── rate-limit(600/15min，代码注释里的 200 是过期的) → 设备追踪 → 全局认证检查
-  ├── cachePublic 中间件 → 12 个路由组挂载于 /api/*
+  ├── cachePublic 中间件 → 13 个路由组挂载于 /api/*（含 /api/oauth）
   ├── [生产] express.static(client/dist, maxAge 1y+immutable, HTML 不缓存) + SPA fallback
   └── errorHandler
 
@@ -252,12 +254,14 @@ LineWebCLI.exe update --yes                    # 代码更新（git reset --hard
 - **更新强制覆盖** — CLI `update` 使用 `git reset --hard origin/master` 而非 `git pull`，避免本地改动导致更新冲突；未跟踪文件（`server/.env` 等）不受影响。
 - **Cloudflare Tunnel 特点** — 隧道进程运行在本地 Windows，公网流量经 Cloudflare 边缘进入 `127.0.0.1:3001`（无需公网 IP/端口映射）；原生支持 WebSocket（网盘存储隧道、AI 流式响应均可用）；隧道中断不影响本地服务与 CLI 管理。
 - **Server 无测试** — `server/` 中零测试基础设施。Playwright 是 client 依赖但无配置或测试。
-- **认证中间件跳过 11 个路径**：`/auth/login`、`/auth/register`、`/auth/avatar`、`/health`、`/posts`、`/pages/featured`、`/pages/slug`、`/stats/public`、`/version`、`/comments/post`、`/ai/chat`。白名单匹配用 `req.path === p || req.path.startsWith(p + '/')`（`req.path` 不含 `/api` 前缀），因此 `/health` 覆盖全部 `/health/*`（路由内部仍要求登录令牌），`/ai/chat` 也覆盖 `/ai/chat/public`。
-- **唯一凭证是账号登录令牌** — API Key（`X-API-Key`）与屏幕时间 Token（`X-Screen-Time-Token`）已彻底移除（含 `ApiKey` / `ScreenTimeToken` 两张表与 `/api/api-keys`、`/api/health/tokens` 端点）；第三方设备登录同一账号后使用同一 JWT，可用 `rememberDays`（1–90）申请长期令牌。
+- **认证中间件跳过 13 个路径**：`/auth/login`、`/auth/register`、`/auth/avatar`、`/health`、`/posts`、`/pages/featured`、`/pages/slug`、`/stats/public`、`/version`、`/comments/post`、`/ai/chat`、`/oauth/token`、`/oauth/revoke`。白名单匹配用 `req.path === p || req.path.startsWith(p + '/')`（`req.path` 不含 `/api` 前缀），因此 `/health` 覆盖全部 `/health/*`（路由内部仍要求登录令牌），`/ai/chat` 也覆盖 `/ai/chat/public`；`/oauth/token|revoke` 用精确路径，避免前缀匹配放大暴露面。
+- **唯一账号凭证是账号登录令牌** — API Key（`X-API-Key`）与屏幕时间 Token（`X-Screen-Time-Token`）已彻底移除（含 `ApiKey` / `ScreenTimeToken` 两张表与 `/api/api-keys`、`/api/health/tokens` 端点）；第三方设备登录同一账号后使用同一 JWT，可用 `rememberDays`（1–90）申请长期令牌，**或走 OAuth 授权流程**获得权限更小的应用令牌。
+- **应用令牌必须走 `authenticate` 内的白名单校验** — `/health/*`、`/comments`、`/auth/avatar`、`/ai/*` 在公开路径白名单里，靠路由内再次调用 `authenticate` 兜底，因此应用令牌的端点白名单检查必须写在 `authenticate()` 内部（而非只放在全局中间件），否则这些端点会被应用令牌绕过。完整路径用 `${req.baseUrl}${req.path}` 拼接并**归一化末尾斜杠**（挂在 `/api/posts` 的 router 处理 `POST /api/posts` 时 `req.path` 是 `/`，否则匹配不上 `^/api/posts$`）。
 - **令牌失效精确到毫秒** — 签发时写入自签 `ts` claim 与 `user.tokenValidAfter` 直接比较，因此登出/改密后同一秒内的旧令牌也会立即 401；下载票据（`/api/drive/download-ticket/:id`）同样带 `ts`。
 - **下载票据有作用域限制** — `type === 'download'` 的票据只允许访问 `/api/drive/download/:id` 与 `/api/drive/files/:id/download`，其它端点一律 403（票据常出现在 URL / 浏览器历史 / 访问日志中）。
 - **前端管理区按能力守卫** — `client/src/lib/permissions.ts` 的 `ADMIN_ROUTE_CAPABILITIES` 同时驱动侧边栏过滤（`AdminLayout`/`GitHubSidebar`）与路由守卫（`Guards.AdminCapabilityRoute`，挂在 AdminLayout 的 `<Outlet/>` 外）；缺能力时重定向到该账号第一个可用管理页，避免落到无权页面 403。
-- **前后端能力清单有测试兜底** — `client/src/lib/__tests__/permissions.test.ts` 直接读 `server/src/lib/permissions.ts` 源码断言两份 `CAPABILITIES` 完全一致（服务端加能力而前端漏改会让 `npm test` 失败）。
+- **前后端能力清单有测试兜底** — `client/src/lib/__tests__/permissions.test.ts` 直接读 `server/src/lib/permissions.ts` 源码断言两份 `CAPABILITIES` 完全一致（服务端加能力而前端漏改会让 `npm test` 失败）；同理 `client/src/lib/__tests__/appScopes.test.ts` 读 `server/src/lib/appScopes.ts` 断言 scope 清单、标签/说明、以及端点白名单引用的 scope 全部合法。
+- **应用令牌绝不会获得管理能力** — 签发时 `role:'app'` + 按 scope 授予能力，且服务端所有角色判断都走 `roleHasCapability()`，未知角色让全部角色型检查自动为假（含 `drive.ts` 的 `drive:all` 越权豁免），因此新增管理端点无需额外改动即对应用令牌关闭。仅当需要放行「能力派生 scope」（`content:write`、`comment:moderate`）时才依赖 `requireCapability()` 读 `req.user.capabilities` 的行为。
 - **认证 API 禁缓存** — 除公开路径外，全局认证中间件设置 `Cache-Control: no-store` 并清空 ETag，避免 304 导致旧数据。
 - **新增公开端点必须同步两处** — `index.ts` 的 `publicApiPaths` 白名单 + `cachePublic` 缓存策略。
 - **`/api` 自描述端点** — `GET /api` 返回全部路由清单（需认证），排查路由问题时先看这里。

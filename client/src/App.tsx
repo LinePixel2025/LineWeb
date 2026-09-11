@@ -29,6 +29,8 @@ const UserAdminPage = lazy(() => import('./pages/admin/UserAdminPage'))
 const ApiDocsPage = lazy(() => import('./pages/admin/ApiDocsPage'))
 const DeviceMonitorPage = lazy(() => import('./pages/admin/DeviceMonitorPage'))
 const AiAdminPage = lazy(() => import('./pages/admin/AiAdminPage'))
+const AppAdminPage = lazy(() => import('./pages/admin/AppAdminPage'))
+const AuthorizePage = lazy(() => import('./pages/AuthorizePage'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -104,6 +106,10 @@ export default function App() {
                     <Route path="/drive" element={
                       <ProtectedRoute><DrivePage /></ProtectedRoute>
                     } />
+                    {/* 第三方应用授权的账户验证页（未登录会跳登录并带参数返回） */}
+                    <Route path="/authorize" element={
+                      <ProtectedRoute><AuthorizePage /></ProtectedRoute>
+                    } />
                   </Route>
 
                   {/* Admin layout — separate from main site */}
@@ -119,6 +125,7 @@ export default function App() {
                     <Route path="/admin/api" element={<ApiDocsPage />} />
                     <Route path="/admin/devices" element={<DeviceMonitorPage />} />
                     <Route path="/admin/ai" element={<AiAdminPage />} />
+                    <Route path="/admin/apps" element={<AppAdminPage />} />
                   </Route>
                   </Routes>
                 </Suspense>

@@ -13,6 +13,7 @@ export const CAPABILITIES = [
   'device:view',
   'ai:configure',
   'drive:all',
+  'app:manage',
 ] as const
 
 export type Capability = typeof CAPABILITIES[number]
@@ -25,6 +26,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   'device:view': '设备监控',
   'ai:configure': 'AI 配置',
   'drive:all': '网盘全量访问',
+  'app:manage': '应用授权管理',
 }
 
 export const ROLE_LABELS: Record<string, string> = {
@@ -76,6 +78,7 @@ export const ADMIN_ROUTE_CAPABILITIES: { prefix: string; capability: Capability 
   { prefix: '/admin/users', capability: 'user:manage' },
   { prefix: '/admin/devices', capability: 'device:view' },
   { prefix: '/admin/ai', capability: 'ai:configure' },
+  { prefix: '/admin/apps', capability: 'app:manage' },
   { prefix: '/admin/api', capability: null },        // API 接入指南：任何管理区账号可见
   { prefix: '/admin', capability: 'content:write' }, // 文章管理（含 /admin 首页）
 ]

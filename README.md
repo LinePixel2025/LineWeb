@@ -199,11 +199,14 @@ npm run docker:restart   # 重启 server 容器
 
 > 完整的登录认证接入说明（端点、令牌生命周期、能力矩阵、错误码、curl/TS/Python 示例、迁移与自检清单）见 **[`docs/auth-api.md`](docs/auth-api.md)**；全部端点详解见 [`docs/api.md`](docs/api.md)。
 
-> 自 2026-09 起统一为账号登录令牌：API Key（`X-API-Key`、`lw_` 前缀）与屏幕时间 Token（`X-Screen-Time-Token`、`st_` 前缀）已移除，相关端点与数据表均已删除，旧密钥全部失效。第三方设备（如 Time Master）改为账号登录，可用 `rememberDays`（1–90 天）申请长期令牌。
+> **第三方应用**（桌面/移动客户端、外部网站）接入请使用 OAuth 2.0 授权码 + PKCE 流程，不要在应用中保存用户密码：应用由管理员在 `/admin/apps` 注册后跳转 `/authorize` 让用户确认授权，再用授权码换取**作用域受限**的访问令牌（无法获得任何管理能力）。完整说明见 **[`docs/app-auth-api.md`](docs/app-auth-api.md)**。
+
+> 自 2026-09 起统一为账号登录令牌：API Key（`X-API-Key`、`lw_` 前缀）与屏幕时间 Token（`X-Screen-Time-Token`、`st_` 前缀）已移除，相关端点与数据表均已删除，旧密钥全部失效。第三方设备（如 Time Master）可继续用账号登录 + `rememberDays`（1–90 天）长期令牌，**或改用 OAuth 授权流程**获得更小权限面。
 
 | 路由模块 | 主要端点 | 说明 |
 |---------|---------|------|
 | **认证** | `POST /auth/login|register`、`GET /auth/me` | 登录/注册/个人信息 |
+| **第三方应用授权** | `POST /oauth/token|revoke`、`GET /oauth/authorize-context`、`POST /oauth/authorize`、`GET /oauth/grants`、`/oauth/clients` | OAuth 2.0 授权码 + PKCE；`/authorize` 为账户验证页，`/admin/apps` 注册应用，个人资料页可撤销 |
 | **文章** | `GET /posts`、`GET/POST/PUT/DELETE /posts/:id` | 公开列表 + 内容编辑（`content:write`）CRUD |
 | **评论** | `GET/POST /comments/post/:id`、嵌套回复 | 树形评论系统 |
 | **页面** | `GET /pages/featured|slug/:slug`、管理端 CRUD | 可视化页面构建器（`content:write`） |
@@ -214,7 +217,7 @@ npm run docker:restart   # 重启 server 容器
 | **API 接入** | `GET /api` | 自描述端点清单；管理面板 `/admin/api` 为账号登录接入指南页 |
 | **统计** | `GET /stats/public`、`GET /stats` | 公开/管理统计 |
 | **设备** | `GET /devices` | 在线设备追踪（admin） |
-| **健康** | `GET /health`、`GET/PUT /health/daily-goal`、`POST /health/push` | 健康检查 + 屏幕时间读写（第三方推送用同一登录令牌） |
+| **健康** | `GET /health`、`GET/PUT /health/daily-goal`、`POST /health/push` | 健康检查 + 屏幕时间读写（第三方推送用登录令牌或应用令牌） |
 | **必应壁纸** | `GET /bing-wallpaper` | 每日必应壁纸 |
 | **版本** | `GET /version` | 部署版本信息 |
 

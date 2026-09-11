@@ -19,6 +19,7 @@ import statsRoutes from './routes/stats.js'
 import avatarRoutes from './routes/avatar.js'
 import healthRoutes from './routes/health.js'
 import aiRoutes from './routes/ai.js'
+import oauthRoutes from './routes/oauth.js'
 import { authenticate } from './middleware/auth.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel, isNodeConnected } from './services/storageTunnel.js'
@@ -95,7 +96,8 @@ app.use('/api', (req, _res, next) => {
 
 // 全局认证中间件 — 除公开路径外，所有 API 请求必须携带账号登录令牌
 // 注意：req.path 在 /api 中间件中不含 /api 前缀（如 /auth/login 而非 /api/auth/login）
-const publicApiPaths = ['/auth/login', '/auth/register', '/auth/avatar', '/health', '/posts', '/pages/featured', '/pages/slug', '/stats/public', '/version', '/comments/post', '/ai/chat']
+// 共 13 条；OAuth 的 token / revoke 端点是应用侧匿名调用入口（授权页等其他端点仍需登录令牌）
+const publicApiPaths = ['/auth/login', '/auth/register', '/auth/avatar', '/health', '/posts', '/pages/featured', '/pages/slug', '/stats/public', '/version', '/comments/post', '/ai/chat', '/oauth/token', '/oauth/revoke']
 app.use('/api', (req, res, next) => {
   if (publicApiPaths.some(p => req.path === p || req.path.startsWith(p + '/'))) {
     next()
@@ -132,6 +134,7 @@ app.use('/api/devices', deviceRoutes)
 app.use('/api/auth/avatar', avatarRoutes)
 app.use('/api/health', healthRoutes)
 app.use('/api/ai', aiRoutes)
+app.use('/api/oauth', oauthRoutes)
 
 // API 自描述端点 — 列出所有可用路由
 app.get('/api', (_req, res) => {
@@ -216,7 +219,21 @@ app.get('/api', (_req, res) => {
     system: {
       health: { method: 'GET', path: '/api/health', auth: 'public', description: '服务健康检查（公开端点之一）' },
       apiIndex: { method: 'GET', path: '/api', auth: true, description: 'API 端点列表（需认证）' },
-      authMethods: '仅支持账号登录令牌：POST /api/auth/login → Authorization: Bearer <token>。权限由账号角色的 capabilities 决定（admin 自动拥有全部能力；普通账号可访问全部非管理端点，网盘受 canAccessDrive 开关约束）。不再支持 API Key 与屏幕时间 Token。',
+      authMethods: '账号登录令牌：POST /api/auth/login → Authorization: Bearer <token>。权限由账号角色的 capabilities 决定（admin 自动拥有全部能力；普通账号可访问全部非管理端点，网盘受 canAccessDrive 开关约束）。第三方应用请改用 OAuth 2.0 授权码 + PKCE 流程（见 docs/app-auth-api.md），不要保存用户密码；应用令牌只能访问白名单端点。',
+    },
+    oauth: {
+      token: { method: 'POST', path: '/api/oauth/token', auth: 'public', description: '授权码换令牌 / 刷新令牌轮换（支持 PKCE，JSON 或表单编码）' },
+      revoke: { method: 'POST', path: '/api/oauth/revoke', auth: 'public', description: '撤销刷新令牌' },
+      authorizeContext: { method: 'GET', path: '/api/oauth/authorize-context?client_id=&redirect_uri=&scope=&state=', auth: true, description: '授权页读取应用信息与权限清单（校验回调地址与账号能力）' },
+      authorize: { method: 'POST', path: '/api/oauth/authorize', auth: true, description: '用户同意或拒绝授权，返回跳转地址（授权码由服务端签发）' },
+      grantsList: { method: 'GET', path: '/api/oauth/grants', auth: true, description: '当前用户已授权的应用列表' },
+      grantsRevoke: { method: 'DELETE', path: '/api/oauth/grants/:id', auth: true, description: '撤销某应用的授权（令牌立即失效）' },
+      clientsList: { method: 'GET', path: '/api/oauth/clients', auth: 'app:manage', description: '管理：第三方应用列表' },
+      clientsCreate: { method: 'POST', path: '/api/oauth/clients', auth: 'app:manage', description: '管理：注册应用（密钥仅返回一次）' },
+      clientsUpdate: { method: 'PUT', path: '/api/oauth/clients/:id', auth: 'app:manage', description: '管理：更新 / 停用应用' },
+      clientsResetSecret: { method: 'POST', path: '/api/oauth/clients/:id/secret', auth: 'app:manage', description: '管理：重置应用密钥（仅返回一次）' },
+      clientsDelete: { method: 'DELETE', path: '/api/oauth/clients/:id', auth: 'app:manage', description: '管理：删除应用（授权一并撤销）' },
+      flow: '授权码 + PKCE：应用跳转 /authorize?client_id&redirect_uri&scope&state&code_challenge → 用户登录并同意 → 回调带回一次性 code → 应用用 code + code_verifier 调用 /api/oauth/token 换取 access_token（1 小时）与 refresh_token（30 天，每次刷新轮换）。应用令牌是作用域令牌（role=app），只能访问白名单端点，无法获得任何管理能力。',
     },
   })
 })

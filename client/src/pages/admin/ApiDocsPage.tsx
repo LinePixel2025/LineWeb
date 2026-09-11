@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { GitHubBadge, GitHubButton, GitHubAlert } from '../../components/ui'
 import { useAuth } from '../../contexts/AuthContext'
 import { CAPABILITIES, capabilityLabel, roleLabel } from '../../lib/permissions'
@@ -163,10 +164,28 @@ export default function ApiDocsPage() {
         </div>
 
         <div className="gh-box" style={{ padding: 'var(--gh-space-4)' }}>
+          <h2 style={{ marginTop: 0, fontSize: 'var(--gh-text-lg)' }}>第三方应用接入</h2>
+          <p className="gh-text-secondary" style={{ lineHeight: 1.9 }}>
+            第三方应用<strong>不应保存用户密码</strong>，而应使用 OAuth 2.0 授权码 + PKCE 流程：
+            用户在你的应用中点击登录后，跳转到本站的{' '}
+            <code>/authorize?client_id=&amp;redirect_uri=&amp;scope=&amp;state=&amp;code_challenge=&amp;code_challenge_method=S256</code>
+            ，用户在<strong>账户验证页</strong>确认授权；应用随后用服务端返回的一次性授权码调用{' '}
+            <code>POST /api/oauth/token</code> 换取访问令牌与刷新令牌。
+          </p>
+          <ul className="gh-text-secondary" style={{ margin: '12px 0 0', paddingLeft: '1.2em', lineHeight: 1.9 }}>
+            <li>应用需先在 <Link to="/admin/apps">应用授权</Link> 页面注册，取得 <code>client_id</code>（机密客户端还有 <code>client_secret</code>）。</li>
+            <li>访问令牌有效期 1 小时，刷新令牌 30 天且每次刷新都会轮换；重复使用旧刷新令牌会吊销整条授权。</li>
+            <li>应用令牌是<strong>作用域令牌</strong>（<code>role=app</code>）：只能访问白名单端点，且无法获得用户管理、设备监控、站点统计、AI 配置等任何管理能力。</li>
+            <li>用户可以随时在「个人资料 → 已授权的应用」中撤销授权，撤销后令牌立即失效。</li>
+            <li>完整接入说明（端点、PKCE 示例、scope 清单、错误码、自检清单）见仓库 <code>docs/app-auth-api.md</code>。</li>
+          </ul>
+        </div>
+
+        <div className="gh-box" style={{ padding: 'var(--gh-space-4)' }}>
           <h2 style={{ marginTop: 0, fontSize: 'var(--gh-text-lg)' }}>注意事项</h2>
           <ul className="gh-text-secondary" style={{ margin: 0, paddingLeft: '1.2em', lineHeight: 1.9 }}>
             <li>令牌默认有效期 7 天；登录时传 <code>rememberDays</code>（1–90）可申请更长的设备令牌。</li>
-            <li>退出登录或修改密码会让该账号的<strong>所有</strong>旧令牌立即失效。</li>
+            <li>退出登录或修改密码会让该账号的<strong>所有</strong>旧令牌（含已授权的应用令牌）立即失效。</li>
             <li>角色变更即时生效，无需重新登录；管理员自动获得全部能力（含网盘访问）。</li>
             <li>登录接口限流 20 次 / 15 分钟（按 IP），设备请缓存令牌并处理 401 重登。</li>
           </ul>

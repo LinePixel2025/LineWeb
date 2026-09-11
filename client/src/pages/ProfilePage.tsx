@@ -6,6 +6,19 @@ import AvatarCropDialog from '../components/AvatarCropDialog'
 import DigitalHealthSection from '../components/DigitalHealthSection'
 import { GitHubButton, GitHubBadge, GitHubAlert, GitHubTabNav, GitHubInput } from '../components/ui'
 import api from '../lib/api'
+import { appScopeLabel, isHighRiskScope } from '../lib/appScopes'
+
+interface UserGrant {
+  id: number
+  scopes: string[]
+  createdAt: string
+  lastUsedAt: string | null
+  client: {
+    name: string
+    description: string | null
+    homepage: string | null
+  }
+}
 
 export default function ProfilePage() {
   const { user, logout, updateProfile } = useAuth()
@@ -25,6 +38,33 @@ export default function ProfilePage() {
   const [passwordError, setPasswordError] = useState('')
   const [passwordSuccess, setPasswordSuccess] = useState(false)
   const [updatingPassword, setUpdatingPassword] = useState(false)
+  const [grants, setGrants] = useState<UserGrant[]>([])
+  const [grantsLoading, setGrantsLoading] = useState(true)
+  const [grantsError, setGrantsError] = useState('')
+  const [revokingId, setRevokingId] = useState<number | null>(null)
+
+  const fetchGrants = () => {
+    setGrantsLoading(true)
+    api.get<{ grants: UserGrant[] }>('/oauth/grants')
+      .then((data) => { setGrants(data.grants); setGrantsError('') })
+      .catch((err: unknown) => setGrantsError(err instanceof Error ? err.message : '加载已授权应用失败'))
+      .finally(() => setGrantsLoading(false))
+  }
+
+  useEffect(() => { fetchGrants() }, [])
+
+  const handleRevoke = async (grant: UserGrant) => {
+    if (!confirm(`确定要撤销「${grant.client.name}」的授权吗？该应用的访问令牌将立即失效。`)) return
+    setRevokingId(grant.id)
+    try {
+      await api.delete(`/oauth/grants/${grant.id}`)
+      setGrants((prev) => prev.filter((g) => g.id !== grant.id))
+    } catch (err: unknown) {
+      setGrantsError(err instanceof Error ? err.message : '撤销失败')
+    } finally {
+      setRevokingId(null)
+    }
+  }
 
   useEffect(() => {
     if (location.hash === '#digital-health') setActiveTab('digital-health')
@@ -233,6 +273,65 @@ export default function ProfilePage() {
                   )}
                   {passwordError && (
                     <GitHubAlert variant="danger">{passwordError}</GitHubAlert>
+                  )}
+                </div>
+
+                <div className="gh-box" style={{ marginTop: '16px' }}>
+                  <h3 style={{ fontSize: '1rem', margin: '0 0 8px' }}>已授权的应用</h3>
+                  <p className="gh-text-tertiary" style={{ fontSize: 'var(--gh-text-xs)', margin: '0 0 16px' }}>
+                    这些第三方应用可以使用你的账号访问 LineWeb API。撤销后该应用的访问令牌会立即失效。
+                  </p>
+
+                  {grantsError && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <GitHubAlert variant="danger">{grantsError}</GitHubAlert>
+                    </div>
+                  )}
+
+                  {grantsLoading ? (
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--gh-space-5)' }}>
+                      <div className="gh-spinner" />
+                    </div>
+                  ) : grants.length === 0 ? (
+                    <p className="gh-text-secondary" style={{ fontSize: 'var(--gh-text-sm)' }}>
+                      目前没有已授权的应用
+                    </p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {grants.map((grant) => (
+                        <div key={grant.id} className="gh-grant-row">
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500 }}>
+                              {grant.client.name}
+                            </div>
+                            {grant.client.description && (
+                              <p className="gh-text-tertiary" style={{ fontSize: 'var(--gh-text-xs)', margin: '4px 0 0' }}>
+                                {grant.client.description}
+                              </p>
+                            )}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
+                              {grant.scopes.map((scope) => (
+                                <GitHubBadge key={scope} variant={isHighRiskScope(scope) ? 'warning' : 'default'}>
+                                  {appScopeLabel(scope)}
+                                </GitHubBadge>
+                              ))}
+                            </div>
+                            <p className="gh-text-tertiary" style={{ fontSize: 'var(--gh-text-xs)', margin: '8px 0 0' }}>
+                              授权于 {new Date(grant.createdAt).toLocaleString('zh-CN')}
+                            </p>
+                          </div>
+                          <GitHubButton
+                            type="button"
+                            variant="danger"
+                            size="sm"
+                            disabled={revokingId === grant.id}
+                            onClick={() => handleRevoke(grant)}
+                          >
+                            {revokingId === grant.id ? '撤销中…' : '撤销授权'}
+                          </GitHubButton>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
 
