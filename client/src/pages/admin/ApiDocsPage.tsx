@@ -157,7 +157,8 @@ export default function ApiDocsPage() {
             </table>
           </div>
           <p className="gh-text-tertiary" style={{ marginBottom: 0 }}>
-            完整清单可在登录后请求 <code>GET /api</code> 获取，或查阅仓库 <code>docs/api.md</code>。
+            完整清单可在登录后请求 <code>GET /api</code> 获取；认证与权限细节见仓库 <code>docs/auth-api.md</code>，
+            全部端点详解见 <code>docs/api.md</code>。
           </p>
         </div>
 

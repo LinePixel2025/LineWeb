@@ -17,7 +17,7 @@ lineweb/
 ├── storage-node/     # Python 3 WebSocket 文件存储客户端（10 个命令）→ D:/LineWebDrive，仅本地
 ├── cli/              # LineWeb CLI 本地管理工具（TS + esbuild + pkg → LineWebCLI.exe，v2.1.0）
 ├── scripts/          # 14 个运维脚本（部署、开发启动/停止、webhook、截图、屏幕时间推送）
-├── docs/             # API 参考、Drive 部署指南、屏幕时间 API 指南、健康系统 API 指南、HTTP 直连部署指南
+├── docs/             # 登录认证接入（auth-api.md）、API 参考、Drive 部署指南、屏幕时间 API 指南、健康系统 API 指南、HTTP 直连部署指南
 ├── .omo/             # OpenCode 会话续传数据
 ├── .trae/            # Trae IDE 配置、项目规则
 ├── .superpowers/     # SDD 任务产物

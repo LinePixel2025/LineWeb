@@ -197,6 +197,8 @@ npm run docker:restart   # 重启 server 容器
 
 所有 API 前缀 `/api`。认证方式只有一种：**账号登录令牌** —— 先 `POST /api/auth/login` 换取 `token`，之后所有请求携带 `Authorization: Bearer <token>`。令牌只签 `{ userId, role }`，能力与网盘开关每次请求从数据库解析，因此角色变更即时生效。
 
+> 完整的登录认证接入说明（端点、令牌生命周期、能力矩阵、错误码、curl/TS/Python 示例、迁移与自检清单）见 **[`docs/auth-api.md`](docs/auth-api.md)**；全部端点详解见 [`docs/api.md`](docs/api.md)。
+
 > 自 2026-09 起统一为账号登录令牌：API Key（`X-API-Key`、`lw_` 前缀）与屏幕时间 Token（`X-Screen-Time-Token`、`st_` 前缀）已移除，相关端点与数据表均已删除，旧密钥全部失效。第三方设备（如 Time Master）改为账号登录，可用 `rememberDays`（1–90 天）申请长期令牌。
 
 | 路由模块 | 主要端点 | 说明 |
