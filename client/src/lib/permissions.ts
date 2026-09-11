@@ -61,3 +61,49 @@ export function capabilityLabel(capability: string): string {
 export function roleLabel(role: string | undefined): string {
   return role ? (ROLE_LABELS[role] ?? role) : '未知'
 }
+
+/**
+ * 管理区路径 → 所需能力（按最长前缀匹配；`null` 表示管理区账号均可访问）
+ *
+ * 导航过滤（AdminLayout / GitHubSidebar）与路由守卫（Guards.AdminCapabilityRoute）
+ * 共用这一张表，避免「导航隐藏了但路由还能进」或反过来的偏差。
+ */
+export const ADMIN_ROUTE_CAPABILITIES: { prefix: string; capability: Capability | null }[] = [
+  { prefix: '/admin/new', capability: 'content:write' },
+  { prefix: '/admin/edit', capability: 'content:write' },
+  { prefix: '/admin/pages', capability: 'content:write' },
+  { prefix: '/admin/comments', capability: 'comment:moderate' },
+  { prefix: '/admin/users', capability: 'user:manage' },
+  { prefix: '/admin/devices', capability: 'device:view' },
+  { prefix: '/admin/ai', capability: 'ai:configure' },
+  { prefix: '/admin/api', capability: null },        // API 接入指南：任何管理区账号可见
+  { prefix: '/admin', capability: 'content:write' }, // 文章管理（含 /admin 首页）
+]
+
+/** 取路径所需能力：undefined = 非管理区路径（不做能力判断） */
+export function capabilityForAdminPath(pathname: string): Capability | null | undefined {
+  let matched: { prefix: string; capability: Capability | null } | undefined
+  for (const entry of ADMIN_ROUTE_CAPABILITIES) {
+    const isMatch = pathname === entry.prefix || pathname.startsWith(`${entry.prefix}/`)
+    if (isMatch && (!matched || entry.prefix.length > matched.prefix.length)) matched = entry
+  }
+  return matched?.capability
+}
+
+/** 当前账号能否访问某个管理区路径（非管理区路径一律返回 true） */
+export function canAccessAdminPath(user: AuthCapableUser | null | undefined, pathname: string): boolean {
+  const capability = capabilityForAdminPath(pathname)
+  if (capability === undefined) return true
+  if (capability === null) return hasAnyCapability(user)
+  return hasCapability(user, capability)
+}
+
+/** 当前账号可进入的第一个管理区路径（用作越权访问时的回退落点） */
+export function firstAllowedAdminPath(user: AuthCapableUser | null | undefined): string {
+  const entry = ADMIN_ROUTE_CAPABILITIES.find((item) => {
+    if (item.prefix === '/admin') return false // 优先精确子页面，避免又回到需要 content:write 的首页
+    if (item.capability === null) return hasAnyCapability(user)
+    return hasCapability(user, item.capability)
+  })
+  return entry?.prefix ?? '/'
+}

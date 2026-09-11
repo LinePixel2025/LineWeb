@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { canAccessAdminPath } from '../lib/permissions'
 
 interface Props {
   collapsed: boolean
@@ -52,7 +53,7 @@ const sections = [
 ]
 
 export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onToggleCollapse }: Props) {
-  const { user, isAdmin } = useAuth()
+  const { user } = useAuth()
   const location = useLocation()
 
   const isActive = (path: string) => {
@@ -68,7 +69,7 @@ export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onT
           {sections.map(section => {
             if (section.requireAuth && !user) return null
             const visibleItems = section.items.filter(item => {
-              if (item.path.startsWith('/admin') && !isAdmin) return false
+              if (item.path.startsWith('/admin') && !canAccessAdminPath(user, item.path)) return false
               if (item.path.startsWith('/profile') && !user) return false
               return true
             })

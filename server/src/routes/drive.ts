@@ -162,10 +162,13 @@ router.post('/download-ticket/:id', async (req: Request, res: Response) => {
     res.status(404).json({ error: '文件不存在或无权访问' })
     return
   }
+  // ts 为毫秒级签发时间：与 user.tokenValidAfter 精确比较，
+  // 否则同秒内（如刚改完密码）签发的票据会被认证中间件误判为失效
   const ticket = jwt.sign({
     type: 'download',
     userId: req.user!.userId,
     role: req.user!.role,
+    ts: Date.now(),
     downloadFileId: id,
     downloadNonce: crypto.randomBytes(16).toString('hex'),
   }, config.jwtSecret, { expiresIn: config.downloadTicketExpiresIn })

@@ -16,7 +16,7 @@ client/src/
 │   └── DriveContext.tsx      # 网盘导航状态（365 行，useReducer）
 ├── components/          # 43 个组件
 │   ├── Layout.tsx / AdminLayout.tsx  # 布局 + Navbar + Outlet
-│   ├── Guards.tsx            # ProtectedRoute + AdminRoute（按能力清单放行）
+│   ├── Guards.tsx            # ProtectedRoute + AdminRoute + AdminCapabilityRoute（按能力放行）
 │   ├── Navbar.tsx / UserAvatar.tsx
 │   ├── drive/               # 网盘 UI（20 组件，最大模块）— 见下方
 │   ├── editor/              # Lexical 编辑器
@@ -40,7 +40,7 @@ client/src/
 |------|------|------|
 | 加新页面 | `pages/` 创建 → `App.tsx` 加 `lazy()` + Route | 公开页放 `<Layout>`，管理页放 `<AdminRoute><AdminLayout>` |
 | 改认证/登录流 | `contexts/AuthContext.tsx` + `lib/api.ts` | api.ts 统一 401 处理；登录返回的 `user.capabilities` 驱动 `can()` |
-| 改路由守卫 | `components/Guards.tsx` + `lib/permissions.ts` | ProtectedRoute（需登录）/ AdminRoute（需任意管理能力） |
+| 改路由守卫 | `components/Guards.tsx` + `lib/permissions.ts` | ProtectedRoute（需登录）/ AdminRoute（需任意管理能力）/ AdminCapabilityRoute（按当前路径所需能力，缺能力重定向到第一个可用管理页） |
 | 加全局状态 | `contexts/` 新建 Context | 6 层 Provider 嵌套在 App.tsx |
 | 加 API 调用 | `lib/api.ts` 已封装 get/post/put/del | 自动附 Bearer token，30s 超时 |
 | 网盘功能 | `components/drive/` + `contexts/DriveContext.tsx` + `pages/DrivePage.tsx` | 双 reducer 架构 |
@@ -53,6 +53,7 @@ localStorage.lineweb_token（账号登录令牌）→ AuthContext 初始化时�
 → 401 时 api.ts handleUnauthorized() 清 token + 跳 /login
 → ProtectedRoute 检查 user 是否存在 → 无则重定向 /login
 → AdminRoute 检查 hasAdminAccess（user.capabilities 非空）→ 否则重定向 /
+→ AdminCapabilityRoute 按当前路径所需能力（ADMIN_ROUTE_CAPABILITIES）放行，缺能力时送到该账号第一个可用管理页
 → 页面/侧边栏用 can('user:manage') 等能力判断可见性（admin 自动拥有全部能力）
 ```
 
@@ -103,7 +104,8 @@ useEffect(() => {
 - Vitest + jsdom + `@testing-library/react`
 - `src/test-setup.ts` → 仅 `import '@testing-library/jest-dom'`
 - `__tests__/` 与源代码同目录
-- **仅 client 有测试**（21 个文件），server 无
+- **仅 client 有测试**（22 个文件），server 无
+- 其中 `lib/__tests__/permissions.test.ts` 会读取 `server/src/lib/permissions.ts` 源码做前后端能力清单一致性断言（需要 `client/src/types/node-builtins.d.ts` 提供最小 node:fs 类型声明）
 - 无 MSW，全部用 `vi.mock()` 模拟 API
 - `npm run test` 在 client/ 目录下运行
 

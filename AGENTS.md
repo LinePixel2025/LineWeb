@@ -160,7 +160,7 @@ server.listen(3001)
 ### 工具链缺失（值得注意）
 
 - **无 ESLint、Prettier、Biome 或 EditorConfig** — 代码格式未强制执行
-- **根目录无 `npm test`** — 仅在 `client/` 中有测试（21 个文件，`__tests__/` 目录）；server 零测试
+- **根目录无 `npm test`** — 仅在 `client/` 中有测试（22 个文件，`__tests__/` 目录）；server 零测试
 - **不使用 `prisma migrate`** — 约定仅使用 `prisma db push`（根 `db:migrate` 脚本存在但 `prisma/migrations/` 目录不存在，属备用入口）
 - **测试约定**：源文件旁 `__tests__/` 目录、`.test.{ts,tsx}` 命名、`vi.mock()`（无 MSW）
 - **验证期望**（源自 CLAUDE.md）：前端改动至少跑 `npx tsc --noEmit` + `vite build`；涉及认证、数据库、网盘上传下载、存储 WebSocket 或权限的服务端改动，需启动服务做 API 或浏览器手动验证
@@ -254,7 +254,10 @@ LineWebCLI.exe update --yes                    # 代码更新（git reset --hard
 - **Server 无测试** — `server/` 中零测试基础设施。Playwright 是 client 依赖但无配置或测试。
 - **认证中间件跳过 11 个路径**：`/auth/login`、`/auth/register`、`/auth/avatar`、`/health`、`/posts`、`/pages/featured`、`/pages/slug`、`/stats/public`、`/version`、`/comments/post`、`/ai/chat`。白名单匹配用 `req.path === p || req.path.startsWith(p + '/')`（`req.path` 不含 `/api` 前缀），因此 `/health` 覆盖全部 `/health/*`（路由内部仍要求登录令牌），`/ai/chat` 也覆盖 `/ai/chat/public`。
 - **唯一凭证是账号登录令牌** — API Key（`X-API-Key`）与屏幕时间 Token（`X-Screen-Time-Token`）已彻底移除（含 `ApiKey` / `ScreenTimeToken` 两张表与 `/api/api-keys`、`/api/health/tokens` 端点）；第三方设备登录同一账号后使用同一 JWT，可用 `rememberDays`（1–90）申请长期令牌。
-- **令牌失效精确到毫秒** — 签发时写入自签 `ts` claim 与 `user.tokenValidAfter` 直接比较，因此登出/改密后同一秒内的旧令牌也会立即 401。
+- **令牌失效精确到毫秒** — 签发时写入自签 `ts` claim 与 `user.tokenValidAfter` 直接比较，因此登出/改密后同一秒内的旧令牌也会立即 401；下载票据（`/api/drive/download-ticket/:id`）同样带 `ts`。
+- **下载票据有作用域限制** — `type === 'download'` 的票据只允许访问 `/api/drive/download/:id` 与 `/api/drive/files/:id/download`，其它端点一律 403（票据常出现在 URL / 浏览器历史 / 访问日志中）。
+- **前端管理区按能力守卫** — `client/src/lib/permissions.ts` 的 `ADMIN_ROUTE_CAPABILITIES` 同时驱动侧边栏过滤（`AdminLayout`/`GitHubSidebar`）与路由守卫（`Guards.AdminCapabilityRoute`，挂在 AdminLayout 的 `<Outlet/>` 外）；缺能力时重定向到该账号第一个可用管理页，避免落到无权页面 403。
+- **前后端能力清单有测试兜底** — `client/src/lib/__tests__/permissions.test.ts` 直接读 `server/src/lib/permissions.ts` 源码断言两份 `CAPABILITIES` 完全一致（服务端加能力而前端漏改会让 `npm test` 失败）。
 - **认证 API 禁缓存** — 除公开路径外，全局认证中间件设置 `Cache-Control: no-store` 并清空 ETag，避免 304 导致旧数据。
 - **新增公开端点必须同步两处** — `index.ts` 的 `publicApiPaths` 白名单 + `cachePublic` 缓存策略。
 - **`/api` 自描述端点** — `GET /api` 返回全部路由清单（需认证），排查路由问题时先看这里。

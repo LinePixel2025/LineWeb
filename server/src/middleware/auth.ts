@@ -97,6 +97,22 @@ async function resolveAuthContext(token: string): Promise<
 }
 
 /**
+ * 下载票据只对文件下载端点有效。
+ * 票据用同一 secret 签发且常见于 URL / 浏览器历史 / 访问日志，
+ * 因此不能被当作通用账号令牌去访问其它 API（越权面收口）。
+ */
+const DOWNLOAD_ENDPOINT_PATTERNS = [
+  /^\/api\/drive\/download\/\d+$/,
+  /^\/api\/drive\/files\/\d+\/download$/,
+]
+
+/** baseUrl + path 拼出完整路径（全局中间件与路由内中间件看到的 req.path 粒度不同） */
+function isDownloadEndpoint(req: Request): boolean {
+  const fullPath = `${req.baseUrl ?? ''}${req.path ?? ''}`
+  return DOWNLOAD_ENDPOINT_PATTERNS.some((pattern) => pattern.test(fullPath))
+}
+
+/**
  * 全局认证中间件 — 仅接受账号登录令牌
  *
  * 凭证来源（都是同一个登录 JWT）：
@@ -125,6 +141,11 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     const result = await resolveAuthContext(token)
     if (!result.ok) {
       res.status(401).json({ error: queryToken && !bearer ? 'Token 无效' : result.reason })
+      return
+    }
+    // 下载票据仅限下载端点使用（403 而非 401，避免前端把它当成登录失效而登出）
+    if (result.user.type === 'download' && !isDownloadEndpoint(req)) {
+      res.status(403).json({ error: '下载票据仅可用于文件下载' })
       return
     }
     req.user = result.user
@@ -163,7 +184,8 @@ export async function optionalAuthenticate(req: Request, res: Response, next: Ne
 
   try {
     const result = await resolveAuthContext(header.slice(7).trim())
-    if (result.ok) req.user = result.user
+    // 下载票据只表达「下载某个文件」，在公开端点上按游客处理
+    if (result.ok && result.user.type !== 'download') req.user = result.user
   } catch (err) {
     console.error('[Auth] 可选认证解析失败（按游客处理）:', err)
   }

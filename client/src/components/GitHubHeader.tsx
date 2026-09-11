@@ -9,7 +9,7 @@ interface Props {
 }
 
 export default memo(function GitHubHeader({ onMenuToggle }: Props) {
-  const { user, isAdmin, logout } = useAuth()
+  const { user, hasAdminAccess, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -80,7 +80,7 @@ export default memo(function GitHubHeader({ onMenuToggle }: Props) {
               {userMenuOpen && (
                 <div className="gh-popover" style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4 }}>
                   <Link to="/profile" className="gh-popover-item" onClick={() => setUserMenuOpen(false)}>Profile</Link>
-                  {isAdmin && <Link to="/admin" className="gh-popover-item" onClick={() => setUserMenuOpen(false)}>Admin</Link>}
+                  {hasAdminAccess && <Link to="/admin" className="gh-popover-item" onClick={() => setUserMenuOpen(false)}>Admin</Link>}
                   <div className="gh-popover-divider" />
                   <button className="gh-popover-item" onClick={() => { setUserMenuOpen(false); logout() }}>Sign out</button>
                 </div>

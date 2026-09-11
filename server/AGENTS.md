@@ -50,6 +50,7 @@ helmet(CSP) → cors → compression → body parser(10mb) → rate-limit(200/15
 - **公开路径**（全局中间件跳过，共 11 条）：`/auth/login`、`/auth/register`、`/auth/avatar`、`/health`、`/posts`、`/pages/featured`、`/pages/slug`、`/stats/public`、`/version`、`/comments/post`、`/ai/chat`。
 - **已移除**：`X-API-Key`（apiKeys 路由与 `ApiKey` 表）、`X-Screen-Time-Token`（`middleware/screenTimeAuth.ts` 与 `ScreenTimeToken` 表）。
 - **Drive 权限**：`router.use(authenticate, ...)` 内联判断 `req.user.canAccessDrive || 具备 drive:all 能力`（不再有 60s 内存缓存与 `clearDriveAccessCache`）。
+- **下载票据**：`POST /api/drive/download-ticket/:id` 签发的票据带毫秒级 `ts`（与登录令牌同样的失效精度），且 `type === 'download'` 的票据**只能访问两个下载端点**，访问其它 API 返回 403 `下载票据仅可用于文件下载`；`optionalAuthenticate` 对票据按游客处理。
 
 ## 路由
 
