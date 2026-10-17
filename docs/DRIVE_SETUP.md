@@ -1,10 +1,10 @@
 # 网盘系统配置教程
 
-> ⚠️ **已废弃（2026-09）**：本指南的 **Railway 部署章节已随云服务器部署废除**，仅作历史存档。当前部署为**本地 Windows 服务器运行 + Cloudflare Tunnel 内网穿透**（服务运行在 `http://127.0.0.1:3001`，存储节点直接连 `ws://127.0.0.1:3001/ws/storage`），参见 [README](../README.md#部署本地-windows--cloudflare-tunnel)。
+> ⚠️ **现状说明（2026-09）**：本指南的 **Railway 部署章节仍为历史存档**，不再是生产部署。当前生产部署为**阿里云 ECS（Ubuntu）+ 1Panel + Docker Compose**：Express 服务端（`:3001`）容器与 **PostgreSQL 16** 容器运行在 ECS 上，构建产物 `client/dist` 打进镜像；**公网入口是 `https://web.linetech.online`（Cloudflare Tunnel，HTTPS）**，IP 直连 `http://<ECS 公网 IP>:3001` 为备用；**存储节点仍运行在本地 Windows**，推荐通过 `wss://web.linetech.online/ws/storage` 主动外连（直连备选 `ws://<ECS 公网 IP>:3001/ws/storage`，明文且需安全组放行 3001）。参见 [README](../README.md#部署阿里云-ecs)。
 
 本文档指导你完成 LineWeb 网盘系统的完整配置，包括：
-- **Railway** — 部署更新后的服务器代码（⚠️ 已废弃，仅存档）
-- **Windows 存储节点** — 在 Windows 笔记本上运行存储节点
+- **Railway** — 部署更新后的服务器代码（⚠️ 历史存档，不再是生产部署）
+- **Windows 存储节点** — 在 Windows 笔记本上运行存储节点，连接**阿里云 ECS** 上的服务端（不再是本机 `:3001`）
 - **管理后台** — 为用户开通网盘权限
 - **验证** — 端到端测试
 
@@ -93,7 +93,7 @@ pip install -r requirements.txt
 
 ```json
 {
-  "serverUrl": "wss://你的railway域名.com/ws/storage",
+  "serverUrl": "ws://<ECS 公网 IP>:3001/ws/storage",
   "token": "你的 STORAGE_NODE_TOKEN（与服务器 .env 一致）",
   "storagePath": "D:/LineWebDrive",
   "logFile": "storage-node.log",
@@ -103,8 +103,8 @@ pip install -r requirements.txt
 
 | 字段 | 说明 |
 |------|------|
-| `serverUrl` | Railway 域名 + `/ws/storage`（**注意用 `wss://` 而非 `ws://`** 因为生产环境用 HTTPS） |
-| `token` | 与 Railway Variables 中的 `STORAGE_NODE_TOKEN` 完全一致 |
+| `serverUrl` | 生产推荐 `wss://web.linetech.online/ws/storage`（经 Cloudflare Tunnel，已实测握手 101，链路加密）；直连备选 `ws://<ECS 公网 IP>:3001/ws/storage`（明文，需安全组放行 3001）；开发连本机：`ws://localhost:3001/ws/storage` |
+| `token` | 与 ECS 服务端 `server/.env` 中的 `STORAGE_NODE_TOKEN` 完全一致 |
 | `storagePath` | Windows 上存储文件的目录（文件实际保存在这里） |
 | `logFile` | 日志文件路径 |
 | `maxReconnectDelay` | 断线重连最大间隔（秒） |
@@ -119,7 +119,7 @@ python main.py
 你应该看到：
 
 ```
-INFO 存储节点启动 — 根目录: D:\LineWebDrive, 服务器: wss://你的域名/ws/storage
+INFO 存储节点启动 — 根目录: D:\LineWebDrive, 服务器: ws://<ECS 公网 IP>:3001/ws/storage
 INFO 已连接到服务器
 INFO 认证成功
 ```
@@ -203,7 +203,7 @@ D:\LineWebDrive\
 
 ```bash
 # 用没有开通权限的用户测试
-curl -s http://你的域名/api/drive/files
+curl -s http://<ECS 公网 IP>:3001/api/drive/files
 # 应该返回 403 无网盘访问权限
 ```
 
@@ -220,9 +220,9 @@ WARNING 连接断开，准备重连...
 
 **排查：**
 1. 检查 `config.json` 中的 `serverUrl`：
-   - 生产环境用 `wss://`（不是 `ws://`）
-   - 开发环境用 `ws://localhost:3001/ws/storage`
-2. 确认 Railway 项目正在运行
+   - 生产推荐 `wss://web.linetech.online/ws/storage`（经 Cloudflare Tunnel，加密且不依赖安全组）
+   - 直连备选 `ws://<ECS 公网 IP>:3001/ws/storage`（明文，需安全组放行 3001）；开发时连 `ws://localhost:3001/ws/storage`
+2. 确认 ECS 上的 LineWeb 服务端正在运行
 3. 检查防火墙是否阻止出站 WebSocket 连接
 
 ### 5.2 认证失败
@@ -233,9 +233,9 @@ ERROR 认证失败: {'type': 'auth_error', 'error': '认证失败'}
 ```
 
 **排查：**
-1. 确认 `config.json` 中的 `token` 与 **Railway Variables** 中的 `STORAGE_NODE_TOKEN` 完全一致
+1. 确认 `config.json` 中的 `token` 与 ECS 上 `server/.env` 的 `STORAGE_NODE_TOKEN` 完全一致
 2. 检查 token 中是否有空格或换行符
-3. 在 Railway 重新设置 `STORAGE_NODE_TOKEN` 后记得重新部署
+3. 在 ECS 上更新 `server/.env` 后重启服务
 
 ### 5.3 上传失败
 
@@ -257,8 +257,9 @@ ERROR 认证失败: {'type': 'auth_error', 'error': '认证失败'}
 ```
 
 **排查：**
-1. Railway 有自身请求体限制，可在 Railway Dashboard → **Networking** 中调整
-2. 或在前端限制单文件大小
+1. ECS 直连阶段由服务端 `MAX_FILE_SIZE_MB` 与阿里云安全组放行策略决定，按需调整 `server/.env` 中的 `MAX_FILE_SIZE_MB`
+2. 若日后套 Nginx 反向代理，还需在其中设置 `client_max_body_size`
+3. 或在前端限制单文件大小
 
 ### 5.5 下载文件内容错误或损坏
 
@@ -285,13 +286,13 @@ npx prisma db seed
 ## 架构图
 
 ```
-用户浏览器 ──HTTPS──→ Railway (Express + WebSocket)
-                            │
-                            │ WebSocket (wss://)
-                            │
-                    Windows 笔记本 (Storage Node)
-                            │
-                    读取/写入 ↓
+用户浏览器 ──HTTP :3001──→ 阿里云 ECS (Express + SQLite)
+                                │
+                                │ ws://<ECS 公网 IP>:3001/ws/storage
+                                ↓
+                    本地 Windows 存储节点 (Python)
+                                │
+                        读取/写入 ↓
                     D:\LineWebDrive\ 目录
 ```
 

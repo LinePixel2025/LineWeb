@@ -43,7 +43,7 @@ LineWebCLI.exe logs server -f
 | `stop` | 停止所有服务（按 PID 杀进程树 + 按端口兜底清理） |
 | `restart [--no-storage]` | 重启所有服务 |
 | `status` | 查看各服务运行状态、端口监听、后端健康检查 |
-| `update [--yes]` | 从 GitHub 拉取最新版本（`git reset --hard`，同 CI），重装依赖、同步数据库，服务在运行则自动重启 |
+| `update [--yes]` | 从 GitHub 拉取最新版本（`git reset --hard`，与云端部署的强制覆盖策略一致），重装依赖、同步数据库，服务在运行则自动重启 |
 | `autoupdate [on\|off\|status] [--interval 6h]` | 注册 Windows 计划任务定时执行 `update --yes`（默认每 6 小时，支持 m/h/d；`on` 开启，`off` 关闭，`status` 查看） |
 | `logs [server\|client\|storage] [-f]` | 查看日志，默认最近 30 行；`-f` 持续跟踪（仅命令行直调模式） |
 | `open` | 打开浏览器访问 http://localhost:5173 |
@@ -61,8 +61,9 @@ CLI 会自动在当前目录下克隆仓库到 `LineWeb/`，安装全部依赖�
 ## 说明
 
 - **启动模式**：开发模式（后端 `tsx watch` + 前端 `vite dev`），与 `scripts/start-dev.ps1` 一致。
+- **本地定位**：CLI 管理的始终是**本机**的前后端与存储节点。生产服务已迁至阿里云 ECS（代码目录 `/opt/lineweb`，Express :3001 + SQLite + `client/dist` 都跑在 ECS 上），本机这套全栈 + Cloudflare Tunnel 已降级为**开发 / 备用环境**，CLI 不负责 ECS 上的部署。
 - **进程管理**：服务以独立后台进程运行，PID 记录在 `<项目根>/.lineweb-cli/state.json`，日志写入 `.lineweb-cli/logs/*.log`。CLI 退出不影响服务。
-- **更新策略**：与服务器 CI 部署一致，强制覆盖本地已提交改动；未跟踪文件（如 `server/.env`）不受影响。有本地改动时会先列出并要求确认（`--yes` 跳过）。
+- **更新策略**：与云端部署的强制覆盖策略一致，强制覆盖本地已提交改动；未跟踪文件（如 `server/.env`）不受影响。有本地改动时会先列出并要求确认（`--yes` 跳过）。
 - **自动更新**：`autoupdate on [--interval 6h]` 注册 Windows 计划任务（`LineWeb-AutoUpdate`），按间隔自动执行 `update --yes`。以 **S4U 登录类型**运行，**无需保持用户登录**（无人值守），重启机器后依然生效；`autoupdate off` 关闭，`autoupdate status` 查看下次/上次运行及登录模式。更新与手动 `update` 通过锁文件互斥，不会并发执行。S4U 不加载用户环境变量，运行脚本（`.lineweb-cli/autoupdate-run.bat`）会注入 HOME/APPDATA/PATH 等；日志写入 `.lineweb-cli/logs/autoupdate.log`。注册 S4U 计划任务需要管理员权限（非管理员 shell 会提示"拒绝访问"）。
 - **数据库备份**：每次 `update` 执行 `prisma db push` 前，自动将 `server/prisma/*.db` 备份到 `.lineweb-cli/db-backups/`（保留最近 5 份）。`--accept-data-loss` 有破坏性，备份可回滚。
 - **内网穿透场景**：CLI 全部命令走本地回路，不依赖公网，穿透中断不影响 `update`/`autoupdate` 拉代码。自动更新以 S4U 身份运行，无需保持登录；注册时需管理员权限。

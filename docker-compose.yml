@@ -1,18 +1,30 @@
 # ============================================================
-# LineWeb Docker Compose — 适配 1Panel / Ubuntu
+# LineWeb Docker Compose — 阿里云 ECS（Ubuntu）生产部署（**生产使用**）
 #
-# 前置准备（在 1Panel 面板操作）:
-#   【数据库】→ PostgreSQL → 创建数据库 "lineweb"
-#   【网站】→ 创建网站 → 反向代理 → 目标 URL: http://127.0.0.1:3001
-#   【文件】→ 上传项目 → 或 git clone 到 /opt/lineweb
+# 线上现状：1Panel v2.3.2 + Docker Compose 部署，1Panel 负责安装 Docker/Compose
+#   与外部网络 1panel-network，本文件是生产实际使用的编排文件。
+#   - 应用：容器 lineweb-server-1（由本仓库根 Dockerfile 构建），端口 3001:3001，
+#     restart: unless-stopped，compose 自带 /api/health 健康检查。
+#   - 数据库：PostgreSQL 16 容器 lineweb-postgres（postgres:16-alpine，
+#     数据卷 lineweb-pg-data，容器挂在 1panel-network 上），DATABASE_URL 指向
+#     lineweb-postgres:5432；SQLite schema → PostgreSQL 的改写由
+#     server/scripts/docker-entrypoint.sh 在容器启动时完成（db push + seed）。
+#   - 该机器直连 Docker Hub 会超时，构建前需在 /etc/docker/daemon.json 配置
+#     国内镜像加速（docker.1panel.live、docker.m.daocloud.io、docker.1ms.run）。
+#
+# 前置准备（ECS / Ubuntu，1Panel + 命令行均可）:
+#   【网络】  1panel-network 由 1Panel 创建（本文件按 external 引用）
+#   【数据库】PostgreSQL 16 容器 lineweb-postgres 已创建，数据库名 lineweb
+#   【文件】  代码在 /opt/lineweb（该 ECS 无法直连 GitHub，更新走镜像或本地 push）
 #
 # 启动:
-#   1. cp .env.docker .env  # 修改密码
-#   2. docker compose up -d
-#   3. 访问域名（1Panel 网站中配置的域名）
+#   1. 在 /opt/lineweb/.env 写入 DATABASE_URL / JWT_SECRET / STORAGE_NODE_TOKEN 等
+#   2. docker compose up -d --build
+#   3. 验收：curl http://127.0.0.1:3001/api/health（期望 status=ok、db=connected）
+#   4. 阿里云安全组放行 3001（面板口为 18080；当前只放行 22 与 18080，3001 待放行）
 #
 # 更新部署:
-#   git pull && docker compose up -d --build
+#   docker compose up -d --build
 #
 # 静态资源加速（可选）:
 #   如果宿主机 Nginx 需要直连静态文件，取消注释 volumes 挂载
@@ -65,6 +77,7 @@ services:
 
 networks:
   1panel:
+    # 由 1Panel 创建的外部网络，应用容器与 PostgreSQL 容器（lineweb-postgres）都在其中
     external: true
     name: 1panel-network
 

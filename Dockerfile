@@ -2,6 +2,19 @@
 # LineWeb Docker 镜像 — 多阶段构建
 # Stage 1: 构建前端 (Vite → client/dist)
 # Stage 2: 运行后端 (Express + WebSocket + 静态文件托管)
+#
+# 用途：阿里云 ECS（Ubuntu）生产部署（**生产使用**）。
+#   线上由 1Panel v2.3.2 + Docker Compose 编排本镜像（见 docker-compose.yml）：
+#   Express 容器 lineweb-server-1 (:3001) + PostgreSQL 16 容器 lineweb-postgres，
+#   代码位于 /opt/lineweb，端口 3001:3001，restart: unless-stopped，自带健康检查。
+#
+# 数据库：生产是 PostgreSQL 16。server/scripts/docker-entrypoint.sh 会在容器启动时
+#   把 SQLite schema 改写为 PostgreSQL（prisma/schema.pg.prisma），随后执行
+#   prisma db push（首次带 --accept-data-loss）与 prisma db seed —— 这是生产链路
+#   的一部分，不是备选机制；生产 .env 的 DATABASE_URL 指向 lineweb-postgres:5432。
+#
+# 注意：该 ECS 直连 Docker Hub 会超时，构建前需在 /etc/docker/daemon.json 配置
+#   国内镜像加速（docker.1panel.live、docker.m.daocloud.io、docker.1ms.run）。
 # ============================================================
 
 # ---- Stage 1: 构建前端 ----
