@@ -71,7 +71,7 @@ curl "http://localhost:3001/api/posts?page=1&limit=10" \
   -H "Authorization: Bearer <token>"
 ```
 
-生产环境把 `http://localhost:3001` 换成你的公网域名（Cloudflare Tunnel 暴露的 HTTPS 地址）。
+生产环境把 `http://localhost:3001` 换成公网入口 `https://web.linetech.online`（Cloudflare Tunnel，HTTPS）；IP 直连 `http://<ECS 公网 IP>:3001` 为明文备用入口。
 
 ---
 
@@ -435,7 +435,7 @@ $login.user.capabilities.Count       # 7
 ### 9.3 JavaScript / TypeScript（含 401 自动重登）
 
 ```ts
-const BASE = 'https://你的域名'
+const BASE = 'http://<ECS 公网 IP>:3001'   // 配置域名 + 证书后改为 https://<域名>
 
 type LoginResult = {
   token: string
@@ -555,7 +555,7 @@ if __name__ == "__main__":
 - 设备令牌（`rememberDays`）请按最小权限账号申请，并设置合理天数；一旦怀疑泄漏，让该账号 `POST /api/auth/logout` 或在管理端改密码即可让所有旧令牌失效。
 - 不要在客户端缓存 `capabilities` 当作长期权限判断：服务端每次请求都会重新解析（角色变更即时生效），客户端缓存只应用于渲染。
 - 浏览器端令牌存于 `localStorage`（标准 SPA 模式，存在 XSS 风险）：请保持 CSP、避免引入不可信脚本；服务端 CSP 已由 helmet 设置。
-- 生产环境务必使用 HTTPS（Cloudflare Tunnel 默认提供）。
+- 生产环境应尽快为 ECS 配置域名与证书并使用 HTTPS；当前仍为 HTTP 明文阶段，务必把阿里云安全组限制为可信来源 IP。
 
 ---
 

@@ -33,7 +33,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 基础 URL | 生产 `http://服务器地址:3001/api` / 开发 `http://localhost:3001/api` |
+| 基础 URL | 生产 `https://web.linetech.online/api`（Cloudflare Tunnel，HTTPS） / 开发 `http://localhost:3001/api`。IP 直连 `http://<ECS 公网 IP>:3001/api` 为备用入口（明文） |
 | 数据格式 | JSON（`Content-Type: application/json`） |
 | 认证 | 账号登录令牌 `Authorization: Bearer <token>`（**全部端点**） |
 | 日期格式 | `YYYY-MM-DD`（如 `2026-08-12`） |
@@ -318,7 +318,7 @@ Authorization: Bearer <jwt_token>
 ### 9.1 curl（登录 + 推送 + 读目标）
 
 ```bash
-API="http://服务器地址:3001/api"
+API="http://<ECS 公网 IP>:3001/api"
 TODAY=$(date +%Y-%m-%d)
 
 # 1. 登录换取令牌（设备建议 rememberDays=90 申请长期令牌）
@@ -350,7 +350,7 @@ import os
 import requests
 from datetime import date
 
-API_URL = os.getenv("LINEWEB_API_URL", "http://服务器地址:3001/api").rstrip("/")
+API_URL = os.getenv("LINEWEB_API_URL", "http://<ECS 公网 IP>:3001/api").rstrip("/")
 USERNAME = os.getenv("LINEWEB_USERNAME", "admin")
 PASSWORD = os.getenv("LINEWEB_PASSWORD")
 REMEMBER_DAYS = int(os.getenv("LINEWEB_REMEMBER_DAYS", "90"))
@@ -445,7 +445,7 @@ if __name__ == "__main__":
 
 ```javascript
 #!/usr/bin/env node
-const API_URL = process.env.LINEWEB_API_URL || 'http://服务器地址:3001/api'
+const API_URL = process.env.LINEWEB_API_URL || 'http://<ECS 公网 IP>:3001/api'
 const USERNAME = process.env.LINEWEB_USERNAME || 'admin'
 const PASSWORD = process.env.LINEWEB_PASSWORD
 const REMEMBER_DAYS = Number(process.env.LINEWEB_REMEMBER_DAYS || 90)
@@ -519,7 +519,7 @@ async function getDailyGoal() {
 ```python
 import requests
 
-API = 'http://服务器地址:3001/api'
+API = 'http://<ECS 公网 IP>:3001/api'
 TOKEN = 'eyJhbGciOiJIUzI1NiIs...'  # POST /api/auth/login 获取
 
 resp = requests.get(
@@ -566,4 +566,4 @@ print(resp.json()['logs'])
 - 仓库脚本：`scripts/time-master-push.py`、`scripts/time-master-guide.md`、`scripts/lineweb-screen-time-api.md`
 - 服务端实现：`server/src/routes/health.ts`、`server/src/services/screenTimeService.ts`
 - 通用 API 教程：`docs/api.md`
-- 部署指南：`docs/DEPLOYMENT_HTTP_3001.md`
+- 部署指南：`docs/DEPLOYMENT_HTTP_3001.md`（当前描述的是阿里云 ECS 服务端 + 运行在本地 Windows 的存储节点这一部署形态）

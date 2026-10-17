@@ -28,12 +28,12 @@ LineWeb API 提供个人网站/CMS 的全部功能，包括 **认证、文章、
 
 | 属性 | 值 |
 |---|---|
-| 基础 URL | 生产 `http://服务器地址:3001/api` / 开发 `http://localhost:3001/api` |
+| 基础 URL | 生产 `https://web.linetech.online/api`（Cloudflare Tunnel，HTTPS） / 开发 `http://localhost:3001/api`。IP 直连 `http://<ECS 公网 IP>:3001/api` 为备用入口（明文） |
 | 数据格式 | JSON（请求 `Content-Type: application/json`，响应 `application/json`） |
 | 认证方式 | 只有一种：**账号登录令牌**（`Authorization: Bearer <token>`），由 `POST /api/auth/login` 签发 |
 | 分页 | 统一 `page` + `limit` 参数，响应含 `total` / `page` / `pageCount` |
 
-> **部署约束**：当前服务器仅使用 **HTTP + 3001 端口**（无 HTTPS/WSS），详见 `docs/DEPLOYMENT_HTTP_3001.md`。
+> **部署约束**：生产部署在**阿里云 ECS（Ubuntu）+ 1Panel + Docker Compose** 上（Express + PostgreSQL 16 容器），公网入口为 **`https://web.linetech.online`**（Cloudflare Tunnel，HTTPS 由 Cloudflare 提供）；IP 直连 `http://<ECS 公网 IP>:3001` 为明文备用入口。域名走隧道的原因是阿里云大陆节点会按 HTTP `Host` 头拦截未备案域名（403 `Non-compliance ICP Filing`）。详见 `docs/DEPLOYMENT_HTTP_3001.md`。
 
 > **凭证变更（2026-09）**：API Key（`X-API-Key` / `lw_` 前缀、`/api/api-keys` 全部端点）与屏幕时间 Token（`X-Screen-Time-Token` / `st_` 前缀、`/api/health/tokens`、`/api/health/screen-time/data`、`/api/health/daily-goal/data`）**已全部移除**，数据库表 `api_keys`、`screen_time_tokens` 已删除，旧密钥一律失效。第三方程序请改为账号登录换取令牌。
 
@@ -67,26 +67,26 @@ LineWeb API 提供个人网站/CMS 的全部功能，包括 **认证、文章、
 
 ```bash
 # 1. 健康检查（公开）
-curl http://服务器地址:3001/api/health
+curl http://<ECS 公网 IP>:3001/api/health
 
 # 2. 登录获取 Token
-curl -X POST http://服务器地址:3001/api/auth/login \
+curl -X POST http://<ECS 公网 IP>:3001/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"identifier":"admin@lineweb.dev","password":"admin123"}'
 
 # 3. 使用 Token 获取个人信息（替换 YOUR_TOKEN）
-curl http://服务器地址:3001/api/auth/me \
+curl http://<ECS 公网 IP>:3001/api/auth/me \
   -H "Authorization: Bearer YOUR_TOKEN"
 
 # 4. 获取文章列表（公开）
-curl "http://服务器地址:3001/api/posts?page=1&limit=10"
+curl "http://<ECS 公网 IP>:3001/api/posts?page=1&limit=10"
 ```
 
 ### 2.2 使用 JavaScript/TypeScript（浏览器环境）
 
 ```typescript
 // 项目已经封装好 api.ts，这里展示底层 fetch 用法
-const API_BASE = 'http://服务器地址:3001/api'
+const API_BASE = 'http://<ECS 公网 IP>:3001/api'
 
 async function login(identifier: string, password: string) {
   const res = await fetch(`${API_BASE}/auth/login`, {
@@ -117,7 +117,7 @@ console.log(me)
 ```python
 import requests
 
-API_BASE = 'http://服务器地址:3001/api'
+API_BASE = 'http://<ECS 公网 IP>:3001/api'
 
 # 登录
 resp = requests.post(f'{API_BASE}/auth/login', json={
@@ -403,7 +403,7 @@ GET /api/version
 }
 ```
 
-> `version` 来自 `GIT_SHA` 环境变量，用于 CI/CD 验证部署是否成功。
+> `version` 来自 `GIT_SHA` 环境变量，更新后可在 ECS 上调用该端点核对部署是否成功。
 
 ### 5.3 API 端点列表（需认证）
 
@@ -1120,19 +1120,19 @@ Authorization: Bearer <token>
 
 ```bash
 # 1. 账号登录换取令牌（设备可传 rememberDays 申请长期令牌，1–90 天）
-curl -X POST http://服务器地址:3001/api/auth/login \
+curl -X POST http://<ECS 公网 IP>:3001/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"identifier":"admin","password":"你的密码","rememberDays":90}'
 
 # 2. 之后所有请求携带同一个令牌
-curl http://服务器地址:3001/api/auth/me \
+curl http://<ECS 公网 IP>:3001/api/auth/me \
   -H "Authorization: Bearer <token>"
 ```
 
 ```python
 import requests
 
-BASE = "http://服务器地址:3001"
+BASE = "http://<ECS 公网 IP>:3001"
 
 token = requests.post(f"{BASE}/api/auth/login", json={
     "identifier": "admin",
@@ -1382,7 +1382,7 @@ CORS_ORIGIN="*"
 ```javascript
 // Node.js / 浏览器环境
 async function publishArticle() {
-  const API = 'http://服务器地址:3001/api'
+  const API = 'http://<ECS 公网 IP>:3001/api'
 
   // 1. 登录
   const loginRes = await fetch(`${API}/auth/login`, {
@@ -1444,7 +1444,7 @@ async function uploadFile(token, filePath, parentId) {
   form.set('file', new File([createReadStream(filePath)], 'photo.jpg'))
   if (parentId) form.set('parentId', String(parentId))
 
-  const res = await fetch('http://服务器地址:3001/api/drive/upload', {
+  const res = await fetch('http://<ECS 公网 IP>:3001/api/drive/upload', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: form,
@@ -1457,7 +1457,7 @@ async function uploadFile(token, filePath, parentId) {
 
 ```javascript
 async function downloadFile(token, fileId) {
-  const res = await fetch(`http://服务器地址:3001/api/drive/download/${fileId}`, {
+  const res = await fetch(`http://<ECS 公网 IP>:3001/api/drive/download/${fileId}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
   const reader = res.body.getReader()
@@ -1484,7 +1484,7 @@ async function downloadFile(token, fileId) {
 ```python
 import requests
 
-API = 'http://服务器地址:3001/api'
+API = 'http://<ECS 公网 IP>:3001/api'
 USERNAME = 'admin'
 PASSWORD = '你的密码'
 
@@ -1589,7 +1589,7 @@ class LineWebAPI:
 
 
 # 使用示例
-api = LineWebAPI('http://服务器地址:3001/api')
+api = LineWebAPI('http://<ECS 公网 IP>:3001/api')
 user = api.login('admin@lineweb.dev', 'admin123')
 print(f'登录成功: {user["username"]}')
 
@@ -1608,17 +1608,17 @@ print(f'文章列表: {len(posts["posts"])} 篇')
 
 ```bash
 # === 1. 登录 ===
-TOKEN=$(curl -s -X POST http://服务器地址:3001/api/auth/login \
+TOKEN=$(curl -s -X POST http://<ECS 公网 IP>:3001/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"identifier":"admin@lineweb.dev","password":"admin123"}' | \
   python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
 
 # === 2. 获取 Dashboard 统计 ===
-curl -s http://服务器地址:3001/api/stats \
+curl -s http://<ECS 公网 IP>:3001/api/stats \
   -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 
 # === 3. 创建文章 ===
-curl -s -X POST http://服务器地址:3001/api/posts \
+curl -s -X POST http://<ECS 公网 IP>:3001/api/posts \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{
@@ -1630,19 +1630,19 @@ curl -s -X POST http://服务器地址:3001/api/posts \
   }' | python3 -m json.tool
 
 # === 4. 查看文章（公开） ===
-curl -s http://服务器地址:3001/api/posts/api-post | python3 -m json.tool
+curl -s http://<ECS 公网 IP>:3001/api/posts/api-post | python3 -m json.tool
 
 # === 5. 获取文件列表 ===
-curl -s "http://服务器地址:3001/api/drive/files?page=1&limit=10" \
+curl -s "http://<ECS 公网 IP>:3001/api/drive/files?page=1&limit=10" \
   -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 
 # === 6. AI 对话（公开） ===
-curl -s -X POST http://服务器地址:3001/api/ai/chat \
+curl -s -X POST http://<ECS 公网 IP>:3001/api/ai/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"你好"}' | python3 -m json.tool
 
 # === 7. 删除文章 ===
-curl -s -X DELETE http://服务器地址:3001/api/posts/1 \
+curl -s -X DELETE http://<ECS 公网 IP>:3001/api/posts/1 \
   -H "Authorization: Bearer $TOKEN"
 ```
 
