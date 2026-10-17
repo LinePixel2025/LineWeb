@@ -30,7 +30,7 @@ client/src/
 │   └── admin/              # 6 个管理页面（CommentAdmin/PageEditor/UserAdmin/ApiDocs/DeviceMonitor/PageList）
 ├── hooks/               # useThumbnails / useKeyboardShortcuts / useDragAndDrop / useResponsive
 ├── lib/                 # api.ts（HTTP 客户端 + Bearer token + 401 处理）+ permissions.ts（能力常量）+ format.ts
-├── styles/              # 7 个 CSS 文件（无 Tailwind，无 CSS-in-JS）
+├── styles/              # 9 个 CSS 文件（无 Tailwind，无 CSS-in-JS）
 └── types/               # drive.ts + comment.ts
 ```
 
@@ -104,7 +104,7 @@ useEffect(() => {
 - Vitest + jsdom + `@testing-library/react`
 - `src/test-setup.ts` → 仅 `import '@testing-library/jest-dom'`
 - `__tests__/` 与源代码同目录
-- **仅 client 有测试**（22 个文件），server 无
+- **仅 client 有测试**（23 个文件 / 162 个用例），server 无
 - 其中 `lib/__tests__/permissions.test.ts` 会读取 `server/src/lib/permissions.ts` 源码做前后端能力清单一致性断言（需要 `client/src/types/node-builtins.d.ts` 提供最小 node:fs 类型声明）
 - 无 MSW，全部用 `vi.mock()` 模拟 API
 - `npm run test` 在 client/ 目录下运行

@@ -435,7 +435,7 @@ $login.user.capabilities.Count       # 7
 ### 9.3 JavaScript / TypeScript（含 401 自动重登）
 
 ```ts
-const BASE = 'http://<ECS 公网 IP>:3001'   // 配置域名 + 证书后改为 https://<域名>
+const BASE = 'https://web.linetech.online'   // 生产公网入口（Cloudflare Tunnel，HTTPS）；临时排查可用 http://120.24.223.65:3001
 
 type LoginResult = {
   token: string
@@ -555,7 +555,7 @@ if __name__ == "__main__":
 - 设备令牌（`rememberDays`）请按最小权限账号申请，并设置合理天数；一旦怀疑泄漏，让该账号 `POST /api/auth/logout` 或在管理端改密码即可让所有旧令牌失效。
 - 不要在客户端缓存 `capabilities` 当作长期权限判断：服务端每次请求都会重新解析（角色变更即时生效），客户端缓存只应用于渲染。
 - 浏览器端令牌存于 `localStorage`（标准 SPA 模式，存在 XSS 风险）：请保持 CSP、避免引入不可信脚本；服务端 CSP 已由 helmet 设置。
-- 生产环境应尽快为 ECS 配置域名与证书并使用 HTTPS；当前仍为 HTTP 明文阶段，务必把阿里云安全组限制为可信来源 IP。
+- 生产已通过 Cloudflare Tunnel 提供 HTTPS（`https://web.linetech.online`）；IP 直连 `http://120.24.223.65:3001` 仍是明文信道，只作备用，建议把安全组收敛到可信来源 IP。
 
 ---
 

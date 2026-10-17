@@ -408,7 +408,7 @@ LineWebCLI.exe start|stop|status|update       # 本地服务一键管理，详�
 ### 已知限制与待办
 
 - **服务器无法直连 GitHub** — 实测 `git clone` 两分钟仅约 200KB，服务器上 `git pull` 不可用；更新走「本地 bundle 上传」或「本地 push」（见第 8 节），或日后配置镜像/代理。
-- **存储节点尚未接入** — `/api/health` 目前返回 `"storageNode":"disconnected"`，还没有节点连上这台服务器：**网盘与头像功能暂不可用**。把本地 Windows 节点 `storage-node/config.json` 的 `serverUrl` 改为 `wss://web.linetech.online/ws/storage`（推荐，走隧道且加密）或 `ws://<ECS 公网 IP>:3001/ws/storage`（直连），并让其 `token` 与服务器 `/opt/lineweb/.env` 的 `STORAGE_NODE_TOKEN` 一致。
+- **存储节点状态（2026-10-17 实测）** — 生产 `/api/health` 返回 `"storageNode":"connected"`，网盘与头像可用；但**本机没有运行节点**，且仓库 `storage-node/config.json` 仍指向已不可达的 `ws://123.207.8.77:3001`，说明线上接入的是另一份配置/另一台机器（来源待确认）。若要在本机跑节点：把 `serverUrl` 改为 `wss://web.linetech.online/ws/storage`（推荐，走隧道且加密）或 `ws://<ECS 公网 IP>:3001/ws/storage`（直连），并让其 `token` 与服务器 `/opt/lineweb/.env` 的 `STORAGE_NODE_TOKEN` 一致。
 - **安全组** — 当前放行 `22`（SSH）、`18080`（面板）、`3001`（IP 直连与存储节点直连）。若存储节点改走 `wss://` 隧道，可以关闭 `3001` 公网入口；建议三者的来源都收敛到可信 IP。
 - **域名走隧道属于合规灰区** — 大陆节点要求指向它的域名完成 ICP 备案，隧道只是规避了技术拦截（详见第 6.1 节）。要彻底合规：完成备案，或把服务器迁到非大陆区域（免备案）。
 - **面板不要绑定域名** — 1Panel 面板继续用 `http://<ECS 公网 IP>:18080/lineweb_panel` 访问；一旦绑定域名，用 IP 打开只会看到 *Access Temporarily Unavailable*，用 `1pctl reset domain` + `systemctl restart 1panel-core` 恢复。

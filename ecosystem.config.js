@@ -1,6 +1,6 @@
 // PM2 备选方案 —— 在阿里云 ECS 上「不用容器、直接跑 Node/tsx」时可用。
-// ECS 上的运行方式（systemd 直接跑 vs Docker Compose）尚未最终确定，本文件仅为备选之一。
-// 原注「已弃用 — 项目现使用 Docker Compose 部署」已过期：Compose 本身也已降级为备选方案。
+// 生产主线是 1Panel + Docker Compose（Express 容器 + PostgreSQL 16 容器，见 docker-compose.yml）；
+// 本文件与 systemd 直跑 tsx 都只是备选路径，生产不使用。
 // 项目根目录：ECS 上为 /opt/lineweb（旧宝塔路径 /www/wwwroot/lineweb 已废弃）。
 
 module.exports = {

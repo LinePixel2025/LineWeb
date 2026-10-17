@@ -10,11 +10,11 @@ server/
 │   ├── index.ts           # 入口 — 中间件链 + 13 个路由挂载 + WebSocket + 定时同步
 │   ├── config/index.ts    # Zod schema（全部端点）+ 环境变量解析
 │   ├── middleware/        # auth.ts（登录令牌 + requireCapability）+ errorHandler.ts
-│   ├── routes/            # 12 个路由模块（全部前缀 /api）
-│   ├── services/          # 8 个服务 — 部分路由直接调 Prisma，不经过 service
+│   ├── routes/            # 13 个路由模块（全部前缀 /api）
+│   ├── services/          # 11 个服务 — 部分路由直接调 Prisma，不经过 service
 │   └── lib/               # prisma.ts（单例）+ utils.ts + asyncHandler.ts + permissions.ts（角色能力矩阵）
 ├── prisma/
-│   ├── schema.prisma      # SQLite schema（8 模型）
+│   ├── schema.prisma      # SQLite schema（12 模型）
 │   └── seed.ts            # admin@lineweb.dev / admin123
 └── scripts/               # generate-mysql-schema.js + generate-pg-schema.js
 ```
@@ -35,7 +35,7 @@ server/
 ## 中间件链顺序
 
 ```
-helmet(CSP) → cors → compression → body parser(10mb) → rate-limit(200/15min)
+helmet(CSP) → cors → compression → body parser(1mb) → rate-limit(600/15min)
 → 设备追踪 → 全局认证检查 → routes → errorHandler
 ```
 
@@ -47,7 +47,7 @@ helmet(CSP) → cors → compression → body parser(10mb) → rate-limit(200/15
 - **权限不信任令牌**：`capabilities`（由角色展开）与 `canAccessDrive` 每次请求从数据库解析 → 角色变更即时生效。
 - **能力矩阵**：`src/lib/permissions.ts`（`USER_ROLES`、`CAPABILITIES`、`capabilitiesForRole`、`roleHasCapability`）；admin 拥有全部能力，user 无管理能力。
 - **守卫**：`requireCapability('user:manage')` 等（替代旧的 `requireAdmin`）；`optionalAuthenticate` 用于公开但可选的端点（`/api/ai/chat`）。
-- **公开路径**（全局中间件跳过，共 11 条）：`/auth/login`、`/auth/register`、`/auth/avatar`、`/health`、`/posts`、`/pages/featured`、`/pages/slug`、`/stats/public`、`/version`、`/comments/post`、`/ai/chat`。
+- **公开路径**（全局中间件跳过，共 13 条）：`/auth/login`、`/auth/register`、`/auth/avatar`、`/health`、`/posts`、`/pages/featured`、`/pages/slug`、`/stats/public`、`/version`、`/comments/post`、`/ai/chat`、`/oauth/token`、`/oauth/revoke`（后两条为精确路径匹配）。
 - **已移除**：`X-API-Key`（apiKeys 路由与 `ApiKey` 表）、`X-Screen-Time-Token`（`middleware/screenTimeAuth.ts` 与 `ScreenTimeToken` 表）。
 - **Drive 权限**：`router.use(authenticate, ...)` 内联判断 `req.user.canAccessDrive || 具备 drive:all 能力`（不再有 60s 内存缓存与 `clearDriveAccessCache`）。
 - **下载票据**：`POST /api/drive/download-ticket/:id` 签发的票据带毫秒级 `ts`（与登录令牌同样的失效精度），且 `type === 'download'` 的票据**只能访问两个下载端点**，访问其它 API 返回 403 `下载票据仅可用于文件下载`；`optionalAuthenticate` 对票据按游客处理。
@@ -66,6 +66,9 @@ helmet(CSP) → cors → compression → body parser(10mb) → rate-limit(200/15
 | stats.ts | GET /（`stats:view`）+ /public | 60s 内存缓存 |
 | avatar.ts | POST/GET/DELETE | `router.use(authenticate)` |
 | health.ts | screen-time/range、push、daily-goal | 全部使用登录令牌（仅本人数据） |
+| ai.ts | chat / chat/public / write/* / config | `/chat` 走 `optionalAuthenticate`；写作辅助需 `content:write`，`/config` 需 `ai:configure` |
+| oauth.ts | token / revoke / authorize-context / authorize / grants / clients | `token`、`revoke` 公开（精确路径 + `oauthLimiter`）；`authorize*`/`grants` 需登录；`clients` 需 `app:manage` |
+| driveFavorites.ts | 收藏夹 CRUD + reorder | `router.use(authenticate)`；挂载在 `/api/drive/favorites` |
 
 ## 服务层
 
@@ -79,6 +82,9 @@ helmet(CSP) → cors → compression → body parser(10mb) → rate-limit(200/15
 | storageSync | 网盘文件同步（节点 ↔ DB） | findMany/deleteMany/upsert |
 | dedupDriveFiles | 重复记录清理 | $queryRawUnsafe |
 | deviceTracker | 内存设备追踪 | 无（纯 Map） |
+| aiService | OpenAI 兼容调用、提示词与上下文拼装 | findUnique/update（AiConfig） |
+| oauthService | OAuth 2.0 授权码 / PKCE / 刷新轮换与吊销 | OAuthClient/Grant/Code/RefreshToken |
+| ftsSearch | SQLite FTS5 全文索引（启动时建表） | $queryRaw（FTS 虚拟表） |
 
 ## 反模式 / 注意事项
 

@@ -1,9 +1,10 @@
 #!/bin/bash
 # 阿里云 ECS 部署参考脚本（**待按新环境调整**，逻辑暂未改动）。
 #
-# 当前生产形态：ECS（Ubuntu）上直接跑 Express(:3001) + SQLite + client/dist，
-#   代码目录 /opt/lineweb，公网访问 http://<ECS 公网 IP>:3001。
-#   ECS 上的运行方式（systemd 直接跑 vs Docker Compose）与代码更新方式待确定。
+# 生产形态：ECS（Ubuntu）上 1Panel + Docker Compose 跑 Express(:3001) 容器
+#   + PostgreSQL 16 容器（lineweb-postgres），client/dist 打进镜像；
+#   代码目录 /opt/lineweb，公网入口 https://web.linetech.online（Cloudflare Tunnel）。
+#   生产更新命令是 `docker compose up -d --build`（见 README），本脚本不是生产链路。
 #
 # ⚠️ 本脚本有三处与新环境不符，采用前必须调整：
 #   1. 路径：`/www/wwwroot/lineweb` 是旧宝塔路径，应改为 /opt/lineweb。

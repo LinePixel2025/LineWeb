@@ -39,7 +39,7 @@ LineWeb API 提供个人网站/CMS 的全部功能，包括 **认证、文章、
 
 **安全策略**：除公开路径外，**所有 API 端点均需身份认证**。每次请求必须携带有效的登录令牌，否则返回 `401`。
 
-**公开端点（免认证，共 11 条白名单路径）**：
+**公开端点（免认证，共 13 条白名单路径）**：
 
 | 端点 | 说明 |
 |---|---|
@@ -52,6 +52,7 @@ LineWeb API 提供个人网站/CMS 的全部功能，包括 **认证、文章、
 | `GET /api/version` | 部署版本信息 |
 | `GET /api/comments/post/:postId` | 文章评论树 |
 | `GET /api/ai/chat/public`、`POST /api/ai/chat` | AI 启用状态 / AI 对话 |
+| `POST /api/oauth/token`、`POST /api/oauth/revoke` | 第三方应用授权：换取/刷新令牌、撤销授权（精确路径匹配） |
 
 > `/health/*` 前缀整体位于白名单中（`GET /api/health` 公开），但 `POST /api/health/push`、`GET /api/health/screen-time` 等路由**内部仍强制要求登录令牌**，不携带令牌无法使用。
 >
