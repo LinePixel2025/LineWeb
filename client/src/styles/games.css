@@ -489,6 +489,10 @@
 }
 
 .gh-g2048-board-wrap--mini .gh-g2048-board {
+  /* 缩略棋盘用宽度撑出正方形：不能沿用 100% 高度（父容器高度为 auto 会塌陷成 0） */
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
   gap: 5px;
   padding: 5px;
   border-radius: 8px;
@@ -1157,6 +1161,19 @@
 .gh-game-room-hint {
   color: var(--gh-text-secondary);
   font-size: var(--gh-text-sm);
+}
+
+.gh-game-room-duration {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-game-room-duration-select {
+  width: auto;
+  min-width: 110px;
 }
 
 .gh-game-room-section-title {

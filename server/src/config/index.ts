@@ -278,6 +278,11 @@ export const gameInviteRespondSchema = z.object({
   action: z.enum(['accept', 'decline']),
 })
 
+/** POST /api/games/2048/matches/:id/start —— 房主开始游戏（可选竞速时长，1–60 分钟） */
+export const gameStartSchema = z.object({
+  durationMinutes: z.number().int().min(1).max(60).optional(),
+})
+
 /** POST /api/games/2048/matches/:id/moves —— 服务端权威移动（客户端只提交方向） */
 export const gameMoveSchema = z.object({
   direction: z.enum(['up', 'down', 'left', 'right']),

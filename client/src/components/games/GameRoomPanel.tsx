@@ -15,6 +15,9 @@ export interface GameRoomPanelProps {
   highlightFriendId?: number | null
   busyKey?: string | null
   error?: string | null
+  /** 房主选择的竞速时长（分钟） */
+  durationMinutes: number
+  onDurationChange: (minutes: number) => void
   onInvite: (friendId: number) => void | Promise<void>
   onCancelInvite: (inviteId: number) => void | Promise<void>
   onRespondInvite: (inviteId: number, action: 'accept' | 'decline') => void | Promise<void>
@@ -38,6 +41,8 @@ export default function GameRoomPanel({
   highlightFriendId = null,
   busyKey = null,
   error = null,
+  durationMinutes,
+  onDurationChange,
   onInvite,
   onCancelInvite,
   onRespondInvite,
@@ -73,16 +78,34 @@ export default function GameRoomPanel({
 
       <div className="gh-game-room-actions">
         {isHost ? (
-          <button
-            type="button"
-            className="gh-btn gh-btn--primary gh-btn--lg"
-            onClick={() => void onStart()}
-            disabled={!canStart || busyKey === 'start'}
-          >
-            {busyKey === 'start' ? '正在开始…' : `开始游戏（${playerCount}/${MAX_PLAYERS}）`}
-          </button>
+          <>
+            <label className="gh-game-room-duration">
+              <span>竞速时长</span>
+              <select
+                className="gh-input gh-game-room-duration-select"
+                value={durationMinutes}
+                onChange={(event) => onDurationChange(Number(event.target.value))}
+                disabled={busyKey === 'start'}
+                aria-label="选择竞速时长"
+              >
+                {[1, 3, 5, 10, 15, 20, 30, 45, 60].map((minutes) => (
+                  <option key={minutes} value={minutes}>
+                    {minutes} 分钟
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="gh-btn gh-btn--primary gh-btn--lg"
+              onClick={() => void onStart()}
+              disabled={!canStart || busyKey === 'start'}
+            >
+              {busyKey === 'start' ? '正在开始…' : `开始游戏（${playerCount}/${MAX_PLAYERS}）`}
+            </button>
+          </>
         ) : (
-          <span className="gh-game-room-waiting">等待房主开始游戏…</span>
+          <span className="gh-game-room-waiting">等待房主开始游戏…（竞速时长由房主选择）</span>
         )}
         <button
           type="button"

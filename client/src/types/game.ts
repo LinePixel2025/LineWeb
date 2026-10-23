@@ -66,6 +66,8 @@ export interface Game2048Match {
   hostId: number
   status: Game2048MatchStatus
   version: number
+  /** 本局竞速时长（毫秒）；等待房间中为房主默认/已选时长 */
+  durationMs: number
   startedAt: string
   endsAt: string
   endedAt: string | null
@@ -113,6 +115,11 @@ export interface GameMatchResponse {
 /** GET /api/games/2048/matches/active */
 export interface GameActiveMatchResponse {
   match: Game2048Match | null
+}
+
+/** POST /api/games/2048/matches/:id/start */
+export interface GameStartResponse {
+  match: Game2048Match
 }
 
 /** POST /api/games/2048/matches/:id/moves */

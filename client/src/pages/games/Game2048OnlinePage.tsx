@@ -73,6 +73,8 @@ export default function Game2048OnlinePage() {
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [movesPending, setMovesPending] = useState(false)
   const [remainingMs, setRemainingMs] = useState(0)
+  /** 房主在等待房间选择的竞速时长（分钟） */
+  const [durationMinutes, setDurationMinutes] = useState(10)
 
   const matchRef = useRef<Game2048Match | null>(null)
   const matchIdRef = useRef<number | null>(matchId)
@@ -413,14 +415,16 @@ export default function Game2048OnlinePage() {
     setBusyKey('start')
     setActionError(null)
     try {
-      const data = await api.post<GameMatchResponse>(`/games/2048/matches/${id}/start`)
+      const data = await api.post<GameMatchResponse>(`/games/2048/matches/${id}/start`, {
+        durationMinutes,
+      })
       setMatch(data.match)
     } catch (err) {
       setActionError(errorMessage(err, '开始游戏失败'))
     } finally {
       setBusyKey(null)
     }
-  }, [])
+  }, [durationMinutes])
 
   const handleLeaveRoom = useCallback(async () => {
     const id = matchIdRef.current
@@ -561,6 +565,8 @@ export default function Game2048OnlinePage() {
             highlightFriendId={highlightFriendId}
             busyKey={busyKey}
             error={actionError ?? matchError}
+            durationMinutes={durationMinutes}
+            onDurationChange={setDurationMinutes}
             onInvite={handleInvite}
             onCancelInvite={handleCancelInvite}
             onRespondInvite={handleRespondInvite}
@@ -600,7 +606,7 @@ export default function Game2048OnlinePage() {
           </p>
           <h1 className="gh-games-title">2048 好友对战</h1>
           <p className="gh-games-subtitle">
-            邀请最多 9 位好友（共 10 人）进入房间，房主开始后同步竞速：10 分钟内率先合成 2048 或分数最高者获胜。
+            邀请最多 9 位好友（共 10 人）进入房间，房主选择竞速时长后同步竞速：率先合成 2048 或分数最高者获胜。
           </p>
         </div>
         <div className="gh-game-lobby-actions">

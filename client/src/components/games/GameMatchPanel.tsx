@@ -128,6 +128,7 @@ export default function GameMatchPanel({
   const lowTime = !finished && remainingMs > 0 && remainingMs < 60_000
   const result = finished ? describeResult(match, meId) : null
   const playerCount = match.players.length
+  const durationMinutes = Math.max(1, Math.round((match.durationMs || 10 * 60_000) / 60_000))
 
   return (
     <section className="gh-game-match" aria-label="2048 联机对局">
@@ -135,7 +136,9 @@ export default function GameMatchPanel({
         <div className="gh-game-match-opponent">
           <div className="gh-game-match-opponent-copy">
             <span className="gh-game-match-eyebrow">2048 同步竞速</span>
-            <strong className="gh-game-match-opponent-name">{playerCount} 人同场</strong>
+            <strong className="gh-game-match-opponent-name">
+              {playerCount} 人同场 · {durationMinutes} 分钟
+            </strong>
             <span className={`gh-game-presence ${me?.online ? 'gh-game-presence--online' : 'gh-game-presence--offline'}`}>
               <span className="gh-game-presence-dot" aria-hidden="true" />
               我 {me?.online ? '在线' : '离线'}

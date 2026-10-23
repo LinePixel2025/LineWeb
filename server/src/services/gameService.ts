@@ -37,8 +37,11 @@ import {
 
 /** 邀请有效期：60 秒 */
 export const GAME_INVITE_TTL_MS = 60_000
-/** 单局时长上限：10 分钟 */
-export const GAME_MATCH_DURATION_MS = 10 * 60_000
+/** 默认竞速时长：10 分钟（房主开始时可选择 1–60 分钟） */
+export const GAME_DEFAULT_DURATION_MS = 10 * 60_000
+/** 房主可选竞速时长范围（分钟） */
+export const GAME_MIN_DURATION_MINUTES = 1
+export const GAME_MAX_DURATION_MINUTES = 60
 /** 单个房间最多玩家数（含房主） */
 export const GAME_MAX_PLAYERS = 10
 /** 房间最少开局人数 */
@@ -103,6 +106,8 @@ export interface GameMatchDto {
   hostId: number
   status: GameMatchStatus
   version: number
+  /** 本局竞速时长（毫秒），等待房间中为房主默认/已选时长 */
+  durationMs: number
   startedAt: string
   endsAt: string
   endedAt: string | null
@@ -159,6 +164,7 @@ interface MatchState {
   hostId: number
   status: GameMatchStatus
   version: number
+  durationMs: number
   startedAt: number
   endsAt: number
   endedAt: number | null
@@ -241,6 +247,7 @@ function toMatchDto(match: MatchState): GameMatchDto {
     hostId: match.hostId,
     status: match.status,
     version: match.version,
+    durationMs: match.durationMs,
     startedAt: iso(match.startedAt),
     endsAt: iso(match.endsAt),
     endedAt: match.endedAt === null ? null : iso(match.endedAt),
@@ -355,6 +362,7 @@ function createWaitingRoom(host: GameUserBriefDto, now: number): MatchState {
     hostId: host.id,
     status: 'waiting',
     version: 1,
+    durationMs: GAME_DEFAULT_DURATION_MS,
     startedAt: now,
     endsAt: now + GAME_WAITING_ROOM_TTL_MS,
     endedAt: null,
@@ -382,19 +390,32 @@ function initPlayerForGame(player: PlayerState, seed: number, now: number): void
  * 房主开始游戏：2–10 人，所有人同一 seed，状态从 waiting 切到 playing。
  * 只允许房主操作；房间已开始/已结束时拒绝。
  */
-export function startGameMatch(userId: number, matchId: number, now: number = Date.now()): { match: GameMatchDto } {
+export function startGameMatch(
+  userId: number,
+  matchId: number,
+  durationMinutes: number = GAME_DEFAULT_DURATION_MS / 60_000,
+  now: number = Date.now(),
+): { match: GameMatchDto } {
   const match = matches.get(matchId)
   if (!match || !isParticipant(match, userId)) throw new AppError('房间不存在', 404)
   if (match.status !== 'waiting') throw new AppError('房间已经开始或已结束', 409)
   if (match.hostId !== userId) throw new AppError('只有房主可以开始游戏', 403)
   if (match.players.length < GAME_MIN_PLAYERS) throw new AppError('至少需要 2 名玩家才能开始', 400)
   if (match.players.length > GAME_MAX_PLAYERS) throw new AppError('房间人数超过上限', 400)
+  if (
+    !Number.isInteger(durationMinutes)
+    || durationMinutes < GAME_MIN_DURATION_MINUTES
+    || durationMinutes > GAME_MAX_DURATION_MINUTES
+  ) {
+    throw new AppError(`竞速时长需为 ${GAME_MIN_DURATION_MINUTES}–${GAME_MAX_DURATION_MINUTES} 分钟`, 400)
+  }
 
   const seed = randomSeed()
   for (const player of match.players) initPlayerForGame(player, seed, now)
   match.status = 'playing'
+  match.durationMs = durationMinutes * 60_000
   match.startedAt = now
-  match.endsAt = now + GAME_MATCH_DURATION_MS
+  match.endsAt = now + match.durationMs
   match.version += 1
   // 对局开始后不再接受任何邀请
   removeInvitesForUsers(match.players.map((player) => player.userId), 'cancelled')

@@ -31,7 +31,7 @@ server/
 | 加业务逻辑 | `services/` | authService、postService、avatarService 有 service 层；其余路由直接调 Prisma |
 | 文件上传 | routes 中用 `busboy` | drive/avatar/users 三处；无 multer |
 | 存储节点通信 | `services/storageTunnel.ts` | WebSocket 命令代理 + 流式读写 |
-| 游戏 / 2048 联机 | `routes/games.ts` + `services/gameService.ts` + `services/game2048.ts` + `services/gamePresence.ts` | 内存态等待房间（2–10 人）/对局（无 Prisma 表）、房主 `start`/`leave`、多玩家服务端权威棋盘与淘汰制、WS 事件复用 chatHub、`sync`/`presence` 轮询降级 |
+| 游戏 / 2048 联机 | `routes/games.ts` + `services/gameService.ts` + `services/game2048.ts` + `services/gamePresence.ts` | 内存态等待房间（2–10 人）/对局（无 Prisma 表）、房主 `start`（可选 1–60 分钟）/`leave`、多玩家服务端权威棋盘与淘汰制、WS 事件复用 chatHub、`sync`/`presence` 轮询降级 |
 
 ## 中间件链顺序
 
@@ -106,7 +106,7 @@ helmet(CSP) → cors → compression → body parser(1mb) → rate-limit(600/15m
 - **裸 catch {}**：多处存在且无注释
 - **asyncHandler 已应用**：`posts.ts` 和 `pages.ts` 的所有 async 路由处理器已包裹 `asyncHandler()`，确保异步异常正确转发到 `errorHandler`。其他路由文件（comments、drive 等）尚未包裹，仍有未处理 async 异常的风险。
 - **WebSocket upgrade 分发**：`chatHub` 用 `noServer: true` 接管 `server` 的 `upgrade` 事件并按路径分发（`/ws/chat` 自己处理，其余转交先前监听器），因此 `initChatHub` 必须在 `initStorageTunnel` 之后调用；新增 WS 服务需接入同一分发。
-- **游戏为内存态**：等待房间/邀请/对局/棋盘/RNG 全部在 `gameService` 内存中，**不新增 Prisma 表**；服务重启即失效（客户端 404 时应提示重新开始）。每个房间最多 10 人（含房主）、最少 2 人开局；邀请接受加入房间，房主 `start` 后统一种子发牌；无路可走/认输/掉线淘汰该玩家，最后存活者获胜。`startGameSweeper()` 必须在 `initChatHub(server)` 之后调用，定时器 15 秒且 unref。
+- **游戏为内存态**：等待房间/邀请/对局/棋盘/RNG 全部在 `gameService` 内存中，**不新增 Prisma 表**；服务重启即失效（客户端 404 时应提示重新开始）。每个房间最多 10 人（含房主）、最少 2 人开局；邀请接受加入房间，房主 `start` 时可传 `durationMinutes`（1–60，默认 10）后统一种子发牌；无路可走/认输/掉线淘汰该玩家，最后存活者获胜。`startGameSweeper()` 必须在 `initChatHub(server)` 之后调用，定时器 15 秒且 unref。
 - **游戏在线判定唯一口径**：`isGameUserAvailable = chatHub.isUserOnline(userId) || gamePresence.isGamePresent(userId)`；presence TTL 90 秒、客户端心跳 20 秒、连续不可用 120 秒判负。邀请目标/接受邀请方可用性、好友 `online`、对局 DTO 的 `online`、sweeper 判负都必须走这一个函数，不要各自判断。
 - **游戏高频端点要绕开全局限流**：`/games/2048/matches/:id/moves`、`/games/2048/sync`、`/games/2048/presence` 在 `index.ts` 的 `apiLimiter` 里用精确正则 `skip`（`req.path` 不含 `/api`），改路由路径时必须同步改这三条正则，否则轮询/对局会被 600/15min 卡死。
 - **游戏事件不新增 WS 服务**：`game:invite` / `game:invite:removed` / `game:match:started|update|ended` 全部经 `chatHub.sendToUser` 推送；无 WS 时客户端用 `GET /sync` 轮询 + `POST /presence` 心跳降级。

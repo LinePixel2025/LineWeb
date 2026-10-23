@@ -8,6 +8,7 @@ import {
   gameInviteCreateSchema,
   gameInviteRespondSchema,
   gameMoveSchema,
+  gameStartSchema,
   gameSyncQuerySchema,
 } from '../config/index.js'
 import { markGamePresence } from '../services/gamePresence.js'
@@ -171,7 +172,8 @@ router.get('/2048/matches/:id', (req, res) => {
 
 router.post('/2048/matches/:id/start', gameWriteLimiter, (req, res) => {
   const matchId = parseIdParam(req.params.id, '对局 ID')
-  res.json(startGameMatch(currentUserId(req), matchId))
+  const body = parseInput(gameStartSchema, req.body ?? {})
+  res.json(startGameMatch(currentUserId(req), matchId, body.durationMinutes))
 })
 
 router.post('/2048/matches/:id/leave', gameWriteLimiter, (req, res) => {
