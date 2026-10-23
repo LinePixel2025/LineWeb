@@ -80,7 +80,7 @@ describe('appScopes 前后端一致性', () => {
   })
 
   it('管理类能力不可作为第三方应用的 scope 申请', () => {
-    const forbidden = ['user:manage', 'device:view', 'ai:configure', 'stats:view', 'drive:all', 'app:manage']
+    const forbidden = ['user:manage', 'content:manage', 'device:view', 'ai:configure', 'stats:view', 'drive:all', 'app:manage']
     for (const capability of forbidden) {
       expect(isKnownAppScope(capability), `${capability} 不应出现在应用 scope 中`).toBe(false)
     }

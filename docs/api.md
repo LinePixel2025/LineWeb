@@ -19,12 +19,14 @@
 - [15. 错误处理](#15-错误处理)
 - [16. CORS 配置](#16-cors-配置)
 - [17. 代码示例](#17-代码示例)
+- [18. 聊天（Chat）](#18-聊天chat)
+- [附录：端点快速索引](#附录端点快速索引)
 
 ---
 
 ## 1. 概述
 
-LineWeb API 提供个人网站/CMS 的全部功能，包括 **认证、文章、评论、页面管理、网盘文件存储、AI 助手、屏幕时间追踪** 以及 **管理面板** 接口。
+LineWeb API 提供个人网站/CMS 的全部功能，包括 **认证、文章、评论、页面管理、网盘文件存储（含空间配额）、好友 / 私聊 / 群聊、AI 助手、屏幕时间追踪** 以及 **管理面板** 接口。
 
 | 属性 | 值 |
 |---|---|
@@ -207,12 +209,14 @@ Content-Type: application/json
     "role": "admin",
     "capabilities": [
       "content:write",
+      "content:manage",
       "comment:moderate",
       "user:manage",
       "stats:view",
       "device:view",
       "ai:configure",
-      "drive:all"
+      "drive:all",
+      "app:manage"
     ],
     "canAccessDrive": true,
     "settings": null
@@ -530,6 +534,8 @@ Content-Type: application/json
 ```
 
 > slug 已存在时返回 **409**。
+>
+> 角色说明：`author` / `admin` 可创建文章；普通 `user` 调用返回 403。文章作者固定为当前登录账号（请求体不能指定 `authorId`）。
 
 ### 6.4 更新文章（需要 `content:write` 能力）
 
@@ -538,6 +544,8 @@ PUT /api/posts/:id
 Authorization: Bearer <token>
 Content-Type: application/json
 ```
+
+> **所有权**：作者只能更新自己的文章；操作他人文章返回 **404**（不暴露文章是否存在）。具备 `content:manage` 的管理员可更新全站文章。
 
 请求体所有字段可选（partial update）：
 
@@ -557,13 +565,15 @@ DELETE /api/posts/:id
 Authorization: Bearer <token>
 ```
 
+> 与更新相同：作者只能删除自己的文章，操作他人文章返回 **404**；`content:manage` 可删除全站文章。
+
 **响应：**
 
 ```json
 { "message": "已删除" }
 ```
 
-### 6.6 管理：获取所有文章（含未发布）
+### 6.6 管理：获取文章列表（含未发布）
 
 ```
 GET /api/posts/admin/all?page=1&limit=20
@@ -572,6 +582,9 @@ Authorization: Bearer <token>
 
 与公开列表相同结构，但包含未发布的草稿。
 
+- 作者（无 `content:manage`）：只返回**自己创建**的文章。
+- 管理员（`content:manage`）：返回全站文章。
+
 ### 6.7 管理：按 ID 获取文章
 
 ```
@@ -579,7 +592,7 @@ GET /api/posts/admin/:id
 Authorization: Bearer <token>
 ```
 
-返回完整文章对象（含未发布状态的）。
+返回完整文章对象（含未发布状态与 `authorId`）。非作者且无 `content:manage` 时返回 **404**。
 
 ---
 
@@ -711,7 +724,9 @@ GET /api/pages/slug/:slug
 }
 ```
 
-### 8.3 管理页面接口（需要 `content:write` 能力）
+### 8.3 管理页面接口（需要 `content:manage` 能力）
+
+> 页面管理属于全站内容管理，目前仅 `admin` 具备。作者（`author`）即使能写文章，也不能创建 / 修改 / 删除页面（403），第三方应用也无法通过任何 scope 访问这些端点。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -738,6 +753,8 @@ GET /api/pages/slug/:slug
 ## 9. 网盘（Drive）
 
 Drive 模块提供文件存储和管理功能。所有端点需要 **登录 + 网盘访问权**（`canAccessDrive = true`，或具备 `drive:all` 能力；都不满足返回 403）。默认只能访问**自己上传**的文件，具备 `drive:all` 的账号（如 `admin`）可访问全部。
+
+> **空间配额（2026-10 起）**：每个用户默认 **2 GiB**（`users.storage_quota`，字节），管理员可通过 `PUT /api/users/:id/quota` 逐用户调整（0–10 TiB）。普通用户上传超过剩余空间会返回 `413 QUOTA_EXCEEDED`；`drive:all` 账号不受配额限制。查看本人在用空间：`GET /api/drive/quota`（见 9.14）。
 
 ### 9.1 获取文件列表（分页）
 
@@ -879,6 +896,7 @@ Content-Type: multipart/form-data
 - 流式上传：边收边转发到存储节点，内存峰值 ~64KB
 - 同级同名文件自动添加计数器后缀去重（如 `file(1).jpg`）
 - 存储节点写入失败时自动回滚 DB 记录
+- **空间配额强制**：解析前预检剩余空间、流式阶段按剩余空间限制、写入后复核；超限会删除本次 DB 记录与节点文件，保证无残留
 
 **成功响应（201）：**
 
@@ -891,6 +909,20 @@ Content-Type: multipart/form-data
   "createdAt": "2026-07-04T10:00:00.000Z"
 }
 ```
+
+**空间不足（413）：**
+
+```json
+{
+  "error": "网盘空间不足",
+  "code": "QUOTA_EXCEEDED",
+  "quota": "2147483648",
+  "used": "2147483000",
+  "remaining": "0"
+}
+```
+
+单文件超过 `MAX_FILE_SIZE_MB` 时同样返回 413，但 `code` 为 `FILE_TOO_LARGE`。
 
 ### 9.8 下载文件（流式）
 
@@ -950,7 +982,7 @@ Authorization: Bearer <token>
 
 **递归删除**：删除文件夹时，其所有子文件和子文件夹也会被删除。
 
-### 9.12 手动触发文件同步
+### 9.12 手动触发文件同步（仅 `drive:all`）
 
 ```
 POST /api/drive/sync
@@ -958,6 +990,8 @@ Authorization: Bearer <token>
 ```
 
 对比存储节点文件系统与数据库记录：清理孤立文件 + 创建缺失记录。返回同步报告。
+
+> 仅具备 `drive:all` 的账号（管理员）可调用；普通用户 / 作者调用返回 **403**（避免把节点上他人文件记到自己名下）。
 
 ### 9.13 文件夹收藏
 
@@ -967,6 +1001,30 @@ Authorization: Bearer <token>
 | POST | `/api/drive/favorites` | 添加收藏 `{folderId, folderName}`（已存在时直接返回） |
 | DELETE | `/api/drive/favorites/:folderId` | 移除收藏 |
 | PUT | `/api/drive/favorites/reorder` | 重排序 `{favorites: [{id, order}]}` |
+
+### 9.14 查询空间配额
+
+```
+GET /api/drive/quota
+Authorization: Bearer <token>
+```
+
+```json
+{
+  "unlimited": false,
+  "quota": "2147483648",
+  "used": "1048576",
+  "remaining": "2146435072"
+}
+```
+
+管理员（`drive:all`）：
+
+```json
+{ "unlimited": true, "quota": null, "used": "1048576", "remaining": null }
+```
+
+> 所有字节数字段均为**字符串**（数据库为 BigInt，避免 JSON 精度问题）。已用空间 = 本人上传的非文件夹文件 `size` 总和。
 
 ---
 
@@ -992,6 +1050,8 @@ Authorization: Bearer <token>
       "email": "admin@lineweb.dev",
       "role": "admin",
       "canAccessDrive": true,
+      "storageQuota": "2147483648",
+      "storageUsed": "1048576",
       "createdAt": "2026-06-01T00:00:00.000Z"
     }
   ],
@@ -1002,12 +1062,16 @@ Authorization: Bearer <token>
 }
 ```
 
+> `storageQuota` / `storageUsed` 均为**字节字符串**；`storageUsed` 只统计该用户上传的非文件夹文件。
+
 #### 用户详情
 
 ```
 GET /api/users/:id
 Authorization: Bearer <token>
 ```
+
+响应含 `storageQuota`（字节字符串）；不返回 `storageUsed`。
 
 #### 更新用户
 
@@ -1019,8 +1083,22 @@ Content-Type: application/json
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| role | string | `"user"` 或 `"admin"`（不能修改自己的角色） |
+| role | string | `"user"` / `"author"` / `"admin"`（不能修改自己的角色） |
 | password | string | 新密码，6-100 字符 |
+
+> `author` 具备 `content:write`：可发布并管理自己的文章；页面管理仍需 `admin`。
+
+#### 调整网盘空间配额
+
+```
+PUT /api/users/:id/quota
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+请求体：`{ "storageQuotaBytes": "1073741824" }`（纯数字字符串，0–10995116277760，即 0–10 TiB）。
+
+响应：`{ "id": 3, "storageQuota": "1073741824" }`。变更即时生效；普通用户上传时按新配额校验。
 
 #### 切换网盘权限
 
@@ -1030,7 +1108,7 @@ Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
-请求体：`{ "canAccessDrive": true }`。权限变更即时生效（会清除权限缓存）。
+请求体：`{ "canAccessDrive": true }`。权限变更即时生效（服务端每请求从数据库解析，无缓存）。
 
 #### 管理员设置用户头像
 
@@ -1149,17 +1227,19 @@ requests.post(f"{BASE}/api/health/push",
 
 ### 11.2 角色与能力矩阵
 
-角色只有两种：`user` 与 `admin`。**`admin` 自动拥有全部能力；`user` 不具备任何管理能力**（仍可访问全部非管理端点，例如发表评论、读写自己的屏幕时间数据）。
+角色有三种：`user`、`author`、`admin`。**`admin` 自动拥有全部能力；`author` 仅具备 `content:write`（管理自己的文章）；`user` 不具备任何管理能力**（仍可访问全部非管理端点，例如发表评论、读写自己的屏幕时间数据）。
 
 | 能力 | 说明 | 对应端点 |
 |---|---|---|
-| `content:write` | 内容编辑（文章 / 页面 + AI 写作辅助） | posts `/admin/*` 与 POST/PUT/DELETE；pages 全部管理端点；ai `/write/*` |
+| `content:write` | 内容编辑（自己的文章 + AI 写作辅助） | posts `/admin/*` 与 POST/PUT/DELETE（作者仅限自己的文章）；ai `/write/*` |
+| `content:manage` | 全站内容管理（全部文章 + 页面） | pages 全部管理端点；可跨作者操作 posts |
 | `comment:moderate` | 评论管理 | comments `/admin/*`、`PUT /api/comments/:id`、`DELETE /api/comments/:id`（POST 发表评论仅需登录） |
-| `user:manage` | 用户管理 | users 全部端点 |
+| `user:manage` | 用户管理 | users 全部端点（含空间配额） |
 | `stats:view` | 站点统计 | `GET /api/stats` |
 | `device:view` | 设备监控 | devices 全部端点 |
 | `ai:configure` | AI 配置 | ai `/config` 的 GET / PUT |
-| `drive:all` | 网盘全量访问（豁免 `canAccessDrive` 开关 + 可操作他人文件） | drive 全部端点 |
+| `drive:all` | 网盘全量访问（豁免 `canAccessDrive` 开关 + 可操作他人文件 + 不受空间配额限制） | drive 全部端点 |
+| `app:manage` | 第三方应用授权管理 | oauth `/clients*` |
 
 > 能力定义在服务端 `server/src/lib/permissions.ts`；登录响应与 `GET /api/auth/me` 中的 `capabilities` 字段即当前账号的能力清单。
 
@@ -1302,15 +1382,17 @@ LineWeb 只保留一种凭证：`POST /api/auth/login` 签发的**账号登录�
 
 | 端点 | 登录即可 | 需要的能力 |
 |---|---|---|
-| posts `/admin/*`、POST/PUT/DELETE；pages 全部管理端点 | | `content:write` |
+| posts `/admin/*`、POST/PUT/DELETE（作者仅自己的文章） | | `content:write` |
+| pages 全部管理端点；跨作者操作 posts | | `content:manage` |
 | comments `POST /api/comments`（发表评论） | ✓ | |
 | comments `/admin/*`、`PUT`/`DELETE /api/comments/:id` | | `comment:moderate` |
-| users 全部端点 | | `user:manage` |
+| users 全部端点（含 `PUT /users/:id/quota`） | | `user:manage` |
 | devices 全部端点 | | `device:view` |
 | `GET /api/stats` | | `stats:view` |
 | ai `/write/*` | | `content:write` |
 | ai `/config` GET/PUT | | `ai:configure` |
-| drive 全部端点 | | `canAccessDrive = true` 或 `drive:all` |
+| drive 全部端点 | | `canAccessDrive = true` 或 `drive:all`（配额见 9.14） |
+| `/api/chat/**`、`/ws/chat` | ✓（仅账号令牌；应用令牌 / 下载票据不可用） | |
 | health 屏幕时间相关端点（含 `push`） | ✓（只能读写本人数据） | |
 
 **令牌生命周期：**
@@ -1649,6 +1731,37 @@ curl -s -X DELETE http://<ECS 公网 IP>:3001/api/posts/1 \
 
 ---
 
+## 18. 聊天（Chat）
+
+好友 / 私聊 / 群聊与 WebSocket 实时推送的完整协议、请求示例与错误码见 **[`chat-api.md`](./chat-api.md)**。要点：
+
+- 全部聊天端点要求**账号登录令牌**；OAuth 应用令牌与下载票据不可用。
+- 好友需申请 + 对方接受；仅好友可创建私聊；群主只能邀请自己的好友（群上限 50 人）。
+- 消息写入走 REST（`POST /api/chat/conversations/:id/messages`，纯文本 1–2000 字），实时推送走 `ws(s)://<host>/ws/chat`（连接后 5 秒内发送 `{ "type": "auth", "token": "..." }`，认证失败 close code `4001`）。
+- 未读数以 `GET /api/chat/summary` / 会话列表为准；断线重连后重新拉取，不依赖推送补全。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/chat/summary` | 未读总数 + 待处理好友申请数 |
+| GET | `/api/chat/users/search?q=` | 搜索用户（含好友关系） |
+| GET | `/api/chat/friends` | 好友列表 |
+| DELETE | `/api/chat/friends/:userId` | 删除好友（保留历史） |
+| GET | `/api/chat/friend-requests` | 待处理好友申请 |
+| POST | `/api/chat/friend-requests` | 发送好友申请 |
+| POST | `/api/chat/friend-requests/:id/accept` / `reject` | 接受 / 拒绝 |
+| GET | `/api/chat/conversations` | 会话列表 |
+| POST | `/api/chat/conversations/direct` | 创建 / 获取私聊 |
+| POST | `/api/chat/conversations/group` | 创建群聊 |
+| GET | `/api/chat/conversations/:id/messages` | 历史消息（游标分页） |
+| POST | `/api/chat/conversations/:id/messages` | 发送消息 |
+| PUT | `/api/chat/conversations/:id/read` | 标记已读 |
+| PUT | `/api/chat/conversations/:id` | 群主改群名 |
+| POST | `/api/chat/conversations/:id/members` | 群主加人 |
+| DELETE | `/api/chat/conversations/:id/members/:userId` | 退群 / 群主移人 |
+| DELETE | `/api/chat/conversations/:id` | 群主解散群 |
+
+---
+
 ## 附录：端点快速索引
 
 | 模块 | 端点数 | 公开 | 需登录 | 需管理能力 | 需网盘权限 |
@@ -1658,17 +1771,18 @@ curl -s -X DELETE http://<ECS 公网 IP>:3001/api/posts/1 \
 | 文章 | 7 | 2 | 0 | 5 | 0 |
 | 评论 | 7 | 1 | 2 | 4 | 0 |
 | 页面 | 7 | 2 | 0 | 5 | 0 |
-| 网盘 | 14 | 0 | 0 | 0 | 14 |
+| 网盘 | 15 | 0 | 0 | 0 | 15 |
 | 网盘收藏 | 4 | 0 | 0 | 0 | 4 |
-| 用户 | 6 | 0 | 0 | 6 | 0 |
+| 用户 | 7 | 0 | 0 | 7 | 0 |
 | 设备 | 1 | 0 | 0 | 1 | 0 |
 | 统计 | 2 | 1 | 0 | 1 | 0 |
 | AI 助手 | 3 | 2 | 0 | 1 | 0 |
 | 屏幕时间 | 5 | 0 | 5 | 0 | 0 |
-| **总计** | **69** | **13** | **15** | **23** | **18** |
+| 聊天 | 18 | 0 | 18 | 0 | 0 |
+| **总计** | **89** | **13** | **33** | **24** | **19** |
 
 > **认证说明**：所有认证都使用**同一个账号登录令牌**（`Authorization: Bearer <token>`），没有第二套凭证。
-> 「公开」= 无需任何凭证；「需登录」= 有有效登录令牌即可；「需管理能力」= 需具备该端点对应的能力（`content:write` / `comment:moderate` / `user:manage` / `stats:view` / `device:view` / `ai:configure`，`admin` 自动全具备）；「需网盘权限」= 需登录且 `canAccessDrive = true` 或具备 `drive:all`。
+> 「公开」= 无需任何凭证；「需登录」= 有有效登录令牌即可；「需管理能力」= 需具备该端点对应的能力（`content:write` / `content:manage` / `comment:moderate` / `user:manage` / `stats:view` / `device:view` / `ai:configure`，`admin` 自动全具备）；「需网盘权限」= 需登录且 `canAccessDrive = true` 或具备 `drive:all`。
 >
 > 原「API 密钥」模块（5 个端点）与屏幕时间 Token 相关端点（`/api/health/tokens` 3 个、`/api/health/screen-time/data`、`/api/health/daily-goal/data`）已于 2026-09 随 API Key / 屏幕时间 Token 一并移除。
 

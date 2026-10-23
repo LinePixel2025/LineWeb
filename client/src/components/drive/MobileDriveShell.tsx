@@ -11,6 +11,8 @@ import type {
 import { getFileTypeLabel } from '../../types/drive'
 import { useDrive } from '../../contexts/DriveContext'
 import { formatDate, formatFileSize } from '../../lib/format'
+import DriveQuotaBar from './DriveQuotaBar'
+import type { DriveQuota } from '../../hooks/useDriveQuota'
 import {
   ChevronDown,
   ChevronRight,
@@ -52,6 +54,11 @@ export interface MobileDriveShellProps {
   onUpload: () => void
   onSync: () => void
   syncing: boolean
+  /** 是否展示同步入口（仅具备 drive:all 能力的管理员可见，默认显示） */
+  showSync?: boolean
+  /** 空间配额数据（由 DrivePage 统一拉取后传入） */
+  quota?: DriveQuota | null
+  quotaLoading?: boolean
   onRefresh: () => void
   onPageChange: (page: number) => void
   viewMode: ViewMode
@@ -97,6 +104,9 @@ const MobileDriveShell = memo(function MobileDriveShell({
   onUpload,
   onSync,
   syncing,
+  showSync = true,
+  quota,
+  quotaLoading = false,
   onRefresh,
   onPageChange,
   viewMode,
@@ -419,7 +429,13 @@ const MobileDriveShell = memo(function MobileDriveShell({
             <button onClick={() => { onUpload(); setShowMore(false) }}><UploadIcon size={18} /> 上传文件</button>
             <button onClick={() => { onNewFolder(); setShowMore(false) }}><NewFolderIcon size={18} /> 新建文件夹</button>
             <button onClick={() => { onRefresh(); setShowMore(false) }}><RefreshIcon size={18} /> 刷新文件</button>
-            <button onClick={() => { onSync(); setShowMore(false) }} disabled={syncing}><RefreshIcon size={18} /> {syncing ? '同步中…' : '同步存储'}</button>
+            {showSync && (
+              <button onClick={() => { onSync(); setShowMore(false) }} disabled={syncing}><RefreshIcon size={18} /> {syncing ? '同步中…' : '同步存储'}</button>
+            )}
+          </div>
+          <div className="gh-drive-mobile-sheet-section">
+            <span>空间用量</span>
+            <DriveQuotaBar quota={quota} loading={quotaLoading} compact />
           </div>
           <div className="gh-drive-mobile-sheet-section"><span>文件视图</span><div className="gh-drive-mobile-view-switcher" role="group" aria-label="文件视图">
             <button className={viewMode === 'list' ? 'gh-drive-mobile-view-button--active' : ''} onClick={() => onViewModeChange('list')}><ListViewIcon size={16} /> 列表</button>

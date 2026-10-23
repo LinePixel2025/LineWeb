@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import DriveToolbar from '../components/drive/DriveToolbar'
 import DriveNavigation from '../components/drive/DriveNavigation'
 import DriveDetailPanel from '../components/drive/DriveDetailPanel'
@@ -6,16 +6,19 @@ import DriveListView from '../components/drive/DriveListView'
 import DriveGridView from '../components/drive/DriveGridView'
 import MobileDriveShell from '../components/drive/MobileDriveShell'
 import UploadZone from '../components/drive/UploadZone'
+import DriveQuotaBar from '../components/drive/DriveQuotaBar'
 import DrivePreview from '../components/drive/DrivePreview'
 import BatchActions from '../components/drive/BatchActions'
 import FolderPickerDialog from '../components/drive/FolderPickerDialog'
 import { NewFolderDialog, RenameDialog, DeleteDialog } from '../components/drive/DriveDialogs'
 import Pagination from '../components/Pagination'
 import api from '../lib/api'
+import { useAuth } from '../contexts/AuthContext'
 import { useDownload } from '../contexts/DownloadContext'
 import { DriveProvider, useDrive } from '../contexts/DriveContext'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { useDriveFiles } from '../hooks/useDriveFiles'
+import { useDriveQuota } from '../hooks/useDriveQuota'
 import { useDriveSearch } from '../hooks/useDriveSearch'
 import { useDriveSync } from '../hooks/useDriveSync'
 import { useDriveDialogs } from '../hooks/useDriveDialogs'
@@ -38,10 +41,17 @@ function DrivePageInner() {
     navigateToBreadcrumb: navigateToBreadcrumbInContext,
   } = useDrive()
   const { startDownload } = useDownload()
+  const { can } = useAuth()
+  // 同步会把节点上的全部文件写入 DB，只有具备 drive:all 能力的管理员才允许（服务端同样校验）
+  const canSync = can('drive:all')
   const { isMobile } = useResponsive()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showFolderPicker, setShowFolderPicker] = useState(false)
   const [pendingMoveIds, setPendingMoveIds] = useState<number[]>([])
+  // 自增 token 触发配额重新拉取（上传成功 / 删除成功后）
+  const [quotaRefreshToken, setQuotaRefreshToken] = useState(0)
+  const refreshQuota = useCallback(() => setQuotaRefreshToken(token => token + 1), [])
+  const quota = useDriveQuota(quotaRefreshToken)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   const breadcrumbs = ctx.currentPath
@@ -149,8 +159,9 @@ function DrivePageInner() {
 
   const handleUploaded = useCallback(() => {
     refresh()
+    refreshQuota()
     dialogs.closeUpload()
-  }, [refresh, dialogs])
+  }, [refresh, refreshQuota, dialogs])
 
   const handleBatchMove = useCallback(() => {
     if (ctx.selectedFiles.length === 0) return
@@ -182,8 +193,9 @@ function DrivePageInner() {
     const failedCount = results.filter(result => result.status === 'rejected').length
     clearSelection()
     invalidate()
+    refreshQuota()
     if (failedCount > 0) window.alert(`${failedCount} 个项目删除失败，请刷新后重试。`)
-  }, [clearSelection, ctx.selectedFiles, invalidate])
+  }, [clearSelection, ctx.selectedFiles, invalidate, refreshQuota])
 
   const handleBatchFavorite = useCallback(() => {
     displayItems
@@ -206,6 +218,7 @@ function DrivePageInner() {
           </div>
         </div>
         <div className="gh-drive-repo-actions">
+          <DriveQuotaBar quota={quota.data} loading={quota.loading} />
           <span className="gh-drive-repo-status"><span /> 私有工作区</span>
           <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={dialogs.openNewFolder}>
             <NewFolderIcon size={14} /> 新建文件夹
@@ -213,9 +226,11 @@ function DrivePageInner() {
           <button className="gh-btn gh-btn--sm gh-btn--primary" onClick={dialogs.openUpload}>
             <UploadIcon size={14} /> 上传
           </button>
-          <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={syncOpts.sync} disabled={syncOpts.syncing}>
-            <RefreshIcon size={14} /> {syncOpts.syncing ? '同步中…' : '同步'}
-          </button>
+          {canSync && (
+            <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={syncOpts.sync} disabled={syncOpts.syncing}>
+              <RefreshIcon size={14} /> {syncOpts.syncing ? '同步中…' : '同步'}
+            </button>
+          )}
         </div>
       </header>
 
@@ -264,6 +279,7 @@ function DrivePageInner() {
               }}
               onSortDirectionChange={() => setSort({ field: ctx.sort.field, direction: ctx.sort.direction === 'asc' ? 'desc' : 'asc' })}
               showActions={false}
+              showSync={canSync}
             />
 
 
@@ -385,6 +401,9 @@ function DrivePageInner() {
         onUpload={dialogs.openUpload}
         onSync={syncOpts.sync}
         syncing={syncOpts.syncing}
+        showSync={canSync}
+        quota={quota.data}
+        quotaLoading={quota.loading}
         onRefresh={refresh}
         onPageChange={targetPage => fetchItems(targetPage)}
         viewMode={ctx.viewMode}
@@ -425,7 +444,7 @@ function DrivePageInner() {
         <RenameDialog item={dialogs.renameItem} onRenamed={() => { dialogs.closeRename(); refresh() }} onClose={dialogs.closeRename} />
       )}
       {dialogs.deleteItem && (
-        <DeleteDialog item={dialogs.deleteItem} onDeleted={() => { dialogs.closeDelete(); refresh(); clearSelection() }} onClose={dialogs.closeDelete} />
+        <DeleteDialog item={dialogs.deleteItem} onDeleted={() => { dialogs.closeDelete(); refresh(); refreshQuota(); clearSelection() }} onClose={dialogs.closeDelete} />
       )}
       {showFolderPicker && (
         <FolderPickerDialog

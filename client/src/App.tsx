@@ -2,6 +2,7 @@ import { Component, lazy, Suspense, type ReactNode } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './contexts/AuthContext'
+import { ChatProvider } from './contexts/ChatContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { DownloadProvider } from './contexts/DownloadContext'
 import Layout from './components/Layout'
@@ -20,6 +21,7 @@ const FeaturesPage = lazy(() => import('./pages/FeaturesPage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const DynamicPage = lazy(() => import('./pages/DynamicPage'))
 const DrivePage = lazy(() => import('./pages/DrivePage'))
+const ChatPage = lazy(() => import('./pages/ChatPage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
 const EditorPage = lazy(() => import('./pages/EditorPage'))
 const CommentAdminPage = lazy(() => import('./pages/admin/CommentAdminPage'))
@@ -85,6 +87,7 @@ export default function App() {
     <BrowserRouter>
       <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <ChatProvider>
         <ThemeProvider>
           <DownloadProvider>
               <RouteErrorBoundary>
@@ -105,6 +108,12 @@ export default function App() {
                     <Route path="/page/:slug" element={<DynamicPage />} />
                     <Route path="/drive" element={
                       <ProtectedRoute><DrivePage /></ProtectedRoute>
+                    } />
+                    <Route path="/chat" element={
+                      <ProtectedRoute><ChatPage /></ProtectedRoute>
+                    } />
+                    <Route path="/chat/:conversationId" element={
+                      <ProtectedRoute><ChatPage /></ProtectedRoute>
                     } />
                     {/* 第三方应用授权的账户验证页（未登录会跳登录并带参数返回） */}
                     <Route path="/authorize" element={
@@ -135,6 +144,7 @@ export default function App() {
               <DownloadToast />
             </DownloadProvider>
         </ThemeProvider>
+        </ChatProvider>
       </AuthProvider>
       </QueryClientProvider>
     </BrowserRouter>

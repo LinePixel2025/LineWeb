@@ -1,6 +1,8 @@
 import { memo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useChat } from '../contexts/ChatContext'
+import { formatUnread } from '../lib/chat'
 import { canAccessAdminPath } from '../lib/permissions'
 
 interface Props {
@@ -17,6 +19,7 @@ function SidebarIcon({ path }: { path: string }) {
     : path === '/' ? <><rect x="3" y="3" width="10" height="10" rx="2" /><path d="M5.5 10 7.5 8l1.5 1.5L11.5 6" /></>
     : path === '/posts' ? <><path d="M3.5 3.5h8a1.5 1.5 0 0 1 1.5 1.5v7.5h-8A1.5 1.5 0 0 0 3.5 14z" /><path d="M3.5 3.5v10.5M6 6.5h4M6 9h4" /></>
     : path === '/drive' ? <path d="M2.5 5.5A1.5 1.5 0 0 1 4 4h3l1.2 1.5H12A1.5 1.5 0 0 1 13.5 7v5A1.5 1.5 0 0 1 12 13.5H4A1.5 1.5 0 0 1 2.5 12z" />
+    : path === '/chat' ? <><path d="M8 2.75c-3.1 0-5.5 2.1-5.5 4.7 0 1.4.72 2.62 1.87 3.44l-.57 2.11 2.35-1.1c.58.17 1.2.26 1.85.26 3.1 0 5.5-2.1 5.5-4.71S11.1 2.75 8 2.75Z" /></>
     : path === '/features' ? <><circle cx="8" cy="8" r="5" /><path d="m9.8 6.2-1 2.6-2.6 1 1-2.6z" /></>
     : <><circle cx="8" cy="5.5" r="2.5" /><path d="M3.5 13a4.5 4.5 0 0 1 9 0" /></>
 
@@ -47,6 +50,7 @@ const sections = [
   {
     title: 'Personal',
     items: [
+      { path: '/chat', label: '聊天', icon: 'M2.75 2.5h10.5a1.25 1.25 0 0 1 1.25 1.25v6.5a1.25 1.25 0 0 1-1.25 1.25H9l-3.25 2.5v-2.5H2.75A1.25 1.25 0 0 1 1.5 10.25v-6.5A1.25 1.25 0 0 1 2.75 2.5Z' },
       { path: '/profile', label: 'Profile', icon: 'M2 1.75C2 .784 2.784 0 3.75 0h8.5C13.216 0 14 .784 14 1.75v12.5a1.75 1.75 0 0 1-1.75 1.75h-8.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25V1.75a.25.25 0 0 0-.25-.25Z M5.5 2.75a.75.75 0 0 1 0-1.5h5a.75.75 0 0 1 0 1.5Z M8 12a.75.75 0 0 0 .75-.75v-3.5a.75.75 0 0 0-1.5 0v3.5c0 .414.336.75.75.75Z' },
     ]
   },
@@ -54,7 +58,9 @@ const sections = [
 
 export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onToggleCollapse }: Props) {
   const { user } = useAuth()
+  const { unreadTotal } = useChat()
   const location = useLocation()
+  const chatUnreadLabel = formatUnread(unreadTotal)
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/'
@@ -71,6 +77,7 @@ export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onT
             const visibleItems = section.items.filter(item => {
               if (item.path.startsWith('/admin') && !canAccessAdminPath(user, item.path)) return false
               if (item.path.startsWith('/profile') && !user) return false
+              if (item.path.startsWith('/chat') && !user) return false
               return true
             })
             if (visibleItems.length === 0) return null
@@ -81,11 +88,16 @@ export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onT
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={`gh-sidebar-item ${isActive(item.path) ? 'gh-sidebar-item--active' : ''}`}
+                    className={`gh-sidebar-item ${isActive(item.path) ? 'gh-sidebar-item--active' : ''} ${item.path === '/chat' ? 'gh-chat-nav-item' : ''}`}
                     onClick={onClose}
                   >
                     <SidebarIcon path={item.path} />
                     <span className="gh-sidebar-label">{item.label}</span>
+                    {item.path === '/chat' && chatUnreadLabel && (
+                      <span className="gh-chat-nav-badge" aria-label={`${unreadTotal} 条未读消息`}>
+                        {chatUnreadLabel}
+                      </span>
+                    )}
                   </Link>
                 ))}
               </div>

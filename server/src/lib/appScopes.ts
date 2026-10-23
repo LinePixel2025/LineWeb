@@ -41,7 +41,7 @@ export const APP_SCOPE_LABELS: Record<AppScope, string> = {
   'health:write': '上报你的屏幕时间数据',
   'drive:read': '读取你的网盘文件',
   'drive:write': '管理你的网盘文件',
-  'content:write': '管理站点内容（文章与页面）',
+  'content:write': '管理自己的文章',
   'comment:moderate': '管理全部评论',
 }
 
@@ -54,7 +54,7 @@ export const APP_SCOPE_DESCRIPTIONS: Record<AppScope, string> = {
   'health:write': '上报屏幕使用时间、设置每日目标',
   'drive:read': '列出、搜索并下载你自己的网盘文件',
   'drive:write': '上传、新建文件夹、重命名、移动或删除你自己的网盘文件',
-  'content:write': '创建、编辑、删除文章与页面，并可调用 AI 写作辅助',
+  'content:write': '创建、编辑、删除自己的文章，并可调用 AI 写作辅助',
   'comment:moderate': '编辑或删除任意用户的评论',
 }
 
@@ -63,7 +63,7 @@ export const HIGH_RISK_APP_SCOPES: readonly AppScope[] = ['content:write', 'comm
 
 /**
  * 能力派生 scope —— 这两项要求「账号本身先具备同名能力」才能授权：
- * 普通用户无法把 content:write 授予应用，只有具备该能力的账号（如管理员）可以。
+ * 普通用户无法把 content:write 授予应用，只有具备该能力的账号（如作者、管理员）可以。
  */
 export const CAPABILITY_SCOPES: readonly AppScope[] = ['content:write', 'comment:moderate']
 
@@ -129,6 +129,7 @@ export interface AppEndpointRule {
  *
  * 未列入此表的端点对应用令牌一律拒绝，包括（但不限于）：
  *   /api/users、/api/devices、/api/stats、/api/ai/config、
+ *   /api/pages/*（页面管理 = content:manage，应用永远不可达）、
  *   /api/drive/sync、/api/drive/resolve-path、/api/drive/download-ticket/*、
  *   /api/drive/favorites/*、/api/oauth/*（应用不能自我提权）、
  *   /api/auth/profile、/api/auth/settings、/api/auth/logout（应用不能改密或把你登出）、
@@ -140,8 +141,6 @@ export const APP_ENDPOINT_RULES: readonly AppEndpointRule[] = [
   { method: 'GET', pattern: /^\/api\/auth\/avatar(\/\d+)?$/, scope: 'profile:read' },
   { method: 'GET', pattern: /^\/api\/comments$/, scope: 'content:read' },
   { method: 'GET', pattern: /^\/api\/posts\/admin(\/all|\/\d+)?$/, scope: 'content:write' },
-  { method: 'GET', pattern: /^\/api\/pages$/, scope: 'content:write' },
-  { method: 'GET', pattern: /^\/api\/pages\/\d+$/, scope: 'content:write' },
   { method: 'GET', pattern: /^\/api\/comments\/admin\/.+$/, scope: 'comment:moderate' },
   { method: 'GET', pattern: /^\/api\/health\/screen-time(\/range)?$/, scope: 'health:read' },
   { method: 'GET', pattern: /^\/api\/health\/daily-goal$/, scope: 'health:read' },
@@ -154,7 +153,6 @@ export const APP_ENDPOINT_RULES: readonly AppEndpointRule[] = [
 
   // === POST ===
   { method: 'POST', pattern: /^\/api\/posts$/, scope: 'content:write' },
-  { method: 'POST', pattern: /^\/api\/pages$/, scope: 'content:write' },
   { method: 'POST', pattern: /^\/api\/ai\/write\/(summary|polish|titles|draft)$/, scope: 'content:write' },
   { method: 'POST', pattern: /^\/api\/comments$/, scope: 'comment:write' },
   { method: 'POST', pattern: /^\/api\/health\/push$/, scope: 'health:write' },
@@ -164,14 +162,12 @@ export const APP_ENDPOINT_RULES: readonly AppEndpointRule[] = [
 
   // === PUT ===
   { method: 'PUT', pattern: /^\/api\/posts\/\d+$/, scope: 'content:write' },
-  { method: 'PUT', pattern: /^\/api\/pages\/\d+$/, scope: 'content:write' },
   { method: 'PUT', pattern: /^\/api\/comments\/\d+$/, scope: 'comment:moderate' },
   { method: 'PUT', pattern: /^\/api\/health\/daily-goal$/, scope: 'health:write' },
   { method: 'PUT', pattern: /^\/api\/drive\/files\/\d+$/, scope: 'drive:write' },
 
   // === DELETE ===
   { method: 'DELETE', pattern: /^\/api\/posts\/\d+$/, scope: 'content:write' },
-  { method: 'DELETE', pattern: /^\/api\/pages\/\d+$/, scope: 'content:write' },
   { method: 'DELETE', pattern: /^\/api\/comments\/\d+$/, scope: 'comment:moderate' },
   { method: 'DELETE', pattern: /^\/api\/drive\/files\/\d+$/, scope: 'drive:write' },
 ]

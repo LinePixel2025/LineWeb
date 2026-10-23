@@ -20,9 +20,11 @@ import avatarRoutes from './routes/avatar.js'
 import healthRoutes from './routes/health.js'
 import aiRoutes from './routes/ai.js'
 import oauthRoutes from './routes/oauth.js'
+import chatRoutes from './routes/chat.js'
 import { authenticate } from './middleware/auth.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel, isNodeConnected } from './services/storageTunnel.js'
+import { initChatHub } from './services/chatHub.js'
 import { syncDriveFiles } from './services/storageSync.js'
 import { deduplicateDriveFiles } from './services/dedupDriveFiles.js'
 import { ensureFTSTable } from './services/ftsSearch.js'
@@ -45,7 +47,8 @@ app.use(helmet({
         : ["'self'", "'unsafe-inline'", "'unsafe-eval'", "'blob:'"],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
-      connectSrc: ["'self'", 'https:', 'http:'],
+      // connectSrc 需允许 ws/wss：聊天实时推送走 /ws/chat
+      connectSrc: ["'self'", 'https:', 'http:', 'ws:', 'wss:'],
       fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com', 'https://fonts.googleapis.com'],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
@@ -135,6 +138,7 @@ app.use('/api/auth/avatar', avatarRoutes)
 app.use('/api/health', healthRoutes)
 app.use('/api/ai', aiRoutes)
 app.use('/api/oauth', oauthRoutes)
+app.use('/api/chat', chatRoutes)
 
 // API 自描述端点 — 列出所有可用路由
 app.get('/api', (_req, res) => {
@@ -235,6 +239,14 @@ app.get('/api', (_req, res) => {
       clientsDelete: { method: 'DELETE', path: '/api/oauth/clients/:id', auth: 'app:manage', description: '管理：删除应用（授权一并撤销）' },
       flow: '授权码 + PKCE：应用跳转 /authorize?client_id&redirect_uri&scope&state&code_challenge → 用户登录并同意 → 回调带回一次性 code → 应用用 code + code_verifier 调用 /api/oauth/token 换取 access_token（1 小时）与 refresh_token（30 天，每次刷新轮换）。应用令牌是作用域令牌（role=app），只能访问白名单端点，无法获得任何管理能力。',
     },
+    chat: {
+      summary: { method: 'GET', path: '/api/chat/summary', auth: true, description: '未读消息总数与待处理好友申请数' },
+      friends: { method: 'GET', path: '/api/chat/friends', auth: true, description: '好友列表（DELETE /api/chat/friends/:userId 删除好友）' },
+      friendRequests: { method: 'GET', path: '/api/chat/friend-requests', auth: true, description: '收到/发出的好友申请；POST /api/chat/friend-requests 发送，POST /api/chat/friend-requests/:id/accept|reject 处理' },
+      conversations: { method: 'GET', path: '/api/chat/conversations', auth: true, description: '我的会话列表（含最后一条消息与未读数）；POST /api/chat/conversations/direct 发起私聊，POST /api/chat/conversations/group 创建群聊（≤50 人，仅可邀请好友）' },
+      messages: { method: 'GET', path: '/api/chat/conversations/:id/messages?before=&limit=', auth: true, description: '历史消息（游标分页，id 正序）；POST /api/chat/conversations/:id/messages 发送纯文本消息；PUT /api/chat/conversations/:id/read 更新已读位置' },
+      ws: '实时推送：ws(s)://<host>/ws/chat，连接后 5 秒内发送 {"type":"auth","token":"<登录令牌>"}，服务端回 {"type":"auth_ok","userId":N}；推送 message:new / conversation:updated / conversation:removed / friend:request / friend:accepted / friend:rejected / friend:removed，客户端 {type:"ping"} ↔ 服务端 {type:"pong"}。认证失败以 close code 4001 断开。',
+    },
   })
 })
 
@@ -300,6 +312,9 @@ const server = http.createServer(app)
 
 // 初始化 WebSocket 隧道
 initStorageTunnel(server)
+
+// 初始化聊天 WebSocket Hub（/ws/chat）
+initChatHub(server)
 
 // 网盘文件定期同步
 const syncInterval = setInterval(() => {

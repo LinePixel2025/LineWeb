@@ -40,7 +40,7 @@ POST /api/auth/login  →  { token, user }
 | 特性 | 说明 |
 |---|---|
 | 唯一凭证 | 账号登录令牌；**没有** API Key，也**没有**独立的屏幕时间 Token |
-| 权限来源 | 账号角色（`user` / `admin`）展开的能力矩阵，随请求从数据库解析 |
+| 权限来源 | 账号角色（`user` / `author` / `admin`）展开的能力矩阵，随请求从数据库解析 |
 | 角色即时生效 | 管理员调整某账号角色后，该账号**无需重新登录**即按新权限放行 |
 | 同一账号多端 | 浏览器、脚本、桌面设备可用同一个令牌体系，各自独立登录 |
 | 令牌失效 | 登出、修改密码、删除账号后旧令牌立即失效（精确到毫秒） |
@@ -238,7 +238,7 @@ POST /api/auth/logout   (需登录)
 | `POST /api/auth/logout` | 该账号**所有**已签发令牌立即失效 |
 | `PUT /api/auth/profile` 改密码 | 同上；接口返回新令牌供当前会话继续 |
 | 账号被删除 | 令牌立即失效（401 `账号不存在或已注销，请重新登录`） |
-| 角色变更（如 user → admin） | **无需重新登录**：下一次请求即按新能力放行 |
+| 角色变更（如 user → author / admin） | **无需重新登录**：下一次请求即按新能力放行 |
 | `canAccessDrive` 开关变更 | 同上，下一次请求即生效 |
 | 令牌过期或签名不匹配 | 401 `Token 无效` / `Token 已失效，请重新登录` |
 
@@ -258,8 +258,9 @@ POST /api/auth/logout   (需登录)
 
 | 角色 | 说明 |
 |---|---|
-| `admin` | 管理员，**自动拥有全部能力**（含网盘全量访问） |
-| `user` | 普通用户，无管理能力；可访问全部非管理端点，网盘受个人开关约束 |
+| `admin` | 管理员，**自动拥有全部能力**（含网盘全量访问、全站内容与页面管理） |
+| `author` | 作者，仅具备 `content:write`：可创建 / 编辑 / 删除**自己的**文章并使用 AI 写作辅助；不能管理页面、评论、用户；网盘受个人开关与空间配额约束 |
+| `user` | 普通用户，无管理能力；可访问全部非管理端点，网盘受个人开关与空间配额约束 |
 
 > 能力矩阵定义在 `server/src/lib/permissions.ts`，是新增角色的唯一扩展点；路由守卫使用 `requireCapability(...)`，不再有散落的 `role === 'admin'` 判断。
 
@@ -267,35 +268,38 @@ POST /api/auth/logout   (需登录)
 
 | 能力 | 中文 | 覆盖范围 |
 |---|---|---|
-| `content:write` | 内容编辑 | 文章、页面的管理与写操作；AI 写作辅助 |
+| `content:write` | 内容编辑 | 自己的文章增删改；AI 写作辅助 |
+| `content:manage` | 内容管理 | 全站文章（含他人文章）+ 页面管理（目前仅 admin） |
 | `comment:moderate` | 评论管理 | 评论列表、编辑、删除 |
-| `user:manage` | 用户管理 | 用户 CRUD、角色调整、网盘开关、设置头像 |
+| `user:manage` | 用户管理 | 用户 CRUD、角色调整、网盘开关、空间配额、设置头像 |
 | `stats:view` | 站点统计 | Dashboard 汇总 |
 | `device:view` | 设备监控 | 设备列表 |
 | `ai:configure` | AI 配置 | AI 提供商 / 模型 / Key 配置读写 |
-| `drive:all` | 网盘全量访问 | 豁免 `canAccessDrive` 开关；可操作他人文件 |
+| `drive:all` | 网盘全量访问 | 豁免 `canAccessDrive` 开关；可操作他人文件；**不受空间配额限制** |
 
 ### 5.3 端点 → 能力对照
 
 | 端点 | 需要 |
 |---|---|
-| `POST /api/posts`、`PUT/DELETE /api/posts/:id`、`GET /api/posts/admin/*` | `content:write` |
-| `GET /api/pages`、`POST /api/pages`、`GET/PUT/DELETE /api/pages/:id` | `content:write` |
+| `POST /api/posts`、`GET /api/posts/admin/all`、`GET/PUT/DELETE /api/posts/admin/:id` | `content:write`（作者只能访问 / 修改自己的文章；`content:manage` 可操作全部） |
+| `GET /api/pages`、`POST /api/pages`、`GET/PUT/DELETE /api/pages/:id` | `content:manage` |
 | `GET /api/comments/admin/*`、`PUT/DELETE /api/comments/:id` | `comment:moderate` |
 | `POST /api/comments` | 登录即可 |
-| `GET /api/users`、`GET/PUT/DELETE /api/users/:id`、`/api/users/:id/drive-access`、`/api/users/:id/avatar` | `user:manage` |
+| `GET /api/users`、`GET/PUT/DELETE /api/users/:id`、`/api/users/:id/drive-access`、`/api/users/:id/avatar`、`PUT /api/users/:id/quota` | `user:manage` |
 | `GET /api/devices` | `device:view` |
 | `GET /api/stats` | `stats:view` |
 | `POST /api/ai/write/*` | `content:write` |
 | `GET/PUT /api/ai/config` | `ai:configure` |
 | `/api/drive/**` | 网盘门禁（见 5.4） |
+| `/api/chat/**`、`/ws/chat` | 登录即可（仅账号令牌；应用令牌不可用） |
 | `/api/health/screen-time*`、`/api/health/daily-goal`、`POST /api/health/push` | 登录即可（**只能读写本人数据**） |
 | `/api/auth/me`、`/api/auth/profile`、`/api/auth/settings`、`/api/auth/logout`、`/api/auth/avatar` | 登录即可 |
 
-### 5.4 网盘门禁两条规则
+### 5.4 网盘门禁三条规则
 
 1. **模块准入**：`user.canAccessDrive === true` **或** 账号具备 `drive:all`（即 admin 自动通过）。不满足返回 403 `无网盘访问权限`。
 2. **文件所有权**：普通用户只能读取/操作自己上传的文件；具备 `drive:all` 的账号可操作全部文件。越权返回 404/403。
+3. **空间配额**：每用户默认 2 GiB（`users.storage_quota`，字节），管理员可通过 `PUT /api/users/:id/quota` 调整（0–10 TiB）；上传超过剩余空间返回 413 `code: "QUOTA_EXCEEDED"`。具备 `drive:all` 的账号不受配额限制。`GET /api/drive/quota` 查询本人配额与已用空间。
 
 ---
 
@@ -427,7 +431,7 @@ $login = Invoke-RestMethod "$base/auth/login" -Method Post -ContentType 'applica
 $h = @{ Authorization = "Bearer $($login.token)" }
 
 $login.user.role                     # admin
-$login.user.capabilities.Count       # 7
+$login.user.capabilities.Count       # 9
 
 (Invoke-RestMethod "$base/users" -Headers $h).total
 ```
@@ -544,7 +548,7 @@ if __name__ == "__main__":
 4. 实现 401 重登与 429 退避（见 9.3 / 9.4）。
 5. 删除旧密钥的本地留存（旧密钥在服务端已随表删除，必然失效）。
 
-> 若调用方需要管理权限，请让管理员把对应账号角色设为 `admin`（或未来新增的细粒度角色），而不是共享同一个管理员账号。
+> 若调用方需要发布文章，请让管理员把对应账号角色设为 `author`；需要全站内容 / 用户 / 系统管理，再设为 `admin`（或未来新增的细粒度角色），而不是共享同一个管理员账号。
 
 ---
 
@@ -567,7 +571,7 @@ $base = "http://127.0.0.1:3001/api"
 # ① 登录返回能力清单
 $login = Invoke-RestMethod "$base/auth/login" -Method Post -ContentType 'application/json' `
   -Body '{"identifier":"admin","password":"你的密码"}'
-$login.user.capabilities.Count        # admin → 7
+$login.user.capabilities.Count        # admin → 9
 
 # ② 管理端点可访问
 $h = @{ Authorization = "Bearer $($login.token)" }

@@ -7,6 +7,7 @@ import DigitalHealthSection from '../components/DigitalHealthSection'
 import { GitHubButton, GitHubBadge, GitHubAlert, GitHubTabNav, GitHubInput } from '../components/ui'
 import api from '../lib/api'
 import { appScopeLabel, isHighRiskScope } from '../lib/appScopes'
+import { roleLabel } from '../lib/permissions'
 
 interface UserGrant {
   id: number
@@ -139,8 +140,8 @@ export default function ProfilePage() {
             <h2 style={{ fontSize: '1.25rem', margin: '12px 0 4px' }}>{user?.username}</h2>
             <p className="gh-text-secondary" style={{ fontSize: '0.88rem' }}>{user?.email}</p>
             <div style={{ marginTop: '12px' }}>
-              <GitHubBadge variant={user?.role === 'admin' ? 'accent' : 'default'}>
-                {user?.role === 'admin' ? '管理员' : '用户'}
+              <GitHubBadge variant={user?.role === 'admin' ? 'accent' : user?.role === 'author' ? 'success' : 'default'}>
+                {roleLabel(user?.role)}
               </GitHubBadge>
             </div>
             <div style={{ marginTop: '20px', display: 'flex', gap: '8px', flexDirection: 'column', alignItems: 'center' }}>
@@ -191,7 +192,7 @@ export default function ProfilePage() {
                     </div>
                     <div>
                       <span className="gh-text-secondary" style={{ fontSize: '0.78rem' }}>角色</span>
-                      <div style={{ fontSize: '0.95rem' }}>{user?.role === 'admin' ? '管理员' : '用户'}</div>
+                      <div style={{ fontSize: '0.95rem' }}>{roleLabel(user?.role)}</div>
                     </div>
                   </div>
                 </div>

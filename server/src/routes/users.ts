@@ -5,19 +5,27 @@ import { parsePagination, parseId, getErrorMessage, getErrorStatus } from '../li
 import busboy from 'busboy'
 import { adminSetAvatar } from '../services/avatarService.js'
 import { sendCommand, isNodeConnected } from '../services/storageTunnel.js'
-import { updateUserSchema } from '../config/index.js'
+import { updateUserSchema, updateUserQuotaSchema } from '../config/index.js'
 import { authenticate, requireCapability } from '../middleware/auth.js'
 
 const router = Router()
 
+/** 单个用户的存储配额上限（10 TiB），下调/上调均不允许越界 */
+const MAX_STORAGE_QUOTA_BYTES = 10995116277760n
+
+/** BigInt 配额 → 字符串（BigInt 不能直接 JSON 序列化） */
+function serializeQuota(quota: bigint): string {
+  return quota.toString()
+}
+
 // 所有路由需要 user:manage 能力（admin 自动具备）
 router.use(authenticate, requireCapability('user:manage'))
 
-// 列出用户（分页）
+// 列出用户（分页）— 附带空间配额与已用空间
 router.get('/', async (req: Request, res: Response) => {
   const { page, limit, skip } = parsePagination(req.query)
 
-  const [users, total] = await Promise.all([
+  const [users, total, usageGroups] = await Promise.all([
     prisma.user.findMany({
       skip,
       take: limit,
@@ -27,15 +35,33 @@ router.get('/', async (req: Request, res: Response) => {
         email: true,
         role: true,
         canAccessDrive: true,
+        storageQuota: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
     }),
     prisma.user.count(),
+    // 单次 groupBy 汇总所有用户的已用空间，避免逐用户 N+1
+    prisma.driveFile.groupBy({
+      by: ['uploadedById'],
+      where: { isFolder: false },
+      _sum: { size: true },
+    }),
   ])
 
+  const usageByUser = new Map<number, bigint>()
+  for (const row of usageGroups) {
+    if (row.uploadedById !== null) {
+      usageByUser.set(row.uploadedById, row._sum.size ?? 0n)
+    }
+  }
+
   res.json({
-    users,
+    users: users.map(user => ({
+      ...user,
+      storageQuota: serializeQuota(user.storageQuota),
+      storageUsed: serializeQuota(usageByUser.get(user.id) ?? 0n),
+    })),
     total,
     page,
     limit,
@@ -59,6 +85,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       email: true,
       role: true,
       canAccessDrive: true,
+      storageQuota: true,
       createdAt: true,
     },
   })
@@ -68,7 +95,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     return
   }
 
-  res.json(user)
+  res.json({ ...user, storageQuota: serializeQuota(user.storageQuota) })
 })
 
 // 更新用户（角色 / 密码）
@@ -117,6 +144,47 @@ router.put('/:id', async (req: Request, res: Response) => {
   })
 
   res.json(updated)
+})
+
+// 调整用户的网盘空间配额（字节字符串 → BigInt，0 ~ 10 TiB）
+router.put('/:id/quota', async (req: Request, res: Response) => {
+  const id = parseId(req.params.id)
+  if (id === null) {
+    res.status(400).json({ error: '无效的用户 ID' })
+    return
+  }
+
+  const parsed = updateUserQuotaSchema.safeParse(req.body)
+  if (!parsed.success) {
+    res.status(400).json({ error: '输入数据无效', details: parsed.error.flatten() })
+    return
+  }
+
+  let storageQuota: bigint
+  try {
+    storageQuota = BigInt(parsed.data.storageQuotaBytes)
+  } catch {
+    res.status(400).json({ error: '配额必须是合法的字节数' })
+    return
+  }
+  if (storageQuota < 0n || storageQuota > MAX_STORAGE_QUOTA_BYTES) {
+    res.status(400).json({ error: '配额超出允许范围（0 ~ 10 TiB）' })
+    return
+  }
+
+  const user = await prisma.user.findUnique({ where: { id }, select: { id: true } })
+  if (!user) {
+    res.status(404).json({ error: '用户不存在' })
+    return
+  }
+
+  const updated = await prisma.user.update({
+    where: { id },
+    data: { storageQuota },
+    select: { id: true, storageQuota: true },
+  })
+
+  res.json({ id: updated.id, storageQuota: serializeQuota(updated.storageQuota) })
 })
 
 // 切换用户的网盘访问权限
@@ -230,12 +298,32 @@ router.delete('/:id', async (req: Request, res: Response) => {
     await sendCommand({ type: 'delete_file', path: user.avatarPath }).catch(() => {})
   }
 
+  // 记录该用户参与的会话，删除用户后清理「没有任何成员」的孤儿会话
+  // （好友关系 / 成员 / 消息由数据库 onDelete: Cascade 自动清理）
+  const memberships = await prisma.conversationMember.findMany({
+    where: { userId: id },
+    select: { conversationId: true },
+  })
+  const conversationIds = [...new Set(memberships.map(m => m.conversationId))]
+
   // 使用事务：先删除评论，再删除文章，最后删除用户
   await prisma.$transaction([
     prisma.comment.deleteMany({ where: { authorId: id } }),
     prisma.post.deleteMany({ where: { authorId: id } }),
     prisma.user.delete({ where: { id } }),
   ])
+
+  // 清理孤儿会话（所有成员都已不存在）：避免私聊/群聊留下无成员的记录
+  if (conversationIds.length > 0) {
+    const orphanConversations = await prisma.conversation.findMany({
+      where: { id: { in: conversationIds }, members: { none: {} } },
+      select: { id: true },
+    }).catch(() => [])
+    const orphanIds = orphanConversations.map(conversation => conversation.id)
+    if (orphanIds.length > 0) {
+      await prisma.conversation.deleteMany({ where: { id: { in: orphanIds } } }).catch(() => {})
+    }
+  }
 
   res.json({ message: '已删除' })
 })

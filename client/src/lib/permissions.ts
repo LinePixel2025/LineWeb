@@ -7,6 +7,7 @@
 
 export const CAPABILITIES = [
   'content:write',
+  'content:manage',
   'comment:moderate',
   'user:manage',
   'stats:view',
@@ -19,7 +20,8 @@ export const CAPABILITIES = [
 export type Capability = typeof CAPABILITIES[number]
 
 export const CAPABILITY_LABELS: Record<Capability, string> = {
-  'content:write': '内容编辑（文章 / 页面）',
+  'content:write': '内容编辑（自己的文章）',
+  'content:manage': '内容管理（全站文章 / 页面）',
   'comment:moderate': '评论管理',
   'user:manage': '用户管理',
   'stats:view': '站点统计',
@@ -31,6 +33,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
 
 export const ROLE_LABELS: Record<string, string> = {
   admin: '管理员',
+  author: '作者',
   user: '用户',
 }
 
@@ -73,7 +76,7 @@ export function roleLabel(role: string | undefined): string {
 export const ADMIN_ROUTE_CAPABILITIES: { prefix: string; capability: Capability | null }[] = [
   { prefix: '/admin/new', capability: 'content:write' },
   { prefix: '/admin/edit', capability: 'content:write' },
-  { prefix: '/admin/pages', capability: 'content:write' },
+  { prefix: '/admin/pages', capability: 'content:manage' },
   { prefix: '/admin/comments', capability: 'comment:moderate' },
   { prefix: '/admin/users', capability: 'user:manage' },
   { prefix: '/admin/devices', capability: 'device:view' },

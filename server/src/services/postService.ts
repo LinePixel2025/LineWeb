@@ -46,6 +46,7 @@ const postSelectFull = {
   summary: true,
   slug: true,
   published: true,
+  authorId: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.PostSelect
@@ -105,15 +106,21 @@ export async function getPublishedPostBySlug(slug: string) {
 }
 
 /**
- * 获取所有文章（管理员，含草稿）
+ * 获取所有文章（管理面板，含草稿）
+ *
+ * 传 authorId 时只返回该作者的文章（作者角色）；不传则返回全部（content:manage）。
  */
 export async function getAllPosts(
   page: number,
   limit: number,
   skip: number,
+  authorId?: number,
 ): Promise<PaginatedPosts> {
+  const where: Prisma.PostWhereInput | undefined = authorId === undefined ? undefined : { authorId }
+
   const [posts, total] = await Promise.all([
     prisma.post.findMany({
+      where,
       select: {
         id: true, title: true, summary: true, slug: true,
         published: true, createdAt: true, updatedAt: true,
@@ -122,10 +129,23 @@ export async function getAllPosts(
       skip,
       take: limit,
     }),
-    prisma.post.count(),
+    prisma.post.count({ where }),
   ])
 
   return { posts, total, page, limit, totalPages: Math.ceil(total / limit) }
+}
+
+/**
+ * 轻量查询文章作者 ID（用于所有权校验）
+ *
+ * 返回 null 表示文章不存在；调用方据此统一返回 404。
+ */
+export async function getPostAuthorId(id: number): Promise<number | null> {
+  const post = await prisma.post.findUnique({
+    where: { id },
+    select: { authorId: true },
+  })
+  return post?.authorId ?? null
 }
 
 /**

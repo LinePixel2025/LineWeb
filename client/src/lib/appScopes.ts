@@ -28,7 +28,7 @@ export const APP_SCOPE_LABELS: Record<AppScope, string> = {
   'health:write': '上报你的屏幕时间数据',
   'drive:read': '读取你的网盘文件',
   'drive:write': '管理你的网盘文件',
-  'content:write': '管理站点内容（文章与页面）',
+  'content:write': '管理自己的文章',
   'comment:moderate': '管理全部评论',
 }
 
@@ -40,7 +40,7 @@ export const APP_SCOPE_DESCRIPTIONS: Record<AppScope, string> = {
   'health:write': '上报屏幕使用时间、设置每日目标',
   'drive:read': '列出、搜索并下载你自己的网盘文件',
   'drive:write': '上传、新建文件夹、重命名、移动或删除你自己的网盘文件',
-  'content:write': '创建、编辑、删除文章与页面，并可调用 AI 写作辅助',
+  'content:write': '创建、编辑、删除自己的文章，并可调用 AI 写作辅助',
   'comment:moderate': '编辑或删除任意用户的评论',
 }
 

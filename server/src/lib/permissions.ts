@@ -7,18 +7,19 @@
  * 路由与前端守卫都通过能力判断，不需要再散落 `role === 'admin'` 之类的硬编码。
  */
 
-export const USER_ROLES = ['user', 'admin'] as const
+export const USER_ROLES = ['user', 'author', 'admin'] as const
 
 export type UserRole = typeof USER_ROLES[number]
 
 export const CAPABILITIES = [
-  'content:write',    // 文章 / 页面 增删改 + AI 写作辅助
+  'content:write',    // 自己的文章增删改 + AI 写作辅助
+  'content:manage',   // 全站文章管理 + 页面管理（管理员专属）
   'comment:moderate', // 评论审核 / 编辑 / 删除
-  'user:manage',      // 用户管理（角色、网盘开关、头像）
+  'user:manage',      // 用户管理（角色、网盘开关、头像、空间配额）
   'stats:view',       // Dashboard 统计
   'device:view',      // 设备监控
   'ai:configure',     // AI 配置读写
-  'drive:all',        // 网盘：豁免 canAccessDrive + 可操作他人文件
+  'drive:all',        // 网盘：豁免 canAccessDrive + 可操作他人文件 + 不受空间配额限制
   'app:manage',       // 第三方应用授权管理（注册 / 停用 / 删除应用）
 ] as const
 
@@ -29,6 +30,7 @@ const ALL_CAPABILITIES: readonly Capability[] = CAPABILITIES
 
 const ROLE_CAPABILITIES: Record<UserRole, readonly Capability[]> = {
   user: [],
+  author: ['content:write'],
   admin: ALL_CAPABILITIES,
 }
 

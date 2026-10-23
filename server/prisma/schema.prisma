@@ -15,6 +15,7 @@ model User {
   role             String    @default("user")
   settings         String?   // JSON：用户个性化设置（背景类型、颜色等）
   canAccessDrive   Boolean   @default(false) // 是否有网盘访问权限
+  storageQuota     BigInt    @default(2147483648) @map("storage_quota") // 网盘空间上限（字节，默认 2 GiB）
   avatarPath       String?   @map("avatar_path") // 存储节点路径（如 _avatars/1.webp）
   tokenValidAfter  DateTime  @default(now()) @map("token_valid_after") // JWT 失效校验基准时间
   createdAt        DateTime  @default(now()) @map("created_at")
@@ -26,6 +27,13 @@ model User {
   screenTimeLogs   ScreenTimeLog[]
   oauthGrants      OAuthGrant[] // 该用户授权过的第三方应用
   createdOAuthClients OAuthClient[] @relation("OAuthClientCreatedBy")
+  friendshipsA         Friendship[]         @relation("FriendshipUser")
+  friendshipsB         Friendship[]         @relation("FriendshipFriend")
+  friendRequestsSent   FriendRequest[]      @relation("FriendRequestSender")
+  friendRequestsReceived FriendRequest[]    @relation("FriendRequestReceiver")
+  conversationMembers  ConversationMember[]
+  messages             Message[]
+  ownedConversations   Conversation[]       @relation("ConversationOwner")
 
   @@map("users")
 }
@@ -232,4 +240,83 @@ model OAuthRefreshToken {
 
   @@index([grantId])
   @@map("oauth_refresh_tokens")
+}
+
+// === 好友 / 聊天 ===
+
+model Friendship {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  friendId  Int      @map("friend_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation("FriendshipUser", fields: [userId], references: [id], onDelete: Cascade)
+  friend    User     @relation("FriendshipFriend", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+  @@index([friendId])
+  @@map("friendships")
+}
+
+model FriendRequest {
+  id          Int       @id @default(autoincrement())
+  fromUserId  Int       @map("from_user_id")
+  toUserId    Int       @map("to_user_id")
+  status      String    @default("pending") // pending | accepted | rejected
+  createdAt   DateTime  @default(now()) @map("created_at")
+  respondedAt DateTime? @map("responded_at")
+  fromUser    User      @relation("FriendRequestSender", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser      User      @relation("FriendRequestReceiver", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([fromUserId, toUserId])
+  @@index([toUserId, status])
+  @@map("friend_requests")
+}
+
+model Conversation {
+  id            Int      @id @default(autoincrement())
+  type          String   // direct | group
+  name          String?  // 群名；direct 为 null
+  ownerId       Int?     @map("owner_id")
+  directKey     String?  @unique @map("direct_key") // direct 会话去重键：`minUserId:maxUserId`
+  lastMessageAt DateTime @default(now()) @map("last_message_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  owner    User?                @relation("ConversationOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  members  ConversationMember[]
+  messages Message[]
+
+  @@index([lastMessageAt])
+  @@map("conversations")
+}
+
+model ConversationMember {
+  id                Int      @id @default(autoincrement())
+  conversationId    Int      @map("conversation_id")
+  userId            Int      @map("user_id")
+  role              String   @default("member") // owner | member
+  joinedAt          DateTime @default(now()) @map("joined_at")
+  lastReadMessageId Int      @default(0) @map("last_read_message_id")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_members")
+}
+
+model Message {
+  id             Int      @id @default(autoincrement())
+  conversationId Int      @map("conversation_id")
+  senderId       Int      @map("sender_id")
+  content        String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, id])
+  @@index([senderId])
+  @@map("messages")
 }

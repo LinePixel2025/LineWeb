@@ -60,6 +60,7 @@ describe('permissions 能力判定', () => {
     expect(capabilityLabel('user:manage')).toBe('用户管理')
     expect(capabilityLabel('unknown:cap')).toBe('unknown:cap')
     expect(roleLabel('admin')).toBe('管理员')
+    expect(roleLabel('author')).toBe('作者')
     expect(roleLabel('user')).toBe('用户')
     expect(roleLabel(undefined)).toBe('未知')
   })
@@ -89,8 +90,8 @@ describe('管理区路径 → 能力（导航过滤与路由守卫同源）', ()
     ['/admin', 'content:write'],
     ['/admin/new', 'content:write'],
     ['/admin/edit/12', 'content:write'],
-    ['/admin/pages', 'content:write'],
-    ['/admin/pages/3/edit', 'content:write'],
+    ['/admin/pages', 'content:manage'],
+    ['/admin/pages/3/edit', 'content:manage'],
     ['/admin/comments', 'comment:moderate'],
     ['/admin/users', 'user:manage'],
     ['/admin/devices', 'device:view'],

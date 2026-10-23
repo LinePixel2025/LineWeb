@@ -31,6 +31,8 @@ export interface AuthPayload {
   role: string
   capabilities: Capability[]
   canAccessDrive: boolean
+  /** 网盘空间上限（字节）；应用令牌使用所属账号的配额 */
+  storageQuota: bigint
   // 下载票据相关（由 /api/drive/download-ticket/:id 签发）
   type?: string
   downloadFileId?: number
@@ -78,7 +80,7 @@ async function resolveAppAuthContext(
   try {
     const user = await prisma.user.findUnique({
       where: { id: claims.userId },
-      select: { tokenValidAfter: true, role: true, canAccessDrive: true },
+      select: { tokenValidAfter: true, role: true, canAccessDrive: true, storageQuota: true },
     })
     if (!user) return { ok: false, reason: '账号不存在或已注销，请重新登录' }
 
@@ -121,6 +123,7 @@ async function resolveAppAuthContext(
         role: 'app',
         capabilities: capabilityScopes as Capability[],
         canAccessDrive: !!user.canAccessDrive,
+        storageQuota: user.storageQuota,
         type: config.oauthAccessTokenType,
         clientId,
         scopes: effectiveScopes,
@@ -142,7 +145,7 @@ async function resolveAppAuthContext(
  *
  * 返回 null 表示令牌无效（用户不存在 / 已失效 / 签名错误）。
  */
-async function resolveAuthContext(token: string): Promise<
+export async function resolveAuthContext(token: string): Promise<
   | { ok: true; user: AuthPayload }
   | { ok: false; reason: string }
 > {
@@ -162,7 +165,7 @@ async function resolveAuthContext(token: string): Promise<
 
   const user = await prisma.user.findUnique({
     where: { id: claims.userId },
-    select: { tokenValidAfter: true, role: true, canAccessDrive: true },
+    select: { tokenValidAfter: true, role: true, canAccessDrive: true, storageQuota: true },
   })
   if (!user) return { ok: false, reason: '账号不存在或已注销，请重新登录' }
 
@@ -182,6 +185,7 @@ async function resolveAuthContext(token: string): Promise<
       role: user.role,
       capabilities: capabilitiesForRole(user.role),
       canAccessDrive: !!user.canAccessDrive,
+      storageQuota: user.storageQuota,
       type: claims.type,
       downloadFileId: claims.downloadFileId,
       downloadNonce: claims.downloadNonce,

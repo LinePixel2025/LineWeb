@@ -4,10 +4,11 @@ import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 import prisma from '../lib/prisma.js'
 import { parseId, parsePagination } from '../lib/utils.js'
-import { authenticate } from '../middleware/auth.js'
+import { authenticate, requireCapability } from '../middleware/auth.js'
 import { roleHasCapability } from '../lib/permissions.js'
 import { sendCommand, streamRead, streamReadBinary, streamWriteBinary, isNodeConnected } from '../services/storageTunnel.js'
 import { syncDriveFiles } from '../services/storageSync.js'
+import { getDriveQuota, getDriveUsage, formatQuotaSize } from '../services/driveQuota.js'
 import { config } from '../config/index.js'
 import { searchFTS, syncFTSIndex, deleteFTSIndex } from '../services/ftsSearch.js'
 
@@ -81,6 +82,43 @@ function transformSizeList<T extends { size: bigint }>(files: T[]): WithSize<T>[
   return files.map(transformSize)
 }
 
+/* ---------- 上传大小 / 空间配额限制错误（统一映射为 413） ---------- */
+class UploadLimitError extends Error {
+  readonly code: 'QUOTA_EXCEEDED' | 'FILE_TOO_LARGE'
+  readonly quota: string | null
+  readonly used: string | null
+  readonly remaining: string | null
+
+  constructor(
+    message: string,
+    code: 'QUOTA_EXCEEDED' | 'FILE_TOO_LARGE',
+    detail?: { quota?: bigint; used?: bigint; remaining?: bigint },
+  ) {
+    super(message)
+    this.name = 'UploadLimitError'
+    this.code = code
+    this.quota = detail?.quota !== undefined ? detail.quota.toString() : null
+    this.used = detail?.used !== undefined ? detail.used.toString() : null
+    this.remaining = detail?.remaining !== undefined ? detail.remaining.toString() : null
+  }
+}
+
+/**
+ * 413 响应体（客户端 UploadZone 直接展示 error 文案）：
+ *   - QUOTA_EXCEEDED：附带 quota / used / remaining（字符串形式的字节数）
+ *   - FILE_TOO_LARGE：保持原有单文件超限文案，客户端行为不变
+ */
+function sendUploadLimitError(res: Response, err: UploadLimitError): void {
+  if (res.headersSent) return
+  res.status(413).json({
+    error: err.message,
+    code: err.code,
+    ...(err.code === 'QUOTA_EXCEEDED'
+      ? { quota: err.quota, used: err.used, remaining: err.remaining ?? '0' }
+      : {}),
+  })
+}
+
 // === 网盘访问权限 ===
 // canAccessDrive 开关由管理员在用户管理页控制；具备 drive:all 能力的角色（admin）自动通过。
 // 权限值随每次认证从数据库解析（见 middleware/auth.ts），因此变更即时生效，无需缓存。
@@ -149,6 +187,23 @@ router.use(authenticate, (req: Request, res: Response, next) => {
     return
   }
   next()
+})
+
+/* ---------- 查询当前用户的空间配额 ---------- */
+router.get('/quota', async (req: Request, res: Response) => {
+  try {
+    const quota = await getDriveQuota(req.user!)
+    // BigInt → 字符串：BigInt 不能直接 JSON 序列化
+    res.json({
+      unlimited: quota.unlimited,
+      quota: quota.quota === null ? null : quota.quota.toString(),
+      used: quota.used.toString(),
+      remaining: quota.remaining === null ? null : quota.remaining.toString(),
+    })
+  } catch (err) {
+    console.error('获取网盘配额失败:', err)
+    res.status(500).json({ error: '获取网盘配额失败' })
+  }
 })
 
 router.post('/download-ticket/:id', async (req: Request, res: Response) => {
@@ -442,7 +497,7 @@ router.post('/files', async (req: Request, res: Response) => {
   }
 })
 
-/* ---------- 上传文件 (busboy 流式解析) ---------- */
+/* ---------- 上传文件 (busboy 流式解析 + 空间配额强制) ---------- */
 router.post('/upload', async (req: Request, res: Response) => {
   try {
     if (!isNodeConnected()) {
@@ -450,7 +505,30 @@ router.post('/upload', async (req: Request, res: Response) => {
       return
     }
 
-    const bb = busboy({ headers: req.headers, limits: { fileSize: config.maxFileSizeMB * 1024 * 1024 } })
+    // === 配额预检：解析 multipart 之前先判断剩余空间 ===
+    // 已用满时直接 413，避免白白把整个请求体读进来再丢弃。
+    const quota = await getDriveQuota(req.user!)
+    if (!quota.unlimited && quota.quota !== null && quota.remaining !== null && quota.remaining <= 0n) {
+      sendUploadLimitError(res, new UploadLimitError('网盘空间不足', 'QUOTA_EXCEEDED', {
+        quota: quota.quota,
+        used: quota.used,
+        remaining: 0n,
+      }))
+      // 响应已发出：继续消费请求体（丢弃），避免连接被重置导致前端只看到「网络错误」
+      req.resume()
+      return
+    }
+
+    // 单个文件允许的上限 = min(单文件大小上限, 剩余空间)
+    // busboy 触发上限时流会被截断，因此记录「限制是否由配额决定」以区分 413 文案。
+    const fileSizeHardLimit = BigInt(config.maxFileSizeMB) * 1024n * 1024n
+    const remainingBytes = quota.unlimited ? null : quota.remaining
+    const quotaLimited = remainingBytes !== null && remainingBytes < fileSizeHardLimit
+    const effectiveLimitBytes = quotaLimited && remainingBytes !== null ? remainingBytes : fileSizeHardLimit
+    // 配额上限最大 10 TiB，Number 转换在安全整数范围内
+    const effectiveLimit = Number(effectiveLimitBytes)
+
+    const bb = busboy({ headers: req.headers, limits: { fileSize: effectiveLimit } })
     let fileProcessed = false
     let fileError: Error | null = null
     let originalName = ''
@@ -471,6 +549,11 @@ router.post('/upload', async (req: Request, res: Response) => {
       fileProcessed = true
       originalName = fixMojibake(info.filename)
       mimeType = info.mimeType
+
+      // busboy 的文件大小上限触发的是「文件流」的 limit 事件（不是 multipart 实例），
+      // 触发后文件流会被截断，必须主动清理并返回 413，否则会静默写入半截文件。
+      let sizeLimitHit = false
+      stream.on('limit', () => { sizeLimitHit = true })
 
       try {
         // 解析父文件夹路径
@@ -538,6 +621,18 @@ router.post('/upload', async (req: Request, res: Response) => {
           const { bytesWritten } = await streamWriteBinary(storagePath, stream)
           writeSucceeded = true
 
+          // 触达大小上限：文件流已被截断，清理掉半截文件与 DB 行，再按原因返回 413
+          if (sizeLimitHit) {
+            if (quotaLimited && remainingBytes !== null) {
+              throw new UploadLimitError(
+                `网盘空间不足（剩余 ${formatQuotaSize(remainingBytes)}）`,
+                'QUOTA_EXCEEDED',
+                { quota: quota.quota ?? undefined, used: quota.used, remaining: 0n },
+              )
+            }
+            throw new UploadLimitError(`文件大小超过限制 (${config.maxFileSizeMB}MB)`, 'FILE_TOO_LARGE')
+          }
+
           const updatedFile = await prisma.driveFile.update({
             where: { id: file.id },
             data: { size: BigInt(bytesWritten) },
@@ -546,12 +641,28 @@ router.post('/upload', async (req: Request, res: Response) => {
             },
           })
 
+          // === 写入完成后复核 ===
+          // 并发上传可能让多个请求同时看到「剩余空间充足」，或管理员中途下调了配额；
+          // 落库后重新统计，确认超限则清理本次上传（DB 行 + 节点文件）并返回 413。
+          if (!quota.unlimited && quota.quota !== null) {
+            const usedAfter = await getDriveUsage(req.user!.userId)
+            if (usedAfter > quota.quota) {
+              throw new UploadLimitError('网盘空间不足', 'QUOTA_EXCEEDED', {
+                quota: quota.quota,
+                used: usedAfter,
+                remaining: 0n,
+              })
+            }
+          }
+
           res.status(201).json(transformSize(updatedFile))
 
           // 异步更新 FTS 索引
           syncFTSIndex([file.id]).catch(() => {})
         } catch (writeErr) {
+          // 失败 / 超限清理：删 DB 行 + 删节点文件 + 清 FTS，确保 413 后无残留
           await prisma.driveFile.delete({ where: { id: file.id } }).catch(() => {})
+          deleteFTSIndex([file.id]).catch(() => {})
           if (writeSucceeded) {
             try {
               if (isNodeConnected()) {
@@ -563,22 +674,26 @@ router.post('/upload', async (req: Request, res: Response) => {
         }
       } catch (err: unknown) {
         fileError = err instanceof Error ? err : new Error(String(err))
+        // 限制类错误立即响应：busboy 的 close 事件可能先于此异步流程触发，
+        // 若等到 close 再响应会漏掉 413
+        if (fileError instanceof UploadLimitError) {
+          sendUploadLimitError(res, fileError)
+        }
         // 耗尽流防止内存泄漏
         stream.resume()
-      }
-    })
-
-    bb.on('limit', () => {
-      if (!fileError) {
-        fileError = new Error(`文件大小超过限制 (${config.maxFileSizeMB}MB)`)
       }
     })
 
     bb.on('close', () => {
       if (fileError) {
         if (!res.headersSent) {
-          const isSizeLimit = fileError.message.includes('限制')
-          res.status(isSizeLimit ? 413 : 502).json({ error: fileError.message })
+          if (fileError instanceof UploadLimitError) {
+            sendUploadLimitError(res, fileError)
+          } else if (fileError.message.includes('限制')) {
+            res.status(413).json({ error: fileError.message })
+          } else {
+            res.status(502).json({ error: fileError.message })
+          }
         }
       } else if (!fileProcessed) {
         res.status(400).json({ error: '请选择文件' })
@@ -1041,8 +1156,8 @@ router.get('/resolve-path', async (req: Request, res: Response) => {
   }
 })
 
-/* ---------- 手动触发文件同步 ---------- */
-router.post('/sync', async (req: Request, res: Response) => {
+/* ---------- 手动触发文件同步（仅具备 drive:all 能力的管理员） ---------- */
+router.post('/sync', requireCapability('drive:all'), async (req: Request, res: Response) => {
   try {
     const report = await syncDriveFiles(req.user!.userId)
     res.json(report)

@@ -36,6 +36,8 @@ export interface DriveToolbarProps {
   onSortChange: (field: SortField) => void
   onSortDirectionChange: () => void
   showActions?: boolean
+  /** 是否展示「同步」按钮（仅具备 drive:all 能力的管理员可见，默认显示） */
+  showSync?: boolean
 }
 
 const CATEGORY_OPTIONS: { value: CategoryFilter; label: string }[] = [
@@ -80,6 +82,7 @@ const DriveToolbar = memo(function DriveToolbar({
   onSortChange,
   onSortDirectionChange,
   showActions = true,
+  showSync = true,
 }: DriveToolbarProps) {
   return (
     <div className="gh-drive-toolbar">
@@ -193,9 +196,11 @@ const DriveToolbar = memo(function DriveToolbar({
             <button className="gh-btn gh-btn--sm gh-btn--primary" onClick={onUpload}>
               <UploadIcon size={14} /> 上传
             </button>
-            <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={onSync} disabled={syncing}>
-              <RefreshIcon size={14} /> {syncing ? '同步中…' : '同步'}
-            </button>
+            {showSync && (
+              <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={onSync} disabled={syncing}>
+                <RefreshIcon size={14} /> {syncing ? '同步中…' : '同步'}
+              </button>
+            )}
           </div>
         )}
       </div>

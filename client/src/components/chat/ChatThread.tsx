@@ -1,0 +1,324 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import UserAvatar from '../UserAvatar'
+import ChatComposer from './ChatComposer'
+import { displayName } from '../../lib/chat'
+import type { Conversation, Message } from '../../types/chat'
+
+interface Props {
+  conversation: Conversation | null
+  meId: number
+  messages: Message[]
+  loading?: boolean
+  loadingMore?: boolean
+  hasMore?: boolean
+  error?: string | null
+  emptyMessage?: string
+  onBack: () => void
+  onSend: (content: string) => Promise<void> | void
+  onLoadMore: () => void
+  onAddMembers: () => void
+  onRemoveMember: (userId: number) => void
+  onRename: (name: string) => Promise<void> | void
+  onDissolve: () => void
+  onLeave: () => void
+}
+
+function formatMessageTime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function groupAvatarName(conversation: Conversation, meId: number): string {
+  return displayName(conversation, meId)
+}
+
+export default function ChatThread({
+  conversation,
+  meId,
+  messages,
+  loading = false,
+  loadingMore = false,
+  hasMore = false,
+  error = null,
+  emptyMessage = '选择一个会话，开始聊天',
+  onBack,
+  onSend,
+  onLoadMore,
+  onAddMembers,
+  onRemoveMember,
+  onRename,
+  onDissolve,
+  onLeave,
+}: Props) {
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const stickToBottomRef = useRef(true)
+  const pendingPrependRef = useRef(false)
+  const previousScrollHeightRef = useRef(0)
+  const previousLastIdRef = useRef<number | null>(null)
+  const previousCountRef = useRef(0)
+
+  const [membersOpen, setMembersOpen] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [renameValue, setRenameValue] = useState('')
+
+  const conversationId = conversation?.id ?? null
+  const isOwner = conversation !== null && conversation.ownerId === meId
+  const isGroup = conversation?.type === 'group'
+
+  // 切换会话时回到最新消息
+  useEffect(() => {
+    stickToBottomRef.current = true
+    pendingPrependRef.current = false
+    previousLastIdRef.current = null
+    setMembersOpen(false)
+    setRenaming(false)
+    const element = listRef.current
+    if (element) element.scrollTop = element.scrollHeight
+  }, [conversationId])
+
+  // 维护滚动位置：追加新消息时贴底，加载历史时保持视口不跳
+  useLayoutEffect(() => {
+    const element = listRef.current
+    if (!element) return
+
+    if (pendingPrependRef.current) {
+      const delta = element.scrollHeight - previousScrollHeightRef.current
+      if (delta > 0) element.scrollTop = delta
+      pendingPrependRef.current = false
+    } else {
+      const lastId = messages.length > 0 ? messages[messages.length - 1].id : null
+      const appended = messages.length > previousCountRef.current
+      if (appended && (stickToBottomRef.current || previousLastIdRef.current === null)) {
+        element.scrollTop = element.scrollHeight
+      }
+      previousLastIdRef.current = lastId
+    }
+    previousCountRef.current = messages.length
+  }, [messages])
+
+  const handleScroll = () => {
+    const element = listRef.current
+    if (!element) return
+    const distance = element.scrollHeight - element.scrollTop - element.clientHeight
+    stickToBottomRef.current = distance < 80
+    if (element.scrollTop < 48 && hasMore && !loadingMore && !loading && messages.length > 0) {
+      pendingPrependRef.current = true
+      previousScrollHeightRef.current = element.scrollHeight
+      onLoadMore()
+    }
+  }
+
+  const handleSend = async (content: string) => {
+    stickToBottomRef.current = true
+    await onSend(content)
+  }
+
+  if (!conversation) {
+    return (
+      <section className="gh-chat-thread gh-chat-thread--empty" aria-label="聊天窗口">
+        <div className="gh-chat-empty">
+          <svg width="48" height="48" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M8 2.75c-3.1 0-5.5 2.1-5.5 4.7 0 1.4.72 2.62 1.87 3.44l-.57 2.11 2.35-1.1c.58.17 1.2.26 1.85.26 3.1 0 5.5-2.1 5.5-4.71S11.1 2.75 8 2.75Z" />
+          </svg>
+          <p className="gh-chat-empty-title">{emptyMessage}</p>
+          <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm gh-chat-back-inline" onClick={onBack}>
+            返回会话列表
+          </button>
+        </div>
+      </section>
+    )
+  }
+
+  const title = displayName(conversation, meId)
+  const partner = conversation.type === 'direct'
+    ? conversation.members.find((member) => member.id !== meId)
+    : null
+  const avatarId = partner?.id ?? conversation.id
+  const avatarName = partner?.username ?? groupAvatarName(conversation, meId)
+  const subtitle = conversation.type === 'group'
+    ? `${conversation.members.length} 位成员`
+    : conversation.canSend
+      ? '私聊'
+      : '你们已不是好友'
+
+  const submitRename = async () => {
+    const next = renameValue.trim()
+    if (!next || next === conversation.name) {
+      setRenaming(false)
+      return
+    }
+    try {
+      await onRename(next)
+      setRenaming(false)
+    } catch {
+      // 错误由页面统一展示，保持编辑状态方便重试
+    }
+  }
+
+  return (
+    <section className="gh-chat-thread" aria-label="聊天窗口">
+      <header className="gh-chat-thread-header">
+        <button type="button" className="gh-chat-back" aria-label="返回会话列表" onClick={onBack}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m9.5 3.5-4.5 4.5 4.5 4.5" />
+          </svg>
+        </button>
+        <UserAvatar userId={avatarId} username={avatarName} size="md" />
+        <div className="gh-chat-thread-title">
+          {renaming ? (
+            <form
+              className="gh-chat-rename-form"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void submitRename()
+              }}
+            >
+              <input
+                className="gh-input gh-chat-rename-input"
+                value={renameValue}
+                maxLength={40}
+                aria-label="群聊名称"
+                onChange={(event) => setRenameValue(event.target.value)}
+              />
+              <button type="submit" className="gh-btn gh-btn--primary gh-btn--sm">保存</button>
+              <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm" onClick={() => setRenaming(false)}>取消</button>
+            </form>
+          ) : (
+            <>
+              <p className="gh-chat-thread-name">{title}</p>
+              <p className={`gh-chat-thread-subtitle ${!conversation.canSend && conversation.type === 'direct' ? 'gh-chat-thread-subtitle--warn' : ''}`}>
+                {subtitle}
+              </p>
+            </>
+          )}
+        </div>
+        <div className="gh-chat-thread-actions">
+          {isGroup && (
+            <>
+              {isOwner && (
+                <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm" onClick={onAddMembers}>
+                  添加成员
+                </button>
+              )}
+              {isOwner && (
+                <button
+                  type="button"
+                  className="gh-btn gh-btn--secondary gh-btn--sm"
+                  onClick={() => {
+                    setRenameValue(conversation.name)
+                    setRenaming((prev) => !prev)
+                  }}
+                >
+                  改名
+                </button>
+              )}
+              <button
+                type="button"
+                className="gh-btn gh-btn--secondary gh-btn--sm"
+                aria-expanded={membersOpen}
+                onClick={() => setMembersOpen((prev) => !prev)}
+              >
+                成员
+              </button>
+            </>
+          )}
+        </div>
+
+        {isGroup && membersOpen && (
+          <div className="gh-chat-members-popover" role="dialog" aria-label="群聊成员">
+            <p className="gh-chat-members-title">成员（{conversation.members.length}）</p>
+            <ul className="gh-chat-members-list">
+              {conversation.members.map((member) => (
+                <li key={member.id} className="gh-chat-member-row">
+                  <UserAvatar userId={member.id} username={member.username} size="sm" />
+                  <span className="gh-chat-member-name">{member.username}</span>
+                  {(member.role === 'owner' || member.id === conversation.ownerId) && (
+                    <span className="gh-chat-member-role">群主</span>
+                  )}
+                  {isOwner && member.id !== meId && (
+                    <button
+                      type="button"
+                      className="gh-btn gh-btn--danger gh-btn--sm"
+                      onClick={() => onRemoveMember(member.id)}
+                    >
+                      移出
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <div className="gh-chat-members-footer">
+              {isOwner ? (
+                <button type="button" className="gh-btn gh-btn--danger gh-btn--sm" onClick={onDissolve}>
+                  解散群聊
+                </button>
+              ) : (
+                <button type="button" className="gh-btn gh-btn--danger gh-btn--sm" onClick={onLeave}>
+                  退出群聊
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </header>
+
+      <div className="gh-chat-messages" ref={listRef} onScroll={handleScroll} role="log" aria-label="消息列表">
+        {loading && (
+          <div className="gh-chat-messages-state">
+            <div className="gh-spinner" />
+            <span>正在加载消息…</span>
+          </div>
+        )}
+
+        {!loading && loadingMore && (
+          <div className="gh-chat-messages-state">
+            <div className="gh-spinner" />
+            <span>正在加载更早的消息…</span>
+          </div>
+        )}
+
+        {!loading && !loadingMore && hasMore && messages.length > 0 && (
+          <div className="gh-chat-messages-hint">滚动到顶部加载更早消息</div>
+        )}
+
+        {!loading && error && <div className="gh-chat-messages-state gh-chat-messages-state--error">{error}</div>}
+
+        {!loading && !error && messages.length === 0 && (
+          <div className="gh-chat-messages-state">
+            <p className="gh-chat-messages-empty-title">还没有消息</p>
+            <p className="gh-chat-messages-empty-hint">发送第一条消息，开始对话吧。</p>
+          </div>
+        )}
+
+        {!loading &&
+          messages.map((message) => {
+            const own = message.senderId === meId
+            return (
+              <div
+                key={message.id}
+                className={`gh-chat-message ${own ? 'gh-chat-message--own' : ''}`}
+              >
+                {!own && <UserAvatar userId={message.sender.id} username={message.sender.username} size="sm" />}
+                <div className="gh-chat-message-body">
+                  <div className="gh-chat-message-meta">
+                    {!own && <span className="gh-chat-message-sender">{message.sender.username}</span>}
+                    <time className="gh-chat-message-time" dateTime={message.createdAt}>
+                      {formatMessageTime(message.createdAt)}
+                    </time>
+                  </div>
+                  <div className="gh-chat-message-bubble">{message.content}</div>
+                </div>
+              </div>
+            )
+          })}
+      </div>
+
+      <ChatComposer
+        onSend={handleSend}
+        disabled={!conversation.canSend}
+        disabledHint={conversation.type === 'direct' ? '你们已不是好友，无法继续发送消息' : '当前会话已禁止发送消息'}
+      />
+    </section>
+  )
+}

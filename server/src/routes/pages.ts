@@ -15,6 +15,9 @@ const router = Router()
    5. GET  /:id          — 管理面板：按 ID 获取页面完整内容
    6. PUT  /:id          — 更新页面
    7. DELETE /:id        — 删除页面
+
+   页面管理整体归 content:manage（全站内容管理，目前为管理员专属）：
+   作者角色只有 content:write（管理自己的文章），不能创建 / 修改 / 删除页面。
 */
 
 // 1. 公开接口：获取所有在功能界面展示的已发布页面
@@ -44,7 +47,7 @@ router.get('/slug/:slug', asyncHandler(async (req: Request, res: Response) => {
 }))
 
 // 3. 管理面板：获取页面列表（分页）
-router.get('/', authenticate, requireCapability('content:write'), asyncHandler(async (req: Request, res: Response) => {
+router.get('/', authenticate, requireCapability('content:manage'), asyncHandler(async (req: Request, res: Response) => {
   const { page, limit, skip } = parsePagination(req.query)
 
   const [pages, total] = await Promise.all([
@@ -66,7 +69,7 @@ router.get('/', authenticate, requireCapability('content:write'), asyncHandler(a
 }))
 
 // 4. 创建页面
-router.post('/', authenticate, requireCapability('content:write'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/', authenticate, requireCapability('content:manage'), asyncHandler(async (req: Request, res: Response) => {
   const parsed = pageSchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: '输入数据无效', details: parsed.error.flatten() })
@@ -86,7 +89,7 @@ router.post('/', authenticate, requireCapability('content:write'), asyncHandler(
 }))
 
 // 5. 管理面板：按 ID 获取页面完整内容
-router.get('/:id', authenticate, requireCapability('content:write'), asyncHandler(async (req: Request, res: Response) => {
+router.get('/:id', authenticate, requireCapability('content:manage'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseId(req.params.id)
   if (id === null) {
     res.status(400).json({ error: '无效 ID' })
@@ -104,7 +107,7 @@ router.get('/:id', authenticate, requireCapability('content:write'), asyncHandle
 }))
 
 // 6. 更新页面
-router.put('/:id', authenticate, requireCapability('content:write'), asyncHandler(async (req: Request, res: Response) => {
+router.put('/:id', authenticate, requireCapability('content:manage'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseId(req.params.id)
   if (id === null) {
     res.status(400).json({ error: '无效 ID' })
@@ -135,7 +138,7 @@ router.put('/:id', authenticate, requireCapability('content:write'), asyncHandle
 }))
 
 // 7. 删除页面
-router.delete('/:id', authenticate, requireCapability('content:write'), asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id', authenticate, requireCapability('content:manage'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseId(req.params.id)
   if (id === null) {
     res.status(400).json({ error: '无效 ID' })

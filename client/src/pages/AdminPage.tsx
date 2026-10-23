@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { GitHubButton, GitHubBadge } from '../components/ui'
 import api from '../lib/api'
+import { useAuth } from '../contexts/AuthContext'
 import Pagination from '../components/Pagination'
 
 interface PostSummary {
@@ -19,9 +20,13 @@ interface PostsResponse {
 }
 
 export default function AdminPage() {
+  const { can } = useAuth()
   const [data, setData] = useState<PostsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
+
+  // content:manage 看全站文章；作者（content:write）只看自己的文章（后端已按所有权过滤）
+  const canManageAll = can('content:manage')
 
   const fetchPosts = () => {
     setLoading(true)
@@ -47,7 +52,7 @@ export default function AdminPage() {
       <div className="gh-page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <h1>文章管理</h1>
-          <p>管理所有文章的状态</p>
+          <p>{canManageAll ? '管理所有文章（全站）' : '管理我的文章（仅显示你创建的文章）'}</p>
         </div>
         <GitHubButton variant="primary" size="md" href="/admin/new">
           写文章

@@ -21,7 +21,8 @@ class ApiError extends Error {
 // === Token 缓存 — 避免每请求读 localStorage ===
 let cachedToken: string | null = null
 
-function getToken(): string | null {
+/** 读取当前 token（复用模块内缓存，供 WebSocket 等非 api 通道使用） */
+export function getToken(): string | null {
   if (cachedToken !== null) return cachedToken
   cachedToken = localStorage.getItem(TOKEN_KEY)
   return cachedToken

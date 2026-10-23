@@ -227,3 +227,41 @@ export const oauthClientUpdateSchema = z.object({
   clientType: z.enum(['confidential', 'public']).optional(),
   isActive: z.boolean().optional(),
 })
+
+// === 好友 / 聊天 Schemas ===
+
+export const chatUserTargetSchema = z.object({
+  userId: z.number().int().positive(),
+})
+
+export const chatMessageSchema = z.object({
+  content: z.string().trim().min(1, '消息不能为空').max(2000, '消息过长'),
+})
+
+export const chatReadSchema = z.object({
+  lastMessageId: z.number().int().nonnegative(),
+})
+
+export const chatGroupCreateSchema = z.object({
+  name: z.string().trim().min(1, '群名不能为空').max(60, '群名过长'),
+  memberIds: z.array(z.number().int().positive()).min(1, '至少选择一位好友').max(49),
+})
+
+export const chatGroupUpdateSchema = z.object({
+  name: z.string().trim().min(1, '群名不能为空').max(60, '群名过长'),
+})
+
+export const chatGroupMembersSchema = z.object({
+  userIds: z.array(z.number().int().positive()).min(1).max(49),
+})
+
+export const chatSearchSchema = z.object({
+  q: z.string().trim().min(1).max(50),
+})
+
+// === 网盘空间配额 Schema ===
+
+export const updateUserQuotaSchema = z.object({
+  // 用纯数字字符串传输，避免 JS number 在超大字节数上的精度问题
+  storageQuotaBytes: z.string().regex(/^\d{1,16}$/, '请提供字节数（字符串）'),
+})

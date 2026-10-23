@@ -10,6 +10,13 @@ export interface UploadZoneProps {
   onClose: () => void
 }
 
+/** 判断错误是否为「空间不足 / 单文件超限」这类全局性失败（继续上传只会重复失败） */
+function isLimitError(message: string): boolean {
+  return message.includes('空间不足')
+    || message.includes('空间已用满')
+    || message.includes('大小超过限制')
+}
+
 const UploadZone = memo(function UploadZone({
   parentId,
   onUploaded,
@@ -18,6 +25,8 @@ const UploadZone = memo(function UploadZone({
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState<TransferProgress | null>(null)
   const [failedFiles, setFailedFiles] = useState<string[]>([])
+  /** 服务端返回的失败原因（配额不足 / 剩余空间不足 / 单文件超限等） */
+  const [uploadError, setUploadError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef(false)
   const xhrRef = useRef<XMLHttpRequest | null>(null)
@@ -98,8 +107,10 @@ const UploadZone = memo(function UploadZone({
       const fileArray = Array.from(files)
       setUploading(true)
       setFailedFiles([])
+      setUploadError('')
       abortRef.current = false
       const failed: string[] = []
+      let firstError = ''
 
       for (let i = 0; i < fileArray.length; i++) {
         if (abortRef.current) break
@@ -107,9 +118,14 @@ const UploadZone = memo(function UploadZone({
         try {
           const success = await uploadFileViaXHR(file, i + 1, fileArray.length)
           if (!success) break
-        } catch {
+        } catch (err) {
           failed.push(file.name)
+          if (!firstError) {
+            firstError = err instanceof Error ? err.message : '上传失败'
+          }
           console.error(`上传失败: ${file.name}`)
+          // 空间不足 / 单文件超限是全局性失败，继续上传剩余文件只会重复失败
+          if (isLimitError(firstError)) break
         }
       }
 
@@ -117,6 +133,8 @@ const UploadZone = memo(function UploadZone({
 
       if (failed.length > 0) {
         setFailedFiles(failed)
+        setUploadError(firstError)
+        setProgress(null)
       } else if (!abortRef.current) {
         setProgress(null)
         onUploaded()
@@ -202,6 +220,7 @@ const UploadZone = memo(function UploadZone({
 
       {failedFiles.length > 0 && (
         <div className="gh-drive-upload-zone-failed" style={{ padding: '16px', background: 'var(--gh-canvas)', borderRadius: 'var(--gh-radius)', border: '1px solid var(--gh-border)' }}>
+          {uploadError && <p className="gh-drive-upload-zone-failed-reason">{uploadError}</p>}
           <p>以下文件上传失败：</p>
           <ul>
             {failedFiles.map((f, i) => (
@@ -212,6 +231,7 @@ const UploadZone = memo(function UploadZone({
             className="gh-btn gh-btn--sm gh-btn--secondary"
             onClick={() => {
               setFailedFiles([])
+              setUploadError('')
               onUploaded()
             }}
           >

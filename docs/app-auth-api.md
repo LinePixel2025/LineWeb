@@ -176,7 +176,7 @@ code_challenge: E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
 浏览器打开 `/authorize` 后：
 
 - 未登录 → 先跳到登录页，**登录后自动回到授权页且参数不丢失**。
-- 已登录 → 显示「账户验证」页：应用名称、简介、主页，以及逐条列出的权限说明；高危权限（如"管理站点内容"）会单独用醒目标记提示，并排在列表最后。
+- 已登录 → 显示「账户验证」页：应用名称、简介、主页，以及逐条列出的权限说明；高危权限（如"管理自己的文章"）会单独用醒目标记提示，并排在列表最后。
 - 用户可以点「拒绝」或「同意授权」。
 
 ### 4.3 回调结果
@@ -259,27 +259,28 @@ curl http://localhost:3001/api/health/screen-time \
 | GET | `/api/auth/me` | `profile:read` |
 | GET | `/api/auth/avatar`、`/api/auth/avatar/:userId` | `profile:read` |
 | GET | `/api/comments` | `content:read` |
-| GET | `/api/posts/admin/all`、`/api/posts/admin/:id` | `content:write` |
-| GET | `/api/pages`、`/api/pages/:id` | `content:write` |
+| GET | `/api/posts/admin/all`、`/api/posts/admin/:id` | `content:write`（仅返回 / 操作该账号自己的文章） |
 | GET | `/api/comments/admin/posts`、`/api/comments/admin/post/:postId` | `comment:moderate` |
 | GET | `/api/health/screen-time`、`/api/health/screen-time/range` | `health:read` |
 | GET | `/api/health/daily-goal` | `health:read` |
 | GET | `/api/drive/files`、`/api/drive/files/:id`、`/api/drive/search`、`/api/drive/fts-search` | `drive:read` |
 | GET | `/api/drive/files/:id/download`、`/api/drive/download/:id` | `drive:read` |
-| POST | `/api/posts`、`/api/pages` | `content:write` |
+| POST | `/api/posts` | `content:write` |
 | POST | `/api/ai/write/summary`、`/ai/write/polish`、`/ai/write/titles`、`/ai/write/draft` | `content:write` |
 | POST | `/api/comments` | `comment:write` |
 | POST | `/api/health/push` | `health:write` |
 | POST | `/api/drive/folders`、`/api/drive/files`、`/api/drive/upload` | `drive:write` |
-| PUT | `/api/posts/:id`、`/api/pages/:id` | `content:write` |
+| PUT | `/api/posts/:id` | `content:write`（仅自己的文章） |
 | PUT | `/api/comments/:id` | `comment:moderate` |
 | PUT | `/api/health/daily-goal` | `health:write` |
 | PUT | `/api/drive/files/:id` | `drive:write` |
-| DELETE | `/api/posts/:id`、`/api/pages/:id` | `content:write` |
+| DELETE | `/api/posts/:id` | `content:write`（仅自己的文章） |
 | DELETE | `/api/comments/:id` | `comment:moderate` |
 | DELETE | `/api/drive/files/:id` | `drive:write` |
 
-**永远无法访问**（无论申请什么 scope）：`/api/users/*`、`/api/devices`、`/api/stats`、`/api/ai/config`、`/api/drive/sync`、`/api/drive/resolve-path`、`/api/drive/download-ticket/*`、`/api/drive/favorites/*`、`/api/oauth/*`、`/api/auth/profile`、`/api/auth/settings`、`/api/auth/logout`、`POST|DELETE /api/auth/avatar`、`GET /api`。
+**永远无法访问**（无论申请什么 scope）：`/api/users/*`、`/api/devices`、`/api/stats`、`/api/ai/config`、`/api/pages/*`（页面管理 = `content:manage`，目前仅管理员）、`/api/chat/*`、`/api/drive/sync`、`/api/drive/resolve-path`、`/api/drive/download-ticket/*`、`/api/drive/favorites/*`、`/api/oauth/*`、`/api/auth/profile`、`/api/auth/settings`、`/api/auth/logout`、`POST|DELETE /api/auth/avatar`、`GET /api`。
+
+> **2026-10 变更（breaking）**：`content:write` scope 的语义收窄为「管理自己的文章」。`/api/pages*` 端点已从应用白名单移除（页面管理改为管理员专属的 `content:manage` 能力，无法通过任何应用 scope 获得）。此前已授权、依赖应用管理页面的集成需要改由管理员账号直接操作，或等待后续新增页面 scope。
 
 > 设计取舍：应用不能改用户账号、不能把用户登出、不能给自己提权，也不能访问其他用户的数据。
 
@@ -291,7 +292,7 @@ curl http://localhost:3001/api/health/screen-time \
 
 ### 6.3 权限变更即时生效
 
-如果用户账号在授权后被**降权**（例如管理员被改为普通用户），应用对应的能力派生 scope（`content:write`、`comment:moderate`）会在**下一个请求**立即失效，无需等令牌过期。应用应把这种情况当作 403 处理并提示用户重新授权。
+如果用户账号在授权后被**降权**（例如管理员被改为普通用户），应用对应的能力派生 scope（`content:write`、`comment:moderate`）会在**下一个请求**立即失效，无需等令牌过期。应用应把这种情况当作 403 处理并提示用户重新授权。`content:write` 降权后应用也会失去文章写权限；页面管理从来不在应用 scope 内。
 
 ---
 
@@ -306,15 +307,15 @@ curl http://localhost:3001/api/health/screen-time \
 | `health:write` | 上报屏幕使用时间、设置每日目标 | — |
 | `drive:read` | 列出、搜索并下载你自己的网盘文件 | 账号需有网盘权限 |
 | `drive:write` | 上传、新建文件夹、重命名、移动或删除你自己的网盘文件 | 账号需有网盘权限 |
-| `content:write` | 创建、编辑、删除文章与页面，并可调用 AI 写作辅助 | ⚠️ 账号本身须具备该能力 |
+| `content:write` | 创建、编辑、删除**自己的文章**，并可调用 AI 写作辅助（不再包含页面管理） | ⚠️ 账号本身须具备该能力（`author` / `admin`） |
 | `comment:moderate` | 编辑或删除任意用户的评论 | ⚠️ 账号本身须具备该能力 |
 
 **同时还有两层限制**：
 
 1. **应用允许范围**：管理员注册时勾选的 `allowedScopes`。应用请求超出该集合会被拒绝（400 `以下权限未被允许：...`）。
-2. **账号能力**：最后两项是"能力派生"权限，只有账号本身已具备对应能力时才可授权。普通账号申请 `content:write` 会被拒绝（400 `当前账号不具备以下权限，无法授权：content:write`）。
+2. **账号能力**：最后两项是"能力派生"权限，只有账号本身已具备对应能力时才可授权。普通账号（`user`）申请 `content:write` 会被拒绝（400 `当前账号不具备以下权限，无法授权：content:write`）；`author` / `admin` 可以授权。
 
-> 授权页会把 `content:write`、`comment:moderate` 标记为**高危权限**并排在最后，提醒用户"该应用可以代表你创建、编辑或删除站点内容与评论"。
+> 授权页会把 `content:write`、`comment:moderate` 标记为**高危权限**并排在最后，提醒用户"该应用可以代表你创建、编辑或删除你的文章与评论"。
 
 **不可申请**（不属于应用 scope）：`user:manage`、`device:view`、`ai:configure`、`stats:view`、`drive:all`、`app:manage`。
 
@@ -419,7 +420,7 @@ POST /api/oauth/revoke
   "client": { "name": "Time Master 桌面版", "description": "…", "homepage": "https://example.com" },
   "scopes": [
     { "scope": "health:read", "label": "读取你的屏幕时间数据", "description": "读取你的屏幕使用时间与每日目标", "highRisk": false },
-    { "scope": "content:write", "label": "管理站点内容（文章与页面）", "description": "创建、编辑、删除文章与页面，并可调用 AI 写作辅助", "highRisk": true }
+    { "scope": "content:write", "label": "管理自己的文章", "description": "创建、编辑、删除自己的文章，并可调用 AI 写作辅助", "highRisk": true }
   ],
   "state": "xyz"
 }
