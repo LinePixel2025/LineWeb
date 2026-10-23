@@ -66,7 +66,7 @@ export interface Game2048Match {
   hostId: number
   status: Game2048MatchStatus
   version: number
-  /** 本局竞速时长（毫秒）；等待房间中为房主默认/已选时长 */
+  /** 竞速时长（毫秒）；等待房间中为默认 10 分钟，开始后为房主选择值 */
   durationMs: number
   startedAt: string
   endsAt: string
