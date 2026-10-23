@@ -10,7 +10,8 @@
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "verify:game": "tsx scripts/verify-game2048.ts"
+    "verify:game": "tsx scripts/verify-game2048.ts",
+    "verify:ddz": "tsx scripts/verify-doudizhu.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

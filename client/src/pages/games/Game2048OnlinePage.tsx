@@ -232,6 +232,7 @@ export default function Game2048OnlinePage() {
       ) {
         return
       }
+      if (event.match.game !== '2048') return
       if (event.match.id !== matchId) return
       applyMatch(event.match)
       if (event.type === 'game:match:ended' && event.match.reason === 'cancelled') {
@@ -499,6 +500,10 @@ export default function Game2048OnlinePage() {
     [respondInvite, dismissStartedMatch, navigate]
   )
 
+  /** 双游戏共用邀请列表：本页只处理 2048 的邀请（按 game 过滤，缺省视为 2048） */
+  const pageIncomingInvites = incomingInvites.filter((invite) => (invite.game ?? '2048') === '2048')
+  const pageOutgoingInvites = outgoingInvites.filter((invite) => (invite.game ?? '2048') === '2048')
+
   const refreshLobby = useCallback(() => {
     void loadFriends(true)
     void refreshInvites()
@@ -558,8 +563,8 @@ export default function Game2048OnlinePage() {
             match={match}
             meId={meId}
             friends={friends}
-            incomingInvites={incomingInvites}
-            outgoingInvites={outgoingInvites}
+            incomingInvites={pageIncomingInvites}
+            outgoingInvites={pageOutgoingInvites}
             friendsLoading={friendsLoading}
             friendsError={friendsError}
             highlightFriendId={highlightFriendId}
@@ -647,8 +652,8 @@ export default function Game2048OnlinePage() {
       ) : (
         <GameFriendPicker
           friends={friends}
-          incomingInvites={incomingInvites}
-          outgoingInvites={outgoingInvites}
+          incomingInvites={pageIncomingInvites}
+          outgoingInvites={pageOutgoingInvites}
           loading={friendsLoading || matchLoading}
           highlightFriendId={highlightFriendId}
           busyKey={busyKey}

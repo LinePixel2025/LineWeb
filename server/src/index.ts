@@ -102,6 +102,9 @@ const apiLimiterSkipPaths = [
   /^\/games\/2048\/matches\/\d+\/moves\/?$/,
   /^\/games\/2048\/sync\/?$/,
   /^\/games\/2048\/presence\/?$/,
+  /^\/games\/doudizhu\/matches\/\d+\/actions\/?$/,
+  /^\/games\/doudizhu\/sync\/?$/,
+  /^\/games\/doudizhu\/presence\/?$/,
 ]
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -286,6 +289,23 @@ app.get('/api', (_req, res) => {
       resign: { method: 'POST', path: '/api/games/2048/matches/:id/resign', auth: true, description: '认输：该玩家淘汰，其余玩家继续（最后存活者/分数最高者获胜）' },
       rules: '服务端权威：邀请加入等待房间（2–10 人），房主开始后可选择 1–60 分钟竞速时长（默认 10 分钟），所有玩家同一 seed 得到相同初始棋盘，先合成 2048 者获胜；无路可走/认输/掉线会淘汰该玩家，其余玩家继续；最后存活者获胜，全部出局按分数判定；超时在存活玩家中按分数判定（平分平局）；邀请 60 秒有效、等待房间 30 分钟过期、对局结束保留 5 分钟；对局/房间/邀请均为内存态，无数据库表。',
       ws: '实时推送（复用 /ws/chat，不新增 WS 服务）：game:invite {invite}、game:invite:removed {inviteId, reason}、game:match:started/update/ended {match}。无 WebSocket 时客户端用 POST /presence（20 秒心跳）+ GET /sync（2–5 秒轮询）降级。',
+    },
+    doudizhu: {
+      friends: { method: 'GET', path: '/api/games/doudizhu/friends', auth: true, description: '斗地主好友大厅：好友列表（含 online / inMatch，inMatch 覆盖全部游戏）' },
+      invites: { method: 'GET', path: '/api/games/doudizhu/invites', auth: true, description: '收到/发出的斗地主邀请（60 秒有效；invite 带 game:"doudizhu"）' },
+      inviteCreate: { method: 'POST', path: '/api/games/doudizhu/invites', auth: true, description: '邀请好友加入 3 人等待房间（body: {friendId}；没有房间会自动创建；返回 invite + match）' },
+      inviteRespond: { method: 'POST', path: '/api/games/doudizhu/invites/:id/respond', auth: true, description: '接受/拒绝邀请（body: {action:"accept"|"decline"}；接受成功返回 match）' },
+      inviteCancel: { method: 'DELETE', path: '/api/games/doudizhu/invites/:id', auth: true, description: '取消自己发出的邀请' },
+      sync: { method: 'GET', path: '/api/games/doudizhu/sync?matchId=', auth: true, description: '轮询降级：返回 serverTime + 邀请列表 + 当前/指定对局（按观看者裁剪，myHand 仅自己的牌）' },
+      presence: { method: 'POST', path: '/api/games/doudizhu/presence', auth: true, description: '轮询降级心跳（与 2048 共用 presence TTL 存储）' },
+      activeMatch: { method: 'GET', path: '/api/games/doudizhu/matches/active', auth: true, description: '当前等待房间 / 叫分 / 出牌中的对局（无则 match: null）' },
+      matchDetail: { method: 'GET', path: '/api/games/doudizhu/matches/:id', auth: true, description: '房间/对局详情（非参与者 404；每个玩家只看到自己的手牌）' },
+      start: { method: 'POST', path: '/api/games/doudizhu/matches/:id/start', auth: true, description: '房主开始游戏（需恰好 3 人；发牌进入叫分，status: waiting → bidding）' },
+      leave: { method: 'POST', path: '/api/games/doudizhu/matches/:id/leave', auth: true, description: '离开等待房间；房主离开即解散房间（已开局请用 resign）' },
+      action: { method: 'POST', path: '/api/games/doudizhu/matches/:id/actions', auth: true, description: '统一动作入口（body: {type:"bid",bid:0-3} 叫分 / {type:"play",cards:[牌id]} 出牌 / {type:"pass"} 不出）；服务端权威校验牌型与压牌；限流 900/5min/用户' },
+      resign: { method: 'POST', path: '/api/games/doudizhu/matches/:id/resign', auth: true, description: '认输：本方阵营按当前倍率判负（叫分阶段认输直接解散）' },
+      rules: '斗地主（3 人）：邀请凑齐 3 人后房主开局 → 叫分（0–3 分，3 分立即成交，连续 3 轮无人叫分流局解散）→ 地主拿 3 张底牌先行出牌 → 先出完者所在阵营获胜。计分 = 底分 100 × 倍率（炸弹/王炸/春天/反春各 ×2），地主赢 +2 份、输 -2 份。回合限时 90 秒，超时或离线 30 秒自动托管（应叫=不叫、领出=最小单张、跟牌=不出）；全员离线 10 分钟废弃对局。与 2048 跨游戏互斥：同时在任意游戏中即不能被邀请。对局/邀请均为内存态，无数据库表。',
+      ws: '实时推送复用 /ws/chat 的事件名：game:invite / game:invite:removed / game:match:started|update|ended（match.game === "doudizhu"，每个玩家收到自己视角的 DTO）。无 WebSocket 时用 POST /presence + GET /sync 轮询降级。',
     },
   })
 })

@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import UserAvatar from '../UserAvatar'
 import { useAuth } from '../../contexts/AuthContext'
 import { useChat } from '../../contexts/ChatContext'
-import { useGame } from '../../contexts/GameContext'
+import { gameMatchPath, useGame } from '../../contexts/GameContext'
 
 const PORTAL_ROOT = document.body
 const INVITE_TTL_SECONDS = 60
@@ -51,7 +51,7 @@ export default function GameInviteToast() {
     [incomingInvites, hiddenInviteIds]
   )
 
-  const matchPath = startedMatch ? `/games/2048/online/${startedMatch.id}` : null
+  const matchPath = startedMatch ? gameMatchPath(startedMatch) : null
   // 已经在对局页面时不再重复提示
   const onStartedMatchPage = matchPath !== null && location.pathname === matchPath
   const showStarted = Boolean(startedMatch) && !onStartedMatchPage
@@ -80,10 +80,10 @@ export default function GameInviteToast() {
     setBusy('accept')
     setError(null)
     try {
-      const match = await respondInvite(invite.id, 'accept')
+      const match = await respondInvite(invite.id, 'accept', invite.game ?? '2048')
       if (match) {
         dismissStartedMatch()
-        navigate(`/games/2048/online/${match.id}`)
+        navigate(gameMatchPath(match))
       } else {
         hideInvite(invite.id)
       }
@@ -110,12 +110,12 @@ export default function GameInviteToast() {
 
   const handleEnterMatch = useCallback(() => {
     if (!startedMatch) return
-    const id = startedMatch.id
     dismissStartedMatch()
-    navigate(`/games/2048/online/${id}`)
+    navigate(gameMatchPath(startedMatch))
   }, [startedMatch, dismissStartedMatch, navigate])
 
-  const opponent = startedMatch?.players.find((player) => player.userId !== meId) ?? null
+  const opponents = (startedMatch?.players ?? []).filter((player) => player.userId !== meId)
+  const opponentNames = opponents.map((player) => player.username).join('、')
 
   if (!showStarted && !invite) return null
 
@@ -123,7 +123,11 @@ export default function GameInviteToast() {
     <section className="gh-game-toast" aria-live="polite" aria-label="游戏邀请">
       <div className="gh-game-toast-head">
         <span className="gh-game-toast-eyebrow">
-          {showStarted ? '对局已开始' : '2048 对战邀请'}
+          {showStarted
+            ? '对局已开始'
+            : invite?.game === 'doudizhu'
+              ? '斗地主对战邀请'
+              : '2048 对战邀请'}
         </span>
         <button
           type="button"
@@ -144,7 +148,9 @@ export default function GameInviteToast() {
       {showStarted && startedMatch ? (
         <div className="gh-game-toast-body">
           <p className="gh-game-toast-text">
-            {opponent ? `${opponent.username} 与你的对局已开始。` : '你的对局已开始。'}
+            {opponentNames
+              ? `${opponentNames} 与你的${startedMatch?.game === 'doudizhu' ? '斗地主' : '2048'}对局已开始。`
+              : '你的对局已开始。'}
           </p>
           <div className="gh-game-toast-actions">
             <button type="button" className="gh-btn gh-btn--primary gh-btn--md" onClick={handleEnterMatch}>
@@ -166,7 +172,9 @@ export default function GameInviteToast() {
               <UserAvatar userId={invite.from.id} username={invite.from.username} size="md" />
               <div className="gh-game-toast-user-copy">
                 <strong className="gh-game-toast-username">{invite.from.username}</strong>
-                <span className="gh-game-toast-desc">邀请你进行 2048 对战</span>
+                <span className="gh-game-toast-desc">
+                  邀请你进行 {invite.game === 'doudizhu' ? '斗地主' : '2048'} 对战
+                </span>
               </div>
             </div>
             <p className={`gh-game-toast-countdown${remainingSeconds <= 10 ? ' gh-game-toast-countdown--urgent' : ''}`}>

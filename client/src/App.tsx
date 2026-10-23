@@ -23,6 +23,8 @@ const FeaturesPage = lazy(() => import('./pages/FeaturesPage'))
 const GamesPage = lazy(() => import('./pages/GamesPage'))
 const Game2048Page = lazy(() => import('./pages/games/Game2048Page'))
 const Game2048OnlinePage = lazy(() => import('./pages/games/Game2048OnlinePage'))
+const DoudizhuPage = lazy(() => import('./pages/games/DoudizhuPage'))
+const DoudizhuOnlinePage = lazy(() => import('./pages/games/DoudizhuOnlinePage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const DynamicPage = lazy(() => import('./pages/DynamicPage'))
 const DrivePage = lazy(() => import('./pages/DrivePage'))
@@ -115,6 +117,13 @@ export default function App() {
                     } />
                     <Route path="/games/2048/online/:matchId" element={
                       <ProtectedRoute><Game2048OnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/doudizhu" element={<DoudizhuPage />} />
+                    <Route path="/games/doudizhu/online" element={
+                      <ProtectedRoute><DoudizhuOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/doudizhu/online/:matchId" element={
+                      <ProtectedRoute><DoudizhuOnlinePage /></ProtectedRoute>
                     } />
                     <Route path="/profile" element={
                       <ProtectedRoute><ProfilePage /></ProtectedRoute>

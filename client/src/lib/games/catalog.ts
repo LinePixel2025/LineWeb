@@ -38,6 +38,10 @@ export interface GameCatalogEntry {
 export const GAME_2048_ROUTE = '/games/2048'
 /** 2048 联机大厅路由（对局详情为 `${GAME_2048_ONLINE_ROUTE}/:matchId`） */
 export const GAME_2048_ONLINE_ROUTE = '/games/2048/online'
+/** 斗地主单机模式路由 */
+export const GAME_DOUDIZHU_ROUTE = '/games/doudizhu'
+/** 斗地主联机大厅路由（对局详情为 `${GAME_DOUDIZHU_ONLINE_ROUTE}/:matchId`） */
+export const GAME_DOUDIZHU_ONLINE_ROUTE = '/games/doudizhu/online'
 
 /** 大厅完整目录：可玩游戏在前，即将上线占位在后 */
 export const GAME_CATALOG: readonly GameCatalogEntry[] = [
@@ -51,6 +55,17 @@ export const GAME_CATALOG: readonly GameCatalogEntry[] = [
     playable: true,
     route: GAME_2048_ROUTE,
     onlineRoute: GAME_2048_ONLINE_ROUTE,
+  },
+  {
+    id: 'doudizhu',
+    name: '斗地主',
+    description: '经典三人扑克：叫分定地主、炸弹翻倍；支持单机 AI 练习与好友三人联机。',
+    icon: '🃏',
+    modes: ['single', 'online'],
+    status: 'available',
+    playable: true,
+    route: GAME_DOUDIZHU_ROUTE,
+    onlineRoute: GAME_DOUDIZHU_ONLINE_ROUTE,
   },
   {
     id: 'gomoku',

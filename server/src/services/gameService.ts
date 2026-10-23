@@ -2,6 +2,7 @@ import { AppError } from '../middleware/errorHandler.js'
 import { areFriends, getUserBrief, listFriends } from './chatService.js'
 import { isUserOnline, sendToUser } from './chatHub.js'
 import { isGamePresent, pruneGamePresence } from './gamePresence.js'
+import { nextGameInviteId } from './gameIds.js'
 import {
   GAME2048_TARGET,
   applyMove,
@@ -177,8 +178,32 @@ type MatchEventType = 'game:match:started' | 'game:match:update' | 'game:match:e
 
 const invites = new Map<number, InviteState>()
 const matches = new Map<number, MatchState>()
-let nextInviteId = 1
 let nextMatchId = 1
+
+// === 跨游戏模块注册（斗地主等后加的游戏通过这里与 2048 互斥） ===
+
+export interface GameModuleHook {
+  /** 该游戏模块中用户是否在未结束的房间/对局中 */
+  isUserInMatch: (userId: number) => boolean
+  /** 定时清理钩子（由 runGameSweeper 每轮调用） */
+  sweep: (now: number) => void
+}
+
+const gameModuleHooks: GameModuleHook[] = []
+
+/**
+ * 注册一个游戏模块的互斥探针与清理钩子。
+ * 模块在被 routes/games.ts 导入时调用（顶层副作用），
+ * gameService 不会反向 import 各游戏模块，避免循环依赖。
+ */
+export function registerGameModule(hook: GameModuleHook): void {
+  if (!gameModuleHooks.includes(hook)) gameModuleHooks.push(hook)
+}
+
+/** 用户是否在其他游戏（非 2048）的未结束房间/对局中 */
+function isBusyInOtherGames(userId: number): boolean {
+  return gameModuleHooks.some((hook) => hook.isUserInMatch(userId))
+}
 
 // === 工具函数 ===
 
@@ -532,7 +557,7 @@ export async function listGameFriends(userId: number): Promise<{ friends: GameFr
       id: friend.id,
       username: friend.username,
       online: isGameUserAvailable(friend.id),
-      inMatch: activeMatchFor(friend.id) !== null,
+      inMatch: activeMatchFor(friend.id) !== null || isBusyInOtherGames(friend.id),
     })),
   }
 }
@@ -562,7 +587,8 @@ export async function createGameInvite(
 
   const current = activeMatchFor(userId)
   if (current && current.status !== 'waiting') throw new AppError('你正在对局中，无法发起邀请', 409)
-  if (activeMatchFor(friendId)) throw new AppError('对方正在对局/房间中，无法邀请', 409)
+  if (activeMatchFor(friendId) || isBusyInOtherGames(friendId)) throw new AppError('对方正在对局/房间中，无法邀请', 409)
+  if (isBusyInOtherGames(userId)) throw new AppError('你正在其他游戏对局中，无法发起邀请', 409)
   if (!isGameUserAvailable(friendId)) throw new AppError('对方不在线，无法邀请', 409)
 
   let incomingCount = 0
@@ -578,7 +604,8 @@ export async function createGameInvite(
   // 异步查询期间可能已有并发请求写入邀请/房间；落库前再检查一次
   const currentAfter = activeMatchFor(userId)
   if (currentAfter && currentAfter.status !== 'waiting') throw new AppError('你正在对局中，无法发起邀请', 409)
-  if (activeMatchFor(friendId)) throw new AppError('对方正在对局/房间中，无法邀请', 409)
+  if (activeMatchFor(friendId) || isBusyInOtherGames(friendId)) throw new AppError('对方正在对局/房间中，无法邀请', 409)
+  if (isBusyInOtherGames(userId)) throw new AppError('你正在其他游戏对局中，无法发起邀请', 409)
   if (!isGameUserAvailable(friendId)) throw new AppError('对方不在线，无法邀请', 409)
 
   let room = currentAfter ?? waitingRoomFor(userId)
@@ -603,7 +630,7 @@ export async function createGameInvite(
   }
 
   const invite: InviteState = {
-    id: nextInviteId++,
+    id: nextGameInviteId(),
     matchId: room.id,
     from: { id: from.id, username: from.username },
     to: { id: to.id, username: to.username },
@@ -645,7 +672,7 @@ export function respondGameInvite(
     removeInvite(invite, 'cancelled')
     throw new AppError('房间已开始或已解散', 409)
   }
-  if (activeMatchFor(userId)) {
+  if (activeMatchFor(userId) || isBusyInOtherGames(userId)) {
     removeInvite(invite, 'cancelled')
     throw new AppError('你已在另一场对局或房间中', 409)
   }
@@ -897,6 +924,11 @@ export function runGameSweeper(now: number = Date.now()): void {
     ) {
       matches.delete(match.id)
     }
+  }
+
+  // 其他游戏模块（斗地主等）注册的清理钩子
+  for (const hook of gameModuleHooks) {
+    hook.sweep(now)
   }
 }
 

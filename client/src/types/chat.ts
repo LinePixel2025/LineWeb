@@ -7,7 +7,7 @@
  */
 
 import type {
-  Game2048Match,
+  Game2048Match, AnyGameMatch,
   GameInvite,
   GameInviteRemovalReason,
 } from './game'
@@ -164,9 +164,9 @@ export type ChatServerEvent =
   | { type: 'friend:removed'; userId: number }
   | { type: 'game:invite'; invite: GameInvite }
   | { type: 'game:invite:removed'; inviteId: number; reason: GameInviteRemovalReason }
-  | { type: 'game:match:started'; match: Game2048Match }
-  | { type: 'game:match:update'; match: Game2048Match }
-  | { type: 'game:match:ended'; match: Game2048Match }
+  | { type: 'game:match:started'; match: AnyGameMatch }
+  | { type: 'game:match:update'; match: AnyGameMatch }
+  | { type: 'game:match:ended'; match: AnyGameMatch }
   | { type: 'ping' }
   | { type: 'pong' }
 

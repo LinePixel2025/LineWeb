@@ -5,6 +5,11 @@
  * 时间字段统一为 ISO 字符串。
  */
 
+import type { DoudizhuCombo } from '../lib/games/doudizhu'
+
+/** 游戏种类（邀请与对局 DTO 的 game 字段；旧邀请缺省视为 2048） */
+export type GameKind = '2048' | 'doudizhu'
+
 /** 2048 移动方向 */
 export type Game2048Direction = 'up' | 'down' | 'left' | 'right'
 
@@ -34,11 +39,13 @@ export interface GameUserBrief {
   username: string
 }
 
-/** 好友对战邀请 */
+/** 好友对战邀请（2048 与斗地主共用；id 跨游戏唯一） */
 export interface GameInvite {
   id: number
   /** 邀请加入的房间/对局 id */
   matchId: number
+  /** 所属游戏（2048 的旧响应可能缺省） */
+  game?: GameKind
   from: GameUserBrief
   to: GameUserBrief
   createdAt: string
@@ -140,3 +147,101 @@ export interface GamePresenceResponse {
   ok: boolean
   serverTime: string
 }
+
+// ==================== 斗地主（doudizhu） ====================
+
+/** 斗地主一张牌（与后端引擎一致：rank 为比较点数，suit 0–3 为 ♠♥♣♦、4 为王） */
+export interface DoudizhuCardDto {
+  id: number
+  rank: number
+  suit: number
+}
+
+export type GameDoudizhuMatchStatus = 'waiting' | 'bidding' | 'playing' | 'finished'
+export type DoudizhuRole = 'landlord' | 'farmer'
+export type GameDoudizhuEndReason = 'hand_empty' | 'resign' | 'no_bid' | 'cancelled' | 'abandoned'
+
+/** 斗地主对局中的单个玩家（只暴露剩余张数，手牌仅自己可见） */
+export interface GameDoudizhuPlayer {
+  userId: number
+  username: string
+  online: boolean
+  role: DoudizhuRole | null
+  cardCount: number
+  status: 'waiting' | 'playing' | 'won' | 'lost'
+  /** 当前叫分轮的叫分（null = 尚未应叫） */
+  bid: number | null
+  /** 结算积分（未结算为 null） */
+  scoreDelta: number | null
+}
+
+/** 一手出牌记录（action=pass 时 cards 为空、combo 为 null） */
+export interface DoudizhuTrickMoveDto {
+  userId: number
+  action: 'pass' | 'play'
+  cards: DoudizhuCardDto[]
+  combo: DoudizhuCombo | null
+}
+
+/** 斗地主对局 DTO（按观看者裁剪：myHand 只有自己的牌） */
+export interface GameDoudizhuMatch {
+  id: number
+  game: 'doudizhu'
+  hostId: number
+  status: GameDoudizhuMatchStatus
+  version: number
+  createdAt: string
+  startedAt: string | null
+  endedAt: string | null
+  reason: GameDoudizhuEndReason | null
+  /** 获胜方（流局 / 解散为 null） */
+  winnerSide: 'landlord' | 'farmers' | null
+  /** 当前倍率（底分 100 × 倍率 = 每份积分） */
+  multiplier: number
+  landlordId: number | null
+  /** 底牌（叫分结束后对所有人可见） */
+  bottomCards: DoudizhuCardDto[]
+  /** 观看者自己的座位（0–2；players 按座位排序） */
+  seat: number
+  players: GameDoudizhuPlayer[]
+  myHand: DoudizhuCardDto[]
+  bidding: {
+    turnUserId: number
+    highestBid: number
+    highestBidderId: number | null
+    bids: Array<{ userId: number; bid: number }>
+    round: number
+    deadline: string
+  } | null
+  playing: {
+    turnUserId: number
+    lastMove: DoudizhuTrickMoveDto | null
+    recentMoves: DoudizhuTrickMoveDto[]
+    deadline: string
+  } | null
+}
+
+/** 任一游戏的对局（game:match:* 事件载荷） */
+export type AnyGameMatch = Game2048Match | GameDoudizhuMatch
+
+/** GET/POST /api/games/doudizhu/* 对局响应 */
+export interface DoudizhuMatchResponse {
+  match: GameDoudizhuMatch
+}
+
+export interface DoudizhuActiveMatchResponse {
+  match: GameDoudizhuMatch | null
+}
+
+/** GET /api/games/doudizhu/sync —— 轮询降级统一同步 */
+export interface DoudizhuSyncResponse {
+  serverTime: string
+  invites: GameInvitesResponse
+  match: GameDoudizhuMatch | null
+}
+
+/** POST /api/games/doudizhu/matches/:id/actions 的动作体 */
+export type DoudizhuActionBody =
+  | { type: 'bid'; bid: number }
+  | { type: 'play'; cards: number[] }
+  | { type: 'pass' }

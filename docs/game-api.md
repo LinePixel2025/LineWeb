@@ -407,3 +407,114 @@ curl -X POST "$BASE/games/2048/matches/7/resign" -H "Authorization: Bearer $TOKE
 - 生产为单 Express 容器；未来水平扩容需 Redis 或数据库承载对局状态。
 - 不涉及存储节点、网盘配额或文件上传。
 - 客户端单机版最高分保存在浏览器 `localStorage`（`lineweb_2048_best`）。
+
+
+---
+
+# 二、斗地主（doudizhu）单机 / 好友联机
+
+> 2026-10 新增。单机为纯前端（引擎 + AI），联机复用 2048 的邀请 / presence /
+> 轮询降级基础设施；端点前缀 `/api/games/doudizhu`，实时事件复用 `/ws/chat`。
+
+## 1. 概述
+
+- 3 人房间（恰好 3 人才能开局）：邀请流程与 2048 一致（60 秒有效、房主等待房间）；
+- 开局后进入叫分（0–3 分，叫 3 分立即成交；连续 3 轮无人叫分流局解散）；
+- 地主拿 3 张底牌并先出牌；先出完手牌者所在阵营获胜；
+- 计分：底分 100 × 倍率（炸弹 / 王炸 / 春天 / 反春各 ×2）；地主赢 +2 份、输 −2 份；
+- 服务端权威：客户端只提交叫分 / 出牌（手牌 id）/ 不出，牌型与压牌校验全部在服务端；
+- **手牌隐私**：对局 DTO 按观看者裁剪，`myHand` 只含自己的牌，其他玩家只有 `cardCount`；
+- 与 2048 **跨游戏互斥**：任意游戏中未结束的房间 / 对局会让另一游戏的发起与接受邀请返回 409。
+
+## 2. 对局状态机
+
+```
+waiting（等待房间，最多 30 分钟）
+  └─ POST /matches/:id/start（房主，恰 3 人）→ bidding（叫分）
+       ├─ 叫 3 分 / 三人叫完最高分>0 → playing（出牌）
+       │    ├─ 有人出完 → finished（hand_empty，含春天 / 反春倍率）
+       │    └─ POST /matches/:id/resign → finished（resign，按当前倍率判负）
+       └─ 三人全不叫 → 重新发牌（首叫轮转，最多 3 轮）→ 超过 → finished（no_bid）
+```
+
+- 回合时限 90 秒；超时或当前回合玩家离线超 30 秒由 sweeper 自动托管
+  （应叫 = 不叫、领出 = 最小可拆单张、跟牌 = 不出）；
+- 全员连续不可用 10 分钟 → 对局废弃（abandoned）；
+- 对局 / 邀请均为内存态（无数据库表），结束 5 分钟后回收。
+
+## 3. REST 端点（全部需账号登录令牌）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/games/doudizhu/friends` | 好友大厅（含 online / inMatch，inMatch 覆盖全部游戏） |
+| GET | `/api/games/doudizhu/invites` | 收到 / 发出的邀请（invite 带 `game:"doudizhu"`） |
+| POST | `/api/games/doudizhu/invites` | 邀请好友加入等待房间（body `{friendId}`，无房间自动创建） |
+| POST | `/api/games/doudizhu/invites/:id/respond` | 接受 / 拒绝（body `{action}`） |
+| DELETE | `/api/games/doudizhu/invites/:id` | 取消自己发出的邀请 |
+| GET | `/api/games/doudizhu/sync?matchId=` | 轮询降级统一同步（serverTime + invites + match） |
+| POST | `/api/games/doudizhu/presence` | 在线心跳（与 2048 共用 presence TTL 存储） |
+| GET | `/api/games/doudizhu/matches/active` | 当前等待 / 叫分 / 出牌中的对局 |
+| GET | `/api/games/doudizhu/matches/:id` | 对局详情（按观看者裁剪；非参与者 404） |
+| POST | `/api/games/doudizhu/matches/:id/start` | 房主开始（需恰好 3 人） |
+| POST | `/api/games/doudizhu/matches/:id/leave` | 离开等待房间（房主离开即解散） |
+| POST | `/api/games/doudizhu/matches/:id/actions` | **统一动作入口**（见下） |
+| POST | `/api/games/doudizhu/matches/:id/resign` | 认输（叫分阶段认输 = 解散，无积分） |
+
+`actions` 请求体（限流 900/5min/用户，已在全局 600/15min 限流中豁免）：
+
+```json
+{ "type": "bid", "bid": 0 }        // 不叫（1–3 为叫分，须高于当前最高）
+{ "type": "play", "cards": [12, 25] } // 出牌：手牌 id 列表（服务端校验牌型与压牌）
+{ "type": "pass" }                   // 不出（领出 / 新一轮时禁止）
+```
+
+## 4. 对局 DTO（按观看者裁剪）
+
+```jsonc
+{
+  "id": 1, "game": "doudizhu", "hostId": 1,
+  "status": "bidding",              // waiting | bidding | playing | finished
+  "version": 3,
+  "winnerSide": null,               // landlord | farmers | null
+  "multiplier": 1,                  // 底分 100 × 倍率 = 每份积分
+  "landlordId": null,
+  "bottomCards": [],                // 叫分结束后对所有人可见（3 张）
+  "seat": 0,                        // 观看者座位（players 按座位排序）
+  "players": [{ "userId": 1, "username": "a", "online": true,
+                "role": null, "cardCount": 17, "status": "playing",
+                "bid": null, "scoreDelta": null }],
+  "myHand": [ /* 仅自己的手牌 */ ],
+  "bidding": { "turnUserId": 1, "highestBid": 0, "highestBidderId": null,
+               "bids": [], "round": 1, "deadline": "ISO" },
+  "playing": { "turnUserId": 1, "lastMove": { ... }, "recentMoves": [ ... ], "deadline": "ISO" }
+}
+```
+
+结束原因 `reason`：`hand_empty`（打完）| `resign` | `no_bid` | `cancelled` | `abandoned`。
+
+## 5. WebSocket 事件（复用 /ws/chat）
+
+事件名与 2048 完全一致（`game:invite` / `game:invite:removed` /
+`game:match:started|update|ended`），按载荷判别：
+
+- 邀请：`invite.game === "doudizhu"`（2048 的旧响应缺省该字段，前端按 2048 处理）；
+- 对局：`match.game === "doudizhu"`，且**每个玩家收到自己视角的 DTO**；
+- 邀请 id 由 `server/src/services/gameIds.ts` 跨游戏统一发号，前端可安全合并同一列表。
+
+## 6. 规则口径（引擎双端一致）
+
+- 牌型：单张 / 对子 / 三张 / 三带一 / 三带二 / 顺子(≥5) / 连对(≥3连) /
+  飞机(≥2连三，可带同数量单牌或对子) / 四带二单 / 四带二对 / 炸弹 / 王炸；
+- 2 与双王不入顺子 / 连对 / 飞机本体；王炸不拆做翅膀；炸弹不拆做翅膀；
+- 前端引擎 `client/src/lib/games/doudizhu.ts` 与服务端
+  `server/src/services/gameDoudizhu.ts` 为同源双拷贝，
+  由 `client/src/lib/games/__tests__/doudizhu.test.ts` 的对齐测试兜底；
+- 单机 AI（`client/src/lib/games/doudizhuAi.ts`）：叫分按手牌强度，
+  出牌按「剩余手数最少」启发，农民之间不互相压牌。
+
+## 7. 自检与测试
+
+```bash
+cd server && npm run verify:ddz       # 引擎 + 状态机 + 托管 + 流局 + 认输（50 断言）
+cd client && npx vitest run src/lib/games/__tests__/doudizhu.test.ts
+```

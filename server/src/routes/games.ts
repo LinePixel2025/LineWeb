@@ -10,6 +10,7 @@ import {
   gameMoveSchema,
   gameStartSchema,
   gameSyncQuerySchema,
+  doudizhuActionSchema,
 } from '../config/index.js'
 import { markGamePresence } from '../services/gamePresence.js'
 import {
@@ -26,9 +27,23 @@ import {
   resignGameMatch,
   startGameMatch,
 } from '../services/gameService.js'
+import {
+  applyDoudizhuAction,
+  cancelDoudizhuInvite,
+  createDoudizhuInvite,
+  getActiveDoudizhuMatch,
+  getDoudizhuMatch,
+  getDoudizhuSync,
+  leaveDoudizhuMatch,
+  listDoudizhuFriends,
+  listDoudizhuInvites,
+  respondDoudizhuInvite,
+  resignDoudizhuMatch,
+  startDoudizhuMatch,
+} from '../services/gameDoudizhuService.js'
 
 /**
- * 2048 好友联机 REST 路由（挂载于 /api/games）
+ * 游戏联机 REST 路由（挂载于 /api/games）：2048（2–10 人竞速）+ 斗地主（3 人）
  *
  * 全部端点要求账号登录令牌（router 内 authenticate 兜底）；没有公开端点。
  * 第三方应用令牌 / 下载票据不可用（全局认证白名单会拒绝 /games/*）。
@@ -190,6 +205,85 @@ router.post('/2048/matches/:id/moves', moveLimiter, (req, res) => {
 router.post('/2048/matches/:id/resign', gameWriteLimiter, (req, res) => {
   const matchId = parseIdParam(req.params.id, '对局 ID')
   res.json(resignGameMatch(currentUserId(req), matchId))
+})
+
+// ============================================================
+// 斗地主好友联机（3 人房间：邀请 → 叫分 → 出牌；服务端权威，
+// 手牌对其他玩家不可见，DTO 按观看者裁剪）
+// ============================================================
+
+// === 好友大厅 ===
+
+router.get('/doudizhu/friends', asyncHandler(async (req, res) => {
+  const data = await listDoudizhuFriends(currentUserId(req))
+  res.json(data)
+}))
+
+// === 邀请 ===
+
+router.get('/doudizhu/invites', (req, res) => {
+  res.json(listDoudizhuInvites(currentUserId(req)))
+})
+
+router.post('/doudizhu/invites', gameWriteLimiter, asyncHandler(async (req, res) => {
+  const body = parseInput(gameInviteCreateSchema, req.body)
+  const data = await createDoudizhuInvite(currentUserId(req), body.friendId)
+  res.status(201).json(data)
+}))
+
+router.post('/doudizhu/invites/:id/respond', gameWriteLimiter, (req, res) => {
+  const inviteId = parseIdParam(req.params.id, '邀请 ID')
+  const body = parseInput(gameInviteRespondSchema, req.body)
+  res.json(respondDoudizhuInvite(currentUserId(req), inviteId, body.action))
+})
+
+router.delete('/doudizhu/invites/:id', gameWriteLimiter, (req, res) => {
+  const inviteId = parseIdParam(req.params.id, '邀请 ID')
+  res.json(cancelDoudizhuInvite(currentUserId(req), inviteId))
+})
+
+// === 轮询降级：统一同步 + 在线心跳（presence 与 2048 共用同一 TTL 存储） ===
+
+router.get('/doudizhu/sync', syncLimiter, (req, res) => {
+  const query = parseInput(gameSyncQuerySchema, req.query)
+  res.json(getDoudizhuSync(currentUserId(req), query.matchId))
+})
+
+router.post('/doudizhu/presence', presenceLimiter, (req, res) => {
+  markGamePresence(currentUserId(req))
+  res.json({ ok: true, serverTime: nowIso() })
+})
+
+// === 对局 ===
+
+router.get('/doudizhu/matches/active', (req, res) => {
+  res.json({ match: getActiveDoudizhuMatch(currentUserId(req)) })
+})
+
+router.get('/doudizhu/matches/:id', (req, res) => {
+  const matchId = parseIdParam(req.params.id, '对局 ID')
+  res.json({ match: getDoudizhuMatch(currentUserId(req), matchId) })
+})
+
+router.post('/doudizhu/matches/:id/start', gameWriteLimiter, (req, res) => {
+  const matchId = parseIdParam(req.params.id, '对局 ID')
+  res.json(startDoudizhuMatch(currentUserId(req), matchId))
+})
+
+router.post('/doudizhu/matches/:id/leave', gameWriteLimiter, (req, res) => {
+  const matchId = parseIdParam(req.params.id, '对局 ID')
+  res.json(leaveDoudizhuMatch(currentUserId(req), matchId))
+})
+
+router.post('/doudizhu/matches/:id/actions', moveLimiter, (req, res) => {
+  const matchId = parseIdParam(req.params.id, '对局 ID')
+  const body = parseInput(doudizhuActionSchema, req.body)
+  res.json(applyDoudizhuAction(currentUserId(req), matchId, body))
+})
+
+router.post('/doudizhu/matches/:id/resign', gameWriteLimiter, (req, res) => {
+  const matchId = parseIdParam(req.params.id, '对局 ID')
+  res.json(resignDoudizhuMatch(currentUserId(req), matchId))
 })
 
 export default router

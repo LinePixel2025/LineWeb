@@ -292,3 +292,21 @@ export const gameMoveSchema = z.object({
 export const gameSyncQuerySchema = z.object({
   matchId: z.coerce.number().int().positive().optional(),
 })
+
+// === 游戏（斗地主好友联机）Schemas ===
+
+/**
+ * POST /api/games/doudizhu/matches/:id/actions —— 服务端权威动作
+ * bid：叫分（0 = 不叫，1–3 分）；play：出牌（手牌 id 列表）；pass：不出。
+ */
+export const doudizhuActionSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('bid'),
+    bid: z.number().int().min(0).max(3),
+  }),
+  z.object({
+    type: z.literal('play'),
+    cards: z.array(z.number().int().min(0).max(53)).min(1).max(20),
+  }),
+  z.object({ type: z.literal('pass') }),
+])
