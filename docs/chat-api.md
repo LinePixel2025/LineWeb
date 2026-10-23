@@ -1,6 +1,6 @@
 # LineWeb 聊天 API 接入文档
 
-> 适用版本：2026-10（好友 / 私聊 / 群聊 + WebSocket 实时推送）
+> 适用版本：2026-10（好友 / 私聊 / 群聊 + 图片消息 / 2 分钟撤回 + WebSocket 实时推送）
 > 相关文档：[`api.md`](./api.md)（全部端点）、[`auth-api.md`](./auth-api.md)（账号登录令牌与角色能力）
 > 服务端实现：`server/src/routes/chat.ts`、`server/src/services/chatService.ts`、`server/src/services/chatHub.ts`
 > 前端实现：`client/src/pages/ChatPage.tsx`、`client/src/contexts/ChatContext.tsx`
@@ -14,8 +14,11 @@
 - **好友**：搜索用户、发送好友申请、接受 / 拒绝、删除好友（双向删除，保留历史会话）。
 - **私聊**：仅好友之间可以创建一对一会话；取消好友后历史仍可查看，但不能再发消息。
 - **群聊**：创建者（群主）只能邀请**自己的好友**；群上限 50 人；群主可改名、加人、移人、解散；成员可退群。
+- **图片消息**：`multipart/form-data` 上传，服务端用 sharp 统一转成 WebP（EXIF 方向校正、长边 ≤ 2048），文件存到存储节点 `_chat/<conversationId>/`；单张原图上限 10 MB。
+- **撤回**：发送者可在**消息发出后 2 分钟内**撤回；双方都看到「你 / xxx 撤回了一条消息」，正文与图片立即清除。
 - **实时推送**：REST 负责持久化与校验，`/ws/chat` 负责服务端 → 客户端推送；断线重连后以 REST 为准重新拉取。
-- 一期仅支持**纯文本消息**（1–2000 字）；不支持图片 / 文件、撤回、编辑、引用、typing / presence、黑名单。
+- 仍不支持：文件消息、编辑、引用、typing / presence、黑名单。
+- **空间配额**：聊天图片计入发送者的网盘空间配额（`User.storageQuota`，默认 2 GiB；`drive:all` 角色不限），撤回后释放。
 
 ---
 
@@ -131,7 +134,10 @@ GET /api/chat/conversations
         "senderId": 2,
         "sender": { "id": 2, "username": "alice" },
         "content": "在吗",
-        "createdAt": "2026-10-23T12:00:00.000Z"
+        "createdAt": "2026-10-23T12:00:00.000Z",
+        "type": "text",
+        "recalledAt": null,
+        "image": null
       },
       "unreadCount": 1,
       "lastMessageAt": "2026-10-23T12:00:00.000Z",
@@ -183,14 +189,20 @@ GET /api/chat/conversations/:id/messages?before=<messageId>&limit=30
       "senderId": 2,
       "sender": { "id": 2, "username": "alice" },
       "content": "在吗",
-      "createdAt": "2026-10-23T12:00:00.000Z"
+      "createdAt": "2026-10-23T12:00:00.000Z",
+      "type": "text",
+      "recalledAt": null,
+      "image": null
     }
   ],
   "hasMore": false
 }
 ```
 
-### 4.5 发送消息
+> `type`：`text` | `image`；`recalledAt` 非空表示已撤回（此时 `content` 为空串、`image` 为 `null`）；
+> `image` 仅图片消息有值：`{ width, height, size }`，`size` 为字节数字符串。图片内容本身不内联在消息里，用 `GET /chat/messages/:id/image` 读取。
+
+### 4.5 发送文本消息
 
 ```http
 POST /api/chat/conversations/:id/messages   { "content": "你好" }
@@ -200,7 +212,51 @@ POST /api/chat/conversations/:id/messages   { "content": "你好" }
 - 私聊要求双方仍是好友，否则 403。
 - 返回 `201 { "message": { ... } }`，并通过 WebSocket 向全部成员推送 `message:new`（包括发送者自己的其它标签页）。
 
-### 4.6 标记已读
+### 4.6 发送图片消息
+
+```http
+POST /api/chat/conversations/:id/images
+Content-Type: multipart/form-data
+字段：file=<图片文件>
+```
+
+- 仅成员可发；私聊要求双方仍是好友；写操作限流同上。
+- 支持格式：JPEG / PNG / WebP / GIF；单张**原图上限 10 MB**（服务端处理后 WebP 再限制 4 MiB）。
+- 服务端用 sharp 处理：EXIF 方向校正 → 长边缩放到 ≤ 2048（不放大）→ 输出 WebP（quality 82）；处理后文件写入存储节点 `_chat/<conversationId>/<uuid>.webp`。动图（GIF）只保留首帧，统一为静态 WebP。
+- 成功返回 `201 { "message": { ... } }`，并广播 `message:new`；图片消息的 `content` 为空串、`type` 为 `image`。
+- 错误：
+  - `400 仅支持图片格式（JPEG/PNG/WebP/GIF）`
+  - `400 图片处理失败，请换一张图片重试`
+  - `502 图片保存失败，请稍后重试`（存储节点写入失败）
+  - `413` 单张超限：`{ "error": "图片大小超过限制 (10.0 MB)", "code": "IMAGE_TOO_LARGE" }`
+  - `413` 配额不足：`{ "error": "网盘空间不足（剩余 1.2 GB）", "code": "QUOTA_EXCEEDED", "quota": "2147483648", "used": "940000000", "remaining": "0" }`（字节数均为字符串）
+  - `503 存储节点未接入，暂时无法发送图片`（本地未运行 storage-node 时）
+- 图片字节数计入**发送者**的网盘配额；撤回后从配额中释放。
+
+### 4.7 读取图片
+
+```http
+GET /api/chat/messages/:id/image
+Authorization: Bearer <token>        # 或 ?token=<token>（<img src> 直链）
+```
+
+- 返回 `image/webp`，带 `Cache-Control: private, max-age=31536000, immutable`（图片内容不可变，可按 URL 长期缓存）。
+- 仅会话成员可读，否则 404（不泄露存在性）；非图片消息、已撤回消息同样 404。
+- 存储节点未接入返回 503。
+- `<img src="...">` 无法设置请求头，因此支持 `?token=` 查询参数（下载直链同款机制）；不要把带令牌的 URL 长期保存或分享。
+
+### 4.8 撤回消息
+
+```http
+POST /api/chat/messages/:id/recall
+```
+
+- 仅**发送者本人**可撤回，且仅在消息发出后 **2 分钟内**（服务端时间为准）。
+- 撤回后：正文清空、`recalledAt` 置为当前时间；若为图片消息，服务端会删除存储节点上的图片文件并清空 `image` 信息。
+- 返回 `{ "message": { ... } }`（已撤回状态），并向全部成员广播 `message:recalled`。
+- 错误：非发送者 `403 只能撤回自己发送的消息`；已撤回 `409 消息已撤回`；超时 `400 超过撤回时限（2 分钟）`；不存在 / 非成员 `404 消息不存在`。
+
+### 4.9 标记已读
 
 ```http
 PUT /api/chat/conversations/:id/read   { "lastMessageId": 88 }
@@ -209,7 +265,7 @@ PUT /api/chat/conversations/:id/read   { "lastMessageId": 88 }
 - 仅成员；已读位置只前进不后退：`lastReadMessageId = max(原值, min(请求值, 最新消息 id))`。
 - 返回 `{ "lastReadMessageId": 88 }`。
 
-### 4.7 摘要（侧边栏角标）
+### 4.10 摘要（侧边栏角标）
 
 ```http
 GET /api/chat/summary
@@ -271,6 +327,7 @@ ws(s)://<host>/ws/chat
 | 事件 | 载荷 | 触发时机 |
 |---|---|---|
 | `message:new` | `{ type, conversationId, message }` | 新消息（推给全部成员；发送者自己的其它标签页也会收到） |
+| `message:recalled` | `{ type, conversationId, message }` | 消息被撤回，`message` 为撤回后的状态（`recalledAt` 非空） |
 | `conversation:updated` | `{ type, conversationId }` | 建群、群改名、加人、移除成员（剩余成员）、好友关系变化后的列表刷新提示 |
 | `conversation:removed` | `{ type, conversationId }` | 被移出群 / 退群 / 群解散 |
 | `friend:request` | `{ type, request: { id, from: { id, username }, createdAt } }` | 收到好友申请 |
@@ -278,7 +335,7 @@ ws(s)://<host>/ws/chat
 | `friend:rejected` | `{ type, userId }` | 对方拒绝了我的申请 |
 | `friend:removed` | `{ type, userId }` | 对方删除了与我的好友关系 |
 
-`message` 字段与 REST 中的消息结构一致（`id / conversationId / senderId / sender / content / createdAt`）。
+`message` 字段与 REST 中的消息结构一致（`id / conversationId / senderId / sender / content / createdAt / type / recalledAt / image`）。
 
 > WebSocket 是**尽力实时**通道：断线重连后请重新调用 `GET /chat/conversations` 与当前会话的历史消息接口，未读数以 `GET /chat/summary` / 会话列表为准。
 
@@ -307,6 +364,16 @@ curl -X POST $BASE/chat/conversations/12/messages -H "Authorization: Bearer $TOK
 # 创建群聊（userId 5、6 必须都是我的好友）
 curl -X POST $BASE/chat/conversations/group -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' -d '{"name":"项目组","memberIds":[5,6]}'
+
+# 发送图片（multipart，字段名 file）
+curl -X POST $BASE/chat/conversations/12/images -H "Authorization: Bearer $TOKEN" \
+  -F "file=@photo.jpg;type=image/jpeg"
+
+# 读取图片（<img> 直链可带令牌；curl 用认证头更方便）
+curl "$BASE/chat/messages/89/image" -H "Authorization: Bearer $TOKEN" -o photo.webp
+
+# 撤回 2 分钟内的消息
+curl -X POST $BASE/chat/messages/88/recall -H "Authorization: Bearer $TOKEN"
 ```
 
 ---
@@ -316,8 +383,10 @@ curl -X POST $BASE/chat/conversations/group -H "Authorization: Bearer $TOKEN" \
 | 场景 | 状态码 |
 |---|---|
 | 未登录 / 令牌失效 | 401 |
-| 非好友创建私聊、取消好友后发消息、非群主操作群 | 403 |
-| 会话不存在 / 非成员访问、好友申请不存在 | 404 |
-| 已是好友、重复 pending 申请、申请已处理 | 409 |
+| 非好友创建私聊、取消好友后发消息、非群主操作群、撤回他人消息 | 403 |
+| 会话不存在 / 非成员访问、好友申请不存在、图片不存在 / 已撤回 | 404 |
+| 已是好友、重复 pending 申请、申请已处理、消息已撤回 | 409 |
 | 好友申请过多、写操作过频 | 429 |
-| 参数校验失败（空消息、群名过长、成员超限等） | 400 |
+| 参数校验失败（空消息、群名过长、成员超限、撤回超时等） | 400 |
+| 图片单张超限 / 网盘空间不足 | 413 |
+| 存储节点未接入（发图 / 读图） | 503 |

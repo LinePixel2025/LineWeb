@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
+import busboy from 'busboy'
 import { z } from 'zod'
 import { AppError } from '../middleware/errorHandler.js'
 import { asyncHandler } from '../lib/asyncHandler.js'
@@ -32,7 +33,18 @@ import {
   removeGroupMember,
   deleteGroupConversation,
   getUserBrief,
+  assertConversationWritable,
+  recallMessage,
+  getMessageImageSource,
 } from '../services/chatService.js'
+import {
+  CHAT_IMAGE_MAX_BYTES,
+  ChatImageLimitError,
+  chatImageLimitBody,
+  uploadChatImage,
+} from '../services/chatImageService.js'
+import { getDriveQuota, formatQuotaSize } from '../services/driveQuota.js'
+import { isNodeConnected, streamRead } from '../services/storageTunnel.js'
 import { sendToUser, sendToUsers } from '../services/chatHub.js'
 
 /**
@@ -95,6 +107,69 @@ function parseBefore(raw: unknown): number | undefined {
   if (typeof raw !== 'string' || raw.trim() === '') return undefined
   const value = Number.parseInt(raw, 10)
   return Number.isInteger(value) && value > 0 ? value : undefined
+}
+
+// === 图片上传（multipart 解析） ===
+
+interface MultipartImageFile {
+  buffer: Buffer
+  mimeType: string
+  /** busboy 的 fileSize 上限被触发（文件流已被截断） */
+  limitHit: boolean
+}
+
+/**
+ * 用 busboy 解析 multipart 中的单个图片字段（字段名必须为 `file`），收齐到内存。
+ *
+ * 原始上限只有 10 MiB，直接缓冲可接受；触发 fileSize 上限时返回 limitHit=true，
+ * 由调用方区分「配额不足」（QUOTA_EXCEEDED）与「单张超限」（IMAGE_TOO_LARGE）。
+ */
+function receiveMultipartImage(req: Request, fileSizeLimit: number): Promise<MultipartImageFile> {
+  return new Promise((resolve, reject) => {
+    let bb: ReturnType<typeof busboy>
+    try {
+      bb = busboy({ headers: req.headers, limits: { fileSize: fileSizeLimit, files: 1 } })
+    } catch {
+      reject(new AppError('请使用 multipart/form-data 上传图片', 400))
+      return
+    }
+
+    const chunks: Buffer[] = []
+    let fileSeen = false
+    let limitHit = false
+    let mimeType = ''
+    let settled = false
+
+    const finish = (err: Error | null, result?: MultipartImageFile): void => {
+      if (settled) return
+      settled = true
+      if (err) reject(err)
+      else if (result) resolve(result)
+    }
+
+    bb.on('file', (fieldname: string, stream: NodeJS.ReadableStream, info: { mimeType: string }) => {
+      // 只接受字段名 file；多余文件直接丢弃，避免阻塞解析
+      if (fieldname !== 'file' || fileSeen) {
+        stream.resume()
+        return
+      }
+      fileSeen = true
+      mimeType = info.mimeType
+      stream.on('data', (chunk: Buffer) => chunks.push(chunk))
+      stream.on('limit', () => { limitHit = true })
+      stream.on('error', (err: Error) => finish(err))
+    })
+    bb.on('error', (err: Error) => finish(err))
+    bb.on('close', () => {
+      if (!fileSeen) {
+        finish(new AppError('请选择要发送的图片', 400))
+        return
+      }
+      finish(null, { buffer: Buffer.concat(chunks), mimeType, limitHit })
+    })
+    req.on('aborted', () => finish(new AppError('图片上传已中断', 400)))
+    req.pipe(bb)
+  })
 }
 
 // === 摘要与用户搜索 ===
@@ -213,6 +288,123 @@ router.post('/conversations/:id/messages', chatWriteLimiter, asyncHandler(async 
   // 推给全部成员（含自己其它标签页）
   sendToUsers(memberIds, { type: 'message:new', conversationId, message })
   res.status(201).json({ message })
+}))
+
+// POST /api/chat/conversations/:id/images — 发送图片消息（multipart/form-data，字段名 file）
+router.post('/conversations/:id/images', chatWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const userId = currentUserId(req)
+    const conversationId = parseIdParam(req.params.id, '会话 ID')
+
+    // 成员校验 + direct 会话好友校验（与发送文本消息一致）
+    const { memberIds } = await assertConversationWritable(conversationId, userId)
+
+    if (!isNodeConnected()) {
+      throw new AppError('存储节点未接入，暂时无法发送图片', 503)
+    }
+
+    // === 配额预检：空间已满直接 413（drive:all 不受限） ===
+    const quota = await getDriveQuota(req.user!)
+    if (!quota.unlimited && quota.remaining !== null && quota.remaining <= 0n) {
+      throw new ChatImageLimitError('网盘空间不足', 'QUOTA_EXCEEDED', {
+        quota: quota.quota ?? undefined,
+        used: quota.used,
+        remaining: 0n,
+      })
+    }
+
+    // 单张允许的原始上限 = min(10 MiB, 剩余空间)；配额更小时以配额为准
+    const hardLimitBytes = BigInt(CHAT_IMAGE_MAX_BYTES)
+    const remainingBytes = quota.unlimited ? null : quota.remaining
+    const quotaLimited = remainingBytes !== null && remainingBytes < hardLimitBytes
+    const effectiveLimitBytes = quotaLimited && remainingBytes !== null ? remainingBytes : hardLimitBytes
+    const effectiveLimit = Number(effectiveLimitBytes)
+
+    const file = await receiveMultipartImage(req, effectiveLimit)
+    if (file.limitHit) {
+      if (quotaLimited && remainingBytes !== null) {
+        throw new ChatImageLimitError(
+          `网盘空间不足（剩余 ${formatQuotaSize(remainingBytes)}）`,
+          'QUOTA_EXCEEDED',
+          { quota: quota.quota ?? undefined, used: quota.used, remaining: 0n },
+        )
+      }
+      throw new ChatImageLimitError(
+        `图片大小超过限制 (${formatQuotaSize(hardLimitBytes)})`,
+        'IMAGE_TOO_LARGE',
+      )
+    }
+
+    // 处理 + 写节点 + 写后配额复核 + 落库
+    const message = await uploadChatImage({
+      userId,
+      conversationId,
+      buffer: file.buffer,
+      mimeType: file.mimeType,
+      quota,
+    })
+
+    // 推给全部成员（含自己其它标签页）
+    sendToUsers(memberIds, { type: 'message:new', conversationId, message })
+    res.status(201).json({ message })
+  } catch (err) {
+    // 大小/配额类错误按 drive.ts 的 413 响应体返回（errorHandler 不认识该错误类型）
+    if (err instanceof ChatImageLimitError) {
+      if (!res.headersSent) res.status(413).json(chatImageLimitBody(err))
+      return
+    }
+    throw err
+  }
+}))
+
+// POST /api/chat/messages/:id/recall — 撤回消息（2 分钟内，仅发送者）
+router.post('/messages/:id/recall', chatWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const userId = currentUserId(req)
+  const messageId = parseIdParam(req.params.id, '消息 ID')
+  const { message, memberIds } = await recallMessage(userId, messageId)
+
+  // 推给全部成员（含自己其它标签页），前端把该条消息替换为「已撤回」
+  sendToUsers(memberIds, {
+    type: 'message:recalled',
+    conversationId: message.conversationId,
+    message,
+  })
+  res.json({ message })
+}))
+
+// GET /api/chat/messages/:id/image — 读取图片消息（成员校验；支持 ?token= 直链）
+router.get('/messages/:id/image', asyncHandler(async (req: Request, res: Response) => {
+  const userId = currentUserId(req)
+  const messageId = parseIdParam(req.params.id, '消息 ID')
+  const image = await getMessageImageSource(userId, messageId)
+
+  if (!isNodeConnected()) {
+    throw new AppError('存储节点未接入，暂时无法读取图片', 503)
+  }
+
+  // 覆盖全局认证中间件设置的 Cache-Control: no-store —— 图片内容按路径不可变，可长期缓存
+  res.setHeader('Content-Type', 'image/webp')
+  res.setHeader('Content-Disposition', 'inline')
+  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable')
+  if (image.imageSize !== null) {
+    res.setHeader('Content-Length', image.imageSize.toString())
+  }
+
+  try {
+    for await (const chunk of streamRead(image.imagePath)) {
+      if (!res.write(chunk)) {
+        await new Promise<void>(resolve => res.once('drain', resolve))
+      }
+    }
+    res.end()
+  } catch (err) {
+    console.error('读取聊天图片失败:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: '读取图片失败' })
+      return
+    }
+    if (!res.writableEnded) res.destroy(err instanceof Error ? err : undefined)
+  }
 }))
 
 // PUT /api/chat/conversations/:id/read — 更新已读位置（只前进不后退）

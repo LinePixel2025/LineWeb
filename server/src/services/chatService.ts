@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import prisma from '../lib/prisma.js'
 import { AppError } from '../middleware/errorHandler.js'
+import { isNodeConnected, sendCommand } from './storageTunnel.js'
 
 /**
  * 聊天业务逻辑（好友、会话、消息）
@@ -19,6 +20,22 @@ export interface ChatUserBrief {
   username: string
 }
 
+/** 消息类型：文本 / 图片（图片消息正文为空串） */
+export type ChatMessageType = 'text' | 'image'
+
+export interface ChatMessageImageDto {
+  width: number | null
+  height: number | null
+  /** 处理后的字节数（字符串，避免 BigInt 不能 JSON 序列化） */
+  size: string | null
+}
+
+/**
+ * 消息 DTO —— REST 与 WebSocket 共用，字段名必须与前端契约一致。
+ *
+ * 已撤回消息：content 为 ''、image 为 null，但 sender 仍返回
+ * （前端据此渲染「你/xxx 撤回了一条消息」）。
+ */
 export interface ChatMessageDto {
   id: number
   conversationId: number
@@ -26,6 +43,9 @@ export interface ChatMessageDto {
   sender: ChatUserBrief
   content: string
   createdAt: Date
+  type: ChatMessageType
+  recalledAt: Date | null
+  image: ChatMessageImageDto | null
 }
 
 export interface ChatConversationMemberDto {
@@ -60,12 +80,20 @@ const MESSAGE_MAX_LENGTH = 2000
 const GROUP_MEMBER_LIMIT = 50
 /** 单用户最多同时待处理的「发出的好友申请」数 */
 const PENDING_FRIEND_REQUEST_LIMIT = 20
+/** 消息撤回时限：2 分钟（以服务端时间为准） */
+export const MESSAGE_RECALL_WINDOW_MS = 2 * 60 * 1000
 
 type MessageRow = {
   id: number
   conversationId: number
   senderId: number
   content: string
+  type: string
+  imagePath: string | null
+  imageWidth: number | null
+  imageHeight: number | null
+  imageSize: bigint | null
+  recalledAt: Date | null
   createdAt: Date
   sender: { id: number; username: string }
 }
@@ -74,14 +102,26 @@ const messageInclude = {
   sender: { select: { id: true, username: true } },
 } as const
 
+/** 数据库行 → 消息 DTO（REST 与 WS 共用，已撤回消息隐藏正文与图片） */
 function toMessageDto(message: MessageRow): ChatMessageDto {
+  const recalled = message.recalledAt !== null
+  const type: ChatMessageType = message.type === 'image' ? 'image' : 'text'
   return {
     id: message.id,
     conversationId: message.conversationId,
     senderId: message.senderId,
     sender: { id: message.sender.id, username: message.sender.username },
-    content: message.content,
+    content: recalled ? '' : message.content,
     createdAt: message.createdAt,
+    type,
+    recalledAt: message.recalledAt,
+    image: type === 'image' && !recalled
+      ? {
+          width: message.imageWidth,
+          height: message.imageHeight,
+          size: message.imageSize !== null ? message.imageSize.toString() : null,
+        }
+      : null,
   }
 }
 
@@ -679,6 +719,27 @@ export async function listMessages(
 }
 
 /**
+ * 校验当前用户可以向会话发送消息（文本与图片共用同一套规则）
+ *
+ * 非成员一律 404（不泄露会话是否存在）；direct 会话要求双方仍是好友，否则 403。
+ */
+export async function assertConversationWritable(
+  conversationId: number,
+  userId: number,
+): Promise<{ conversation: { id: number; type: string; name: string | null; ownerId: number | null }; memberIds: number[] }> {
+  const { conversation, memberIds } = await requireMembership(conversationId, userId)
+
+  if (conversation.type === 'direct') {
+    const otherId = memberIds.find(id => id !== userId)
+    if (!otherId || !(await areFriends(userId, otherId))) {
+      throw new AppError('你们已不是好友，无法发送消息', 403)
+    }
+  }
+
+  return { conversation, memberIds }
+}
+
+/**
  * POST /chat/conversations/:id/messages —— 发送消息
  *
  * 只有成员可发；direct 会话要求双方仍是好友（否则 403）；
@@ -693,19 +754,12 @@ export async function sendMessage(
   if (!content) throw new AppError('消息不能为空', 400)
   if (content.length > MESSAGE_MAX_LENGTH) throw new AppError('消息过长', 400)
 
-  const { conversation, memberIds } = await requireMembership(conversationId, userId)
-
-  if (conversation.type === 'direct') {
-    const otherId = memberIds.find(id => id !== userId)
-    if (!otherId || !(await areFriends(userId, otherId))) {
-      throw new AppError('你们已不是好友，无法发送消息', 403)
-    }
-  }
+  const { memberIds } = await assertConversationWritable(conversationId, userId)
 
   const now = new Date()
   const message = await prisma.$transaction(async (tx) => {
     const created = await tx.message.create({
-      data: { conversationId, senderId: userId, content },
+      data: { conversationId, senderId: userId, content, type: 'text' },
       include: messageInclude,
     })
     await tx.conversation.update({
@@ -716,6 +770,139 @@ export async function sendMessage(
   })
 
   return { message: toMessageDto(message), memberIds }
+}
+
+/** 创建图片消息需要的元数据（节点文件由 chatImageService 先行写入） */
+export interface CreateChatImageInput {
+  imagePath: string
+  imageWidth: number
+  imageHeight: number
+  /** 处理后的 WebP 字节数 */
+  imageSize: number
+}
+
+/**
+ * 写入图片消息：content 为空串、type='image'，并在同一事务内推进会话 lastMessageAt。
+ * 调用方负责成员/好友校验、配额校验与节点文件写入。
+ */
+export async function createImageMessage(
+  userId: number,
+  conversationId: number,
+  image: CreateChatImageInput,
+): Promise<ChatMessageDto> {
+  const now = new Date()
+  const message = await prisma.$transaction(async (tx) => {
+    const created = await tx.message.create({
+      data: {
+        conversationId,
+        senderId: userId,
+        content: '',
+        type: 'image',
+        imagePath: image.imagePath,
+        imageWidth: image.imageWidth,
+        imageHeight: image.imageHeight,
+        imageSize: BigInt(image.imageSize),
+      },
+      include: messageInclude,
+    })
+    await tx.conversation.update({
+      where: { id: conversationId },
+      data: { lastMessageAt: now },
+    })
+    return created
+  })
+
+  return toMessageDto(message)
+}
+
+/**
+ * POST /chat/messages/:id/recall —— 撤回消息（2 分钟内、仅发送者）
+ *
+ * 消息不存在或当前用户不是会话成员一律 404（不泄露存在性）；
+ * 撤回图片时清空图片字段，并 best-effort 删除存储节点上的文件（失败不影响撤回）。
+ */
+export async function recallMessage(
+  userId: number,
+  messageId: number,
+): Promise<{ message: ChatMessageDto; memberIds: number[] }> {
+  const message = await prisma.message.findUnique({
+    where: { id: messageId },
+    include: {
+      sender: { select: { id: true, username: true } },
+      conversation: { select: { members: { select: { userId: true } } } },
+    },
+  })
+  if (!message) throw new AppError('消息不存在', 404)
+
+  const memberIds = message.conversation.members.map(member => member.userId)
+  if (!memberIds.includes(userId)) throw new AppError('消息不存在', 404)
+
+  if (message.senderId !== userId) throw new AppError('只能撤回自己发送的消息', 403)
+  if (message.recalledAt !== null) throw new AppError('消息已撤回', 409)
+  if (Date.now() - message.createdAt.getTime() > MESSAGE_RECALL_WINDOW_MS) {
+    throw new AppError('超过撤回时限（2 分钟）', 400)
+  }
+
+  const isImage = message.type === 'image'
+  const imagePath = message.imagePath
+
+  // 用 recalledAt: null 作为并发保护：两个标签页同时撤回时只有一个能成功
+  const recalledAt = new Date()
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.message.updateMany({
+      where: { id: message.id, recalledAt: null },
+      data: {
+        content: '',
+        recalledAt,
+        ...(isImage
+          ? { imagePath: null, imageWidth: null, imageHeight: null, imageSize: null }
+          : {}),
+      },
+    })
+    if (result.count === 0) throw new AppError('消息已撤回', 409)
+    return tx.message.findUniqueOrThrow({
+      where: { id: message.id },
+      include: messageInclude,
+    })
+  })
+
+  // 图片消息：撤回后释放存储节点文件（best-effort，失败忽略）
+  if (isImage && imagePath && isNodeConnected()) {
+    await sendCommand({ type: 'delete_file', path: imagePath }).catch(() => {})
+  }
+
+  return { message: toMessageDto(updated), memberIds }
+}
+
+/**
+ * GET /chat/messages/:id/image —— 取图片消息的节点路径与原始字节数
+ *
+ * 消息不存在 / 非成员 / 非图片 / 已撤回 / 无图片路径 一律 404（不泄露存在性）。
+ */
+export async function getMessageImageSource(
+  userId: number,
+  messageId: number,
+): Promise<{ imagePath: string; imageSize: bigint | null }> {
+  const message = await prisma.message.findUnique({
+    where: { id: messageId },
+    select: {
+      type: true,
+      imagePath: true,
+      imageSize: true,
+      recalledAt: true,
+      conversation: { select: { members: { select: { userId: true } } } },
+    },
+  })
+  if (!message) throw new AppError('图片不存在', 404)
+
+  const isMember = message.conversation.members.some(member => member.userId === userId)
+  if (!isMember) throw new AppError('图片不存在', 404)
+
+  if (message.type !== 'image' || message.recalledAt !== null || !message.imagePath) {
+    throw new AppError('图片不存在', 404)
+  }
+
+  return { imagePath: message.imagePath, imageSize: message.imageSize }
 }
 
 /**
@@ -851,6 +1038,26 @@ export async function deleteGroupConversation(
   if (conversation.type !== 'group') throw new AppError('仅群聊支持解散', 403)
   if (conversation.ownerId !== userId) throw new AppError('只有群主可以解散群聊', 403)
 
+  // 解散前 best-effort 清理该会话下所有图片消息的节点文件（失败不阻断解散）
+  await deleteConversationImageFiles(conversationId)
+
   await prisma.conversation.delete({ where: { id: conversationId } })
   return { memberIds }
+}
+
+/** best-effort 删除某会话下所有图片消息的节点文件；任何失败都忽略 */
+async function deleteConversationImageFiles(conversationId: number): Promise<void> {
+  if (!isNodeConnected()) return
+  try {
+    const images = await prisma.message.findMany({
+      where: { conversationId, type: 'image', imagePath: { not: null } },
+      select: { imagePath: true },
+    })
+    for (const image of images) {
+      if (!image.imagePath) continue
+      await sendCommand({ type: 'delete_file', path: image.imagePath }).catch(() => {})
+    }
+  } catch (err) {
+    console.warn('[Chat] 清理会话图片文件失败（忽略）:', err)
+  }
 }

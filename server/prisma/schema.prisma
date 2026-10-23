@@ -12,7 +12,7 @@ model User {
   username         String    @unique
   email            String    @unique
   password         String
-  role             String    @default("user")
+  role             String    @default("author") // 新注册用户默认 author（可发布自己的文章）
   settings         String?   // JSON：用户个性化设置（背景类型、颜色等）
   canAccessDrive   Boolean   @default(false) // 是否有网盘访问权限
   storageQuota     BigInt    @default(2147483648) @map("storage_quota") // 网盘空间上限（字节，默认 2 GiB）
@@ -307,11 +307,17 @@ model ConversationMember {
 }
 
 model Message {
-  id             Int      @id @default(autoincrement())
-  conversationId Int      @map("conversation_id")
-  senderId       Int      @map("sender_id")
-  content        String
-  createdAt      DateTime @default(now()) @map("created_at")
+  id             Int       @id @default(autoincrement())
+  conversationId Int       @map("conversation_id")
+  senderId       Int       @map("sender_id")
+  content        String    @default("") // 文本正文；图片消息与已撤回消息为空串
+  type           String    @default("text") // text | image
+  imagePath      String?   @map("image_path") // 存储节点相对路径 _chat/<conversationId>/<uuid>.webp
+  imageWidth     Int?      @map("image_width")
+  imageHeight    Int?      @map("image_height")
+  imageSize      BigInt?   @map("image_size") // 处理后的字节数（计入网盘配额）
+  recalledAt     DateTime? @map("recalled_at") // 非空 = 已撤回
+  createdAt      DateTime  @default(now()) @map("created_at")
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)

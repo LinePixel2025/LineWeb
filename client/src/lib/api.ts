@@ -1,13 +1,18 @@
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 const TOKEN_KEY = 'lineweb_token'
 const DEFAULT_TIMEOUT_MS = 30_000
+/** 图片上传需要更长的超时（服务端还会处理图片，30s 不够） */
+const UPLOAD_TIMEOUT_MS = 120_000
 
 interface RequestOptions {
   method?: string
   body?: unknown
+  /** multipart/form-data 表单；与 body 互斥，设置后不写 Content-Type（交给浏览器补 boundary） */
+  form?: FormData
   headers?: Record<string, string>
   signal?: AbortSignal
   noRedirect?: boolean
+  timeoutMs?: number
 }
 
 class ApiError extends Error {
@@ -61,13 +66,14 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     headers['Cache-Control'] = 'no-cache'
   }
 
-  if (options.body && !headers['Content-Type']) {
+  if (options.body && !options.form && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json'
   }
+  // multipart 表单不设置 Content-Type：浏览器会自动补上带 boundary 的值
 
-  // 默认 30s 超时
+  // 默认 30s 超时；上传等长耗时场景可通过 timeoutMs 放宽
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS)
+  const timeoutId = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
   // 链接外部 signal（调用方主动取消时同步触发内部 controller）
   if (options.signal) {
     if (options.signal.aborted) {
@@ -84,7 +90,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     const res = await fetch(`${API_BASE}${path}`, {
       method: options.method || 'GET',
       headers,
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      body: options.form ?? (options.body ? JSON.stringify(options.body) : undefined),
       signal: controller.signal,
     })
 
@@ -128,6 +134,15 @@ export const api = {
     request<T>(path, { signal: opts?.signal, noRedirect: opts?.noRedirect }),
   post: <T>(path: string, body?: unknown, opts?: { noRedirect?: boolean }) =>
     request<T>(path, { method: 'POST', body, noRedirect: opts?.noRedirect }),
+  /** multipart/form-data 上传（图片等）：不设置 Content-Type，超时放宽到 120s */
+  postForm: <T>(path: string, form: FormData, opts?: { signal?: AbortSignal; noRedirect?: boolean }) =>
+    request<T>(path, {
+      method: 'POST',
+      form,
+      signal: opts?.signal,
+      noRedirect: opts?.noRedirect,
+      timeoutMs: UPLOAD_TIMEOUT_MS,
+    }),
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
   text: (path: string) => requestText(path),

@@ -10,6 +10,14 @@ export interface SyncReport {
   durationMs: number
 }
 
+/** 存储节点上的系统目录（不进入网盘）：头像 / 聊天图片 */
+const SYSTEM_DIRECTORIES = ['_avatars', '_chat']
+
+/** 路径是否属于系统目录（目录本身或其下的任意层级） */
+function isSystemPath(path: string): boolean {
+  return SYSTEM_DIRECTORIES.some(dir => path === dir || path.startsWith(dir + '/'))
+}
+
 /**
  * 执行一次网盘文件同步：
  * 1. 检查存储节点连接
@@ -38,8 +46,8 @@ export async function syncDriveFiles(uploaderUserId?: number): Promise<SyncRepor
   try {
     // 1. 递归列出存储节点所有路径（文件 + 文件夹）
     const nodePaths = await listDirRecursive('')
-    // 排除隐藏的系统目录（如 _avatars/），这些不应出现在网盘中
-    const filteredPaths = nodePaths.filter(p => p !== '_avatars' && !p.startsWith('_avatars/'))
+    // 排除隐藏的系统目录（_avatars/ 头像、_chat/ 聊天图片），这些不应出现在网盘中
+    const filteredPaths = nodePaths.filter(p => !isSystemPath(p))
     report.scanned = filteredPaths.length
 
     // 2. 获取数据库全部记录

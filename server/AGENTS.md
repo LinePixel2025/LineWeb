@@ -45,12 +45,12 @@ helmet(CSP) → cors → compression → body parser(1mb) → rate-limit(600/15m
 
 - **JWT payload**：`{ userId, role, ts }`；`ts` 为毫秒级签发时间，与 `user.tokenValidAfter` 精确比较（登出/改密后同秒内旧令牌也立即失效）。
 - **权限不信任令牌**：`capabilities`（由角色展开）、`canAccessDrive` 与网盘 `storageQuota` 每次请求从数据库解析 → 角色变更即时生效。
-- **能力矩阵**：`src/lib/permissions.ts`（`USER_ROLES`、`CAPABILITIES`、`capabilitiesForRole`、`roleHasCapability`）；角色 `user`/`author`/`admin`，`author` 仅 `content:write`，`content:manage`（全站文章 + 页面）仅 admin，admin 拥有全部能力，user 无管理能力。
+- **能力矩阵**：`src/lib/permissions.ts`（`USER_ROLES`、`CAPABILITIES`、`capabilitiesForRole`、`roleHasCapability`）；角色 `user`/`author`/`admin`，**注册默认 `author`**（schema 默认值 + `registerUser` 显式指定；存量账号可用 `scripts/promote-users-to-author.ts` 一次性提升），`author` 仅 `content:write`，`content:manage`（全站文章 + 页面）仅 admin，admin 拥有全部能力，user 无管理能力。
 - **守卫**：`requireCapability('user:manage')` 等（替代旧的 `requireAdmin`）；`optionalAuthenticate` 用于公开但可选的端点（`/api/ai/chat`）。
 - **公开路径**（全局中间件跳过，共 13 条）：`/auth/login`、`/auth/register`、`/auth/avatar`、`/health`、`/posts`、`/pages/featured`、`/pages/slug`、`/stats/public`、`/version`、`/comments/post`、`/ai/chat`、`/oauth/token`、`/oauth/revoke`（后两条为精确路径匹配）。
 - **已移除**：`X-API-Key`（apiKeys 路由与 `ApiKey` 表）、`X-Screen-Time-Token`（`middleware/screenTimeAuth.ts` 与 `ScreenTimeToken` 表）。
-- **Drive 权限**：`router.use(authenticate, ...)` 内联判断 `req.user.canAccessDrive || 具备 drive:all 能力`（不再有 60s 内存缓存与 `clearDriveAccessCache`）；上传受 `storageQuota` 配额约束（`drive:all` 不限），`POST /drive/sync` 仅 `drive:all`。
-- **聊天**：`/api/chat/*` 全部要求登录；WS `/ws/chat` 用认证帧 + `resolveAuthContext`，拒绝 app/download 令牌；聊天写操作限流 120 次 / 5 分钟 / 用户。
+- **Drive 权限**：`router.use(authenticate, ...)` 内联判断 `req.user.canAccessDrive || 具备 drive:all 能力`（不再有 60s 内存缓存与 `clearDriveAccessCache`）；上传受 `storageQuota` 配额约束（`drive:all` 不限），`POST /drive/sync` 仅 `drive:all`；**已用空间包含聊天图片**（`driveQuota.getDriveUsage` 会叠加 `Message.imageSize`，撤回后不计）。
+- **聊天**：`/api/chat/*` 全部要求登录；WS `/ws/chat` 用认证帧 + `resolveAuthContext`，拒绝 app/download 令牌；聊天写操作限流 120 次 / 5 分钟 / 用户；**图片消息**走 `chatImageService`（busboy + sharp 转 WebP → 存储节点 `_chat/`，计入网盘配额），**2 分钟撤回**由 `chatService.recallMessage` 强制（撤回图片会删节点文件并释放配额）。
 - **下载票据**：`POST /api/drive/download-ticket/:id` 签发的票据带毫秒级 `ts`（与登录令牌同样的失效精度），且 `type === 'download'` 的票据**只能访问两个下载端点**，访问其它 API 返回 403 `下载票据仅可用于文件下载`；`optionalAuthenticate` 对票据按游客处理。
 
 ## 路由
@@ -70,7 +70,7 @@ helmet(CSP) → cors → compression → body parser(1mb) → rate-limit(600/15m
 | ai.ts | chat / chat/public / write/* / config | `/chat` 走 `optionalAuthenticate`；写作辅助需 `content:write`，`/config` 需 `ai:configure` |
 | oauth.ts | token / revoke / authorize-context / authorize / grants / clients | `token`、`revoke` 公开（精确路径 + `oauthLimiter`）；`authorize*`/`grants` 需登录；`clients` 需 `app:manage` |
 | driveFavorites.ts | 收藏夹 CRUD + reorder | `router.use(authenticate)`；挂载在 `/api/drive/favorites` |
-| chat.ts | summary / users/search / friends / friend-requests / conversations / messages / read / group members | `router.use(authenticate)`；写操作 5 分钟 120 次/用户限流；返回前广播 WS 事件 |
+| chat.ts | summary / users/search / friends / friend-requests / conversations / messages / images / recall / read / group members | `router.use(authenticate)`；写操作 5 分钟 120 次/用户限流；返回前广播 WS 事件（含 `message:recalled`）；图片读取支持 `?token=` 直链 |
 
 ## 服务层
 
@@ -87,8 +87,9 @@ helmet(CSP) → cors → compression → body parser(1mb) → rate-limit(600/15m
 | aiService | OpenAI 兼容调用、提示词与上下文拼装 | findUnique/update（AiConfig） |
 | oauthService | OAuth 2.0 授权码 / PKCE / 刷新轮换与吊销 | OAuthClient/Grant/Code/RefreshToken |
 | ftsSearch | SQLite FTS5 全文索引（启动时建表） | $queryRaw（FTS 虚拟表） |
-| driveQuota | 网盘配额计算（getDriveUsage / getDriveQuota / formatQuotaSize） | aggregate/groupBy（DriveFile.size） |
-| chatService | 好友 / 好友申请 / 会话 / 消息 / 群管理业务逻辑 | Friendship/FriendRequest/Conversation/ConversationMember/Message |
+| driveQuota | 网盘配额计算（getDriveUsage / getDriveQuota / formatQuotaSize）；getDriveUsage = 网盘文件 + 聊天图片 | aggregate/groupBy（DriveFile.size / Message.imageSize） |
+| chatService | 好友 / 好友申请 / 会话 / 消息（文本、图片 DTO）/ 2 分钟撤回 / 群管理业务逻辑 | Friendship/FriendRequest/Conversation/ConversationMember/Message |
+| chatImageService | 聊天图片：busboy 流 → sharp 归一化（EXIF/2048/WebP）→ 存储节点 `_chat/<conversationId>/` → 配额复核 | Message（内部由路由事务写入） |
 | chatHub | 聊天 WebSocket Hub：认证、在线连接 Map、心跳、sendToUser(s) | 无（纯 WebSocket + resolveAuthContext） |
 
 ## 反模式 / 注意事项

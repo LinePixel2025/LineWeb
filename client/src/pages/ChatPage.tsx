@@ -49,6 +49,13 @@ function extractConversation(payload: ConversationResponse & Partial<Conversatio
   return null
 }
 
+/** 兼容服务端直接返回消息或包在 { message } 中的两种形式 */
+function extractMessage(payload: SendMessageResponse & Partial<Message>): Message | null {
+  if (payload.message) return payload.message
+  if (typeof payload.id === 'number') return payload as Message
+  return null
+}
+
 export default function ChatPage() {
   const { user } = useAuth()
   const meId = user?.id ?? 0
@@ -214,6 +221,36 @@ export default function ChatPage() {
     }
   }, [activeId, messages, messagesHasMore, messagesLoadingMore])
 
+  /**
+   * 把刚刚发出的消息合并进当前会话，并更新会话列表的最后一条消息。
+   *
+   * 上传/发送期间用户可能已切到别的会话：只有当前仍停留在该会话时才合并进消息列表，
+   * 否则只更新会话列表（避免消息被渲染进错误的会话窗口）。
+   */
+  const applyOutgoingMessage = useCallback(
+    (conversationId: number, created: Message) => {
+      if (activeIdRef.current === conversationId) {
+        setMessages((prev) => mergeMessages(prev, created))
+      }
+      setConversations((prev) =>
+        sortConversations(
+          prev.map((conversation) =>
+            conversation.id === conversationId
+              ? {
+                  ...conversation,
+                  lastMessage: created,
+                  lastMessageAt: created.createdAt,
+                  unreadCount: 0,
+                }
+              : conversation
+          )
+        )
+      )
+      void markRead(conversationId, created.id)
+    },
+    [markRead]
+  )
+
   const sendMessage = useCallback(
     async (content: string) => {
       if (activeId === null) return
@@ -223,26 +260,10 @@ export default function ChatPage() {
           `/chat/conversations/${activeId}/messages`,
           { content }
         )
-        const created: Message | null =
-          data.message ?? (typeof data.id === 'number' ? (data as Message) : null)
+        const created = extractMessage(data)
 
         if (created) {
-          setMessages((prev) => mergeMessages(prev, created))
-          setConversations((prev) =>
-            sortConversations(
-              prev.map((conversation) =>
-                conversation.id === activeId
-                  ? {
-                      ...conversation,
-                      lastMessage: created,
-                      lastMessageAt: created.createdAt,
-                      unreadCount: 0,
-                    }
-                  : conversation
-              )
-            )
-          )
-          void markRead(activeId, created.id)
+          applyOutgoingMessage(activeId, created)
         } else {
           // 契约未约定响应体时回退到重新拉取最后一页，避免消息丢失
           const data2 = await api.get<MessagesResponse>(`/chat/conversations/${activeId}/messages?limit=30`)
@@ -253,8 +274,55 @@ export default function ChatPage() {
         throw error
       }
     },
-    [activeId, markRead]
+    [activeId, applyOutgoingMessage]
   )
+
+  /** 发送图片：multipart 字段名固定为 file */
+  const sendImage = useCallback(
+    async (file: File) => {
+      if (activeId === null) return
+      setActionError(null)
+      const form = new FormData()
+      form.append('file', file)
+      try {
+        const data = await api.postForm<SendMessageResponse & Partial<Message>>(
+          `/chat/conversations/${activeId}/images`,
+          form
+        )
+        const created = extractMessage(data)
+        if (created) {
+          applyOutgoingMessage(activeId, created)
+        } else {
+          const data2 = await api.get<MessagesResponse>(`/chat/conversations/${activeId}/messages?limit=30`)
+          setMessages((prev) => mergeMessages(prev, data2.messages ?? []))
+        }
+      } catch (error) {
+        setActionError(errorMessage(error, '发送图片失败'))
+        throw error
+      }
+    },
+    [activeId, applyOutgoingMessage]
+  )
+
+  /** 撤回本人 2 分钟内的消息 */
+  const recallMessage = useCallback(async (messageId: number) => {
+    setActionError(null)
+    try {
+      const data = await api.post<SendMessageResponse & Partial<Message>>(`/chat/messages/${messageId}/recall`)
+      const updated = extractMessage(data)
+      if (!updated) return
+      // 用服务端返回的消息替换本地同 id 消息（recalledAt 非空即渲染为系统行）
+      setMessages((prev) => mergeMessages(prev, updated))
+      setConversations((prev) =>
+        prev.map((conversation) =>
+          conversation.lastMessage?.id === updated.id ? { ...conversation, lastMessage: updated } : conversation
+        )
+      )
+    } catch (error) {
+      setActionError(errorMessage(error, '撤回消息失败'))
+      throw error
+    }
+  }, [])
 
   // WebSocket 事件驱动：当前会话消息、标题/成员、会话移除、好友变化
   useEffect(() => {
@@ -288,6 +356,21 @@ export default function ChatPage() {
             setMessages((prev) => mergeMessages(prev, message))
             void markRead(conversationId, message.id)
           }
+          break
+        }
+        case 'message:recalled': {
+          // 撤回不产生未读；当前会话内替换消息，并同步会话列表预览（lastMessage 换成新消息）
+          const { conversationId, message } = event
+          if (activeIdRef.current === conversationId) {
+            setMessages((prev) => mergeMessages(prev, message))
+          }
+          setConversations((prev) =>
+            prev.map((conversation) =>
+              conversation.id === conversationId && conversation.lastMessage?.id === message.id
+                ? { ...conversation, lastMessage: message }
+                : conversation
+            )
+          )
           break
         }
         case 'conversation:updated':
@@ -645,6 +728,8 @@ export default function ChatPage() {
           emptyMessage={emptyMessage}
           onBack={() => navigate('/chat')}
           onSend={sendMessage}
+          onSendImage={sendImage}
+          onRecall={recallMessage}
           onLoadMore={() => void loadMoreMessages()}
           onAddMembers={() => setDialog({ mode: 'add-members' })}
           onRemoveMember={(userId) => void removeMember(userId)}

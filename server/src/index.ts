@@ -71,8 +71,19 @@ app.use(cors({
 }))
 
 // 压缩响应 — compression supports gzip/deflate/brotli based on Accept-Encoding
-// 跳过 /proxy、/download（流式）与 /ai/write/draft（SSE 不能被压缩缓冲）
-app.use(compression({ threshold: '2kb', filter: (req, _res) => !req.path.includes('/proxy') && !req.path.includes('/download') && !req.path.includes('/ai/write/draft') }))
+// 跳过 /proxy、/download（流式）、/ai/write/draft（SSE 不能被压缩缓冲）
+// 以及聊天图片（/chat/messages/:id/image）：WebP 本身已压缩，再 gzip 只会浪费 CPU，
+// 并让响应变成 chunked（丢失 Content-Length，浏览器无法显示下载进度）。
+app.use(compression({
+  threshold: '2kb',
+  // 注意：filter 在响应头阶段执行，此时 Express 挂载路由会把 req.path 剥成路由内相对路径
+  // （如 /messages/17/image），因此这里用 req.originalUrl（保留完整路径与查询串）。
+  filter: (req, _res) =>
+    !req.originalUrl.includes('/proxy')
+    && !req.originalUrl.includes('/download')
+    && !req.originalUrl.includes('/ai/write/draft')
+    && !/\/chat\/messages\/\d+\/image(\?|$)/.test(req.originalUrl),
+}))
 
 app.set('trust proxy', 1)  // 信任反向代理，用于 rate-limiter 正确获取客户端 IP
 
@@ -148,7 +159,7 @@ app.get('/api', (_req, res) => {
     baseUrl: '/api',
     auth: {
       login: { method: 'POST', path: '/api/auth/login', auth: 'public', description: '账号登录，返回访问令牌（可选 rememberDays 申请最多 90 天有效期）' },
-      register: { method: 'POST', path: '/api/auth/register', auth: 'public', description: '用户注册（默认 user 角色）' },
+      register: { method: 'POST', path: '/api/auth/register', auth: 'public', description: '用户注册（默认 author 角色，可发布文章）' },
       me: { method: 'GET', path: '/api/auth/me', auth: true, description: '获取当前用户信息（含角色与 capabilities 能力清单）' },
       settings: { method: 'PUT', path: '/api/auth/settings', auth: true, description: '更新用户设置' },
       avatarUpload: { method: 'POST', path: '/api/auth/avatar', auth: true, description: '上传/更新头像 (multipart/form-data)' },
@@ -244,8 +255,8 @@ app.get('/api', (_req, res) => {
       friends: { method: 'GET', path: '/api/chat/friends', auth: true, description: '好友列表（DELETE /api/chat/friends/:userId 删除好友）' },
       friendRequests: { method: 'GET', path: '/api/chat/friend-requests', auth: true, description: '收到/发出的好友申请；POST /api/chat/friend-requests 发送，POST /api/chat/friend-requests/:id/accept|reject 处理' },
       conversations: { method: 'GET', path: '/api/chat/conversations', auth: true, description: '我的会话列表（含最后一条消息与未读数）；POST /api/chat/conversations/direct 发起私聊，POST /api/chat/conversations/group 创建群聊（≤50 人，仅可邀请好友）' },
-      messages: { method: 'GET', path: '/api/chat/conversations/:id/messages?before=&limit=', auth: true, description: '历史消息（游标分页，id 正序）；POST /api/chat/conversations/:id/messages 发送纯文本消息；PUT /api/chat/conversations/:id/read 更新已读位置' },
-      ws: '实时推送：ws(s)://<host>/ws/chat，连接后 5 秒内发送 {"type":"auth","token":"<登录令牌>"}，服务端回 {"type":"auth_ok","userId":N}；推送 message:new / conversation:updated / conversation:removed / friend:request / friend:accepted / friend:rejected / friend:removed，客户端 {type:"ping"} ↔ 服务端 {type:"pong"}。认证失败以 close code 4001 断开。',
+      messages: { method: 'GET', path: '/api/chat/conversations/:id/messages?before=&limit=', auth: true, description: '历史消息（游标分页，id 正序）；POST /api/chat/conversations/:id/messages 发送纯文本消息；POST /api/chat/conversations/:id/images 发送图片（multipart/form-data，字段名 file）；GET /api/chat/messages/:id/image 读取图片（支持 ?token= 直链）；POST /api/chat/messages/:id/recall 撤回自己发送的消息（2 分钟内）；PUT /api/chat/conversations/:id/read 更新已读位置' },
+      ws: '实时推送：ws(s)://<host>/ws/chat，连接后 5 秒内发送 {"type":"auth","token":"<登录令牌>"}，服务端回 {"type":"auth_ok","userId":N}；推送 message:new / message:recalled / conversation:updated / conversation:removed / friend:request / friend:accepted / friend:rejected / friend:removed，客户端 {type:"ping"} ↔ 服务端 {type:"pong"}。认证失败以 close code 4001 断开。',
     },
   })
 })

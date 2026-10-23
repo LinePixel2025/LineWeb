@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import UserAvatar from '../UserAvatar'
 import ChatComposer from './ChatComposer'
-import { displayName } from '../../lib/chat'
+import ChatImageLightbox from './ChatImageLightbox'
+import { canRecall, chatImageUrl, displayName } from '../../lib/chat'
 import type { Conversation, Message } from '../../types/chat'
 
 interface Props {
@@ -15,6 +16,10 @@ interface Props {
   emptyMessage?: string
   onBack: () => void
   onSend: (content: string) => Promise<void> | void
+  /** 发送图片（页面负责上传与错误提示） */
+  onSendImage?: (file: File) => Promise<void> | void
+  /** 撤回消息（确认逻辑在 ChatThread 内，页面只负责请求） */
+  onRecall?: (messageId: number) => Promise<void> | void
   onLoadMore: () => void
   onAddMembers: () => void
   onRemoveMember: (userId: number) => void
@@ -27,6 +32,16 @@ function formatMessageTime(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+/** 图片消息的 width/height 属性（有元数据时用于占位防跳动） */
+function imageDimensions(message: Message): { width?: number; height?: number } {
+  const width = message.image?.width
+  const height = message.image?.height
+  if (typeof width === 'number' && width > 0 && typeof height === 'number' && height > 0) {
+    return { width, height }
+  }
+  return {}
 }
 
 function groupAvatarName(conversation: Conversation, meId: number): string {
@@ -44,6 +59,8 @@ export default function ChatThread({
   emptyMessage = '选择一个会话，开始聊天',
   onBack,
   onSend,
+  onSendImage,
+  onRecall,
   onLoadMore,
   onAddMembers,
   onRemoveMember,
@@ -61,6 +78,9 @@ export default function ChatThread({
   const [membersOpen, setMembersOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState('')
+  const [previewImage, setPreviewImage] = useState<Message | null>(null)
+  // 用于「撤回」按钮的 2 分钟窗口自动消失：低频 tick 触发重渲染
+  const [now, setNow] = useState(() => Date.now())
 
   const conversationId = conversation?.id ?? null
   const isOwner = conversation !== null && conversation.ownerId === meId
@@ -73,9 +93,21 @@ export default function ChatThread({
     previousLastIdRef.current = null
     setMembersOpen(false)
     setRenaming(false)
+    setPreviewImage(null)
     const element = listRef.current
     if (element) element.scrollTop = element.scrollHeight
   }, [conversationId])
+
+  // 低频刷新当前时间，让超过 2 分钟的「撤回」按钮自动消失（卸载时清理）
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 15_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  // 消息变化时同步一次时间，避免刚加载的消息用的是旧时间导致按钮不出现
+  useEffect(() => {
+    setNow(Date.now())
+  }, [messages])
 
   // 维护滚动位置：追加新消息时贴底，加载历史时保持视口不跳
   useLayoutEffect(() => {
@@ -112,6 +144,16 @@ export default function ChatThread({
   const handleSend = async (content: string) => {
     stickToBottomRef.current = true
     await onSend(content)
+  }
+
+  const handleRecall = async (message: Message) => {
+    if (!onRecall) return
+    if (!window.confirm('确定撤回这条消息吗？')) return
+    try {
+      await onRecall(message.id)
+    } catch {
+      // 撤回失败由页面 actionError banner 展示
+    }
   }
 
   if (!conversation) {
@@ -294,6 +336,19 @@ export default function ChatThread({
         {!loading &&
           messages.map((message) => {
             const own = message.senderId === meId
+
+            // 已撤回：不渲染气泡，改为居中系统行
+            if (message.recalledAt) {
+              return (
+                <div key={message.id} className="gh-chat-recall-line" role="status">
+                  {own ? '你撤回了一条消息' : `${message.sender.username} 撤回了一条消息`}
+                </div>
+              )
+            }
+
+            const recallable = own && onRecall !== undefined && canRecall(message, meId, now)
+            const isImage = message.type === 'image'
+
             return (
               <div
                 key={message.id}
@@ -306,16 +361,52 @@ export default function ChatThread({
                     <time className="gh-chat-message-time" dateTime={message.createdAt}>
                       {formatMessageTime(message.createdAt)}
                     </time>
+                    {recallable && (
+                      <button
+                        type="button"
+                        className="gh-chat-recall-btn"
+                        title="撤回这条消息"
+                        onClick={() => void handleRecall(message)}
+                      >
+                        撤回
+                      </button>
+                    )}
                   </div>
-                  <div className="gh-chat-message-bubble">{message.content}</div>
+                  {isImage ? (
+                    <button
+                      type="button"
+                      className="gh-chat-message-image-wrap"
+                      aria-label="查看大图"
+                      onClick={() => setPreviewImage(message)}
+                    >
+                      <img
+                        className="gh-chat-message-image"
+                        src={chatImageUrl(message.id)}
+                        alt="图片消息"
+                        loading="lazy"
+                        {...imageDimensions(message)}
+                      />
+                    </button>
+                  ) : (
+                    <div className="gh-chat-message-bubble">{message.content}</div>
+                  )}
                 </div>
               </div>
             )
           })}
       </div>
 
+      {previewImage && (
+        <ChatImageLightbox
+          src={chatImageUrl(previewImage.id)}
+          alt="图片预览"
+          onClose={() => setPreviewImage(null)}
+        />
+      )}
+
       <ChatComposer
         onSend={handleSend}
+        onSendImage={onSendImage}
         disabled={!conversation.canSend}
         disabledHint={conversation.type === 'direct' ? '你们已不是好友，无法继续发送消息' : '当前会话已禁止发送消息'}
       />

@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import UserAvatar from '../UserAvatar'
-import { displayName, formatUnread } from '../../lib/chat'
+import { displayName, formatUnread, messagePreview } from '../../lib/chat'
 import type { Conversation } from '../../types/chat'
 
 interface Props {
@@ -27,7 +27,8 @@ function previewText(conversation: Conversation): string {
   const lastMessage = conversation.lastMessage
   if (!lastMessage) return '暂无消息'
   const prefix = conversation.type === 'group' ? `${lastMessage.sender.username}：` : ''
-  return `${prefix}${lastMessage.content}`
+  // 图片消息显示 [图片]，已撤回显示 [已撤回]
+  return `${prefix}${messagePreview(lastMessage)}`
 }
 
 function avatarTarget(conversation: Conversation, meId: number): { id: number; username: string; name: string } {

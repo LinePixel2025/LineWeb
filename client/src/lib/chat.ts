@@ -1,7 +1,11 @@
 import type { Conversation, Message } from '../types/chat'
+import { getToken } from './api'
 
 const API_SUFFIX = /\/api\/?$/
 const TRAILING_SLASHES = /\/+$/
+
+/** 撤回时间窗口：2 分钟（与服务端一致） */
+export const RECALL_WINDOW_MS = 2 * 60 * 1000
 
 /**
  * 计算聊天 WebSocket 地址。
@@ -75,4 +79,37 @@ export function displayName(conversation: Conversation, meId: number): string {
 export function directPartnerId(conversation: Conversation, meId: number): number | null {
   if (conversation.type !== 'direct') return null
   return conversation.members.find((member) => member.id !== meId)?.id ?? null
+}
+
+/**
+ * 图片消息的访问地址。
+ *
+ * `<img src>` 无法携带 Authorization 头，因此服务端允许用 `?token=` 登录令牌鉴权。
+ * 无 token 时仍拼出 URL（token 参数为空），由服务端返回 401。
+ */
+export function chatImageUrl(messageId: number): string {
+  // 运行时读取环境变量，便于测试用 vi.stubEnv 覆盖；去掉末尾斜杠避免出现双斜杠
+  const base = (import.meta.env.VITE_API_URL || '/api').replace(TRAILING_SLASHES, '')
+  const token = getToken() ?? ''
+  return `${base}/chat/messages/${messageId}/image?token=${encodeURIComponent(token)}`
+}
+
+/**
+ * 是否允许撤回该消息：仅本人的消息、未撤回、且距发送时间不超过 2 分钟。
+ */
+export function canRecall(message: Message, meId: number, now: number = Date.now()): boolean {
+  if (message.senderId !== meId) return false
+  if (message.recalledAt) return false
+  const createdAt = Date.parse(message.createdAt)
+  if (Number.isNaN(createdAt)) return false
+  return now - createdAt <= RECALL_WINDOW_MS
+}
+
+/**
+ * 会话列表 / 最后一条消息的预览文案。
+ */
+export function messagePreview(message: Message): string {
+  if (message.recalledAt) return '[已撤回]'
+  if (message.type === 'image') return '[图片]'
+  return message.content
 }

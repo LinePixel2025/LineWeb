@@ -1737,7 +1737,8 @@ curl -s -X DELETE http://<ECS 公网 IP>:3001/api/posts/1 \
 
 - 全部聊天端点要求**账号登录令牌**；OAuth 应用令牌与下载票据不可用。
 - 好友需申请 + 对方接受；仅好友可创建私聊；群主只能邀请自己的好友（群上限 50 人）。
-- 消息写入走 REST（`POST /api/chat/conversations/:id/messages`，纯文本 1–2000 字），实时推送走 `ws(s)://<host>/ws/chat`（连接后 5 秒内发送 `{ "type": "auth", "token": "..." }`，认证失败 close code `4001`）。
+- 消息写入走 REST（`POST /api/chat/conversations/:id/messages` 纯文本 1–2000 字；`POST /api/chat/conversations/:id/images` 图片，multipart 字段名 `file`，服务端统一转 WebP 并计入发送者网盘配额），实时推送走 `ws(s)://<host>/ws/chat`（连接后 5 秒内发送 `{ "type": "auth", "token": "..." }`，认证失败 close code `4001`）。
+- 消息可在发出后 **2 分钟内撤回**（`POST /api/chat/messages/:id/recall`），双方收到 `message:recalled` 推送；图片通过 `GET /api/chat/messages/:id/image` 读取（支持 `?token=` 供 `<img src>` 使用）。
 - 未读数以 `GET /api/chat/summary` / 会话列表为准；断线重连后重新拉取，不依赖推送补全。
 
 | 方法 | 路径 | 说明 |
@@ -1753,7 +1754,10 @@ curl -s -X DELETE http://<ECS 公网 IP>:3001/api/posts/1 \
 | POST | `/api/chat/conversations/direct` | 创建 / 获取私聊 |
 | POST | `/api/chat/conversations/group` | 创建群聊 |
 | GET | `/api/chat/conversations/:id/messages` | 历史消息（游标分页） |
-| POST | `/api/chat/conversations/:id/messages` | 发送消息 |
+| POST | `/api/chat/conversations/:id/messages` | 发送文本消息 |
+| POST | `/api/chat/conversations/:id/images` | 发送图片消息（multipart/form-data，字段名 `file`） |
+| GET | `/api/chat/messages/:id/image` | 读取图片（成员校验；支持 `?token=` 直链） |
+| POST | `/api/chat/messages/:id/recall` | 撤回自己 2 分钟内发送的消息 |
 | PUT | `/api/chat/conversations/:id/read` | 标记已读 |
 | PUT | `/api/chat/conversations/:id` | 群主改群名 |
 | POST | `/api/chat/conversations/:id/members` | 群主加人 |
@@ -1778,8 +1782,8 @@ curl -s -X DELETE http://<ECS 公网 IP>:3001/api/posts/1 \
 | 统计 | 2 | 1 | 0 | 1 | 0 |
 | AI 助手 | 3 | 2 | 0 | 1 | 0 |
 | 屏幕时间 | 5 | 0 | 5 | 0 | 0 |
-| 聊天 | 18 | 0 | 18 | 0 | 0 |
-| **总计** | **89** | **13** | **33** | **24** | **19** |
+| 聊天 | 21 | 0 | 21 | 0 | 0 |
+| **总计** | **92** | **13** | **36** | **24** | **19** |
 
 > **认证说明**：所有认证都使用**同一个账号登录令牌**（`Authorization: Bearer <token>`），没有第二套凭证。
 > 「公开」= 无需任何凭证；「需登录」= 有有效登录令牌即可；「需管理能力」= 需具备该端点对应的能力（`content:write` / `content:manage` / `comment:moderate` / `user:manage` / `stats:view` / `device:view` / `ai:configure`，`admin` 自动全具备）；「需网盘权限」= 需登录且 `canAccessDrive = true` 或具备 `drive:all`。

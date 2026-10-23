@@ -27,6 +27,9 @@ function createMessage(id: number, senderId: number, username: string, content: 
     sender: { id: senderId, username },
     content,
     createdAt: '2026-10-01T10:00:00.000Z',
+    type: 'text',
+    recalledAt: null,
+    image: null,
   }
 }
 
@@ -121,5 +124,38 @@ describe('ChatConversationList', () => {
 
     expect(screen.getByText('正在加载会话…')).toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('图片与已撤回消息的预览使用占位文案', () => {
+    const imageConversation = createConversation({
+      id: 3,
+      type: 'group',
+      name: '图片群',
+      members: [
+        { id: 1, username: 'me', role: 'member' },
+        { id: 2, username: 'alice', role: 'owner' },
+      ],
+      lastMessage: {
+        ...createMessage(30, 2, 'alice', ''),
+        type: 'image',
+        image: { width: 800, height: 600, size: '102400' },
+      },
+    })
+    const recalledConversation = createConversation({
+      id: 4,
+      lastMessage: { ...createMessage(40, 2, 'alice', ''), recalledAt: '2026-10-01T10:00:30.000Z' },
+    })
+
+    render(
+      <ChatConversationList
+        conversations={[imageConversation, recalledConversation]}
+        activeId={null}
+        meId={1}
+        onSelect={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText('alice：[图片]')).toBeInTheDocument()
+    expect(screen.getByText('[已撤回]')).toBeInTheDocument()
   })
 })

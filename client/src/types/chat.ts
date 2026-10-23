@@ -45,14 +45,34 @@ export interface MessageSender {
   username: string
 }
 
+/** 消息类型：文本 / 图片 */
+export type MessageType = 'text' | 'image'
+
+/** 图片消息的附加信息（非图片消息为 null） */
+export interface MessageImage {
+  /** 原图宽度（服务端处理成功时提供，用于渲染时占位防跳动） */
+  width: number | null
+  /** 原图高度 */
+  height: number | null
+  /** 处理后的图片字节数（字符串，避免大数精度问题） */
+  size: string | null
+}
+
 /** 单条聊天消息 */
 export interface Message {
   id: number
   conversationId: number
   senderId: number
   sender: MessageSender
+  /** 文本正文；图片消息与已撤回消息为 '' */
   content: string
   createdAt: string
+  /** 消息类型（老数据按文本处理） */
+  type: MessageType
+  /** 非空表示已撤回 */
+  recalledAt: string | null
+  /** 图片信息，仅 type === 'image' 时非空 */
+  image: MessageImage | null
 }
 
 /** 会话成员 */
@@ -126,6 +146,7 @@ export interface SendMessageResponse {
 export type ChatServerEvent =
   | { type: 'auth_ok' }
   | { type: 'message:new'; conversationId: number; message: Message }
+  | { type: 'message:recalled'; conversationId: number; message: Message }
   | { type: 'conversation:updated'; conversationId: number }
   | { type: 'conversation:removed'; conversationId: number }
   | { type: 'friend:request'; request: FriendRequestEventPayload }

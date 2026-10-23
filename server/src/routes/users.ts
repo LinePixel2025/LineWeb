@@ -25,7 +25,7 @@ router.use(authenticate, requireCapability('user:manage'))
 router.get('/', async (req: Request, res: Response) => {
   const { page, limit, skip } = parsePagination(req.query)
 
-  const [users, total, usageGroups] = await Promise.all([
+  const [users, total, usageGroups, chatImageGroups] = await Promise.all([
     prisma.user.findMany({
       skip,
       take: limit,
@@ -47,6 +47,12 @@ router.get('/', async (req: Request, res: Response) => {
       where: { isFolder: false },
       _sum: { size: true },
     }),
+    // 聊天图片同样占用网盘配额（与 driveQuota.getDriveUsage 口径一致，撤回后不计）
+    prisma.message.groupBy({
+      by: ['senderId'],
+      where: { type: 'image', recalledAt: null, imageSize: { not: null } },
+      _sum: { imageSize: true },
+    }),
   ])
 
   const usageByUser = new Map<number, bigint>()
@@ -54,6 +60,9 @@ router.get('/', async (req: Request, res: Response) => {
     if (row.uploadedById !== null) {
       usageByUser.set(row.uploadedById, row._sum.size ?? 0n)
     }
+  }
+  for (const row of chatImageGroups) {
+    usageByUser.set(row.senderId, (usageByUser.get(row.senderId) ?? 0n) + (row._sum.imageSize ?? 0n))
   }
 
   res.json({
@@ -296,6 +305,18 @@ router.delete('/:id', async (req: Request, res: Response) => {
   // 删除存储节点上的头像文件（如果存在）
   if (user.avatarPath && isNodeConnected()) {
     await sendCommand({ type: 'delete_file', path: user.avatarPath }).catch(() => {})
+  }
+
+  // 删除该用户作为发送者的聊天图片文件（best-effort，失败不影响账号删除）
+  if (isNodeConnected()) {
+    const imageMessages = await prisma.message.findMany({
+      where: { senderId: id, type: 'image', imagePath: { not: null } },
+      select: { imagePath: true },
+    })
+    for (const image of imageMessages) {
+      if (!image.imagePath) continue
+      await sendCommand({ type: 'delete_file', path: image.imagePath }).catch(() => {})
+    }
   }
 
   // 记录该用户参与的会话，删除用户后清理「没有任何成员」的孤儿会话
