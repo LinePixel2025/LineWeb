@@ -457,9 +457,9 @@
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.5);
   background:
-    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.28) 0 4px, transparent 5px),
-    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0 3px, transparent 3px 7px),
-    linear-gradient(160deg, #2f6f9f, #1d4a76);
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.34) 0 4px, transparent 5px),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0 3px, transparent 3px 7px),
+    linear-gradient(160deg, #4a8fc7, #2b5f96);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
   margin-left: -14px;
   flex: none;
