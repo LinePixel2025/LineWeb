@@ -943,9 +943,12 @@
 
 .gh-game-scoreboard {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   align-items: stretch;
   gap: var(--gh-space-2);
+  max-height: 210px;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .gh-game-score-card {
@@ -961,6 +964,10 @@
 
 .gh-game-score-card--me {
   border-color: var(--gh-accent);
+}
+
+.gh-game-score-card--out {
+  opacity: 0.6;
 }
 
 .gh-game-score-label {
@@ -996,7 +1003,7 @@
 
 .gh-game-boards {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 360px);
   gap: var(--gh-space-5);
   align-items: start;
 }
@@ -1028,23 +1035,201 @@
   font-size: var(--gh-text-xs);
 }
 
-.gh-game-opponent-panel {
+.gh-game-opponents-panel {
   display: flex;
   flex-direction: column;
   gap: var(--gh-space-2);
   align-items: stretch;
+  min-width: 0;
   padding: var(--gh-space-3);
   background: var(--gh-canvas);
   border: 1px solid var(--gh-border-muted);
   border-radius: var(--gh-radius);
 }
 
-.gh-game-opponent-panel .gh-g2048-board-wrap--mini {
-  align-self: center;
+.gh-game-opponent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: var(--gh-space-2);
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.gh-game-opponent-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: var(--gh-space-2);
+  background: var(--gh-bg);
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+}
+
+.gh-game-opponent-card--out {
+  opacity: 0.55;
+}
+
+.gh-game-opponent-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.gh-game-opponent-card-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.gh-game-opponent-card-name {
+  color: var(--gh-text);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-game-opponent-card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  white-space: nowrap;
+}
+
+.gh-game-opponent-card-score {
+  color: var(--gh-text);
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-game-opponent-card .gh-g2048-board-wrap--mini {
+  --g2048-board-size: 100%;
+  width: 100%;
+  align-self: stretch;
 }
 
 .gh-game-resign {
   margin-top: var(--gh-space-1);
+}
+
+/* ===== 等待房间 ===== */
+.gh-game-room {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-4);
+}
+
+.gh-game-room-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gh-space-4);
+}
+
+.gh-game-room-count {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border: 1px solid var(--gh-border);
+  border-radius: 999px;
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-base);
+  font-weight: 700;
+}
+
+.gh-game-room-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+}
+
+.gh-game-room-waiting,
+.gh-game-room-hint {
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-game-room-section-title {
+  margin: 0 0 var(--gh-space-2);
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-game-room-player-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--gh-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gh-game-room-player {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-2) var(--gh-space-3);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+}
+
+.gh-game-room-player--me {
+  border-color: var(--gh-accent);
+}
+
+.gh-game-room-player-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.gh-game-room-player-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  min-width: 0;
+}
+
+.gh-game-room-player-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-game-room-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--gh-canvas-inset);
+  color: var(--gh-text-secondary);
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.gh-game-room-badge--me {
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+}
+
+.gh-game-room-invite {
+  padding-top: var(--gh-space-2);
+  border-top: 1px solid var(--gh-border-muted);
 }
 
 /* ===== 对局结算浮层 ===== */
@@ -1106,7 +1291,11 @@
 
 .gh-game-result-scores {
   display: flex;
-  gap: var(--gh-space-5);
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--gh-space-2) var(--gh-space-4);
+  max-height: 180px;
+  overflow-y: auto;
   color: var(--gh-text-secondary);
   font-size: var(--gh-text-sm);
 }
@@ -1290,9 +1479,13 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  /* 手机屏幕隐藏对手缩略棋盘，避免布局拥挤 */
-  .gh-game-opponent-panel {
-    display: none;
+  .gh-game-opponents-panel {
+    order: 2;
+  }
+
+  .gh-game-opponent-grid {
+    grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+    max-height: 360px;
   }
 }
 

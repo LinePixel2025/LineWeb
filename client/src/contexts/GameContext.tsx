@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import { GAME_POLL_INTERVALS } from '../lib/realtime'
 import { useAuth } from './AuthContext'
@@ -37,8 +38,8 @@ export interface GameContextValue {
   error: string | null
   /** 重新拉取邀请列表（登录后、WS 建立、窗口重新可见时自动调用） */
   refreshInvites: () => Promise<void>
-  /** 向好友发起对战邀请 */
-  createInvite: (friendId: number) => Promise<GameInvite>
+  /** 向好友发起对战邀请；同时返回邀请加入的等待房间 */
+  createInvite: (friendId: number) => Promise<{ invite: GameInvite; match?: Game2048Match }>
   /** 取消自己发出的邀请 */
   cancelInvite: (inviteId: number) => Promise<void>
   /** 接受 / 拒绝收到的邀请；接受成功时返回新对局 */
@@ -88,6 +89,22 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const userId = user?.id ?? null
   const { connectionState, transport, subscribe } = useChat()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const pathnameRef = useRef(location.pathname)
+
+  useEffect(() => {
+    pathnameRef.current = location.pathname
+  }, [location.pathname])
+
+  const goToMatch = useCallback(
+    (match: Game2048Match | null | undefined) => {
+      if (!match) return
+      const target = `/games/2048/online/${match.id}`
+      if (pathnameRef.current !== target) navigate(target)
+    },
+    [navigate]
+  )
 
   const [incomingInvites, setIncomingInvites] = useState<GameInvite[]>([])
   const [outgoingInvites, setOutgoingInvites] = useState<GameInvite[]>([])
@@ -185,7 +202,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
           setOutgoingInvites((prev) => removeById(prev, event.inviteId))
           break
         case 'game:match:started':
+          // 邀请通过后房主开始游戏：所有参与者直接进入对局页
           acceptStartedMatch(event.match)
+          goToMatch(event.match)
           break
         case 'game:match:ended':
           // 对局在用户进入前就结束（认输/超时/掉线）：撤掉「对局已开始」提示
@@ -200,7 +219,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
     })
     return unsubscribe
-  }, [userId, subscribe, acceptStartedMatch])
+  }, [userId, subscribe, acceptStartedMatch, goToMatch])
 
   // 无 WebSocket（transport === 'polling'）时：presence 心跳 + 全量 sync
   useEffect(() => {
@@ -222,7 +241,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
         if (disposed) return
         applyInvites(data.invites)
         if (data.match) {
-          acceptStartedMatch(data.match)
+          if (data.match.status === 'playing') {
+            acceptStartedMatch(data.match)
+            goToMatch(data.match)
+          }
         } else if (startedMatchRef.current) {
           // 没有进行中的对局：之前提示的对局已结束，撤掉提示
           startedMatchRef.current = null
@@ -256,7 +278,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       clearInterval(syncTimer)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [userId, transport, applyInvites, acceptStartedMatch])
+  }, [userId, transport, applyInvites, acceptStartedMatch, goToMatch])
 
   // 每秒剔除过期邀请（倒计时弹窗与列表保持一致）
   useEffect(() => {
@@ -272,13 +294,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer)
   }, [userId])
 
-  const createInvite = useCallback(async (friendId: number): Promise<GameInvite> => {
+  const createInvite = useCallback(async (friendId: number): Promise<{ invite: GameInvite; match?: Game2048Match }> => {
     try {
       const data = await api.post<GameInviteResponse>('/games/2048/invites', { friendId })
       const invite = data.invite
       setOutgoingInvites((prev) => upsertById(prev, invite))
       setError(null)
-      return invite
+      return { invite, match: data.match }
     } catch (err) {
       setError(errorMessage(err, '发送对战邀请失败'))
       throw err

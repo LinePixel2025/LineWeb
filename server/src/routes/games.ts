@@ -18,10 +18,12 @@ import {
   getActiveGameMatch,
   getGameMatch,
   getGameSync,
+  leaveGameMatch,
   listGameFriends,
   listGameInvites,
   respondGameInvite,
   resignGameMatch,
+  startGameMatch,
 } from '../services/gameService.js'
 
 /**
@@ -165,6 +167,16 @@ router.get('/2048/matches/active', (req, res) => {
 router.get('/2048/matches/:id', (req, res) => {
   const matchId = parseIdParam(req.params.id, '对局 ID')
   res.json({ match: getGameMatch(currentUserId(req), matchId) })
+})
+
+router.post('/2048/matches/:id/start', gameWriteLimiter, (req, res) => {
+  const matchId = parseIdParam(req.params.id, '对局 ID')
+  res.json(startGameMatch(currentUserId(req), matchId))
+})
+
+router.post('/2048/matches/:id/leave', gameWriteLimiter, (req, res) => {
+  const matchId = parseIdParam(req.params.id, '对局 ID')
+  res.json(leaveGameMatch(currentUserId(req), matchId))
 })
 
 router.post('/2048/matches/:id/moves', moveLimiter, (req, res) => {

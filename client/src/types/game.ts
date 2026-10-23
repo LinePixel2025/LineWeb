@@ -8,14 +8,22 @@
 /** 2048 移动方向 */
 export type Game2048Direction = 'up' | 'down' | 'left' | 'right'
 
-/** 单个玩家的棋局状态 */
-export type Game2048PlayerStatus = 'playing' | 'won' | 'lost'
+/** 单个玩家在房间/对局中的状态 */
+export type Game2048PlayerStatus = 'waiting' | 'playing' | 'won' | 'lost'
 
-/** 对局状态 */
-export type Game2048MatchStatus = 'playing' | 'finished'
+/** 对局状态：waiting = 等待房主开始；playing = 竞速中；finished = 已结束 */
+export type Game2048MatchStatus = 'waiting' | 'playing' | 'finished'
 
 /** 对局结束原因 */
-export type Game2048EndReason = 'target' | 'timeout' | 'resign' | 'forfeit' | 'blocked'
+export type Game2048EndReason =
+  | 'target'
+  | 'timeout'
+  | 'resign'
+  | 'forfeit'
+  | 'blocked'
+  | 'last_standing'
+  | 'elimination'
+  | 'cancelled'
 
 /** 邀请移除原因 */
 export type GameInviteRemovalReason = 'accepted' | 'declined' | 'cancelled' | 'expired'
@@ -29,6 +37,8 @@ export interface GameUserBrief {
 /** 好友对战邀请 */
 export interface GameInvite {
   id: number
+  /** 邀请加入的房间/对局 id */
+  matchId: number
   from: GameUserBrief
   to: GameUserBrief
   createdAt: string
@@ -52,6 +62,8 @@ export interface Game2048Player {
 export interface Game2048Match {
   id: number
   game: '2048'
+  /** 房主（只有房主可以开始游戏/解散房间） */
+  hostId: number
   status: Game2048MatchStatus
   version: number
   startedAt: string
@@ -81,9 +93,10 @@ export interface GameInvitesResponse {
   outgoing: GameInvite[]
 }
 
-/** POST /api/games/2048/invites */
+/** POST /api/games/2048/invites —— 同时返回邀请加入的房间 */
 export interface GameInviteResponse {
   invite: GameInvite
+  match?: Game2048Match
 }
 
 /** POST /api/games/2048/invites/:id/respond */

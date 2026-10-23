@@ -12,13 +12,13 @@
 游戏模块首期提供 **2048**：
 
 - **单机版**：`/games/2048`，游客可用，纯前端运行，不上传棋盘/分数。
-- **好友联机版**：`/games/2048/online`，登录后用现有好友关系发起 1v1 对战。
-  - 双方拿到**完全相同**的初始棋盘（同一 `seed`）。
+- **好友联机版**：`/games/2048/online`，登录后用现有好友关系创建/加入**等待房间**，支持 **2–10 人**同步竞速。
+  - 房主邀请好友；好友接受邀请后**双方一同进入房间**（房主在发出邀请时即进入房间）。
+  - 房间内任何成员都可继续邀请自己的好友；房主点击「开始游戏」后，所有玩家拿到**完全相同**的初始棋盘（同一 `seed`）。
   - 先合成 **2048** 的玩家获胜。
-  - 一方无合法移动时，该玩家判负。
-  - 单局上限 **10 分钟**，到时按分数判定，平分平局。
-  - 认输、掉线（120 秒不可用）均可结束对局。
-- **服务端权威**：服务端保存双方棋盘与 RNG 状态，客户端只提交移动方向，不能提交棋盘/分数。
+  - 无路可走/认输/掉线会**淘汰该玩家**，其余玩家继续；最后存活者获胜，全部出局按分数判定。
+  - 单局上限 **10 分钟**，到时在存活玩家中按分数判定，平分平局。
+- **服务端权威**：服务端保存所有玩家棋盘与 RNG 状态，客户端只提交移动方向，不能提交棋盘/分数。
 - **实时推送**：复用聊天 WebSocket `/ws/chat` 的 `game:*` 事件；无 WebSocket 时自动降级为 HTTP 轮询。
 
 > 本 MVP **不持久化对局/邀请**：数据保存在服务进程内存中，服务重启后所有对局失效（客户端提示重新开始）。不提供战绩历史、排行榜、观战、群战、陌生人匹配或离线邀请。
@@ -48,6 +48,7 @@
 ```json
 {
   "id": 12,
+  "matchId": 7,
   "from": { "id": 1, "username": "alice" },
   "to": { "id": 2, "username": "bob" },
   "createdAt": "2026-10-23T15:00:00.000Z",
@@ -61,8 +62,9 @@
 {
   "id": 7,
   "game": "2048",
+  "hostId": 1,
   "status": "playing",
-  "version": 3,
+  "version": 5,
   "startedAt": "2026-10-23T15:02:00.000Z",
   "endsAt": "2026-10-23T15:12:00.000Z",
   "endedAt": null,
@@ -83,10 +85,12 @@
 }
 ```
 
-- `players` 固定为两名玩家；`board` 为 4×4 数字矩阵，`0` 表示空位。
+- `hostId` 为房主；只有房主可以开始游戏/解散等待房间。
+- `status`：`waiting`（等待房间，1–10 人）、`playing`（竞速中）、`finished`（已结束）。
+- `players` 为 **1–10 名玩家**；等待房间中玩家 `status = "waiting"` 且 `board` 为空棋盘；开始后统一初始化为 `playing`。`board` 为 4×4 数字矩阵，`0` 表示空位。
 - `online` 由服务端判定：聊天 WebSocket 在线 **或** 最近 90 秒内收到游戏 presence 心跳。
-- `reason`：`target`（合成 2048）、`blocked`（无路可走）、`resign`（认输）、`forfeit`（掉线）、`timeout`（超时）；进行中为 `null`。
-- `timeout` 且 `winnerId === null` 表示平局。
+- `reason`：`target`（合成 2048）、`timeout`（超时按分数）、`last_standing`（最后存活）、`elimination`（全部出局按分数）、`cancelled`（房间解散）；兼容保留 `blocked` / `resign` / `forfeit` 文案。进行中为 `null`。
+- `timeout` / `elimination` 且 `winnerId === null` 表示平局。
 - `version` 单调递增；客户端应丢弃低于当前版本的旧状态。
 
 ### 3.3 `GameFriendDto`
@@ -139,14 +143,18 @@ Content-Type: application/json
 响应 `201`：
 
 ```json
-{ "invite": { "id": 12, "from": { "id": 1, "username": "alice" }, "to": { "id": 2, "username": "bob" }, "createdAt": "...", "expiresAt": "..." } }
+{
+  "invite": { "id": 12, "matchId": 7, "from": { "id": 1, "username": "alice" }, "to": { "id": 2, "username": "bob" }, "createdAt": "...", "expiresAt": "..." },
+  "match": { "id": 7, "game": "2048", "hostId": 1, "status": "waiting", "version": 1, "players": [] }
+}
 ```
 
 规则：
 
-- 只能邀请好友；目标必须可用（WS 在线或 presence 未过期）；双方都不能处于进行中的对局。
-- 同一发送者同时只能有一个待处理邀请；向同一好友重复发起会幂等返回已有邀请。
-- 目标已有反向待处理邀请时返回 409，提示先处理对方邀请。
+- 只能邀请好友；目标必须可用（WS 在线或 presence 未过期）；目标不能已在等待房间/对局中。
+- 邀请者没有等待房间时自动创建，邀请者为房主；同一房间可以向多名好友同时发出邀请。
+- 房间最多 **10 人**（含房主）；房间满时返回 409。
+- 同一好友重复发起会幂等返回已有邀请；目标已有反向待处理邀请时返回 409。
 - 邀请有效期 60 秒。
 
 ### 4.4 响应邀请
@@ -163,7 +171,7 @@ Content-Type: application/json
 响应（接受）：
 
 ```json
-{ "ok": true, "match": { "id": 7, "game": "2048", "status": "playing", "version": 1, "players": [] } }
+{ "ok": true, "match": { "id": 7, "game": "2048", "hostId": 1, "status": "waiting", "version": 2, "players": [] } }
 ```
 
 响应（拒绝）：
@@ -174,8 +182,10 @@ Content-Type: application/json
 
 规则：
 
-- 仅收件人可操作；邀请过期返回 410；邀请人不可用或双方已进入对局返回 409 并清理邀請。
-- 接受后双方收到 `game:match:started`；邀请及双方其它待处理邀请会被清理。
+- 仅收件人可操作；邀请过期返回 410；房间已开始/已解散、房间已满返回 409 并清理邀请。
+- 接受后**加入等待房间**（不会立刻开局），双方收到 `game:match:update`；接受者应跳转到房间页。
+- 房间内任意成员都可以继续邀请好友，直到 10 人上限。
+- 接受者的其它邀请会被清理，避免同时加入多个房间。
 
 ### 4.5 取消邀请
 
@@ -202,8 +212,9 @@ GET /api/games/2048/sync?matchId=7
 }
 ```
 
-- 不带 `matchId`：`match` 为当前进行中对局，没有则为 `null`。
-- 带 `matchId`：返回指定对局（含已结束且仍在 5 分钟保留期内的结果）；不存在或非参与者返回 404。
+- 不带 `matchId`：`match` 为当前等待房间或进行中对局，没有则为 `null`。
+- 带 `matchId`：返回指定房间/对局（含已结束且仍在 5 分钟保留期内的结果）；不存在或非参与者返回 404。
+- 等待房间超过 30 分钟会被 sweeper 解散（`reason = "cancelled"`）。
 - 该端点不更新 presence；客户端需单独发送心跳。
 
 ### 4.7 在线心跳（轮询降级）
@@ -230,7 +241,18 @@ GET /api/games/2048/matches/:id
 
 `active` 响应 `{ "match": null }` 或 `{ "match": MatchDto }`；`:id` 返回 `{ "match": MatchDto }`。
 
-### 4.9 移动
+### 4.9 开始游戏 / 离开房间
+
+```http
+POST /api/games/2048/matches/7/start
+POST /api/games/2048/matches/7/leave
+```
+
+- `start`：仅房主；房间需处于 `waiting` 且人数 **2–10**；成功后所有玩家获得同一 `seed` 的初始棋盘，`status` 切到 `playing`，推送 `game:match:started`。
+- `leave`：仅 `waiting` 房间可用；普通玩家离开会从房间移除，房主离开会解散房间（`status: finished`, `reason: "cancelled"`）。
+- 已开始的对局不能 `leave`，请使用 `resign`。
+
+### 4.11 移动
 
 ```http
 POST /api/games/2048/matches/7/moves
@@ -247,18 +269,18 @@ Content-Type: application/json
 { "match": { "id": 7, "version": 4, "players": [] }, "moved": true }
 ```
 
-- 只有当前对局参与者可操作。
+- 只有当前对局参与者可操作；已淘汰玩家不能继续移动。
 - 无效（棋盘没有变化）移动返回 `200 { "match": ..., "moved": false }`，不递增版本、不广播。
-- 有效移动递增 `version`；若一方合成 2048 → `target`；若一方无路可走 → 对方胜、`blocked`；否则广播 `game:match:update`。
+- 有效移动递增 `version`；若玩家合成 2048 → 该玩家获胜（`target`）；若玩家无路可走 → 该玩家淘汰，其余玩家继续；只剩 1 人时 `last_standing`，全部出局时按分数 `elimination`。
 - 对局结束/超时返回 409。
 
-### 4.10 认输
+### 4.12 认输
 
 ```http
 POST /api/games/2048/matches/7/resign
 ```
 
-响应 `{ "match": MatchDto }`；对方获胜，`reason = "resign"`。
+响应 `{ "match": MatchDto }`；认输者淘汰，其余玩家继续；只剩 1 人时该玩家获胜（`last_standing`）。
 
 ---
 
@@ -277,9 +299,9 @@ POST /api/games/2048/matches/7/resign
 |---|---|---|
 | `game:invite` | `{ type, invite: GameInviteDto }` | 被邀请人 |
 | `game:invite:removed` | `{ type, inviteId, reason: 'accepted'\|'declined'\|'cancelled'\|'expired' }` | 双方 |
-| `game:match:started` | `{ type, match: MatchDto }` | 双方 |
-| `game:match:update` | `{ type, match: MatchDto }` | 双方 |
-| `game:match:ended` | `{ type, match: MatchDto }` | 双方 |
+| `game:match:started` | `{ type, match: MatchDto }` | 房间内全部玩家 |
+| `game:match:update` | `{ type, match: MatchDto }` | 房间内全部玩家（等待房间加入/离开、对局移动、淘汰） |
+| `game:match:ended` | `{ type, match: MatchDto }` | 房间内全部玩家（含房间解散 `reason=cancelled`） |
 
 > 游戏事件与聊天事件共用同一个连接；`ChatContext` 会把非心跳事件转发给订阅者。客户端必须同时处理「WS 事件」与「轮询 sync」两条路径，不能假设 WS 一定可用。
 
@@ -332,8 +354,8 @@ POST /api/games/2048/matches/7/resign
 |---|---|
 | 未登录 / 令牌失效 | 401 |
 | 非好友邀请、非参与者访问对局 | 403 / 404 |
-| 对局/邀请不存在、非参与者 | 404 |
-| 对方不可用、双方已在对局、重复邀请冲突 | 409 |
+| 对局/邀请/房间不存在、非参与者 | 404 |
+| 对方不可用、已在房间/对局、房间已满（10 人）、重复邀请冲突 | 409 |
 | 邀请已过期 | 410 |
 | 移动/同步/心跳过频 | 429 |
 | 参数错误（方向、friendId、action） | 400 |
@@ -358,6 +380,9 @@ curl -X POST $BASE/games/2048/invites -H "Authorization: Bearer $TOKEN" \
 # 对方接受后，查看当前对局
 curl "$BASE/games/2048/matches/active" -H "Authorization: Bearer $TOKEN"
 
+# 房主开始游戏（2–10 人）
+curl -X POST "$BASE/games/2048/matches/7/start" -H "Authorization: Bearer $TOKEN"
+
 # 移动
 curl -X POST "$BASE/games/2048/matches/7/moves" -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' -d '{"direction":"left"}'
@@ -374,7 +399,9 @@ curl -X POST "$BASE/games/2048/matches/7/resign" -H "Authorization: Bearer $TOKE
 
 ## 9. 部署与限制
 
-- 不新增数据库表；对局/邀请/presence 均在服务端内存中。
+- 不新增数据库表；房间/对局/邀请/presence 均在服务端内存中。
+- 每个房间最多 **10 名玩家**（含房主），最少 2 人开局；等待房间 30 分钟过期。
+- 好友接受邀请后，房主与接受者都会被带入同一个等待房间；房主开始后所有参与者自动进入对局页。
 - 生产为单 Express 容器；未来水平扩容需 Redis 或数据库承载对局状态。
 - 不涉及存储节点、网盘配额或文件上传。
 - 客户端单机版最高分保存在浏览器 `localStorage`（`lineweb_2048_best`）。

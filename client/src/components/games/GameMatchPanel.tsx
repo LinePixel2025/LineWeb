@@ -25,6 +25,9 @@ const REASON_LABEL: Record<NonNullable<Game2048Match['reason']>, string> = {
   resign: '认输',
   forfeit: '掉线判负',
   blocked: '无路可走',
+  last_standing: '最后存活',
+  elimination: '全部出局，按分数判定',
+  cancelled: '房间已解散',
 }
 
 function formatDuration(ms: number): string {
@@ -34,17 +37,17 @@ function formatDuration(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
-function playerStatusLabel(player: Game2048Player | null, match: Game2048Match): string {
-  if (!player) return ''
+function playerStatusLabel(player: Game2048Player, match: Game2048Match): string {
   switch (player.status) {
+    case 'waiting':
+      return '等待开始'
     case 'won':
       return '已达成 2048'
     case 'lost':
-      // 已被对手认输/掉线/超时结束的对局，不应误显示为「无路可走」
       if (match.status === 'finished' && match.reason !== 'blocked') return '对局结束'
-      return '无路可走'
+      return '已出局'
     default:
-      return '对战中'
+      return '竞速中'
   }
 }
 
@@ -56,51 +59,47 @@ interface ResultCopy {
 /** 把服务端结果（winnerId + reason）翻译成用户可读文案 */
 function describeResult(match: Game2048Match, meId: number): ResultCopy {
   const winner = match.players.find((player) => player.userId === match.winnerId) ?? null
-  const loser = match.players.find((player) => player.userId !== match.winnerId) ?? null
-  const isDraw = match.winnerId === null
+  const winnerName = winner?.username ?? '对手'
+  const iWon = match.winnerId === meId
 
-  if (isDraw) {
+  if (match.winnerId === null) {
     return {
       title: '平局',
       detail:
         match.reason === 'timeout'
-          ? '时间到，双方分数相同，本局平局。'
-          : '双方战成平手。',
+          ? '时间到，存活玩家分数相同，本局平局。'
+          : '所有玩家均已出局且分数相同，本局平局。',
     }
   }
 
-  const iWon = match.winnerId === meId
-  const winnerName = winner?.username ?? '对手'
-  const loserName = loser?.username ?? '对手'
-  const iLost = loser?.userId === meId
-
-  let detail: string
   switch (match.reason) {
     case 'target':
-      detail = `${winnerName} 率先合成 2048，赢下本局。`
-      break
-    case 'blocked':
-      detail = `${loserName} 无路可走，${winnerName} 获胜。`
-      break
-    case 'resign':
-      detail = iLost ? '你选择了认输。' : `${loserName} 认输，你赢下本局。`
-      break
-    case 'forfeit':
-      detail = iLost ? '你掉线超时，本局判负。' : `${loserName} 掉线超时，你赢下本局。`
-      break
+      return { title: iWon ? '你获胜了' : `${winnerName} 获胜`, detail: `${winnerName} 率先合成 2048，赢下本局。` }
     case 'timeout':
-      detail = `时间到，${winnerName} 分数更高，赢下本局。`
-      break
+      return { title: iWon ? '你获胜了' : `${winnerName} 获胜`, detail: `时间到，${winnerName} 分数最高，赢下本局。` }
+    case 'last_standing':
+      return { title: iWon ? '你获胜了' : `${winnerName} 获胜`, detail: `${winnerName} 成为最后存活的玩家。` }
+    case 'elimination':
+      return { title: iWon ? '你获胜了' : `${winnerName} 获胜`, detail: `所有玩家均已出局，${winnerName} 分数最高。` }
+    case 'resign':
+      return { title: iWon ? '你获胜了' : `${winnerName} 获胜`, detail: `${winnerName} 成为最后存活的玩家（其余玩家认输）。` }
+    case 'forfeit':
+      return { title: iWon ? '你获胜了' : `${winnerName} 获胜`, detail: `${winnerName} 成为最后存活的玩家（其余玩家掉线）。` }
+    case 'blocked':
+      return { title: iWon ? '你获胜了' : `${winnerName} 获胜`, detail: `${winnerName} 成为最后存活的玩家（其余玩家无路可走）。` }
+    case 'cancelled':
+      return { title: '房间已解散', detail: '房主解散了房间，本局未开始。' }
     default:
-      detail = '对局已结束。'
-      break
+      return { title: iWon ? '你获胜了' : `${winnerName} 获胜`, detail: '对局已结束。' }
   }
-
-  return { title: iWon ? '你获胜了' : `${winnerName} 获胜`, detail }
 }
 
 /**
- * 联机对局面板：双方比分、我方棋盘（含方向键）、对手缩略棋盘与结算浮层。
+ * 2048 联机对局面板（2–10 人）：
+ * - 顶部展示传输模式、计时与所有玩家比分；
+ * - 左侧是我的主棋盘，右侧/下方是其他玩家的缩略棋盘；
+ * - 结算浮层按 winnerId + reason 展示结果。
+ *
  * 所有网络请求由页面（Game2048OnlinePage）负责，本组件只展示与回调。
  */
 export default function GameMatchPanel({
@@ -115,28 +114,32 @@ export default function GameMatchPanel({
   onRematch,
 }: GameMatchPanelProps) {
   const me = match.players.find((player) => player.userId === meId) ?? null
-  const opponent = match.players.find((player) => player.userId !== meId) ?? null
+  const others = match.players.filter((player) => player.userId !== meId)
+  const sortedPlayers = [...match.players].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    return a.userId - b.userId
+  })
+  const sortedOthers = [...others].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    return a.userId - b.userId
+  })
   const finished = match.status === 'finished'
   const canMove = !finished && me !== null && me.status === 'playing'
   const lowTime = !finished && remainingMs > 0 && remainingMs < 60_000
   const result = finished ? describeResult(match, meId) : null
+  const playerCount = match.players.length
 
   return (
     <section className="gh-game-match" aria-label="2048 联机对局">
       <header className="gh-game-match-header">
         <div className="gh-game-match-opponent">
-          {opponent && <UserAvatar userId={opponent.userId} username={opponent.username} size="md" />}
           <div className="gh-game-match-opponent-copy">
-            <span className="gh-game-match-eyebrow">对手</span>
-            <strong className="gh-game-match-opponent-name">{opponent?.username ?? '等待对手'}</strong>
-            {opponent && (
-              <span
-                className={`gh-game-presence ${opponent.online ? 'gh-game-presence--online' : 'gh-game-presence--offline'}`}
-              >
-                <span className="gh-game-presence-dot" aria-hidden="true" />
-                {opponent.online ? '在线' : '离线'}
-              </span>
-            )}
+            <span className="gh-game-match-eyebrow">2048 同步竞速</span>
+            <strong className="gh-game-match-opponent-name">{playerCount} 人同场</strong>
+            <span className={`gh-game-presence ${me?.online ? 'gh-game-presence--online' : 'gh-game-presence--offline'}`}>
+              <span className="gh-game-presence-dot" aria-hidden="true" />
+              我 {me?.online ? '在线' : '离线'}
+            </span>
           </div>
         </div>
 
@@ -154,23 +157,26 @@ export default function GameMatchPanel({
       </header>
 
       <div className="gh-game-scoreboard" aria-live="polite">
-        <div className="gh-game-score-card gh-game-score-card--me">
-          <span className="gh-game-score-label">我</span>
-          <strong className="gh-game-score-value">{me?.score ?? 0}</strong>
-          <span className="gh-game-score-meta">
-            最大方块 {me?.maxTile ?? 0} · {playerStatusLabel(me, match)}
-          </span>
-        </div>
-        <span className="gh-game-score-vs" aria-hidden="true">
-          VS
-        </span>
-        <div className="gh-game-score-card">
-          <span className="gh-game-score-label">{opponent?.username ?? '对手'}</span>
-          <strong className="gh-game-score-value">{opponent?.score ?? 0}</strong>
-          <span className="gh-game-score-meta">
-            最大方块 {opponent?.maxTile ?? 0} · {playerStatusLabel(opponent, match)}
-          </span>
-        </div>
+        {sortedPlayers.map((player) => {
+          const isMe = player.userId === meId
+          const isHost = player.userId === match.hostId
+          return (
+            <div
+              key={player.userId}
+              className={`gh-game-score-card${isMe ? ' gh-game-score-card--me' : ''}${player.status === 'lost' ? ' gh-game-score-card--out' : ''}`}
+            >
+              <span className="gh-game-score-label">
+                {player.username}
+                {isHost && <span className="gh-game-room-badge">房主</span>}
+                {isMe && <span className="gh-game-room-badge gh-game-room-badge--me">你</span>}
+              </span>
+              <strong className="gh-game-score-value">{player.score}</strong>
+              <span className="gh-game-score-meta">
+                最大方块 {player.maxTile} · {playerStatusLabel(player, match)}
+              </span>
+            </div>
+          )
+        })}
       </div>
 
       <div className="gh-game-boards">
@@ -187,16 +193,36 @@ export default function GameMatchPanel({
           />
         </div>
 
-        <aside className="gh-game-opponent-panel">
+        <aside className="gh-game-opponents-panel" aria-label="其他玩家棋盘">
           <div className="gh-game-board-panel-head">
-            <h2 className="gh-game-board-panel-title">对手棋盘</h2>
+            <h2 className="gh-game-board-panel-title">其他玩家（{sortedOthers.length}）</h2>
           </div>
-          <Game2048Board
-            board={opponent?.board ?? []}
-            variant="mini"
-            disabled
-            label={`${opponent?.username ?? '对手'}的棋盘`}
-          />
+          <div className="gh-game-opponent-grid">
+            {sortedOthers.map((player) => (
+              <article
+                key={player.userId}
+                className={`gh-game-opponent-card${player.status === 'lost' ? ' gh-game-opponent-card--out' : ''}`}
+              >
+                <header className="gh-game-opponent-card-head">
+                  <UserAvatar userId={player.userId} username={player.username} size="sm" />
+                  <span className="gh-game-opponent-card-copy">
+                    <span className="gh-game-opponent-card-name">{player.username}</span>
+                    <span className="gh-game-opponent-card-meta">
+                      <span className={`gh-game-presence-dot${player.online ? ' gh-game-presence-dot--online' : ''}`} />
+                      {player.online ? '在线' : '离线'} · {playerStatusLabel(player, match)}
+                    </span>
+                  </span>
+                  <strong className="gh-game-opponent-card-score">{player.score}</strong>
+                </header>
+                <Game2048Board
+                  board={player.board}
+                  variant="mini"
+                  disabled
+                  label={`${player.username} 的棋盘`}
+                />
+              </article>
+            ))}
+          </div>
           <button
             type="button"
             className="gh-btn gh-btn--danger gh-btn--md gh-game-resign"
@@ -214,18 +240,13 @@ export default function GameMatchPanel({
             <p className="gh-game-result-eyebrow">对局结束</p>
             <h2 className="gh-game-result-title">{result.title}</h2>
             <p className="gh-game-result-detail">{result.detail}</p>
-            {(match.reason || match.winnerId !== null) && (
-              <p className="gh-game-result-reason">
-                {match.reason ? REASON_LABEL[match.reason] : '对局结束'}
-              </p>
-            )}
+            {match.reason && <p className="gh-game-result-reason">{REASON_LABEL[match.reason]}</p>}
             <div className="gh-game-result-scores">
-              <span>
-                我 <strong>{me?.score ?? 0}</strong>
-              </span>
-              <span>
-                {opponent?.username ?? '对手'} <strong>{opponent?.score ?? 0}</strong>
-              </span>
+              {sortedPlayers.map((player) => (
+                <span key={player.userId}>
+                  {player.username} <strong>{player.score}</strong>
+                </span>
+              ))}
             </div>
             <div className="gh-game-result-actions">
               <button type="button" className="gh-btn gh-btn--secondary gh-btn--md" onClick={onBackToLobby}>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import GameFriendPicker from '../../components/games/GameFriendPicker'
 import GameMatchPanel from '../../components/games/GameMatchPanel'
+import GameRoomPanel from '../../components/games/GameRoomPanel'
 import { useGame2048Input } from '../../hooks/useGame2048Input'
 import { useAuth } from '../../contexts/AuthContext'
 import { useChat } from '../../contexts/ChatContext'
@@ -193,10 +194,10 @@ export default function Game2048OnlinePage() {
     if (matchId && startedMatch?.id === matchId) dismissStartedMatch()
   }, [matchId, startedMatch, dismissStartedMatch])
 
-  // 大厅好友在线状态：定期刷新，并在本端 WS 建立/恢复后立即刷新一次，
+  // 大厅/等待房间的好友在线状态：定期刷新，并在本端 WS 建立/恢复后立即刷新一次，
   // 避免页面加载早于对方 WS 连接时一直显示「离线」。
   useEffect(() => {
-    if (matchId) return
+    if (matchId && match?.status !== 'waiting') return
     // 首次 3 秒补一次，解决「本页先加载、对方 WS 后连接」时的离线误判
     const quickRefresh = setTimeout(() => void loadFriends(false), 3_000)
     const timer = setInterval(() => void loadFriends(false), 15_000)
@@ -204,22 +205,40 @@ export default function Game2048OnlinePage() {
       clearTimeout(quickRefresh)
       clearInterval(timer)
     }
-  }, [matchId, loadFriends])
+  }, [matchId, match?.status, loadFriends])
 
   useEffect(() => {
-    if (matchId || connectionState !== 'open') return
+    if (matchId && match?.status !== 'waiting') return
+    if (connectionState !== 'open') return
     void loadFriends(false)
-  }, [matchId, connectionState, loadFriends])
+  }, [matchId, match?.status, connectionState, loadFriends])
 
-  // WS 模式：订阅对局更新 / 结束
+  // 等待房间：加载一次好友列表用于邀请（大厅初始化只加载了 match）
+  useEffect(() => {
+    if (!matchId || match?.status !== 'waiting') return
+    void loadFriends(true)
+  }, [matchId, match?.status, loadFriends])
+
+  // WS 模式：订阅房间更新 / 开局 / 结束
   useEffect(() => {
     if (!matchId || transport !== 'ws') return
     const unsubscribe = subscribe((event) => {
-      if (event.type !== 'game:match:update' && event.type !== 'game:match:ended') return
-      if (event.match.id === matchId) applyMatch(event.match)
+      if (
+        event.type !== 'game:match:update'
+        && event.type !== 'game:match:started'
+        && event.type !== 'game:match:ended'
+      ) {
+        return
+      }
+      if (event.match.id !== matchId) return
+      applyMatch(event.match)
+      if (event.type === 'game:match:ended' && event.match.reason === 'cancelled') {
+        skipActiveCheckRef.current = true
+        navigate(LOBBY_PATH, { replace: true })
+      }
     })
     return unsubscribe
-  }, [matchId, transport, subscribe, applyMatch])
+  }, [matchId, transport, subscribe, applyMatch, navigate])
 
   // 传输模式切换时补拉一次对局，避免 WS 建立/断开瞬间漏掉版本
   useEffect(() => {
@@ -239,6 +258,10 @@ export default function Game2048OnlinePage() {
         const data = await api.get<GameSyncResponse>(`/games/2048/sync?matchId=${matchId}`)
         if (disposed || !data.match) return
         applyMatch(data.match)
+        if (data.match.reason === 'cancelled') {
+          skipActiveCheckRef.current = true
+          navigate(LOBBY_PATH, { replace: true })
+        }
       } catch {
         // 轮询失败静默重试
       }
@@ -258,7 +281,7 @@ export default function Game2048OnlinePage() {
       clearInterval(timer)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [matchId, transport, applyMatch])
+  }, [matchId, transport, applyMatch, navigate])
 
   // 倒计时（以服务端 endsAt 为准）
   const endsAtMs = match?.endsAt ? Date.parse(match.endsAt) : Number.NaN
@@ -350,7 +373,7 @@ export default function Game2048OnlinePage() {
     const id = matchIdRef.current
     const current = matchRef.current
     if (!id || !current || current.status !== 'playing') return
-    if (!window.confirm('确定认输吗？本局将判定对手获胜。')) return
+    if (!window.confirm('确定认输吗？你将退出本局竞速，其他玩家继续。')) return
     setBusyKey('resign')
     try {
       const data = await api.post<GameMatchResponse>(`/games/2048/matches/${id}/resign`)
@@ -377,12 +400,46 @@ export default function Game2048OnlinePage() {
   }, [navigate])
 
   const handleRematch = useCallback(() => {
-    const current = matchRef.current
-    const opponent = current?.players.find((player) => player.userId !== meId) ?? null
+    skipActiveCheckRef.current = true
     setMatch(null)
     setMatchError(null)
     setActionError(null)
-    navigate(opponent ? `${LOBBY_PATH}?friend=${opponent.userId}` : LOBBY_PATH, { replace: true })
+    navigate(LOBBY_PATH, { replace: true })
+  }, [navigate])
+
+  const handleStart = useCallback(async () => {
+    const id = matchIdRef.current
+    if (!id) return
+    setBusyKey('start')
+    setActionError(null)
+    try {
+      const data = await api.post<GameMatchResponse>(`/games/2048/matches/${id}/start`)
+      setMatch(data.match)
+    } catch (err) {
+      setActionError(errorMessage(err, '开始游戏失败'))
+    } finally {
+      setBusyKey(null)
+    }
+  }, [])
+
+  const handleLeaveRoom = useCallback(async () => {
+    const id = matchIdRef.current
+    const current = matchRef.current
+    if (!id) return
+    const isHost = current?.hostId === meId
+    if (!window.confirm(isHost ? '确定解散房间吗？' : '确定离开房间吗？')) return
+    setBusyKey('leave')
+    setActionError(null)
+    try {
+      await api.post(`/games/2048/matches/${id}/leave`)
+      skipActiveCheckRef.current = true
+      setMatch(null)
+      navigate(LOBBY_PATH, { replace: true })
+    } catch (err) {
+      setActionError(errorMessage(err, '离开房间失败'))
+    } finally {
+      setBusyKey(null)
+    }
   }, [meId, navigate])
 
   const handleInvite = useCallback(
@@ -390,14 +447,18 @@ export default function Game2048OnlinePage() {
       setBusyKey(`invite-${friendId}`)
       setActionError(null)
       try {
-        await createInvite(friendId)
+        const result = await createInvite(friendId)
+        // 从大厅发起邀请时，房主立即进入等待房间；房间内邀请则原地等待更多玩家
+        if (result.match && result.match.id !== matchIdRef.current) {
+          navigate(`/games/2048/online/${result.match.id}`)
+        }
       } catch (err) {
         setActionError(errorMessage(err, '发送对战邀请失败'))
       } finally {
         setBusyKey(null)
       }
     },
-    [createInvite]
+    [createInvite, navigate]
   )
 
   const handleCancelInvite = useCallback(
@@ -486,6 +547,31 @@ export default function Game2048OnlinePage() {
       )
     }
 
+    if (match.status === 'waiting') {
+      return (
+        <div className="gh-page-container gh-games-page gh-game-online-page">
+          <GameRoomPanel
+            match={match}
+            meId={meId}
+            friends={friends}
+            incomingInvites={incomingInvites}
+            outgoingInvites={outgoingInvites}
+            friendsLoading={friendsLoading}
+            friendsError={friendsError}
+            highlightFriendId={highlightFriendId}
+            busyKey={busyKey}
+            error={actionError ?? matchError}
+            onInvite={handleInvite}
+            onCancelInvite={handleCancelInvite}
+            onRespondInvite={handleRespondInvite}
+            onStart={handleStart}
+            onLeave={handleLeaveRoom}
+            onRefresh={refreshLobby}
+          />
+        </div>
+      )
+    }
+
     return (
       <div className="gh-page-container gh-games-page gh-game-online-page">
         {errorBanner(actionError ?? matchError)}
@@ -514,7 +600,7 @@ export default function Game2048OnlinePage() {
           </p>
           <h1 className="gh-games-title">2048 好友对战</h1>
           <p className="gh-games-subtitle">
-            邀请好友实时对战：10 分钟内率先合成 2048 或分数更高者获胜。
+            邀请最多 9 位好友（共 10 人）进入房间，房主开始后同步竞速：10 分钟内率先合成 2048 或分数最高者获胜。
           </p>
         </div>
         <div className="gh-game-lobby-actions">

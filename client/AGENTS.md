@@ -48,7 +48,7 @@ client/src/
 | 加全局状态 | `contexts/` 新建 Context | 多层 Provider 嵌套在 App.tsx；注意 Chat → Game 依赖顺序 |
 | 加 API 调用 | `lib/api.ts` 已封装 get/post/put/del | 自动附 Bearer token，30s 超时 |
 | 网盘功能 | `components/drive/` + `contexts/DriveContext.tsx` + `pages/DrivePage.tsx` | 双 reducer 架构 |
-| 游戏/2048 | `pages/GamesPage.tsx` + `pages/games/` + `components/games/` + `contexts/GameContext.tsx` + `lib/games/` | 单机纯前端引擎；联机 REST + `/ws/chat` 的 `game:*` 事件；无 WS 时按 `lib/realtime.ts` 轮询 |
+| 游戏/2048 | `pages/GamesPage.tsx` + `pages/games/` + `components/games/` + `contexts/GameContext.tsx` + `lib/games/` | 单机纯前端引擎；联机为 2–10 人等待房间（房主开始）+ 多玩家棋盘/淘汰制，REST + `/ws/chat` 的 `game:*` 事件；无 WS 时按 `lib/realtime.ts` 轮询 |
 | 实时传输降级 | `lib/realtime.ts` + `contexts/ChatContext.tsx` | `transport: 'ws' \| 'polling'`；WS 不支持/阻断/8 秒超时自动轮询；`?transport=polling` 强制 |
 | 样式修改 | `styles/` 中对应 CSS 文件 | 普通 CSS，无 Tailwind |
 

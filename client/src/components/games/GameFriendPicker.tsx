@@ -9,6 +9,8 @@ export interface GameFriendPickerProps {
   error?: string | null
   /** URL ?friend= 指定的好友，高亮提示 */
   highlightFriendId?: number | null
+  /** 已在房间中的玩家，不再显示邀请按钮 */
+  excludeIds?: number[]
   /** 正在处理的动作 key（invite-1 / cancel-2 / respond-3） */
   busyKey?: string | null
   onInvite: (friendId: number) => void | Promise<void>
@@ -28,6 +30,7 @@ export default function GameFriendPicker({
   loading = false,
   error = null,
   highlightFriendId = null,
+  excludeIds = [],
   busyKey = null,
   onInvite,
   onCancelInvite,
@@ -100,17 +103,21 @@ export default function GameFriendPicker({
       )}
 
       <section className="gh-game-friend-section" aria-label="好友列表">
-        <h2 className="gh-game-friend-section-title">好友（{friends.length}）</h2>
-        {friends.length === 0 ? (
+        <h2 className="gh-game-friend-section-title">
+          好友（{friends.filter((friend) => !excludeIds.includes(friend.id)).length}）
+        </h2>
+        {friends.filter((friend) => !excludeIds.includes(friend.id)).length === 0 ? (
           <div className="gh-game-list-state">
-            <p className="gh-game-list-state-title">还没有好友</p>
+            <p className="gh-game-list-state-title">没有可邀请的好友</p>
             <p className="gh-game-list-state-hint">
-              先在聊天页搜索用户名添加好友，之后就可以邀请对方对战。
+              可能好友已在房间中，或还没有添加好友。可在聊天页搜索用户名添加好友。
             </p>
           </div>
         ) : (
           <ul className="gh-game-friend-list">
-            {friends.map((friend) => {
+            {friends
+              .filter((friend) => !excludeIds.includes(friend.id))
+              .map((friend) => {
               const outgoing = outgoingByFriendId.get(friend.id)
               const highlighted = highlightFriendId === friend.id
               const disabled = !friend.online || friend.inMatch
@@ -140,7 +147,7 @@ export default function GameFriendPicker({
                     </span>
                     <span className="gh-game-friend-meta">
                       {friend.online ? '在线' : '离线'}
-                      {friend.inMatch ? ' · 对局中' : ''}
+                      {friend.inMatch ? ' · 房间/对局中' : ''}
                     </span>
                   </span>
                   <span className="gh-game-friend-actions">
@@ -161,9 +168,9 @@ export default function GameFriendPicker({
                         disabled={disabled || busyKey === `invite-${friend.id}`}
                         onClick={() => void onInvite(friend.id)}
                         aria-label={`邀请 ${friend.username} 对战`}
-                        title={!friend.online ? '对方不在线' : friend.inMatch ? '对方正在对局中' : undefined}
+                        title={!friend.online ? '对方不在线' : friend.inMatch ? '对方正在房间/对局中' : undefined}
                       >
-                        {friend.inMatch ? '对局中' : '邀请对战'}
+                        {friend.inMatch ? '房间/对局中' : '邀请对战'}
                       </button>
                     )}
                   </span>

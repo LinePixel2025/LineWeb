@@ -5,6 +5,7 @@ import { isGamePresent, pruneGamePresence } from './gamePresence.js'
 import {
   GAME2048_TARGET,
   applyMove,
+  createEmptyBoard,
   createSeededGame,
   hasAvailableMoves,
   maxTileValue,
@@ -38,6 +39,12 @@ import {
 export const GAME_INVITE_TTL_MS = 60_000
 /** 单局时长上限：10 分钟 */
 export const GAME_MATCH_DURATION_MS = 10 * 60_000
+/** 单个房间最多玩家数（含房主） */
+export const GAME_MAX_PLAYERS = 10
+/** 房间最少开局人数 */
+export const GAME_MIN_PLAYERS = 2
+/** 等待房间最长存活时间：30 分钟（防止房主离开后房间永久占用） */
+export const GAME_WAITING_ROOM_TTL_MS = 30 * 60_000
 /** 已结束对局的保留期：5 分钟（供客户端补拉最终结果） */
 export const GAME_FINISHED_RETENTION_MS = 5 * 60_000
 /** 连续不可用超过该时长判负：120 秒 */
@@ -58,6 +65,7 @@ export interface GameUserBriefDto {
 
 export interface GameInviteDto {
   id: number
+  matchId: number
   from: GameUserBriefDto
   to: GameUserBriefDto
   createdAt: string
@@ -65,9 +73,17 @@ export interface GameInviteDto {
 }
 
 export type GameInviteRemovalReason = 'accepted' | 'declined' | 'cancelled' | 'expired'
-export type GameMatchStatus = 'playing' | 'finished'
-export type GamePlayerStatus = 'playing' | 'won' | 'lost'
-export type GameEndReason = 'target' | 'timeout' | 'resign' | 'forfeit' | 'blocked'
+export type GameMatchStatus = 'waiting' | 'playing' | 'finished'
+export type GamePlayerStatus = 'waiting' | 'playing' | 'won' | 'lost'
+export type GameEndReason =
+  | 'target'
+  | 'timeout'
+  | 'resign'
+  | 'forfeit'
+  | 'blocked'
+  | 'last_standing'
+  | 'elimination'
+  | 'cancelled'
 
 export interface GamePlayerDto {
   userId: number
@@ -84,6 +100,7 @@ export interface GamePlayerDto {
 export interface GameMatchDto {
   id: number
   game: '2048'
+  hostId: number
   status: GameMatchStatus
   version: number
   startedAt: string
@@ -116,6 +133,7 @@ export interface GameSyncDto {
 
 interface InviteState {
   id: number
+  matchId: number
   from: GameUserBriefDto
   to: GameUserBriefDto
   createdAt: number
@@ -130,14 +148,15 @@ interface PlayerState {
   maxTile: number
   moves: number
   status: GamePlayerStatus
-  /** 该玩家专属的随机序列（与对手同种子起步，之后独立推进） */
-  random: Game2048Random
+  /** 该玩家专属的随机序列（开局后分配；等待房间中为 null） */
+  random: Game2048Random | null
   /** 最近一次被判定为可用的时间（用于掉线判负） */
   lastAvailableAt: number
 }
 
 interface MatchState {
   id: number
+  hostId: number
   status: GameMatchStatus
   version: number
   startedAt: number
@@ -145,7 +164,7 @@ interface MatchState {
   endedAt: number | null
   winnerId: number | null
   reason: GameEndReason | null
-  players: [PlayerState, PlayerState]
+  players: PlayerState[]
 }
 
 type MatchEventType = 'game:match:started' | 'game:match:update' | 'game:match:ended'
@@ -172,15 +191,27 @@ export function isGameUserAvailable(userId: number): boolean {
 }
 
 function isParticipant(match: MatchState, userId: number): boolean {
-  return match.players[0].userId === userId || match.players[1].userId === userId
+  return match.players.some((player) => player.userId === userId)
 }
 
-/** 当前用户进行中的对局（status === 'playing'） */
+/** 当前用户所在的房间/对局（等待或进行中） */
 function activeMatchFor(userId: number): MatchState | null {
   for (const match of matches.values()) {
-    if (match.status === 'playing' && isParticipant(match, userId)) return match
+    if (match.status !== 'finished' && isParticipant(match, userId)) return match
   }
   return null
+}
+
+/** 寻找当前用户所在的等待房间 */
+function waitingRoomFor(userId: number): MatchState | null {
+  for (const match of matches.values()) {
+    if (match.status === 'waiting' && isParticipant(match, userId)) return match
+  }
+  return null
+}
+
+function activePlayerCount(match: MatchState): number {
+  return match.players.filter((player) => player.status === 'playing').length
 }
 
 /** 当前总进行中对局数 */
@@ -195,6 +226,7 @@ function countActiveMatches(): number {
 function toInviteDto(invite: InviteState): GameInviteDto {
   return {
     id: invite.id,
+    matchId: invite.matchId,
     from: { id: invite.from.id, username: invite.from.username },
     to: { id: invite.to.id, username: invite.to.username },
     createdAt: iso(invite.createdAt),
@@ -206,6 +238,7 @@ function toMatchDto(match: MatchState): GameMatchDto {
   return {
     id: match.id,
     game: '2048',
+    hostId: match.hostId,
     status: match.status,
     version: match.version,
     startedAt: iso(match.startedAt),
@@ -298,46 +331,110 @@ function collectInvites(userId: number, now: number): GameInvitesDto {
   return { incoming: sortInvites(incoming), outgoing: sortInvites(outgoing) }
 }
 
-// === 对局生命周期 ===
+// === 房间 / 对局生命周期 ===
 
-function createPlayerState(user: GameUserBriefDto, seed: number, now: number): PlayerState {
-  const initial = createSeededGame(seed)
+/** 等待房间中的玩家：还没有棋盘，等房主开始后统一种子发牌 */
+function createWaitingPlayer(user: GameUserBriefDto, now: number): PlayerState {
   return {
     userId: user.id,
     username: user.username,
-    board: initial.board,
+    board: createEmptyBoard(),
     score: 0,
-    maxTile: maxTileValue(initial.board),
+    maxTile: 0,
     moves: 0,
-    status: 'playing',
-    random: initial.random,
+    status: 'waiting',
+    random: null,
     lastAvailableAt: now,
   }
 }
 
-/** 建立对局：双方用同一 seed 得到完全相同的初始棋盘 */
-function createMatch(host: GameUserBriefDto, guest: GameUserBriefDto, now: number): MatchState {
-  const seed = randomSeed()
+/** 创建等待房间（房主已在房间里） */
+function createWaitingRoom(host: GameUserBriefDto, now: number): MatchState {
   const match: MatchState = {
     id: nextMatchId++,
-    status: 'playing',
+    hostId: host.id,
+    status: 'waiting',
     version: 1,
     startedAt: now,
-    endsAt: now + GAME_MATCH_DURATION_MS,
+    endsAt: now + GAME_WAITING_ROOM_TTL_MS,
     endedAt: null,
     winnerId: null,
     reason: null,
-    players: [createPlayerState(host, seed, now), createPlayerState(guest, seed, now)],
+    players: [createWaitingPlayer(host, now)],
   }
   matches.set(match.id, match)
   return match
 }
 
+/** 把等待房间里的玩家初始化成同一 seed 的竞速棋盘 */
+function initPlayerForGame(player: PlayerState, seed: number, now: number): void {
+  const initial = createSeededGame(seed)
+  player.board = initial.board
+  player.score = 0
+  player.maxTile = maxTileValue(initial.board)
+  player.moves = 0
+  player.status = 'playing'
+  player.random = initial.random
+  player.lastAvailableAt = now
+}
+
+/**
+ * 房主开始游戏：2–10 人，所有人同一 seed，状态从 waiting 切到 playing。
+ * 只允许房主操作；房间已开始/已结束时拒绝。
+ */
+export function startGameMatch(userId: number, matchId: number, now: number = Date.now()): { match: GameMatchDto } {
+  const match = matches.get(matchId)
+  if (!match || !isParticipant(match, userId)) throw new AppError('房间不存在', 404)
+  if (match.status !== 'waiting') throw new AppError('房间已经开始或已结束', 409)
+  if (match.hostId !== userId) throw new AppError('只有房主可以开始游戏', 403)
+  if (match.players.length < GAME_MIN_PLAYERS) throw new AppError('至少需要 2 名玩家才能开始', 400)
+  if (match.players.length > GAME_MAX_PLAYERS) throw new AppError('房间人数超过上限', 400)
+
+  const seed = randomSeed()
+  for (const player of match.players) initPlayerForGame(player, seed, now)
+  match.status = 'playing'
+  match.startedAt = now
+  match.endsAt = now + GAME_MATCH_DURATION_MS
+  match.version += 1
+  // 对局开始后不再接受任何邀请
+  removeInvitesForUsers(match.players.map((player) => player.userId), 'cancelled')
+  broadcastMatch(match, 'game:match:started')
+  return { match: toMatchDto(match) }
+}
+
+/**
+ * 离开等待房间：房主离开 = 解散房间；普通玩家离开 = 从房间移除。
+ * 已开始的对局不能走这个接口（请使用 resign）。
+ */
+export function leaveGameMatch(userId: number, matchId: number, now: number = Date.now()): { ok: true; dissolved: boolean } {
+  const match = matches.get(matchId)
+  if (!match || !isParticipant(match, userId)) throw new AppError('房间不存在', 404)
+  if (match.status !== 'waiting') throw new AppError('对局已开始，无法离开房间', 409)
+
+  const isHost = match.hostId === userId
+  removeInvitesForUsers([userId], 'cancelled')
+
+  if (isHost) {
+    removeInvitesForUsers(match.players.map((player) => player.userId), 'cancelled')
+    finishMatch(match, 'cancelled', null, now)
+    return { ok: true, dissolved: true }
+  }
+
+  match.players = match.players.filter((player) => player.userId !== userId)
+  match.version += 1
+  if (match.players.length === 0) {
+    finishMatch(match, 'cancelled', null, now)
+    return { ok: true, dissolved: true }
+  }
+  broadcastMatch(match, 'game:match:update')
+  return { ok: true, dissolved: false }
+}
+
 /**
  * 结束对局并广播 game:match:ended。
  *
- * 单个玩家状态：winnerId 对应玩家为 won、另一人为 lost；
- * 平局（winnerId === null，仅 timeout 平分）双方均为 lost，客户端应以
+ * winnerId 对应玩家为 won，其余玩家为 lost；
+ * 平局（winnerId === null，仅超时平分）所有玩家均为 lost，客户端应以
  * `winnerId === null` 判断平局，而不是以单个玩家 status 判断。
  */
 function finishMatch(
@@ -359,15 +456,49 @@ function finishMatch(
   broadcastMatch(match, 'game:match:ended')
 }
 
-/** 超时结算：比较分数，高者胜；平分则 winnerId = null（平局） */
+/** 在指定玩家集合中按分数选最高者；最高分并列时返回 null（平局） */
+function highestScoreWinner(players: PlayerState[]): number | null {
+  if (players.length === 0) return null
+  let winner = players[0]
+  let tie = false
+  for (const player of players.slice(1)) {
+    if (player.score > winner.score) {
+      winner = player
+      tie = false
+    } else if (player.score === winner.score) {
+      tie = true
+    }
+  }
+  return tie ? null : winner.userId
+}
+
+/** 超时结算：优先在仍存活的玩家中比较分数；全部出局时比较所有玩家分数 */
 function finishByTimeout(match: MatchState, now: number): void {
-  const [first, second] = match.players
-  const winnerId = first.score > second.score
-    ? first.userId
-    : second.score > first.score
-      ? second.userId
-      : null
-  finishMatch(match, 'timeout', winnerId, now)
+  const alive = match.players.filter((player) => player.status === 'playing')
+  const candidates = alive.length > 0 ? alive : match.players
+  finishMatch(match, 'timeout', highestScoreWinner(candidates), now)
+}
+
+/**
+ * 淘汰一名玩家（无路可走 / 认输 / 掉线）：
+ * - 仍有 2+ 人存活 → 对局继续，广播 update；
+ * - 只剩 1 人存活 → 该玩家以 last_standing 获胜；
+ * - 全部出局 → 按分数判定（elimination，平分则平局）。
+ */
+function eliminatePlayer(match: MatchState, player: PlayerState, now: number): void {
+  if (player.status !== 'playing') return
+  player.status = 'lost'
+  const alive = match.players.filter((candidate) => candidate.status === 'playing')
+  if (alive.length === 1) {
+    finishMatch(match, 'last_standing', alive[0].userId, now)
+    return
+  }
+  if (alive.length === 0) {
+    finishMatch(match, 'elimination', highestScoreWinner(match.players), now)
+    return
+  }
+  match.version += 1
+  broadcastMatch(match, 'game:match:update')
 }
 
 // === 好友大厅 ===
@@ -392,34 +523,25 @@ export function listGameInvites(userId: number, now: number = Date.now()): GameI
   return collectInvites(userId, now)
 }
 
-/** POST /api/games/2048/invites */
+/**
+ * POST /api/games/2048/invites
+ *
+ * 邀请加入自己的等待房间；没有房间时自动创建（inviter 为房主）。
+ * 一个房间可以同时向多名好友发出邀请（上限 10 人），同一好友重复邀请幂等。
+ */
 export async function createGameInvite(
   userId: number,
   friendId: number,
   now: number = Date.now(),
-): Promise<{ invite: GameInviteDto }> {
+): Promise<{ invite: GameInviteDto; match: GameMatchDto }> {
   if (friendId === userId) throw new AppError('不能邀请自己', 400)
   if (!(await areFriends(userId, friendId))) throw new AppError('只能邀请好友进行对战', 403)
 
   pruneExpiredInvites(now)
 
-  if (activeMatchFor(userId)) throw new AppError('你正在对局中，无法发起邀请', 409)
-  if (activeMatchFor(friendId)) throw new AppError('对方正在对局中，无法邀请', 409)
-
-  // 同一发送者只能有一条待处理邀请；同一好友重复发起幂等返回已有邀请
-  for (const invite of invites.values()) {
-    if (invite.from.id !== userId) continue
-    if (invite.to.id === friendId) return { invite: toInviteDto(invite) }
-    throw new AppError('你已有一条待处理的对战邀请，请先取消', 409)
-  }
-
-  // 对方已经先邀请了自己 → 先处理对方邀请
-  for (const invite of invites.values()) {
-    if (invite.from.id === friendId && invite.to.id === userId) {
-      throw new AppError('对方已向你发出邀请，请先处理', 409)
-    }
-  }
-
+  const current = activeMatchFor(userId)
+  if (current && current.status !== 'waiting') throw new AppError('你正在对局中，无法发起邀请', 409)
+  if (activeMatchFor(friendId)) throw new AppError('对方正在对局/房间中，无法邀请', 409)
   if (!isGameUserAvailable(friendId)) throw new AppError('对方不在线，无法邀请', 409)
 
   let incomingCount = 0
@@ -432,23 +554,36 @@ export async function createGameInvite(
 
   const [from, to] = await Promise.all([getUserBrief(userId), getUserBrief(friendId)])
 
-  // 异步查询期间可能已有并发请求写入邀请/对局；落库前再检查一次，避免同一发送者产生多条邀请。
-  if (activeMatchFor(userId)) throw new AppError('你正在对局中，无法发起邀请', 409)
-  if (activeMatchFor(friendId)) throw new AppError('对方正在对局中，无法邀请', 409)
-  for (const invite of invites.values()) {
-    if (invite.from.id !== userId) continue
-    if (invite.to.id === friendId) return { invite: toInviteDto(invite) }
-    throw new AppError('你已有一条待处理的对战邀请，请先取消', 409)
+  // 异步查询期间可能已有并发请求写入邀请/房间；落库前再检查一次
+  const currentAfter = activeMatchFor(userId)
+  if (currentAfter && currentAfter.status !== 'waiting') throw new AppError('你正在对局中，无法发起邀请', 409)
+  if (activeMatchFor(friendId)) throw new AppError('对方正在对局/房间中，无法邀请', 409)
+  if (!isGameUserAvailable(friendId)) throw new AppError('对方不在线，无法邀请', 409)
+
+  let room = currentAfter ?? waitingRoomFor(userId)
+  if (!room) {
+    room = createWaitingRoom({ id: from.id, username: from.username }, now)
   }
+  if (room.status !== 'waiting') throw new AppError('房间已经开始，无法继续邀请', 409)
+  if (room.players.length >= GAME_MAX_PLAYERS) throw new AppError('房间已满（最多 10 人）', 409)
+
+  // 同一好友重复邀请：幂等返回已有邀请与房间
+  for (const invite of invites.values()) {
+    if (invite.matchId === room.id && invite.to.id === friendId) {
+      return { invite: toInviteDto(invite), match: toMatchDto(room) }
+    }
+  }
+
+  // 对方已经先邀请了自己 → 先处理对方邀请
   for (const invite of invites.values()) {
     if (invite.from.id === friendId && invite.to.id === userId) {
       throw new AppError('对方已向你发出邀请，请先处理', 409)
     }
   }
-  if (!isGameUserAvailable(friendId)) throw new AppError('对方不在线，无法邀请', 409)
 
   const invite: InviteState = {
     id: nextInviteId++,
+    matchId: room.id,
     from: { id: from.id, username: from.username },
     to: { id: to.id, username: to.username },
     createdAt: now,
@@ -456,10 +591,14 @@ export async function createGameInvite(
   }
   invites.set(invite.id, invite)
   emitInviteInviteToTarget(invite)
-  return { invite: toInviteDto(invite) }
+  return { invite: toInviteDto(invite), match: toMatchDto(room) }
 }
 
-/** POST /api/games/2048/invites/:id/respond */
+/**
+ * POST /api/games/2048/invites/:id/respond
+ *
+ * 接受邀请 = 加入邀请对应的等待房间（不会立刻开局；由房主统一开始）。
+ */
 export function respondGameInvite(
   userId: number,
   inviteId: number,
@@ -479,34 +618,40 @@ export function respondGameInvite(
     return { ok: true }
   }
 
-  // === 接受邀请 ===
-  const inviterId = invite.from.id
+  // === 接受邀请：加入等待房间 ===
+  const room = matches.get(invite.matchId)
+  if (!room || room.status !== 'waiting') {
+    removeInvite(invite, 'cancelled')
+    throw new AppError('房间已开始或已解散', 409)
+  }
   if (activeMatchFor(userId)) {
-    // 自己已在另一场对局：清理本条邀请
     removeInvite(invite, 'cancelled')
-    throw new AppError('你已在另一场对局中', 409)
+    throw new AppError('你已在另一场对局或房间中', 409)
   }
-  if (activeMatchFor(inviterId)) {
+  if (!isParticipant(room, invite.from.id)) {
     removeInvite(invite, 'cancelled')
-    throw new AppError('对方已进入另一场对局', 409)
+    throw new AppError('邀请已失效', 409)
   }
-  if (!isGameUserAvailable(inviterId)) {
-    removeInvite(invite, 'expired')
-    throw new AppError('对方已离线，邀请已失效', 409)
+  if (room.players.length >= GAME_MAX_PLAYERS) {
+    removeInvite(invite, 'cancelled')
+    throw new AppError('房间已满（最多 10 人）', 409)
   }
   if (countActiveMatches() >= GAME_MAX_ACTIVE_MATCHES) {
     throw new AppError('游戏服务繁忙，请稍后再试', 503)
   }
 
-  // 接受后先标记本条为 accepted，再清理双方之间其它待处理邀请，最后建立对局
   invites.delete(invite.id)
   emitInviteRemoved(invite, 'accepted')
-  // 对局开始后清理双方其它待处理邀请（包括与第三人的邀请），避免过期邀请堆积
-  removeInvitesForUsers([userId, inviterId], 'cancelled')
+  // 只清理「接受者」相关的其它邀请，保留房主邀请其他好友的邀请
+  removeInvitesForUsers([userId], 'cancelled')
 
-  const match = createMatch(invite.from, invite.to, now)
-  broadcastMatch(match, 'game:match:started')
-  return { ok: true, match: toMatchDto(match) }
+  room.players.push(createWaitingPlayer({ id: invite.to.id, username: invite.to.username }, now))
+  room.version += 1
+  if (room.players.length >= GAME_MAX_PLAYERS) {
+    removeInvitesForUsers(room.players.map((player) => player.userId), 'cancelled')
+  }
+  broadcastMatch(room, 'game:match:update')
+  return { ok: true, match: toMatchDto(room) }
 }
 
 /** DELETE /api/games/2048/invites/:id */
@@ -546,13 +691,23 @@ export function getGameSync(
   if (matchId === undefined) {
     match = activeMatchFor(userId)
     if (match !== null && now >= match.endsAt) {
-      finishByTimeout(match, now)
+      if (match.status === 'waiting') {
+        removeInvitesForUsers(match.players.map((player) => player.userId), 'cancelled')
+        finishMatch(match, 'cancelled', null, now)
+      } else {
+        finishByTimeout(match, now)
+      }
       match = null
     }
   } else {
     const found = matches.get(matchId)
     if (!found || !isParticipant(found, userId)) throw new AppError('对局不存在', 404)
-    if (found.status === 'playing' && now >= found.endsAt) finishByTimeout(found, now)
+    if (found.status === 'waiting' && now >= found.endsAt) {
+      removeInvitesForUsers(found.players.map((player) => player.userId), 'cancelled')
+      finishMatch(found, 'cancelled', null, now)
+    } else if (found.status === 'playing' && now >= found.endsAt) {
+      finishByTimeout(found, now)
+    }
     match = found
   }
 
@@ -563,22 +718,33 @@ export function getGameSync(
   }
 }
 
-/** GET /api/games/2048/matches/active —— 当前进行中的对局或 null */
+/** GET /api/games/2048/matches/active —— 当前等待房间/进行中对局或 null */
 export function getActiveGameMatch(userId: number, now: number = Date.now()): GameMatchDto | null {
   const match = activeMatchFor(userId)
   if (match === null) return null
-  // sweeper 有 15 秒间隔：读取时先结算已超时的对局，避免大厅继续跳回一场已超时的对局
+  // sweeper 有 15 秒间隔：读取时先结算已超时/已过期的房间，避免大厅继续跳回旧房间
   if (now >= match.endsAt) {
-    finishByTimeout(match, now)
+    if (match.status === 'waiting') {
+      removeInvitesForUsers(match.players.map((player) => player.userId), 'cancelled')
+      finishMatch(match, 'cancelled', null, now)
+    } else {
+      finishByTimeout(match, now)
+    }
     return null
   }
   return toMatchDto(match)
 }
 
 /** GET /api/games/2048/matches/:id —— 非参与者按 404 处理（不泄露对局是否存在） */
-export function getGameMatch(userId: number, matchId: number): GameMatchDto {
+export function getGameMatch(userId: number, matchId: number, now: number = Date.now()): GameMatchDto {
   const match = matches.get(matchId)
   if (!match || !isParticipant(match, userId)) throw new AppError('对局不存在', 404)
+  if (match.status === 'waiting' && now >= match.endsAt) {
+    removeInvitesForUsers(match.players.map((player) => player.userId), 'cancelled')
+    finishMatch(match, 'cancelled', null, now)
+  } else if (match.status === 'playing' && now >= match.endsAt) {
+    finishByTimeout(match, now)
+  }
   return toMatchDto(match)
 }
 
@@ -601,9 +767,9 @@ export function applyGameMove(
     throw new AppError('对局已结束', 409)
   }
 
-  const playerIndex = match.players[0].userId === userId ? 0 : 1
-  const player = match.players[playerIndex]
-  const opponent = match.players[1 - playerIndex]
+  const player = match.players.find((candidate) => candidate.userId === userId)
+  if (!player || player.status !== 'playing') throw new AppError('你已出局或对局未开始', 409)
+  if (!player.random) throw new AppError('对局尚未开始', 409)
 
   const result = applyMove(player.board, direction, player.random)
   if (!result.moved) {
@@ -621,8 +787,8 @@ export function applyGameMove(
     // 先合成 2048 者获胜
     finishMatch(match, 'target', player.userId, now)
   } else if (!hasAvailableMoves(player.board)) {
-    // 无合法移动 → 该玩家判负，对手获胜
-    finishMatch(match, 'blocked', opponent.userId, now)
+    // 无合法移动：该玩家淘汰，其他人继续竞速
+    eliminatePlayer(match, player, now)
   } else {
     broadcastMatch(match, 'game:match:update')
   }
@@ -630,7 +796,7 @@ export function applyGameMove(
   return { match: toMatchDto(match), moved: true }
 }
 
-/** POST /api/games/2048/matches/:id/resign —— 认输，对手获胜 */
+/** POST /api/games/2048/matches/:id/resign —— 认输：该玩家淘汰，其他人继续 */
 export function resignGameMatch(
   userId: number,
   matchId: number,
@@ -645,10 +811,9 @@ export function resignGameMatch(
     throw new AppError('对局已结束', 409)
   }
 
-  const opponentId = match.players[0].userId === userId
-    ? match.players[1].userId
-    : match.players[0].userId
-  finishMatch(match, 'resign', opponentId, now)
+  const player = match.players.find((candidate) => candidate.userId === userId)
+  if (!player || player.status !== 'playing') throw new AppError('你已出局', 409)
+  eliminatePlayer(match, player, now)
   return { match: toMatchDto(match) }
 }
 
@@ -666,6 +831,13 @@ export function runGameSweeper(now: number = Date.now()): void {
   pruneGamePresence(now)
 
   for (const match of matches.values()) {
+    if (match.status === 'waiting') {
+      if (now >= match.endsAt) {
+        removeInvitesForUsers(match.players.map((player) => player.userId), 'cancelled')
+        finishMatch(match, 'cancelled', null, now)
+      }
+      continue
+    }
     if (match.status !== 'playing') continue
 
     if (now >= match.endsAt) {
@@ -674,19 +846,23 @@ export function runGameSweeper(now: number = Date.now()): void {
     }
 
     for (const player of match.players) {
+      if (player.status !== 'playing') continue
       if (isGameUserAvailable(player.userId)) {
         player.lastAvailableAt = now
         continue
       }
       if (now - player.lastAvailableAt < GAME_DISCONNECT_FORFEIT_MS) continue
 
-      const opponent = match.players[0].userId === player.userId
-        ? match.players[1]
-        : match.players[0]
-      // 双方都不可用时不判负（等超时或任意一方恢复）
-      if (!isGameUserAvailable(opponent.userId)) continue
+      // 至少还有一名其他存活玩家可用时才淘汰掉线者；全员掉线等超时
+      const othersAvailable = match.players.some(
+        (candidate) =>
+          candidate.userId !== player.userId
+          && candidate.status === 'playing'
+          && isGameUserAvailable(candidate.userId),
+      )
+      if (!othersAvailable) continue
 
-      finishMatch(match, 'forfeit', opponent.userId, now)
+      eliminatePlayer(match, player, now)
       break
     }
   }
