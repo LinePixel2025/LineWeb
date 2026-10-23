@@ -7,11 +7,10 @@ import {
 } from '../../../lib/games/doudizhu'
 
 /**
- * 斗地主卡牌展示组件（纯展示，单机与联机页面共用）：
- * - DoudizhuCardView  单张牌（可选中）
- * - DoudizhuHandView  自己的手牌行（点击选牌）
- * - DoudizhuCardBacks 对手手牌（背面 + 剩余张数）
- * - DoudizhuMiniCards 小牌行（出牌记录 / 底牌展示）
+ * 斗地主卡牌展示组件（单机与联机页面共用）：
+ * - DoudizhuCardView  单张牌（可选中，手牌用）
+ * - DoudizhuMiniCards 小牌行（桌面出牌记录 / 明示底牌）
+ * 座位牌背与手牌行由 DoudizhuTable 直接渲染（.gh-ddz-back / .gh-ddz-hand）。
  */
 
 export interface DoudizhuCardViewProps {
@@ -60,60 +59,12 @@ export function DoudizhuCardView({ card, selected = false, selectable = false, s
   )
 }
 
-export interface DoudizhuHandViewProps {
-  cards: DoudizhuCard[]
-  selectedIds: ReadonlySet<number>
-  onToggle?: (card: DoudizhuCard) => void
-  disabled?: boolean
-}
-
-/** 自己的手牌：升序排列，点击选 / 取消选 */
-export function DoudizhuHandView({ cards, selectedIds, onToggle, disabled = false }: DoudizhuHandViewProps) {
-  const sorted = sortDoudizhuCards(cards)
-  return (
-    <div className="gh-ddz-hand" role="group" aria-label="我的手牌">
-      {sorted.map((card) => (
-        <DoudizhuCardView
-          key={card.id}
-          card={card}
-          selected={selectedIds.has(card.id)}
-          selectable={!disabled}
-          onClick={onToggle}
-        />
-      ))}
-    </div>
-  )
-}
-
-export interface DoudizhuCardBacksProps {
-  count: number
-  label?: string
-}
-
-/** 对手手牌：重叠背面 + 剩余张数 */
-export function DoudizhuCardBacks({ count, label }: DoudizhuCardBacksProps) {
-  if (count <= 0) {
-    return <span className="gh-ddz-backs gh-ddz-backs--empty">{label ? `${label} 已出完` : '已出完'}</span>
-  }
-  const shown = Math.min(count, 10)
-  return (
-    <span className="gh-ddz-backs" aria-label={`剩余 ${count} 张`}>
-      <span className="gh-ddz-backs-row">
-        {Array.from({ length: shown }, (_, index) => (
-          <span key={index} className="gh-ddz-back" />
-        ))}
-      </span>
-      <span className="gh-ddz-backs-count">{count}</span>
-    </span>
-  )
-}
-
 export interface DoudizhuMiniCardsProps {
   cards: DoudizhuCard[]
   ariaLabel?: string
 }
 
-/** 小牌行：出牌记录、底牌等紧凑展示 */
+/** 小牌行：桌面出牌记录、明示底牌等紧凑展示 */
 export function DoudizhuMiniCards({ cards, ariaLabel }: DoudizhuMiniCardsProps) {
   const sorted = sortDoudizhuCards(cards)
   return (

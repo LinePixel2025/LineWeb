@@ -1,161 +1,183 @@
 /* =============================================================
-   LineWeb — 斗地主（单机 / 联机）
+   LineWeb — 斗地主（经典牌桌，单机 / 联机共用）
    命名空间：.gh-ddz-*
-   保持 GitHub Primer 设计语言（.gh-btn / 令牌变量 / [data-theme]）。
+   对局页为全屏沉浸布局（不套站点导航），整页即牌桌：
+   深绿桌布 + 顶部信息条 + 上家/下家/我 三方位 + 中央出牌区 + 扇形手牌。
    ============================================================= */
 
-/* ===== 页面骨架 ===== */
+/* ===== 全屏游戏壳 ===== */
 
-.gh-ddz-page {
-  max-width: var(--gh-content-width);
-  margin: 0 auto;
+.gh-ddz-game {
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  gap: var(--gh-space-4);
+  background:
+    radial-gradient(ellipse 120% 90% at 50% 30%, rgba(255, 255, 255, 0.10), transparent 60%),
+    linear-gradient(160deg, #1d7a4f 0%, #14603c 45%, #0c4529 100%);
+  color: rgba(255, 255, 255, 0.94);
+  padding: 0 env(12px, 12px) 12px;
+  box-sizing: border-box;
 }
 
-.gh-ddz-topbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--gh-space-4);
-  flex-wrap: wrap;
-}
+/* ===== 顶部信息条 ===== */
 
-.gh-ddz-topbar-copy {
-  min-width: 0;
-}
-
-.gh-ddz-eyebrow {
-  margin: 0 0 var(--gh-space-1);
-  color: var(--gh-text-tertiary);
-  font-size: var(--gh-text-xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.gh-ddz-title {
-  margin: 0 0 var(--gh-space-1);
-  font-size: var(--gh-text-2xl);
-  line-height: 1.2;
-}
-
-.gh-ddz-subtitle {
-  margin: 0;
-  color: var(--gh-text-secondary);
-  font-size: var(--gh-text-sm);
-  line-height: 1.6;
-}
-
-/* ===== 信息条（底牌 / 倍率 / 角色 / 战绩） ===== */
-
-.gh-ddz-meta {
+.gh-ddz-gamebar {
   display: flex;
   align-items: center;
   gap: var(--gh-space-3);
   flex-wrap: wrap;
-  padding: var(--gh-space-3) var(--gh-space-4);
-  border: 1px solid var(--gh-border-muted);
-  border-radius: var(--gh-radius);
-  background: var(--gh-canvas);
+  padding: 10px 4px;
 }
 
-.gh-ddz-meta-item {
+.gh-ddz-gamebar-back {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  margin-left: -8px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: var(--gh-text-sm);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.gh-ddz-gamebar-back:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.gh-ddz-gamebar-title {
   display: inline-flex;
   align-items: center;
   gap: var(--gh-space-2);
-  font-size: var(--gh-text-sm);
-  color: var(--gh-text-secondary);
+  font-weight: 700;
+  font-size: var(--gh-text-base);
+  letter-spacing: 0.02em;
 }
 
-.gh-ddz-meta-item strong {
-  color: var(--gh-text);
-}
-
-.gh-ddz-role-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: var(--gh-text-xs);
-  font-weight: 600;
-}
-
-.gh-ddz-role-badge--landlord {
-  color: var(--gh-warning);
-  background: var(--gh-warning-soft);
-}
-
-.gh-ddz-role-badge--farmer {
-  color: var(--gh-success);
-  background: var(--gh-success-soft);
-}
-
-.gh-ddz-multiplier {
-  color: var(--gh-danger);
-  font-weight: 600;
-}
-
-/* ===== 牌桌 ===== */
-
-.gh-ddz-table {
-  display: grid;
-  grid-template-areas:
-    'opponent'
-    'center'
-    'hand';
-  gap: var(--gh-space-4);
-  padding: var(--gh-space-4);
-  border: 1px solid var(--gh-border-muted);
-  border-radius: var(--gh-radius);
-  background: var(--gh-bg);
-  box-shadow: var(--gh-shadow-sm);
-}
-
-.gh-ddz-table--bidding {
-  grid-template-areas:
-    'opponent'
-    'center'
-    'hand';
-}
-
-.gh-ddz-opponents {
-  grid-area: opponent;
+.gh-ddz-gamebar-actions {
+  margin-left: auto;
   display: flex;
-  gap: var(--gh-space-4);
+  align-items: center;
+  gap: var(--gh-space-2);
   flex-wrap: wrap;
 }
 
-.gh-ddz-opponent {
-  flex: 1 1 220px;
-  min-width: 0;
+.gh-ddz-gamebar-chip {
+  font-size: var(--gh-text-xs);
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 桌布上的按钮统一微调：次级按钮半透明白，融入桌面 */
+.gh-ddz-game .gh-btn--secondary {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+
+.gh-ddz-game .gh-btn--secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* ===== 通知条（流局 / 错误） ===== */
+
+.gh-ddz-notice {
+  align-self: center;
+  max-width: min(92vw, 640px);
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.30);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: var(--gh-text-sm);
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.gh-ddz-notice--error {
+  background: rgba(154, 27, 34, 0.85);
+  border-color: rgba(255, 255, 255, 0.30);
+}
+
+/* ===== 牌桌区域 ===== */
+
+.gh-ddz-felt {
+  flex: 1;
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--gh-space-2);
-  padding: var(--gh-space-3);
-  border: 1px solid var(--gh-border-muted);
-  border-radius: var(--gh-radius);
-  background: var(--gh-canvas);
+  gap: 8px;
+  min-height: 0;
 }
 
-.gh-ddz-opponent--active {
-  border-color: var(--gh-accent);
-  box-shadow: 0 0 0 3px var(--gh-accent-soft);
+/* --- 顶行：上家 · 底牌/倍率 · 下家 --- */
+
+.gh-ddz-felt-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--gh-space-3);
 }
 
-.gh-ddz-opponent-head {
+.gh-ddz-seat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  max-width: 280px;
+}
+
+.gh-ddz-seat--active {
+  border-color: rgba(255, 209, 102, 0.9);
+  box-shadow: 0 0 0 3px rgba(255, 209, 102, 0.28), 0 0 18px rgba(255, 209, 102, 0.25);
+}
+
+.gh-ddz-felt-top > .gh-ddz-seat:last-child {
+  justify-self: end;
+}
+
+.gh-ddz-seat-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--gh-space-2);
+  gap: 8px;
   min-width: 0;
 }
 
-.gh-ddz-opponent-name {
+.gh-ddz-seat-avatar {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 50%;
   display: inline-flex;
   align-items: center;
-  gap: var(--gh-space-2);
+  justify-content: center;
+  background: linear-gradient(135deg, #3d8f6a, #24583d);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  font-weight: 700;
+  font-size: var(--gh-text-sm);
+}
+
+.gh-ddz-seat-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gh-ddz-seat-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-weight: 600;
   font-size: var(--gh-text-sm);
   min-width: 0;
@@ -164,129 +186,149 @@
   white-space: nowrap;
 }
 
-.gh-ddz-opponent-meta {
+.gh-ddz-seat-meta {
   display: inline-flex;
   align-items: center;
-  gap: var(--gh-space-1);
-  font-size: var(--gh-text-xs);
-  color: var(--gh-text-tertiary);
-  white-space: nowrap;
+  gap: 6px;
 }
 
-.gh-ddz-presence-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--gh-text-disabled);
-  flex: none;
-}
-
-.gh-ddz-presence-dot--online {
-  background: var(--gh-success-emphasis);
-}
-
-/* 对手最近动作（出牌 / 不出气泡） */
-.gh-ddz-opponent-play {
-  min-height: 58px;
-  display: flex;
-  align-items: center;
-  gap: var(--gh-space-2);
-  flex-wrap: wrap;
-}
-
-.gh-ddz-pass-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 12px;
+.gh-ddz-seat-count {
+  margin-left: auto;
+  min-width: 28px;
+  text-align: center;
+  padding: 2px 8px;
   border-radius: 999px;
-  border: 1px dashed var(--gh-border);
-  color: var(--gh-text-tertiary);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   font-size: var(--gh-text-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
-/* ===== 中央区（叫分 / 提示语 / 最近出牌） ===== */
+.gh-ddz-seat-backs {
+  display: flex;
+  padding-left: 14px;
+  min-height: 34px;
+  align-items: center;
+}
 
-.gh-ddz-center {
-  grid-area: center;
+/* --- 中央奖池：底牌 + 倍率 --- */
+
+.gh-ddz-pot {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.gh-ddz-pot-label {
+  font-size: var(--gh-text-xs);
+  color: rgba(255, 255, 255, 0.66);
+  letter-spacing: 0.15em;
+}
+
+.gh-ddz-pot-cards {
+  display: inline-flex;
+  gap: 4px;
+  min-height: 24px;
+  align-items: center;
+}
+
+.gh-ddz-multiplier {
+  font-weight: 700;
+  color: #ffd166;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- 中央行：出牌展示区 + 提示 --- */
+
+.gh-ddz-felt-mid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
   gap: var(--gh-space-3);
-  padding: var(--gh-space-4);
-  border: 1px dashed var(--gh-border-muted);
-  border-radius: var(--gh-radius);
-  background: var(--gh-canvas-inset);
-  min-height: 120px;
+  min-height: 130px;
+}
+
+.gh-ddz-play-slot {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-height: 48px;
+}
+
+.gh-ddz-felt-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   text-align: center;
+  max-width: min(46vw, 420px);
 }
 
 .gh-ddz-center-hint {
   margin: 0;
-  color: var(--gh-text-secondary);
   font-size: var(--gh-text-sm);
+  color: rgba(255, 255, 255, 0.92);
+  line-height: 1.6;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
-.gh-ddz-center-cards {
-  display: flex;
-  justify-content: center;
-  gap: var(--gh-space-2);
-  flex-wrap: wrap;
-}
-
-.gh-ddz-center-label {
-  font-size: var(--gh-text-xs);
-  color: var(--gh-text-tertiary);
-}
-
-/* 叫分按钮组 */
-.gh-ddz-bid-actions {
-  display: flex;
-  gap: var(--gh-space-2);
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.gh-ddz-bid-history {
-  display: flex;
-  gap: var(--gh-space-3);
-  flex-wrap: wrap;
-  justify-content: center;
-  font-size: var(--gh-text-sm);
-  color: var(--gh-text-secondary);
-}
-
-.gh-ddz-bid-item strong {
-  color: var(--gh-text);
-}
-
-/* 倒计时 */
 .gh-ddz-countdown {
   display: inline-flex;
   align-items: center;
-  gap: var(--gh-space-1);
+  padding: 2px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   font-size: var(--gh-text-sm);
-  color: var(--gh-text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
-.gh-ddz-countdown strong {
-  font-variant-numeric: tabular-nums;
-  color: var(--gh-text);
+.gh-ddz-countdown--urgent {
+  border-color: rgba(255, 138, 128, 0.9);
 }
 
 .gh-ddz-countdown--urgent strong {
-  color: var(--gh-danger);
+  color: #ff9d94;
 }
 
-/* ===== 我的手牌区 ===== */
+/* --- 气泡（不要 / 叫分） --- */
 
-.gh-ddz-me {
-  grid-area: hand;
+.gh-ddz-bubble {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 16px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.gh-ddz-bubble--bid {
+  background: rgba(9, 105, 218, 0.55);
+}
+
+/* ===== 我的一侧 ===== */
+
+.gh-ddz-felt-me {
   display: flex;
   flex-direction: column;
-  gap: var(--gh-space-3);
+  gap: 8px;
 }
 
-.gh-ddz-me-head {
+.gh-ddz-me-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -297,60 +339,77 @@
 .gh-ddz-me-name {
   display: inline-flex;
   align-items: center;
-  gap: var(--gh-space-2);
-  font-weight: 600;
+  gap: 8px;
+  font-weight: 700;
   font-size: var(--gh-text-sm);
+}
+
+.gh-ddz-turn-tag {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(255, 209, 102, 0.9);
+  color: #4a3200;
+  font-size: var(--gh-text-xs);
+  font-weight: 700;
 }
 
 .gh-ddz-actions {
   display: flex;
+  align-items: center;
   gap: var(--gh-space-2);
   flex-wrap: wrap;
-  align-items: center;
 }
 
-/* ===== 卡牌 ===== */
+.gh-ddz-play-btn {
+  min-width: 96px;
+}
+
+.gh-ddz-me-play {
+  min-height: 44px;
+  display: flex;
+  justify-content: center;
+}
+
+/* ===== 扑克牌 ===== */
 
 .gh-ddz-hand {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: var(--gh-space-3) 0 var(--gh-space-2);
-  min-height: 96px;
+  justify-content: center;
   align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0;
+  padding: 14px 0 6px;
+  min-height: 108px;
 }
 
 .gh-ddz-card {
   position: relative;
-  width: 56px;
-  height: 80px;
-  border-radius: 6px;
-  border: 1px solid var(--gh-border);
-  background: var(--gh-bg);
-  box-shadow: var(--gh-shadow-sm);
+  width: 66px;
+  height: 94px;
+  border-radius: 7px;
+  border: 1px solid #cfd6dd;
+  background: linear-gradient(170deg, #ffffff, #f2f5f8);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 5px 6px;
+  padding: 6px 7px;
   font-family: var(--gh-font);
+  color: #1f2328; /* 卡面固定白底，文字固定深色（不随主题变化） */
   cursor: default;
-  transition: transform var(--gh-transition), box-shadow var(--gh-transition),
-    border-color var(--gh-transition);
   flex: none;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  margin-left: -22px; /* 扇形重叠 */
+  z-index: 1;
 }
 
-.gh-ddz-card--sm {
-  width: 40px;
-  height: 58px;
-  padding: 3px 4px;
-}
-
-.gh-ddz-card--black {
-  color: var(--gh-text);
+.gh-ddz-hand .gh-ddz-card:first-child,
+.gh-ddz-hand .gh-ddz-card--selected {
+  margin-left: 0;
 }
 
 .gh-ddz-card--red {
-  color: var(--gh-danger);
+  color: #cf222e;
 }
 
 .gh-ddz-card--clickable {
@@ -358,121 +417,132 @@
 }
 
 .gh-ddz-card--clickable:hover {
-  transform: translateY(-6px);
-  border-color: var(--gh-accent);
+  transform: translateY(-10px);
+  z-index: 3;
 }
 
 .gh-ddz-card--selected {
-  transform: translateY(-12px);
+  transform: translateY(-18px);
   border-color: var(--gh-accent);
-  box-shadow: 0 0 0 3px var(--gh-accent-soft), var(--gh-shadow-md);
-}
-
-.gh-ddz-card--selected:hover {
-  transform: translateY(-14px);
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.45), 0 6px 14px rgba(0, 0, 0, 0.4);
+  z-index: 4;
 }
 
 .gh-ddz-card-rank {
-  font-size: 1.05rem;
-  font-weight: 700;
+  font-size: 1.2rem;
+  font-weight: 800;
   line-height: 1;
-}
-
-.gh-ddz-card--sm .gh-ddz-card-rank {
-  font-size: 0.85rem;
 }
 
 .gh-ddz-card-suit {
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   line-height: 1;
-}
-
-.gh-ddz-card--sm .gh-ddz-card-suit {
-  font-size: 0.8rem;
 }
 
 .gh-ddz-card-joker-mark {
   position: absolute;
-  top: 4px;
-  right: 5px;
+  top: 5px;
+  right: 6px;
   font-size: var(--gh-text-xs);
-  font-weight: 600;
+  font-weight: 700;
   writing-mode: vertical-rl;
-  letter-spacing: 2px;
+  letter-spacing: 3px;
 }
 
-.gh-ddz-card--sm .gh-ddz-card-joker-mark {
-  display: none;
-}
-
-/* 对手牌背 */
-.gh-ddz-backs {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--gh-space-2);
-}
-
-.gh-ddz-backs-row {
-  display: inline-flex;
-  padding-left: 10px;
-}
+/* 牌背（对手手牌 / 底牌背面） */
 
 .gh-ddz-back {
-  width: 22px;
-  height: 32px;
-  border-radius: 3px;
-  border: 1px solid var(--gh-border);
-  background: repeating-linear-gradient(
-    135deg,
-    var(--gh-accent-soft) 0 3px,
-    transparent 3px 6px
-  ), var(--gh-canvas-inset);
-  margin-left: -12px;
-  box-shadow: var(--gh-shadow-sm);
+  width: 26px;
+  height: 36px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.28) 0 4px, transparent 5px),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0 3px, transparent 3px 7px),
+    linear-gradient(160deg, #2f6f9f, #1d4a76);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  margin-left: -14px;
+  flex: none;
 }
 
-.gh-ddz-back:first-child {
+.gh-ddz-seat-backs .gh-ddz-back:first-child,
+.gh-ddz-pot-cards .gh-ddz-back:first-child {
   margin-left: 0;
 }
 
-.gh-ddz-backs-count {
-  font-size: var(--gh-text-sm);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--gh-text-secondary);
+.gh-ddz-back--sm {
+  width: 22px;
+  height: 30px;
+  margin-left: 0;
 }
 
-.gh-ddz-backs--empty {
-  font-size: var(--gh-text-sm);
-  color: var(--gh-text-tertiary);
-}
+/* 小牌行（出牌记录 / 明示底牌） —— 桌布上用亮色小卡 */
 
-/* 小牌行（底牌 / 出牌记录） */
 .gh-ddz-mini-cards {
   display: inline-flex;
   flex-wrap: wrap;
   gap: 4px;
   align-items: center;
+  justify-content: center;
 }
 
 .gh-ddz-mini-card {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 30px;
-  height: 22px;
-  padding: 0 5px;
-  border-radius: 4px;
-  border: 1px solid var(--gh-border);
-  background: var(--gh-bg);
-  color: var(--gh-text);
-  font-size: var(--gh-text-xs);
-  font-weight: 600;
+  min-width: 34px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 1px solid #cfd6dd;
+  background: linear-gradient(170deg, #ffffff, #f2f5f8);
+  color: #1f2328;
+  font-size: var(--gh-text-sm);
+  font-weight: 700;
   white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .gh-ddz-mini-card--red {
-  color: var(--gh-danger);
+  color: #cf222e;
+}
+
+/* ===== 角色徽标 / 在线点 / 皇冠 ===== */
+
+.gh-ddz-role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: var(--gh-text-xs);
+  font-weight: 700;
+}
+
+.gh-ddz-role-badge--landlord {
+  color: #4a3200;
+  background: #ffd166;
+}
+
+.gh-ddz-role-badge--farmer {
+  color: #062e12;
+  background: #7ee2a8;
+}
+
+.gh-ddz-crown {
+  font-size: 0.95em;
+}
+
+.gh-ddz-presence-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  flex: none;
+}
+
+.gh-ddz-presence-dot--online {
+  background: #56d364;
+  box-shadow: 0 0 6px rgba(86, 211, 100, 0.8);
 }
 
 /* ===== 结果弹层 ===== */
@@ -484,7 +554,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(31, 35, 40, 0.45);
+  background: rgba(6, 26, 16, 0.62);
+  backdrop-filter: blur(2px);
 }
 
 .gh-ddz-overlay-card {
@@ -492,31 +563,32 @@
   flex-direction: column;
   align-items: center;
   gap: var(--gh-space-3);
-  padding: var(--gh-space-6);
-  border: 1px solid var(--gh-border-muted);
-  border-radius: var(--gh-radius);
-  background: var(--gh-bg);
-  box-shadow: var(--gh-shadow-lg);
+  padding: var(--gh-space-6) var(--gh-space-7);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: linear-gradient(170deg, #17573a, #0e3f27);
+  box-shadow: var(--gh-shadow-xl);
   text-align: center;
-  max-width: 100%;
+  max-width: calc(100vw - 32px);
 }
 
 .gh-ddz-overlay-title {
   margin: 0;
-  font-size: var(--gh-text-xl);
+  font-size: var(--gh-text-2xl);
+  color: #fff;
 }
 
 .gh-ddz-overlay-title--win {
-  color: var(--gh-success);
+  color: #ffd166;
 }
 
 .gh-ddz-overlay-title--lose {
-  color: var(--gh-danger);
+  color: #ff9d94;
 }
 
 .gh-ddz-overlay-detail {
   margin: 0;
-  color: var(--gh-text-secondary);
+  color: rgba(255, 255, 255, 0.8);
   font-size: var(--gh-text-sm);
 }
 
@@ -525,30 +597,33 @@
   gap: var(--gh-space-4);
   flex-wrap: wrap;
   justify-content: center;
-  font-size: var(--gh-text-sm);
 }
 
 .gh-ddz-score {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 72px;
 }
 
 .gh-ddz-score-name {
-  color: var(--gh-text-secondary);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: var(--gh-text-xs);
 }
 
 .gh-ddz-score-value {
-  font-weight: 700;
+  font-weight: 800;
+  font-size: var(--gh-text-lg);
   font-variant-numeric: tabular-nums;
+  color: #fff;
 }
 
 .gh-ddz-score-value--up {
-  color: var(--gh-success);
+  color: #7ee2a8;
 }
 
 .gh-ddz-score-value--down {
-  color: var(--gh-danger);
+  color: #ff9d94;
 }
 
 .gh-ddz-overlay-actions {
@@ -558,79 +633,109 @@
   justify-content: center;
 }
 
-/* ===== 战绩 / 帮助侧栏 ===== */
+/* ===== 玩法说明（可折叠） ===== */
 
-.gh-ddz-stage {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: var(--gh-space-4);
-  align-items: start;
+.gh-ddz-rules {
+  margin: 10px auto 0;
+  max-width: 720px;
+  text-align: center;
 }
 
-.gh-ddz-help {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gh-space-2);
-  padding: var(--gh-space-4);
-  border: 1px solid var(--gh-border-muted);
-  border-radius: var(--gh-radius);
-  background: var(--gh-canvas);
+.gh-ddz-rules-toggle {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: var(--gh-text-xs);
+  cursor: pointer;
+  padding: 4px 10px;
+  text-decoration: underline dotted;
 }
 
-.gh-ddz-help h2 {
-  margin: 0;
-  font-size: var(--gh-text-base);
+.gh-ddz-rules-toggle:hover {
+  color: #fff;
 }
 
-.gh-ddz-help ul {
-  margin: 0;
+.gh-ddz-rules-list {
+  margin: 8px 0 0;
   padding-left: 1.2em;
-  color: var(--gh-text-secondary);
-  font-size: var(--gh-text-sm);
-  line-height: 1.7;
-}
-
-.gh-ddz-record {
-  display: flex;
-  gap: var(--gh-space-3);
-  font-size: var(--gh-text-sm);
-  color: var(--gh-text-secondary);
-}
-
-.gh-ddz-record strong {
-  color: var(--gh-text);
-  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: var(--gh-text-xs);
+  line-height: 1.8;
+  text-align: left;
 }
 
 /* ===== 响应式 ===== */
 
-@media (max-width: 900px) {
-  .gh-ddz-stage {
+@media (max-width: 760px) {
+  .gh-ddz-felt-top {
+    /* 底牌整行置顶，上/下家并排省出竖向空间 */
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .gh-ddz-pot {
+    order: -1;
+    grid-column: 1 / -1;
+    flex-direction: row;
+    gap: var(--gh-space-3);
+    padding: 6px 14px;
+    justify-content: center;
+  }
+
+  .gh-ddz-pot-cards {
+    min-height: auto;
+  }
+
+  .gh-ddz-seat {
+    max-width: none;
+    width: 100%;
+    padding: 8px;
+  }
+
+  .gh-ddz-seat-avatar {
+    display: none;
+  }
+
+  .gh-ddz-seat-backs .gh-ddz-back:nth-child(n + 6) {
+    display: none;
+  }
+
+  .gh-ddz-felt-mid {
     grid-template-columns: 1fr;
+    gap: 6px;
+    min-height: 0;
   }
-}
 
-@media (max-width: 640px) {
+  .gh-ddz-felt-center {
+    order: -1;
+    max-width: 100%;
+  }
+
   .gh-ddz-card {
-    width: 44px;
-    height: 64px;
-  }
-
-  .gh-ddz-card--selected,
-  .gh-ddz-card--clickable:hover,
-  .gh-ddz-card--selected:hover {
-    transform: translateY(-8px);
+    width: 46px;
+    height: 66px;
+    margin-left: -16px;
+    padding: 4px 5px;
   }
 
   .gh-ddz-card-rank {
     font-size: 0.9rem;
   }
 
-  .gh-ddz-hand {
-    min-height: 78px;
+  .gh-ddz-card-suit {
+    font-size: 0.8rem;
   }
 
-  .gh-ddz-table {
-    padding: var(--gh-space-3);
+  .gh-ddz-card--selected,
+  .gh-ddz-card--clickable:hover {
+    transform: translateY(-10px);
+  }
+
+  .gh-ddz-hand {
+    min-height: 80px;
+  }
+
+  .gh-ddz-gamebar-title {
+    font-size: var(--gh-text-sm);
   }
 }

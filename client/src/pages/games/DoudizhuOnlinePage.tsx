@@ -2,11 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import UserAvatar from '../../components/UserAvatar'
 import GameFriendPicker from '../../components/games/GameFriendPicker'
-import {
-  DoudizhuCardBacks,
-  DoudizhuHandView,
-  DoudizhuMiniCards,
-} from '../../components/games/doudizhu/DoudizhuCards'
+import DoudizhuTable, { type DoudizhuSeatInfo } from '../../components/games/doudizhu/DoudizhuTable'
 import { useAuth } from '../../contexts/AuthContext'
 import { useChat } from '../../contexts/ChatContext'
 import { useGame } from '../../contexts/GameContext'
@@ -592,8 +588,6 @@ export default function DoudizhuOnlinePage() {
 
     const isHost = match.hostId === meId
     const playerCount = match.players.length
-    const seats = [0, 1, 2]
-    const opponents = seats.filter((seat) => seat !== match.seat)
 
     // 每个座位最近一次动作
     const latestByUserId = new Map<number, DoudizhuTrickMoveDto>()
@@ -708,281 +702,197 @@ export default function DoudizhuOnlinePage() {
       )
     }
 
-    // === 叫分 / 出牌 / 结算共用牌桌 ===
-    return (
-      <div className="gh-page-container gh-ddz-page">
-      <header className="gh-ddz-topbar">
-        <div className="gh-ddz-topbar-copy">
-          <p className="gh-ddz-eyebrow">
-            <Link to={LOBBY_PATH} onClick={handleBackToLobby}>← 斗地主大厅</Link>
-          </p>
-          <h1 className="gh-ddz-title">
-            {match.status === 'bidding' ? '叫分中' : match.status === 'playing' ? '对局进行中' : '对局结束'}
-          </h1>
-          <p className="gh-ddz-subtitle">
-            {match.status === 'finished'
-              ? END_REASON_LABELS[match.reason ?? 'cancelled']
-              : '服务端权威判定：回合限时 90 秒，超时自动托管（不叫 / 最小单张 / 不出）。'}
-          </p>
-        </div>
-        <div className="gh-ddz-actions">
-          {match.status !== 'finished' && (
+    // === 叫分 / 出牌 / 结算共用牌桌（经典布局，全屏沉浸） ===
+    const turnUserId = match.bidding?.turnUserId ?? match.playing?.turnUserId ?? null
+
+    const seatInfoOf = (userId: number): DoudizhuSeatInfo => {
+      const player = match.players.find((item) => item.userId === userId)
+      if (!player) {
+        return { name: '—', role: null, cardCount: 0, isTurn: false, bid: null, lastAction: null }
+      }
+      const action = latestByUserId.get(userId)
+      const bidEntry = [...(match.bidding?.bids ?? [])].reverse().find((b) => b.userId === userId)
+      return {
+        name: player.username,
+        role: player.role,
+        cardCount: player.cardCount,
+        online: player.online,
+        isTurn: turnUserId === userId && match.status !== 'finished',
+        bid: bidEntry ? bidEntry.bid : null,
+        lastAction: action
+          ? action.action === 'pass'
+            ? 'pass'
+            : { cards: action.cards }
+          : null,
+      }
+    }
+
+    const leftSeat = seatInfoOf(match.players[(match.seat + 2) % 3].userId)
+    const rightSeat = seatInfoOf(match.players[(match.seat + 1) % 3].userId)
+    const meSeat = seatInfoOf(meId)
+
+    const centerHint = (() => {
+      if (match.status === 'bidding') {
+        return match.bidding?.turnUserId === meId
+          ? '轮到你叫分：牌越强叫得越高（底分 100 × 倍率结算）'
+          : `等待 ${match.players.find((p) => p.userId === match.bidding?.turnUserId)?.username ?? ''} 叫分…`
+      }
+      if (match.status === 'playing' && match.playing) {
+        if (match.playing.turnUserId === meId) {
+          return match.playing.lastMove?.combo
+            ? `轮到你 —— 压住 ${doudizhuComboLabel(match.playing.lastMove.combo)}`
+            : '轮到你出牌（新一轮）'
+        }
+        return `等待 ${match.players.find((p) => p.userId === match.playing?.turnUserId)?.username ?? ''} 出牌…`
+      }
+      if (match.status === 'finished') {
+        const side = match.winnerSide === 'landlord' ? '地主阵营获胜' : match.winnerSide === 'farmers' ? '农民阵营获胜' : '本局未分胜负'
+        return `${side}${match.multiplier > 1 ? ` · 倍率 ×${match.multiplier}` : ''}`
+      }
+      return ''
+    })()
+
+    const actions = (() => {
+      if (match.status === 'bidding' && myTurn) {
+        return (
+          <>
+            <button type="button" className="gh-btn gh-btn--secondary gh-btn--md" onClick={() => handleBid(0)}>
+              不叫
+            </button>
+            {[1, 2, 3].map((bid) => (
+              <button
+                key={bid}
+                type="button"
+                className="gh-btn gh-btn--primary gh-btn--md"
+                disabled={bid <= (match.bidding?.highestBid ?? 0)}
+                onClick={() => handleBid(bid)}
+              >
+                {bid} 分
+              </button>
+            ))}
+          </>
+        )
+      }
+      if (match.status === 'playing' && myTurn) {
+        return (
+          <>
             <button
               type="button"
-              className="gh-btn gh-btn--danger gh-btn--md"
-              onClick={() => void handleResign()}
-              disabled={busyKey === 'resign'}
+              className="gh-btn gh-btn--secondary gh-btn--md"
+              disabled={hints.length === 0}
+              onClick={handleHint}
             >
-              {busyKey === 'resign' ? '提交中…' : '认输'}
+              提示
             </button>
-          )}
-          <button type="button" className="gh-btn gh-btn--secondary gh-btn--md" onClick={handleBackToLobby}>
-            返回大厅
-          </button>
-        </div>
-      </header>
+            <button
+              type="button"
+              className="gh-btn gh-btn--secondary gh-btn--md"
+              disabled={leading}
+              onClick={handlePass}
+            >
+              不出
+            </button>
+            <button
+              type="button"
+              className="gh-btn gh-btn--primary gh-btn--md gh-ddz-play-btn"
+              disabled={!canPlaySelected}
+              onClick={handlePlay}
+            >
+              出牌
+            </button>
+          </>
+        )
+      }
+      return null
+    })()
 
-      <div className="gh-ddz-meta">
-        <span className="gh-ddz-meta-item">
-          倍率 <strong className="gh-ddz-multiplier">×{match.multiplier}</strong>
-        </span>
-        {match.landlordId !== null && (
-          <span className="gh-ddz-meta-item">
-            地主 <strong>{match.players.find((p) => p.userId === match.landlordId)?.username ?? '—'}</strong>
-          </span>
-        )}
-        {match.status !== 'bidding' && (
-          <span className="gh-ddz-meta-item">
-            底牌 <DoudizhuMiniCards cards={match.bottomCards} ariaLabel="底牌" />
-          </span>
-        )}
-        <span className="gh-ddz-meta-item">
-          <span className={`gh-game-conn-chip gh-game-conn-chip--${transport}`}>
-            {transport === 'ws' ? '实时连接' : '轮询模式'}
-          </span>
-        </span>
-      </div>
-
-      {errorBanner(actionError ?? matchError)}
-
-      <div className="gh-ddz-stage">
-        <div className="gh-ddz-table">
-          <div className="gh-ddz-opponents">
-            {opponents.map((seat) => {
-              const player = match.players[seat]
-              const isTurn =
-                (match.bidding?.turnUserId ?? match.playing?.turnUserId) === player.userId
-                && match.status !== 'finished'
-              const action = latestByUserId.get(player.userId)
-              const bidEntry = match.bidding?.bids.find((b) => b.userId === player.userId)
-              return (
-                <div key={seat} className={`gh-ddz-opponent${isTurn ? ' gh-ddz-opponent--active' : ''}`}>
-                  <div className="gh-ddz-opponent-head">
-                    <span className="gh-ddz-opponent-name">
-                      {player.username}
-                      {player.role === 'landlord' && (
-                        <span className="gh-ddz-role-badge gh-ddz-role-badge--landlord">地主</span>
-                      )}
-                      {player.role === 'farmer' && (
-                        <span className="gh-ddz-role-badge gh-ddz-role-badge--farmer">农民</span>
-                      )}
-                    </span>
-                    <span className="gh-ddz-opponent-meta">
-                      <span className={`gh-ddz-presence-dot${player.online ? ' gh-ddz-presence-dot--online' : ''}`} />
-                      <DoudizhuCardBacks count={player.cardCount} />
-                    </span>
-                  </div>
-                  <div className="gh-ddz-opponent-play">
-                    {match.status === 'bidding' && bidEntry && (
-                      <span className="gh-ddz-pass-chip">
-                        {bidEntry.bid === 0 ? '不叫' : `叫 ${bidEntry.bid} 分`}
-                      </span>
-                    )}
-                    {match.status !== 'bidding' && action && (
-                      action.action === 'pass' ? (
-                        <span className="gh-ddz-pass-chip">不出</span>
-                      ) : (
-                        <DoudizhuMiniCards cards={action.cards} ariaLabel={`${player.username} 的出牌`} />
-                      )
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          <div className="gh-ddz-center">
-            {match.status === 'bidding' && (
-              <>
-                <p className="gh-ddz-center-hint">
-                  {match.bidding?.turnUserId === meId
-                    ? '轮到你叫分：牌越强叫得越高（底分 100 × 倍率结算）'
-                    : `等待 ${match.players.find((p) => p.userId === match.bidding?.turnUserId)?.username ?? ''} 叫分…`}
-                </p>
-                {myTurn && (
-                  <div className="gh-ddz-bid-actions">
-                    <button
-                      type="button"
-                      className="gh-btn gh-btn--secondary gh-btn--md"
-                      onClick={() => handleBid(0)}
-                    >
-                      不叫
-                    </button>
-                    {[1, 2, 3].map((bid) => (
-                      <button
-                        key={bid}
-                        type="button"
-                        className="gh-btn gh-btn--primary gh-btn--md"
-                        disabled={bid <= (match.bidding?.highestBid ?? 0)}
-                        onClick={() => handleBid(bid)}
-                      >
-                        {bid} 分
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {match.bidding && match.bidding.bids.length > 0 && (
-                  <div className="gh-ddz-bid-history">
-                    {match.bidding.bids.map((entry, index) => (
-                      <span key={index}>
-                        {match.players.find((p) => p.userId === entry.userId)?.username ?? '—'}：
-                        <strong>{entry.bid === 0 ? '不叫' : `${entry.bid} 分`}</strong>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-
-            {match.status === 'playing' && match.playing && (
-              <>
-                <p className="gh-ddz-center-hint">
-                  {match.playing.turnUserId === meId
-                    ? match.playing.lastMove?.combo
-                      ? `轮到你 —— 压住 ${doudizhuComboLabel(match.playing.lastMove.combo)}`
-                      : '轮到你出牌（新一轮）'
-                    : `等待 ${match.players.find((p) => p.userId === match.playing?.turnUserId)?.username ?? ''} 出牌…`}
-                </p>
-                {match.playing.lastMove && (
-                  <div className="gh-ddz-center-cards">
-                    <DoudizhuMiniCards
-                      cards={match.playing.lastMove.cards}
-                      ariaLabel="最近出牌"
-                    />
-                  </div>
-                )}
-              </>
-            )}
-
-            {match.status === 'finished' && (
-              <p className="gh-ddz-center-hint">
-                {match.winnerSide === 'landlord' ? '地主阵营获胜' : match.winnerSide === 'farmers' ? '农民阵营获胜' : '本局未分胜负'}
-                {match.multiplier > 1 ? ` · 倍率 ×${match.multiplier}` : ''}
-              </p>
-            )}
-
-            {myTurn && match.status !== 'finished' && (
-              <span className={`gh-ddz-countdown${remainingSeconds <= 15 ? ' gh-ddz-countdown--urgent' : ''}`}>
-                剩余 <strong>{remainingSeconds}s</strong>
-              </span>
-            )}
-          </div>
-
-          <div className="gh-ddz-me">
-            <div className="gh-ddz-me-head">
-              <span className="gh-ddz-me-name">
-                {myPlayer?.username ?? '我'}
-                {myRole === 'landlord' && (
-                  <span className="gh-ddz-role-badge gh-ddz-role-badge--landlord">地主</span>
-                )}
-                {myRole === 'farmer' && (
-                  <span className="gh-ddz-role-badge gh-ddz-role-badge--farmer">农民</span>
-                )}
-              </span>
-              {match.status === 'playing' && myTurn && (
-                <div className="gh-ddz-actions">
-                  <button
-                    type="button"
-                    className="gh-btn gh-btn--primary gh-btn--md"
-                    disabled={!canPlaySelected}
-                    onClick={handlePlay}
-                  >
-                    出牌
-                  </button>
-                  <button
-                    type="button"
-                    className="gh-btn gh-btn--secondary gh-btn--md"
-                    disabled={leading}
-                    onClick={handlePass}
-                  >
-                    不出
-                  </button>
-                  <button
-                    type="button"
-                    className="gh-btn gh-btn--secondary gh-btn--md"
-                    disabled={hints.length === 0}
-                    onClick={handleHint}
-                  >
-                    提示
-                  </button>
-                </div>
-              )}
-            </div>
-            <DoudizhuHandView
-              cards={myHand}
-              selectedIds={selectedIds}
-              onToggle={match.status === 'playing' && myTurn ? toggleCard : undefined}
-              disabled={!(match.status === 'playing' && myTurn)}
-            />
-          </div>
-        </div>
-
-        <aside className="gh-ddz-help" aria-label="玩法说明">
-          <h2>联机规则</h2>
-          <ul>
-            <li>3 人房间：房主开始后自动发牌，依次叫分（0–3 分），叫 3 分立即成为地主。</li>
-            <li>地主拿 3 张底牌并先出牌；先出完手牌的阵营获胜。</li>
-            <li>炸弹 / 王炸 / 春天使倍率 ×2；积分 = 底分 100 × 倍率。</li>
-            <li>回合限时 90 秒；离线超 30 秒或超时会自动托管出牌。</li>
-            <li>认输按当前倍率结算；全员离线 10 分钟对局废弃。</li>
-          </ul>
-          <Link to="/games" className="gh-g2048-help-link">
-            返回游戏大厅
-          </Link>
-        </aside>
-      </div>
-
-      {match.status === 'finished' && (
-        <div className="gh-ddz-overlay" role="dialog" aria-modal="true" aria-label="对局结果">
-          <div className="gh-ddz-overlay-card">
-            <h2 className={`gh-ddz-overlay-title${iWon ? ' gh-ddz-overlay-title--win' : ' gh-ddz-overlay-title--lose'}`}>
-              {match.winnerSide === null ? '本局结束' : iWon ? '恭喜获胜！' : '本局告负'}
-            </h2>
-            <p className="gh-ddz-overlay-detail">{END_REASON_LABELS[match.reason ?? 'cancelled']}</p>
-            <div className="gh-ddz-scores">
-              {match.players.map((player) => (
-                <span key={player.userId} className="gh-ddz-score">
-                  <span className="gh-ddz-score-name">
-                    {player.username}
-                    {player.role === 'landlord' ? '（地主）' : ''}
-                  </span>
-                  <span className={`gh-ddz-score-value${(player.scoreDelta ?? 0) >= 0 ? ' gh-ddz-score-value--up' : ' gh-ddz-score-value--down'}`}>
-                    {player.scoreDelta === null ? '—' : `${player.scoreDelta >= 0 ? '+' : ''}${player.scoreDelta}`}
-                  </span>
+    const overlay = match.status === 'finished' ? (
+      <div className="gh-ddz-overlay" role="dialog" aria-modal="true" aria-label="对局结果">
+        <div className="gh-ddz-overlay-card">
+          <h2 className={`gh-ddz-overlay-title${iWon ? ' gh-ddz-overlay-title--win' : ' gh-ddz-overlay-title--lose'}`}>
+            {match.winnerSide === null ? '本局结束' : iWon ? '恭喜获胜！' : '本局告负'}
+          </h2>
+          <p className="gh-ddz-overlay-detail">{END_REASON_LABELS[match.reason ?? 'cancelled']}</p>
+          <div className="gh-ddz-scores">
+            {match.players.map((player) => (
+              <span key={player.userId} className="gh-ddz-score">
+                <span className="gh-ddz-score-name">
+                  {player.username}
+                  {player.role === 'landlord' ? '（地主）' : ''}
                 </span>
-              ))}
-            </div>
-            <div className="gh-ddz-overlay-actions">
-              <button type="button" className="gh-btn gh-btn--primary gh-btn--lg" onClick={handleBackToLobby}>
-                返回大厅
-              </button>
-              <Link className="gh-btn gh-btn--secondary gh-btn--lg" to={GAME_DOUDIZHU_ROUTE}>
-                单机练习
-              </Link>
-            </div>
+                <span className={`gh-ddz-score-value${(player.scoreDelta ?? 0) >= 0 ? ' gh-ddz-score-value--up' : ' gh-ddz-score-value--down'}`}>
+                  {player.scoreDelta === null ? '—' : `${player.scoreDelta >= 0 ? '+' : ''}${player.scoreDelta}`}
+                </span>
+              </span>
+            ))}
+          </div>
+          <div className="gh-ddz-overlay-actions">
+            <button type="button" className="gh-btn gh-btn--primary gh-btn--lg" onClick={handleBackToLobby}>
+              返回大厅
+            </button>
+            <Link className="gh-btn gh-btn--secondary gh-btn--lg" to={GAME_DOUDIZHU_ROUTE}>
+              单机练习
+            </Link>
           </div>
         </div>
-      )}
+      </div>
+    ) : null
+
+    return (
+      <div className="gh-ddz-game">
+        <header className="gh-ddz-gamebar">
+          <button type="button" className="gh-ddz-gamebar-back" onClick={handleBackToLobby}>
+            ← 斗地主大厅
+          </button>
+          <span className="gh-ddz-gamebar-title">
+            斗地主 · 好友联机
+            <span className={`gh-game-conn-chip gh-game-conn-chip--${transport}`}>
+              {transport === 'ws' ? '实时' : '轮询'}
+            </span>
+          </span>
+          <div className="gh-ddz-gamebar-actions">
+            {match.status !== 'finished' && (
+              <button
+                type="button"
+                className="gh-btn gh-btn--danger gh-btn--sm"
+                onClick={() => void handleResign()}
+                disabled={busyKey === 'resign'}
+              >
+                {busyKey === 'resign' ? '提交中…' : '认输'}
+              </button>
+            )}
+            <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm" onClick={handleBackToLobby}>
+              返回大厅
+            </button>
+          </div>
+        </header>
+
+        {(actionError ?? matchError) && (
+          <div className="gh-ddz-notice gh-ddz-notice--error" role="alert">{actionError ?? matchError}</div>
+        )}
+
+        <DoudizhuTable
+          phase={match.status === 'bidding' ? 'bidding' : match.status === 'playing' ? 'playing' : 'finished'}
+          leftSeat={leftSeat}
+          rightSeat={rightSeat}
+          me={{
+            name: myPlayer?.username ?? '我',
+            role: myRole,
+            bid: meSeat.bid,
+            isTurn: myTurn,
+            hand: myHand,
+            lastAction: meSeat.lastAction,
+          }}
+          bottomCards={match.bottomCards}
+          multiplier={match.multiplier}
+          centerHint={centerHint}
+          remainingSeconds={match.status === 'finished' ? null : remainingSeconds}
+          selectedIds={selectedIds}
+          onToggleCard={match.status === 'playing' && myTurn ? toggleCard : undefined}
+          handDisabled={!(match.status === 'playing' && myTurn)}
+          actions={actions}
+          overlay={overlay}
+        />
       </div>
     )
   }

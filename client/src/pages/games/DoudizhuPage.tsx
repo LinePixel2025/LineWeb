@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  DoudizhuCardBacks,
-  DoudizhuHandView,
-  DoudizhuMiniCards,
-} from '../../components/games/doudizhu/DoudizhuCards'
+import DoudizhuTable, { type DoudizhuSeatInfo } from '../../components/games/doudizhu/DoudizhuTable'
 import {
   canDoudizhuBeat,
   dealDoudizhu,
@@ -169,7 +165,7 @@ function applyPlay(state: GameState, seat: number, cards: DoudizhuCard[]): GameS
   if (state.phase !== 'playing' || state.turnSeat !== seat) return state
   const combo = parseDoudizhuCombo(cards)
   if (!combo) return state
-  if (!canDoodizhuBeatGuard(combo, state)) return state
+  if (state.lastMove !== null && !canDoudizhuBeat(combo, state.lastMove.combo)) return state
 
   const ids = new Set(cards.map((card) => card.id))
   const hands = state.hands.map((hand, index) =>
@@ -200,12 +196,6 @@ function applyPlay(state: GameState, seat: number, cards: DoudizhuCard[]): GameS
     passCount: 0,
     turnSeat: (seat + 1) % 3,
   }
-}
-
-/** 该牌型能否压住当前桌面要求（领出时恒真） */
-function canDoodizhuBeatGuard(combo: DoudizhuCombo, state: GameState): boolean {
-  if (state.lastMove === null) return true
-  return canDoudizhuBeat(combo, state.lastMove.combo)
 }
 
 function applyPass(state: GameState, seat: number): GameState {
@@ -255,12 +245,20 @@ function latestActionPerSeat(state: GameState): Array<TrickEntry | null> {
   return latest
 }
 
+/** TrickEntry → 牌桌组件的动作表示 */
+function toSeatAction(entry: TrickEntry | null): DoudizhuSeatInfo['lastAction'] {
+  if (!entry) return null
+  if (entry.action === 'pass') return 'pass'
+  return { cards: entry.cards }
+}
+
 export default function DoudizhuPage() {
   const [state, setState] = useState<GameState>(() => createInitialState(true))
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [record, setRecord] = useState<RecordData>(() => readRecord())
   const [error, setError] = useState<string | null>(null)
   const [hintIndex, setHintIndex] = useState(0)
+  const [rulesOpen, setRulesOpen] = useState(false)
   const timersRef = useRef<number[]>([])
   const stateRef = useRef(state)
 
@@ -346,6 +344,11 @@ export default function DoudizhuPage() {
 
   // === 我的操作 ===
 
+  const lastBidOf = useCallback((seat: number): number | null => {
+    const entry = state.bids.filter((b) => b.seat === seat).slice(-1)[0]
+    return entry ? entry.bid : null
+  }, [state.bids])
+
   const handleBid = useCallback((bid: number) => {
     setError(null)
     setState((prev) => {
@@ -374,21 +377,26 @@ export default function DoudizhuPage() {
   )
 
   const myTurn = state.phase === 'playing' && state.turnSeat === 0
+  const myBidTurn = state.phase === 'bidding' && state.bidTurn === 0
   const leading = state.lastMove === null
   const selectedCombo = selectedCards.length > 0 ? parseDoudizhuCombo(selectedCards) : null
   const canPlaySelected =
-    myTurn && selectedCombo !== null && canDoodizhuBeatGuard(selectedCombo, state)
+    myTurn && selectedCombo !== null && (leading || canDoudizhuBeat(selectedCombo, state.lastMove!.combo))
 
   const handlePlay = useCallback(() => {
-    if (!canPlaySelected || selectedCombo === null) {
-      setError(selectedCombo === null ? '所选牌不是合法牌型' : '压不住上一手牌')
+    if (selectedCombo === null) {
+      setError('所选牌不是合法牌型')
+      return
+    }
+    if (!leading && !canDoudizhuBeat(selectedCombo, state.lastMove!.combo)) {
+      setError('压不住上一手牌')
       return
     }
     setState((prev) => applyPlay(prev, 0, selectedCards))
     setSelectedIds(new Set())
     setError(null)
     setHintIndex(0)
-  }, [canPlaySelected, selectedCombo, selectedCards])
+  }, [selectedCombo, leading, selectedCards])
 
   const handlePass = useCallback(() => {
     if (!myTurn) return
@@ -401,10 +409,6 @@ export default function DoudizhuPage() {
     setError(null)
     setHintIndex(0)
   }, [myTurn, leading])
-
-  const handleRestartAfterFinish = useCallback(() => {
-    newGame()
-  }, [newGame])
 
   // === 提示（循环可用出牌） ===
 
@@ -421,299 +425,189 @@ export default function DoudizhuPage() {
     setError(null)
   }, [hints, hintIndex])
 
+  // === 牌桌视图数据 ===
+
   const latestActions = latestActionPerSeat(state)
-  const landlordSeat = [0, 1, 2].find((seat) => state.roles[seat] === 'landlord') ?? null
   const myRole = state.roles[0]
   const myScoreDelta = state.scoreDeltas?.[0] ?? null
   const iWon = state.winnerSide !== null && myRole !== null && (myRole === 'landlord') === (state.winnerSide === 'landlord')
 
-  return (
-    <div className="gh-page-container gh-ddz-page">
-      <header className="gh-ddz-topbar">
-        <div className="gh-ddz-topbar-copy">
-          <p className="gh-ddz-eyebrow">
-            <Link to="/games">← 游戏大厅</Link>
-          </p>
-          <h1 className="gh-ddz-title">斗地主 · 单机</h1>
-          <p className="gh-ddz-subtitle">与两位 AI 对战：叫分定地主，先出完手牌的一方获胜。</p>
+  const seatInfo = (seat: number): DoudizhuSeatInfo => ({
+    name: SEAT_NAMES[seat],
+    role: state.roles[seat],
+    cardCount: state.hands[seat].length,
+    isTurn:
+      (state.phase === 'playing' && state.turnSeat === seat)
+      || (state.phase === 'bidding' && state.bidTurn === seat),
+    bid: lastBidOf(seat),
+    lastAction: toSeatAction(latestActions[seat]),
+  })
+
+  const centerHint = (() => {
+    if (state.phase === 'bidding') {
+      return myBidTurn
+        ? '轮到你叫分：牌越强叫得越高（底分 100 × 倍率结算）'
+        : `${SEAT_NAMES[state.bidTurn]} 正在考虑叫分…`
+    }
+    if (state.phase === 'playing') {
+      if (state.turnSeat === 0) {
+        return leading ? '轮到你出牌（新一轮）' : `压住 ${SEAT_NAMES[state.lastMove!.seat]} 的${doudizhuComboLabel(state.lastMove!.combo)}`
+      }
+      return `${SEAT_NAMES[state.turnSeat]} 思考中…`
+    }
+    return `${state.winnerSide === 'landlord' ? '地主' : '农民'}获胜${state.multiplier > 1 ? `（倍率 ×${state.multiplier}）` : ''}`
+  })()
+
+  const actions = (() => {
+    if (myBidTurn) {
+      return (
+        <>
+          <button type="button" className="gh-btn gh-btn--secondary gh-btn--md" onClick={() => handleBid(0)}>
+            不叫
+          </button>
+          {[1, 2, 3].map((bid) => (
+            <button
+              key={bid}
+              type="button"
+              className="gh-btn gh-btn--primary gh-btn--md"
+              disabled={bid <= state.highestBid}
+              onClick={() => handleBid(bid)}
+            >
+              {bid} 分
+            </button>
+          ))}
+        </>
+      )
+    }
+    if (myTurn) {
+      return (
+        <>
+          <button
+            type="button"
+            className="gh-btn gh-btn--secondary gh-btn--md"
+            disabled={hints.length === 0}
+            onClick={handleHint}
+          >
+            提示
+          </button>
+          <button
+            type="button"
+            className="gh-btn gh-btn--secondary gh-btn--md"
+            disabled={leading}
+            onClick={handlePass}
+          >
+            不出
+          </button>
+          <button
+            type="button"
+            className="gh-btn gh-btn--primary gh-btn--md gh-ddz-play-btn"
+            disabled={!canPlaySelected}
+            onClick={handlePlay}
+          >
+            出牌
+          </button>
+        </>
+      )
+    }
+    return null
+  })()
+
+  const overlay = state.phase === 'finished' && state.scoreDeltas ? (
+    <div className="gh-ddz-overlay" role="dialog" aria-modal="true" aria-label="本局结果">
+      <div className="gh-ddz-overlay-card">
+        <h2 className={`gh-ddz-overlay-title${iWon ? ' gh-ddz-overlay-title--win' : ' gh-ddz-overlay-title--lose'}`}>
+          {iWon ? '恭喜获胜！' : '本局告负'}
+        </h2>
+        <p className="gh-ddz-overlay-detail">
+          {state.winnerSide === 'landlord' ? '地主' : '农民'}获胜 · 倍率 ×{state.multiplier}
+        </p>
+        <div className="gh-ddz-scores">
+          {[0, 1, 2].map((seat) => (
+            <span key={seat} className="gh-ddz-score">
+              <span className="gh-ddz-score-name">{SEAT_NAMES[seat]}</span>
+              <span className={`gh-ddz-score-value${(state.scoreDeltas ?? [])[seat] >= 0 ? ' gh-ddz-score-value--up' : ' gh-ddz-score-value--down'}`}>
+                {(state.scoreDeltas ?? [])[seat] >= 0 ? '+' : ''}
+                {(state.scoreDeltas ?? [])[seat]}
+              </span>
+            </span>
+          ))}
         </div>
-        <div className="gh-ddz-actions">
-          <Link className="gh-btn gh-btn--secondary gh-btn--md" to={GAME_DOUDIZHU_ONLINE_ROUTE}>
+        <div className="gh-ddz-overlay-actions">
+          <button type="button" className="gh-btn gh-btn--primary gh-btn--lg" onClick={newGame}>
+            再来一局
+          </button>
+          <Link className="gh-btn gh-btn--secondary gh-btn--lg" to="/games">
+            返回大厅
+          </Link>
+        </div>
+        {myScoreDelta !== null && (
+          <p className="gh-ddz-overlay-detail">
+            你的积分变化：{myScoreDelta >= 0 ? '+' : ''}{myScoreDelta}
+          </p>
+        )}
+      </div>
+    </div>
+  ) : null
+
+  return (
+    <div className="gh-ddz-game">
+      <header className="gh-ddz-gamebar">
+        <Link to="/games" className="gh-ddz-gamebar-back">← 游戏大厅</Link>
+        <span className="gh-ddz-gamebar-title">斗地主 · 单机</span>
+        <div className="gh-ddz-gamebar-actions">
+          <span className="gh-ddz-gamebar-chip" title="本机战绩">
+            {record.wins}胜 / {record.games}局 · 积分 {record.score >= 0 ? `+${record.score}` : record.score}
+          </span>
+          <Link className="gh-btn gh-btn--secondary gh-btn--sm" to={GAME_DOUDIZHU_ONLINE_ROUTE}>
             好友联机
           </Link>
-          <button type="button" className="gh-btn gh-btn--primary gh-btn--md" onClick={newGame}>
+          <button type="button" className="gh-btn gh-btn--primary gh-btn--sm" onClick={newGame}>
             重新开局
           </button>
         </div>
       </header>
 
-      <div className="gh-ddz-meta">
-        <span className="gh-ddz-meta-item">
-          倍率 <strong className="gh-ddz-multiplier">×{state.multiplier}</strong>
-        </span>
-        {landlordSeat !== null && (
-          <span className="gh-ddz-meta-item">
-            地主 <strong>{SEAT_NAMES[landlordSeat]}</strong>
-          </span>
-        )}
-        {state.phase !== 'bidding' && (
-          <span className="gh-ddz-meta-item">
-            底牌 <DoudizhuMiniCards cards={state.bottom} ariaLabel="底牌" />
-          </span>
-        )}
-        <span className="gh-ddz-meta-item">
-          战绩 <strong>{record.wins}胜 / {record.games}局</strong>
-        </span>
-        <span className="gh-ddz-meta-item">
-          积分 <strong className={record.score >= 0 ? 'gh-ddz-score-value--up' : 'gh-ddz-score-value--down'}>
-            {record.score >= 0 ? `+${record.score}` : record.score}
-          </strong>
-        </span>
-      </div>
-
       {state.redealNotice && (
-        <div className="gh-alert gh-alert--warning" role="status">
-          {state.redealNotice}
-        </div>
+        <div className="gh-ddz-notice" role="status">{state.redealNotice}</div>
       )}
+      {error && <div className="gh-ddz-notice gh-ddz-notice--error" role="alert">{error}</div>}
 
-      <div className="gh-ddz-stage">
-        <div className="gh-ddz-table">
-          <div className="gh-ddz-opponents">
-            {[2, 1].map((seat) => {
-              const action = latestActions[seat]
-              const isTurn =
-                (state.phase === 'playing' && state.turnSeat === seat)
-                || (state.phase === 'bidding' && state.bidTurn === seat)
-              return (
-                <div key={seat} className={`gh-ddz-opponent${isTurn ? ' gh-ddz-opponent--active' : ''}`}>
-                  <div className="gh-ddz-opponent-head">
-                    <span className="gh-ddz-opponent-name">
-                      {SEAT_NAMES[seat]}
-                      {state.roles[seat] === 'landlord' && (
-                        <span className="gh-ddz-role-badge gh-ddz-role-badge--landlord">地主</span>
-                      )}
-                      {state.roles[seat] === 'farmer' && (
-                        <span className="gh-ddz-role-badge gh-ddz-role-badge--farmer">农民</span>
-                      )}
-                    </span>
-                    <span className="gh-ddz-opponent-meta">
-                      <DoudizhuCardBacks count={state.hands[seat].length} />
-                    </span>
-                  </div>
-                  <div className="gh-ddz-opponent-play">
-                    {action ? (
-                      action.action === 'pass' ? (
-                        <span className="gh-ddz-pass-chip">不出</span>
-                      ) : (
-                        <DoudizhuMiniCards cards={action.cards} ariaLabel="出牌" />
-                      )
-                    ) : null}
-                    {state.phase === 'bidding' && state.bids.some((b) => b.seat === seat) && (
-                      <span className="gh-ddz-bid-item">
-                        {(() => {
-                          const entry = state.bids.filter((b) => b.seat === seat).slice(-1)[0]
-                          return (
-                            <strong>
-                              {entry.bid === 0 ? '不叫' : `叫 ${entry.bid} 分`}
-                            </strong>
-                          )
-                        })()}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+      <DoudizhuTable
+        phase={state.phase}
+        leftSeat={seatInfo(2)}
+        rightSeat={seatInfo(1)}
+        me={{
+          name: '我',
+          role: myRole,
+          bid: lastBidOf(0),
+          isTurn: myBidTurn || myTurn,
+          hand: state.hands[0],
+          lastAction: toSeatAction(latestActions[0]),
+        }}
+        bottomCards={state.bottom}
+        multiplier={state.multiplier}
+        centerHint={centerHint}
+        selectedIds={selectedIds}
+        onToggleCard={myTurn ? toggleCard : undefined}
+        handDisabled={!myTurn}
+        actions={actions}
+        overlay={overlay}
+      />
 
-          <div className="gh-ddz-center">
-            {state.phase === 'bidding' && (
-              <>
-                <p className="gh-ddz-center-hint">
-                  {state.bidTurn === 0
-                    ? '轮到你叫分：牌越强叫得越高（底分 100 × 倍率结算）'
-                    : `${SEAT_NAMES[state.bidTurn]} 正在考虑叫分…`}
-                </p>
-                {state.bidTurn === 0 && (
-                  <div className="gh-ddz-bid-actions">
-                    <button
-                      type="button"
-                      className="gh-btn gh-btn--secondary gh-btn--md"
-                      onClick={() => handleBid(0)}
-                    >
-                      不叫
-                    </button>
-                    {[1, 2, 3].map((bid) => (
-                      <button
-                        key={bid}
-                        type="button"
-                        className="gh-btn gh-btn--primary gh-btn--md"
-                        disabled={bid <= state.highestBid}
-                        onClick={() => handleBid(bid)}
-                      >
-                        {bid} 分
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {state.bids.length > 0 && (
-                  <div className="gh-ddz-bid-history">
-                    {state.bids.map((entry, index) => (
-                      <span key={index} className="gh-ddz-bid-item">
-                        {SEAT_NAMES[entry.seat]}：<strong>{entry.bid === 0 ? '不叫' : `${entry.bid} 分`}</strong>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-
-            {state.phase === 'playing' && (
-              <>
-                <p className="gh-ddz-center-hint">
-                  {state.turnSeat === 0
-                    ? leading
-                      ? '轮到你出牌（新一轮）'
-                      : `轮到你出牌 —— 压住 ${SEAT_NAMES[state.lastMove!.seat]} 的${doudizhuComboLabel(state.lastMove!.combo)}`
-                    : `${SEAT_NAMES[state.turnSeat]} 思考中…`}
-                </p>
-                {state.lastMove && (
-                  <div className="gh-ddz-center-cards">
-                    <DoudizhuMiniCards
-                      cards={state.lastMove.cards}
-                      ariaLabel={`${SEAT_NAMES[state.lastMove.seat]} 的出牌`}
-                    />
-                  </div>
-                )}
-              </>
-            )}
-
-            {state.phase === 'finished' && (
-              <p className="gh-ddz-center-hint">
-                {state.winnerSide === 'landlord' ? '地主获胜' : '农民获胜'}
-                {state.multiplier > 1 ? `（倍率 ×${state.multiplier}）` : ''}
-              </p>
-            )}
-          </div>
-
-          <div className="gh-ddz-me">
-            <div className="gh-ddz-me-head">
-              <span className="gh-ddz-me-name">
-                我
-                {myRole === 'landlord' && (
-                  <span className="gh-ddz-role-badge gh-ddz-role-badge--landlord">地主</span>
-                )}
-                {myRole === 'farmer' && (
-                  <span className="gh-ddz-role-badge gh-ddz-role-badge--farmer">农民</span>
-                )}
-                {state.phase === 'bidding' && state.bids.some((b) => b.seat === 0) && (
-                  <span className="gh-ddz-opponent-meta">
-                    {(() => {
-                      const entry = state.bids.filter((b) => b.seat === 0).slice(-1)[0]
-                      return entry.bid === 0 ? '已不叫' : `已叫 ${entry.bid} 分`
-                    })()}
-                  </span>
-                )}
-              </span>
-              {state.phase === 'playing' && myTurn && (
-                <div className="gh-ddz-actions">
-                  <button
-                    type="button"
-                    className="gh-btn gh-btn--primary gh-btn--md"
-                    disabled={!canPlaySelected}
-                    onClick={handlePlay}
-                  >
-                    出牌
-                  </button>
-                  <button
-                    type="button"
-                    className="gh-btn gh-btn--secondary gh-btn--md"
-                    disabled={leading}
-                    onClick={handlePass}
-                  >
-                    不出
-                  </button>
-                  <button
-                    type="button"
-                    className="gh-btn gh-btn--secondary gh-btn--md"
-                    disabled={hints.length === 0}
-                    onClick={handleHint}
-                  >
-                    提示
-                  </button>
-                </div>
-              )}
-            </div>
-            <DoudizhuHandView
-              cards={state.hands[0]}
-              selectedIds={selectedIds}
-              onToggle={myTurn ? toggleCard : undefined}
-              disabled={!myTurn}
-            />
-            {error && (
-              <p className="gh-ddz-center-hint" style={{ color: 'var(--gh-danger)' }} role="alert">
-                {error}
-              </p>
-            )}
-          </div>
-        </div>
-
-        <aside className="gh-ddz-help" aria-label="玩法说明">
-          <h2>玩法说明</h2>
-          <ul>
+      <div className="gh-ddz-rules">
+        <button type="button" className="gh-ddz-rules-toggle" onClick={() => setRulesOpen((prev) => !prev)}>
+          {rulesOpen ? '收起玩法说明' : '玩法说明'}
+        </button>
+        {rulesOpen && (
+          <ul className="gh-ddz-rules-list">
             <li>54 张牌，每人 17 张，3 张底牌归地主；叫分最高者当地主（3 分立即成交）。</li>
             <li>单张 / 对子 / 三带 / 顺子 / 连对 / 飞机 / 四带二；炸弹与王炸压任意牌型并让倍率 ×2。</li>
             <li>两家连续不出即开启新一轮出牌；先出完的一方获胜。</li>
             <li>春天（农民整局未出牌）与反春（地主只出过一手）倍率 ×2。</li>
             <li>积分 = 底分 100 × 倍率；地主赢 +2 份、输 −2 份。战绩保存在本机。</li>
           </ul>
-          <p className="gh-ddz-record">
-            累计积分 <strong>{record.score >= 0 ? `+${record.score}` : record.score}</strong>
-          </p>
-          <Link to="/games" className="gh-g2048-help-link">
-            返回游戏大厅
-          </Link>
-        </aside>
+        )}
       </div>
-
-      {state.phase === 'finished' && state.scoreDeltas && (
-        <div className="gh-ddz-overlay" role="dialog" aria-modal="true" aria-label="本局结果">
-          <div className="gh-ddz-overlay-card">
-            <h2 className={`gh-ddz-overlay-title${iWon ? ' gh-ddz-overlay-title--win' : ' gh-ddz-overlay-title--lose'}`}>
-              {iWon ? '恭喜获胜！' : '本局告负'}
-            </h2>
-            <p className="gh-ddz-overlay-detail">
-              {state.winnerSide === 'landlord' ? '地主' : '农民'}获胜 · 倍率 ×{state.multiplier}
-              {state.multiplier > 4 ? '（含春天 / 炸弹翻倍）' : ''}
-            </p>
-            <div className="gh-ddz-scores">
-              {[0, 1, 2].map((seat) => (
-                <span key={seat} className="gh-ddz-score">
-                  <span className="gh-ddz-score-name">{SEAT_NAMES[seat]}</span>
-                  <span className={`gh-ddz-score-value${(state.scoreDeltas ?? [])[seat] >= 0 ? ' gh-ddz-score-value--up' : ' gh-ddz-score-value--down'}`}>
-                    {(state.scoreDeltas ?? [])[seat] >= 0 ? '+' : ''}
-                    {(state.scoreDeltas ?? [])[seat]}
-                  </span>
-                </span>
-              ))}
-            </div>
-            <div className="gh-ddz-overlay-actions">
-              <button type="button" className="gh-btn gh-btn--primary gh-btn--lg" onClick={handleRestartAfterFinish}>
-                再来一局
-              </button>
-              <Link className="gh-btn gh-btn--secondary gh-btn--lg" to="/games">
-                返回大厅
-              </Link>
-            </div>
-            {myScoreDelta !== null && (
-              <p className="gh-ddz-overlay-detail">
-                你的积分变化：{myScoreDelta >= 0 ? '+' : ''}{myScoreDelta}
-              </p>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
