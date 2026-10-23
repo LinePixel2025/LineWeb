@@ -326,6 +326,18 @@ curl -si -N --max-time 8 -H "Connection: Upgrade" -H "Upgrade: websocket" \
 - **页面标题是 `Non-compliance ICP Filing`、HTTP 403、`Server: Beaver`**：这是**阿里云对未备案域名的拦截**，不是服务器故障。原因是请求带着未备案域名的 `Host` 头直接打到了 ECS（换端口也无效）。解决方式是走 Cloudflare Tunnel（`https://web.linetech.online`），或完成 ICP 备案 / 换非大陆节点。
 - **1Panel 面板只显示 `Access Temporarily Unavailable`**：面板被绑定了域名（`面板设置 → 域名绑定`）。恢复：`1pctl reset domain` 然后 `systemctl restart 1panel-core`；之后**不要**给面板绑域名。
 - **隧道不通**：`systemctl status cloudflared` / `journalctl -u cloudflared -n 50`；确认出站 `7844` 可达（`bash -c 'cat < /dev/null > /dev/tcp/region1.v2.argotunnel.com/7844'`）、DNS 是 CNAME 到 `<隧道ID>.cfargotunnel.com` 且 Cloudflare 代理已开启。
+- **cloudflared 日志出现 `degraded transport` / `QUIC connection failed` / `suggested_protocol=http2`**：说明到 Cloudflare 边缘的 QUIC 路径不稳定，可强制使用 HTTP/2 出站。新增 systemd drop-in 后重启：
+  ```bash
+  mkdir -p /etc/systemd/system/cloudflared.service.d
+  cat > /etc/systemd/system/cloudflared.service.d/override.conf <<'EOF'
+  [Service]
+  Environment="TUNNEL_TRANSPORT_PROTOCOL=http2"
+  EOF
+  systemctl daemon-reload && systemctl restart cloudflared
+  systemctl show cloudflared -p Environment     # 应显示 TUNNEL_TRANSPORT_PROTOCOL=http2
+  journalctl -u cloudflared -n 30 | grep -E 'Registered tunnel connection|protocol='
+  ```
+  验证时优先在 ECS 本机执行 `curl -sS -o /dev/null -w '%{http_code} %{time_total}s\n' https://web.linetech.online/api/health`；若本机公网路径异常（某些运营商到 Cloudflare 的 IPv4/IPv6 路由抖动），以 ECS 本机与 IP 直连 `http://<ECS IP>:3001/api/health` 作为对照，避免误判为应用故障。
 - **`docker compose build` 卡在 npm / 拉镜像**：确认 `/etc/docker/daemon.json` 的镜像加速生效（该机器直连 Docker Hub 会超时）。
 - **容器反复重启**：`docker compose logs server`；常见原因是 `DATABASE_URL` 写错（主机名必须是 `lineweb-postgres`）或 PostgreSQL 未就绪。
 - **`db` 为 `disconnected`**：`docker exec lineweb-postgres pg_isready -U lineweb -d lineweb`；确认 PG 容器与 server 在同一 `1panel-network`。

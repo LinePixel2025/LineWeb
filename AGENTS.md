@@ -74,7 +74,7 @@ lineweb/
 | 本地管理 CLI | `cli/src/`（commands/autoupdate/processes/ui） | `setup` 新机器一键安装、`start` 默认生产模式、`update` GitHub 拉取（镜像降级）、`token` 查询存储节点 Key、`autoupdate` S4U 计划任务无人值守更新；构建 `npm run build:cli` → `cli/dist/LineWebCLI.exe` |
 | PWA | `client/index.html` + `client/public/manifest.json` | theme-color、apple-touch-icon、manifest 已配置 |
 | 环境配置 | `server/.env`（本地）/ `/opt/lineweb/.env`（生产） | 本地：`NODE_ENV`、`PORT=3001`、`JWT_SECRET`、`DATABASE_URL`（`file:./lineweb.db`）、`STORAGE_NODE_TOKEN`、`CORS_ORIGIN`、`MAX_FILE_SIZE_MB`；**生产 `.env` 在服务器 `/opt/lineweb/.env`，`DATABASE_URL` 指向 `lineweb-postgres:5432`**，另有 `JWT_SECRET`、`STORAGE_NODE_TOKEN`、`MAX_FILE_SIZE_MB` 等（凭据副本在服务器 `/root/lineweb-secrets.txt`，不进仓库）；缺 `JWT_SECRET`/`STORAGE_NODE_TOKEN` 会直接启动失败。本地与生产 `.env` 各自独立，`.env.docker` 为容器部署模板 |
-| 内网穿透 | `cloudflared`（Cloudflare Tunnel） | **生产公网入口即由它承载**：ECS 上跑 `cloudflared`（systemd 服务 `cloudflared`，隧道 `lineweb-ecs`），`https://web.linetech.online` → `127.0.0.1:3001`；本地开发时也可用 `cloudflared tunnel run <name>` 把本机 :3001 映射为公网 HTTPS 域名，原生支持 WebSocket；无公网 IP 要求 |
+| 内网穿透 | `cloudflared`（Cloudflare Tunnel） | **生产公网入口即由它承载**：ECS 上跑 `cloudflared`（systemd 服务 `cloudflared`，隧道 `lineweb-ecs`），`https://web.linetech.online` → `127.0.0.1:3001`；本地开发时也可用 `cloudflared tunnel run <name>` 把本机 :3001 映射为公网 HTTPS 域名，原生支持 WebSocket；无公网 IP 要求。**若日志出现 QUIC 降级，已通过 `/etc/systemd/system/cloudflared.service.d/override.conf` 设置 `TUNNEL_TRANSPORT_PROTOCOL=http2` 强制 HTTP/2 出站**（见部署指南故障排查） |
 | API 缓存策略 | `server/src/index.ts` cachePublic 中间件 | posts/pages/comments 5min、stats 1min；**bing 壁纸已移除** |
 
 ## 架构
