@@ -13,6 +13,8 @@ interface Props {
   onStartDirect: (userId: number) => void | Promise<void>
   searchUsers: (query: string) => Promise<ChatUser[]>
   onAddFriend: (userId: number) => void | Promise<void>
+  /** 邀请好友进行 2048 联机对战（可选；未传则不渲染按钮） */
+  onInviteGame?: (userId: number) => void
 }
 
 const SEARCH_DELAY = 300
@@ -41,6 +43,7 @@ export default function FriendPanel({
   onStartDirect,
   searchUsers,
   onAddFriend,
+  onInviteGame,
 }: Props) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<ChatUser[]>([])
@@ -194,6 +197,19 @@ export default function FriendPanel({
                 <UserAvatar userId={friend.id} username={friend.username} size="sm" />
                 <span className="gh-chat-friend-name">{friend.username}</span>
                 <span className="gh-chat-friend-actions">
+                  {onInviteGame && (
+                    <button
+                      type="button"
+                      className="gh-chat-game-btn"
+                      aria-label="邀请对战"
+                      title="邀请对战"
+                      onClick={() => onInviteGame(friend.id)}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
+                        <path d="M6.5 4a3.5 3.5 0 0 0-3.46 2.97l-.7 4.2a1.2 1.2 0 0 0 2.05 1.07l1.2-1.2h4.82l1.2 1.2a1.2 1.2 0 0 0 2.05-1.07l-.7-4.2A3.5 3.5 0 0 0 9.5 4h-3ZM5 6h1v1h1v1H6v1H5V8H4V7h1V6Zm5.25 1.5a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5Zm-1.5 1.5a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5Z" />
+                      </svg>
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="gh-btn gh-btn--primary gh-btn--sm"

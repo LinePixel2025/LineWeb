@@ -6,7 +6,7 @@
 
 ## 概述
 
-个人网站/CMS 单体仓库，GitHub Primer 风格的纯 CSS 前端设计系统（`.gh-*` BEM，已全面改版完成）。React 19 SPA 前端，Express 4 REST API 后端，Python 3 WebSocket 文件存储节点，以及打包为 exe 的 LineWeb CLI 本地管理工具。SQLite 仅用于本地开发，生产为 PostgreSQL 16。功能：文章/评论、动态页面构建器、网盘、计算器、屏幕时间追踪（数字健康卡片，含电脑使用热力图）、AI 助手、头像裁剪上传、用户名登录、**私信（好友/群聊，支持图片消息与 2 分钟撤回）**、PWA。**部署：阿里云 ECS（Ubuntu，公网 IP `120.24.223.65`）上用 1Panel + Docker Compose 部署：Express :3001 容器 + PostgreSQL 16 容器，公网入口 `https://web.linetech.online`（Cloudflare Tunnel 出站隧道，`cloudflared` 已注册为 systemd 服务开机自启）；IP 直连 `http://120.24.223.65:3001` 仍可用；阿里云按 Host 头拦截未备案域名，故不能用橙云 A 记录直连源站；存储节点仍运行在本地 Windows（`D:/LineWebDrive`），主动外连服务端；本地 Windows 全栈仍为开发/备用方案。**（2026-10-17 实测：生产 `/api/health` 显示 `storageNode: connected`，但本机未运行节点、仓库 `storage-node/config.json` 仍指向已不可达的 `ws://123.207.8.77:3001`，线上实际接入的节点来源待确认。）**
+个人网站/CMS 单体仓库，GitHub Primer 风格的纯 CSS 前端设计系统（`.gh-*` BEM，已全面改版完成）。React 19 SPA 前端，Express 4 REST API 后端，Python 3 WebSocket 文件存储节点，以及打包为 exe 的 LineWeb CLI 本地管理工具。SQLite 仅用于本地开发，生产为 PostgreSQL 16。功能：文章/评论、动态页面构建器、网盘、计算器、屏幕时间追踪（数字健康卡片，含电脑使用热力图）、AI 助手、头像裁剪上传、用户名登录、**私信（好友/群聊，支持图片消息与 2 分钟撤回）**、**游戏大厅（2048 单机 / 好友联机，支持无 WebSocket 轮询降级）**、PWA。**部署：阿里云 ECS（Ubuntu，公网 IP `120.24.223.65`）上用 1Panel + Docker Compose 部署：Express :3001 容器 + PostgreSQL 16 容器，公网入口 `https://web.linetech.online`（Cloudflare Tunnel 出站隧道，`cloudflared` 已注册为 systemd 服务开机自启）；IP 直连 `http://120.24.223.65:3001` 仍可用；阿里云按 Host 头拦截未备案域名，故不能用橙云 A 记录直连源站；存储节点仍运行在本地 Windows（`D:/LineWebDrive`），主动外连服务端；本地 Windows 全栈仍为开发/备用方案。**（2026-10-17 实测：生产 `/api/health` 显示 `storageNode: connected`，但本机未运行节点、仓库 `storage-node/config.json` 仍指向已不可达的 `ws://123.207.8.77:3001`，线上实际接入的节点来源待确认。）**
 
 ## 目录结构
 
@@ -17,7 +17,7 @@ lineweb/
 ├── storage-node/     # Python 3 WebSocket 文件存储客户端（10 个命令）→ D:/LineWebDrive，仅本地
 ├── cli/              # LineWeb CLI 本地管理工具（TS + esbuild + pkg → LineWebCLI.exe，v2.1.0）
 ├── scripts/          # 14 个运维脚本（部署、开发启动/停止、webhook、截图、屏幕时间推送）
-├── docs/             # 登录认证接入（auth-api.md）、第三方应用授权（app-auth-api.md）、聊天 API（chat-api.md）、API 参考、Drive 部署指南、屏幕时间 API 指南、健康系统 API 指南、ECS 部署指南（DEPLOYMENT_HTTP_3001.md）
+├── docs/             # 登录认证接入（auth-api.md）、第三方应用授权（app-auth-api.md）、聊天 API（chat-api.md）、游戏 API（game-api.md）、API 参考、Drive 部署指南、屏幕时间 API 指南、健康系统 API 指南、ECS 部署指南（DEPLOYMENT_HTTP_3001.md）
 ├── .omo/             # OpenCode 会话续传数据
 ├── .trae/            # Trae IDE 配置、项目规则
 ├── .superpowers/     # SDD 任务产物
@@ -61,6 +61,7 @@ lineweb/
 | 应用令牌（scope） | `server/src/lib/appScopes.ts` | **scope 与端点白名单的唯一真相源**：9 个 scope（`profile:read`、`content:read`、`comment:write`、`health:read/write`、`drive:read/write`、`content:write`、`comment:moderate`）；`APP_ENDPOINT_RULES` 是应用令牌唯一可达的 API 面，**未列入一律 403**（`/api/users`、`/api/devices`、`/api/stats`、`/api/ai/config`、`/api/oauth/*`、`/api/auth/logout|profile|settings` 等永不可达）；应用令牌 `role:'app'`（未知角色 → 全部角色型检查自动为假），能力派生 scope 逐请求与账号当前能力取交集 → 降权即时生效；前端副本 `client/src/lib/appScopes.ts`，`__tests__/appScopes.test.ts` 跨端断言一致 |
 | 角色能力矩阵 | `server/src/lib/permissions.ts` | 角色 `user`/`author`/`admin` → 能力（`content:write`、`content:manage`、`comment:moderate`、`user:manage`、`stats:view`、`device:view`、`ai:configure`、`drive:all`、`app:manage`）；**新注册用户默认 `author`**（schema `User.role` 默认值 + `registerUser` 显式指定，可发布自己的文章；一次性提升存量账号用 `server/scripts/promote-users-to-author.ts`）；`author` 仅 `content:write`（管理员仍可调整角色）；`content:manage` 为全站文章 + 页面（仅 admin）；admin 自动全权；路由用 `requireCapability()` 守卫（读认证阶段解析好的 `req.user.capabilities`，故对应用令牌精确生效）；令牌只签 `{userId, role, ts}`，能力、网盘开关与空间配额逐请求从 DB 解析 → 角色变更即时生效 |
 | 好友 / 聊天（私信） | `server/src/routes/chat.ts` + `services/chatService.ts` + `services/chatImageService.ts` + `services/chatHub.ts` | REST（21 个端点，前缀 `/api/chat`）：好友申请/接受、好友列表、私聊/群聊会话、消息游标分页、已读、群管理、**图片消息上传/读取**（`POST /conversations/:id/images`、`GET /messages/:id/image`：busboy + sharp 统一转 WebP，存存储节点 `_chat/<conversationId>/`，计入发送者网盘配额）、**2 分钟内撤回**（`POST /messages/:id/recall`，撤回图片会删除节点文件并释放配额）；WebSocket `/ws/chat`（账号令牌认证帧 + 30s 心跳 + `message:new` / `message:recalled` / `friend:*` / `conversation:*` 推送），与 `/ws/storage` 共用 HTTP server（chatHub 接管 upgrade 分发，必须在 initStorageTunnel 之后初始化）；应用令牌/下载票据不可用；前端 `client/src/pages/ChatPage.tsx` + `contexts/ChatContext.tsx` + `components/chat/`（含 `ChatCameraDialog` 相机拍照） |
+| 游戏 / 2048 联机 | `server/src/routes/games.ts` + `services/gameService.ts` + `services/game2048.ts` + `services/gamePresence.ts`；前端 `client/src/pages/games/` + `contexts/GameContext.tsx` + `lib/games/` | REST 前缀 `/api/games`（好友邀请、接受/拒绝/取消、对局、移动、认输、`sync` 轮询、`presence` 心跳）；`game:*` 事件复用 `/ws/chat` 的 `sendToUser`；服务端权威棋盘，内存态、无 Prisma 表；无 WebSocket 时客户端按 2–10 秒轮询降级，在线判定 = 聊天 WS 在线 OR presence 未过期（TTL 90s，掉线判负 120s）；单机版纯前端、最高分 localStorage |
 | 网盘空间配额 | `server/src/services/driveQuota.ts` + `routes/drive.ts` / `routes/users.ts` | 每用户 `user.storageQuota`（默认 2 GiB，管理员 `PUT /api/users/:id/quota` 可调 0–10 TiB）；**已用空间 = 网盘文件 + 聊天图片**（`Message.imageSize`，撤回后不计）；上传三阶段强制（预检 / busboy 按剩余空间截断 / 写后复核并清理），超限 413 `QUOTA_EXCEEDED`；`GET /api/drive/quota` 返回 BigInt 字符串；`drive:all` 不受限；`POST /api/drive/sync` 收紧为仅 `drive:all`；前端 `useDriveQuota` + `DriveQuotaBar` |
 | 登录/个人资料 | `server/src/routes/auth.ts` | 登录支持 `identifier`（用户名或邮箱，兼容 email）与 `rememberDays`（1–90 天设备长期令牌）；`PUT /auth/profile` 修改用户名（唯一性校验）/密码（验证当前密码，改密后旧 token 全失效并重签） |
 | 屏幕时间推送 | `server/src/routes/health.ts` | `/api/health/push`、`/screen-time*`、`/daily-goal*` 统一用登录令牌（仅本人数据）；`X-Screen-Time-Token` 已移除 |
@@ -69,7 +70,7 @@ lineweb/
 | 头像服务 | `server/src/services/avatarService.ts` | sharp 处理 + 存储节点读写；`GET /api/auth/avatar/:userId` 公开（头像可匿名访问） |
 | 全文搜索 | `server/src/services/ftsSearch.ts` | SQLite FTS5 全文索引，启动时 `ensureFTSTable` |
 | React Query 层 | `client/src/hooks/useQueries.ts` + `lib/queryKeys.ts` | 公开页面已使用（staleTime 5min、retry 1、不随窗口聚焦刷新），管理页面仍手写 `useState+useEffect` |
-| 设计系统 | `client/src/styles/`（10 个 CSS 文件，含 `chat.css`） | `globals.css` 仅 import 聚合器；`drive.css` 最大（约 2900 行）；聊天样式为 `.gh-chat-*`；无 Tailwind、无 CSS-in-JS |
+| 设计系统 | `client/src/styles/`（11 个 CSS 文件，含 `chat.css`、`games.css`） | `globals.css` 仅 import 聚合器；`drive.css` 最大（约 2900 行）；聊天样式为 `.gh-chat-*`，游戏为 `.gh-games-*` / `.gh-g2048-*` / `.gh-game-*`；无 Tailwind、无 CSS-in-JS |
 | 本地管理 CLI | `cli/src/`（commands/autoupdate/processes/ui） | `setup` 新机器一键安装、`start` 默认生产模式、`update` GitHub 拉取（镜像降级）、`token` 查询存储节点 Key、`autoupdate` S4U 计划任务无人值守更新；构建 `npm run build:cli` → `cli/dist/LineWebCLI.exe` |
 | PWA | `client/index.html` + `client/public/manifest.json` | theme-color、apple-touch-icon、manifest 已配置 |
 | 环境配置 | `server/.env`（本地）/ `/opt/lineweb/.env`（生产） | 本地：`NODE_ENV`、`PORT=3001`、`JWT_SECRET`、`DATABASE_URL`（`file:./lineweb.db`）、`STORAGE_NODE_TOKEN`、`CORS_ORIGIN`、`MAX_FILE_SIZE_MB`；**生产 `.env` 在服务器 `/opt/lineweb/.env`，`DATABASE_URL` 指向 `lineweb-postgres:5432`**，另有 `JWT_SECRET`、`STORAGE_NODE_TOKEN`、`MAX_FILE_SIZE_MB` 等（凭据副本在服务器 `/root/lineweb-secrets.txt`，不进仓库）；缺 `JWT_SECRET`/`STORAGE_NODE_TOKEN` 会直接启动失败。本地与生产 `.env` 各自独立，`.env.docker` 为容器部署模板 |
@@ -100,7 +101,7 @@ server.listen(3001)
   ├── helmet(CSP) → cors → compression（跳过 /proxy、/download）
   ├── body parser 限定 /api（1mb，避免静态文件请求触发解析）
   ├── rate-limit(600/15min，代码注释里的 200 是过期的) → 设备追踪 → 全局认证检查
-  ├── cachePublic 中间件 → 14 个路由组挂载于 /api/*（含 /api/oauth、/api/chat）
+  ├── cachePublic 中间件 → 15 个路由组挂载于 /api/*（含 /api/oauth、/api/chat、/api/games）
   ├── [生产] express.static(client/dist, maxAge 1y+immutable, HTML 不缓存) + SPA fallback
   └── errorHandler
 
@@ -309,7 +310,7 @@ cd storage-node && python main.py     # 本地 Windows 存储节点，config.jso
 - **中文友好默认配置** — `.npmrc` 设置 npmmirror.com 镜像；文档使用中文。
 - **更新强制覆盖** — CLI `update` 使用 `git reset --hard origin/master` 而非 `git pull`，避免本地改动导致更新冲突；未跟踪文件（`server/.env` 等）不受影响。
 - **Cloudflare Tunnel（当前生产公网入口）** — ECS 上运行 `cloudflared`（systemd 服务，开机自启），公网流量经 Cloudflare 边缘（`https://web.linetech.online`）进入服务器本机 `127.0.0.1:3001`（无需为站点额外开放入站端口）；原生支持 WebSocket（网盘存储隧道、AI 流式响应均可用），实测 `wss://web.linetech.online/ws/storage` 握手 101；本地开发时也可用 `cloudflared tunnel run <name>` 把本机 :3001 临时暴露为公网 HTTPS。
-- **Server 无测试** — `server/` 中零测试基础设施。Playwright 是 client 依赖但无配置或测试。
+- **Server 无测试框架** — `server/` 中无 vitest 等测试基础设施；2048 引擎/presence 用 `cd server && npm run verify:game` 自检脚本。Playwright 是 client 依赖但无正式配置；本次联机/轮询冒烟用临时脚本完成（未提交）。
 - **认证中间件跳过 13 个路径**：`/auth/login`、`/auth/register`、`/auth/avatar`、`/health`、`/posts`、`/pages/featured`、`/pages/slug`、`/stats/public`、`/version`、`/comments/post`、`/ai/chat`、`/oauth/token`、`/oauth/revoke`。白名单匹配用 `req.path === p || req.path.startsWith(p + '/')`（`req.path` 不含 `/api` 前缀），因此 `/health` 覆盖全部 `/health/*`（路由内部仍要求登录令牌），`/ai/chat` 也覆盖 `/ai/chat/public`；`/oauth/token|revoke` 用精确路径，避免前缀匹配放大暴露面。
 - **唯一账号凭证是账号登录令牌** — API Key（`X-API-Key`）与屏幕时间 Token（`X-Screen-Time-Token`）已彻底移除（含 `ApiKey` / `ScreenTimeToken` 两张表与 `/api/api-keys`、`/api/health/tokens` 端点）；第三方设备登录同一账号后使用同一 JWT，可用 `rememberDays`（1–90）申请长期令牌，**或走 OAuth 授权流程**获得权限更小的应用令牌。
 - **应用令牌必须走 `authenticate` 内的白名单校验** — `/health/*`、`/comments`、`/auth/avatar`、`/ai/*` 在公开路径白名单里，靠路由内再次调用 `authenticate` 兜底，因此应用令牌的端点白名单检查必须写在 `authenticate()` 内部（而非只放在全局中间件），否则这些端点会被应用令牌绕过。完整路径用 `${req.baseUrl}${req.path}` 拼接并**归一化末尾斜杠**（挂在 `/api/posts` 的 router 处理 `POST /api/posts` 时 `req.path` 是 `/`，否则匹配不上 `^/api/posts$`）。
@@ -321,8 +322,9 @@ cd storage-node && python main.py     # 本地 Windows 存储节点，config.jso
 - **认证 API 禁缓存** — 除公开路径外，全局认证中间件设置 `Cache-Control: no-store` 并清空 ETag，避免 304 导致旧数据。
 - **新增公开端点必须同步两处** — `index.ts` 的 `publicApiPaths` 白名单 + `cachePublic` 缓存策略。
 - **`/api` 自描述端点** — `GET /api` 返回全部路由清单（需认证），排查路由问题时先看这里。
-- **前端 Provider 顺序** — `BrowserRouter → QueryClient → Auth → Chat → Theme → Download → RouteErrorBoundary → Suspense → Routes`；`DownloadToast` 在 Routes 外，下载进度跨页面保留；ChatProvider 负责 `/ws/chat` 连接与未读角标，需在 AuthProvider 内。
-- **聊天 WebSocket 与存储隧道共用端口** — `chatHub` 用 `noServer: true` 接管 HTTP server 的 `upgrade` 事件并按路径分发（`/ws/chat` → 聊天，其余转交已注册的 `/ws/storage` 监听），因此**必须先 `initStorageTunnel(server)` 再 `initChatHub(server)`**；后续再新增 WebSocketServer 需接入同一分发逻辑。
+- **前端 Provider 顺序** — `BrowserRouter → QueryClient → Auth → Chat → Game → Theme → Download → RouteErrorBoundary → Suspense → Routes`；`DownloadToast` 与 `GameInviteToast` 在 Routes 外；ChatProvider 负责 `/ws/chat` 连接与未读角标，GameProvider 依赖 ChatProvider 的 `transport`，两者都需在 AuthProvider 内。
+- **聊天 WebSocket 与存储隧道共用端口** — `chatHub` 用 `noServer: true` 接管 HTTP server 的 `upgrade` 事件并按路径分发（`/ws/chat` → 聊天，其余转交已注册的 `/ws/storage` 监听），因此**必须先 `initStorageTunnel(server)` 再 `initChatHub(server)`**；后续再新增 WebSocketServer 需接入同一分发逻辑。游戏事件（`game:invite` / `game:invite:removed` / `game:match:started|update|ended`）复用同一 `/ws/chat`，不新增 WS 服务。
+- **无 WebSocket 降级** — `ChatContext` 暴露 `transport: 'ws' | 'polling'`；WS 不存在/构造失败/8 秒握手超时/断线时聊天与游戏改用 HTTP 轮询（聊天消息 10s、会话/摘要 30s、好友 60s；游戏对局 sync 2s、全局 sync 5s、presence 20s）。游戏在线判定 = `chatHub.isUserOnline` OR `gamePresence` 未过期（TTL 90s），掉线判负 120s。`?transport=polling` / `localStorage.lineweb_force_polling=1` 可强制轮询，`?transport=auto` 恢复。游戏 `sync`/`presence`/移动端点从全局 600/15min 限流中精确豁免，由路由级按用户限流；聊天轮询不改服务端限流。
 - **网盘配额是 BigInt** — `User.storageQuota` / `DriveFile.size` 均不能直接 JSON 序列化；`/api/drive/quota`、`/api/users`、上传 413 响应中的字节数一律用**字符串**；客户端用 `formatStorageSize` 展示。
 - **上传配额有三道检查** — 解析前预检剩余空间、busboy 以 `min(单文件上限, 剩余空间)` 截断、写入后重新 SUM 复核并清理（DB 行 + 节点文件 + FTS）。本地无存储节点时 `/upload` 会先返回 503，配额全链路需在节点在线时验证。
 - **聊天图片与网盘共用配额** — `driveQuota.getDriveUsage` = `DriveFile.size` + `Message.imageSize`（未撤回图片）；聊天图片写节点后**先落库再复核**（复核必须能看到本张图，否则并发上传各超一张），超限回滚消息行 + 删除节点文件。撤回图片会清空 image 字段并删除节点文件，配额立即释放；`storageSync` 必须排除 `_chat/`，否则聊天图片会被扫进网盘。

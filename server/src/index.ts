@@ -21,10 +21,12 @@ import healthRoutes from './routes/health.js'
 import aiRoutes from './routes/ai.js'
 import oauthRoutes from './routes/oauth.js'
 import chatRoutes from './routes/chat.js'
+import gameRoutes from './routes/games.js'
 import { authenticate } from './middleware/auth.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel, isNodeConnected } from './services/storageTunnel.js'
 import { initChatHub } from './services/chatHub.js'
+import { startGameSweeper } from './services/gameService.js'
 import { syncDriveFiles } from './services/storageSync.js'
 import { deduplicateDriveFiles } from './services/dedupDriveFiles.js'
 import { ensureFTSTable } from './services/ftsSearch.js'
@@ -92,12 +94,21 @@ app.use('/api', express.json({ limit: '1mb' }))
 app.use('/api', express.urlencoded({ limit: '1mb', extended: true }))
 
 // === 全局速率限制 ===
-// 所有 /api 端点每 IP 每 15 分钟最多 200 次请求
+// 所有 /api 端点每 IP 每 15 分钟最多 600 次请求。
+// 例外：游戏的高频端点（移动 / 轮询 sync / presence 心跳）由 routes/games.ts 内
+// 按用户的精确限流接管，这里必须按精确路径跳过，否则正常对局/轮询会被全局 IP 限流卡住。
+// 注意：apiLimiter 挂在 /api 上，req.path 不含 /api 前缀（如 /games/2048/sync）。
+const apiLimiterSkipPaths = [
+  /^\/games\/2048\/matches\/\d+\/moves\/?$/,
+  /^\/games\/2048\/sync\/?$/,
+  /^\/games\/2048\/presence\/?$/,
+]
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 600,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => apiLimiterSkipPaths.some((pattern) => pattern.test(req.path)),
   message: { error: '请求过于频繁，请稍后再试' },
 })
 app.use('/api', apiLimiter)
@@ -150,6 +161,7 @@ app.use('/api/health', healthRoutes)
 app.use('/api/ai', aiRoutes)
 app.use('/api/oauth', oauthRoutes)
 app.use('/api/chat', chatRoutes)
+app.use('/api/games', gameRoutes)
 
 // API 自描述端点 — 列出所有可用路由
 app.get('/api', (_req, res) => {
@@ -258,6 +270,21 @@ app.get('/api', (_req, res) => {
       messages: { method: 'GET', path: '/api/chat/conversations/:id/messages?before=&limit=', auth: true, description: '历史消息（游标分页，id 正序）；POST /api/chat/conversations/:id/messages 发送纯文本消息；POST /api/chat/conversations/:id/images 发送图片（multipart/form-data，字段名 file）；GET /api/chat/messages/:id/image 读取图片（支持 ?token= 直链）；POST /api/chat/messages/:id/recall 撤回自己发送的消息（2 分钟内）；PUT /api/chat/conversations/:id/read 更新已读位置' },
       ws: '实时推送：ws(s)://<host>/ws/chat，连接后 5 秒内发送 {"type":"auth","token":"<登录令牌>"}，服务端回 {"type":"auth_ok","userId":N}；推送 message:new / message:recalled / conversation:updated / conversation:removed / friend:request / friend:accepted / friend:rejected / friend:removed，客户端 {type:"ping"} ↔ 服务端 {type:"pong"}。认证失败以 close code 4001 断开。',
     },
+    games: {
+      friends: { method: 'GET', path: '/api/games/2048/friends', auth: true, description: '好友对战大厅：好友列表（含 online / inMatch）' },
+      invites: { method: 'GET', path: '/api/games/2048/invites', auth: true, description: '收到/发出的待处理邀请（60 秒有效）' },
+      inviteCreate: { method: 'POST', path: '/api/games/2048/invites', auth: true, description: '邀请好友进行 2048 对战（body: {friendId}；对方需在线、同一发送者仅一条待处理邀请）' },
+      inviteRespond: { method: 'POST', path: '/api/games/2048/invites/:id/respond', auth: true, description: '接受/拒绝邀请（body: {action:"accept"|"decline"}；接受成功返回 match）' },
+      inviteCancel: { method: 'DELETE', path: '/api/games/2048/invites/:id', auth: true, description: '取消自己发出的邀请' },
+      sync: { method: 'GET', path: '/api/games/2048/sync?matchId=', auth: true, description: '轮询降级：返回 serverTime + 邀请列表 + 当前/指定对局（对局结束 5 分钟内仍可取结果）' },
+      presence: { method: 'POST', path: '/api/games/2048/presence', auth: true, description: '轮询降级心跳（建议 20 秒一次，服务端 TTL 90 秒；在线判定 = 聊天 WS 在线 || presence 有效）' },
+      activeMatch: { method: 'GET', path: '/api/games/2048/matches/active', auth: true, description: '当前进行中的对局（无则 match: null）' },
+      matchDetail: { method: 'GET', path: '/api/games/2048/matches/:id', auth: true, description: '对局详情（非参与者 404）' },
+      move: { method: 'POST', path: '/api/games/2048/matches/:id/moves', auth: true, description: '服务端权威移动（body: {direction:"up"|"down"|"left"|"right"}；无效移动返回 moved:false 且不广播）；限流 900/5min/用户' },
+      resign: { method: 'POST', path: '/api/games/2048/matches/:id/resign', auth: true, description: '认输，对手获胜（reason=resign）' },
+      rules: '服务端权威：双方同一 seed 得到完全相同的初始棋盘，先合成 2048 者获胜；无合法移动判负；单局 10 分钟，超时按分数判定（平分平局）；连续 120 秒不可用判负（forfeit）；邀请 60 秒有效、对局结束保留 5 分钟；对局/邀请均为内存态，无数据库表。',
+      ws: '实时推送（复用 /ws/chat，不新增 WS 服务）：game:invite {invite}、game:invite:removed {inviteId, reason}、game:match:started/update/ended {match}。无 WebSocket 时客户端用 POST /presence（20 秒心跳）+ GET /sync（2–5 秒轮询）降级。',
+    },
   })
 })
 
@@ -326,6 +353,9 @@ initStorageTunnel(server)
 
 // 初始化聊天 WebSocket Hub（/ws/chat）
 initChatHub(server)
+
+// 游戏定时器：邀请过期、超时结算、掉线判负、结束对局回收（每 15 秒，unref）
+startGameSweeper()
 
 // 网盘文件定期同步
 const syncInterval = setInterval(() => {

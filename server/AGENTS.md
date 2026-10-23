@@ -7,16 +7,16 @@ Express 4 + Prisma 6 + JWT + Zod API 后端。端口 3001，`tsx` 运行时，`.
 ```
 server/
 ├── src/
-│   ├── index.ts           # 入口 — 中间件链 + 14 个路由挂载 + WebSocket(/ws/storage + /ws/chat) + 定时同步
+│   ├── index.ts           # 入口 — 中间件链 + 15 个路由挂载 + WebSocket(/ws/storage + /ws/chat) + 定时同步 + 游戏 sweeper
 │   ├── config/index.ts    # Zod schema（全部端点）+ 环境变量解析
 │   ├── middleware/        # auth.ts（登录令牌 + requireCapability）+ errorHandler.ts
-│   ├── routes/            # 14 个路由模块（全部前缀 /api）
-│   ├── services/          # 14 个服务 — 部分路由直接调 Prisma，不经过 service
+│   ├── routes/            # 15 个路由模块（全部前缀 /api）
+│   ├── services/          # 18 个服务 — 部分路由直接调 Prisma，不经过 service
 │   └── lib/               # prisma.ts（单例）+ utils.ts + asyncHandler.ts + permissions.ts（角色能力矩阵）
 ├── prisma/
 │   ├── schema.prisma      # SQLite schema（17 模型，含好友/聊天与 storageQuota）
 │   └── seed.ts            # admin@lineweb.dev / admin123
-└── scripts/               # generate-mysql-schema.js + generate-pg-schema.js
+└── scripts/               # generate-mysql-schema.js + generate-pg-schema.js + verify-game2048.ts
 ```
 
 ## 哪里找
@@ -31,6 +31,7 @@ server/
 | 加业务逻辑 | `services/` | authService、postService、avatarService 有 service 层；其余路由直接调 Prisma |
 | 文件上传 | routes 中用 `busboy` | drive/avatar/users 三处；无 multer |
 | 存储节点通信 | `services/storageTunnel.ts` | WebSocket 命令代理 + 流式读写 |
+| 游戏 / 2048 联机 | `routes/games.ts` + `services/gameService.ts` + `services/game2048.ts` + `services/gamePresence.ts` | 内存态邀请/对局（无 Prisma 表）、服务端权威棋盘、WS 事件复用 chatHub、`sync`/`presence` 轮询降级 |
 
 ## 中间件链顺序
 
@@ -71,6 +72,7 @@ helmet(CSP) → cors → compression → body parser(1mb) → rate-limit(600/15m
 | oauth.ts | token / revoke / authorize-context / authorize / grants / clients | `token`、`revoke` 公开（精确路径 + `oauthLimiter`）；`authorize*`/`grants` 需登录；`clients` 需 `app:manage` |
 | driveFavorites.ts | 收藏夹 CRUD + reorder | `router.use(authenticate)`；挂载在 `/api/drive/favorites` |
 | chat.ts | summary / users/search / friends / friend-requests / conversations / messages / images / recall / read / group members | `router.use(authenticate)`；写操作 5 分钟 120 次/用户限流；返回前广播 WS 事件（含 `message:recalled`）；图片读取支持 `?token=` 直链 |
+| games.ts | 2048 联机：friends / invites（发起/响应/取消）/ sync / presence / matches（active、详情、moves、resign） | `router.use(authenticate)`；按用户限流：移动 900、sync 1800、presence 120、其它写 60（均 5 分钟）；`/sync`、`/presence`、`/moves` 在 `index.ts` 全局 apiLimiter 中精确豁免 |
 
 ## 服务层
 
@@ -91,6 +93,9 @@ helmet(CSP) → cors → compression → body parser(1mb) → rate-limit(600/15m
 | chatService | 好友 / 好友申请 / 会话 / 消息（文本、图片 DTO）/ 2 分钟撤回 / 群管理业务逻辑 | Friendship/FriendRequest/Conversation/ConversationMember/Message |
 | chatImageService | 聊天图片：busboy 流 → sharp 归一化（EXIF/2048/WebP）→ 存储节点 `_chat/<conversationId>/` → 配额复核 | Message（内部由路由事务写入） |
 | chatHub | 聊天 WebSocket Hub：认证、在线连接 Map、心跳、sendToUser(s) | 无（纯 WebSocket + resolveAuthContext） |
+| game2048 | 2048 纯规则引擎：mulberry32 固定种子、slide/applyMove、合并规则与得分、hasAvailableMoves、目标 2048 | 无（纯函数，可脚本直接验证） |
+| gamePresence | 游戏 presence 纯 TTL 映射（默认 90 秒，函数接受显式 now 便于测边界） | 无（纯 Map） |
+| gameService | 内存态邀请/对局/棋盘与 RNG、服务端权威移动与结算、sweeper（邀请过期/超时/掉线判负/回收）、`game:*` 事件经 chatHub 推送 | 仅 `chatService.areFriends/getUserBrief/listFriends`（对局无 Prisma 表） |
 
 ## 反模式 / 注意事项
 
@@ -101,6 +106,10 @@ helmet(CSP) → cors → compression → body parser(1mb) → rate-limit(600/15m
 - **裸 catch {}**：多处存在且无注释
 - **asyncHandler 已应用**：`posts.ts` 和 `pages.ts` 的所有 async 路由处理器已包裹 `asyncHandler()`，确保异步异常正确转发到 `errorHandler`。其他路由文件（comments、drive 等）尚未包裹，仍有未处理 async 异常的风险。
 - **WebSocket upgrade 分发**：`chatHub` 用 `noServer: true` 接管 `server` 的 `upgrade` 事件并按路径分发（`/ws/chat` 自己处理，其余转交先前监听器），因此 `initChatHub` 必须在 `initStorageTunnel` 之后调用；新增 WS 服务需接入同一分发。
+- **游戏为内存态**：邀请/对局/棋盘/RNG 全部在 `gameService` 内存中，**不新增 Prisma 表**；服务重启即失效（客户端 404 时应提示重新开始）。`startGameSweeper()` 必须在 `initChatHub(server)` 之后调用，定时器 15 秒且 unref。
+- **游戏在线判定唯一口径**：`isGameUserAvailable = chatHub.isUserOnline(userId) || gamePresence.isGamePresent(userId)`；presence TTL 90 秒、客户端心跳 20 秒、连续不可用 120 秒判负。邀请目标/接受邀请方可用性、好友 `online`、对局 DTO 的 `online`、sweeper 判负都必须走这一个函数，不要各自判断。
+- **游戏高频端点要绕开全局限流**：`/games/2048/matches/:id/moves`、`/games/2048/sync`、`/games/2048/presence` 在 `index.ts` 的 `apiLimiter` 里用精确正则 `skip`（`req.path` 不含 `/api`），改路由路径时必须同步改这三条正则，否则轮询/对局会被 600/15min 卡死。
+- **游戏事件不新增 WS 服务**：`game:invite` / `game:invite:removed` / `game:match:started|update|ended` 全部经 `chatHub.sendToUser` 推送；无 WS 时客户端用 `GET /sync` 轮询 + `POST /presence` 心跳降级。
 - **BigInt 序列化**：`User.storageQuota`、`DriveFile.size` 不能直接进 JSON；所有对外响应显式 `String()`，客户端按字符串展示。
 
 ## 命令
@@ -110,4 +119,5 @@ npm run dev           # tsx watch src/index.ts
 npm run db:push       # prisma db push → SQLite
 npm run db:seed       # prisma db seed
 npm run db:studio     # prisma studio
+npm run verify:game   # tsx scripts/verify-game2048.ts —— 2048 引擎 + presence TTL 自检（无 DB/网络依赖）
 ```

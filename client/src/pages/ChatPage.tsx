@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../lib/api'
 import { mergeMessages } from '../lib/chat'
+import { CHAT_POLL_INTERVALS } from '../lib/realtime'
 import { useAuth } from '../contexts/AuthContext'
 import { useChat } from '../contexts/ChatContext'
 import ChatConversationList from '../components/chat/ChatConversationList'
@@ -63,6 +64,7 @@ export default function ChatPage() {
   const { conversationId: conversationIdParam } = useParams<{ conversationId?: string }>()
   const {
     connectionState,
+    transport,
     unreadTotal,
     pendingFriendRequests,
     error: chatError,
@@ -95,6 +97,10 @@ export default function ChatPage() {
 
   const conversationsRef = useRef<Conversation[]>([])
   const activeIdRef = useRef<number | null>(activeId)
+  /** 当前会话已上报已读（或已在本地可见）的最大消息 id，轮询时据此避免重复 markRead */
+  const latestMessageIdRef = useRef(0)
+  /** 上一次的传输模式，用于识别 polling → ws 的切换 */
+  const previousTransportRef = useRef(transport)
 
   useEffect(() => {
     conversationsRef.current = conversations
@@ -110,7 +116,7 @@ export default function ChatPage() {
     return () => setActiveConversationId(null)
   }, [activeId, setActiveConversationId])
 
-  const loadConversations = useCallback(async (showLoading = false): Promise<Conversation[]> => {
+  const loadConversations = useCallback(async (showLoading = false): Promise<Conversation[] | null> => {
     if (showLoading) setConversationsLoading(true)
     try {
       const data = await api.get<ConversationsResponse>('/chat/conversations')
@@ -121,14 +127,19 @@ export default function ChatPage() {
       return list
     } catch (error) {
       setConversationsError(errorMessage(error, '加载会话失败'))
-      return []
+      // null 表示本次拉取失败（区别于「真的没有会话」），轮询时不要据此判断会话消失
+      return null
     } finally {
       setConversationsLoading(false)
     }
   }, [])
 
-  const loadFriends = useCallback(async () => {
-    setFriendsLoading(true)
+  /**
+   * 加载好友列表与申请。
+   * @param showLoading 是否切换 loading 态——轮询时传 false，避免列表闪烁
+   */
+  const loadFriends = useCallback(async (showLoading = true) => {
+    if (showLoading) setFriendsLoading(true)
     try {
       const [friendData, requestData] = await Promise.all([
         api.get<FriendsResponse>('/chat/friends'),
@@ -140,7 +151,7 @@ export default function ChatPage() {
     } catch (error) {
       setActionError(errorMessage(error, '加载好友失败'))
     } finally {
-      setFriendsLoading(false)
+      if (showLoading) setFriendsLoading(false)
     }
   }, [])
 
@@ -169,6 +180,7 @@ export default function ChatPage() {
   // 打开会话：加载最近一页消息并上报已读
   useEffect(() => {
     if (activeId === null) {
+      latestMessageIdRef.current = 0
       setMessages([])
       setMessagesHasMore(false)
       setMessagesError(null)
@@ -177,6 +189,8 @@ export default function ChatPage() {
     }
 
     let cancelled = false
+    // 切换会话后重置已读游标，避免上一个会话的 id 影响 markRead 判定
+    latestMessageIdRef.current = 0
     setMessages([])
     setMessagesLoading(true)
     setMessagesHasMore(false)
@@ -190,7 +204,11 @@ export default function ChatPage() {
         setMessages(list)
         setMessagesHasMore(Boolean(data.hasMore))
         const lastMessage = list[list.length - 1]
-        if (lastMessage) void markRead(activeId, lastMessage.id)
+        // 轮询可能先于首次加载完成：只有 id 前进时才上报已读，避免重复 markRead
+        if (lastMessage && lastMessage.id > latestMessageIdRef.current) {
+          latestMessageIdRef.current = lastMessage.id
+          void markRead(activeId, lastMessage.id)
+        }
       })
       .catch((error) => {
         if (!cancelled) setMessagesError(errorMessage(error, '加载消息失败'))
@@ -230,6 +248,7 @@ export default function ChatPage() {
   const applyOutgoingMessage = useCallback(
     (conversationId: number, created: Message) => {
       if (activeIdRef.current === conversationId) {
+        if (created.id > latestMessageIdRef.current) latestMessageIdRef.current = created.id
         setMessages((prev) => mergeMessages(prev, created))
       }
       setConversations((prev) =>
@@ -353,6 +372,7 @@ export default function ChatPage() {
           }
 
           if (isActive) {
+            if (message.id > latestMessageIdRef.current) latestMessageIdRef.current = message.id
             setMessages((prev) => mergeMessages(prev, message))
             void markRead(conversationId, message.id)
           }
@@ -396,6 +416,93 @@ export default function ChatPage() {
     })
   }, [subscribe, meId, markRead, loadConversations, loadFriends, navigate])
 
+  /** 轮询当前会话最新一页消息（10s）；仅在最新消息 id 前进时上报已读，避免重复 markRead */
+  const pollActiveMessages = useCallback(async () => {
+    const conversationId = activeIdRef.current
+    if (conversationId === null) return
+    try {
+      const data = await api.get<MessagesResponse>(
+        `/chat/conversations/${conversationId}/messages?limit=50`
+      )
+      // 请求期间用户可能已切换会话，丢弃过期结果
+      if (activeIdRef.current !== conversationId) return
+      const list = data.messages ?? []
+      const latest = list[list.length - 1]
+      if (!latest) return
+      const advanced = latest.id > latestMessageIdRef.current
+      latestMessageIdRef.current = Math.max(latestMessageIdRef.current, latest.id)
+      setMessages((prev) => mergeMessages(prev, list))
+      setConversations((prev) =>
+        sortConversations(
+          prev.map((conversation) =>
+            conversation.id === conversationId
+              ? {
+                  ...conversation,
+                  lastMessage: latest,
+                  lastMessageAt: latest.createdAt,
+                  unreadCount: advanced ? 0 : conversation.unreadCount,
+                }
+              : conversation
+          )
+        )
+      )
+      if (advanced) void markRead(conversationId, latest.id)
+    } catch {
+      // 轮询失败静默忽略，等下一轮
+    }
+  }, [markRead])
+
+  /** 轮询会话列表（30s）；当前会话已不在列表（被移出/解散）时回到会话列表页 */
+  const pollConversations = useCallback(async () => {
+    const list = await loadConversations(false)
+    if (!list) return
+    const current = activeIdRef.current
+    if (current !== null && !list.some((conversation) => conversation.id === current)) {
+      navigate('/chat')
+    }
+  }, [loadConversations, navigate])
+
+  // 轮询降级：会话列表 30s、好友列表 60s（不切换 loading，避免列表闪烁）
+  useEffect(() => {
+    if (transport !== 'polling') return
+    const conversationTimer = setInterval(() => void pollConversations(), CHAT_POLL_INTERVALS.conversations)
+    const friendTimer = setInterval(() => void loadFriends(false), CHAT_POLL_INTERVALS.friends)
+    return () => {
+      clearInterval(conversationTimer)
+      clearInterval(friendTimer)
+    }
+  }, [transport, pollConversations, loadFriends])
+
+  // 轮询降级：当前会话消息 10s（仅在已打开会话时）
+  useEffect(() => {
+    if (transport !== 'polling' || activeId === null) return
+    const timer = setInterval(() => void pollActiveMessages(), CHAT_POLL_INTERVALS.messages)
+    return () => clearInterval(timer)
+  }, [transport, activeId, pollActiveMessages])
+
+  // 从轮询切回 WebSocket：停止轮询，并立即补拉一次，避免切换瞬间的空窗
+  useEffect(() => {
+    const previous = previousTransportRef.current
+    previousTransportRef.current = transport
+    if (previous === 'polling' && transport === 'ws') {
+      void loadConversations(false)
+      void pollActiveMessages()
+    }
+  }, [transport, loadConversations, pollActiveMessages])
+
+  // 页面重新可见时立即刷新，避免等待下一个轮询周期
+  useEffect(() => {
+    if (transport !== 'polling') return
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return
+      void pollActiveMessages()
+      void pollConversations()
+      void loadFriends(false)
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [transport, pollActiveMessages, pollConversations, loadFriends])
+
   const activeConversation = useMemo(
     () => (activeId === null ? null : conversations.find((conversation) => conversation.id === activeId) ?? null),
     [activeId, conversations]
@@ -430,7 +537,7 @@ export default function ChatPage() {
           navigate(`/chat/${created.id}`)
           return
         }
-        const list = await loadConversations()
+        const list = (await loadConversations()) ?? []
         const existing = list.find(
           (conversation) => conversation.type === 'direct' && conversation.members.some((member) => member.id === userId)
         )
@@ -462,7 +569,7 @@ export default function ChatPage() {
           navigate(`/chat/${created.id}`)
           return
         }
-        const list = await loadConversations()
+        const list = (await loadConversations()) ?? []
         const found = list
           .filter((conversation) => conversation.type === 'group' && conversation.name === name)
           .sort((a, b) => b.id - a.id)[0]
@@ -624,12 +731,21 @@ export default function ChatPage() {
     [dialog, createGroup, addMembers]
   )
 
+  // 传输模式文案：轮询时提示延迟；仍在尝试 WS 时补充说明
   const connectionLabel =
-    connectionState === 'open'
+    transport === 'ws'
       ? '实时连接正常'
       : connectionState === 'connecting'
-        ? '正在连接实时消息…'
-        : '实时连接已断开'
+        ? '轮询模式（约 10 秒延迟）· 正在连接实时消息…'
+        : '轮询模式（约 10 秒延迟）'
+
+  /** 邀请好友进行 2048 联机对战 */
+  const inviteGame = useCallback(
+    (friendId: number) => {
+      navigate(`/games/2048/online?friend=${friendId}`)
+    },
+    [navigate]
+  )
 
   return (
     <div className="gh-chat-page">
@@ -683,8 +799,15 @@ export default function ChatPage() {
             >
               +
             </button>
+            {transport === 'polling' && (
+              <span className="gh-chat-mode-chip" title={connectionLabel}>
+                轮询模式
+              </span>
+            )}
             <span
-              className={`gh-chat-status gh-chat-status--${connectionState}`}
+              className={`gh-chat-status ${
+                transport === 'polling' ? 'gh-chat-status--polling' : `gh-chat-status--${connectionState}`
+              }`}
               title={connectionLabel}
               aria-label={connectionLabel}
             />
@@ -712,6 +835,7 @@ export default function ChatPage() {
                 onStartDirect={startDirect}
                 searchUsers={searchUsers}
                 onAddFriend={addFriend}
+                onInviteGame={inviteGame}
               />
             )}
           </div>

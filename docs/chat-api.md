@@ -390,3 +390,23 @@ curl -X POST $BASE/chat/messages/88/recall -H "Authorization: Bearer $TOKEN"
 | 参数校验失败（空消息、群名过长、成员超限、撤回超时等） | 400 |
 | 图片单张超限 / 网盘空间不足 | 413 |
 | 存储节点未接入（发图 / 读图） | 503 |
+
+---
+
+## 9. 无 WebSocket 轮询降级
+
+当浏览器不支持 WebSocket、握手被代理阻断或连接超时时，聊天会自动降级为 HTTP 轮询（REST 契约不变）：
+
+| 数据 | 轮询间隔 |
+|---|---|
+| 当前会话消息 `GET /conversations/:id/messages?limit=50` | 10 秒 |
+| 会话列表 `GET /conversations` | 30 秒 |
+| 未读摘要 `GET /summary` | 30 秒 |
+| 好友 + 好友申请 | 60 秒 |
+
+- 所有发送/撤回/已读/好友操作仍走原有 REST。
+- `ChatContext` 暴露 `transport: 'ws' | 'polling'`，界面显示「轮询模式」提示。
+- WebSocket 恢复后自动切回实时模式，并补拉一次当前会话与会话列表。
+- 轮询模式只合并最近 50 条消息，极旧消息的撤回可能延迟到刷新。
+- 调试/排障：`?transport=polling` 强制轮询，`?transport=auto` 恢复自动检测。
+- 单标签页轮询约 180 次 / 15 分钟，低于全局 600 次限制；多标签页时请注意频率。

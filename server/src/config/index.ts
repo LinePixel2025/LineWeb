@@ -265,3 +265,25 @@ export const updateUserQuotaSchema = z.object({
   // 用纯数字字符串传输，避免 JS number 在超大字节数上的精度问题
   storageQuotaBytes: z.string().regex(/^\d{1,16}$/, '请提供字节数（字符串）'),
 })
+
+// === 游戏（2048 好友联机）Schemas ===
+
+/** POST /api/games/2048/invites —— 邀请好友对战 */
+export const gameInviteCreateSchema = z.object({
+  friendId: z.number().int().positive(),
+})
+
+/** POST /api/games/2048/invites/:id/respond —— 接受 / 拒绝邀请 */
+export const gameInviteRespondSchema = z.object({
+  action: z.enum(['accept', 'decline']),
+})
+
+/** POST /api/games/2048/matches/:id/moves —— 服务端权威移动（客户端只提交方向） */
+export const gameMoveSchema = z.object({
+  direction: z.enum(['up', 'down', 'left', 'right']),
+})
+
+/** GET /api/games/2048/sync?matchId= —— 轮询降级时的统一状态同步 */
+export const gameSyncQuerySchema = z.object({
+  matchId: z.coerce.number().int().positive().optional(),
+})

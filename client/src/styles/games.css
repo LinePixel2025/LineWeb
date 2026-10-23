@@ -1,0 +1,1360 @@
+/* =============================================================
+   LineWeb — 游戏模块（游戏大厅 / 2048 单机 / 2048 联机）
+   命名空间：
+   - .gh-games-*  游戏大厅
+   - .gh-g2048-*  2048 棋盘与单机页面
+   - .gh-game-*   联机大厅 / 对局面板 / 邀请弹窗
+   保持 GitHub Primer 设计语言（.gh-btn / .gh-badge / 令牌变量）。
+   ============================================================= */
+
+/* ===== 游戏大厅（/games） ===== */
+.gh-games-page {
+  max-width: var(--gh-content-width);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-5);
+}
+
+.gh-games-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gh-space-4);
+  flex-wrap: wrap;
+}
+
+.gh-games-header-copy {
+  min-width: 0;
+}
+
+.gh-games-eyebrow {
+  margin: 0 0 var(--gh-space-1);
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gh-games-title {
+  margin: 0 0 var(--gh-space-1);
+  font-size: var(--gh-text-2xl);
+  line-height: 1.2;
+}
+
+.gh-games-subtitle {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.6;
+}
+
+.gh-games-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+}
+
+.gh-games-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  padding-bottom: var(--gh-space-2);
+  border-bottom: 1px solid var(--gh-border-muted);
+}
+
+.gh-games-section-title {
+  margin: 0;
+  font-size: var(--gh-text-lg);
+}
+
+.gh-games-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--gh-space-3);
+}
+
+.gh-games-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-4);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  transition: border-color var(--gh-transition), box-shadow var(--gh-transition);
+}
+
+.gh-games-card--featured {
+  border-color: var(--gh-accent);
+  box-shadow: var(--gh-shadow-sm);
+}
+
+.gh-games-card--soon {
+  opacity: 0.78;
+}
+
+.gh-games-card--featured:hover {
+  box-shadow: var(--gh-shadow-md);
+}
+
+.gh-games-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gh-space-3);
+  min-width: 0;
+}
+
+.gh-games-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  font-size: 1.5rem;
+  background: var(--gh-canvas-inset);
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+  user-select: none;
+}
+
+.gh-games-card-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-1);
+}
+
+.gh-games-card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: var(--gh-text-lg);
+}
+
+.gh-games-card-desc {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.6;
+}
+
+.gh-games-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gh-space-1);
+  margin-top: var(--gh-space-1);
+}
+
+.gh-games-soon-badge {
+  font-size: var(--gh-text-xs);
+}
+
+.gh-games-card-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--gh-space-2);
+}
+
+.gh-games-login-hint {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--gh-warning-soft);
+  color: var(--gh-warning);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+}
+
+.gh-games-card-meta {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.6;
+}
+
+.gh-games-footnote {
+  margin: 0;
+  padding-top: var(--gh-space-2);
+  border-top: 1px solid var(--gh-border-muted);
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.6;
+}
+
+/* ===== 2048 单机页面 ===== */
+.gh-g2048-page {
+  max-width: 880px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-4);
+}
+
+.gh-g2048-topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gh-space-4);
+  flex-wrap: wrap;
+}
+
+.gh-g2048-topbar-copy {
+  min-width: 0;
+}
+
+.gh-g2048-eyebrow {
+  margin: 0 0 var(--gh-space-1);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-g2048-eyebrow a {
+  color: var(--gh-text-secondary);
+  text-decoration: none;
+}
+
+.gh-g2048-eyebrow a:hover {
+  color: var(--gh-accent);
+}
+
+.gh-g2048-title {
+  margin: 0 0 var(--gh-space-1);
+  font-size: var(--gh-text-3xl);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.gh-g2048-subtitle {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.6;
+}
+
+.gh-g2048-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+}
+
+.gh-g2048-scoreboard {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--gh-space-2);
+}
+
+.gh-g2048-score-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--gh-space-3);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  min-width: 0;
+}
+
+.gh-g2048-score-card--subtle {
+  background: var(--gh-canvas-inset);
+}
+
+.gh-g2048-score-label {
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  font-weight: 500;
+}
+
+.gh-g2048-score-value {
+  color: var(--gh-text);
+  font-size: var(--gh-text-xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.gh-g2048-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--gh-space-2);
+}
+
+.gh-g2048-toolbar-hint {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-g2048-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: var(--gh-space-5);
+  align-items: start;
+}
+
+.gh-g2048-board-area {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.gh-g2048-help {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-4);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-g2048-help h2 {
+  margin: 0;
+  font-size: var(--gh-text-base);
+  color: var(--gh-text);
+}
+
+.gh-g2048-help ul {
+  margin: 0;
+  padding-left: 1.25em;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  line-height: 1.6;
+}
+
+.gh-g2048-help-note {
+  margin: 0;
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+  line-height: 1.6;
+}
+
+.gh-g2048-help-link {
+  align-self: flex-start;
+  font-size: var(--gh-text-sm);
+}
+
+/* ===== 2048 棋盘 ===== */
+.gh-g2048-board-wrap {
+  --g2048-board-size: min(92vw, 420px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gh-space-4);
+  width: 100%;
+}
+
+.gh-g2048-board {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 8px;
+  width: var(--g2048-board-size);
+  height: var(--g2048-board-size);
+  padding: 8px;
+  background: #bbada0;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  box-sizing: border-box;
+  touch-action: none;
+  user-select: none;
+}
+
+/* role="row" 仅用于无障碍结构，布局仍由 board 的 grid 直接排布 16 个格子 */
+.gh-g2048-row {
+  display: contents;
+}
+
+.gh-g2048-cell {
+  position: relative;
+  background: rgba(238, 228, 218, 0.42);
+  border-radius: 6px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.gh-g2048-tile {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: #eee4da;
+  color: #776e65;
+  font-weight: 700;
+  font-size: clamp(1.1rem, 5.6vw, 1.9rem);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  animation: gh-g2048-tile-pop 0.12s ease-out;
+}
+
+.gh-g2048-tile[data-value="2"] { background: #eee4da; }
+.gh-g2048-tile[data-value="4"] { background: #ede0c8; }
+.gh-g2048-tile[data-value="8"] { background: #f2b179; color: #f9f6f2; }
+.gh-g2048-tile[data-value="16"] { background: #f59563; color: #f9f6f2; }
+.gh-g2048-tile[data-value="32"] { background: #f67c5f; color: #f9f6f2; }
+.gh-g2048-tile[data-value="64"] { background: #f65e3b; color: #f9f6f2; }
+.gh-g2048-tile[data-value="128"] { background: #edcf72; color: #f9f6f2; }
+.gh-g2048-tile[data-value="256"] { background: #edcc61; color: #f9f6f2; }
+.gh-g2048-tile[data-value="512"] { background: #edc850; color: #f9f6f2; }
+.gh-g2048-tile[data-value="1024"] { background: #edc53f; color: #f9f6f2; }
+.gh-g2048-tile[data-value="2048"] {
+  background: #edc22e;
+  color: #f9f6f2;
+  box-shadow: 0 0 0 3px rgba(237, 194, 46, 0.35), 0 0 24px rgba(237, 194, 46, 0.55);
+}
+.gh-g2048-tile[data-value="4096"],
+.gh-g2048-tile[data-value="8192"],
+.gh-g2048-tile[data-value="16384"],
+.gh-g2048-tile[data-value="32768"],
+.gh-g2048-tile[data-value="65536"] {
+  background: #3c3a32;
+  color: #f9f6f2;
+}
+
+/* 位数越多字号越小，避免撑破格子 */
+.gh-g2048-tile[data-value="1024"],
+.gh-g2048-tile[data-value="2048"],
+.gh-g2048-tile[data-value="4096"],
+.gh-g2048-tile[data-value="8192"],
+.gh-g2048-tile[data-value="16384"],
+.gh-g2048-tile[data-value="32768"],
+.gh-g2048-tile[data-value="65536"] {
+  font-size: clamp(0.85rem, 4vw, 1.5rem);
+}
+
+@keyframes gh-g2048-tile-pop {
+  from { transform: scale(0.86); opacity: 0.4; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* 方向键（D-pad）：每个按钮不小于 44px，方便触屏 */
+.gh-g2048-dpad {
+  display: grid;
+  grid-template-areas:
+    ". up ."
+    "left down right";
+  grid-template-columns: repeat(3, 48px);
+  grid-template-rows: repeat(2, 44px);
+  gap: 6px;
+  justify-content: center;
+}
+
+.gh-g2048-dpad-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  color: var(--gh-text-secondary);
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-lg);
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--gh-transition), color var(--gh-transition), border-color var(--gh-transition);
+}
+
+.gh-g2048-dpad-btn:hover:not(:disabled) {
+  background: var(--gh-btn-hover);
+  color: var(--gh-accent);
+  border-color: var(--gh-accent);
+}
+
+.gh-g2048-dpad-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.gh-g2048-dpad-btn--up { grid-area: up; }
+.gh-g2048-dpad-btn--left { grid-area: left; }
+.gh-g2048-dpad-btn--down { grid-area: down; }
+.gh-g2048-dpad-btn--right { grid-area: right; }
+
+/* mini 棋盘（对手视角）：无方向键、无触摸手势 */
+.gh-g2048-board-wrap--mini {
+  --g2048-board-size: min(100%, 200px);
+  gap: var(--gh-space-2);
+}
+
+.gh-g2048-board-wrap--mini .gh-g2048-board {
+  gap: 5px;
+  padding: 5px;
+  border-radius: 8px;
+  touch-action: auto;
+}
+
+.gh-g2048-board-wrap--mini .gh-g2048-cell {
+  border-radius: 4px;
+}
+
+.gh-g2048-board-wrap--mini .gh-g2048-tile {
+  border-radius: 4px;
+  font-size: clamp(0.6rem, 2.4vw, 0.9rem);
+}
+
+.gh-g2048-board-wrap--mini .gh-g2048-tile[data-value="1024"],
+.gh-g2048-board-wrap--mini .gh-g2048-tile[data-value="2048"],
+.gh-g2048-board-wrap--mini .gh-g2048-tile[data-value="4096"],
+.gh-g2048-board-wrap--mini .gh-g2048-tile[data-value="8192"] {
+  font-size: clamp(0.55rem, 2.1vw, 0.8rem);
+}
+
+.gh-g2048-board-wrap--mini .gh-g2048-tile {
+  animation: none;
+}
+
+/* ===== 2048 结算浮层 ===== */
+.gh-g2048-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gh-space-4);
+  background: rgba(31, 35, 40, 0.5);
+  border-radius: var(--gh-radius);
+  backdrop-filter: blur(2px);
+  z-index: 5;
+}
+
+.gh-g2048-overlay-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gh-space-2);
+  width: min(100%, 320px);
+  padding: var(--gh-space-5);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  box-shadow: var(--gh-shadow-xl);
+  text-align: center;
+}
+
+.gh-g2048-overlay-eyebrow {
+  margin: 0;
+  color: var(--gh-accent);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.gh-g2048-overlay-title {
+  margin: 0;
+  font-size: var(--gh-text-xl);
+}
+
+.gh-g2048-overlay-detail {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.6;
+}
+
+.gh-g2048-overlay-scores {
+  display: flex;
+  gap: var(--gh-space-4);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-g2048-overlay-scores strong {
+  color: var(--gh-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-g2048-overlay-actions {
+  display: flex;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: var(--gh-space-1);
+}
+
+.gh-g2048-overlay-link {
+  margin-top: var(--gh-space-1);
+  font-size: var(--gh-text-sm);
+}
+
+/* ===== 联机大厅 ===== */
+.gh-game-online-page {
+  gap: var(--gh-space-4);
+}
+
+.gh-game-lobby-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+.gh-game-conn-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+  padding: var(--gh-space-2) var(--gh-space-3);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+}
+
+.gh-game-conn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.gh-game-conn-chip--ws {
+  background: var(--gh-success-soft);
+  border-color: var(--gh-success-soft);
+  color: var(--gh-success);
+}
+
+.gh-game-conn-chip--polling {
+  background: var(--gh-warning-soft);
+  border-color: var(--gh-warning-soft);
+  color: var(--gh-warning);
+}
+
+.gh-game-conn-desc {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.5;
+}
+
+.gh-game-alert {
+  font-size: var(--gh-text-sm);
+}
+
+.gh-game-highlight-hint {
+  margin: 0;
+  padding: var(--gh-space-2) var(--gh-space-3);
+  background: var(--gh-accent-soft);
+  border: 1px solid transparent;
+  border-radius: var(--gh-radius);
+  color: var(--gh-accent);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-game-inline-link {
+  margin: 0;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+/* 列表加载 / 空 / 错误状态（与聊天模块 .gh-chat-list-state 保持一致的外观） */
+.gh-game-list-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-6) var(--gh-space-4);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  text-align: center;
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+}
+
+.gh-game-list-state--error {
+  color: var(--gh-danger);
+}
+
+.gh-game-list-state-title {
+  margin: 0;
+  color: var(--gh-text);
+  font-weight: 600;
+}
+
+.gh-game-list-state--error .gh-game-list-state-title {
+  color: var(--gh-danger);
+}
+
+.gh-game-list-state-hint {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.6;
+  max-width: 48ch;
+}
+
+.gh-game-list-state-actions {
+  display: flex;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: var(--gh-space-1);
+}
+
+/* ===== 好友选择器 ===== */
+.gh-game-friend-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-4);
+}
+
+.gh-game-friend-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+}
+
+.gh-game-friend-section-title {
+  margin: 0;
+  padding-bottom: var(--gh-space-2);
+  border-bottom: 1px solid var(--gh-border-muted);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.gh-game-friend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gh-game-friend-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-2) var(--gh-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--gh-radius);
+  transition: background var(--gh-transition), border-color var(--gh-transition);
+}
+
+.gh-game-friend-row:hover {
+  background: var(--gh-canvas-inset);
+}
+
+.gh-game-friend-row--highlight {
+  border-color: var(--gh-accent);
+  background: var(--gh-accent-soft);
+}
+
+.gh-game-friend-row--invite {
+  background: var(--gh-canvas);
+  border-color: var(--gh-border-muted);
+}
+
+.gh-game-friend-row--busy .gh-game-friend-name {
+  color: var(--gh-text-secondary);
+}
+
+.gh-game-friend-avatar {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.gh-game-online-dot {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--gh-text-disabled);
+  border: 2px solid var(--gh-canvas);
+  box-sizing: content-box;
+}
+
+.gh-game-online-dot--online {
+  background: var(--gh-success-emphasis);
+}
+
+.gh-game-friend-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.gh-game-friend-name {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-game-friend-hint {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+  font-size: var(--gh-text-xs);
+  font-weight: 500;
+}
+
+.gh-game-friend-meta {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-game-friend-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-1);
+  flex-shrink: 0;
+}
+
+/* ===== 对局面板 ===== */
+.gh-game-match {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-4);
+}
+
+.gh-game-match-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+  padding: var(--gh-space-3) var(--gh-space-4);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+}
+
+.gh-game-match-opponent {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  min-width: 0;
+}
+
+.gh-game-match-opponent-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.gh-game-match-eyebrow {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-game-match-opponent-name {
+  color: var(--gh-text);
+  font-size: var(--gh-text-base);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-game-presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  white-space: nowrap;
+}
+
+.gh-game-presence-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gh-text-disabled);
+}
+
+.gh-game-presence--online {
+  color: var(--gh-success);
+}
+
+.gh-game-presence--online .gh-game-presence-dot {
+  background: var(--gh-success);
+}
+
+.gh-game-presence--offline {
+  color: var(--gh-warning);
+}
+
+.gh-game-presence--offline .gh-game-presence-dot {
+  background: var(--gh-warning);
+}
+
+.gh-game-match-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+.gh-game-timer {
+  padding: 4px 12px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-inset);
+  color: var(--gh-text);
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-base);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-game-timer--low {
+  color: var(--gh-danger);
+  border-color: var(--gh-danger);
+  background: var(--gh-danger-soft);
+  animation: gh-game-timer-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes gh-game-timer-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.gh-game-scoreboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: var(--gh-space-2);
+}
+
+.gh-game-score-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--gh-space-3) var(--gh-space-4);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  min-width: 0;
+}
+
+.gh-game-score-card--me {
+  border-color: var(--gh-accent);
+}
+
+.gh-game-score-label {
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-game-score-value {
+  color: var(--gh-text);
+  font-size: var(--gh-text-2xl);
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-game-score-meta {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.5;
+}
+
+.gh-game-score-vs {
+  align-self: center;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.gh-game-boards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: var(--gh-space-5);
+  align-items: start;
+}
+
+.gh-game-board-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  align-items: center;
+  min-width: 0;
+}
+
+.gh-game-board-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gh-space-2);
+  width: 100%;
+}
+
+.gh-game-board-panel-title {
+  margin: 0;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-game-board-panel-state {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-game-opponent-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  align-items: stretch;
+  padding: var(--gh-space-3);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+}
+
+.gh-game-opponent-panel .gh-g2048-board-wrap--mini {
+  align-self: center;
+}
+
+.gh-game-resign {
+  margin-top: var(--gh-space-1);
+}
+
+/* ===== 对局结算浮层 ===== */
+.gh-game-result {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gh-space-4);
+  background: rgba(31, 35, 40, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.gh-game-result-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gh-space-2);
+  width: min(100%, 380px);
+  padding: var(--gh-space-5);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  box-shadow: var(--gh-shadow-xl);
+  text-align: center;
+}
+
+.gh-game-result-eyebrow {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.gh-game-result-title {
+  margin: 0;
+  font-size: var(--gh-text-2xl);
+}
+
+.gh-game-result-detail {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.6;
+}
+
+.gh-game-result-reason {
+  margin: 0;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--gh-canvas-inset);
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-game-result-scores {
+  display: flex;
+  gap: var(--gh-space-5);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-game-result-scores strong {
+  color: var(--gh-text);
+  font-size: var(--gh-text-base);
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-game-result-actions {
+  display: flex;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: var(--gh-space-2);
+}
+
+/* ===== 全局邀请弹窗（GameInviteToast，portal 到 body） ===== */
+.gh-game-toast {
+  position: fixed;
+  top: calc(var(--gh-safe-top) + 76px);
+  right: calc(var(--gh-safe-right) + 20px);
+  z-index: 1300;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  width: min(340px, calc(100vw - 40px));
+  padding: var(--gh-space-3) var(--gh-space-4);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  box-shadow: var(--gh-shadow-xl);
+}
+
+.gh-game-toast-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-2);
+}
+
+.gh-game-toast-eyebrow {
+  color: var(--gh-accent);
+  font-size: var(--gh-text-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.gh-game-toast-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--gh-radius);
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-lg);
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--gh-transition), color var(--gh-transition);
+}
+
+.gh-game-toast-close:hover {
+  background: var(--gh-btn-hover);
+  color: var(--gh-text);
+}
+
+.gh-game-toast-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+}
+
+.gh-game-toast-user {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+}
+
+.gh-game-toast-user-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.gh-game-toast-username {
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-game-toast-desc {
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-game-toast-text {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.6;
+}
+
+.gh-game-toast-countdown {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-game-toast-countdown--urgent {
+  color: var(--gh-danger);
+  font-weight: 600;
+}
+
+.gh-game-toast-actions {
+  display: flex;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+.gh-game-toast-error {
+  margin: 0;
+  color: var(--gh-danger);
+  font-size: var(--gh-text-xs);
+  line-height: 1.5;
+}
+
+.gh-game-toast-hint {
+  margin: 0;
+  padding-top: var(--gh-space-2);
+  border-top: 1px solid var(--gh-border-muted);
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.5;
+}
+
+/* ===== 深色主题 ===== */
+[data-theme="dark"] .gh-g2048-board {
+  background: #2f2b27;
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="dark"] .gh-g2048-cell {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .gh-g2048-tile {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .gh-g2048-overlay,
+[data-theme="dark"] .gh-game-result {
+  background: rgba(1, 4, 9, 0.66);
+}
+
+[data-theme="dark"] .gh-g2048-overlay-card,
+[data-theme="dark"] .gh-game-result-card {
+  background: var(--gh-canvas);
+}
+
+[data-theme="dark"] .gh-game-toast {
+  background: var(--gh-canvas);
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 900px) {
+  .gh-g2048-stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .gh-g2048-help {
+    order: -1;
+  }
+
+  .gh-game-boards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* 手机屏幕隐藏对手缩略棋盘，避免布局拥挤 */
+  .gh-game-opponent-panel {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .gh-games-page {
+    gap: var(--gh-space-4);
+  }
+
+  .gh-games-title,
+  .gh-g2048-title {
+    font-size: var(--gh-text-xl);
+  }
+
+  .gh-g2048-scoreboard {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .gh-game-scoreboard {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .gh-game-score-vs {
+    display: none;
+  }
+
+  .gh-game-friend-row {
+    flex-wrap: wrap;
+  }
+
+  .gh-game-friend-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .gh-game-toast {
+    top: calc(var(--gh-safe-top) + 12px);
+    right: calc(var(--gh-safe-right) + 12px);
+    left: calc(var(--gh-safe-left) + 12px);
+    width: auto;
+  }
+}
+
+@media (max-width: 420px) {
+  .gh-g2048-board-wrap {
+    --g2048-board-size: min(94vw, 420px);
+  }
+
+  .gh-g2048-toolbar-hint {
+    display: none;
+  }
+}
+
+/* ===== 减少动态效果 ===== */
+@media (prefers-reduced-motion: reduce) {
+  .gh-g2048-tile,
+  .gh-game-timer--low {
+    animation: none;
+  }
+
+  .gh-games-card,
+  .gh-g2048-dpad-btn,
+  .gh-game-friend-row {
+    transition: none;
+  }
+}

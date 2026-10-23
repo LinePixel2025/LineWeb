@@ -6,6 +6,15 @@
  * - WebSocket 事件统一为 { type, ...payload } 结构
  */
 
+import type {
+  Game2048Match,
+  GameInvite,
+  GameInviteRemovalReason,
+} from './game'
+
+/** 实时传输模式：WebSocket 优先，失败/不支持时降级为 HTTP 轮询 */
+export type ChatTransport = 'ws' | 'polling'
+
 /** 用户与当前登录用户的关系 */
 export type ChatRelation = 'none' | 'friend' | 'outgoing' | 'incoming'
 
@@ -153,6 +162,11 @@ export type ChatServerEvent =
   | { type: 'friend:accepted'; friend: Friend }
   | { type: 'friend:rejected'; userId: number }
   | { type: 'friend:removed'; userId: number }
+  | { type: 'game:invite'; invite: GameInvite }
+  | { type: 'game:invite:removed'; inviteId: number; reason: GameInviteRemovalReason }
+  | { type: 'game:match:started'; match: Game2048Match }
+  | { type: 'game:match:update'; match: Game2048Match }
+  | { type: 'game:match:ended'; match: Game2048Match }
   | { type: 'ping' }
   | { type: 'pong' }
 

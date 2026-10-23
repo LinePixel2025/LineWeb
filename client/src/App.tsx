@@ -3,11 +3,13 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './contexts/AuthContext'
 import { ChatProvider } from './contexts/ChatContext'
+import { GameProvider } from './contexts/GameContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { DownloadProvider } from './contexts/DownloadContext'
 import Layout from './components/Layout'
 import { ProtectedRoute, AdminRoute } from './components/Guards'
 import DownloadToast from './components/drive/DownloadToast'
+import GameInviteToast from './components/games/GameInviteToast'
 
 // 路由级代码分割 — 所有页面和布局懒加载，减少首屏包体积
 const HomePage = lazy(() => import('./pages/HomePage'))
@@ -18,6 +20,9 @@ const PostsPage = lazy(() => import('./pages/PostsPage'))
 const PostPage = lazy(() => import('./pages/PostPage'))
 const CalculatorPage = lazy(() => import('./pages/CalculatorPage'))
 const FeaturesPage = lazy(() => import('./pages/FeaturesPage'))
+const GamesPage = lazy(() => import('./pages/GamesPage'))
+const Game2048Page = lazy(() => import('./pages/games/Game2048Page'))
+const Game2048OnlinePage = lazy(() => import('./pages/games/Game2048OnlinePage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const DynamicPage = lazy(() => import('./pages/DynamicPage'))
 const DrivePage = lazy(() => import('./pages/DrivePage'))
@@ -88,6 +93,7 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <ChatProvider>
+        <GameProvider>
         <ThemeProvider>
           <DownloadProvider>
               <RouteErrorBoundary>
@@ -102,6 +108,14 @@ export default function App() {
                     <Route path="/posts/:slug" element={<PostPage />} />
                     <Route path="/features" element={<FeaturesPage />} />
                     <Route path="/calculator" element={<CalculatorPage />} />
+                    <Route path="/games" element={<GamesPage />} />
+                    <Route path="/games/2048" element={<Game2048Page />} />
+                    <Route path="/games/2048/online" element={
+                      <ProtectedRoute><Game2048OnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/2048/online/:matchId" element={
+                      <ProtectedRoute><Game2048OnlinePage /></ProtectedRoute>
+                    } />
                     <Route path="/profile" element={
                       <ProtectedRoute><ProfilePage /></ProtectedRoute>
                     } />
@@ -142,8 +156,11 @@ export default function App() {
 
               {/* 下载进度弹窗 — 放在 Routes 外层，不随页面切换卸载 */}
               <DownloadToast />
+              {/* 游戏邀请/开局提示 — 全局监听，任意页面可接收好友邀请 */}
+              <GameInviteToast />
             </DownloadProvider>
         </ThemeProvider>
+        </GameProvider>
         </ChatProvider>
       </AuthProvider>
       </QueryClientProvider>

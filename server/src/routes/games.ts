@@ -1,0 +1,181 @@
+import { Router, type Request } from 'express'
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
+import { z } from 'zod'
+import { AppError } from '../middleware/errorHandler.js'
+import { asyncHandler } from '../lib/asyncHandler.js'
+import { authenticate } from '../middleware/auth.js'
+import {
+  gameInviteCreateSchema,
+  gameInviteRespondSchema,
+  gameMoveSchema,
+  gameSyncQuerySchema,
+} from '../config/index.js'
+import { markGamePresence } from '../services/gamePresence.js'
+import {
+  applyGameMove,
+  cancelGameInvite,
+  createGameInvite,
+  getActiveGameMatch,
+  getGameMatch,
+  getGameSync,
+  listGameFriends,
+  listGameInvites,
+  respondGameInvite,
+  resignGameMatch,
+} from '../services/gameService.js'
+
+/**
+ * 2048 好友联机 REST 路由（挂载于 /api/games）
+ *
+ * 全部端点要求账号登录令牌（router 内 authenticate 兜底）；没有公开端点。
+ * 第三方应用令牌 / 下载票据不可用（全局认证白名单会拒绝 /games/*）。
+ *
+ * 限流（每用户，未认证回退 IP）：
+ *   - 移动：900 次 / 5 分钟（对局中高频操作）
+ *   - sync：1800 次 / 5 分钟（轮询降级最多 2 秒一次）
+ *   - presence：120 次 / 5 分钟（20 秒心跳）
+ *   - 其它写操作（邀请 / 响应 / 取消 / 认输）：60 次 / 5 分钟
+ * 上述三个高频端点同时在 index.ts 的全局 apiLimiter 中按精确路径豁免（否则会被 600/15min 卡住）。
+ */
+const router = Router()
+router.use(authenticate)
+
+/**
+ * 按用户限流。express-rate-limit v8 要求自定义 keyGenerator 在回退到请求 IP 时
+ * 必须调用 ipKeyGenerator（IPv6 归一化），否则创建 limiter 时直接抛校验错误。
+ */
+function userKeyGenerator(req: Request): string {
+  return String(req.user?.userId ?? ipKeyGenerator(req.ip ?? ''))
+}
+
+const moveLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 900,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKeyGenerator,
+  message: { error: '操作过于频繁，请稍后再试' },
+})
+
+const syncLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 1800,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKeyGenerator,
+  message: { error: '同步过于频繁，请稍后再试' },
+})
+
+const presenceLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKeyGenerator,
+  message: { error: '在线心跳过于频繁，请稍后再试' },
+})
+
+const gameWriteLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKeyGenerator,
+  message: { error: '操作过于频繁，请稍后再试' },
+})
+
+/** 当前登录用户 id（authenticate 已保证存在；集中处理类型与兜底） */
+function currentUserId(req: Request): number {
+  const userId = req.user?.userId
+  if (!userId) throw new AppError('未登录', 401)
+  return userId
+}
+
+/** 校验输入，失败时抛 400（错误文案取 Zod 的第一条 issue） */
+function parseInput<S extends z.ZodTypeAny>(schema: S, data: unknown): z.infer<S> {
+  const parsed = schema.safeParse(data)
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0]
+    throw new AppError(issue?.message ? `输入数据无效：${issue.message}` : '输入数据无效', 400)
+  }
+  return parsed.data as z.infer<S>
+}
+
+/** 解析正整数路径参数（邀请 id / 对局 id） */
+function parseIdParam(raw: string | undefined, name: string): number {
+  const value = Number.parseInt(raw ?? '', 10)
+  if (!Number.isInteger(value) || value <= 0) throw new AppError(`无效的${name}`, 400)
+  return value
+}
+
+/** 当前服务器时间（ISO 字符串） */
+function nowIso(): string {
+  return new Date().toISOString()
+}
+
+// === 好友大厅 ===
+
+router.get('/2048/friends', asyncHandler(async (req, res) => {
+  const data = await listGameFriends(currentUserId(req))
+  res.json(data)
+}))
+
+// === 邀请 ===
+
+router.get('/2048/invites', (req, res) => {
+  res.json(listGameInvites(currentUserId(req)))
+})
+
+router.post('/2048/invites', gameWriteLimiter, asyncHandler(async (req, res) => {
+  const body = parseInput(gameInviteCreateSchema, req.body)
+  const data = await createGameInvite(currentUserId(req), body.friendId)
+  res.status(201).json(data)
+}))
+
+router.post('/2048/invites/:id/respond', gameWriteLimiter, (req, res) => {
+  const inviteId = parseIdParam(req.params.id, '邀请 ID')
+  const body = parseInput(gameInviteRespondSchema, req.body)
+  res.json(respondGameInvite(currentUserId(req), inviteId, body.action))
+})
+
+router.delete('/2048/invites/:id', gameWriteLimiter, (req, res) => {
+  const inviteId = parseIdParam(req.params.id, '邀请 ID')
+  res.json(cancelGameInvite(currentUserId(req), inviteId))
+})
+
+// === 轮询降级：统一同步 + 在线心跳 ===
+
+router.get('/2048/sync', syncLimiter, (req, res) => {
+  const query = parseInput(gameSyncQuerySchema, req.query)
+  res.json(getGameSync(currentUserId(req), query.matchId))
+})
+
+router.post('/2048/presence', presenceLimiter, (req, res) => {
+  markGamePresence(currentUserId(req))
+  res.json({ ok: true, serverTime: nowIso() })
+})
+
+// === 对局 ===
+
+// 注意：/matches/active 必须注册在 /matches/:id 之前，否则 "active" 会被当成 id 解析
+router.get('/2048/matches/active', (req, res) => {
+  res.json({ match: getActiveGameMatch(currentUserId(req)) })
+})
+
+router.get('/2048/matches/:id', (req, res) => {
+  const matchId = parseIdParam(req.params.id, '对局 ID')
+  res.json({ match: getGameMatch(currentUserId(req), matchId) })
+})
+
+router.post('/2048/matches/:id/moves', moveLimiter, (req, res) => {
+  const matchId = parseIdParam(req.params.id, '对局 ID')
+  const body = parseInput(gameMoveSchema, req.body)
+  res.json(applyGameMove(currentUserId(req), matchId, body.direction))
+})
+
+router.post('/2048/matches/:id/resign', gameWriteLimiter, (req, res) => {
+  const matchId = parseIdParam(req.params.id, '对局 ID')
+  res.json(resignGameMatch(currentUserId(req), matchId))
+})
+
+export default router

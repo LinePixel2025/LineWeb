@@ -30,8 +30,9 @@ describe('FeaturesPage', () => {
 
     const grids = container.querySelectorAll('.gh-feature-grid')
     expect(grids).toHaveLength(2)
-    expect(grids[0].querySelectorAll('a')).toHaveLength(3)
+    expect(grids[0].querySelectorAll('a')).toHaveLength(4)
     expect(grids[1].querySelectorAll('a')).toHaveLength(1)
     expect(grids[1].querySelector('a')?.getAttribute('href')).toBe('/page/custom-tool')
+    expect(screen.getByRole('link', { name: /游戏大厅/ }).getAttribute('href')).toBe('/games')
   })
 })

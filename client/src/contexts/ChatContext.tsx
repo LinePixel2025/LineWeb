@@ -10,6 +10,13 @@ import {
 } from 'react'
 import api, { getToken } from '../lib/api'
 import { getChatWsUrl } from '../lib/chat'
+import {
+  CHAT_POLL_INTERVALS,
+  isWebSocketAvailable,
+  readForcedPolling,
+  resolveChatTransport,
+  WS_CONNECT_TIMEOUT_MS,
+} from '../lib/realtime'
 import { useAuth } from './AuthContext'
 import type {
   ChatConnectionState,
@@ -17,11 +24,18 @@ import type {
   ChatEventListener,
   ChatServerEvent,
   ChatSummary,
+  ChatTransport,
 } from '../types/chat'
 
 interface ChatContextValue {
   /** 实时连接状态：connecting（连接/重连中）、open（已认证）、closed（已断开） */
   connectionState: ChatConnectionState
+  /**
+   * 当前实时传输模式：
+   * - 'ws'：WebSocket 已认证打开，事件实时推送
+   * - 'polling'：连接中/已断开/环境不支持/被强制降级，由页面轮询兜底
+   */
+  transport: ChatTransport
   /** 全部会话的未读消息总数（侧边栏角标） */
   unreadTotal: number
   /** 待处理的好友申请数 */
@@ -51,6 +65,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [unreadTotal, setUnreadTotal] = useState(0)
   const [pendingFriendRequests, setPendingFriendRequests] = useState(0)
   const [error, setError] = useState<string | null>(null)
+
+  // 启动时读取一次「强制轮询」开关（?transport=polling / ?transport=auto 会顺带写入/清除持久标记）
+  const [forcedPolling] = useState<boolean>(() => readForcedPolling())
+
+  // 传输模式：仅 WS 已认证打开且未被强制降级时才为 ws，其余（连接中/断开/不支持）一律轮询
+  const transport = useMemo(
+    () => resolveChatTransport(connectionState, forcedPolling),
+    [connectionState, forcedPolling]
+  )
 
   const listenersRef = useRef<Set<ChatEventListener>>(new Set())
   const activeConversationIdRef = useRef<number | null>(null)
@@ -92,8 +115,26 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    // 强制轮询：不创建 WebSocket，连接状态固定为 closed，transport 解析为 polling
+    if (forcedPolling) {
+      setConnectionState('closed')
+      setError(null)
+      return
+    }
+
     let disposed = false
     let authFailed = false
+    /** WebSocket 不可用（环境不支持 / 构造函数抛错）：停止重连，由轮询永久兜底 */
+    let wsUnavailable = false
+    /** 握手超时定时器（发出 auth 帧后 8 秒内未收到 auth_ok 则关闭连接） */
+    let handshakeTimer: ReturnType<typeof setTimeout> | null = null
+
+    const clearHandshakeTimer = () => {
+      if (handshakeTimer !== null) {
+        clearTimeout(handshakeTimer)
+        handshakeTimer = null
+      }
+    }
 
     const emit = (event: ChatEvent) => {
       for (const listener of listenersRef.current) {
@@ -113,7 +154,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
 
     const scheduleReconnect = () => {
-      if (disposed || authFailed) return
+      if (disposed || authFailed || wsUnavailable) return
       clearReconnectTimer()
       const delay = Math.min(
         INITIAL_RECONNECT_DELAY * 2 ** reconnectAttemptsRef.current,
@@ -128,22 +169,42 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
 
     const connect = () => {
-      if (disposed || authFailed) return
+      if (disposed || authFailed || wsUnavailable) return
       const token = getToken()
       if (!token) {
         setConnectionState('closed')
         return
       }
 
+      // 环境不支持 WebSocket：不再重试，让轮询接管
+      if (!isWebSocketAvailable()) {
+        wsUnavailable = true
+        setConnectionState('closed')
+        return
+      }
+
+      clearHandshakeTimer()
       setConnectionState('connecting')
       let socket: WebSocket
       try {
         socket = new WebSocket(getChatWsUrl())
       } catch {
-        scheduleReconnect()
+        // 构造函数抛错（CSP / 隐私策略阻断等）：停止重连，让轮询接管
+        wsUnavailable = true
+        setConnectionState('closed')
         return
       }
       socketRef.current = socket
+
+      // 握手超时：发送 auth 帧后 8 秒内没有 auth_ok 就主动关闭，由 onclose 走重连/轮询
+      handshakeTimer = setTimeout(() => {
+        handshakeTimer = null
+        try {
+          socket.close()
+        } catch {
+          // ignore
+        }
+      }, WS_CONNECT_TIMEOUT_MS)
 
       socket.onopen = () => {
         if (disposed) return
@@ -176,6 +237,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         if (payload.type === 'pong') return
 
         if (payload.type === 'auth_ok') {
+          clearHandshakeTimer()
           reconnectAttemptsRef.current = 0
           setConnectionState('open')
           setError(null)
@@ -212,6 +274,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
 
       socket.onclose = (event) => {
+        clearHandshakeTimer()
         if (socketRef.current === socket) socketRef.current = null
         if (disposed) return
         setConnectionState('closed')
@@ -230,11 +293,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
 
     connect()
-    void refreshSummary()
 
     return () => {
       disposed = true
       clearReconnectTimer()
+      clearHandshakeTimer()
       const socket = socketRef.current
       socketRef.current = null
       if (socket) {
@@ -249,11 +312,36 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
     }
-  }, [userId, refreshSummary])
+  }, [userId, refreshSummary, forcedPolling])
+
+  // 轮询降级：定期拉取未读摘要（WS 打开后自动停止）；页面重新可见时立即刷新一次
+  useEffect(() => {
+    if (!userId || transport !== 'polling') return
+
+    let cancelled = false
+    const refresh = () => {
+      if (!cancelled) void refreshSummary()
+    }
+
+    refresh()
+    const timer = setInterval(refresh, CHAT_POLL_INTERVALS.summary)
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [userId, transport, refreshSummary])
 
   const value = useMemo<ChatContextValue>(
     () => ({
       connectionState,
+      transport,
       unreadTotal,
       pendingFriendRequests,
       error,
@@ -263,6 +351,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }),
     [
       connectionState,
+      transport,
       unreadTotal,
       pendingFriendRequests,
       error,

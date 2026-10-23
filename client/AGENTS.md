@@ -6,32 +6,36 @@ React 19 + Vite 6 + TypeScript 前端。端口 5173，路由级代码分割，Gi
 
 ```
 client/src/
-├── App.tsx              # 路由中枢 — 6 层 Provider + 19 个 lazy() 页面
+├── App.tsx              # 路由中枢 — 多层 Provider + 22 个 lazy() 页面
 ├── main.tsx             # ReactDOM.createRoot 入口
-├── contexts/            # 6 个 Context（状态管理核心）
+├── contexts/            # 7 个 Context（状态管理核心）
 │   ├── AuthContext.tsx       # 账号登录状态（user/loading/isAdmin/hasAdminAccess/can()/login/register/logout）
+│   ├── ChatContext.tsx       # /ws/chat 连接、未读摘要、transport（ws/polling）
+│   ├── GameContext.tsx       # 游戏邀请/对局、轮询 sync + presence
 │   ├── WallpaperContext.tsx  # Bing 壁纸（依赖 AuthContext）
 │   ├── ContrastContext.tsx   # 高对比度模式（依赖 WallpaperContext）
 │   ├── DownloadContext.tsx   # 文件下载队列
 │   └── DriveContext.tsx      # 网盘导航状态（365 行，useReducer）
-├── components/          # 43 个组件
+├── components/          # 组件
 │   ├── Layout.tsx / AdminLayout.tsx  # 布局 + Navbar + Outlet
 │   ├── Guards.tsx            # ProtectedRoute + AdminRoute + AdminCapabilityRoute（按能力放行）
 │   ├── Navbar.tsx / UserAvatar.tsx
 │   ├── drive/               # 网盘 UI（20 组件，最大模块）— 见下方
+│   ├── games/               # 游戏棋盘/好友邀请/对局面板/邀请弹窗
 │   ├── editor/              # Lexical 编辑器
 │   ├── comments/            # CommentSection（树形回复）
 │   ├── DigitalHealthCard/   # 屏幕时间卡片
 │   └── admin/               # AdminMobileNav
-├── pages/               # 19 个页面（全部 lazy()）
+├── pages/               # 22 个页面（全部 lazy()）
 │   ├── HomePage / LoginPage / RegisterPage / PostsPage / PostPage
-│   ├── ProfilePage / DrivePage / CalculatorPage / FeaturesPage
+│   ├── ProfilePage / DrivePage / CalculatorPage / FeaturesPage / GamesPage
 │   ├── DynamicPage / EditorPage / AdminPage
+│   ├── games/              # Game2048Page（单机）+ Game2048OnlinePage（联机）
 │   └── admin/              # 6 个管理页面（CommentAdmin/PageEditor/UserAdmin/ApiDocs/DeviceMonitor/PageList）
-├── hooks/               # useThumbnails / useKeyboardShortcuts / useDragAndDrop / useResponsive
-├── lib/                 # api.ts（HTTP 客户端 + Bearer token + 401 处理）+ permissions.ts（能力常量）+ format.ts
-├── styles/              # 9 个 CSS 文件（无 Tailwind，无 CSS-in-JS）
-└── types/               # drive.ts + comment.ts
+├── hooks/               # useThumbnails / useKeyboardShortcuts / useDragAndDrop / useResponsive / useGame2048Input
+├── lib/                 # api.ts + permissions.ts + format.ts + realtime.ts + games/（2048 引擎/目录）
+├── styles/              # 11 个 CSS 文件（无 Tailwind，无 CSS-in-JS）
+└── types/               # drive.ts + comment.ts + chat.ts + game.ts
 ```
 
 ## 哪里找
@@ -41,9 +45,11 @@ client/src/
 | 加新页面 | `pages/` 创建 → `App.tsx` 加 `lazy()` + Route | 公开页放 `<Layout>`，管理页放 `<AdminRoute><AdminLayout>` |
 | 改认证/登录流 | `contexts/AuthContext.tsx` + `lib/api.ts` | api.ts 统一 401 处理；登录返回的 `user.capabilities` 驱动 `can()` |
 | 改路由守卫 | `components/Guards.tsx` + `lib/permissions.ts` | ProtectedRoute（需登录）/ AdminRoute（需任意管理能力）/ AdminCapabilityRoute（按当前路径所需能力，缺能力重定向到第一个可用管理页） |
-| 加全局状态 | `contexts/` 新建 Context | 6 层 Provider 嵌套在 App.tsx |
+| 加全局状态 | `contexts/` 新建 Context | 多层 Provider 嵌套在 App.tsx；注意 Chat → Game 依赖顺序 |
 | 加 API 调用 | `lib/api.ts` 已封装 get/post/put/del | 自动附 Bearer token，30s 超时 |
 | 网盘功能 | `components/drive/` + `contexts/DriveContext.tsx` + `pages/DrivePage.tsx` | 双 reducer 架构 |
+| 游戏/2048 | `pages/GamesPage.tsx` + `pages/games/` + `components/games/` + `contexts/GameContext.tsx` + `lib/games/` | 单机纯前端引擎；联机 REST + `/ws/chat` 的 `game:*` 事件；无 WS 时按 `lib/realtime.ts` 轮询 |
+| 实时传输降级 | `lib/realtime.ts` + `contexts/ChatContext.tsx` | `transport: 'ws' \| 'polling'`；WS 不支持/阻断/8 秒超时自动轮询；`?transport=polling` 强制 |
 | 样式修改 | `styles/` 中对应 CSS 文件 | 普通 CSS，无 Tailwind |
 
 ## 认证流程
@@ -62,19 +68,21 @@ localStorage.lineweb_token（账号登录令牌）→ AuthContext 初始化时�
 ## Provider 嵌套顺序
 
 ```
-BrowserRouter → AuthProvider → ThemeProvider → WallpaperProvider
-→ DownloadProvider → Suspense → Routes
+BrowserRouter → QueryClient → AuthProvider → ChatProvider → GameProvider
+→ ThemeProvider → DownloadProvider → RouteErrorBoundary → Suspense → Routes
 ```
+
+`ChatProvider` 负责 `/ws/chat`、未读摘要与 `transport`；`GameProvider` 依赖 `ChatProvider`，负责游戏邀请/对局与轮询降级。`GameInviteToast` 与 `DownloadToast` 渲染在 Routes 外。
 
 ## Context 依赖图
 
 ```
-AuthContext ← WallpaperContext ← ContrastContext
+AuthContext ← ChatContext ← GameContext
      ↓              ↓
 ThemeContext    Layout/AdminLayout（读取主题和壁纸状态）
 ```
 
-`DownloadContext` 和 `DriveContext` 独立。
+`DownloadContext` 和 `DriveContext` 独立；`GameProvider` 必须在 `ChatProvider` 内。
 
 ## 数据获取模式
 
@@ -104,7 +112,7 @@ useEffect(() => {
 - Vitest + jsdom + `@testing-library/react`
 - `src/test-setup.ts` → 仅 `import '@testing-library/jest-dom'`
 - `__tests__/` 与源代码同目录
-- **仅 client 有测试**（23 个文件 / 162 个用例），server 无
+- **仅 client 有测试**（server 无）；新增游戏引擎/传输模式/大厅测试，运行 `npm run test`
 - 其中 `lib/__tests__/permissions.test.ts` 会读取 `server/src/lib/permissions.ts` 源码做前后端能力清单一致性断言（需要 `client/src/types/node-builtins.d.ts` 提供最小 node:fs 类型声明）
 - 无 MSW，全部用 `vi.mock()` 模拟 API
 - `npm run test` 在 client/ 目录下运行

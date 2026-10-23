@@ -168,6 +168,29 @@
   background: var(--gh-danger);
 }
 
+/* 轮询降级：警示色圆点（与 connecting 同样的脉冲提示） */
+.gh-chat-status--polling {
+  background: var(--gh-warning);
+  animation: gh-chat-pulse 1.4s ease-in-out infinite;
+}
+
+/* 状态点旁的「轮询模式」小 chip */
+.gh-chat-mode-chip {
+  display: inline-flex;
+  height: 18px;
+  flex-shrink: 0;
+  align-items: center;
+  padding: 0 6px;
+  border: 1px solid var(--gh-warning-soft);
+  border-radius: 999px;
+  background: var(--gh-warning-soft);
+  color: var(--gh-warning);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 @keyframes gh-chat-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
@@ -1068,6 +1091,29 @@
   flex-shrink: 0;
 }
 
+/* 好友行内的紧凑图标按钮（邀请 2048 对战） */
+.gh-chat-game-btn {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+  color: var(--gh-text-secondary);
+  cursor: pointer;
+  transition: background var(--gh-transition), color var(--gh-transition), border-color var(--gh-transition);
+}
+
+.gh-chat-game-btn:hover {
+  border-color: var(--gh-accent);
+  background: var(--gh-btn-hover);
+  color: var(--gh-accent);
+}
+
 /* ===== 弹窗（新建群聊 / 添加成员） ===== */
 .gh-chat-dialog-overlay {
   position: fixed;
@@ -1204,6 +1250,7 @@
 .gh-chat-message-image-wrap:focus-visible,
 .gh-chat-recall-btn:focus-visible,
 .gh-chat-composer-tool:focus-visible,
+.gh-chat-game-btn:focus-visible,
 .gh-chat-image-lightbox-close:focus-visible,
 .gh-chat-camera-close:focus-visible {
   outline: none;
@@ -1312,6 +1359,11 @@
 
   .gh-chat-dialog {
     max-height: 86vh;
+  }
+
+  .gh-chat-mode-chip {
+    padding: 0 5px;
+    font-size: 9px;
   }
 }
 
