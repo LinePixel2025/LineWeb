@@ -183,6 +183,8 @@ let nextMatchId = 1
 // === 跨游戏模块注册（斗地主等后加的游戏通过这里与 2048 互斥） ===
 
 export interface GameModuleHook {
+  /** 模块名（'doudizhu' / 'snake' / 'minesweeper' / 'jump'），自查时用来排除自己 */
+  name: string
   /** 该游戏模块中用户是否在未结束的房间/对局中 */
   isUserInMatch: (userId: number) => boolean
   /** 定时清理钩子（由 runGameSweeper 每轮调用） */
@@ -197,12 +199,20 @@ const gameModuleHooks: GameModuleHook[] = []
  * gameService 不会反向 import 各游戏模块，避免循环依赖。
  */
 export function registerGameModule(hook: GameModuleHook): void {
-  if (!gameModuleHooks.includes(hook)) gameModuleHooks.push(hook)
+  if (!gameModuleHooks.some((item) => item.name === hook.name)) gameModuleHooks.push(hook)
+}
+
+/**
+ * 用户是否在其他游戏的未结束房间/对局中（跨游戏互斥的唯一口径）。
+ * 各游戏模块自查时用 `selfName` 排除自己：已在自己等待房间里仍可继续邀请好友。
+ */
+export function isUserBusyInOtherGames(userId: number, selfName?: string): boolean {
+  return gameModuleHooks.some((hook) => hook.name !== selfName && hook.isUserInMatch(userId))
 }
 
 /** 用户是否在其他游戏（非 2048）的未结束房间/对局中 */
 function isBusyInOtherGames(userId: number): boolean {
-  return gameModuleHooks.some((hook) => hook.isUserInMatch(userId))
+  return isUserBusyInOtherGames(userId, '2048')
 }
 
 // === 工具函数 ===
@@ -941,3 +951,14 @@ export function startGameSweeper(): void {
   sweeperTimer.unref()
   console.log(`✦ Game sweeper started (interval: ${GAME_SWEEPER_INTERVAL_MS}ms)`)
 }
+
+/**
+ * 把 2048 自己也注册进跨游戏互斥注册表，这样后加的游戏（斗地主 / 贪吃蛇 /
+ * 扫雷 / 跳一跳）用 isUserBusyInOtherGames 就能查到 2048 的房间。
+ * sweep 留空：2048 的清理就是 runGameSweeper 本身，注册会造成自我递归。
+ */
+registerGameModule({
+  name: '2048',
+  isUserInMatch: (userId) => activeMatchFor(userId) !== null,
+  sweep: () => {},
+})

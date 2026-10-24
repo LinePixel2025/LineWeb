@@ -3,7 +3,7 @@ import { areFriends, getUserBrief, listFriends } from './chatService.js'
 import { isUserOnline, sendToUser } from './chatHub.js'
 import { isGamePresent } from './gamePresence.js'
 import { nextGameInviteId } from './gameIds.js'
-import { registerGameModule } from './gameService.js'
+import { isUserBusyInOtherGames, registerGameModule } from './gameService.js'
 import {
   canDoudizhuBeat,
   dealDoudizhu,
@@ -492,6 +492,17 @@ function settleScores(match: DoudizhuMatchState): void {
 }
 
 /** 房主开始游戏：需要恰好 3 人，发牌并进入叫分 */
+/**
+ * 发牌与首个叫分座位的随机源。生产恒为 Math.random；
+ * 自检脚本通过 setDoudizhuRandomForTest 注入确定性序列，
+ * 避免「随机牌局撞上脚本假设」造成的偶发失败。
+ */
+let doudizhuRandom: () => number = Math.random
+
+export function setDoudizhuRandomForTest(random: (() => number) | null): void {
+  doudizhuRandom = random ?? Math.random
+}
+
 export function startDoudizhuMatch(
   userId: number,
   matchId: number,
@@ -508,7 +519,7 @@ export function startDoudizhuMatch(
     throw new AppError('游戏服务繁忙，请稍后再试', 503)
   }
 
-  beginBidding(match, 1, Math.floor(Math.random() * DOUDIZHU_PLAYERS), now)
+  beginBidding(match, 1, Math.floor(doudizhuRandom() * DOUDIZHU_PLAYERS), now)
   match.startedAt = now
   match.version += 1
   removeInvitesForUsers(match.players.map((player) => player.userId), 'cancelled')
@@ -518,7 +529,7 @@ export function startDoudizhuMatch(
 
 /** 发牌并进入（或重新进入）叫分阶段 */
 function beginBidding(match: DoudizhuMatchState, round: number, firstSeat: number, now: number): void {
-  const { hands, bottom } = dealDoudizhu(() => Math.random())
+  const { hands, bottom } = dealDoudizhu(doudizhuRandom)
   for (let seat = 0; seat < match.players.length; seat += 1) {
     const player = match.players[seat]
     player.hand = hands[seat]
@@ -639,7 +650,7 @@ export async function listDoudizhuFriends(userId: number): Promise<{ friends: Do
       id: friend.id,
       username: friend.username,
       online: isGameUserAvailable(friend.id),
-      inMatch: activeMatchFor(friend.id) !== null,
+      inMatch: activeMatchFor(friend.id) !== null || isUserBusyInOtherGames(friend.id, 'doudizhu'),
     })),
   }
 }
@@ -664,7 +675,8 @@ export async function createDoudizhuInvite(
 
   const current = activeMatchFor(userId)
   if (current && current.status !== 'waiting') throw new AppError('你正在对局中，无法发起邀请', 409)
-  if (activeMatchFor(friendId)) throw new AppError('对方正在对局/房间中，无法邀请', 409)
+  if (activeMatchFor(friendId) || isUserBusyInOtherGames(friendId, 'doudizhu')) throw new AppError('对方正在对局/房间中，无法邀请', 409)
+  if (isUserBusyInOtherGames(userId, 'doudizhu')) throw new AppError('你正在其他游戏对局中，无法发起邀请', 409)
   if (!isGameUserAvailable(friendId)) throw new AppError('对方不在线，无法邀请', 409)
 
   let incomingCount = 0
@@ -680,7 +692,8 @@ export async function createDoudizhuInvite(
   // 异步查询期间的并发写保护：落库前再检查一次
   const currentAfter = activeMatchFor(userId)
   if (currentAfter && currentAfter.status !== 'waiting') throw new AppError('你正在对局中，无法发起邀请', 409)
-  if (activeMatchFor(friendId)) throw new AppError('对方正在对局/房间中，无法邀请', 409)
+  if (activeMatchFor(friendId) || isUserBusyInOtherGames(friendId, 'doudizhu')) throw new AppError('对方正在对局/房间中，无法邀请', 409)
+  if (isUserBusyInOtherGames(userId, 'doudizhu')) throw new AppError('你正在其他游戏对局中，无法发起邀请', 409)
   if (!isGameUserAvailable(friendId)) throw new AppError('对方不在线，无法邀请', 409)
 
   let room = currentAfter
@@ -733,7 +746,7 @@ export function respondDoudizhuInvite(
     removeInvite(invite, 'cancelled')
     throw new AppError('房间已开始或已解散', 409)
   }
-  if (activeMatchFor(userId)) {
+  if (activeMatchFor(userId) || isUserBusyInOtherGames(userId, 'doudizhu')) {
     removeInvite(invite, 'cancelled')
     throw new AppError('你已在另一场对局或房间中', 409)
   }
@@ -1098,4 +1111,4 @@ function isUserInDoudizhuMatch(userId: number): boolean {
   return activeMatchFor(userId) !== null
 }
 
-registerGameModule({ isUserInMatch: isUserInDoudizhuMatch, sweep: runDoudizhuSweep })
+registerGameModule({ name: 'doudizhu', isUserInMatch: isUserInDoudizhuMatch, sweep: runDoudizhuSweep })
