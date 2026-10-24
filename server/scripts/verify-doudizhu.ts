@@ -65,6 +65,26 @@ const card = (rank: number, idx = 0): Card => ({ id: rank * 10 + idx, rank, suit
 const ofRank = (rank: number, n: number): Card[] =>
   Array.from({ length: n }, (_, index) => card(rank, index))
 
+/** mulberry32：确定性伪随机源，用于固定发牌与首个叫分座位 */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/**
+ * 每个阶段开一局前重新播种，让牌局与首个叫分座位固定下来。
+ * 不播种时脚本会撞上「随机牌局正好不满足脚本假设」的情况（历史上约 1/3 概率失败）。
+ */
+function seedDoudizhu(round: number): void {
+  service.setDoudizhuRandomForTest(mulberry32(20261024 + round))
+}
+
 function verifyEngine(): void {
   // 引擎引用在 main 里赋值；这里直接使用包装变量
   const pair7 = parseDoudizhuCombo(ofRank(7, 2))
@@ -100,6 +120,7 @@ async function verifyFullMatch(): Promise<void> {
   )
 
   // 房主开始 → 叫分
+  seedDoudizhu(1)
   const started = service.startDoudizhuMatch(players[0].id, matchId)
   assert(started.match.status === 'bidding', '开始后应进入叫分')
   assert(started.match.bidding !== null, '叫分状态应存在')
@@ -272,8 +293,8 @@ function verifyAutoPlayAndEdgeCases(): void {
   ]
   const now = 2_000_000_000_000
   const room = service.createDoudizhuRoomForTest(players, now)
+  seedDoudizhu(2)
   service.startDoudizhuMatch(players[0].id, room.id, now + 1)
-
   // 时间推进 91 秒（超过 90 秒回合时限）→ 托管不叫
   service.runDoudizhuSweep(now + 91_000)
   const afterAuto = service.getDoudizhuMatch(players[0].id, room.id, now + 91_000)
@@ -290,6 +311,7 @@ function verifyAutoPlayAndEdgeCases(): void {
   const now2 = 3_000_000_000_000
   const room2 = service.createDoudizhuRoomForTest(players2, now2)
   service.startDoudizhuMatch(players2[0].id, room2.id, now2 + 1)
+  seedDoudizhu(3)
   for (let round = 1; round <= 3; round += 1) {
     const view = service.getDoudizhuMatch(players2[0].id, room2.id, now2 + round * 1000)
     if (view.status === 'finished') break
@@ -312,6 +334,7 @@ function verifyAutoPlayAndEdgeCases(): void {
   const now3 = 4_000_000_000_000
   const room3 = service.createDoudizhuRoomForTest(players3, now3)
   service.startDoudizhuMatch(players3[0].id, room3.id, now3 + 1)
+  seedDoudizhu(4)
   // 叫到 3 分直接进对局
   const v = service.getDoudizhuMatch(players3[0].id, room3.id, now3 + 2)
   service.applyDoudizhuAction(v.bidding!.turnUserId, room3.id, { type: 'bid', bid: 3 }, now3 + 3)
