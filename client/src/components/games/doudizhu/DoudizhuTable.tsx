@@ -109,8 +109,17 @@ function Seat({ seat, phase }: { seat: DoudizhuSeatInfo; phase: DoudizhuTablePro
 }
 
 function PlaySlot({ action, bid }: { action: DoudizhuSeatInfo['lastAction']; bid: string | null }) {
+  // key 变化时重挂载，触发新出牌的入场动效
+  const slotKey = action === 'pass'
+    ? 'pass'
+    : action
+      ? `play-${action.cards.map((card) => card.id).join('-')}`
+      : bid
+        ? `bid-${bid}`
+        : 'empty'
+
   return (
-    <div className="gh-ddz-play-slot">
+    <div className="gh-ddz-play-slot" key={slotKey}>
       {bid !== null && <span className="gh-ddz-bubble gh-ddz-bubble--bid">{bid}</span>}
       {action === 'pass' && <span className="gh-ddz-bubble">不要</span>}
       {action && action !== 'pass' && (
@@ -139,63 +148,66 @@ export default function DoudizhuTable({
 
   return (
     <div className="gh-ddz-felt">
-      {/* 顶行：上家 · 底牌与倍率 · 下家 */}
-      <div className="gh-ddz-felt-top">
-        <Seat seat={leftSeat} phase={phase} />
-        <div className="gh-ddz-pot">
-          <span className="gh-ddz-pot-label">底牌</span>
-          <span className="gh-ddz-pot-cards">
-            {phase === 'bidding'
-              ? bottomCards.map((card) => <span key={card.id} className="gh-ddz-back gh-ddz-back--sm" />)
-              : <DoudizhuMiniCards cards={bottomCards} ariaLabel="底牌" />}
-          </span>
-          <span className="gh-ddz-multiplier">×{multiplier}</span>
-        </div>
-        <Seat seat={rightSeat} phase={phase} />
-      </div>
-
-      {/* 中央：各家最近一手 + 提示 + 计时 */}
-      <div className="gh-ddz-felt-mid">
-        <PlaySlot action={leftSeat.lastAction} bid={phase === 'bidding' ? bidLabel(leftSeat.bid) : null} />
-        <div className="gh-ddz-felt-center">
-          <p className="gh-ddz-center-hint">{centerHint}</p>
-          {typeof remainingSeconds === 'number' && remainingSeconds >= 0 && (
-            <span className={`gh-ddz-countdown${remainingSeconds <= 15 ? ' gh-ddz-countdown--urgent' : ''}`}>
-              <strong>{remainingSeconds}s</strong>
+      <div className="gh-ddz-felt-surface">
+        {/* 顶行：上家 · 底牌与倍率 · 下家 */}
+        <div className="gh-ddz-felt-top">
+          <Seat seat={leftSeat} phase={phase} />
+          <div className="gh-ddz-pot">
+            <span className="gh-ddz-pot-label">底牌</span>
+            <span className="gh-ddz-pot-cards" key={phase}>
+              {phase === 'bidding'
+                ? bottomCards.map((card) => <span key={card.id} className="gh-ddz-back gh-ddz-back--sm" />)
+                : <DoudizhuMiniCards cards={bottomCards} ariaLabel="底牌" />}
             </span>
-          )}
+            <span className="gh-ddz-multiplier">×{multiplier}</span>
+          </div>
+          <Seat seat={rightSeat} phase={phase} />
         </div>
-        <PlaySlot action={rightSeat.lastAction} bid={phase === 'bidding' ? bidLabel(rightSeat.bid) : null} />
-      </div>
 
-      {/* 我的一侧：操作按钮 → 我最近一手 → 手牌 */}
-      <div className="gh-ddz-felt-me">
-        <div className="gh-ddz-me-row">
-          <span className="gh-ddz-me-name">
-            {me.role === 'landlord' && <span className="gh-ddz-crown" title="地主">👑</span>}
-            {me.name}
-            {me.role && (
-              <span className={`gh-ddz-role-badge gh-ddz-role-badge--${me.role}`}>
-                {me.role === 'landlord' ? '地主' : '农民'}
+        {/* 中央：各家最近一手 + 提示 + 计时 */}
+        <div className="gh-ddz-felt-mid">
+          <PlaySlot action={leftSeat.lastAction} bid={phase === 'bidding' ? bidLabel(leftSeat.bid) : null} />
+          <div className="gh-ddz-felt-center">
+            <p className="gh-ddz-center-hint" role="status" aria-live="polite">{centerHint}</p>
+            {typeof remainingSeconds === 'number' && remainingSeconds >= 0 && (
+              <span className={`gh-ddz-countdown${remainingSeconds <= 15 ? ' gh-ddz-countdown--urgent' : ''}`}>
+                <strong>{remainingSeconds}s</strong>
               </span>
             )}
-            {me.isTurn && <span className="gh-ddz-turn-tag">轮到你</span>}
-          </span>
-          <div className="gh-ddz-actions">{actions}</div>
+          </div>
+          <PlaySlot action={rightSeat.lastAction} bid={phase === 'bidding' ? bidLabel(rightSeat.bid) : null} />
         </div>
-        <div className="gh-ddz-me-play">
-          <PlaySlot action={me.lastAction} bid={meBidText} />
-        </div>
-        <div className="gh-ddz-hand" role="group" aria-label="我的手牌">
-          {me.hand.map((card) => (
-            <DoudizhuCardView
-              key={card.id}
-              card={card}
-              selected={selectedIds.has(card.id)}
-              selectable={!handDisabled}
-              onClick={onToggleCard}
-            />
-          ))}
+
+        {/* 我的一侧：操作按钮 → 我最近一手 → 手牌 */}
+        <div className="gh-ddz-felt-me">
+          <div className="gh-ddz-me-row">
+            <span className="gh-ddz-me-name">
+              {me.role === 'landlord' && <span className="gh-ddz-crown" title="地主">👑</span>}
+              {me.name}
+              {me.role && (
+                <span className={`gh-ddz-role-badge gh-ddz-role-badge--${me.role}`}>
+                  {me.role === 'landlord' ? '地主' : '农民'}
+                </span>
+              )}
+              {me.isTurn && <span className="gh-ddz-turn-tag">轮到你</span>}
+            </span>
+            <div className="gh-ddz-actions">{actions}</div>
+          </div>
+          <div className="gh-ddz-me-play">
+            <PlaySlot action={me.lastAction} bid={meBidText} />
+          </div>
+          <div className="gh-ddz-hand" role="group" aria-label="我的手牌" key={phase}>
+            {me.hand.map((card, index) => (
+              <DoudizhuCardView
+                key={card.id}
+                card={card}
+                dealIndex={index}
+                selected={selectedIds.has(card.id)}
+                selectable={!handDisabled}
+                onClick={onToggleCard}
+              />
+            ))}
+          </div>
         </div>
       </div>
 

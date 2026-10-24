@@ -1,6 +1,8 @@
+import type { CSSProperties } from 'react'
 import {
   DOUDIZHU_RANK_LABELS,
   DOUDIZHU_SUIT_LABELS,
+  doudizhuCardLabel,
   isDoudizhuRedCard,
   sortDoudizhuCards,
   type DoudizhuCard,
@@ -18,6 +20,8 @@ export interface DoudizhuCardViewProps {
   selected?: boolean
   selectable?: boolean
   size?: 'md' | 'sm'
+  /** 发牌动画的逐张延迟序号 */
+  dealIndex?: number
   onClick?: (card: DoudizhuCard) => void
 }
 
@@ -25,36 +29,59 @@ function isJoker(card: DoudizhuCard): boolean {
   return card.suit === 4
 }
 
-export function DoudizhuCardView({ card, selected = false, selectable = false, size = 'md', onClick }: DoudizhuCardViewProps) {
+function cornerContent(card: DoudizhuCard): { rank: string; suit: string } {
+  if (isJoker(card)) return { rank: card.rank === 19 ? '大' : '小', suit: '王' }
+  return { rank: DOUDIZHU_RANK_LABELS[card.rank], suit: DOUDIZHU_SUIT_LABELS[card.suit] }
+}
+
+export function DoudizhuCardView({
+  card,
+  selected = false,
+  selectable = false,
+  size = 'md',
+  dealIndex,
+  onClick,
+}: DoudizhuCardViewProps) {
   const clickable = selectable && onClick !== undefined
+  const joker = isJoker(card)
+  const { rank, suit } = cornerContent(card)
   const className = [
     'gh-ddz-card',
     `gh-ddz-card--${size}`,
     isDoudizhuRedCard(card) ? 'gh-ddz-card--red' : 'gh-ddz-card--black',
+    joker ? 'gh-ddz-card--joker' : '',
     selected ? 'gh-ddz-card--selected' : '',
     clickable ? 'gh-ddz-card--clickable' : '',
   ].filter(Boolean).join(' ')
+
+  const style = dealIndex === undefined
+    ? undefined
+    : ({ '--i': dealIndex } as CSSProperties)
 
   return (
     <button
       type="button"
       className={className}
+      style={style}
       aria-pressed={clickable ? selected : undefined}
-      aria-label={`${isJoker(card) ? (card.rank === 19 ? '大王' : '小王') : DOUDIZHU_SUIT_LABELS[card.suit] + DOUDIZHU_RANK_LABELS[card.rank]}${selected ? '（已选中）' : ''}`}
+      aria-label={`${doudizhuCardLabel(card)}${selected ? '（已选中）' : ''}`}
       disabled={!clickable}
       onClick={clickable ? () => onClick(card) : undefined}
     >
-      {isJoker(card) ? (
-        <>
-          <span className="gh-ddz-card-joker-mark">{card.rank === 19 ? '大' : '小'}</span>
-          <span className="gh-ddz-card-rank">王</span>
-        </>
-      ) : (
-        <>
-          <span className="gh-ddz-card-rank">{DOUDIZHU_RANK_LABELS[card.rank]}</span>
-          <span className="gh-ddz-card-suit">{DOUDIZHU_SUIT_LABELS[card.suit]}</span>
-        </>
-      )}
+      <span className="gh-ddz-card-corner gh-ddz-card-corner--tl" aria-hidden="true">
+        <span className="gh-ddz-card-rank">{rank}</span>
+        <span className="gh-ddz-card-suit">{suit}</span>
+      </span>
+      <span
+        className={`gh-ddz-card-pip${joker ? ' gh-ddz-card-pip--joker' : ''}`}
+        aria-hidden="true"
+      >
+        {joker ? '✦' : suit}
+      </span>
+      <span className="gh-ddz-card-corner gh-ddz-card-corner--br" aria-hidden="true">
+        <span className="gh-ddz-card-rank">{rank}</span>
+        <span className="gh-ddz-card-suit">{suit}</span>
+      </span>
     </button>
   )
 }
@@ -74,11 +101,7 @@ export function DoudizhuMiniCards({ cards, ariaLabel }: DoudizhuMiniCardsProps) 
           key={card.id}
           className={`gh-ddz-mini-card${isDoudizhuRedCard(card) ? ' gh-ddz-mini-card--red' : ''}`}
         >
-          {card.suit === 4
-            ? card.rank === 19
-              ? '大王'
-              : '小王'
-            : DOUDIZHU_SUIT_LABELS[card.suit] + DOUDIZHU_RANK_LABELS[card.rank]}
+          {doudizhuCardLabel(card)}
         </span>
       ))}
     </span>

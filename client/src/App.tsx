@@ -111,6 +111,20 @@ export default function App() {
                     <Route path="/features" element={<FeaturesPage />} />
                     <Route path="/calculator" element={<CalculatorPage />} />
                     <Route path="/games" element={<GamesPage />} />
+                    <Route path="/games/2048" element={<Game2048Page />} />
+                    <Route path="/games/2048/online" element={
+                      <ProtectedRoute><Game2048OnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/2048/online/:matchId" element={
+                      <ProtectedRoute><Game2048OnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/doudizhu" element={<DoudizhuPage />} />
+                    <Route path="/games/doudizhu/online" element={
+                      <ProtectedRoute><DoudizhuOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/doudizhu/online/:matchId" element={
+                      <ProtectedRoute><DoudizhuOnlinePage /></ProtectedRoute>
+                    } />
                     <Route path="/profile" element={
                       <ProtectedRoute><ProfilePage /></ProtectedRoute>
                     } />
@@ -129,23 +143,6 @@ export default function App() {
                       <ProtectedRoute><AuthorizePage /></ProtectedRoute>
                     } />
                   </Route>
-
-                  {/* 游戏对局页 — 独立全屏布局，不套站点框架（导航/侧栏/页脚），
-                      页面内自带「← 游戏大厅」返回入口；大厅 /games 仍在站点 Layout 内 */}
-                  <Route path="/games/2048" element={<Game2048Page />} />
-                  <Route path="/games/2048/online" element={
-                    <ProtectedRoute><Game2048OnlinePage /></ProtectedRoute>
-                  } />
-                  <Route path="/games/2048/online/:matchId" element={
-                    <ProtectedRoute><Game2048OnlinePage /></ProtectedRoute>
-                  } />
-                  <Route path="/games/doudizhu" element={<DoudizhuPage />} />
-                  <Route path="/games/doudizhu/online" element={
-                    <ProtectedRoute><DoudizhuOnlinePage /></ProtectedRoute>
-                  } />
-                  <Route path="/games/doudizhu/online/:matchId" element={
-                    <ProtectedRoute><DoudizhuOnlinePage /></ProtectedRoute>
-                  } />
 
                   {/* Admin layout — separate from main site */}
                   <Route element={<AdminRoute><AdminLayout /></AdminRoute>}>

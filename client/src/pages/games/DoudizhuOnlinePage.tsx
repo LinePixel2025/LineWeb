@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import UserAvatar from '../../components/UserAvatar'
 import GameFriendPicker from '../../components/games/GameFriendPicker'
+import DoudizhuActionBar from '../../components/games/doudizhu/DoudizhuActionBar'
+import DoudizhuGamebar from '../../components/games/doudizhu/DoudizhuGamebar'
+import DoudizhuResultOverlay from '../../components/games/doudizhu/DoudizhuResultOverlay'
 import DoudizhuTable, { type DoudizhuSeatInfo } from '../../components/games/doudizhu/DoudizhuTable'
 import { useAuth } from '../../contexts/AuthContext'
 import { useChat } from '../../contexts/ChatContext'
@@ -752,120 +755,64 @@ export default function DoudizhuOnlinePage() {
       return ''
     })()
 
-    const actions = (() => {
-      if (match.status === 'bidding' && myTurn) {
-        return (
-          <>
-            <button type="button" className="gh-btn gh-btn--secondary gh-btn--md" onClick={() => handleBid(0)}>
-              不叫
-            </button>
-            {[1, 2, 3].map((bid) => (
-              <button
-                key={bid}
-                type="button"
-                className="gh-btn gh-btn--primary gh-btn--md"
-                disabled={bid <= (match.bidding?.highestBid ?? 0)}
-                onClick={() => handleBid(bid)}
-              >
-                {bid} 分
-              </button>
-            ))}
-          </>
-        )
-      }
-      if (match.status === 'playing' && myTurn) {
-        return (
-          <>
-            <button
-              type="button"
-              className="gh-btn gh-btn--secondary gh-btn--md"
-              disabled={hints.length === 0}
-              onClick={handleHint}
-            >
-              提示
-            </button>
-            <button
-              type="button"
-              className="gh-btn gh-btn--secondary gh-btn--md"
-              disabled={leading}
-              onClick={handlePass}
-            >
-              不出
-            </button>
-            <button
-              type="button"
-              className="gh-btn gh-btn--primary gh-btn--md gh-ddz-play-btn"
-              disabled={!canPlaySelected}
-              onClick={handlePlay}
-            >
-              出牌
-            </button>
-          </>
-        )
-      }
-      return null
-    })()
+    const actionStage =
+      match.status === 'bidding' && myTurn
+        ? 'bidding'
+        : match.status === 'playing' && myTurn
+          ? 'playing'
+          : null
 
     const overlay = match.status === 'finished' ? (
-      <div className="gh-ddz-overlay" role="dialog" aria-modal="true" aria-label="对局结果">
-        <div className="gh-ddz-overlay-card">
-          <h2 className={`gh-ddz-overlay-title${iWon ? ' gh-ddz-overlay-title--win' : ' gh-ddz-overlay-title--lose'}`}>
-            {match.winnerSide === null ? '本局结束' : iWon ? '恭喜获胜！' : '本局告负'}
-          </h2>
-          <p className="gh-ddz-overlay-detail">{END_REASON_LABELS[match.reason ?? 'cancelled']}</p>
-          <div className="gh-ddz-scores">
-            {match.players.map((player) => (
-              <span key={player.userId} className="gh-ddz-score">
-                <span className="gh-ddz-score-name">
-                  {player.username}
-                  {player.role === 'landlord' ? '（地主）' : ''}
-                </span>
-                <span className={`gh-ddz-score-value${(player.scoreDelta ?? 0) >= 0 ? ' gh-ddz-score-value--up' : ' gh-ddz-score-value--down'}`}>
-                  {player.scoreDelta === null ? '—' : `${player.scoreDelta >= 0 ? '+' : ''}${player.scoreDelta}`}
-                </span>
-              </span>
-            ))}
-          </div>
-          <div className="gh-ddz-overlay-actions">
+      <DoudizhuResultOverlay
+        open
+        outcome={match.winnerSide === null ? 'draw' : iWon ? 'win' : 'lose'}
+        detail={END_REASON_LABELS[match.reason ?? 'cancelled']}
+        scores={match.players.map((player) => ({
+          key: player.userId,
+          name: `${player.username}${player.role === 'landlord' ? '（地主）' : ''}`,
+          delta: player.scoreDelta,
+        }))}
+        actions={
+          <>
             <button type="button" className="gh-btn gh-btn--primary gh-btn--lg" onClick={handleBackToLobby}>
               返回大厅
             </button>
             <Link className="gh-btn gh-btn--secondary gh-btn--lg" to={GAME_DOUDIZHU_ROUTE}>
               单机练习
             </Link>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
     ) : null
 
     return (
       <div className="gh-ddz-game">
-        <header className="gh-ddz-gamebar">
-          <button type="button" className="gh-ddz-gamebar-back" onClick={handleBackToLobby}>
-            ← 斗地主大厅
-          </button>
-          <span className="gh-ddz-gamebar-title">
-            斗地主 · 好友联机
-            <span className={`gh-game-conn-chip gh-game-conn-chip--${transport}`}>
-              {transport === 'ws' ? '实时' : '轮询'}
-            </span>
-          </span>
-          <div className="gh-ddz-gamebar-actions">
-            {match.status !== 'finished' && (
-              <button
-                type="button"
-                className="gh-btn gh-btn--danger gh-btn--sm"
-                onClick={() => void handleResign()}
-                disabled={busyKey === 'resign'}
-              >
-                {busyKey === 'resign' ? '提交中…' : '认输'}
-              </button>
-            )}
-            <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm" onClick={handleBackToLobby}>
-              返回大厅
+        <DoudizhuGamebar
+          backLabel="← 斗地主大厅"
+          onBack={handleBackToLobby}
+          title={
+            <>
+              斗地主 · 好友联机
+              <span className={`gh-game-conn-chip gh-game-conn-chip--${transport}`}>
+                {transport === 'ws' ? '实时' : '轮询'}
+              </span>
+            </>
+          }
+        >
+          {match.status !== 'finished' && (
+            <button
+              type="button"
+              className="gh-btn gh-btn--danger gh-btn--sm"
+              onClick={() => void handleResign()}
+              disabled={busyKey === 'resign'}
+            >
+              {busyKey === 'resign' ? '提交中…' : '认输'}
             </button>
-          </div>
-        </header>
+          )}
+          <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm" onClick={handleBackToLobby}>
+            返回大厅
+          </button>
+        </DoudizhuGamebar>
 
         {(actionError ?? matchError) && (
           <div className="gh-ddz-notice gh-ddz-notice--error" role="alert">{actionError ?? matchError}</div>
@@ -890,7 +837,19 @@ export default function DoudizhuOnlinePage() {
           selectedIds={selectedIds}
           onToggleCard={match.status === 'playing' && myTurn ? toggleCard : undefined}
           handDisabled={!(match.status === 'playing' && myTurn)}
-          actions={actions}
+          actions={
+            <DoudizhuActionBar
+              stage={actionStage}
+              highestBid={match.bidding?.highestBid ?? 0}
+              canHint={hints.length > 0}
+              canPass={!leading}
+              canPlay={canPlaySelected}
+              onBid={handleBid}
+              onHint={handleHint}
+              onPass={handlePass}
+              onPlay={handlePlay}
+            />
+          }
           overlay={overlay}
         />
       </div>
