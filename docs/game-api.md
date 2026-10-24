@@ -741,7 +741,55 @@ cd client && npx vitest run src/lib/games/__tests__/minecraft.test.ts   # 14 用
 
 ---
 
-# 七、跨游戏互斥与新增游戏清单
+# 七、五子棋（gomoku）好友联机轮流落子
+
+## 1. 概述
+
+15×15 标准棋盘、无禁手 freestyle（连成五子及以上即胜，长连同样获胜），棋盘下满且无人连五为平局。
+
+- **单机**纯前端（引擎 `client/src/lib/games/gomoku.ts`），执黑/执白可选，人机对战
+  用与联机托管同一套 `suggestGomokuMove` 启发式；战绩存 localStorage（`lineweb.gomoku.stats`）；
+- **好友联机**（恰好 2 人）：房主 = 座位 0 执黑先行，另一位执白。棋盘全量下发
+  （无隐藏信息），客户端只提交落子坐标，连五 / 满盘 / 超时 / 掉线判定全部在服务端。
+
+## 2. 引擎常量与坐标（双端唯一真相源，两份拷贝必须逐字一致）
+
+```
+GOMOKU_BOARD_SIZE = 15   GOMOKU_CELL_COUNT = 225   GOMOKU_BLACK = 1   GOMOKU_WHITE = 2
+棋盘为一维数组：下标 = y * 15 + x（x 列 0–14、y 行 0–14），0 空 / 1 黑 / 2 白
+```
+
+**双端对齐兜底**：`server/src/services/gameGomoku.ts` 与 `client/src/lib/games/gomoku.ts`
+为逐字同拷贝，`client/src/lib/games/__tests__/gomoku.test.ts` 读两份源文件断言一致（除头注释）——
+漂移会让 `npm test` 直接失败。托管与单机 AI 共用 `suggestGomokuMove`
+（成五直落 → 必堵对方成五点 → 攻防加权最高分点，候选限已有棋子切比雪夫距离 ≤ 2，空盘落天元）。
+
+## 3. REST 端点（前缀 `/api/games/gomoku`）
+
+同构挂载于 `mountGameEndpoints({ base: 'gomoku', ... })`，动作体 `{ "type": "place", "x": 7, "y": 7 }`。
+非当前回合 409「还没轮到你」；坐标越界（zod 0–14）或该点已有棋子 400；
+回合 60 秒超时 → 服务端自动托管落子（`lastMove.auto = true`，**不淘汰**，与斗地主托管同口径）；
+掉线超过 120 秒且对方在线 → `forfeit` 对方获胜；全局 30 分钟超时未分胜负 → `timeout` 平局。
+
+DTO：`boardSize`、`board`（225 一维）、`turn {userId, deadline}`、
+`lastMove {userId, x, y, color, auto}`、`winningLine`（reason='five' 时按 y、x 升序的 ≥5 点）、
+`players[] {color, moves, status}`。
+
+## 4. 规则口径
+
+连五及以上（含长连）→ `five` 获胜；认输 → `resign`；掉线 120 秒 → `forfeit`；
+全局 30 分钟 → `timeout` 平局（winnerId null）；下满 → `draw` 平局；等待期解散 → `cancelled`。
+
+## 5. 自检
+
+```bash
+cd server && npm run verify:gomoku   # 引擎四方向/长连 + 托管/掉线/超时/平局 + 互斥（139+ 断言）
+cd client && npx vitest run src/lib/games/__tests__/gomoku.test.ts   # 15 用例（双端源码对齐兜底在这里）
+```
+
+---
+
+# 八、跨游戏互斥与新增游戏清单
 
 - 所有游戏的房间/邀请都通过 `gameService.registerGameModule({ name, isUserInMatch, sweep })`
   注册进同一张表，`isUserBusyInOtherGames(userId, selfName)` 是**跨游戏互斥的唯一口径**
