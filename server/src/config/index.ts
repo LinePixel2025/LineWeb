@@ -310,3 +310,33 @@ export const doudizhuActionSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('pass') }),
 ])
+
+// === 游戏（贪吃蛇大地图联机）Schemas ===
+
+/** POST /api/games/snake/matches/:id/actions —— 提交下一步方向（服务端权威推进） */
+export const snakeActionSchema = z.object({
+  type: z.literal('turn'),
+  direction: z.enum(['up', 'down', 'left', 'right']),
+})
+
+// === 游戏（扫雷好友联机，轮流点）Schemas ===
+
+/**
+ * POST /api/games/minesweeper/matches/:id/actions —— 一人只许下一次
+ * open：翻开格子（越界由服务层按棋盘尺寸再校验）；flag：插旗 / 拔旗。
+ */
+export const minesweeperActionSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('open'), index: z.number().int().min(0).max(4095) }),
+  z.object({ type: z.literal('flag'), index: z.number().int().min(0).max(4095) }),
+])
+
+// === 游戏（跳一跳好友联机，轮流跳）Schemas ===
+
+/**
+ * POST /api/games/jump/matches/:id/actions —— 蓄力起跳
+ * chargeMs：按住到松手的蓄力毫秒数（1–2000，与服务端物理引擎一致）。
+ */
+export const jumpActionSchema = z.object({
+  type: z.literal('jump'),
+  chargeMs: z.number().int().min(1).max(2000),
+})

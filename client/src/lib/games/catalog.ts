@@ -6,8 +6,8 @@
  * 路由与 `App.tsx` 中的 `/games/2048`、`/games/2048/online` 保持一致。
  */
 
-/** 游戏支持的模式 */
-export type GameCatalogMode = 'single' | 'online'
+/** 游戏支持的模式：单机 / 同屏双人 / 好友联机 */
+export type GameCatalogMode = 'single' | 'local' | 'online'
 
 /** 游戏上线状态：available 可玩，coming-soon 仅为占位 */
 export type GameCatalogStatus = 'available' | 'coming-soon'
@@ -42,6 +42,18 @@ export const GAME_2048_ONLINE_ROUTE = '/games/2048/online'
 export const GAME_DOUDIZHU_ROUTE = '/games/doudizhu'
 /** 斗地主联机大厅路由（对局详情为 `${GAME_DOUDIZHU_ONLINE_ROUTE}/:matchId`） */
 export const GAME_DOUDIZHU_ONLINE_ROUTE = '/games/doudizhu/online'
+/** 贪吃蛇单机 / 同屏双人对局路由（同屏联机是页内模式，不单独占路由） */
+export const GAME_SNAKE_ROUTE = '/games/snake'
+/** 贪吃蛇大地图联机大厅路由 */
+export const GAME_SNAKE_ONLINE_ROUTE = '/games/snake/online'
+/** 扫雷单机路由 */
+export const GAME_MINESWEEPER_ROUTE = '/games/minesweeper'
+/** 扫雷联机（轮流点）大厅路由 */
+export const GAME_MINESWEEPER_ONLINE_ROUTE = '/games/minesweeper/online'
+/** 跳一跳单机路由 */
+export const GAME_JUMP_ROUTE = '/games/jump'
+/** 跳一跳联机（轮流跳）大厅路由 */
+export const GAME_JUMP_ONLINE_ROUTE = '/games/jump/online'
 
 /** 大厅完整目录：可玩游戏在前，即将上线占位在后 */
 export const GAME_CATALOG: readonly GameCatalogEntry[] = [
@@ -68,33 +80,44 @@ export const GAME_CATALOG: readonly GameCatalogEntry[] = [
     onlineRoute: GAME_DOUDIZHU_ONLINE_ROUTE,
   },
   {
+    id: 'snake',
+    name: '贪吃蛇',
+    description: '经典街机吃果变长：单机冲分、同屏双人对掐，或好友大地图混战。',
+    icon: '🐍',
+    modes: ['single', 'local', 'online'],
+    status: 'available',
+    playable: true,
+    route: GAME_SNAKE_ROUTE,
+    onlineRoute: GAME_SNAKE_ONLINE_ROUTE,
+  },
+  {
+    id: 'minesweeper',
+    name: '扫雷',
+    description: '数字推理排雷：单机三档难度冲纪录，联机模式一人只许下一次，轮流开格。',
+    icon: '💣',
+    modes: ['single', 'online'],
+    status: 'available',
+    playable: true,
+    route: GAME_MINESWEEPER_ROUTE,
+    onlineRoute: GAME_MINESWEEPER_ONLINE_ROUTE,
+  },
+  {
+    id: 'jump',
+    name: '跳一跳',
+    description: '按住蓄力、松手起跳，落点越靠近中心分越高；支持单机冲榜与好友轮流对战。',
+    icon: '🎯',
+    modes: ['single', 'online'],
+    status: 'available',
+    playable: true,
+    route: GAME_JUMP_ROUTE,
+    onlineRoute: GAME_JUMP_ONLINE_ROUTE,
+  },
+  {
     id: 'gomoku',
     name: '五子棋',
     description: '在棋盘上率先连成五子即可获胜，支持好友对局。即将上线。',
     icon: '⚫',
     modes: ['online'],
-    status: 'coming-soon',
-    playable: false,
-    route: null,
-    onlineRoute: null,
-  },
-  {
-    id: 'snake',
-    name: '贪吃蛇',
-    description: '经典街机玩法，吃下果实不断变长，别撞到自己。即将上线。',
-    icon: '🐍',
-    modes: ['single'],
-    status: 'coming-soon',
-    playable: false,
-    route: null,
-    onlineRoute: null,
-  },
-  {
-    id: 'minesweeper',
-    name: '扫雷',
-    description: '根据数字提示排除雷区，考验推理与耐心。即将上线。',
-    icon: '💣',
-    modes: ['single'],
     status: 'coming-soon',
     playable: false,
     route: null,

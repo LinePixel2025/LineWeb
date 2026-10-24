@@ -8,7 +8,7 @@
 import type { DoudizhuCombo } from '../lib/games/doudizhu'
 
 /** 游戏种类（邀请与对局 DTO 的 game 字段；旧邀请缺省视为 2048） */
-export type GameKind = '2048' | 'doudizhu'
+export type GameKind = '2048' | 'doudizhu' | 'snake' | 'minesweeper' | 'jump'
 
 /** 2048 移动方向 */
 export type Game2048Direction = 'up' | 'down' | 'left' | 'right'
@@ -222,7 +222,12 @@ export interface GameDoudizhuMatch {
 }
 
 /** 任一游戏的对局（game:match:* 事件载荷） */
-export type AnyGameMatch = Game2048Match | GameDoudizhuMatch
+export type AnyGameMatch =
+  | Game2048Match
+  | GameDoudizhuMatch
+  | GameSnakeMatch
+  | GameMinesweeperMatch
+  | GameJumpMatch
 
 /** GET/POST /api/games/doudizhu/* 对局响应 */
 export interface DoudizhuMatchResponse {
@@ -245,3 +250,268 @@ export type DoudizhuActionBody =
   | { type: 'bid'; bid: number }
   | { type: 'play'; cards: number[] }
   | { type: 'pass' }
+
+// ==================== 贪吃蛇（snake，大地图联机） ====================
+
+/** 蛇的移动方向 */
+export type SnakeDirection = 'up' | 'down' | 'left' | 'right'
+
+/** 联机房间/对局中的玩家状态 */
+export type GameSnakePlayerStatus = 'waiting' | 'playing' | 'won' | 'lost'
+
+/** 大地图联机对局状态 */
+export type GameSnakeMatchStatus = 'waiting' | 'playing' | 'finished'
+
+/** 大地图对局结束原因 */
+export type GameSnakeEndReason =
+  | 'last_standing'
+  | 'elimination'
+  | 'timeout'
+  | 'resign'
+  | 'forfeit'
+  | 'cancelled'
+
+/** 网格坐标 */
+export interface SnakeCellDto {
+  x: number
+  y: number
+}
+
+/** 地图上的果实（big = 加分更多的金果） */
+export interface SnakeFoodDto extends SnakeCellDto {
+  big: boolean
+}
+
+/** 大地图对局中的单个玩家 */
+export interface GameSnakePlayer {
+  userId: number
+  username: string
+  online: boolean
+  status: GameSnakePlayerStatus
+  /** 蛇身配色索引（0–7，由座位决定） */
+  colorIndex: number
+  /** 蛇身（头部在前）；已出局为空数组 */
+  body: SnakeCellDto[]
+  /** 服务端当前生效方向 */
+  direction: SnakeDirection
+  /** 已提交、下一步生效的方向（无则 null） */
+  pendingDirection: SnakeDirection | null
+  score: number
+  /** 当前蛇身长度（等价于 body.length） */
+  length: number
+  /** 死亡步数（未死亡为 null） */
+  deathStep: number | null
+}
+
+/** 贪吃蛇大地图联机对局 DTO（服务端权威，客户端只做渲染与方向输入） */
+export interface GameSnakeMatch {
+  id: number
+  game: 'snake'
+  hostId: number
+  status: GameSnakeMatchStatus
+  version: number
+  startedAt: string
+  endsAt: string
+  endedAt: string | null
+  winnerId: number | null
+  reason: GameSnakeEndReason | null
+  /** 大地图尺寸 */
+  board: { width: number; height: number }
+  /** 服务端步进间隔（毫秒） */
+  stepMs: number
+  /** 已执行步数 */
+  step: number
+  /** 距对局结束的剩余毫秒（服务端算好，避免客户端时钟漂移） */
+  remainingMs: number
+  foods: SnakeFoodDto[]
+  players: GameSnakePlayer[]
+  /** 最近一次事件（吃果 / 死亡），用于播报；无则 null */
+  lastEvent: { kind: 'eat' | 'dead'; userId: number; step: number } | null
+}
+
+/** POST /api/games/snake/matches/:id/actions 的动作体 */
+export type SnakeActionBody = { type: 'turn'; direction: SnakeDirection }
+
+// ==================== 扫雷（minesweeper，联机轮流点） ====================
+
+export type GameMinesweeperPlayerStatus = 'waiting' | 'playing' | 'won' | 'lost'
+export type GameMinesweeperMatchStatus = 'waiting' | 'playing' | 'finished'
+
+/** 联机扫雷结束原因 */
+export type GameMinesweeperEndReason =
+  | 'boom'
+  | 'cleared'
+  | 'timeout'
+  | 'resign'
+  | 'forfeit'
+  | 'cancelled'
+
+/** 联机扫雷中的单个玩家 */
+export interface GameMinesweeperPlayer {
+  userId: number
+  username: string
+  online: boolean
+  status: GameMinesweeperPlayerStatus
+  /** 安全翻开格子数（本玩家名下） */
+  opened: number
+  /** 踩雷次数 */
+  booms: number
+  /** 计分 = opened（踩雷不扣分，仅记录） */
+  score: number
+}
+
+/** 已翻开的格子（翻开后才对所有人可见） */
+export interface MinesweeperOpenedDto {
+  index: number
+  mine: boolean
+  adjacent: number
+}
+
+/** 插旗记录（by = 插旗者 userId） */
+export interface MinesweeperFlagDto {
+  index: number
+  by: number
+}
+
+/** 联机扫雷对局 DTO：一人只许下一次（翻开或插旗），随后轮到下一名玩家 */
+export interface GameMinesweeperMatch {
+  id: number
+  game: 'minesweeper'
+  hostId: number
+  status: GameMinesweeperMatchStatus
+  version: number
+  startedAt: string
+  endsAt: string
+  endedAt: string | null
+  winnerId: number | null
+  reason: GameMinesweeperEndReason | null
+  board: { width: number; height: number; mines: number }
+  /** 已翻开格（未翻开的格子不出现在这里，雷位因此不泄露） */
+  opened: MinesweeperOpenedDto[]
+  flags: MinesweeperFlagDto[]
+  /** 当前回合 */
+  turn: { userId: number; deadline: string; skips: number } | null
+  lastAction: { userId: number; kind: 'open' | 'flag' | 'unflag'; index: number } | null
+  players: GameMinesweeperPlayer[]
+}
+
+/** POST /api/games/minesweeper/matches/:id/actions 的动作体 */
+export type MinesweeperActionBody =
+  | { type: 'open'; index: number }
+  | { type: 'flag'; index: number }
+
+// ==================== 跳一跳（jump，联机轮流跳） ====================
+
+export type GameJumpPlayerStatus = 'waiting' | 'playing' | 'won' | 'lost'
+export type GameJumpMatchStatus = 'waiting' | 'playing' | 'finished'
+
+/** 跳一跳对局结束原因 */
+export type GameJumpEndReason =
+  | 'last_standing'
+  | 'elimination'
+  | 'timeout'
+  | 'resign'
+  | 'forfeit'
+  | 'cancelled'
+
+/** 一次跳跃的落点判定（对齐微信小游戏：中心命中可连击翻倍） */
+export type JumpLanding = 'center' | 'normal' | 'short' | 'long' | 'off'
+
+/** 共享盒子序列里的一格 */
+export interface JumpBoxDto {
+  index: number
+  /** 与上一格的中心间距（逻辑单位） */
+  gap: number
+  kind: 'box' | 'cylinder'
+  /** 半宽（逻辑单位），落点判定用 */
+  size: number
+  /** 是否特殊盒（音乐盒 / 加分盒），预留 */
+  bonus: boolean
+}
+
+/** 跳一跳联机中的单个玩家 */
+export interface GameJumpPlayer {
+  userId: number
+  username: string
+  online: boolean
+  status: GameJumpPlayerStatus
+  score: number
+  /** 连续中心命中次数（连击） */
+  combo: number
+  /** 已跳次数 */
+  jumps: number
+  /** 当前所站盒子序号（掉出则为 null） */
+  boxIndex: number | null
+  /** 落点偏移（逻辑单位，右为正；未跳为 null） */
+  offset: number | null
+}
+
+/** 上一次跳跃结果 */
+export interface JumpLastResultDto {
+  userId: number
+  kind: JumpLanding
+  gained: number
+  offset: number
+  scoreAfter: number
+  comboAfter: number
+}
+
+/** 跳一跳对局 DTO：好友轮流各跳一次，同一条盒子序列，掉出即淘汰 */
+export interface GameJumpMatch {
+  id: number
+  game: 'jump'
+  hostId: number
+  status: GameJumpMatchStatus
+  version: number
+  startedAt: string
+  endsAt: string
+  endedAt: string | null
+  winnerId: number | null
+  reason: GameJumpEndReason | null
+  /** 共享盒子序列（服务端按 seed 生成，长度随对局推进增长） */
+  boxes: JumpBoxDto[]
+  turn: { userId: number; deadline: string } | null
+  lastResult: JumpLastResultDto | null
+  players: GameJumpPlayer[]
+}
+
+/** POST /api/games/jump/matches/:id/actions 的动作体（蓄力毫秒数） */
+export type JumpActionBody = { type: 'jump'; chargeMs: number }
+
+// ==================== 通用对局响应（新游戏复用同一形状） ====================
+
+export interface SnakeMatchResponse {
+  match: GameSnakeMatch
+}
+export interface SnakeActiveMatchResponse {
+  match: GameSnakeMatch | null
+}
+export interface SnakeSyncResponse {
+  serverTime: string
+  invites: GameInvitesResponse
+  match: GameSnakeMatch | null
+}
+
+export interface MinesweeperMatchResponse {
+  match: GameMinesweeperMatch
+}
+export interface MinesweeperActiveMatchResponse {
+  match: GameMinesweeperMatch | null
+}
+export interface MinesweeperSyncResponse {
+  serverTime: string
+  invites: GameInvitesResponse
+  match: GameMinesweeperMatch | null
+}
+
+export interface JumpMatchResponse {
+  match: GameJumpMatch
+}
+export interface JumpActiveMatchResponse {
+  match: GameJumpMatch | null
+}
+export interface JumpSyncResponse {
+  serverTime: string
+  invites: GameInvitesResponse
+  match: GameJumpMatch | null
+}
