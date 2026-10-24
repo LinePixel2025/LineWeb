@@ -9,4 +9,7 @@
 @import './chat.css';
 @import './games.css';
 @import './doudizhu.css';
+@import './snake.css';
+@import './minesweeper.css';
+@import './jump.css';
 @import './responsive.css';

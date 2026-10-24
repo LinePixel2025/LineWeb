@@ -1,5 +1,11 @@
 import UserAvatar from '../UserAvatar'
-import type { GameFriend, GameInvite } from '../../types/game'
+import { getGameCatalogEntry } from '../../lib/games/catalog'
+import type { GameFriend, GameInvite, GameKind } from '../../types/game'
+
+/** 邀请徽章文案里的游戏名（未知 id 兜底为「2048」，与旧邀请载荷缺省 game 一致） */
+function gameNameOf(game?: GameKind): string {
+  return getGameCatalogEntry(game ?? '2048')?.name ?? '2048'
+}
 
 export interface GameFriendPickerProps {
   friends: GameFriend[]
@@ -74,7 +80,7 @@ export default function GameFriendPicker({
                 <UserAvatar userId={invite.from.id} username={invite.from.username} size="md" />
                 <span className="gh-game-friend-copy">
                   <span className="gh-game-friend-name">{invite.from.username}</span>
-                  <span className="gh-game-friend-meta">邀请你进行 2048 对战</span>
+                  <span className="gh-game-friend-meta">邀请你进行 {gameNameOf(invite.game)} 对战</span>
                 </span>
                 <span className="gh-game-friend-actions">
                   <button

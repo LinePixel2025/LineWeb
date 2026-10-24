@@ -518,3 +518,165 @@ waiting（等待房间，最多 30 分钟）
 cd server && npm run verify:ddz       # 引擎 + 状态机 + 托管 + 流局 + 认输（50 断言）
 cd client && npx vitest run src/lib/games/__tests__/doudizhu.test.ts
 ```
+
+自检脚本在每个阶段开局前调用 `setDoudizhuRandomForTest(mulberry32(seed))` 固定发牌与首个叫分座位
+（生产不调用，随机源仍为 `Math.random`）；不播种时脚本会撞上「随机牌局正好不满足脚本假设」的情况，
+历史上约 1/3 概率失败。
+
+---
+
+# 三、贪吃蛇（snake）单机 / 同屏双人 / 大地图联机
+
+## 1. 概述
+
+三种玩法共用一套引擎语义：
+
+- **单机冲分**与**同屏双人**（一台电脑、P1 = WASD、P2 = 方向键）为纯前端玩法，
+  引擎在 `client/src/lib/games/snake.ts`，最高分与战绩存 localStorage，**不走任何 API**；
+- **大地图好友联机**（2–8 人，40×40 共享世界）为服务端权威：客户端只提交方向、只渲染 DTO。
+  引擎 `server/src/services/gameSnake.ts`，业务 `gameSnakeService.ts`，路由前缀 `/api/games/snake`。
+
+## 2. 步进模型（与 2048 / 斗地主的关键差异）
+
+贪吃蛇是**服务端定时推进**而非回合制：每个进行中的房间有一个 `SNAKE_STEP_MS = 220ms` 的定时器
+（`unref`，房间结束时清理），每步调 `stepSnakeWorld()` 并广播一次 `game:match:update`。
+DTO 里给出 `step`（已执行步数）、`stepMs`、`remainingMs`（服务端算好的剩余毫秒，前端不要自己减本地时钟）。
+无 WebSocket 时轮询 `sync`（2 秒）依旧可用，画面表现为跳步而非补间。
+
+## 3. REST 端点
+
+与 2048 / 斗地主完全同构（前缀 `/api/games/snake`）：
+`GET /friends`、`GET|POST /invites`、`POST /invites/:id/respond`、`DELETE /invites/:id`、
+`GET /sync?matchId=`、`POST /presence`、`GET /matches/active`、`GET /matches/:id`、
+`POST /matches/:id/start`、`POST /matches/:id/leave`、`POST /matches/:id/actions`、`POST /matches/:id/resign`。
+
+动作体：`{ "type": "turn", "direction": "up" | "down" | "left" | "right" }`
+—— 180° 掉头返回 `applied: false` 且不递增版本、不广播。
+
+## 4. 规则口径
+
+- 地图 40×40，8 个固定出生点按座位分配（`colorIndex` 0–7）；
+- 普通果 +10 分 / 蛇长 +1，金果 +30 分 / 蛇长 +3，场上恒 6 个果，吃掉即时补种；
+- 撞墙、撞任意蛇身（含自己）、双头同一步进入同一格 → 该蛇淘汰；
+- 默认 5 分钟一局；只剩一条存活蛇 → `last_standing`；全灭或超时按分数（并列 `winnerId: null` 平局）；
+- 认输 = 本蛇判死；掉线连续 120 秒且对手可用 → 淘汰（`forfeit`）；等待房间 30 分钟 → `cancelled`。
+
+结束原因：`last_standing | elimination | timeout | resign | forfeit | cancelled`。
+
+## 5. 自检
+
+```bash
+cd server && npm run verify:snake     # 引擎 + 房间状态机 + 结算（170 断言）
+cd client && npx vitest run src/lib/games/__tests__/snake.test.ts
+```
+
+---
+
+# 四、扫雷（minesweeper）单机 / 好友轮流点
+
+## 1. 概述
+
+- **单机**三档（9×9/10、12×12/22、16×16/40）纯前端，引擎 `client/src/lib/games/minesweeper.ts`，
+  首点必安全、洪水展开、双击和弦、最佳时间存 localStorage；
+- **好友联机**（2–4 人）是**轮流制**：轮到自己时只允许一次动作（开一格或插/拔一面旗），
+  随后立即轮到下一名存活玩家。服务端权威，盘面 12×12 / 22 雷。
+
+## 2. REST 端点
+
+同构前缀 `/api/games/minesweeper`，动作体为联合类型：
+
+```json
+{ "type": "open", "index": 42 }
+{ "type": "flag", "index": 42 }
+```
+
+`index = y * width + x`。非当前回合玩家调用返回 409「还没轮到你」；点已翻开格返回 `applied: false` 且不轮转。
+
+## 3. 信息裁剪（不泄露雷位）
+
+DTO 只包含**已翻开**的格子 `opened: [{index, mine, adjacent}]` 与旗子 `flags: [{index, by}]`；
+未翻开格从不出现在响应里，服务端也不会在终局前公布雷位（`minePositions` 仅供单机/复盘使用）。
+
+## 4. 规则口径
+
+- `open` 命中数字 0 时自动洪水展开整片连通区，这些合起来仍算「一次动作」；
+- 踩雷 → 该玩家 `booms += 1` 并淘汰，其余玩家继续；只剩 1 人时立即结束（`boom`）；
+- 全部安全格翻开 → `cleared`，按 `opened` 最多者获胜（并列平局）；
+- 回合 30 秒未动作 → `turn.skips += 1` 并轮转，累计 3 次跳过 → 该玩家淘汰（`forfeit`）；
+- 全局 10 分钟 → `timeout` 按 `opened` 判定。
+
+## 5. 自检
+
+```bash
+cd server && npm run verify:minesweeper   # 引擎 + 轮流/跳过/踩雷/全清结算（385 断言）
+cd client && npx vitest run src/lib/games/__tests__/minesweeper.test.ts
+```
+
+---
+
+# 五、跳一跳（jump）单机 / 好友轮流跳
+
+## 1. 概述
+
+对齐微信小游戏的核心逻辑：按住蓄力 → 松手起跳 → 蓄力时长线性映射距离 → 按落点相对目标盒中心的偏移判定。
+
+- **单机**纯前端（引擎 `client/src/lib/games/jump.ts`，canvas 2.5D 等距渲染、镜头跟随、蓄力压扁形变），
+  最高分存 localStorage；
+- **好友联机**（2–6 人）轮流各跳一次，**同一条盒子路线**（seed 确定性生成、按需续写），
+  每人有自己的进度；客户端只提交蓄力毫秒数，落点与得分由服务端判定。
+
+## 2. 物理常量（前后端唯一真相源，两份实现必须逐字一致）
+
+```
+JUMP_MAX_CHARGE_MS = 2000     JUMP_MAX_DISTANCE = 260
+JUMP_GAP_MIN = 60   JUMP_GAP_MAX = 150      // 相邻盒中心间距
+JUMP_SIZE_MIN = 26  JUMP_SIZE_MAX = 36      // 盒面上表面半宽
+JUMP_CENTER_RATIO = 0.30      JUMP_COMBO_CAP = 5     JUMP_MAX_SCORE_GAIN = 32
+```
+
+判定：`offset = jumpDistance(chargeMs) - gap`；
+`|offset| <= size * 0.30` → `center`；`|offset| <= size` → `normal`；
+`offset < -size` → `short`（落空）；`offset > size` → `long`（越过）。
+
+计分：`normal` +1 且连击清零；`center` 连击 +1，得分 `min(2^连击, 32)`（2/4/8/16/32 封顶）；
+落空即淘汰。`bonus` 字段为原作音乐盒等彩蛋预留，当前恒 `false`。
+
+**RNG 取数顺序是协议的一部分**：`gap`（第 0 盒不取）→ `size` → `kind`，两端必须同序，
+否则同一 seed 生成不同路线。
+
+## 3. REST 端点
+
+同构前缀 `/api/games/jump`，动作体 `{ "type": "jump", "chargeMs": 900 }`（1–2000，本地
+`performance.now()` 差值）。非当前回合 409；回合 20 秒未跳 → 服务端以 `chargeMs = 1` 代跳（必 `short`）并淘汰该玩家。
+
+DTO：`boxes`（共享路线）、`turn {userId, deadline}`、`lastResult {userId, kind, gained, offset, scoreAfter, comboAfter}`、
+`players[] {score, combo, jumps, boxIndex, offset}`。
+
+## 4. 规则口径
+
+只剩 1 人存活 → `last_standing`；6 分钟时长到或全灭 → 按 `score` 判定（并列平局）；
+认输 = 自己出局；掉线 120 秒 → 淘汰（`forfeit`）。
+
+## 5. 自检
+
+```bash
+cd server && npm run verify:jump      # 物理 + 轮流/淘汰结算（207 断言）
+cd client && npx vitest run src/lib/games/__tests__/jump.test.ts
+```
+
+---
+
+# 六、跨游戏互斥与新增游戏清单
+
+- 所有游戏的房间/邀请都通过 `gameService.registerGameModule({ name, isUserInMatch, sweep })`
+  注册进同一张表，`isUserBusyInOtherGames(userId, selfName)` 是**跨游戏互斥的唯一口径**
+  （`selfName` 用于排除自己，这样已在自家等待房间的人仍可继续邀请好友）；
+  2048 自己也注册了一个探针（`sweep` 为空操作，避免主 sweeper 自我递归）。
+- 新增一款游戏需要同时改：`server/src/config/index.ts`（动作 schema）、
+  `server/src/routes/games.ts`（用 `mountGameEndpoints({ base: '<id>', ... })` 一行挂载）、
+  `server/src/index.ts`（`apiLimiterSkipPaths` 三条豁免 + `/api` 自描述条目）、
+  `client/src/types/game.ts`、`client/src/lib/games/catalog.ts`、`client/src/App.tsx`（路由）、
+  `client/src/contexts/GameContext.tsx`（`GAME_API_BASE` 映射）、`client/src/styles/globals.css`（CSS import）。
+- 对局详情页路由统一为 `/games/<id>/online/:matchId`，因此 `GameContext.gameMatchPath()` 可直接拼字符串，
+  邀请与对局的 WS 事件名跨游戏共用（`game:invite` / `game:invite:removed` / `game:match:started|update|ended`），
+  由载荷里的 `match.game` / `invite.game` 判别。

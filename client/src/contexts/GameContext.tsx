@@ -20,23 +20,40 @@ import type {
   GameInviteResponse,
   GameInvitesResponse,
   GameKind,
-  GameSyncResponse,
-  DoudizhuSyncResponse,
 } from '../types/game'
 
 /** 邀请过期清理间隔：前端按时剔除已过期邀请，避免弹窗/列表残留 */
 const INVITE_SWEEP_MS = 1_000
 
-/** 对局详情页路由（按游戏区分） */
+/**
+ * 五款游戏的 API 前缀唯一映射（新增游戏时改这里 + catalog + App 路由）。
+ */
+const GAME_API_BASE: Record<GameKind, string> = {
+  '2048': '/games/2048',
+  doudizhu: '/games/doudizhu',
+  snake: '/games/snake',
+  minesweeper: '/games/minesweeper',
+  jump: '/games/jump',
+}
+
+/** 需要一并拉取邀请 / 对局状态的全部游戏 */
+const ALL_GAME_KINDS = Object.keys(GAME_API_BASE) as GameKind[]
+
+/** 对局详情页路由（五款游戏统一 /games/<game>/online/:matchId） */
 export function gameMatchPath(match: Pick<AnyGameMatch, 'game' | 'id'>): string {
-  return match.game === 'doudizhu'
-    ? `/games/doudizhu/online/${match.id}`
-    : `/games/2048/online/${match.id}`
+  return `/games/${match.game}/online/${match.id}`
 }
 
 /** 游戏 API 前缀 */
 function gameApiBase(game: GameKind): string {
-  return game === 'doudizhu' ? '/games/doudizhu' : '/games/2048'
+  return GAME_API_BASE[game] ?? GAME_API_BASE['2048']
+}
+
+/** 任一游戏的 sync 载荷（match 形状按 game 判别） */
+interface AnyGameSyncPayload {
+  serverTime: string
+  invites: GameInvitesResponse
+  match: AnyGameMatch | null
 }
 
 export interface GameContextValue {
@@ -74,9 +91,9 @@ function isAlive(invite: GameInvite, now = Date.now()): boolean {
   return Number.isFinite(expiresAt) ? expiresAt > now : false
 }
 
-/** 合并两个游戏的邀请并按创建时间排序（id 跨游戏唯一，可直接合并） */
-function mergeInvites(a: GameInvite[], b: GameInvite[]): GameInvite[] {
-  return sortByCreatedAt([...a, ...b])
+/** 给邀请补上所属游戏（旧载荷可能缺省 game 字段） */
+function tagInvites(list: GameInvite[], game: GameKind): GameInvite[] {
+  return list.map((invite) => ({ ...invite, game: invite.game ?? game }))
 }
 
 function sortByCreatedAt(list: GameInvite[]): GameInvite[] {
@@ -149,13 +166,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!userId) return
     if (!loadedRef.current) setLoading(true)
     try {
-      const [g2048, ddz] = await Promise.all([
-        api.get<GameInvitesResponse>('/games/2048/invites'),
-        api.get<GameInvitesResponse>('/games/doudizhu/invites'),
-      ])
+      // 五款游戏的邀请各自独立存放；用 allSettled，某个游戏端点异常不影响其余展示
+      const results = await Promise.allSettled(
+        ALL_GAME_KINDS.map((game) => api.get<GameInvitesResponse>(`${gameApiBase(game)}/invites`)),
+      )
       const now = Date.now()
-      setIncomingInvites(aliveOnly(mergeInvites(g2048.incoming, ddz.incoming), now))
-      setOutgoingInvites(aliveOnly(mergeInvites(g2048.outgoing, ddz.outgoing), now))
+      const incoming: GameInvite[] = []
+      const outgoing: GameInvite[] = []
+      results.forEach((result, index) => {
+        if (result.status !== 'fulfilled') return
+        const game = ALL_GAME_KINDS[index]
+        incoming.push(...tagInvites(result.value.incoming ?? [], game))
+        outgoing.push(...tagInvites(result.value.outgoing ?? [], game))
+      })
+      setIncomingInvites(aliveOnly(incoming, now))
+      setOutgoingInvites(aliveOnly(outgoing, now))
       loadedRef.current = true
       setError(null)
     } catch (err) {
@@ -254,19 +279,25 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     const sync = async () => {
       try {
-        const [g2048, ddz] = await Promise.all([
-          api.get<GameSyncResponse>('/games/2048/sync'),
-          api.get<DoudizhuSyncResponse>('/games/doudizhu/sync'),
-        ])
+        const results = await Promise.allSettled(
+          ALL_GAME_KINDS.map((game) => api.get<AnyGameSyncPayload>(`${gameApiBase(game)}/sync`)),
+        )
         if (disposed) return
         const now = Date.now()
-        setIncomingInvites(aliveOnly(mergeInvites(g2048.invites.incoming, ddz.invites.incoming), now))
-        setOutgoingInvites(aliveOnly(mergeInvites(g2048.invites.outgoing, ddz.invites.outgoing), now))
-        // 与 2048 原行为一致：只有已开局（非 waiting）的对局才自动进入；等待房间由大厅自行处理
-        const active = [g2048.match, ddz.match].filter(
-          (match): match is Exclude<typeof match, null> =>
-            match !== null && (match.status === 'playing' || match.status === 'bidding')
-        )
+        const incoming: GameInvite[] = []
+        const outgoing: GameInvite[] = []
+        const active: AnyGameMatch[] = []
+        results.forEach((result, index) => {
+          if (result.status !== 'fulfilled') return
+          const game = ALL_GAME_KINDS[index]
+          incoming.push(...tagInvites(result.value.invites?.incoming ?? [], game))
+          outgoing.push(...tagInvites(result.value.invites?.outgoing ?? [], game))
+          const match = result.value.match
+          // 与 2048 原行为一致：只有已开局（非 waiting）的对局才自动进入；等待房间由大厅自行处理
+          if (match && (match.status === 'playing' || match.status === 'bidding')) active.push(match)
+        })
+        setIncomingInvites(aliveOnly(incoming, now))
+        setOutgoingInvites(aliveOnly(outgoing, now))
         for (const match of active) {
           acceptStartedMatch(match)
           goToMatch(match)

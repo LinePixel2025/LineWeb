@@ -11,6 +11,9 @@ import {
   gameStartSchema,
   gameSyncQuerySchema,
   doudizhuActionSchema,
+  snakeActionSchema,
+  minesweeperActionSchema,
+  jumpActionSchema,
 } from '../config/index.js'
 import { markGamePresence } from '../services/gamePresence.js'
 import {
@@ -41,15 +44,59 @@ import {
   resignDoudizhuMatch,
   startDoudizhuMatch,
 } from '../services/gameDoudizhuService.js'
+import {
+  applySnakeAction,
+  cancelSnakeInvite,
+  createSnakeInvite,
+  getActiveSnakeMatch,
+  getSnakeMatch,
+  getSnakeSync,
+  leaveSnakeMatch,
+  listSnakeFriends,
+  listSnakeInvites,
+  resignSnakeMatch,
+  respondSnakeInvite,
+  startSnakeMatch,
+} from '../services/gameSnakeService.js'
+import {
+  applyMinesweeperAction,
+  cancelMinesweeperInvite,
+  createMinesweeperInvite,
+  getActiveMinesweeperMatch,
+  getMinesweeperMatch,
+  getMinesweeperSync,
+  leaveMinesweeperMatch,
+  listMinesweeperFriends,
+  listMinesweeperInvites,
+  resignMinesweeperMatch,
+  respondMinesweeperInvite,
+  startMinesweeperMatch,
+} from '../services/gameMinesweeperService.js'
+import {
+  applyJumpAction,
+  cancelJumpInvite,
+  createJumpInvite,
+  getActiveJumpMatch,
+  getJumpMatch,
+  getJumpSync,
+  leaveJumpMatch,
+  listJumpFriends,
+  listJumpInvites,
+  resignJumpMatch,
+  respondJumpInvite,
+  startJumpMatch,
+} from '../services/gameJumpService.js'
 
 /**
- * 游戏联机 REST 路由（挂载于 /api/games）：2048（2–10 人竞速）+ 斗地主（3 人）
+ * 游戏联机 REST 路由（挂载于 /api/games）：
+ *   2048（2–10 人竞速）+ 斗地主（3 人）+ 贪吃蛇（2–8 人大地图）
+ *   + 扫雷（2–4 人轮流点）+ 跳一跳（2–6 人轮流跳）
  *
  * 全部端点要求账号登录令牌（router 内 authenticate 兜底）；没有公开端点。
  * 第三方应用令牌 / 下载票据不可用（全局认证白名单会拒绝 /games/*）。
  *
  * 限流（每用户，未认证回退 IP）：
- *   - 移动：900 次 / 5 分钟（对局中高频操作）
+ *   - 移动 / 动作：900 次 / 5 分钟（对局中高频操作）
  *   - sync：1800 次 / 5 分钟（轮询降级最多 2 秒一次）
  *   - presence：120 次 / 5 分钟（20 秒心跳）
  *   - 其它写操作（邀请 / 响应 / 取消 / 认输）：60 次 / 5 分钟
@@ -284,6 +331,155 @@ router.post('/doudizhu/matches/:id/actions', moveLimiter, (req, res) => {
 router.post('/doudizhu/matches/:id/resign', gameWriteLimiter, (req, res) => {
   const matchId = parseIdParam(req.params.id, '对局 ID')
   res.json(resignDoudizhuMatch(currentUserId(req), matchId))
+})
+
+// ============================================================
+// 贪吃蛇 / 扫雷 / 跳一跳：端点形状完全一致，用同一个工厂挂载
+// ============================================================
+
+/**
+ * 三款后加游戏的 REST 形状与 2048 / 斗地主同构（friends / invites / sync /
+ * presence / matches / start / leave / actions / resign），差异只在动作体，
+ * 因此用泛型 bundle 挂载一次即可，避免 30+ 个 handler 重复。
+ * 2048 与斗地主的既有写法保持原样（它们的 start / moves 形状不同）。
+ */
+interface GameEndpointBundle<A> {
+  /** 路由前缀（如 'snake' → /api/games/snake） */
+  base: string
+  listFriends: (userId: number) => Promise<unknown>
+  listInvites: (userId: number) => unknown
+  createInvite: (userId: number, friendId: number) => Promise<unknown>
+  respondInvite: (userId: number, inviteId: number, action: 'accept' | 'decline') => unknown
+  cancelInvite: (userId: number, inviteId: number) => unknown
+  sync: (userId: number, matchId?: number) => unknown
+  getActiveMatch: (userId: number) => unknown
+  getMatch: (userId: number, matchId: number) => unknown
+  startMatch: (userId: number, matchId: number) => unknown
+  leaveMatch: (userId: number, matchId: number) => unknown
+  applyAction: (userId: number, matchId: number, body: A) => unknown
+  resignMatch: (userId: number, matchId: number) => unknown
+  actionSchema: z.ZodType<A>
+}
+
+function mountGameEndpoints<A>(bundle: GameEndpointBundle<A>): void {
+  const base = `/${bundle.base}`
+
+  router.get(`${base}/friends`, asyncHandler(async (req, res) => {
+    res.json(await bundle.listFriends(currentUserId(req)))
+  }))
+
+  router.get(`${base}/invites`, (req, res) => {
+    res.json(bundle.listInvites(currentUserId(req)))
+  })
+
+  router.post(`${base}/invites`, gameWriteLimiter, asyncHandler(async (req, res) => {
+    const body = parseInput(gameInviteCreateSchema, req.body)
+    res.status(201).json(await bundle.createInvite(currentUserId(req), body.friendId))
+  }))
+
+  router.post(`${base}/invites/:id/respond`, gameWriteLimiter, (req, res) => {
+    const inviteId = parseIdParam(req.params.id, '邀请 ID')
+    const body = parseInput(gameInviteRespondSchema, req.body)
+    res.json(bundle.respondInvite(currentUserId(req), inviteId, body.action))
+  })
+
+  router.delete(`${base}/invites/:id`, gameWriteLimiter, (req, res) => {
+    const inviteId = parseIdParam(req.params.id, '邀请 ID')
+    res.json(bundle.cancelInvite(currentUserId(req), inviteId))
+  })
+
+  router.get(`${base}/sync`, syncLimiter, (req, res) => {
+    const query = parseInput(gameSyncQuerySchema, req.query)
+    res.json(bundle.sync(currentUserId(req), query.matchId))
+  })
+
+  // presence 存储跨游戏共享，三款游戏都只写心跳
+  router.post(`${base}/presence`, presenceLimiter, (req, res) => {
+    markGamePresence(currentUserId(req))
+    res.json({ ok: true, serverTime: nowIso() })
+  })
+
+  // 注意：/matches/active 必须注册在 /matches/:id 之前，否则 "active" 会被当成 id 解析
+  router.get(`${base}/matches/active`, (req, res) => {
+    res.json({ match: bundle.getActiveMatch(currentUserId(req)) })
+  })
+
+  router.get(`${base}/matches/:id`, (req, res) => {
+    const matchId = parseIdParam(req.params.id, '对局 ID')
+    res.json({ match: bundle.getMatch(currentUserId(req), matchId) })
+  })
+
+  router.post(`${base}/matches/:id/start`, gameWriteLimiter, (req, res) => {
+    const matchId = parseIdParam(req.params.id, '对局 ID')
+    res.json(bundle.startMatch(currentUserId(req), matchId))
+  })
+
+  router.post(`${base}/matches/:id/leave`, gameWriteLimiter, (req, res) => {
+    const matchId = parseIdParam(req.params.id, '对局 ID')
+    res.json(bundle.leaveMatch(currentUserId(req), matchId))
+  })
+
+  router.post(`${base}/matches/:id/actions`, moveLimiter, (req, res) => {
+    const matchId = parseIdParam(req.params.id, '对局 ID')
+    const body = parseInput(bundle.actionSchema, req.body)
+    res.json(bundle.applyAction(currentUserId(req), matchId, body))
+  })
+
+  router.post(`${base}/matches/:id/resign`, gameWriteLimiter, (req, res) => {
+    const matchId = parseIdParam(req.params.id, '对局 ID')
+    res.json(bundle.resignMatch(currentUserId(req), matchId))
+  })
+}
+
+mountGameEndpoints({
+  base: 'snake',
+  listFriends: listSnakeFriends,
+  listInvites: listSnakeInvites,
+  createInvite: createSnakeInvite,
+  respondInvite: respondSnakeInvite,
+  cancelInvite: cancelSnakeInvite,
+  sync: getSnakeSync,
+  getActiveMatch: getActiveSnakeMatch,
+  getMatch: getSnakeMatch,
+  startMatch: startSnakeMatch,
+  leaveMatch: leaveSnakeMatch,
+  applyAction: applySnakeAction,
+  resignMatch: resignSnakeMatch,
+  actionSchema: snakeActionSchema,
+})
+
+mountGameEndpoints({
+  base: 'minesweeper',
+  listFriends: listMinesweeperFriends,
+  listInvites: listMinesweeperInvites,
+  createInvite: createMinesweeperInvite,
+  respondInvite: respondMinesweeperInvite,
+  cancelInvite: cancelMinesweeperInvite,
+  sync: getMinesweeperSync,
+  getActiveMatch: getActiveMinesweeperMatch,
+  getMatch: getMinesweeperMatch,
+  startMatch: startMinesweeperMatch,
+  leaveMatch: leaveMinesweeperMatch,
+  applyAction: applyMinesweeperAction,
+  resignMatch: resignMinesweeperMatch,
+  actionSchema: minesweeperActionSchema,
+})
+
+mountGameEndpoints({
+  base: 'jump',
+  listFriends: listJumpFriends,
+  listInvites: listJumpInvites,
+  createInvite: createJumpInvite,
+  respondInvite: respondJumpInvite,
+  cancelInvite: cancelJumpInvite,
+  sync: getJumpSync,
+  getActiveMatch: getActiveJumpMatch,
+  getMatch: getJumpMatch,
+  startMatch: startJumpMatch,
+  leaveMatch: leaveJumpMatch,
+  applyAction: applyJumpAction,
+  resignMatch: resignJumpMatch,
+  actionSchema: jumpActionSchema,
 })
 
 export default router

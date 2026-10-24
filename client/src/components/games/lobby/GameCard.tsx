@@ -1,7 +1,14 @@
 import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
-import type { GameCatalogEntry } from '../../../lib/games/catalog'
+import type { GameCatalogEntry, GameCatalogMode } from '../../../lib/games/catalog'
 import GameCover from './GameCover'
+
+/** 模式徽章文案 */
+const GAME_MODE_LABELS: Record<GameCatalogMode, string> = {
+  single: '单机',
+  local: '同屏双人',
+  online: '好友联机',
+}
 
 /** 大厅卡片形态：精选大卡 / 普通网格卡 / 即将上线占位 */
 export type GameCardVariant = 'featured' | 'grid' | 'soon'
@@ -42,7 +49,7 @@ export default function GameCard({ game, variant, index, isGuest }: GameCardProp
         <div className="gh-games-card-badges">
           {game.modes.map((mode) => (
             <span key={mode} className="gh-badge">
-              {mode === 'single' ? '单机' : '好友联机'}
+              {GAME_MODE_LABELS[mode]}
             </span>
           ))}
           {variant === 'featured' && (

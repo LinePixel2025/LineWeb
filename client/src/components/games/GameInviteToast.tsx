@@ -5,9 +5,16 @@ import UserAvatar from '../UserAvatar'
 import { useAuth } from '../../contexts/AuthContext'
 import { useChat } from '../../contexts/ChatContext'
 import { gameMatchPath, useGame } from '../../contexts/GameContext'
+import { getGameCatalogEntry } from '../../lib/games/catalog'
+import type { GameInvite } from '../../types/game'
 
 const PORTAL_ROOT = document.body
 const INVITE_TTL_SECONDS = 60
+
+/** 提示条里的游戏名（旧邀请缺省 game 时按 2048 处理） */
+function gameNameOf(invite?: Pick<GameInvite, 'game'> | null): string {
+  return getGameCatalogEntry(invite?.game ?? '2048')?.name ?? '2048'
+}
 
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message
@@ -125,9 +132,7 @@ export default function GameInviteToast() {
         <span className="gh-game-toast-eyebrow">
           {showStarted
             ? '对局已开始'
-            : invite?.game === 'doudizhu'
-              ? '斗地主对战邀请'
-              : '2048 对战邀请'}
+            : `${gameNameOf(invite)}对战邀请`}
         </span>
         <button
           type="button"
@@ -149,7 +154,7 @@ export default function GameInviteToast() {
         <div className="gh-game-toast-body">
           <p className="gh-game-toast-text">
             {opponentNames
-              ? `${opponentNames} 与你的${startedMatch?.game === 'doudizhu' ? '斗地主' : '2048'}对局已开始。`
+              ? `${opponentNames} 与你的${gameNameOf(startedMatch)}对局已开始。`
               : '你的对局已开始。'}
           </p>
           <div className="gh-game-toast-actions">
@@ -173,7 +178,7 @@ export default function GameInviteToast() {
               <div className="gh-game-toast-user-copy">
                 <strong className="gh-game-toast-username">{invite.from.username}</strong>
                 <span className="gh-game-toast-desc">
-                  邀请你进行 {invite.game === 'doudizhu' ? '斗地主' : '2048'} 对战
+                  邀请你进行 {gameNameOf(invite)} 对战
                 </span>
               </div>
             </div>

@@ -11,7 +11,10 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "verify:game": "tsx scripts/verify-game2048.ts",
-    "verify:ddz": "tsx scripts/verify-doudizhu.ts"
+    "verify:ddz": "tsx scripts/verify-doudizhu.ts",
+    "verify:snake": "tsx scripts/verify-snake.ts",
+    "verify:minesweeper": "tsx scripts/verify-minesweeper.ts",
+    "verify:jump": "tsx scripts/verify-jump.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -25,6 +25,12 @@ const Game2048Page = lazy(() => import('./pages/games/Game2048Page'))
 const Game2048OnlinePage = lazy(() => import('./pages/games/Game2048OnlinePage'))
 const DoudizhuPage = lazy(() => import('./pages/games/DoudizhuPage'))
 const DoudizhuOnlinePage = lazy(() => import('./pages/games/DoudizhuOnlinePage'))
+const SnakePage = lazy(() => import('./pages/games/SnakePage'))
+const SnakeOnlinePage = lazy(() => import('./pages/games/SnakeOnlinePage'))
+const MinesweeperPage = lazy(() => import('./pages/games/MinesweeperPage'))
+const MinesweeperOnlinePage = lazy(() => import('./pages/games/MinesweeperOnlinePage'))
+const JumpPage = lazy(() => import('./pages/games/JumpPage'))
+const JumpOnlinePage = lazy(() => import('./pages/games/JumpOnlinePage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const DynamicPage = lazy(() => import('./pages/DynamicPage'))
 const DrivePage = lazy(() => import('./pages/DrivePage'))
@@ -124,6 +130,27 @@ export default function App() {
                     } />
                     <Route path="/games/doudizhu/online/:matchId" element={
                       <ProtectedRoute><DoudizhuOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/snake" element={<SnakePage />} />
+                    <Route path="/games/snake/online" element={
+                      <ProtectedRoute><SnakeOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/snake/online/:matchId" element={
+                      <ProtectedRoute><SnakeOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/minesweeper" element={<MinesweeperPage />} />
+                    <Route path="/games/minesweeper/online" element={
+                      <ProtectedRoute><MinesweeperOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/minesweeper/online/:matchId" element={
+                      <ProtectedRoute><MinesweeperOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/jump" element={<JumpPage />} />
+                    <Route path="/games/jump/online" element={
+                      <ProtectedRoute><JumpOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/jump/online/:matchId" element={
+                      <ProtectedRoute><JumpOnlinePage /></ProtectedRoute>
                     } />
                     <Route path="/profile" element={
                       <ProtectedRoute><ProfilePage /></ProtectedRoute>
