@@ -1,38 +1,14 @@
-import { Link } from 'react-router-dom'
+import GameCard from '../components/games/lobby/GameCard'
 import { useAuth } from '../contexts/AuthContext'
-import {
-  COMING_SOON_GAMES,
-  PLAYABLE_GAMES,
-} from '../lib/games/catalog'
+import { COMING_SOON_GAMES, PLAYABLE_GAMES } from '../lib/games/catalog'
 
 /**
- * 游戏大厅：可玩游戏卡片 + 即将上线占位卡片。
- *
- * 可玩游戏全部按目录（PLAYABLE_GAMES）动态渲染：目录里第一个游戏用
- * 精选大卡片样式，其余进网格；新增游戏只需在 catalog 里上架即可出现。
- *
- * 公开页面（不依赖登录态即可访问）；联机入口在未登录时标注「需登录」，
- * 真正的登录校验由各游戏 online 路由的 ProtectedRoute 负责。
+ * 游戏大厅：可玩游戏按目录动态渲染（第一款为精选大卡），其余卡片进网格，
+ * 即将上线为占位卡。公开页面，联机入口在未登录时标注「需登录」。
  */
 export default function GamesPage() {
   const { user } = useAuth()
-  const [featured, ...restPlayable] = PLAYABLE_GAMES
-
-  const renderActions = (route: string | null, onlineRoute: string | null) => (
-    <div className="gh-games-card-actions">
-      {route && (
-        <Link className="gh-btn gh-btn--primary gh-btn--lg" to={route}>
-          单机开始
-        </Link>
-      )}
-      {onlineRoute && (
-        <Link className="gh-btn gh-btn--secondary gh-btn--lg" to={onlineRoute}>
-          好友对战
-          {!user && <span className="gh-games-login-hint">需登录</span>}
-        </Link>
-      )}
-    </div>
-  )
+  const isGuest = !user
 
   return (
     <div className="gh-page-container gh-games-page">
@@ -52,64 +28,21 @@ export default function GamesPage() {
           <span className="gh-badge gh-badge--success">{PLAYABLE_GAMES.length} 款</span>
         </div>
 
-        {featured && (
-          <article className="gh-games-card gh-games-card--featured">
-            <div className="gh-games-card-head">
-              <span className="gh-games-card-icon" aria-hidden="true">
-                {featured.icon}
-              </span>
-              <div className="gh-games-card-copy">
-                <h3 className="gh-games-card-title">{featured.name}</h3>
-                <p className="gh-games-card-desc">{featured.description}</p>
-                <div className="gh-games-card-badges">
-                  {featured.modes.map((mode) => (
-                    <span key={mode} className="gh-badge">
-                      {mode === 'single' ? '单机' : '好友联机'}
-                    </span>
-                  ))}
-                  <span className="gh-badge gh-badge--accent">记录保存在本机</span>
-                </div>
-              </div>
-            </div>
+        <div className="gh-games-grid">
+          {PLAYABLE_GAMES.map((game, index) => (
+            <GameCard
+              key={game.id}
+              game={game}
+              variant={index === 0 ? 'featured' : 'grid'}
+              index={index}
+              isGuest={isGuest}
+            />
+          ))}
+        </div>
 
-            {renderActions(featured.route, featured.onlineRoute)}
-
-            <p className="gh-games-card-meta">
-              联机对战需要登录，并与对方互为好友；无 WebSocket 时自动降级为轮询（约 2–5 秒延迟）。
-            </p>
-          </article>
-        )}
-
-        {restPlayable.length > 0 && (
-          <div className="gh-games-grid">
-            {restPlayable.map((game) => (
-              <article key={game.id} className="gh-games-card">
-                <div className="gh-games-card-head">
-                  <span className="gh-games-card-icon" aria-hidden="true">
-                    {game.icon}
-                  </span>
-                  <div className="gh-games-card-copy">
-                    <h3 className="gh-games-card-title">{game.name}</h3>
-                    <p className="gh-games-card-desc">{game.description}</p>
-                    <div className="gh-games-card-badges">
-                      {game.modes.map((mode) => (
-                        <span key={mode} className="gh-badge">
-                          {mode === 'single' ? '单机' : '好友联机'}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {renderActions(game.route, game.onlineRoute)}
-
-                <p className="gh-games-card-meta">
-                  联机对战需要登录，并与对方互为好友；无 WebSocket 时自动降级为轮询（约 2–5 秒延迟）。
-                </p>
-              </article>
-            ))}
-          </div>
-        )}
+        <p className="gh-games-footnote">
+          联机对战需要登录，并与对方互为好友；无 WebSocket 时自动降级为轮询（约 2–5 秒延迟）。
+        </p>
       </section>
 
       <section className="gh-games-section" aria-labelledby="gh-games-soon-title">
@@ -121,28 +54,14 @@ export default function GamesPage() {
         </div>
 
         <div className="gh-games-grid">
-          {COMING_SOON_GAMES.map((game) => (
-            <article key={game.id} className="gh-games-card gh-games-card--soon" aria-disabled="true">
-              <div className="gh-games-card-head">
-                <span className="gh-games-card-icon" aria-hidden="true">
-                  {game.icon}
-                </span>
-                <div className="gh-games-card-copy">
-                  <h3 className="gh-games-card-title">
-                    {game.name}
-                    <span className="gh-badge gh-badge--warning gh-games-soon-badge">敬请期待</span>
-                  </h3>
-                  <p className="gh-games-card-desc">{game.description}</p>
-                  <div className="gh-games-card-badges">
-                    {game.modes.map((mode) => (
-                      <span key={mode} className="gh-badge">
-                        {mode === 'single' ? '单机' : '联机'}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </article>
+          {COMING_SOON_GAMES.map((game, index) => (
+            <GameCard
+              key={game.id}
+              game={game}
+              variant="soon"
+              index={index}
+              isGuest={isGuest}
+            />
           ))}
         </div>
       </section>

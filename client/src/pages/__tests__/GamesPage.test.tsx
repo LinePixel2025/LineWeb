@@ -69,4 +69,22 @@ describe('GamesPage', () => {
     }
     expect(screen.getAllByText('敬请期待')).toHaveLength(COMING_SOON_GAMES.length)
   })
+
+  it('每张卡片都有游戏化封面，占位卡没有入口链接', () => {
+    const { container } = renderGamesPage()
+
+    expect(container.querySelectorAll('.gh-games-cover')).toHaveLength(
+      PLAYABLE_GAMES.length + COMING_SOON_GAMES.length,
+    )
+
+    const soonCards = container.querySelectorAll('.gh-games-card--soon')
+    expect(soonCards).toHaveLength(COMING_SOON_GAMES.length)
+    soonCards.forEach((card) => {
+      expect(card.querySelectorAll('a')).toHaveLength(0)
+    })
+
+    expect(
+      container.querySelector('.gh-games-card--featured')?.getAttribute('data-game'),
+    ).toBe(PLAYABLE_GAMES[0].id)
+  })
 })
