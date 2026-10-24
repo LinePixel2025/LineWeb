@@ -8,7 +8,7 @@
 import type { DoudizhuCombo } from '../lib/games/doudizhu'
 
 /** 游戏种类（邀请与对局 DTO 的 game 字段；旧邀请缺省视为 2048） */
-export type GameKind = '2048' | 'doudizhu' | 'snake' | 'minesweeper' | 'jump'
+export type GameKind = '2048' | 'doudizhu' | 'snake' | 'minesweeper' | 'jump' | 'minecraft'
 
 /** 2048 移动方向 */
 export type Game2048Direction = 'up' | 'down' | 'left' | 'right'
@@ -228,6 +228,7 @@ export type AnyGameMatch =
   | GameSnakeMatch
   | GameMinesweeperMatch
   | GameJumpMatch
+  | GameMinecraftMatch
 
 /** GET/POST /api/games/doudizhu/* 对局响应 */
 export interface DoudizhuMatchResponse {
@@ -514,4 +515,110 @@ export interface JumpSyncResponse {
   serverTime: string
   invites: GameInvitesResponse
   match: GameJumpMatch | null
+}
+
+// ==================== 我的世界（minecraft，联机共享体素世界） ====================
+
+/** 我的世界对局状态（waiting = 等待房主开始；playing = 共享世界进行中；finished = 已关闭） */
+export type GameMinecraftMatchStatus = 'waiting' | 'playing' | 'finished'
+
+/** 沙盒只有两种结束原因：解散（等待期）/ 废弃（全员离开或全员掉线超时） */
+export type GameMinecraftEndReason = 'cancelled' | 'abandoned'
+
+/** 玩家实时状态（位置为脚底中心坐标，与客户端引擎一致） */
+export interface MinecraftPlayerStateDto {
+  x: number
+  y: number
+  z: number
+  yaw: number
+  pitch: number
+  flying: boolean
+}
+
+/** 我的世界对局中的单个玩家 */
+export interface GameMinecraftPlayer {
+  userId: number
+  username: string
+  online: boolean
+  /** waiting / 从未上报为 null；开始后为最近一次上报的位置快照 */
+  state: MinecraftPlayerStateDto | null
+  joinedAt: string
+}
+
+/** 我的世界对局 DTO（世界由各端按 seed 本地生成；修改日志走增量同步） */
+export interface GameMinecraftMatch {
+  id: number
+  game: 'minecraft'
+  hostId: number
+  status: GameMinecraftMatchStatus
+  version: number
+  /** 等待房间中为 0；开始后为服务端权威 seed */
+  seed: number
+  startedAt: string
+  endedAt: string | null
+  reason: GameMinecraftEndReason | null
+  world: {
+    size: number
+    height: number
+    seaLevel: number
+    spawn: { x: number; y: number; z: number } | null
+  }
+  /** 修改日志水位（单调递增），客户端据此做 since 增量补拉 */
+  editSeq: number
+  editCount: number
+  maxEdits: number
+  players: GameMinecraftPlayer[]
+}
+
+/** 一条已落账的方块修改（WS game:minecraft:edit 与 sync 增量共用） */
+export interface MinecraftEditDto {
+  seq: number
+  x: number
+  y: number
+  z: number
+  b: number
+  userId: number
+}
+
+/** POST /api/games/minecraft/matches/:id/actions 的动作体 */
+export type MinecraftActionBody =
+  | {
+      type: 'state'
+      x: number
+      y: number
+      z: number
+      yaw: number
+      pitch: number
+      flying: boolean
+    }
+  | { type: 'edit'; edits: Array<{ x: number; y: number; z: number; b: number }> }
+
+/** WS 轻量事件：单个玩家的位置快照（发给其他玩家，不含完整对局 DTO） */
+export interface MinecraftStateEvent {
+  type: 'game:minecraft:state'
+  matchId: number
+  userId: number
+  state: MinecraftPlayerStateDto
+}
+
+/** WS 轻量事件：一批新增的方块修改（发给其他玩家） */
+export interface MinecraftEditEvent {
+  type: 'game:minecraft:edit'
+  matchId: number
+  userId: number
+  edits: MinecraftEditDto[]
+}
+
+export interface MinecraftMatchResponse {
+  match: GameMinecraftMatch
+}
+export interface MinecraftActiveMatchResponse {
+  match: GameMinecraftMatch | null
+}
+export interface MinecraftSyncResponse {
+  serverTime: string
+  invites: GameInvitesResponse
+  match: GameMinecraftMatch | null
+  /** 自 since 水位之后的修改日志（match 不存在时为空数组） */
+  edits: MinecraftEditDto[]
 }

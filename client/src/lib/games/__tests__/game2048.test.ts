@@ -507,6 +507,7 @@ describe('catalog：游戏大厅目录', () => {
       'snake',
       'minesweeper',
       'jump',
+      'minecraft',
     ])
     expect(COMING_SOON_GAMES.every((game) => game.status === 'coming-soon')).toBe(true)
     expect(PLAYABLE_GAMES.length + COMING_SOON_GAMES.length).toBe(GAME_CATALOG.length)

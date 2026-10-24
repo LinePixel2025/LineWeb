@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { USER_ROLES } from '../lib/permissions.js'
 import { APP_SCOPES } from '../lib/appScopes.js'
+// 世界尺寸常量来自无依赖的叶子模块（世界生成双端拷贝），不会有循环导入
+import { MC_BLOCK_COUNT, MC_WORLD_HEIGHT, MC_WORLD_SIZE } from '../services/gameMinecraftWorld.js'
 
 function parseCorsOrigins(raw: string | undefined): string | string[] | boolean {
   if (!raw) return 'http://localhost:5173'
@@ -339,4 +341,43 @@ export const minesweeperActionSchema = z.discriminatedUnion('type', [
 export const jumpActionSchema = z.object({
   type: z.literal('jump'),
   chargeMs: z.number().int().min(1).max(2000),
+})
+
+// === 游戏（我的世界体素沙盒联机）Schemas ===
+
+/**
+ * POST /api/games/minecraft/matches/:id/actions —— 状态上报 / 方块编辑
+ * state：玩家位置快照（~2Hz，坐标为脚底中心，允许小越界缓冲便于边界体感）；
+ * edit：一批方块修改（y=0 基岩层在 schema 层就拒绝，越界由服务层再校验）。
+ */
+export const minecraftActionSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('state'),
+    x: z.number().finite().min(-4).max(MC_WORLD_SIZE + 4),
+    y: z.number().finite().min(-4).max(MC_WORLD_HEIGHT + 4),
+    z: z.number().finite().min(-4).max(MC_WORLD_SIZE + 4),
+    yaw: z.number().finite().min(-12.6).max(12.6),
+    pitch: z.number().finite().min(-1.58).max(1.58),
+    flying: z.boolean(),
+  }),
+  z.object({
+    type: z.literal('edit'),
+    edits: z
+      .array(
+        z.object({
+          x: z.number().int().min(0).max(MC_WORLD_SIZE - 1),
+          y: z.number().int().min(1).max(MC_WORLD_HEIGHT - 1),
+          z: z.number().int().min(0).max(MC_WORLD_SIZE - 1),
+          b: z.number().int().min(0).max(MC_BLOCK_COUNT - 1),
+        }),
+      )
+      .min(1)
+      .max(64),
+  }),
+])
+
+/** GET /api/games/minecraft/sync?matchId=&since= —— since 为修改日志水位（增量补拉） */
+export const minecraftSyncQuerySchema = z.object({
+  matchId: z.coerce.number().int().positive().optional(),
+  since: z.coerce.number().int().min(0).max(100_000_000).optional(),
 })

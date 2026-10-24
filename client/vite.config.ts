@@ -27,6 +27,10 @@ export default defineConfig({
           if (id.includes('node_modules/@tanstack/react-query')) {
             return 'query'
           }
+          // three.js（我的世界体素渲染）：只有游戏页懒加载，独立分包避免污染主包
+          if (id.includes('node_modules/three')) {
+            return 'three'
+          }
         },
       },
     },

@@ -10,6 +10,8 @@ import type {
   Game2048Match, AnyGameMatch,
   GameInvite,
   GameInviteRemovalReason,
+  MinecraftEditEvent,
+  MinecraftStateEvent,
 } from './game'
 
 /** 实时传输模式：WebSocket 优先，失败/不支持时降级为 HTTP 轮询 */
@@ -167,6 +169,8 @@ export type ChatServerEvent =
   | { type: 'game:match:started'; match: AnyGameMatch }
   | { type: 'game:match:update'; match: AnyGameMatch }
   | { type: 'game:match:ended'; match: AnyGameMatch }
+  | MinecraftStateEvent
+  | MinecraftEditEvent
   | { type: 'ping' }
   | { type: 'pong' }
 

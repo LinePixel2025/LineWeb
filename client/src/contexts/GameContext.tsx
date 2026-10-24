@@ -26,7 +26,7 @@ import type {
 const INVITE_SWEEP_MS = 1_000
 
 /**
- * 五款游戏的 API 前缀唯一映射（新增游戏时改这里 + catalog + App 路由）。
+ * 六款游戏的 API 前缀唯一映射（新增游戏时改这里 + catalog + App 路由）。
  */
 const GAME_API_BASE: Record<GameKind, string> = {
   '2048': '/games/2048',
@@ -34,6 +34,7 @@ const GAME_API_BASE: Record<GameKind, string> = {
   snake: '/games/snake',
   minesweeper: '/games/minesweeper',
   jump: '/games/jump',
+  minecraft: '/games/minecraft',
 }
 
 /** 需要一并拉取邀请 / 对局状态的全部游戏 */

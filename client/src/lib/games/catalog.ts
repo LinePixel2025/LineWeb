@@ -54,6 +54,10 @@ export const GAME_MINESWEEPER_ONLINE_ROUTE = '/games/minesweeper/online'
 export const GAME_JUMP_ROUTE = '/games/jump'
 /** 跳一跳联机（轮流跳）大厅路由 */
 export const GAME_JUMP_ONLINE_ROUTE = '/games/jump/online'
+/** 我的世界单机路由 */
+export const GAME_MINECRAFT_ROUTE = '/games/minecraft'
+/** 我的世界联机（共享世界）大厅路由 */
+export const GAME_MINECRAFT_ONLINE_ROUTE = '/games/minecraft/online'
 
 /** 大厅完整目录：可玩游戏在前，即将上线占位在后 */
 export const GAME_CATALOG: readonly GameCatalogEntry[] = [
@@ -111,6 +115,17 @@ export const GAME_CATALOG: readonly GameCatalogEntry[] = [
     playable: true,
     route: GAME_JUMP_ROUTE,
     onlineRoute: GAME_JUMP_ONLINE_ROUTE,
+  },
+  {
+    id: 'minecraft',
+    name: '我的世界',
+    description: '三维体素沙盒：程序化地形上挖矿、建造、飞行；单机随时续玩，联机与好友共享同一片世界。',
+    icon: '⛏️',
+    modes: ['single', 'online'],
+    status: 'available',
+    playable: true,
+    route: GAME_MINECRAFT_ROUTE,
+    onlineRoute: GAME_MINECRAFT_ONLINE_ROUTE,
   },
   {
     id: 'gomoku',

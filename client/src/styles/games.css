@@ -157,6 +157,11 @@
   --cover-b: #1f2937;
 }
 
+.gh-games-cover[data-game='minecraft'] {
+  --cover-a: #3e9142;
+  --cover-b: #1e3a1f;
+}
+
 .gh-games-cover::before {
   content: '';
   position: absolute;

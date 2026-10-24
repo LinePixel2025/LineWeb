@@ -31,6 +31,8 @@ const MinesweeperPage = lazy(() => import('./pages/games/MinesweeperPage'))
 const MinesweeperOnlinePage = lazy(() => import('./pages/games/MinesweeperOnlinePage'))
 const JumpPage = lazy(() => import('./pages/games/JumpPage'))
 const JumpOnlinePage = lazy(() => import('./pages/games/JumpOnlinePage'))
+const MinecraftPage = lazy(() => import('./pages/games/MinecraftPage'))
+const MinecraftOnlinePage = lazy(() => import('./pages/games/MinecraftOnlinePage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const DynamicPage = lazy(() => import('./pages/DynamicPage'))
 const DrivePage = lazy(() => import('./pages/DrivePage'))
@@ -151,6 +153,13 @@ export default function App() {
                     } />
                     <Route path="/games/jump/online/:matchId" element={
                       <ProtectedRoute><JumpOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/minecraft" element={<MinecraftPage />} />
+                    <Route path="/games/minecraft/online" element={
+                      <ProtectedRoute><MinecraftOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/minecraft/online/:matchId" element={
+                      <ProtectedRoute><MinecraftOnlinePage /></ProtectedRoute>
                     } />
                     <Route path="/profile" element={
                       <ProtectedRoute><ProfilePage /></ProtectedRoute>

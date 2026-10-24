@@ -14,6 +14,8 @@ import {
   snakeActionSchema,
   minesweeperActionSchema,
   jumpActionSchema,
+  minecraftActionSchema,
+  minecraftSyncQuerySchema,
 } from '../config/index.js'
 import { markGamePresence } from '../services/gamePresence.js'
 import {
@@ -86,6 +88,20 @@ import {
   respondJumpInvite,
   startJumpMatch,
 } from '../services/gameJumpService.js'
+import {
+  applyMinecraftAction,
+  cancelMinecraftInvite,
+  createMinecraftInvite,
+  getActiveMinecraftMatch,
+  getMinecraftMatch,
+  getMinecraftSync,
+  leaveMinecraftMatch,
+  listMinecraftFriends,
+  listMinecraftInvites,
+  resignMinecraftMatch,
+  respondMinecraftInvite,
+  startMinecraftMatch,
+} from '../services/gameMinecraftService.js'
 
 /**
  * 游戏联机 REST 路由（挂载于 /api/games）：
@@ -116,6 +132,19 @@ function userKeyGenerator(req: Request): string {
 const moveLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
   max: 900,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKeyGenerator,
+  message: { error: '操作过于频繁，请稍后再试' },
+})
+
+/**
+ * 我的世界专用动作限流：位置上报 ~2Hz（600/5min）+ 持续挖掘 ~4Hz（1200/5min）
++ 批量编辑叠加，普通游戏的 900/5min 会在几分钟内打满，这里放宽到 3000/5min。
+ */
+const minecraftActionLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 3000,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: userKeyGenerator,
@@ -480,6 +509,80 @@ mountGameEndpoints({
   applyAction: applyJumpAction,
   resignMatch: resignJumpMatch,
   actionSchema: jumpActionSchema,
+})
+
+// ============================================================
+// 我的世界（体素沙盒，2–8 人共享世界）：形状与工厂不同（sync 带 since
+// 增量水位、leave 在进行中也允许、无 resign 语义差异），手动挂载
+// ============================================================
+
+router.get('/minecraft/friends', asyncHandler(async (req, res) => {
+  res.json(await listMinecraftFriends(currentUserId(req)))
+}))
+
+router.get('/minecraft/invites', (req, res) => {
+  res.json(listMinecraftInvites(currentUserId(req)))
+})
+
+router.post('/minecraft/invites', gameWriteLimiter, asyncHandler(async (req, res) => {
+  const body = parseInput(gameInviteCreateSchema, req.body)
+  res.status(201).json(await createMinecraftInvite(currentUserId(req), body.friendId))
+}))
+
+router.post('/minecraft/invites/:id/respond', gameWriteLimiter, (req, res) => {
+  const inviteId = parseIdParam(req.params.id, '邀请 ID')
+  const body = parseInput(gameInviteRespondSchema, req.body)
+  res.json(respondMinecraftInvite(currentUserId(req), inviteId, body.action))
+})
+
+router.delete('/minecraft/invites/:id', gameWriteLimiter, (req, res) => {
+  const inviteId = parseIdParam(req.params.id, '邀请 ID')
+  res.json(cancelMinecraftInvite(currentUserId(req), inviteId))
+})
+
+// sync 的 since 参数是修改日志水位（增量补拉；不传则不返回 edits，供邀请轮询轻量使用）
+router.get('/minecraft/sync', syncLimiter, (req, res) => {
+  const query = parseInput(minecraftSyncQuerySchema, req.query)
+  res.json(getMinecraftSync(currentUserId(req), query.matchId, query.since))
+})
+
+router.post('/minecraft/presence', presenceLimiter, (req, res) => {
+  markGamePresence(currentUserId(req))
+  res.json({ ok: true, serverTime: nowIso() })
+})
+
+// 注意：/matches/active 必须注册在 /matches/:id 之前，否则 "active" 会被当成 id 解析
+router.get('/minecraft/matches/active', (req, res) => {
+  res.json({ match: getActiveMinecraftMatch(currentUserId(req)) })
+})
+
+router.get('/minecraft/matches/:id', (req, res) => {
+  const matchId = parseIdParam(req.params.id, '对局 ID')
+  res.json({ match: getMinecraftMatch(currentUserId(req), matchId) })
+})
+
+router.post('/minecraft/matches/:id/start', gameWriteLimiter, (req, res) => {
+  const matchId = parseIdParam(req.params.id, '对局 ID')
+  res.json(startMinecraftMatch(currentUserId(req), matchId))
+})
+
+// 沙盒世界允许随时离开（房主离开会把房主位移交给剩余玩家）
+router.post('/minecraft/matches/:id/leave', gameWriteLimiter, (req, res) => {
+  const matchId = parseIdParam(req.params.id, '对局 ID')
+  res.json(leaveMinecraftMatch(currentUserId(req), matchId))
+})
+
+// 状态上报 / 方块编辑（沙盒没有回合与胜负；响应形状按动作类型区分）
+router.post('/minecraft/matches/:id/actions', minecraftActionLimiter, (req, res) => {
+  const matchId = parseIdParam(req.params.id, '对局 ID')
+  const body = parseInput(minecraftActionSchema, req.body)
+  res.json(applyMinecraftAction(currentUserId(req), matchId, body))
+})
+
+// 与其他游戏保持端点形状一致（沙盒没有认输语义，行为与 leave 相同）
+router.post('/minecraft/matches/:id/resign', gameWriteLimiter, (req, res) => {
+  const matchId = parseIdParam(req.params.id, '对局 ID')
+  res.json(resignMinecraftMatch(currentUserId(req), matchId))
 })
 
 export default router

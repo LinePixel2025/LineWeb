@@ -114,6 +114,9 @@ const apiLimiterSkipPaths = [
   /^\/games\/jump\/matches\/\d+\/actions\/?$/,
   /^\/games\/jump\/sync\/?$/,
   /^\/games\/jump\/presence\/?$/,
+  /^\/games\/minecraft\/matches\/\d+\/actions\/?$/,
+  /^\/games\/minecraft\/sync\/?$/,
+  /^\/games\/minecraft\/presence\/?$/,
 ]
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -366,6 +369,23 @@ app.get('/api', (_req, res) => {
       resign: { method: 'POST', path: '/api/games/jump/matches/:id/resign', auth: true, description: '认输：自己出局（分数保留），其余继续' },
       rules: '跳一跳（对齐微信小游戏逻辑）：蓄力时长线性映射跳跃距离（≤2000ms → ≤260 逻辑单位），落点相对目标盒中心的偏移 |offset| ≤ size×0.30 判定正中靶心、≤ size 判定命中。命中 +1 分，连续正中按 2/4/8/16/32 翻倍（第 5 次起封顶 32），非中心命中清空连击；落空（short/long）即淘汰。好友轮流各跳一次、走同一条盒子路线，最后存活者获胜（last_standing），6 分钟内全淘汰或超时按分数判定（并列平局）；回合 20 秒未跳则自动以极小蓄力起跳（必落空，forfeit）。盒子序列由 seed 确定性生成并按需续写。单机模式为纯前端玩法，不走这些端点。',
       ws: '实时推送复用 /ws/chat：game:match:started/update/ended（match.game === "jump"，lastResult 带 kind/gained/offset/scoreAfter/comboAfter）。无 WebSocket 时 POST /presence + GET /sync 轮询降级。',
+    },
+    minecraft: {
+      friends: { method: 'GET', path: '/api/games/minecraft/friends', auth: true, description: '我的世界好友大厅：好友列表（online / inMatch 覆盖全部游戏）' },
+      invites: { method: 'GET', path: '/api/games/minecraft/invites', auth: true, description: '收到/发出的我的世界邀请（60 秒有效；invite 带 game:"minecraft"）' },
+      inviteCreate: { method: 'POST', path: '/api/games/minecraft/invites', auth: true, description: '邀请好友加入共享世界等待房间（body: {friendId}；2–8 人）' },
+      inviteRespond: { method: 'POST', path: '/api/games/minecraft/invites/:id/respond', auth: true, description: '接受/拒绝邀请（body: {action:"accept"|"decline"}）' },
+      inviteCancel: { method: 'DELETE', path: '/api/games/minecraft/invites/:id', auth: true, description: '取消自己发出的邀请' },
+      sync: { method: 'GET', path: '/api/games/minecraft/sync?matchId=&since=', auth: true, description: '轮询降级：serverTime + 邀请 + 当前/指定世界 + 自 since 水位之后的方块修改（增量）' },
+      presence: { method: 'POST', path: '/api/games/minecraft/presence', auth: true, description: '轮询降级心跳（与 2048 共用 presence TTL 存储）' },
+      activeMatch: { method: 'GET', path: '/api/games/minecraft/matches/active', auth: true, description: '当前等待房间或进行中世界（无则 match: null）' },
+      matchDetail: { method: 'GET', path: '/api/games/minecraft/matches/:id', auth: true, description: '房间/世界详情（含 seed 与出生点；非参与者 404）' },
+      start: { method: 'POST', path: '/api/games/minecraft/matches/:id/start', auth: true, description: '房主开始世界（2–8 人；服务端生成权威 seed 与出生点，各端按 seed 本地生成同一世界）' },
+      leave: { method: 'POST', path: '/api/games/minecraft/matches/:id/leave', auth: true, description: '离开房间/世界（等待与进行中都允许；房主离开进行中的世界会把房主位移交出去；最后一人离开世界关闭）' },
+      action: { method: 'POST', path: '/api/games/minecraft/matches/:id/actions', auth: true, description: 'state：玩家位置快照上报（~2Hz，服务端转发其他人）；edit：一批方块修改（≤64 格/次，y=0 基岩层拒绝，追加修改日志并转发）；限流 3000/5min/用户（专用限流，位置+挖掘叠加需要更高配额）' },
+      resign: { method: 'POST', path: '/api/games/minecraft/matches/:id/resign', auth: true, description: '与其他游戏端点形状一致（沙盒没有认输语义，行为与 leave 相同）' },
+      rules: '我的世界好友联机（共享体素沙盒，没有胜负与回合）：世界 192×192×64，由权威 seed 在各端确定性生成（服务端只存 seed + 方块修改日志 + 玩家快照）。方块修改带增量 seq，断线用 sync?since= 补拉；单个世界最多 30000 条修改。掉线不淘汰，掉线超过 10 分钟移出世界，全员掉线 10 分钟后世界按 abandoned 关闭。单机模式为纯前端玩法（存档在浏览器 localStorage），不走这些端点。',
+      ws: '实时推送复用 /ws/chat：game:match:started/update/ended（match.game === "minecraft"）之外，还有轻量事件 game:minecraft:state（单人位置快照）与 game:minecraft:edit（新增方块修改），都不携带完整对局 DTO。无 WebSocket 时 POST /presence + GET /sync?since= 轮询降级（位置 2 秒一拍，画面为跳步而非补间）。',
     },
   })
 })

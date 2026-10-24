@@ -1,0 +1,597 @@
+/**
+ * 我的世界（体素沙盒）样式 —— 命名空间 .gh-mc-*
+ *
+ * 依赖 games.css 的通用类（.gh-games-*、.gh-game-*、.gh-btn 等），本文件不 import 其他 CSS。
+ * 布局要点：游戏舞台占满视口高度（3D 全屏画布），HUD 元素绝对定位悬浮其上；
+ * 菜单 / 物品栏 / 暂停菜单为半透明遮罩 + 居中卡片，像素风贴图由引擎程序化生成。
+ */
+
+/* === 单机主菜单 === */
+
+.gh-mc-page {
+  min-height: 100vh;
+}
+
+.gh-mc-menu {
+  display: flex;
+  justify-content: center;
+  padding: 48px 16px 64px;
+  background:
+    linear-gradient(180deg, rgba(142, 202, 252, 0.14), transparent 55%),
+    var(--gh-canvas-inset, transparent);
+}
+
+.gh-mc-menu-card {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 28px;
+  border: 1px solid var(--gh-border-default, #d0d7de);
+  border-radius: 12px;
+  background: var(--gh-canvas-default, #fff);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+
+.gh-mc-menu-title {
+  margin: 0;
+  font-size: 28px;
+  text-align: center;
+}
+
+.gh-mc-menu-subtitle {
+  margin: 0 0 8px;
+  color: var(--gh-fg-muted, #57606a);
+  text-align: center;
+  font-size: 14px;
+}
+
+.gh-mc-menu-btn {
+  width: 100%;
+  padding: 10px 16px;
+  font-size: 15px;
+  border: 1px solid var(--gh-border-default, #d0d7de);
+  border-radius: 8px;
+  background: var(--gh-canvas-subtle, #f6f8fa);
+  color: var(--gh-fg-default, #1f2328);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.gh-mc-menu-btn:hover {
+  background: var(--gh-canvas-inset, #eaeef2);
+}
+
+.gh-mc-menu-btn--primary {
+  background: #3e9142;
+  border-color: #35793a;
+  color: #fff;
+  font-weight: 600;
+}
+
+.gh-mc-menu-btn--primary:hover {
+  background: #35793a;
+}
+
+.gh-mc-menu-btn--danger {
+  background: transparent;
+  border-color: rgba(207, 34, 46, 0.4);
+  color: #cf222e;
+}
+
+.gh-mc-menu-btn--danger:hover {
+  background: rgba(207, 34, 46, 0.08);
+}
+
+.gh-mc-menu-new {
+  display: flex;
+  gap: 8px;
+}
+
+.gh-mc-menu-input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  font-size: 14px;
+  border: 1px solid var(--gh-border-default, #d0d7de);
+  border-radius: 8px;
+  background: var(--gh-canvas-default, #fff);
+  color: var(--gh-fg-default, #1f2328);
+}
+
+.gh-mc-menu-links {
+  display: flex;
+  justify-content: space-between;
+  margin: 4px 0;
+}
+
+.gh-mc-menu-link {
+  color: var(--gh-accent-fg, #0969da);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.gh-mc-menu-link:hover {
+  text-decoration: underline;
+}
+
+.gh-mc-menu-help {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border: 1px dashed var(--gh-border-default, #d0d7de);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--gh-fg-muted, #57606a);
+  line-height: 1.6;
+}
+
+/* === 生成中 / 全屏容器 === */
+
+.gh-mc-full {
+  /* 3D 游戏全屏覆盖（fixed 盖住导航/侧栏，z-index 高于页头 300、低于邀请 Toast 1300） */
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  padding: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+  /* 100dvh 兜底移动端地址栏收缩导致的视口误差 */
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: #0b1026;
+}
+
+.gh-mc-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 60vh;
+  color: var(--gh-fg-muted, #57606a);
+}
+
+.gh-mc-loading--dark {
+  height: 100vh;
+  color: #e6edf3;
+  background: #0b1026;
+}
+
+.gh-mc-loading p {
+  margin: 0;
+  font-size: 15px;
+}
+
+/* === 游戏舞台 === */
+
+.gh-mc-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #8ecafc;
+}
+
+.gh-mc-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+  cursor: crosshair;
+}
+
+/* 准星（十字） */
+.gh-mc-crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  mix-blend-mode: difference;
+}
+
+.gh-mc-crosshair::before,
+.gh-mc-crosshair::after {
+  content: '';
+  position: absolute;
+  background: #fff;
+}
+
+.gh-mc-crosshair::before {
+  left: 50%;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  transform: translateX(-50%);
+}
+
+.gh-mc-crosshair::after {
+  top: 50%;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  transform: translateY(-50%);
+}
+
+/* 返回按钮（左上角悬浮） */
+.gh-mc-back {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 30;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+
+.gh-mc-back:hover {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+/* === 调试浮层（F3） === */
+
+.gh-mc-debug {
+  position: absolute;
+  top: 56px;
+  left: 12px;
+  z-index: 20;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #e6edf3;
+  font-family: var(--gh-font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.7;
+  pointer-events: none;
+  white-space: pre;
+}
+
+/* === 快捷栏 === */
+
+.gh-mc-hotbar {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(4px);
+}
+
+.gh-mc-hotbar-slot {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  padding: 4px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+}
+
+.gh-mc-hotbar-slot img {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  display: block;
+}
+
+.gh-mc-hotbar-slot--active {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.gh-mc-hotbar-num {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.75);
+  pointer-events: none;
+}
+
+/* === 遮罩（物品栏 / 暂停菜单） === */
+
+.gh-mc-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.gh-mc-palette {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(70vh, 560px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 12px;
+  background: #3a3a3c;
+  border: 2px solid #5b5b5f;
+  color: #e6edf3;
+  overflow: auto;
+}
+
+.gh-mc-palette-title {
+  font-weight: 600;
+}
+
+.gh-mc-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.gh-mc-palette-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px;
+  border: 1px solid #5b5b5f;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.gh-mc-palette-item:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.gh-mc-palette-item img {
+  width: 40px;
+  height: 40px;
+  image-rendering: pixelated;
+}
+
+.gh-mc-palette-close {
+  align-self: center;
+  padding: 8px 20px;
+  border-radius: 8px;
+  border: 1px solid #5b5b5f;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  cursor: pointer;
+}
+
+.gh-mc-palette-close:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* === 暂停菜单 === */
+
+.gh-mc-pause {
+  width: min(380px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px;
+  border-radius: 12px;
+  background: #3a3a3c;
+  border: 2px solid #5b5b5f;
+  color: #e6edf3;
+}
+
+.gh-mc-pause-title {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.gh-mc-pause-btn {
+  width: 100%;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid #5b5b5f;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.gh-mc-pause-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.gh-mc-pause-btn--primary {
+  background: #3e9142;
+  border-color: #35793a;
+  font-weight: 600;
+}
+
+.gh-mc-pause-btn--primary:hover {
+  background: #35793a;
+}
+
+.gh-mc-pause-btn--danger {
+  color: #ff8183;
+  border-color: rgba(207, 34, 46, 0.5);
+}
+
+.gh-mc-pause-btn--danger:hover {
+  background: rgba(207, 34, 46, 0.15);
+}
+
+.gh-mc-pause-help {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: rgba(230, 237, 243, 0.65);
+  text-align: center;
+}
+
+/* === 触屏控件 === */
+
+.gh-mc-touch-joystick {
+  position: absolute;
+  left: 20px;
+  bottom: 90px;
+  z-index: 25;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.25);
+  touch-action: none;
+}
+
+.gh-mc-touch-stick {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.gh-mc-touch-look {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 55%;
+  height: 70%;
+  z-index: 15;
+  touch-action: none;
+}
+
+.gh-mc-touch-actions {
+  position: absolute;
+  right: 14px;
+  bottom: 90px;
+  z-index: 25;
+  display: grid;
+  grid-template-columns: repeat(2, 56px);
+  gap: 8px;
+}
+
+.gh-mc-touch-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.gh-mc-touch-btn:active {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.gh-mc-touch-btn--wide {
+  grid-column: span 2;
+  width: 100%;
+  border-radius: 28px;
+}
+
+/* === 联机：座位与关闭结算 === */
+
+.gh-mc-seat-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.gh-mc-seat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--gh-border-default, #d0d7de);
+  border-radius: 8px;
+  background: var(--gh-canvas-subtle, #f6f8fa);
+}
+
+.gh-mc-seat--me {
+  border-color: var(--gh-accent-emphasis, #0969da);
+}
+
+.gh-mc-seat-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gh-mc-seat-name {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gh-mc-seat-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--gh-fg-muted, #57606a);
+}
+
+.gh-mc-closed {
+  text-align: center;
+  padding: 48px 16px;
+}
+
+.gh-mc-closed-meta {
+  margin: 8px 0 16px;
+  font-size: 13px;
+  color: var(--gh-fg-muted, #57606a);
+}
+
+/* 窄屏适配 */
+@media (max-width: 640px) {
+  .gh-mc-hotbar-slot {
+    width: 36px;
+    height: 36px;
+  }
+
+  .gh-mc-menu-new {
+    flex-direction: column;
+  }
+
+  .gh-mc-touch-joystick {
+    width: 96px;
+    height: 96px;
+    bottom: 76px;
+  }
+
+  .gh-mc-touch-actions {
+    bottom: 76px;
+  }
+}
