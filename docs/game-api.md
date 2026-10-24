@@ -666,14 +666,90 @@ cd client && npx vitest run src/lib/games/__tests__/jump.test.ts
 
 ---
 
-# 六、跨游戏互斥与新增游戏清单
+# 六、我的世界（minecraft）单机 / 好友联机共享世界
+
+## 1. 概述
+
+三维体素沙盒（three.js 渲染，致敬像素沙盒玩法；**全部贴图为程序化生成的原创素材**，不含任何第三方版权资源）。
+
+- **世界 192×192×64**（12×12 个 16×16 区块），由 seed 确定性生成：值噪声高度场（基准 18 + fBm，海平面 24）
+  + 三维噪声洞穴 + 分层矿石（煤/铁/钻石）+ 湖泊沙滩 + 雪顶（≥45）+ 确定性撒树。
+- **单机**纯前端（引擎 `client/src/lib/games/minecraft.ts` + 渲染 `minecraftScene.ts`）：
+  创造式玩法（即时挖掘、无限方块、双击空格飞行）、10 分钟昼夜循环、程序化云层、
+  WASD + 指针锁定（触屏有虚拟摇杆/按钮）、F3 调试浮层；存档（seed + 修改 + 位置 + 快捷栏）
+  自动写 localStorage（`lineweb-mc-sp-v1`），不走任何后端端点。
+- **好友联机（2–8 人）**：等待房间 → 房主开局 → 服务端生成权威 seed 与出生点 →
+  **各端本地生成同一世界**（服务端不存世界，只存修改日志与玩家快照）。没有胜负与回合，
+  世界一直存在直到全员离开/掉线超时。
+
+## 2. 引擎常量（双端唯一真相源，两份拷贝必须逐字一致）
+
+```
+MC_WORLD_SIZE = 192   MC_WORLD_HEIGHT = 64   MC_CHUNK_SIZE = 16   MC_SEA_LEVEL = 24
+MC_SNOW_HEIGHT = 45   MC_TREE_DENSITY = 0.006   MC_MAX_EDIT_BATCH = 64   MC_MAX_WORLD_EDITS = 30000
+玩家：宽 0.6 高 1.8 眼高 1.62   重力 32/s²   跳跃 9.0   步行 4.317   疾跑 5.612   飞行 10.92   触及 4.5
+```
+
+**双端对齐兜底**：`client/src/lib/games/minecraft.ts`（完整引擎）与
+`server/src/services/gameMinecraftWorld.ts`（世界生成子集）为同拷贝文件，
+两侧测试断言同一批 seed 的世界哈希（`20261024 → 96adcfaa`、`1 → a98a7e50`、
+`4294967295 → 3267f19b`）与出生点常量（`20261024 → (96.5, 40.01, 96.5)`）——
+改任何生成参数都会同时打红两侧测试，防止「同一 seed 生成不同世界」的联机分叉。
+
+## 3. REST 端点（前缀 `/api/games/minecraft`）
+
+形状与扫雷等同构（friends / invites / sync / presence / matches / start / leave / actions），
+差异：
+
+- `GET /sync?matchId=&since=`：`since` 为修改日志水位，返回**自 since 之后的增量修改**（二分查找）；
+  轮询降级与断线补拉共用。match DTO 含 `seed / world.spawn / editSeq / editCount / maxEdits`，
+  **不含世界数据与日志本体**。
+- `POST /matches/:id/actions` 两种动作体：
+  - `{ "type": "state", x, y, z, yaw, pitch, flying }`：玩家位置快照（客户端 ~2Hz 上报）。
+    服务端只更新内存快照并转发给其他玩家（轻量事件），**不递增 version、不广播完整 DTO**；
+  - `{ "type": "edit", edits: [{x,y,z,b}] }`（≤64 格/批）：追加修改日志（seq 递增）并转发其他玩家。
+    y=0（基岩层）在 zod schema 层即拒绝；与世界最新值相同的修改幂等跳过；
+    总修改数达 30000 后 409。
+- `POST /matches/:id/leave` 在**等待与进行中都允许**（其他游戏开局后只能 resign）：
+  普通玩家移出世界；房主离开进行中的世界会把房主位移交给剩余玩家；最后一人离开世界关闭。
+- 限流豁免（全局 600/15min 外）：`/matches/:id/actions`（900/5min/用户）、`/sync`（1800/5min）、
+  `/presence`（120/5min）。
+
+## 4. WebSocket 事件（复用 `/ws/chat`）
+
+标准三件套之外新增两个**轻量事件**（都不携带完整对局 DTO）：
+
+- `game:minecraft:state  { matchId, userId, state }`：单个玩家的位置快照（发给其他人）；
+- `game:minecraft:edit   { matchId, userId, edits }`：一批新增修改（发给其他人，发送者自己不收）。
+
+无 WebSocket 降级：位置与修改随 `sync?since=` 每 2 秒一拍（位置为跳步而非补间），
+presence 心跳与其他游戏共用（TTL 90s）。掉线**不淘汰**：掉线超 10 分钟被移出世界，
+全员掉线 10 分钟 → `abandoned` 关闭（结束后原参与者仍可在保留期内读取结果）。
+
+## 5. 客户端同步模型（乐观）
+
+- 本地操作立即生效（引擎 + 场景），随后批量（150ms 窗口、≤64/批）上送；
+- 远端修改经 WS 事件 / sync 增量到达，按 seq 水位去重（服务端不回发自己提交的修改）；
+- 远端玩家：以最近一次上报的位置做插值（含走路摆腿、头部俯仰），盒子小人配色由 userId 哈希决定。
+
+## 6. 自检
+
+```bash
+cd server && npm run verify:minecraft   # 世界生成确定性/哈希常量 + 房间/编辑/掉线/上限（52 断言）
+cd client && npx vitest run src/lib/games/__tests__/minecraft.test.ts   # 14 用例（双端哈希对齐兜底在这里）
+```
+
+---
+
+# 七、跨游戏互斥与新增游戏清单
 
 - 所有游戏的房间/邀请都通过 `gameService.registerGameModule({ name, isUserInMatch, sweep })`
   注册进同一张表，`isUserBusyInOtherGames(userId, selfName)` 是**跨游戏互斥的唯一口径**
   （`selfName` 用于排除自己，这样已在自家等待房间的人仍可继续邀请好友）；
   2048 自己也注册了一个探针（`sweep` 为空操作，避免主 sweeper 自我递归）。
 - 新增一款游戏需要同时改：`server/src/config/index.ts`（动作 schema）、
-  `server/src/routes/games.ts`（用 `mountGameEndpoints({ base: '<id>', ... })` 一行挂载）、
+  `server/src/routes/games.ts`（用 `mountGameEndpoints({ base: '<id>', ... })` 一行挂载；
+  端点形状有差异时（如我的世界 sync 带 `since` 水位、leave 语义不同）则手动挂载）、
   `server/src/index.ts`（`apiLimiterSkipPaths` 三条豁免 + `/api` 自描述条目）、
   `client/src/types/game.ts`、`client/src/lib/games/catalog.ts`、`client/src/App.tsx`（路由）、
   `client/src/contexts/GameContext.tsx`（`GAME_API_BASE` 映射）、`client/src/styles/globals.css`（CSS import）。
