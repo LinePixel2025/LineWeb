@@ -68,19 +68,19 @@ export function DoudizhuCardView({
       disabled={!clickable}
       onClick={clickable ? () => onClick(card) : undefined}
     >
-      <span className="gh-ddz-card-corner gh-ddz-card-corner--tl" aria-hidden="true">
-        <span className="gh-ddz-card-rank">{rank}</span>
-        <span className="gh-ddz-card-suit">{suit}</span>
-      </span>
-      <span
-        className={`gh-ddz-card-pip${joker ? ' gh-ddz-card-pip--joker' : ''}`}
-        aria-hidden="true"
-      >
-        {joker ? '✦' : suit}
-      </span>
-      <span className="gh-ddz-card-corner gh-ddz-card-corner--br" aria-hidden="true">
-        <span className="gh-ddz-card-rank">{rank}</span>
-        <span className="gh-ddz-card-suit">{suit}</span>
+      {/* 命中区固定在原位，只有牌面视觉上抬，避免选中后点原位置落空 */}
+      <span className="gh-ddz-card-face" aria-hidden="true">
+        <span className="gh-ddz-card-corner gh-ddz-card-corner--tl">
+          <span className="gh-ddz-card-rank">{rank}</span>
+          <span className="gh-ddz-card-suit">{suit}</span>
+        </span>
+        <span className={`gh-ddz-card-pip${joker ? ' gh-ddz-card-pip--joker' : ''}`}>
+          {joker ? '✦' : suit}
+        </span>
+        <span className="gh-ddz-card-corner gh-ddz-card-corner--br">
+          <span className="gh-ddz-card-rank">{rank}</span>
+          <span className="gh-ddz-card-suit">{suit}</span>
+        </span>
       </span>
     </button>
   )

@@ -524,6 +524,8 @@
   padding: 14px 0 6px;
 }
 
+/* 按钮本身只负责命中区，牌面作为子元素单独上抬：
+   选中后原位置仍然可点，避免“点回去取消不了” */
 .gh-ddz-card {
   position: relative;
   width: 72px;
@@ -531,15 +533,26 @@
   flex: none;
   margin-left: var(--ddz-overlap);
   z-index: 1;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ddz-ink);
+  font-family: var(--gh-font);
+  cursor: default;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.gh-ddz-card-face {
+  position: absolute;
+  inset: 0;
   border-radius: var(--ddz-r-card);
   border: 1px solid rgba(0, 0, 0, 0.14);
   background: linear-gradient(168deg, #ffffff 0%, #f4f7fa 62%, #e9eef3 100%);
   box-shadow:
     inset 0 1px 0 #fff,
     0 4px 10px rgba(0, 0, 0, 0.32);
-  color: var(--ddz-ink);
-  font-family: var(--gh-font);
-  cursor: default;
   transition:
     transform 0.14s var(--ddz-ease),
     box-shadow 0.14s var(--ddz-ease),
@@ -556,7 +569,7 @@
   color: var(--ddz-card-red);
 }
 
-.gh-ddz-card--joker {
+.gh-ddz-card--joker .gh-ddz-card-face {
   background: linear-gradient(168deg, #fffdf5 0%, #f8f1dd 62%, #eee3c9 100%);
 }
 
@@ -565,7 +578,7 @@
 }
 
 @media (hover: hover) {
-  .gh-ddz-card--clickable:hover {
+  .gh-ddz-card--clickable:not(.gh-ddz-card--selected):hover .gh-ddz-card-face {
     transform: translateY(-8px);
     box-shadow:
       inset 0 1px 0 #fff,
@@ -574,7 +587,7 @@
 }
 
 /* 选中只做抬高；不提升 z-index，让后一张牌始终盖在右侧，角标不会被遮挡 */
-.gh-ddz-card--selected {
+.gh-ddz-card--selected .gh-ddz-card-face {
   transform: translateY(-18px);
   border-color: #d9a520;
   box-shadow:
@@ -1241,12 +1254,8 @@
     scrollbar-width: thin;
   }
 
-  .gh-ddz-card--selected {
+  .gh-ddz-card--selected .gh-ddz-card-face {
     transform: translateY(-12px);
-  }
-
-  .gh-ddz-card--clickable:hover {
-    transform: translateY(-8px);
   }
 
   .gh-ddz-gamebar-title {
@@ -1387,14 +1396,18 @@
     justify-content: safe center;
     overflow-x: auto;
     overflow-y: hidden;
-    min-height: 72px;
-    padding: 14px 4px 2px;
+    min-height: 76px;
+    padding: 18px 4px 2px;
   }
 
   .gh-ddz-card {
     --ddz-overlap: -15px;
     width: 46px;
     height: 62px;
+  }
+
+  .gh-ddz-card--selected .gh-ddz-card-face {
+    transform: translateY(-12px);
   }
 
   .gh-ddz-card-corner--tl {
@@ -1454,7 +1467,7 @@
 /* ===== 减少动态效果 ===== */
 
 @media (prefers-reduced-motion: reduce) {
-  .gh-ddz-card,
+  .gh-ddz-card-face,
   .gh-ddz-play-slot,
   .gh-ddz-pot-cards,
   .gh-ddz-seat--active,
@@ -1465,7 +1478,7 @@
     animation: none;
   }
 
-  .gh-ddz-card {
+  .gh-ddz-card-face {
     transition: none;
   }
 }
