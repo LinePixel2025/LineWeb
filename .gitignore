@@ -67,3 +67,6 @@ scripts/lineweb-screen-time-read-api.md
 scripts/time-master-guide.md
 deploy-package.tar.gz
 client/admin-new.png
+
+# 低内存服务器部署用的前端产物快照（由本地 npm run build 产出，传给 ECS，不进仓库）
+client-dist/

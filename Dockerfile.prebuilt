@@ -1,0 +1,48 @@
+# ============================================================
+# LineWeb Docker 镜像 — 使用**外部已构建好的前端产物**（低内存服务器部署用）
+#
+# 与 Dockerfile 的唯一差别：不在镜像里跑 `npx vite build`，
+# 而是直接取仓库根的 client-dist/（由本地 npm run build 产出后传上来）。
+#
+# 为什么需要它：生产 ECS 只有 1.6GB 内存 + 2G swap，且同机还跑着其他容器。
+# Stage 1 的 `npm ci` + `vite build` 内存峰值约 1.2GB，会把整机拖进 swap 抖动，
+# 连累 1Panel 面板与其他站点一起失联（compose 的 deploy.resources.limits
+# 只限制运行期容器，管不住构建过程）。把打包挪到本地后，服务器侧构建峰值
+# 只剩 server 端 npm ci（约 300MB）。
+#
+# 用法（在 /opt/lineweb 下）：
+#   docker build -f Dockerfile.prebuilt -t lineweb-server:latest .
+#   docker compose up -d            # 不带 --build，直接用刚打好的 tag
+#
+# 产物来源（本地 Windows）：
+#   cd client && npm run build
+#   tar czf - dist | ssh root@ECS 'mkdir -p /opt/lineweb/client-dist && tar xzf - -C /opt/lineweb/client-dist --strip-components=1'
+#
+# 注意：client-dist 不在 .dockerignore 里（被忽略的是 client/dist），
+#       且已在 .gitignore 中，不进仓库。
+# ============================================================
+
+FROM node:22-alpine
+WORKDIR /app/server
+
+# bash: entrypoint 脚本依赖
+RUN apk add --no-cache bash
+
+# 安装 server 生产依赖（tsx + prisma CLI 均在 dependencies 中）
+COPY server/package.json server/package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# 复制 server 源码、Prisma schema、脚本
+COPY server/ ./
+
+# 前端产物（供 Express 在生产模式下 serve）
+COPY client-dist/ /app/client/dist
+
+# 入口脚本
+COPY server/scripts/docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENV NODE_ENV=production
+EXPOSE 3001
+
+ENTRYPOINT ["docker-entrypoint.sh"]
