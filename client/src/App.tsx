@@ -33,6 +33,8 @@ const JumpPage = lazy(() => import('./pages/games/JumpPage'))
 const JumpOnlinePage = lazy(() => import('./pages/games/JumpOnlinePage'))
 const MinecraftPage = lazy(() => import('./pages/games/MinecraftPage'))
 const MinecraftOnlinePage = lazy(() => import('./pages/games/MinecraftOnlinePage'))
+const GomokuPage = lazy(() => import('./pages/games/GomokuPage'))
+const GomokuOnlinePage = lazy(() => import('./pages/games/GomokuOnlinePage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const DynamicPage = lazy(() => import('./pages/DynamicPage'))
 const DrivePage = lazy(() => import('./pages/DrivePage'))
@@ -160,6 +162,13 @@ export default function App() {
                     } />
                     <Route path="/games/minecraft/online/:matchId" element={
                       <ProtectedRoute><MinecraftOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/gomoku" element={<GomokuPage />} />
+                    <Route path="/games/gomoku/online" element={
+                      <ProtectedRoute><GomokuOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/gomoku/online/:matchId" element={
+                      <ProtectedRoute><GomokuOnlinePage /></ProtectedRoute>
                     } />
                     <Route path="/profile" element={
                       <ProtectedRoute><ProfilePage /></ProtectedRoute>

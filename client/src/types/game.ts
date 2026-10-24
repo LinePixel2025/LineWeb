@@ -8,7 +8,7 @@
 import type { DoudizhuCombo } from '../lib/games/doudizhu'
 
 /** 游戏种类（邀请与对局 DTO 的 game 字段；旧邀请缺省视为 2048） */
-export type GameKind = '2048' | 'doudizhu' | 'snake' | 'minesweeper' | 'jump' | 'minecraft'
+export type GameKind = '2048' | 'doudizhu' | 'snake' | 'minesweeper' | 'jump' | 'minecraft' | 'gomoku'
 
 /** 2048 移动方向 */
 export type Game2048Direction = 'up' | 'down' | 'left' | 'right'
@@ -229,6 +229,7 @@ export type AnyGameMatch =
   | GameMinesweeperMatch
   | GameJumpMatch
   | GameMinecraftMatch
+  | GameGomokuMatch
 
 /** GET/POST /api/games/doudizhu/* 对局响应 */
 export interface DoudizhuMatchResponse {
@@ -479,6 +480,69 @@ export interface GameJumpMatch {
 /** POST /api/games/jump/matches/:id/actions 的动作体（蓄力毫秒数） */
 export type JumpActionBody = { type: 'jump'; chargeMs: number }
 
+// ==================== 五子棋（gomoku，联机轮流落子） ====================
+
+export type GameGomokuPlayerStatus = 'waiting' | 'playing' | 'won' | 'lost'
+export type GameGomokuMatchStatus = 'waiting' | 'playing' | 'finished'
+
+/** 五子棋对局结束原因 */
+export type GameGomokuEndReason =
+  | 'five'
+  | 'resign'
+  | 'forfeit'
+  | 'timeout'
+  | 'draw'
+  | 'cancelled'
+
+/** 最近一手（auto = 回合超时由服务端托管落下） */
+export interface GomokuLastMoveDto {
+  userId: number
+  x: number
+  y: number
+  color: 1 | 2
+  auto: boolean
+}
+
+/** 五子棋联机中的单个玩家（座位 0 执黑、座位 1 执白） */
+export interface GameGomokuPlayer {
+  userId: number
+  username: string
+  online: boolean
+  status: GameGomokuPlayerStatus
+  /** 执子颜色：1 黑 / 2 白；等待房间中为 null */
+  color: 1 | 2 | null
+  /** 已落子手数 */
+  moves: number
+}
+
+/** 五子棋对局 DTO：15×15 无禁手、棋盘全量可见（board 下标 = y×15+x） */
+export interface GameGomokuMatch {
+  id: number
+  game: 'gomoku'
+  hostId: number
+  status: GameGomokuMatchStatus
+  version: number
+  startedAt: string
+  endsAt: string
+  endedAt: string | null
+  winnerId: number | null
+  reason: GameGomokuEndReason | null
+  /** 棋盘边长（恒 15） */
+  boardSize: number
+  /** 一维棋盘（0 空 1 黑 2 白，长度 225，无隐藏信息全量下发） */
+  board: number[]
+  /** 非 playing 状态固定为 null */
+  turn: { userId: number; deadline: string } | null
+  lastMove: GomokuLastMoveDto | null
+  /** 获胜连线（含 ≥5 长连），reason = 'five' 结束时才有 */
+  winningLine: Array<{ x: number; y: number }> | null
+  /** 按座位顺序（座位 0 = 房主 = 黑） */
+  players: GameGomokuPlayer[]
+}
+
+/** POST /api/games/gomoku/matches/:id/actions 的动作体（落子坐标） */
+export type GomokuActionBody = { type: 'place'; x: number; y: number }
+
 // ==================== 通用对局响应（新游戏复用同一形状） ====================
 
 export interface SnakeMatchResponse {
@@ -515,6 +579,18 @@ export interface JumpSyncResponse {
   serverTime: string
   invites: GameInvitesResponse
   match: GameJumpMatch | null
+}
+
+export interface GomokuMatchResponse {
+  match: GameGomokuMatch
+}
+export interface GomokuActiveMatchResponse {
+  match: GameGomokuMatch | null
+}
+export interface GomokuSyncResponse {
+  serverTime: string
+  invites: GameInvitesResponse
+  match: GameGomokuMatch | null
 }
 
 // ==================== 我的世界（minecraft，联机共享体素世界） ====================

@@ -1,0 +1,655 @@
+/* =============================================================
+   LineWeb — 五子棋（单机人机 / 好友轮流联机）
+   命名空间：.gh-gmk-*
+   依赖 variables.css 的 --gh-* 令牌与 games.css 的通用游戏大厅类
+   （.gh-games-page / .gh-game-room* / .gh-game-list-state / .gh-btn 等），
+   本文件只负责五子棋自己的视觉，不 import 其他 CSS。
+   ============================================================= */
+
+:root {
+  /* 木纹棋盘（亮色主题：暖米黄） */
+  --gh-gmk-wood: #f0d9a7;
+  --gh-gmk-wood-deep: #e3c58c;
+  --gh-gmk-line: rgba(66, 47, 22, 0.55);
+  --gh-gmk-star: rgba(66, 47, 22, 0.85);
+  --gh-gmk-black-stone: radial-gradient(circle at 32% 28%, #6b6b6b 0%, #2b2b2b 45%, #050505 100%);
+  --gh-gmk-white-stone: radial-gradient(circle at 32% 28%, #ffffff 0%, #f1f1f1 55%, #cfcfcf 100%);
+  --gh-gmk-white-stone-edge: rgba(60, 50, 30, 0.55);
+  --gh-gmk-hover-preview: rgba(66, 47, 22, 0.22);
+  --gh-gmk-win-ring: #d4a017;
+  --gh-gmk-mark-on-black: #f5f5f5;
+  --gh-gmk-mark-on-white: #333333;
+}
+
+[data-theme="dark"] {
+  /* 木纹棋盘（暗色主题：压暗并提亮线条保证对比度） */
+  --gh-gmk-wood: #4a3b28;
+  --gh-gmk-wood-deep: #3c2f20;
+  --gh-gmk-line: rgba(240, 225, 190, 0.4);
+  --gh-gmk-star: rgba(240, 225, 190, 0.75);
+  --gh-gmk-black-stone: radial-gradient(circle at 32% 28%, #7a7a7a 0%, #303030 45%, #0a0a0a 100%);
+  --gh-gmk-white-stone: radial-gradient(circle at 32% 28%, #ffffff 0%, #ececec 55%, #bdbdbd 100%);
+  --gh-gmk-white-stone-edge: rgba(240, 225, 190, 0.5);
+  --gh-gmk-hover-preview: rgba(240, 225, 190, 0.28);
+  --gh-gmk-win-ring: #ffd35c;
+  --gh-gmk-mark-on-black: #f5f5f5;
+  --gh-gmk-mark-on-white: #222222;
+}
+
+/* ===== 页面外壳 ===== */
+
+.gh-gmk-page,
+.gh-gmk-online {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-4);
+}
+
+.gh-gmk-header-actions,
+.gh-gmk-online-actions,
+.gh-gmk-guest-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+}
+
+/* ===== 单机工具条与状态 ===== */
+
+.gh-gmk-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+}
+
+.gh-gmk-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+.gh-gmk-toolbar-label {
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-gmk-status {
+  margin: 0;
+  font-size: var(--gh-text-md);
+  font-weight: var(--gh-font-weight-semibold, 600);
+  color: var(--gh-text-primary);
+}
+
+.gh-gmk-status--won {
+  color: var(--gh-success);
+}
+
+.gh-gmk-status--lost {
+  color: var(--gh-danger);
+}
+
+.gh-gmk-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-4);
+  flex-wrap: wrap;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-gmk-stats-item strong {
+  color: var(--gh-text-primary);
+}
+
+/* ===== 棋盘（交叉点网格：木底 + 渐变线 + 星位覆盖层） ===== */
+
+.gh-gmk-stage {
+  align-self: center;
+  max-width: 100%;
+}
+
+.gh-gmk-stage--live .gh-gmk-board {
+  box-shadow: 0 0 0 2px var(--gh-gmk-win-ring);
+}
+
+.gh-gmk-board-wrap {
+  position: relative;
+}
+
+.gh-gmk-board {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--gh-gmk-size, 15), var(--gh-gmk-cell, 34px));
+  padding: calc(var(--gh-gmk-cell, 34px) / 2);
+  background:
+    radial-gradient(circle at 20% 15%, var(--gh-gmk-wood) 0%, var(--gh-gmk-wood-deep) 100%);
+  border: 1px solid var(--gh-gmk-line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  width: fit-content;
+  max-width: 100%;
+}
+
+/* 网格线：从半格处起、每格一条 1px 线，与按钮中心对齐 */
+.gh-gmk-board::before {
+  content: '';
+  position: absolute;
+  inset: calc(var(--gh-gmk-cell, 34px) / 2);
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      var(--gh-gmk-line) 0,
+      var(--gh-gmk-line) 1px,
+      transparent 1px,
+      transparent var(--gh-gmk-cell, 34px)
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      var(--gh-gmk-line) 0,
+      var(--gh-gmk-line) 1px,
+      transparent 1px,
+      transparent var(--gh-gmk-cell, 34px)
+    );
+  pointer-events: none;
+}
+
+/* 星位（天元 + 四星）：绝对定位覆盖层，坐标 = 下标 * 格 + 半格 */
+.gh-gmk-stars {
+  position: absolute;
+  inset: calc(var(--gh-gmk-cell, 34px) / 2);
+  pointer-events: none;
+}
+
+.gh-gmk-star {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gh-gmk-star);
+  transform: translate(-50%, -50%);
+}
+
+/* ===== 交叉点按钮与棋子 ===== */
+
+.gh-gmk-point {
+  position: relative;
+  width: var(--gh-gmk-cell, 34px);
+  height: var(--gh-gmk-cell, 34px);
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: default;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gh-gmk-point::after {
+  /* 棋子本体：空点时隐藏 */
+  content: '';
+  width: 86%;
+  height: 86%;
+  border-radius: 50%;
+  background: transparent;
+  transition: transform 0.12s ease;
+}
+
+.gh-gmk-point--black::after {
+  background: var(--gh-gmk-black-stone);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+
+.gh-gmk-point--white::after {
+  background: var(--gh-gmk-white-stone);
+  border: 1px solid var(--gh-gmk-white-stone-edge);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.22);
+}
+
+/* 轮到落子时空点的可点态与悬停预览 */
+.gh-gmk-point--clickable {
+  cursor: pointer;
+}
+
+.gh-gmk-point--clickable:hover::after {
+  background: var(--gh-gmk-hover-preview);
+  box-shadow: inset 0 0 0 1px var(--gh-gmk-line);
+}
+
+.gh-gmk-point--clickable:focus-visible {
+  outline: 2px solid var(--gh-accent, #0969da);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
+/* 获胜连线高亮 */
+.gh-gmk-point--win::after {
+  box-shadow:
+    0 0 0 2px var(--gh-gmk-win-ring),
+    0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* 最后一手标记（与棋子颜色相反的小点） */
+.gh-gmk-point-mark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22%;
+  height: 22%;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.gh-gmk-point--black .gh-gmk-point-mark {
+  background: var(--gh-gmk-mark-on-black);
+}
+
+.gh-gmk-point--white .gh-gmk-point-mark {
+  background: var(--gh-gmk-mark-on-white);
+}
+
+/* 小号棋子（回合条 / 计分板用） */
+.gh-gmk-stone-mini {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.gh-gmk-stone-mini--black {
+  background: var(--gh-gmk-black-stone);
+}
+
+.gh-gmk-stone-mini--white {
+  background: var(--gh-gmk-white-stone);
+  border: 1px solid var(--gh-gmk-white-stone-edge);
+}
+
+/* ===== 回合条 ===== */
+
+.gh-gmk-turn-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 8px;
+  background: var(--gh-canvas-subtle, var(--gh-bg-subtle, #f6f8fa));
+}
+
+.gh-gmk-turn-bar[data-side='me'] {
+  border-color: var(--gh-gmk-win-ring);
+}
+
+.gh-gmk-turn-label {
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-gmk-turn-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: var(--gh-font-weight-semibold, 600);
+  color: var(--gh-text-primary);
+}
+
+.gh-gmk-turn-countdown {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--gh-font-weight-semibold, 600);
+  color: var(--gh-text-primary);
+}
+
+.gh-gmk-turn-countdown--low {
+  color: var(--gh-danger);
+}
+
+.gh-gmk-turn-hint {
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-gmk-turn-badge {
+  background: var(--gh-gmk-win-ring);
+  color: #24292f;
+}
+
+/* ===== 联机双栏布局 ===== */
+
+.gh-gmk-online-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: var(--gh-space-4);
+  align-items: start;
+}
+
+.gh-gmk-online-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+  min-width: 0;
+}
+
+.gh-gmk-online-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+}
+
+.gh-gmk-online-heading {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .gh-gmk-online-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.gh-gmk-locked-hint,
+.gh-gmk-auto-hint,
+.gh-gmk-broadcast {
+  margin: 0;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-gmk-auto-hint {
+  color: var(--gh-attention, #9a6700);
+}
+
+/* ===== 等待房间座位 ===== */
+
+.gh-gmk-seat-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+}
+
+.gh-gmk-seat {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  padding: 10px 12px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 8px;
+}
+
+.gh-gmk-seat--me {
+  border-color: var(--gh-accent, #0969da);
+}
+
+.gh-gmk-seat--empty {
+  opacity: 0.6;
+  border-style: dashed;
+}
+
+.gh-gmk-seat-stone {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.gh-gmk-seat-stone--black {
+  background: var(--gh-gmk-black-stone);
+}
+
+.gh-gmk-seat-stone--white {
+  background: var(--gh-gmk-white-stone);
+  border: 1px solid var(--gh-gmk-white-stone-edge);
+}
+
+.gh-gmk-seat-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gh-gmk-seat-name {
+  font-weight: var(--gh-font-weight-semibold, 600);
+  color: var(--gh-text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gh-gmk-seat-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+/* ===== 计分板 ===== */
+
+.gh-gmk-scoreboard {
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 8px;
+  padding: var(--gh-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+}
+
+.gh-gmk-scoreboard-title {
+  margin: 0;
+  font-size: var(--gh-text-md);
+  font-weight: var(--gh-font-weight-semibold, 600);
+}
+
+.gh-gmk-scoreboard-countdown {
+  margin: 0;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-gmk-scoreboard-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+}
+
+.gh-gmk-scoreboard-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  padding: 8px 10px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 8px;
+}
+
+.gh-gmk-scoreboard-row--turn {
+  border-color: var(--gh-gmk-win-ring);
+}
+
+.gh-gmk-scoreboard-row--out {
+  opacity: 0.65;
+}
+
+.gh-gmk-scoreboard-row--me {
+  border-color: var(--gh-accent, #0969da);
+}
+
+.gh-gmk-scoreboard-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.gh-gmk-scoreboard-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: var(--gh-font-weight-semibold, 600);
+  color: var(--gh-text-primary);
+}
+
+.gh-gmk-scoreboard-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-gmk-scoreboard-numbers {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.gh-gmk-scoreboard-score {
+  font-size: var(--gh-text-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-gmk-scoreboard-split {
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-gmk-scoreboard-foot {
+  margin: 0;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-tertiary);
+}
+
+/* ===== 结算遮罩 ===== */
+
+.gh-gmk-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 8px;
+  z-index: 5;
+}
+
+.gh-gmk-overlay-card {
+  background: var(--gh-canvas-default, var(--gh-bg, #fff));
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 12px;
+  padding: var(--gh-space-4);
+  max-width: min(420px, 92%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  text-align: center;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+}
+
+.gh-gmk-overlay-eyebrow {
+  margin: 0;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-gmk-overlay-title {
+  margin: 0;
+  font-size: var(--gh-text-2xl, 28px);
+  color: var(--gh-text-primary);
+}
+
+.gh-gmk-overlay-title--win {
+  color: var(--gh-success);
+}
+
+.gh-gmk-overlay-title--draw {
+  color: var(--gh-text-secondary);
+}
+
+.gh-gmk-overlay-detail {
+  margin: 0;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-gmk-overlay-actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+  margin-top: var(--gh-space-2);
+}
+
+.gh-gmk-result-list {
+  list-style: none;
+  margin: var(--gh-space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  text-align: left;
+}
+
+.gh-gmk-result-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+}
+
+.gh-gmk-result-name {
+  font-weight: var(--gh-font-weight-semibold, 600);
+  color: var(--gh-text-primary);
+}
+
+.gh-gmk-result-meta {
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+/* ===== 大厅规则提示 ===== */
+
+.gh-gmk-lobby-tips,
+.gh-gmk-guest {
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 8px;
+  padding: var(--gh-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+}
+
+.gh-gmk-lobby-tips-title {
+  margin: 0;
+  font-size: var(--gh-text-md);
+  font-weight: var(--gh-font-weight-semibold, 600);
+}
+
+.gh-gmk-lobby-tips-list {
+  margin: 0;
+  padding-left: 1.25em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-1);
+  color: var(--gh-text-secondary);
+}
+
+/* 窄屏：棋盘允许缩到 18px 交叉点，仍保持正方形 */
+@media (max-width: 480px) {
+  .gh-gmk-turn-bar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--gh-space-1);
+  }
+}

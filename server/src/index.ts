@@ -117,6 +117,9 @@ const apiLimiterSkipPaths = [
   /^\/games\/minecraft\/matches\/\d+\/actions\/?$/,
   /^\/games\/minecraft\/sync\/?$/,
   /^\/games\/minecraft\/presence\/?$/,
+  /^\/games\/gomoku\/matches\/\d+\/actions\/?$/,
+  /^\/games\/gomoku\/sync\/?$/,
+  /^\/games\/gomoku\/presence\/?$/,
 ]
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -386,6 +389,23 @@ app.get('/api', (_req, res) => {
       resign: { method: 'POST', path: '/api/games/minecraft/matches/:id/resign', auth: true, description: '与其他游戏端点形状一致（沙盒没有认输语义，行为与 leave 相同）' },
       rules: '我的世界好友联机（共享体素沙盒，没有胜负与回合）：世界 192×192×64，由权威 seed 在各端确定性生成（服务端只存 seed + 方块修改日志 + 玩家快照）。方块修改带增量 seq，断线用 sync?since= 补拉；单个世界最多 30000 条修改。掉线不淘汰，掉线超过 10 分钟移出世界，全员掉线 10 分钟后世界按 abandoned 关闭。单机模式为纯前端玩法（存档在浏览器 localStorage），不走这些端点。',
       ws: '实时推送复用 /ws/chat：game:match:started/update/ended（match.game === "minecraft"）之外，还有轻量事件 game:minecraft:state（单人位置快照）与 game:minecraft:edit（新增方块修改），都不携带完整对局 DTO。无 WebSocket 时 POST /presence + GET /sync?since= 轮询降级（位置 2 秒一拍，画面为跳步而非补间）。',
+    },
+    gomoku: {
+      friends: { method: 'GET', path: '/api/games/gomoku/friends', auth: true, description: '五子棋好友大厅：好友列表（online / inMatch 覆盖全部游戏）' },
+      invites: { method: 'GET', path: '/api/games/gomoku/invites', auth: true, description: '收到/发出的五子棋邀请（60 秒有效；invite 带 game:"gomoku"）' },
+      inviteCreate: { method: 'POST', path: '/api/games/gomoku/invites', auth: true, description: '邀请好友加入五子棋等待房间（body: {friendId}；恰好 2 人；返回 invite + match）' },
+      inviteRespond: { method: 'POST', path: '/api/games/gomoku/invites/:id/respond', auth: true, description: '接受/拒绝邀请（body: {action:"accept"|"decline"}；接受成功返回 match）' },
+      inviteCancel: { method: 'DELETE', path: '/api/games/gomoku/invites/:id', auth: true, description: '取消自己发出的邀请' },
+      sync: { method: 'GET', path: '/api/games/gomoku/sync?matchId=', auth: true, description: '轮询降级：serverTime + 邀请 + 当前/指定对局（棋盘全量可见，无隐藏信息）' },
+      presence: { method: 'POST', path: '/api/games/gomoku/presence', auth: true, description: '轮询降级心跳（与 2048 共用 presence TTL 存储）' },
+      activeMatch: { method: 'GET', path: '/api/games/gomoku/matches/active', auth: true, description: '当前等待房间或轮到你落子的对局（无则 match: null）' },
+      matchDetail: { method: 'GET', path: '/api/games/gomoku/matches/:id', auth: true, description: '房间/对局详情（含棋盘、回合与最后一手；非参与者 404）' },
+      start: { method: 'POST', path: '/api/games/gomoku/matches/:id/start', auth: true, description: '房主开始对局（恰好 2 人；房主 = 座位 0 执黑先行，另一位执白；15×15 空盘，回合 60 秒、全局 30 分钟）' },
+      leave: { method: 'POST', path: '/api/games/gomoku/matches/:id/leave', auth: true, description: '离开等待房间；房主离开即解散（reason: cancelled；已开局请用 resign）' },
+      action: { method: 'POST', path: '/api/games/gomoku/matches/:id/actions', auth: true, description: '轮流落子（body: {type:"place", x:0-14, y:0-14}）；连五及以上即胜（含长连，无禁手），下满平局；回合 60 秒超时由服务端自动托管落子（lastMove.auto=true）；非当前回合 409；限流 900/5min/用户' },
+      resign: { method: 'POST', path: '/api/games/gomoku/matches/:id/resign', auth: true, description: '认输：对方获胜' },
+      rules: '五子棋好友联机（2 人轮流落子）：15×15 标准棋盘、无禁手 freestyle（连成五子及以上即胜，长连同样获胜），棋盘下满且无人连五为平局。房主执黑先行；回合 60 秒，超时自动托管落子（不淘汰）；掉线超过 120 秒且对方在线判负（forfeit）；全局 30 分钟超时未分胜负按平局结算（timeout）。棋盘无隐藏信息，DTO 全量下发（board 为 225 长一维数组，下标 = y×15+x）。单机模式为纯前端人机对战（AI 与服务端托管共用同一引擎），不走这些端点。',
+      ws: '实时推送复用 /ws/chat：game:match:started/update/ended（match.game === "gomoku"），无专用轻量事件（落子频率低，全量 DTO 足够）。无 WebSocket 时 POST /presence + GET /sync 轮询降级。',
     },
   })
 })

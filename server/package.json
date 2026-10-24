@@ -15,7 +15,8 @@
     "verify:snake": "tsx scripts/verify-snake.ts",
     "verify:minesweeper": "tsx scripts/verify-minesweeper.ts",
     "verify:jump": "tsx scripts/verify-jump.ts",
-    "verify:minecraft": "tsx scripts/verify-minecraft.ts"
+    "verify:minecraft": "tsx scripts/verify-minecraft.ts",
+    "verify:gomoku": "tsx scripts/verify-gomoku.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

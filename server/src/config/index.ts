@@ -381,3 +381,15 @@ export const minecraftSyncQuerySchema = z.object({
   matchId: z.coerce.number().int().positive().optional(),
   since: z.coerce.number().int().min(0).max(100_000_000).optional(),
 })
+
+// === 游戏（五子棋好友联机，轮流落子）Schemas ===
+
+/**
+ * POST /api/games/gomoku/matches/:id/actions —— 在空交叉点落子
+ * x 为列、y 为行（0–14，15×15 棋盘）；占用已有点由服务层再校验并返回 400。
+ */
+export const gomokuActionSchema = z.object({
+  type: z.literal('place'),
+  x: z.number().int().min(0).max(14),
+  y: z.number().int().min(0).max(14),
+})

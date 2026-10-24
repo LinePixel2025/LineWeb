@@ -67,7 +67,8 @@ describe('GamesPage', () => {
     for (const game of COMING_SOON_GAMES) {
       expect(screen.getByRole('heading', { level: 3, name: new RegExp(game.name) })).toBeInTheDocument()
     }
-    expect(screen.getAllByText('敬请期待')).toHaveLength(COMING_SOON_GAMES.length)
+    // 当前目录可能没有占位游戏：queryAllByText 兼容空列表
+    expect(screen.queryAllByText('敬请期待')).toHaveLength(COMING_SOON_GAMES.length)
   })
 
   it('每张卡片都有游戏化封面，占位卡没有入口链接', () => {

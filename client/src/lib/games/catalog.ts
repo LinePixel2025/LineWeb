@@ -58,6 +58,10 @@ export const GAME_JUMP_ONLINE_ROUTE = '/games/jump/online'
 export const GAME_MINECRAFT_ROUTE = '/games/minecraft'
 /** 我的世界联机（共享世界）大厅路由 */
 export const GAME_MINECRAFT_ONLINE_ROUTE = '/games/minecraft/online'
+/** 五子棋单机（人机对战）路由 */
+export const GAME_GOMOKU_ROUTE = '/games/gomoku'
+/** 五子棋联机（轮流落子）大厅路由 */
+export const GAME_GOMOKU_ONLINE_ROUTE = '/games/gomoku/online'
 
 /** 大厅完整目录：可玩游戏在前，即将上线占位在后 */
 export const GAME_CATALOG: readonly GameCatalogEntry[] = [
@@ -130,13 +134,13 @@ export const GAME_CATALOG: readonly GameCatalogEntry[] = [
   {
     id: 'gomoku',
     name: '五子棋',
-    description: '在棋盘上率先连成五子即可获胜，支持好友对局。即将上线。',
+    description: '15×15 经典连五对弈：黑先白后轮流落子，率先连成五子获胜；支持单机人机练习与好友联机。',
     icon: '⚫',
-    modes: ['online'],
-    status: 'coming-soon',
-    playable: false,
-    route: null,
-    onlineRoute: null,
+    modes: ['single', 'online'],
+    status: 'available',
+    playable: true,
+    route: GAME_GOMOKU_ROUTE,
+    onlineRoute: GAME_GOMOKU_ONLINE_ROUTE,
   },
 ]
 

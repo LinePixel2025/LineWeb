@@ -463,9 +463,9 @@ describe('确定性', () => {
 })
 
 describe('catalog：游戏大厅目录', () => {
-  it('包含 2048 / 斗地主 / 贪吃蛇 / 扫雷 / 跳一跳与 1 个即将上线占位游戏', () => {
+  it('包含 2048 / 斗地主 / 贪吃蛇 / 扫雷 / 跳一跳 / 我的世界 / 五子棋（占位可留空）', () => {
     expect(GAME_CATALOG.length).toBeGreaterThanOrEqual(5)
-    expect(GAME_CATALOG.length).toBeLessThanOrEqual(7)
+    expect(GAME_CATALOG.length).toBeLessThanOrEqual(9)
 
     const first = GAME_CATALOG[0]
     expect(first.id).toBe('2048')
@@ -479,7 +479,7 @@ describe('catalog：游戏大厅目录', () => {
     expect(first.onlineRoute).toBe('/games/2048/online')
 
     const placeholders = GAME_CATALOG.filter((game) => game.status === 'coming-soon')
-    expect(placeholders.length).toBeGreaterThanOrEqual(1)
+    expect(placeholders.length).toBeGreaterThanOrEqual(0)
     expect(placeholders.length).toBeLessThanOrEqual(3)
     for (const game of placeholders) {
       expect(game.status).toBe('coming-soon')
@@ -508,6 +508,7 @@ describe('catalog：游戏大厅目录', () => {
       'minesweeper',
       'jump',
       'minecraft',
+      'gomoku',
     ])
     expect(COMING_SOON_GAMES.every((game) => game.status === 'coming-soon')).toBe(true)
     expect(PLAYABLE_GAMES.length + COMING_SOON_GAMES.length).toBe(GAME_CATALOG.length)
@@ -517,7 +518,7 @@ describe('catalog：游戏大厅目录', () => {
     expect(getGameCatalogEntry('2048')?.name).toBe('2048')
     expect(getGameCatalogEntry('not-exist')).toBeUndefined()
     expect(isGamePlayable('2048')).toBe(true)
-    expect(isGamePlayable('gomoku')).toBe(false)
+    expect(isGamePlayable('gomoku')).toBe(true)
     expect(isGamePlayable('not-exist')).toBe(false)
   })
 })

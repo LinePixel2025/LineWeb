@@ -16,6 +16,7 @@ import {
   jumpActionSchema,
   minecraftActionSchema,
   minecraftSyncQuerySchema,
+  gomokuActionSchema,
 } from '../config/index.js'
 import { markGamePresence } from '../services/gamePresence.js'
 import {
@@ -102,11 +103,25 @@ import {
   respondMinecraftInvite,
   startMinecraftMatch,
 } from '../services/gameMinecraftService.js'
+import {
+  applyGomokuAction,
+  cancelGomokuInvite,
+  createGomokuInvite,
+  getActiveGomokuMatch,
+  getGomokuMatch,
+  getGomokuSync,
+  leaveGomokuMatch,
+  listGomokuFriends,
+  listGomokuInvites,
+  resignGomokuMatch,
+  respondGomokuInvite,
+  startGomokuMatch,
+} from '../services/gameGomokuService.js'
 
 /**
  * 游戏联机 REST 路由（挂载于 /api/games）：
  *   2048（2–10 人竞速）+ 斗地主（3 人）+ 贪吃蛇（2–8 人大地图）
- *   + 扫雷（2–4 人轮流点）+ 跳一跳（2–6 人轮流跳）
+ *   + 扫雷（2–4 人轮流点）+ 跳一跳（2–6 人轮流跳）+ 五子棋（2 人轮流落子）
  *
  * 全部端点要求账号登录令牌（router 内 authenticate 兜底）；没有公开端点。
  * 第三方应用令牌 / 下载票据不可用（全局认证白名单会拒绝 /games/*）。
@@ -509,6 +524,23 @@ mountGameEndpoints({
   applyAction: applyJumpAction,
   resignMatch: resignJumpMatch,
   actionSchema: jumpActionSchema,
+})
+
+mountGameEndpoints({
+  base: 'gomoku',
+  listFriends: listGomokuFriends,
+  listInvites: listGomokuInvites,
+  createInvite: createGomokuInvite,
+  respondInvite: respondGomokuInvite,
+  cancelInvite: cancelGomokuInvite,
+  sync: getGomokuSync,
+  getActiveMatch: getActiveGomokuMatch,
+  getMatch: getGomokuMatch,
+  startMatch: startGomokuMatch,
+  leaveMatch: leaveGomokuMatch,
+  applyAction: applyGomokuAction,
+  resignMatch: resignGomokuMatch,
+  actionSchema: gomokuActionSchema,
 })
 
 // ============================================================
