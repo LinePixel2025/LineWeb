@@ -94,16 +94,34 @@ export interface DoudizhuMiniCardsProps {
 /** 小牌行：桌面出牌记录、明示底牌等紧凑展示 */
 export function DoudizhuMiniCards({ cards, ariaLabel }: DoudizhuMiniCardsProps) {
   const sorted = sortDoudizhuCards(cards)
+  const label = ariaLabel
+    ? `${ariaLabel}：${sorted.map(doudizhuCardLabel).join(' ')}`
+    : sorted.map(doudizhuCardLabel).join(' ')
+
   return (
-    <span className="gh-ddz-mini-cards" role="img" aria-label={ariaLabel}>
-      {sorted.map((card) => (
-        <span
-          key={card.id}
-          className={`gh-ddz-mini-card${isDoudizhuRedCard(card) ? ' gh-ddz-mini-card--red' : ''}`}
-        >
-          {doudizhuCardLabel(card)}
-        </span>
-      ))}
+    <span className="gh-ddz-mini-cards" role="img" aria-label={label}>
+      {sorted.map((card) => {
+        const joker = isJoker(card)
+        const { rank, suit } = cornerContent(card)
+        return (
+          <span
+            key={card.id}
+            className={[
+              'gh-ddz-mini-card',
+              isDoudizhuRedCard(card) ? 'gh-ddz-mini-card--red' : '',
+              joker ? 'gh-ddz-mini-card--joker' : '',
+            ].filter(Boolean).join(' ')}
+          >
+            <span className="gh-ddz-mini-card-corner" aria-hidden="true">
+              <span className="gh-ddz-mini-card-rank">{rank}</span>
+              <span className="gh-ddz-mini-card-suit">{suit}</span>
+            </span>
+            <span className="gh-ddz-mini-card-pip" aria-hidden="true">
+              {joker ? '✦' : suit}
+            </span>
+          </span>
+        )
+      })}
     </span>
   )
 }

@@ -118,12 +118,16 @@ function PlaySlot({ action, bid }: { action: DoudizhuSeatInfo['lastAction']; bid
         ? `bid-${bid}`
         : 'empty'
 
+  const hasCards = action !== null && action !== 'pass'
+
   return (
     <div className="gh-ddz-play-slot" key={slotKey}>
       {bid !== null && <span className="gh-ddz-bubble gh-ddz-bubble--bid">{bid}</span>}
       {action === 'pass' && <span className="gh-ddz-bubble">不要</span>}
-      {action && action !== 'pass' && (
-        <DoudizhuMiniCards cards={action.cards} ariaLabel="出牌" />
+      {hasCards && (
+        <span className="gh-ddz-play-tray">
+          <DoudizhuMiniCards cards={action.cards} ariaLabel="出牌" />
+        </span>
       )}
     </div>
   )
