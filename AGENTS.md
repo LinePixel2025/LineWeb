@@ -128,7 +128,9 @@ server.listen(3001)
   5. 写 /opt/lineweb/.env：DATABASE_URL 指向 lineweb-postgres:5432，
      另有 JWT_SECRET、STORAGE_NODE_TOKEN、MAX_FILE_SIZE_MB 等
      （凭据副本在服务器 /root/lineweb-secrets.txt，不要写入文档或仓库）
-  6. docker compose up -d --build
+  6. 前端产物在本地构建后上传（**切勿**在服务器上 --build，见下方注意事项）：
+     cd client && npm run build && tar czf - -C dist . | ssh -i ~/.ssh/lineweb_aliyun root@120.24.223.65 'rm -rf /opt/lineweb/client-dist && mkdir -p /opt/lineweb/client-dist && tar xzf - -C /opt/lineweb/client-dist'
+     docker build -f Dockerfile.prebuilt -t lineweb-server:latest . && docker compose up -d
      # 应用容器 lineweb-server-1，端口 3001:3001，restart: unless-stopped，compose 自带健康检查
      # 首次启动由 server/scripts/docker-entrypoint.sh 把 SQLite schema 改写为 PostgreSQL，
      # 再执行 prisma db push + prisma db seed
@@ -169,7 +171,7 @@ server.listen(3001)
   ❌ git fetch origin master && git reset --hard origin/master   # 在该 ECS 上跑不通
      （实测 clone 两分钟只拉到约 200KB，最初代码是用本地 git bundle 上传后 clone 的）
   ✅ 走镜像/代理拉取，或从本地机器 git push 到服务器（本地 → 服务器 SSH 可达）
-  更新后重建容器：docker compose up -d --build
+  更新后重建容器：docker build -f Dockerfile.prebuilt -t lineweb-server:latest . && docker compose up -d（前端产物同样由本地 build 后上传 client-dist/）
 ```
 
 > 详细运行手册（含 ECS/1Panel 准备、Docker Compose 部署、`.env`、存储节点连接、验收清单、故障排查、HTTPS 升级步骤）见 [`docs/DEPLOYMENT_HTTP_3001.md`](docs/DEPLOYMENT_HTTP_3001.md)。
@@ -292,13 +294,14 @@ cd cli && npm run dev             # tsx 运行
 cd cli && npm run typecheck       # tsc --noEmit
 
 # 部署（阿里云 ECS Ubuntu + 1Panel + Docker Compose + PostgreSQL 16；代码在 /opt/lineweb）
-docker compose up -d --build          # 构建并启动（Express 容器 lineweb-server-1 + PostgreSQL 16 容器）
+# 先在本地 npm run build 并把 dist 传成 /opt/lineweb/client-dist/，再：
+docker build -f Dockerfile.prebuilt -t lineweb-server:latest . && docker compose up -d   # 构建并启动（Express 容器 lineweb-server-1 + PostgreSQL 16 容器）
 docker compose logs -f server         # 跟踪 server 容器日志
 docker compose restart server         # 重启 server 容器
 docker compose ps                     # 查看容器与健康状态
 curl http://127.0.0.1:3001/api/health # 验收：{"status":"ok","db":"connected",...}
 cd storage-node && python main.py     # 本地 Windows 存储节点，config.json 指向 wss://web.linetech.online/ws/storage（直连备选 ws://120.24.223.65:3001/ws/storage）
-# 更新（服务器无法直连 GitHub，git fetch/reset 跑不通）：走镜像/代理，或从本地 git push 到服务器后 docker compose up -d --build
+# 更新（服务器无法直连 GitHub，git fetch/reset 跑不通）：走镜像/代理，或从本地 git push 到服务器后走「本地产物 + Dockerfile.prebuilt」重建
 # 本地开发/备用：npm run dev + Cloudflare Tunnel（cloudflared tunnel run <name>）
 
 # 备选/存档：systemd 直跑 tsx、PM2（ecosystem.config.js）、Nginx 反代（nginx.conf）
@@ -310,6 +313,7 @@ cd storage-node && python main.py     # 本地 Windows 存储节点，config.jso
 - **Server 运行时使用 tsx** — 生产环境从不编译为 JS。根目录 `npm run build` 仅构建 client（且不做类型检查）。
 - **生产需要 SQLite → PostgreSQL 的 schema 转换** — 本地开发用 SQLite，生产是 PostgreSQL 16 容器；容器首次启动时 `server/scripts/docker-entrypoint.sh` 会把 SQLite schema 改写为 PostgreSQL（`prisma/schema.pg.prisma`）后执行 `prisma db push`（首启带 `--accept-data-loss`）与 `prisma db seed`，这是生产链路的一部分，不是备选机制。
 - **服务器无法直连 GitHub** — 该 ECS 直连 GitHub 极慢/不可达（实测 clone 两分钟只拉到约 200KB），代码是本地 `git bundle` 上传后 clone 的；因此 `git fetch && git reset --hard` 在服务器上跑不通，更新需走镜像/代理，或从本地机器 `git push` 到服务器（本地 → 服务器 SSH 可达）。
+- **绝不在该 ECS 上跑 `docker compose up -d --build`** — 机器只有 2 vCPU / 1.6GB 内存（2G swap 已存在），仓库根 `Dockerfile` 的 Stage 1 是 `npm ci` + `npx vite build`，峰值约 1.2GB，会把整机拖进 swap 抖动：`web.linetech.online` 返回 Cloudflare `1033`、1Panel 面板 `:18080` 与 IP 直连 `:3001` 同时无响应、SSH 卡在 banner exchange，**同机其他站点（如 `aurora-center`）一起下线**（2026-10-24 实测踩过，最终靠重启服务器恢复）。`docker-compose.yml` 的 `deploy.resources.limits` 只限制运行期容器，**管不住构建过程**，不能当兜底。正确做法：本地 `npm run build` → 把 `dist` 传成 `/opt/lineweb/client-dist/`（该目录已 gitignore，且不在 `.dockerignore` 里，被忽略的是 `client/dist`）→ `docker build -f Dockerfile.prebuilt -t lineweb-server:latest . && docker compose up -d`（不带 `--build`），实测全程约 1 分钟、机器无压力。
 - **阿里云大陆节点按 Host 头拦截未备案域名** — 带 `Host: web.linetech.online` 请求 ECS 会返回 `403` + `Server: Beaver` + `Non-compliance ICP Filing`（实测直连 `IP:3001` 同样 403，换端口、套橙云 A 记录都无效，因为回源 Host 仍是未备案域名；Cloudflare 免费版也不代理 3001 端口）。当前用 **Cloudflare Tunnel**（cloudflared 主动外连，不产生带该域名的入站请求）规避，属**备案合规灰区**：要彻底合规需完成 ICP 备案或把服务器换到非大陆区域。
 - **storageNode 当前为 connected（2026-10-17 实测），但接入来源待确认** — 生产 `/api/health` 返回 `"storageNode":"connected"`（服务端与数据库均正常，隧道入口 `https://web.linetech.online/api/health` 200、`db: connected`），网盘/头像可用；然而**本机没有运行存储节点**，且仓库 `storage-node/config.json` 仍指向已不可达的 `ws://123.207.8.77:3001`，说明线上接入的是另一份配置/另一台机器。若要在本机跑节点：把 `serverUrl` 改为 `wss://web.linetech.online/ws/storage`（Cloudflare Tunnel，已实测握手 101；链路加密且改用隧道后可关闭安全组 3001 公网入口）或 `ws://120.24.223.65:3001/ws/storage`（直连备选），token 换成服务器 `/opt/lineweb/.env` 的 `STORAGE_NODE_TOKEN`。
 - **Storage node 是外部进程** — Python 进程运行在本地 Windows 机器上，未容器化。通过 WebSocket 以指数退避重连（最长 60s）方式连接到 `/ws/storage`；认证 5s 超时、心跳 30s。运行期间通过 `SetThreadExecutionState` 阻止系统休眠；文件 I/O 走线程池避免阻塞事件循环。

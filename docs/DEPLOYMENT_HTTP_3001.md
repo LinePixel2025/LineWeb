@@ -166,7 +166,7 @@ chmod 600 .env
 
 ```bash
 cd /opt/lineweb
-docker compose up -d --build          # 首次较慢：npm ci ×2 + vite build + 镜像导出
+docker build -f Dockerfile.prebuilt -t lineweb-server:latest . && docker compose up -d   # 服务器侧只装 server 依赖、不跑 vite build（实测约 1 分钟）
 docker compose ps                     # 期望 lineweb-server-1 为 Up (healthy)
 docker compose logs -f server
 ```
@@ -243,19 +243,19 @@ cd storage-node && python main.py     # 或用 nssm 注册为 Windows 服务开�
 # 方式 A：本地 bundle（推荐，不依赖 GitHub）
 #   本地：git bundle create lw.bundle --all && scp lw.bundle root@<ECS IP>:/root/
 cd /opt/lineweb && git fetch /root/lw.bundle master && git reset --hard FETCH_HEAD
-docker compose up -d --build
+docker build -f Dockerfile.prebuilt -t lineweb-server:latest . && docker compose up -d
 
 # 方式 B：本地 push 到服务器（本地→服务器 SSH 通即可）
 #   服务器：cd /opt/lineweb && git config receive.denyCurrentBranch updateInstead
 #   本地：  git remote add aliyun ssh://root@<ECS IP>/opt/lineweb && git push aliyun master
-#   服务器：cd /opt/lineweb && docker compose up -d --build
+#   服务器：cd /opt/lineweb && docker build -f Dockerfile.prebuilt -t lineweb-server:latest . && docker compose up -d
 ```
 
 ```bash
 docker compose ps && curl -f http://127.0.0.1:3001/api/health
 ```
 
-回滚：`git reset --hard <目标提交>` 后同样执行 `docker compose up -d --build`。
+回滚：`git reset --hard <目标提交>` 后同样执行 `docker build -f Dockerfile.prebuilt -t lineweb-server:latest . && docker compose up -d`。注意 `client-dist/` 必须换成与目标提交对应的前端产物（本地切到该提交重新 build 再上传），否则容器里的页面仍是新版。
 
 备份：
 
