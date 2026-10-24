@@ -1,0 +1,870 @@
+/* =============================================================
+   LineWeb — 贪吃蛇（单机 / 同屏双人 / 大地图联机）
+   命名空间：.gh-snake-*
+   依赖 variables.css 的 --gh-* 令牌与 games.css 的通用游戏大厅类
+   （.gh-games-page / .gh-game-room* / .gh-game-list-state / .gh-btn 等），
+   本文件只负责贪吃蛇自己的视觉，不 import 其他 CSS。
+   ============================================================= */
+
+/* ===== 页面外壳 ===== */
+
+.gh-snake-page,
+.gh-snake-online {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-4);
+}
+
+.gh-snake-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+}
+
+.gh-snake-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-snake-speed-select {
+  width: auto;
+  min-width: 168px;
+}
+
+/* ===== 模式 tab ===== */
+
+.gh-snake-tabs {
+  display: flex;
+  gap: var(--gh-space-2);
+  padding-bottom: var(--gh-space-2);
+  border-bottom: 1px solid var(--gh-border-muted);
+}
+
+.gh-snake-tab {
+  padding: 8px 18px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  color: var(--gh-text-secondary);
+  font: inherit;
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color var(--gh-transition),
+    background var(--gh-transition);
+}
+
+.gh-snake-tab:hover {
+  color: var(--gh-text);
+  background: var(--gh-btn-hover);
+}
+
+.gh-snake-tab:focus-visible {
+  outline: none;
+  box-shadow: var(--gh-focus-ring);
+}
+
+.gh-snake-tab--active {
+  color: var(--gh-text);
+  background: var(--gh-bg);
+  border-color: var(--gh-border);
+  box-shadow: inset 0 -2px 0 var(--gh-accent);
+}
+
+/* ===== 主体两栏布局 ===== */
+
+.gh-snake-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: var(--gh-space-5);
+  align-items: start;
+}
+
+.gh-snake-main {
+  min-width: 0;
+}
+
+.gh-snake-board-area {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+}
+
+/* ===== 计分卡 ===== */
+
+.gh-snake-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: var(--gh-space-2);
+}
+
+.gh-snake-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--gh-space-2) var(--gh-space-3);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+}
+
+.gh-snake-card-label {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  letter-spacing: 0.04em;
+}
+
+.gh-snake-card-value {
+  color: var(--gh-text);
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== 工具条 ===== */
+
+.gh-snake-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+.gh-snake-toolbar-hint {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  flex: 1 1 240px;
+}
+
+/* ===== 棋盘舞台与 canvas ===== */
+
+.gh-snake-stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding: var(--gh-space-3);
+  background: var(--gh-bg);
+  border: 1px solid var(--gh-border);
+  border-radius: 14px;
+  box-shadow: var(--gh-shadow-sm);
+  touch-action: none;
+}
+
+.gh-snake-canvas {
+  display: block;
+  max-width: 100%;
+  border-radius: 10px;
+}
+
+/* ===== 遮罩层（死亡 / 暂停 / 结算） ===== */
+
+.gh-snake-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gh-space-4);
+  background: rgba(1, 4, 9, 0.62);
+  border-radius: 14px;
+  animation: gh-snake-fade-in 0.22s ease backwards;
+}
+
+.gh-snake-overlay--paused {
+  background: rgba(1, 4, 9, 0.45);
+}
+
+.gh-snake-overlay-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+  width: min(100%, 420px);
+  padding: var(--gh-space-5);
+  background: var(--gh-bg);
+  border: 1px solid var(--gh-border);
+  border-radius: 14px;
+  box-shadow: var(--gh-shadow-lg);
+  text-align: center;
+}
+
+.gh-snake-overlay-eyebrow {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gh-snake-overlay-title {
+  margin: 0;
+  font-size: var(--gh-text-xl);
+}
+
+.gh-snake-overlay-title--win {
+  color: var(--gh-success-emphasis);
+}
+
+.gh-snake-overlay-title--draw {
+  color: var(--gh-warning);
+}
+
+.gh-snake-overlay-detail {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.6;
+}
+
+.gh-snake-overlay-scores {
+  display: flex;
+  justify-content: center;
+  gap: var(--gh-space-4);
+  flex-wrap: wrap;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-snake-overlay-scores strong {
+  margin-left: 4px;
+  color: var(--gh-text);
+  font-family: var(--gh-font-mono);
+}
+
+.gh-snake-overlay-actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+@keyframes gh-snake-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ===== 同屏双人 ===== */
+
+.gh-snake-versus-bar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gh-space-2);
+}
+
+.gh-snake-versus-player {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-2) var(--gh-space-3);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border-muted);
+  border-left-width: 4px;
+  border-radius: var(--gh-radius);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-snake-versus-player[data-seat="0"] {
+  border-left-color: #2f9e44;
+}
+
+.gh-snake-versus-player[data-seat="1"] {
+  border-left-color: #1971c2;
+}
+
+.gh-snake-versus-name {
+  font-weight: 600;
+}
+
+.gh-snake-versus-player strong {
+  margin-left: auto;
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-snake-versus-meta {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-snake-versus-record {
+  padding: var(--gh-space-2) var(--gh-space-3);
+  background: var(--gh-canvas-inset);
+  border: 1px dashed var(--gh-border);
+  border-radius: var(--gh-radius);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-snake-swatch {
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--gh-border);
+  border-radius: 3px;
+}
+
+/* ===== 侧栏说明 ===== */
+
+.gh-snake-help {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-4);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: 14px;
+}
+
+.gh-snake-help-title {
+  margin: var(--gh-space-2) 0 0;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.gh-snake-help-title:first-child {
+  margin-top: 0;
+}
+
+.gh-snake-help-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.7;
+}
+
+.gh-snake-help-note {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.6;
+}
+
+.gh-snake-help-link {
+  color: var(--gh-accent);
+  font-size: var(--gh-text-sm);
+  text-decoration: none;
+}
+
+.gh-snake-help-link:hover {
+  text-decoration: underline;
+}
+
+/* ===== 无障碍：仅读屏可见 ===== */
+
+.gh-snake-sr-only {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  color: transparent;
+}
+
+/* ===== 大地图联机：访客提示卡 ===== */
+
+.gh-snake-guest {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-6);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: 16px;
+  box-shadow: var(--gh-shadow-md);
+}
+
+.gh-snake-guest-actions {
+  display: flex;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+/* ===== 大地图联机：对局 ===== */
+
+.gh-snake-online-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gh-space-4);
+  flex-wrap: wrap;
+}
+
+.gh-snake-online-heading {
+  min-width: 0;
+}
+
+.gh-snake-online-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+.gh-snake-online-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: var(--gh-space-4);
+  align-items: start;
+}
+
+.gh-snake-online-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+  min-width: 0;
+}
+
+.gh-snake-online-stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  padding: var(--gh-space-3);
+  background: var(--gh-bg);
+  border: 1px solid var(--gh-border);
+  border-radius: 14px;
+  box-shadow: var(--gh-shadow-sm);
+  touch-action: none;
+}
+
+.gh-snake-canvas--online {
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--gh-border-muted);
+}
+
+.gh-snake-polling-hint {
+  margin: 0;
+  color: var(--gh-warning);
+  font-size: var(--gh-text-xs);
+}
+
+/* --- 触屏四向按钮 --- */
+
+.gh-snake-dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 56px);
+  grid-template-rows: repeat(2, 48px);
+  gap: var(--gh-space-2);
+  justify-content: center;
+  align-items: center;
+}
+
+.gh-snake-dpad-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  color: var(--gh-text);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--gh-transition),
+    transform var(--gh-transition);
+}
+
+.gh-snake-dpad-btn:hover:not(:disabled) {
+  background: var(--gh-btn-hover);
+}
+
+.gh-snake-dpad-btn:active:not(:disabled) {
+  transform: scale(0.94);
+  background: var(--gh-btn-active);
+}
+
+.gh-snake-dpad-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--gh-focus-ring);
+}
+
+.gh-snake-dpad-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.gh-snake-dpad-btn--up {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.gh-snake-dpad-btn--left {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.gh-snake-dpad-btn--down {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.gh-snake-dpad-btn--right {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.gh-snake-dpad-hint {
+  grid-column: 1 / -1;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  text-align: center;
+}
+
+/* --- 计分板 --- */
+
+.gh-snake-scoreboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-4);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: 14px;
+}
+
+.gh-snake-scoreboard-title {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.gh-snake-scoreboard-countdown {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-snake-scoreboard-countdown strong {
+  color: var(--gh-warning);
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-snake-scoreboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gh-snake-scoreboard-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  padding: 6px var(--gh-space-2);
+  background: var(--gh-bg);
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+}
+
+.gh-snake-scoreboard-row--me {
+  border-color: var(--gh-accent);
+  background: var(--gh-accent-soft);
+}
+
+.gh-snake-scoreboard-row--out {
+  opacity: 0.62;
+}
+
+.gh-snake-scoreboard-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.gh-snake-scoreboard-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-snake-scoreboard-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-snake-scoreboard-score {
+  margin-left: auto;
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-base);
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-snake-last-event {
+  margin: 0;
+  padding: 6px var(--gh-space-2);
+  background: var(--gh-canvas-inset);
+  border-radius: var(--gh-radius);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-snake-scoreboard-foot {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.6;
+}
+
+/* --- 等待房间座位 --- */
+
+/* 在线小圆点：games.css 只提供 .gh-game-presence--online 的组合写法，
+   贪吃蛇的座位条 / 计分板用独立的 --online 修饰符，这里补上配色 */
+.gh-snake-seat .gh-game-presence-dot--online,
+.gh-snake-scoreboard .gh-game-presence-dot--online {
+  background: var(--gh-success-emphasis);
+}
+
+.gh-snake-seat-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--gh-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gh-snake-seat {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-2);
+  background: var(--gh-bg);
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+}
+
+.gh-snake-seat--me {
+  border-color: var(--gh-accent);
+  background: var(--gh-accent-soft);
+}
+
+.gh-snake-seat--empty {
+  border-style: dashed;
+  color: var(--gh-text-disabled);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-snake-seat-swatch {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 28px;
+  border-radius: 4px;
+  opacity: 0.85;
+}
+
+.gh-snake-seat--empty .gh-snake-seat-swatch {
+  opacity: 0.35;
+}
+
+.gh-snake-seat-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.gh-snake-seat-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-snake-seat-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+/* --- 结算排名 --- */
+
+.gh-snake-result-ranks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.gh-snake-result-ranks li {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  padding: 6px var(--gh-space-2);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-snake-result-rank {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-snake-result-ranks li strong {
+  margin-left: auto;
+  font-family: var(--gh-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-snake-result-meta {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  white-space: nowrap;
+}
+
+/* --- 大厅规则提示 --- */
+
+.gh-snake-lobby-tips {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-4);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: 14px;
+}
+
+.gh-snake-lobby-tips-title {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.gh-snake-lobby-tips-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.7;
+}
+
+/* ===== 暗色主题微调 ===== */
+
+[data-theme="dark"] .gh-snake-stage,
+[data-theme="dark"] .gh-snake-online-stage {
+  background: #010409;
+}
+
+[data-theme="dark"] .gh-snake-overlay {
+  background: rgba(1, 4, 9, 0.72);
+}
+
+[data-theme="dark"] .gh-snake-tab--active {
+  background: var(--gh-canvas);
+}
+
+[data-theme="dark"] .gh-snake-scoreboard-row {
+  background: var(--gh-canvas-inset);
+}
+
+[data-theme="dark"] .gh-snake-versus-player[data-seat="0"] {
+  border-left-color: #3fb950;
+}
+
+[data-theme="dark"] .gh-snake-versus-player[data-seat="1"] {
+  border-left-color: #2f81f7;
+}
+
+/* ===== 响应式 ===== */
+
+@media (max-width: 900px) {
+  .gh-snake-layout,
+  .gh-snake-online-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .gh-snake-tabs {
+    gap: var(--gh-space-1);
+  }
+
+  .gh-snake-tab {
+    flex: 1 1 50%;
+    padding: 8px 10px;
+    text-align: center;
+  }
+
+  .gh-snake-versus-bar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .gh-snake-stage,
+  .gh-snake-online-stage {
+    padding: var(--gh-space-2);
+    border-radius: 10px;
+  }
+
+  .gh-snake-overlay-card {
+    padding: var(--gh-space-4);
+  }
+
+  .gh-snake-dpad {
+    grid-template-columns: repeat(3, 64px);
+    grid-template-rows: repeat(2, 54px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-snake-overlay {
+    animation: none;
+  }
+
+  .gh-snake-dpad-btn,
+  .gh-snake-tab {
+    transition: none;
+  }
+}
