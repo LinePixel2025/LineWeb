@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../lib/api'
-import DOMPurify from 'dompurify'
+import { renderMarkdown } from '../lib/markdown'
 
 interface ChatMessage {
   id: number
@@ -60,73 +60,7 @@ function TrashIcon({ size = 16 }: { size?: number }) {
   )
 }
 
-function renderMarkdown(text: string): string {
-  const escaped = text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-
-  const codeBlocks: string[] = []
-  let processed = escaped.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
-    const index = codeBlocks.length
-    const languageClass = lang ? ` class="language-${lang}"` : ''
-    codeBlocks.push(`<pre><code${languageClass}>${code}</code></pre>`)
-    return `%%CODEBLOCK_${index}%%`
-  })
-
-  processed = processed
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
-
-  const lines = processed.split('\n')
-  let html = ''
-  let inUl = false
-  let inOl = false
-
-  for (const line of lines) {
-    const codeBlockMatch = line.match(/^%%CODEBLOCK_(\d+)%%$/)
-    if (codeBlockMatch) {
-      if (inUl) { html += '</ul>\n'; inUl = false }
-      if (inOl) { html += '</ol>\n'; inOl = false }
-      html += `${codeBlocks[parseInt(codeBlockMatch[1], 10)]}\n`
-      continue
-    }
-
-    if (/^#{1,4}\s/.test(line)) {
-      if (inUl) { html += '</ul>\n'; inUl = false }
-      if (inOl) { html += '</ol>\n'; inOl = false }
-      const level = line.match(/^#{1,4}/)![0].length
-      html += `<h${level}>${line.replace(/^#+\s/, '')}</h${level}>\n`
-      continue
-    }
-
-    if (/^\s*[-*]\s/.test(line)) {
-      if (inOl) { html += '</ol>\n'; inOl = false }
-      if (!inUl) { html += '<ul>\n'; inUl = true }
-      html += `<li>${line.replace(/^\s*[-*]\s/, '')}</li>\n`
-      continue
-    }
-
-    if (/^\s*\d+\.\s/.test(line)) {
-      if (inUl) { html += '</ul>\n'; inUl = false }
-      if (!inOl) { html += '<ol>\n'; inOl = true }
-      html += `<li>${line.replace(/^\s*\d+\.\s/, '')}</li>\n`
-      continue
-    }
-
-    if (inUl) { html += '</ul>\n'; inUl = false }
-    if (inOl) { html += '</ol>\n'; inOl = false }
-    html += line.trim() === '' ? '<br>\n' : `<p>${line}</p>\n`
-  }
-
-  if (inUl) html += '</ul>\n'
-  if (inOl) html += '</ol>\n'
-
-  return DOMPurify.sanitize(`<div class="gh-ai-markdown">${html}</div>`)
-}
+// renderMarkdown 已抽取到 lib/markdown.ts 共享（DeepSeek 对话页复用同一实现）
 
 export default function AiAssistant() {
   const [enabled, setEnabled] = useState(false)

@@ -37,6 +37,9 @@ const navItems: { path: string; label: string; icon: React.ReactNode }[] = [
   { path: '/admin/ai', label: 'AI 助手', icon: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 110 16A8 8 0 018 0zm0 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm0 7.75a.75.75 0 01.75.75v1.25h.5a.75.75 0 010 1.5h-2.5a.75.75 0 010-1.5h.5V10a.75.75 0 01.75-.75zM8 4a1.5 1.5 0 110 3 1.5 1.5 0 010-3z"/></svg>
   ) },
+  { path: '/admin/ai-chat', label: 'AI 对话设置', icon: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 2h10.5c.69 0 1.25.56 1.25 1.25v7c0 .69-.56 1.25-1.25 1.25H9.25L6 14.5v-3H2.75C2.06 11.5 1.5 10.94 1.5 10.25v-7C1.5 2.56 2.06 2 2.75 2Zm5.11 2.1-.85 1.98-1.98.85 1.98.85.85 1.98.85-1.98 1.98-.85-1.98-.85z"/></svg>
+  ) },
 ]
 
 const SIDEBAR_COLLAPSED_KEY = 'lineweb_admin_sidebar_collapsed'

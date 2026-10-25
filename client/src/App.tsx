@@ -35,6 +35,7 @@ const MinecraftPage = lazy(() => import('./pages/games/MinecraftPage'))
 const MinecraftOnlinePage = lazy(() => import('./pages/games/MinecraftOnlinePage'))
 const GomokuPage = lazy(() => import('./pages/games/GomokuPage'))
 const GomokuOnlinePage = lazy(() => import('./pages/games/GomokuOnlinePage'))
+const DeepSeekChatPage = lazy(() => import('./pages/DeepSeekChatPage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const DynamicPage = lazy(() => import('./pages/DynamicPage'))
 const DrivePage = lazy(() => import('./pages/DrivePage'))
@@ -48,6 +49,7 @@ const UserAdminPage = lazy(() => import('./pages/admin/UserAdminPage'))
 const ApiDocsPage = lazy(() => import('./pages/admin/ApiDocsPage'))
 const DeviceMonitorPage = lazy(() => import('./pages/admin/DeviceMonitorPage'))
 const AiAdminPage = lazy(() => import('./pages/admin/AiAdminPage'))
+const AiChatAdminPage = lazy(() => import('./pages/admin/AiChatAdminPage'))
 const AppAdminPage = lazy(() => import('./pages/admin/AppAdminPage'))
 const AuthorizePage = lazy(() => import('./pages/AuthorizePage'))
 
@@ -183,6 +185,10 @@ export default function App() {
                     <Route path="/chat/:conversationId" element={
                       <ProtectedRoute><ChatPage /></ProtectedRoute>
                     } />
+                    {/* DeepSeek 对话（站内统一代理 AI 服务，需登录；每日提问上限见 /admin/ai-chat） */}
+                    <Route path="/deepseek" element={
+                      <ProtectedRoute><DeepSeekChatPage /></ProtectedRoute>
+                    } />
                     {/* 第三方应用授权的账户验证页（未登录会跳登录并带参数返回） */}
                     <Route path="/authorize" element={
                       <ProtectedRoute><AuthorizePage /></ProtectedRoute>
@@ -202,6 +208,7 @@ export default function App() {
                     <Route path="/admin/api" element={<ApiDocsPage />} />
                     <Route path="/admin/devices" element={<DeviceMonitorPage />} />
                     <Route path="/admin/ai" element={<AiAdminPage />} />
+                    <Route path="/admin/ai-chat" element={<AiChatAdminPage />} />
                     <Route path="/admin/apps" element={<AppAdminPage />} />
                   </Route>
                   </Routes>

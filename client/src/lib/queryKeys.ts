@@ -20,4 +20,9 @@ export const queryKeys = {
   health: {
     screenTime: ['health', 'screenTime'] as const,
   },
+  aiChat: {
+    quota: ['ai-chat', 'quota'] as const,
+    conversations: ['ai-chat', 'conversations'] as const,
+    messages: (conversationId: number) => ['ai-chat', 'conversations', conversationId, 'messages'] as const,
+  },
 }

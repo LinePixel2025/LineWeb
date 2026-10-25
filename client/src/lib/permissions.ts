@@ -81,6 +81,7 @@ export const ADMIN_ROUTE_CAPABILITIES: { prefix: string; capability: Capability 
   { prefix: '/admin/users', capability: 'user:manage' },
   { prefix: '/admin/devices', capability: 'device:view' },
   { prefix: '/admin/ai', capability: 'ai:configure' },
+  { prefix: '/admin/ai-chat', capability: 'ai:configure' },
   { prefix: '/admin/apps', capability: 'app:manage' },
   { prefix: '/admin/api', capability: null },        // API 接入指南：任何管理区账号可见
   { prefix: '/admin', capability: 'content:write' }, // 文章管理（含 /admin 首页）
