@@ -19,6 +19,7 @@ import statsRoutes from './routes/stats.js'
 import avatarRoutes from './routes/avatar.js'
 import healthRoutes from './routes/health.js'
 import aiRoutes from './routes/ai.js'
+import aiChatRoutes from './routes/aiChat.js'
 import oauthRoutes from './routes/oauth.js'
 import chatRoutes from './routes/chat.js'
 import gameRoutes from './routes/games.js'
@@ -73,9 +74,9 @@ app.use(cors({
 }))
 
 // 压缩响应 — compression supports gzip/deflate/brotli based on Accept-Encoding
-// 跳过 /proxy、/download（流式）、/ai/write/draft（SSE 不能被压缩缓冲）
-// 以及聊天图片（/chat/messages/:id/image）：WebP 本身已压缩，再 gzip 只会浪费 CPU，
-// 并让响应变成 chunked（丢失 Content-Length，浏览器无法显示下载进度）。
+// 跳过 /proxy、/download（流式）、/ai/write/draft 与 /ai-chat/messages（SSE 不能被压缩缓冲）
+// 以及聊天/AI 对话图片（/chat/messages/:id/image、/ai-chat/images/:id/image）：
+// WebP 本身已压缩，再 gzip 只会浪费 CPU，并让响应变成 chunked（丢失 Content-Length）。
 app.use(compression({
   threshold: '2kb',
   // 注意：filter 在响应头阶段执行，此时 Express 挂载路由会把 req.path 剥成路由内相对路径
@@ -84,7 +85,9 @@ app.use(compression({
     !req.originalUrl.includes('/proxy')
     && !req.originalUrl.includes('/download')
     && !req.originalUrl.includes('/ai/write/draft')
-    && !/\/chat\/messages\/\d+\/image(\?|$)/.test(req.originalUrl),
+    && !req.originalUrl.includes('/ai-chat/messages')
+    && !/\/chat\/messages\/\d+\/image(\?|$)/.test(req.originalUrl)
+    && !/\/ai-chat\/images\/\d+\/image(\?|$)/.test(req.originalUrl),
 }))
 
 app.set('trust proxy', 1)  // 信任反向代理，用于 rate-limiter 正确获取客户端 IP
@@ -177,6 +180,7 @@ app.use('/api/devices', deviceRoutes)
 app.use('/api/auth/avatar', avatarRoutes)
 app.use('/api/health', healthRoutes)
 app.use('/api/ai', aiRoutes)
+app.use('/api/ai-chat', aiChatRoutes)
 app.use('/api/oauth', oauthRoutes)
 app.use('/api/chat', chatRoutes)
 app.use('/api/games', gameRoutes)
@@ -287,6 +291,14 @@ app.get('/api', (_req, res) => {
       conversations: { method: 'GET', path: '/api/chat/conversations', auth: true, description: '我的会话列表（含最后一条消息与未读数）；POST /api/chat/conversations/direct 发起私聊，POST /api/chat/conversations/group 创建群聊（≤50 人，仅可邀请好友）' },
       messages: { method: 'GET', path: '/api/chat/conversations/:id/messages?before=&limit=', auth: true, description: '历史消息（游标分页，id 正序）；POST /api/chat/conversations/:id/messages 发送纯文本消息；POST /api/chat/conversations/:id/images 发送图片（multipart/form-data，字段名 file）；GET /api/chat/messages/:id/image 读取图片（支持 ?token= 直链）；POST /api/chat/messages/:id/recall 撤回自己发送的消息（2 分钟内）；PUT /api/chat/conversations/:id/read 更新已读位置' },
       ws: '实时推送：ws(s)://<host>/ws/chat，连接后 5 秒内发送 {"type":"auth","token":"<登录令牌>"}，服务端回 {"type":"auth_ok","userId":N}；推送 message:new / message:recalled / conversation:updated / conversation:removed / friend:request / friend:accepted / friend:rejected / friend:removed，客户端 {type:"ping"} ↔ 服务端 {type:"pong"}。认证失败以 close code 4001 断开。',
+    },
+    aiChat: {
+      quota: { method: 'GET', path: '/api/ai-chat/quota', auth: true, description: 'AI 对话功能开关与当日已用/剩余提问次数（Asia/Shanghai 0 点重置；dailyLimit=0 不限）' },
+      conversations: { method: 'GET', path: '/api/ai-chat/conversations', auth: true, description: '我的 AI 对话会话列表（最近活跃优先）；GET /api/ai-chat/conversations/:id/messages?before=&take= 历史消息（游标分页）；DELETE /api/ai-chat/conversations/:id 删除会话' },
+      messages: { method: 'POST', path: '/api/ai-chat/messages', auth: true, description: '发送消息（body: {conversationId?, content, imageIds?≤4}），响应为 SSE：{meta} → {delta}* → {done,…} | {error}；上游失败自动退还当日提问次数' },
+      images: { method: 'POST', path: '/api/ai-chat/images', auth: true, description: '上传提问附件（multipart/form-data，字段名 file，≤10MiB，计入网盘配额）；GET /api/ai-chat/images/:id/image 读取（支持 ?token= 直链）；DELETE /api/ai-chat/images/:id 撤销未发送附件' },
+      config: { method: 'GET', path: '/api/ai-chat/config', auth: 'ai:configure', description: '管理：AI 对话配置（apiKey 脱敏）；PUT /api/ai-chat/config 更新（isEnabled/model/apiKey/baseUrl/systemPrompt/dailyLimit）' },
+      note: '独立于首页 AI 助手（/api/ai/*）的通用对话功能，配置存 AiChatConfig 单行；图片提问需模型支持视觉输入。',
     },
     games: {
       friends: { method: 'GET', path: '/api/games/2048/friends', auth: true, description: '好友对战大厅：好友列表（含 online / inMatch）' },

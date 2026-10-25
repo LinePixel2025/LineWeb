@@ -111,7 +111,7 @@ function parseBefore(raw: unknown): number | undefined {
 
 // === 图片上传（multipart 解析） ===
 
-interface MultipartImageFile {
+export interface MultipartImageFile {
   buffer: Buffer
   mimeType: string
   /** busboy 的 fileSize 上限被触发（文件流已被截断） */
@@ -123,8 +123,9 @@ interface MultipartImageFile {
  *
  * 原始上限只有 10 MiB，直接缓冲可接受；触发 fileSize 上限时返回 limitHit=true，
  * 由调用方区分「配额不足」（QUOTA_EXCEEDED）与「单张超限」（IMAGE_TOO_LARGE）。
+ * （导出供 AI 对话图片上传复用同一解析逻辑）
  */
-function receiveMultipartImage(req: Request, fileSizeLimit: number): Promise<MultipartImageFile> {
+export function receiveMultipartImage(req: Request, fileSizeLimit: number): Promise<MultipartImageFile> {
   return new Promise((resolve, reject) => {
     let bb: ReturnType<typeof busboy>
     try {

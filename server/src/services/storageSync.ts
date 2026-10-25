@@ -10,8 +10,8 @@ export interface SyncReport {
   durationMs: number
 }
 
-/** 存储节点上的系统目录（不进入网盘）：头像 / 聊天图片 */
-const SYSTEM_DIRECTORIES = ['_avatars', '_chat']
+/** 存储节点上的系统目录（不进入网盘）：头像 / 聊天图片 / AI 对话图片 */
+const SYSTEM_DIRECTORIES = ['_avatars', '_chat', '_ai']
 
 /** 路径是否属于系统目录（目录本身或其下的任意层级） */
 function isSystemPath(path: string): boolean {

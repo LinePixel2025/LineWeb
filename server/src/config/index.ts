@@ -176,6 +176,27 @@ export const aiWriteDraftSchema = z.object({
   length: z.enum(['short', 'medium', 'long']).optional(),
 })
 
+// === AI 对话（DeepSeek）Schemas（/ai-chat/*） ===
+
+/** 管理员更新 AI 对话配置 */
+export const aiChatConfigUpdateSchema = z.object({
+  provider: z.string().min(1).max(50).optional(),
+  model: z.string().min(1).max(100).optional(),
+  apiKey: z.string().max(200).optional(),
+  baseUrl: z.string().max(500).nullable().optional(),
+  systemPrompt: z.string().max(3000).optional(),
+  // 每用户每日提问上限；0 = 不限
+  dailyLimit: z.number().int().min(0).max(100000).optional(),
+  isEnabled: z.boolean().optional(),
+})
+
+/** 发送 AI 对话消息（content 与 imageIds 至少其一，路由层校验以给出明确文案） */
+export const aiChatMessageSchema = z.object({
+  conversationId: z.number().int().positive().optional(),
+  content: z.string().max(4000, '消息过长（上限 4000 字）').default(''),
+  imageIds: z.array(z.number().int().positive()).max(4, '每条消息最多 4 张图片').default([]),
+})
+
 // === 第三方应用授权 Schemas（/oauth/*） ===
 
 /** 授权页参数：应用名下的 client_id + 回调地址 + 申请的 scope + 防 CSRF 的 state */

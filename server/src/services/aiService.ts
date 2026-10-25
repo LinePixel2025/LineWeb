@@ -83,8 +83,9 @@ function createClient(config: AiConfigData, timeoutMs = 30_000): OpenAI {
 
 /**
  * 统一映射上游 AI 服务异常为 AppError
+ * （导出供 AI 对话服务复用同一套错误文案）
  */
-function toAiError(err: unknown, label: string): AppError {
+export function toAiError(err: unknown, label: string): AppError {
   const errMsg = err instanceof Error ? err.message : 'Unknown error'
   console.error(`[AI ${label}] 调用失败:`, errMsg)
   if (errMsg.includes('401') || errMsg.includes('Incorrect API key')) {
@@ -101,8 +102,9 @@ function toAiError(err: unknown, label: string): AppError {
 
 /**
  * 获取指定日期的日期键（YYYY-MM-DD，Asia/Shanghai UTC+8，无夏令时）
+ * （导出供 AI 对话的每日配额复用同一时区口径）
  */
-function getDateKey(offsetDays: number): string {
+export function getDateKey(offsetDays: number): string {
   const now = Date.now() + offsetDays * 24 * 60 * 60 * 1000
   const shanghai = new Date(now + 8 * 60 * 60 * 1000)
   const y = shanghai.getUTCFullYear()

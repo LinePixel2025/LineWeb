@@ -34,6 +34,8 @@ model User {
   conversationMembers  ConversationMember[]
   messages             Message[]
   ownedConversations   Conversation[]       @relation("ConversationOwner")
+  aiConversations      AiConversation[]     // AI 对话（DeepSeek）会话
+  aiChatImages         AiChatImage[]        // AI 对话上传的图片附件
 
   @@map("users")
 }
@@ -155,6 +157,69 @@ model AiConfig {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("ai_config")
+}
+
+// === AI 对话（DeepSeek）：多会话 + 流式回复 + 每日提问配额 ===
+
+/// AI 对话功能配置 — 全站单行（与首页 AI 助手的 AiConfig 互不影响，
+/// 便于图片提问时单独指向支持视觉的模型端点）
+model AiChatConfig {
+  id           Int      @id @default(autoincrement())
+  provider     String   @default("deepseek")
+  model        String   @default("deepseek-chat")
+  apiKey       String   @default("")
+  baseUrl      String?  @default("https://api.deepseek.com")
+  systemPrompt String   @default("你是一个乐于助人的中文 AI 助手。请用中文回答，回答准确、简洁，适当使用 Markdown 格式组织内容。")
+  dailyLimit   Int      @default(20) // 每用户每日提问上限；0 = 不限
+  isEnabled    Boolean  @default(false)
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("ai_chat_config")
+}
+
+model AiConversation {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String   @default("新对话") // 首条消息发出时取内容前 20 字
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  messages  AiMessage[]
+
+  @@index([userId])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id             Int            @id @default(autoincrement())
+  conversationId Int            @map("conversation_id")
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String         // 'user' | 'assistant'
+  content        String         @default("")
+  model          String?        // 生成该回复的模型（assistant 消息）
+  counted        Boolean        @default(true) // 是否计入每日提问配额（仅 user 消息；上游调用失败置 false 退还）
+  createdAt      DateTime       @default(now()) @map("created_at")
+  images         AiChatImage[]
+
+  @@index([conversationId])
+  @@map("ai_messages")
+}
+
+model AiChatImage {
+  id        Int        @id @default(autoincrement())
+  userId    Int        @map("user_id")
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messageId Int?       @map("message_id") // null = 已上传、尚未随消息发送的附件
+  message   AiMessage? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  imagePath String     @map("image_path") // 存储节点路径：_ai/<userId>/<uuid>.webp
+  width     Int
+  height    Int
+  size      Int        // WebP 字节数
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([messageId])
+  @@map("ai_chat_images")
 }
 
 // === 第三方应用授权（OAuth 2.0 授权码 + PKCE） ===
