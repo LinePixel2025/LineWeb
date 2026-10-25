@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import DriveToolbar from '../components/drive/DriveToolbar'
 import DriveNavigation from '../components/drive/DriveNavigation'
 import DriveDetailPanel from '../components/drive/DriveDetailPanel'
@@ -13,6 +14,7 @@ import FolderPickerDialog from '../components/drive/FolderPickerDialog'
 import { NewFolderDialog, RenameDialog, DeleteDialog } from '../components/drive/DriveDialogs'
 import Pagination from '../components/Pagination'
 import api from '../lib/api'
+import { resolvePreviewKind } from '../lib/drivePreview'
 import { useAuth } from '../contexts/AuthContext'
 import { useDownload } from '../contexts/DownloadContext'
 import { DriveProvider, useDrive } from '../contexts/DriveContext'
@@ -78,16 +80,7 @@ function DrivePageInner() {
 
   const handlePreview = useCallback((item: DriveItem) => {
     if (item.isFolder) return
-    const mime = (item.mimeType || '').toLowerCase()
-    const ext = item.name.includes('.') ? item.name.split('.').pop()!.toLowerCase() : ''
-    const previewableExts = [
-      'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp',
-      'mp4', 'webm', 'avi', 'mov', 'mkv',
-      'mp3', 'wav', 'ogg', 'flac', 'aac',
-      'pdf', 'js', 'ts', 'jsx', 'tsx', 'py', 'java', 'go', 'rs', 'c', 'cpp',
-      'html', 'css', 'json', 'xml', 'yaml', 'yml', 'toml', 'md', 'sql', 'sh',
-    ]
-    if (mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/') || mime.includes('pdf') || previewableExts.includes(ext)) {
+    if (resolvePreviewKind(item)) {
       dialogs.openPreview(item)
     } else {
       startDownload(item)
@@ -300,7 +293,9 @@ function DrivePageInner() {
               />
             )}
 
-            {dialogs.showUpload && (
+            {/* 上传区是内嵌卡片：桌面端留在文件卡片内；移动端桌面壳整体 display:none，
+                必须用 portal 渲染成弹层，否则手机点「上传」后界面毫无反应（看不见挂载在隐藏壳里的组件） */}
+            {dialogs.showUpload && !isMobile && (
               <UploadZone parentId={currentParentId} onUploaded={handleUploaded} onClose={dialogs.closeUpload} />
             )}
 
@@ -435,6 +430,16 @@ function DrivePageInner() {
         onBatchDelete={handleBatchDelete}
         onBatchFavorite={handleBatchFavorite}
       />
+
+      {dialogs.showUpload && isMobile && createPortal(
+        <div className="gh-drive-upload-sheet-overlay" onClick={dialogs.closeUpload}>
+          <div className="gh-drive-upload-sheet" onClick={e => e.stopPropagation()}>
+            <div className="gh-drive-upload-sheet-handle" />
+            <UploadZone parentId={currentParentId} onUploaded={handleUploaded} onClose={dialogs.closeUpload} />
+          </div>
+        </div>,
+        document.body,
+      )}
 
       {dialogs.previewItem && <DrivePreview item={dialogs.previewItem} onClose={dialogs.closePreview} />}
       {dialogs.showNewFolder && (

@@ -3,6 +3,7 @@ import type { DriveItem, FavoriteItem } from '../../types/drive'
 import { getFileTypeLabel } from '../../types/drive'
 import FileAttributes from './FileAttributes'
 import { useDrive } from '../../contexts/DriveContext'
+import { resolvePreviewKind } from '../../lib/drivePreview'
 import { CloseIcon, CopyIcon, DeleteIcon, DownloadIcon, getDriveIcon, RenameIcon, StarIcon } from './DriveIcons'
 
 export interface DriveDetailPanelProps {
@@ -43,10 +44,7 @@ const DriveDetailPanel = memo(function DriveDetailPanel({
     } catch { /* clipboard access is optional */ }
   }, [item.name])
 
-  const ext = item.name.split('.').pop()?.toLowerCase() || ''
-  const isImage = item.mimeType?.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)
-  const isVideo = item.mimeType?.startsWith('video/') || ['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext)
-  const isPreviewable = isImage || isVideo
+  const isPreviewable = !item.isFolder && resolvePreviewKind(item) !== null
   const isFav = item.isFolder && isFavorite(item.id)
 
   return (

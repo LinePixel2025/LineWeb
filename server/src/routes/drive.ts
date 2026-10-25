@@ -71,6 +71,41 @@ function parseRange(header: string, totalSize: number): { start: number; end?: n
   return { start }
 }
 
+/**
+ * mimeType 缺失（如经同步入库的文件）时按扩展名兜底推断，
+ * 覆盖预览功能依赖的常见类型；推断不出仍回退 application/octet-stream
+ */
+const EXT_MIME_TYPES: Record<string, string> = {
+  mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', mkv: 'video/x-matroska', avi: 'video/x-msvideo',
+  mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', flac: 'audio/flac', aac: 'audio/aac', m4a: 'audio/mp4',
+  pdf: 'application/pdf',
+  txt: 'text/plain', md: 'text/markdown', csv: 'text/csv', log: 'text/plain', json: 'application/json',
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml',
+  zip: 'application/zip',
+}
+
+function resolveMimeType(fileName: string, storedMime: string | null): string {
+  if (storedMime) return storedMime
+  const ext = fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : ''
+  return EXT_MIME_TYPES[ext] || 'application/octet-stream'
+}
+
+/**
+ * 是否允许以 Content-Disposition: inline（浏览器内直接渲染）方式下发。
+ * 仅限无脚本执行风险的类型：视频/音频/PDF/纯文本/JSON。
+ * text/html、text/javascript、SVG 等可携带脚本的类型一律排除，
+ * 防止 ?disposition=inline 被拼在同源 iframe 上造成 XSS。
+ */
+const INLINE_MIME_EXACT = new Set(['application/pdf', 'application/json'])
+const INLINE_MIME_BLOCKED = new Set(['text/html', 'text/javascript', 'image/svg+xml'])
+const INLINE_MIME_PREFIXES = ['video/', 'audio/', 'text/']
+
+function canServeInline(mimeType: string): boolean {
+  const lower = mimeType.toLowerCase()
+  if (INLINE_MIME_BLOCKED.has(lower)) return false
+  return INLINE_MIME_EXACT.has(lower) || INLINE_MIME_PREFIXES.some(prefix => lower.startsWith(prefix))
+}
+
 // === BigInt 序列化 — 显式转换 size 为字符串，避免全局原型污染 ===
 type WithSize<T extends { size: bigint }> = Omit<T, 'size'> & { size: string }
 
@@ -737,9 +772,13 @@ async function handleDownload(req: Request, res: Response): Promise<void> {
       return
     }
 
-    const mimeType = file.mimeType || 'application/octet-stream'
+    const mimeType = resolveMimeType(file.name, file.mimeType)
     const encodedName = encodeURIComponent(file.name)
     const contentLength = Number(file.size)
+    // 预览（PDF iframe / 文本抓取）请求 inline；仅对安全类型生效，其余一律强制 attachment
+    const disposition = req.query.disposition === 'inline' && canServeInline(mimeType)
+      ? 'inline'
+      : 'attachment'
 
     const rangeHeader = req.headers.range
 
@@ -755,7 +794,7 @@ async function handleDownload(req: Request, res: Response): Promise<void> {
 
       res.status(206)
       res.setHeader('Content-Type', mimeType)
-      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedName}`)
+      res.setHeader('Content-Disposition', `${disposition}; filename*=UTF-8''${encodedName}`)
       res.setHeader('Content-Range', `bytes ${start}-${end ?? contentLength - 1}/${contentLength}`)
       res.setHeader('Content-Length', len)
       res.setHeader('Cache-Control', 'no-cache')
@@ -784,7 +823,7 @@ async function handleDownload(req: Request, res: Response): Promise<void> {
 
     // 全量下载
     res.setHeader('Content-Type', mimeType)
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedName}`)
+    res.setHeader('Content-Disposition', `${disposition}; filename*=UTF-8''${encodedName}`)
     res.setHeader('Content-Length', contentLength)
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('X-Content-Length', String(contentLength))

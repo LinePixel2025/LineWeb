@@ -1,6 +1,8 @@
 import { useState, memo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import type { DriveItem } from '../../types/drive'
+import { resolvePreviewKind } from '../../lib/drivePreview'
+import { renderMarkdown } from '../../lib/markdown'
 import { AudioIcon, CloseIcon, FileIcon } from './DriveIcons'
 import api from '../../lib/api'
 
@@ -9,17 +11,20 @@ export interface DrivePreviewProps {
   onClose: () => void
 }
 
-function useDownloadUrl(itemId: number) {
+function useDownloadUrl(itemId: number, inline = false) {
   const [url, setUrl] = useState('')
   useEffect(() => {
     let cancelled = false
     api.post<{ ticket: string }>(`/drive/download-ticket/${itemId}`)
       .then(({ ticket }) => {
-        if (!cancelled) setUrl(`/api/drive/download/${itemId}?token=${encodeURIComponent(ticket)}`)
+        if (!cancelled) {
+          const disposition = inline ? '&disposition=inline' : ''
+          setUrl(`/api/drive/download/${itemId}?token=${encodeURIComponent(ticket)}${disposition}`)
+        }
       })
       .catch(() => { if (!cancelled) setUrl('') })
     return () => { cancelled = true }
-  }, [itemId])
+  }, [itemId, inline])
   return url
 }
 
@@ -70,18 +75,21 @@ const ImagePreview = memo(function ImagePreview({ item, onClose }: DrivePreviewP
 const VideoPreview = memo(function VideoPreview({ item, onClose }: DrivePreviewProps) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const videoSrc = useDownloadUrl(item.id)
+  // inline 下发：Safari 对 attachment 的媒体资源可能拒播；同时规避 autoPlay 在移动端被禁的问题
+  const videoSrc = useDownloadUrl(item.id, true)
   return createPortal(
     <div className="gh-drive-preview-overlay" onClick={onClose}>
       <div className="gh-drive-preview-container" onClick={e => e.stopPropagation()}>
         {loading && <div className="gh-spinner" />}
         {error && <p className="gh-drive-preview-error">{error}</p>}
         {videoSrc && <video
-          controls autoPlay
+          controls
+          playsInline
+          preload="metadata"
           className={`gh-drive-preview-video ${loading ? 'gh-drive-preview-video--hidden' : ''}`}
           src={videoSrc}
           onLoadedData={() => setLoading(false)}
-          onError={() => { setLoading(false); setError('视频加载失败') }}
+          onError={() => { setLoading(false); setError('视频加载失败（浏览器可能不支持该编码格式）') }}
         >
           您的浏览器不支持视频播放
         </video>}
@@ -95,7 +103,7 @@ const VideoPreview = memo(function VideoPreview({ item, onClose }: DrivePreviewP
 /* ---------- Audio Preview ---------- */
 
 const AudioPreview = memo(function AudioPreview({ item, onClose }: DrivePreviewProps) {
-  const audioSrc = useDownloadUrl(item.id)
+  const audioSrc = useDownloadUrl(item.id, true)
   return createPortal(
     <div className="gh-drive-preview-overlay" onClick={onClose}>
       <div className="gh-drive-preview-container" onClick={e => e.stopPropagation()}>
@@ -116,10 +124,21 @@ const AudioPreview = memo(function AudioPreview({ item, onClose }: DrivePreviewP
 /* ---------- PDF Preview ---------- */
 
 const PdfPreview = memo(function PdfPreview({ item, onClose }: DrivePreviewProps) {
-  const pdfSrc = useDownloadUrl(item.id)
+  // inline 下发让 iframe 能直接渲染；iOS Safari 不支持 iframe 内嵌 PDF，用「新窗口打开」兜底
+  const pdfSrc = useDownloadUrl(item.id, true)
   return createPortal(
     <div className="gh-drive-preview-overlay" onClick={onClose}>
       <div className="gh-drive-preview-container" onClick={e => e.stopPropagation()}>
+        <div className="gh-drive-preview-toolbar">
+          <button
+            className="gh-drive-preview-toolbar-btn"
+            disabled={!pdfSrc}
+            onClick={() => pdfSrc && window.open(pdfSrc, '_blank', 'noopener')}
+            title="在新窗口打开"
+          >
+            ↗ 新窗口打开
+          </button>
+        </div>
         <iframe
           className="gh-drive-preview-pdf"
           src={pdfSrc || undefined}
@@ -132,30 +151,68 @@ const PdfPreview = memo(function PdfPreview({ item, onClose }: DrivePreviewProps
   )
 })
 
-/* ---------- Code Preview ---------- */
+/* ---------- Text / Code Preview ---------- */
 
-const CodePreview = memo(function CodePreview({ item, onClose }: DrivePreviewProps) {
-  const [code, setCode] = useState('')
+const TextPreview = memo(function TextPreview({ item, onClose }: DrivePreviewProps) {
+  const [text, setText] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
     let cancelled = false
     api.text(`/drive/download/${item.id}`)
-      .then(text => { if (!cancelled) { setCode(text); setLoading(false) } })
-      .catch(e => { if (!cancelled) { setError(e.message); setLoading(false) } })
+      .then(content => { if (!cancelled) { setText(content); setLoading(false) } })
+      .catch(e => { if (!cancelled) { setError(e instanceof Error ? e.message : '读取失败'); setLoading(false) } })
     return () => { cancelled = true }
   }, [item.id])
 
   return createPortal(
     <div className="gh-drive-preview-overlay" onClick={onClose}>
       <div className="gh-drive-preview-container" onClick={e => e.stopPropagation()}>
+        <div className="gh-drive-preview-toolbar">
+          <span className="gh-drive-preview-toolbar-label">{item.name}</span>
+        </div>
         {loading ? (
           <div className="gh-spinner" />
         ) : error ? (
           <p className="gh-drive-preview-error">{error}</p>
         ) : (
-          <pre className="gh-drive-preview-code"><code>{code}</code></pre>
+          <pre className="gh-drive-preview-code"><code>{text}</code></pre>
+        )}
+        <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览"><CloseIcon size={16} /></button>
+      </div>
+    </div>,
+    document.body
+  )
+})
+
+/* ---------- Markdown Preview ---------- */
+
+const MarkdownPreview = memo(function MarkdownPreview({ item, onClose }: DrivePreviewProps) {
+  const [html, setHtml] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    api.text(`/drive/download/${item.id}`)
+      .then(content => { if (!cancelled) { setHtml(renderMarkdown(content)); setLoading(false) } })
+      .catch(e => { if (!cancelled) { setError(e instanceof Error ? e.message : '读取失败'); setLoading(false) } })
+    return () => { cancelled = true }
+  }, [item.id])
+
+  return createPortal(
+    <div className="gh-drive-preview-overlay" onClick={onClose}>
+      <div className="gh-drive-preview-container" onClick={e => e.stopPropagation()}>
+        <div className="gh-drive-preview-toolbar">
+          <span className="gh-drive-preview-toolbar-label">{item.name}</span>
+        </div>
+        {loading ? (
+          <div className="gh-spinner" />
+        ) : error ? (
+          <p className="gh-drive-preview-error">{error}</p>
+        ) : (
+          <div className="gh-drive-preview-markdown" dangerouslySetInnerHTML={{ __html: html }} />
         )}
         <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览"><CloseIcon size={16} /></button>
       </div>
@@ -180,23 +237,13 @@ const DrivePreview = memo(function DrivePreview({ item, onClose }: DrivePreviewP
     }
   }, [onClose])
 
-  const mime = (item.mimeType || '').toLowerCase()
-  const ext = item.name.includes('.') ? item.name.split('.').pop()!.toLowerCase() : ''
-
-  if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
-    return <ImagePreview item={item} onClose={onClose} />
-  }
-  if (mime.startsWith('video/') || ['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext)) {
-    return <VideoPreview item={item} onClose={onClose} />
-  }
-  if (mime.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'flac', 'aac'].includes(ext)) {
-    return <AudioPreview item={item} onClose={onClose} />
-  }
-  if (mime.includes('pdf') || ext === 'pdf') {
-    return <PdfPreview item={item} onClose={onClose} />
-  }
-  if (['js', 'ts', 'jsx', 'tsx', 'py', 'java', 'go', 'rs', 'c', 'cpp', 'h', 'hpp', 'cs', 'rb', 'php', 'swift', 'kt', 'scala', 'html', 'css', 'scss', 'less', 'json', 'xml', 'yaml', 'yml', 'toml', 'md', 'sql', 'sh', 'bash', 'zsh', 'dockerfile', 'gitignore'].includes(ext)) {
-    return <CodePreview item={item} onClose={onClose} />
+  switch (resolvePreviewKind(item)) {
+    case 'image': return <ImagePreview item={item} onClose={onClose} />
+    case 'video': return <VideoPreview item={item} onClose={onClose} />
+    case 'audio': return <AudioPreview item={item} onClose={onClose} />
+    case 'pdf': return <PdfPreview item={item} onClose={onClose} />
+    case 'markdown': return <MarkdownPreview item={item} onClose={onClose} />
+    case 'text': return <TextPreview item={item} onClose={onClose} />
   }
 
   return createPortal(

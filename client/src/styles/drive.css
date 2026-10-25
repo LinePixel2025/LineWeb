@@ -633,6 +633,42 @@
   background: var(--gh-canvas);
 }
 
+/* 移动端上传弹层：桌面壳在窄屏被 display:none，上传区以底部弹层形式经 portal 渲染 */
+.gh-drive-upload-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: rgba(1, 4, 9, 0.6);
+}
+
+.gh-drive-upload-sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 46;
+  max-height: min(82dvh, 680px);
+  overflow-y: auto;
+  padding: 8px 16px calc(16px + var(--gh-safe-bottom));
+  border-top: 1px solid var(--gh-border);
+  border-radius: 10px 10px 0 0;
+  background: var(--gh-bg);
+  box-shadow: var(--gh-shadow-xl);
+}
+
+.gh-drive-upload-sheet .gh-drive-upload-zone-wrapper {
+  padding: 0;
+  border-bottom: none;
+}
+
+.gh-drive-upload-sheet-handle {
+  width: 36px;
+  height: 4px;
+  margin: 0 auto 12px;
+  border-radius: 2px;
+  background: var(--gh-border);
+}
+
 .gh-drive-upload-zone-header {
   display: flex;
   align-items: center;
@@ -1650,6 +1686,16 @@
 
 .gh-drive-preview-code code {
   white-space: pre;
+}
+
+.gh-drive-preview-markdown {
+  width: min(860px, 92vw);
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+  padding: var(--gh-space-5);
+  border-radius: 6px;
+  background: var(--gh-bg);
+  color: var(--gh-text);
 }
 
 .gh-drive-preview-unsupported {

@@ -10,6 +10,7 @@ import type {
 } from '../../types/drive'
 import { getFileTypeLabel } from '../../types/drive'
 import { useDrive } from '../../contexts/DriveContext'
+import { resolvePreviewKind } from '../../lib/drivePreview'
 import { formatDate, formatFileSize } from '../../lib/format'
 import DriveQuotaBar from './DriveQuotaBar'
 import type { DriveQuota } from '../../hooks/useDriveQuota'
@@ -256,12 +257,7 @@ const MobileDriveShell = memo(function MobileDriveShell({
   }, [onClearSelection])
 
   const isPreviewable = useCallback((item: DriveItem) => {
-    const mime = (item.mimeType || '').toLowerCase()
-    const ext = item.name.includes('.') ? item.name.split('.').pop()!.toLowerCase() : ''
-    return mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/') || mime.includes('pdf') || [
-      'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'mp4', 'webm', 'mp3', 'wav', 'ogg', 'pdf',
-      'js', 'ts', 'tsx', 'jsx', 'py', 'java', 'go', 'rs', 'html', 'css', 'json', 'md',
-    ].includes(ext)
+    return resolvePreviewKind(item) !== null
   }, [])
 
   const handleSortChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
