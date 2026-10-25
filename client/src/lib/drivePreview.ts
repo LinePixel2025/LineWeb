@@ -22,11 +22,11 @@ const PLAINTEXT_EXTS = ['txt', 'log', 'csv', 'tsv', 'ini', 'conf', 'cfg', 'env',
 
 /**
  * 文本类预览的大小上限：
- * - 文本/代码走 CodeMirror 虚拟化渲染（GitHub 同款方案），只渲染可视区域，可放宽到 20MB；
+ * - 文本/代码走 CodeMirror 虚拟化渲染（GitHub 同款方案），只渲染可视区域，可放宽到 50MB；
  * - markdown 是整篇正则渲染成 HTML，撑不了大文件，维持 2MB。
  * 超限不预览，调用方回落为下载。
  */
-export const TEXT_PREVIEW_MAX_BYTES = 20 * 1024 * 1024
+export const TEXT_PREVIEW_MAX_BYTES = 50 * 1024 * 1024
 export const MARKDOWN_PREVIEW_MAX_BYTES = 2 * 1024 * 1024
 
 function extOf(name: string): string {
