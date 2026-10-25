@@ -99,6 +99,7 @@ async function main(): Promise<void> {
     id: 7,
     role: 'user',
     content: '看图',
+    reasoningContent: null,
     model: null,
     createdAt: new Date('2026-10-25T08:00:00Z'),
     images: [
@@ -113,18 +114,42 @@ async function main(): Promise<void> {
     id: 8,
     role: 'assistant',
     content: '回复',
+    reasoningContent: '先分析需求，再写实现…',
+    model: 'deepseek-chat',
+    createdAt: new Date(),
+    images: [],
+  }).reasoningContent, '先分析需求，再写实现…', 'DTO：assistant 消息带思维链')
+  assertEqual(service.toMessageDto({
+    id: 9,
+    role: 'other' as string as 'user' | 'assistant' | 'system',
+    content: '',
+    reasoningContent: '不应外泄的思维链',
+    model: null,
+    createdAt: new Date(),
+    images: [],
+  }).reasoningContent, null, 'DTO：未知 role 归一化时丢弃 reasoningContent')
+  assertEqual(service.toMessageDto({
+    id: 10,
+    role: 'assistant',
+    content: '',
+    reasoningContent: null,
     model: 'deepseek-chat',
     createdAt: new Date(),
     images: [],
   }).model, 'deepseek-chat', 'DTO：assistant 消息带 model')
   assertEqual(service.toMessageDto({
-    id: 9,
+    id: 11,
     role: 'other' as string as 'user' | 'assistant' | 'system',
     content: '',
+    reasoningContent: null,
     model: null,
     createdAt: new Date(),
     images: [],
   }).role, 'user', 'DTO：未知 role 归一化为 user')
+
+  // === buildThinkingParam：思考开关 → 上游 thinking 参数 ===
+  assertEqual(service.buildThinkingParam(true), { type: 'enabled' }, '思考参数：开启 → enabled')
+  assertEqual(service.buildThinkingParam(false), { type: 'disabled' }, '思考参数：关闭 → disabled（压过 DeepSeek 默认 enabled）')
 
   // === maskApiKey 回归护栏（AI 对话配置响应复用同一函数） ===
   assertEqual(aiService.maskApiKey('sk-abcdefghijklmnop'), 'sk-…mnop', '脱敏：常规 key 只露后 4 位')

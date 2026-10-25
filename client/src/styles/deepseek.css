@@ -253,6 +253,54 @@
   object-fit: cover;
 }
 
+/* 思考过程折叠块（思考模式：流式生成中默认展开，正文开始后收起；历史消息默认收起） */
+
+.gh-ds-reasoning {
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+  overflow: hidden;
+}
+
+.gh-ds-reasoning-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  font-family: var(--gh-font);
+  text-align: left;
+  cursor: pointer;
+}
+
+.gh-ds-reasoning-toggle:hover {
+  color: var(--gh-accent);
+}
+
+.gh-ds-reasoning-chevron {
+  flex-shrink: 0;
+  color: var(--gh-text-tertiary);
+}
+
+.gh-ds-reasoning--live .gh-ds-reasoning-toggle {
+  color: var(--gh-accent);
+}
+
+.gh-ds-reasoning-body {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 2px 12px 10px;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* 消息体的气泡宽度与 ai.css 默认对齐（.gh-ai-bubble 已有样式） */
 
 .gh-ds-error {
@@ -362,6 +410,13 @@
 .gh-ds-tool:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* 深度思考开关激活态 */
+.gh-ds-tool--active {
+  border-color: var(--gh-accent);
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
 }
 
 .gh-ds-tool-hint {

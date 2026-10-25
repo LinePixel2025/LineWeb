@@ -40,6 +40,55 @@ function AiSparkIcon({ size = 14 }: { size?: number }) {
   )
 }
 
+/** 思考开关的本地持久化键（跨会话记住用户偏好） */
+const THINKING_PREF_KEY = 'lineweb_aichat_thinking'
+
+function readThinkingPref(): boolean {
+  try {
+    return localStorage.getItem(THINKING_PREF_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 思考过程折叠块：流式生成中默认展开并自动滚动，正文开始后自动收起；
+ * 历史消息默认收起，点击可展开查看。
+ */
+function ReasoningBlock({ text, live = false }: { text: string; live?: boolean }) {
+  const [open, setOpen] = useState(live)
+  const bodyRef = useRef<HTMLDivElement>(null)
+
+  // live 状态翻转（思考开始/正文开始）时跟随展开或收起；期间的手动开合不被覆盖
+  useEffect(() => {
+    setOpen(live)
+  }, [live])
+
+  // 生成中保持滚动到底部，模拟"正在打出思考过程"
+  useEffect(() => {
+    if (open && live && bodyRef.current) {
+      bodyRef.current.scrollTop = bodyRef.current.scrollHeight
+    }
+  }, [text, open, live])
+
+  return (
+    <div className={`gh-ds-reasoning${live ? ' gh-ds-reasoning--live' : ''}`}>
+      <button
+        type="button"
+        className="gh-ds-reasoning-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen(o => !o)}
+      >
+        <span className="gh-ds-reasoning-chevron" aria-hidden="true">{open ? '▾' : '▸'}</span>
+        {live ? '深度思考中…' : '已深度思考（点击可查看思考过程）'}
+      </button>
+      {open && (
+        <div ref={bodyRef} className="gh-ds-reasoning-body">{text}</div>
+      )}
+    </div>
+  )
+}
+
 export default function DeepSeekChatPage() {
   const queryClient = useQueryClient()
 
@@ -68,12 +117,16 @@ export default function DeepSeekChatPage() {
   const [streaming, setStreaming] = useState(false)
   const [streamText, setStreamText] = useState('')
   const [streamWaiting, setStreamWaiting] = useState(false)
+  /** 当前流式回复的思考过程（仅思考模式且上游支持时非空；先于正文输出） */
+  const [streamReasoning, setStreamReasoning] = useState('')
+  const [thinking, setThinking] = useState(readThinkingPref)
   const [error, setError] = useState('')
   const [cameraOpen, setCameraOpen] = useState(false)
   const [listOpen, setListOpen] = useState(false)
 
   const abortRef = useRef<AbortController | null>(null)
   const streamTextRef = useRef('')
+  const streamReasoningRef = useRef('')
   const endRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
@@ -106,10 +159,10 @@ export default function DeepSeekChatPage() {
     return () => { cancelled = true }
   }, [activeId])
 
-  // === 新消息 / 流式输出时滚到底部 ===
+  // === 新消息 / 流式输出（含思考过程）时滚到底部 ===
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [messages, streamText, streamWaiting])
+  }, [messages, streamText, streamReasoning, streamWaiting])
 
   /** 用服务端真实状态覆盖本地消息列表（中断 / 出错后对齐） */
   const refreshMessages = useCallback((conversationId: number) => {
@@ -144,6 +197,7 @@ export default function DeepSeekChatPage() {
       id: optimisticId,
       role: 'user',
       content,
+      reasoningContent: null,
       model: null,
       createdAt: new Date().toISOString(),
       images: sentAttachments.map(a => ({ id: a.id, width: a.width, height: a.height, size: a.size })),
@@ -158,9 +212,11 @@ export default function DeepSeekChatPage() {
 
     setStreaming(true)
     setStreamText('')
+    setStreamReasoning('')
     setStreamWaiting(true)
     setError('')
     streamTextRef.current = ''
+    streamReasoningRef.current = ''
 
     const controller = new AbortController()
     abortRef.current = controller
@@ -169,7 +225,7 @@ export default function DeepSeekChatPage() {
 
     try {
       await streamAiChatMessage(
-        { conversationId: activeId ?? undefined, content, imageIds },
+        { conversationId: activeId ?? undefined, content, imageIds, thinking },
         {
           onMeta: (meta) => {
             conversationIdForServer = meta.conversationId
@@ -181,6 +237,12 @@ export default function DeepSeekChatPage() {
                 ? { ...m, id: meta.userMessageId }
                 : m,
             ))
+          },
+          onReasoning: (delta) => {
+            // 思考内容开始即视为有输出，替换"正在思考"点点点
+            setStreamWaiting(false)
+            streamReasoningRef.current += delta
+            setStreamReasoning(streamReasoningRef.current)
           },
           onDelta: (delta) => {
             setStreamWaiting(false)
@@ -195,6 +257,7 @@ export default function DeepSeekChatPage() {
                 id: done.assistantMessageId ?? -Date.now(),
                 role: 'assistant',
                 content: text,
+                reasoningContent: streamReasoningRef.current.trim() || null,
                 model: done.model,
                 createdAt: new Date().toISOString(),
                 images: [],
@@ -203,6 +266,7 @@ export default function DeepSeekChatPage() {
               setError('AI 没有返回内容，请重试')
             }
             setStreamText('')
+            setStreamReasoning('')
             setStreamWaiting(false)
             // 新会话出现在列表；额度已由 meta 更新，这里再兜底刷新
             void queryClient.invalidateQueries({ queryKey: queryKeys.aiChat.conversations })
@@ -237,6 +301,7 @@ export default function DeepSeekChatPage() {
       abortRef.current = null
       setStreaming(false)
       setStreamText('')
+      setStreamReasoning('')
       setStreamWaiting(false)
       // 未正常完成（中断 / 上游失败）时对齐服务端真实状态：
       // 上游失败该条消息不计入配额，中断则服务端已落库部分回复
@@ -374,6 +439,9 @@ export default function DeepSeekChatPage() {
             ))}
           </div>
         )}
+        {message.role === 'assistant' && message.reasoningContent && (
+          <ReasoningBlock text={message.reasoningContent} />
+        )}
         {(message.content || message.images.length === 0) && (
           <div className="gh-ai-bubble">
             {message.role === 'assistant'
@@ -495,9 +563,19 @@ export default function DeepSeekChatPage() {
                         <span className="gh-ai-dot" />
                       </div>
                     ) : (
-                      <div className="gh-ai-bubble">
-                        <div dangerouslySetInnerHTML={{ __html: renderMarkdown(streamText) }} />
-                      </div>
+                      <>
+                        {streamReasoning && (
+                          <ReasoningBlock
+                            text={streamReasoning}
+                            live={streamText === ''}
+                          />
+                        )}
+                        {streamText && (
+                          <div className="gh-ai-bubble">
+                            <div dangerouslySetInnerHTML={{ __html: renderMarkdown(streamText) }} />
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -527,6 +605,21 @@ export default function DeepSeekChatPage() {
             {/* 输入区 */}
             <div className="gh-ds-composer">
               <div className="gh-ds-composer-tools">
+                <button
+                  type="button"
+                  className={`gh-ds-tool${thinking ? ' gh-ds-tool--active' : ''}`}
+                  aria-pressed={thinking}
+                  aria-label="深度思考开关"
+                  title={thinking ? '深度思考已开启：回复前会先输出思考过程' : '开启深度思考：回复前会先输出思考过程'}
+                  disabled={!featureEnabled || streaming || uploading}
+                  onClick={() => setThinking(t => {
+                    const next = !t
+                    try { localStorage.setItem(THINKING_PREF_KEY, next ? '1' : '0') } catch { /* 存不下也不阻断 */ }
+                    return next
+                  })}
+                >
+                  深度思考{thinking ? ' · 开' : ''}
+                </button>
                 <button
                   type="button"
                   className="gh-ds-tool"

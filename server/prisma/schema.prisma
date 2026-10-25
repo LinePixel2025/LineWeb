@@ -196,6 +196,7 @@ model AiMessage {
   conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   role           String         // 'user' | 'assistant'
   content        String         @default("")
+  reasoningContent String?      @map("reasoning_content") // 思考模型的思维链（assistant 消息；非思考为 null）
   model          String?        // 生成该回复的模型（assistant 消息）
   counted        Boolean        @default(true) // 是否计入每日提问配额（仅 user 消息；上游调用失败置 false 退还）
   createdAt      DateTime       @default(now()) @map("created_at")

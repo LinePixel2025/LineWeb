@@ -39,6 +39,8 @@ export interface AiChatMessageDto {
   id: number
   role: 'user' | 'assistant'
   content: string
+  /** 思考模型的思维链（仅 assistant 且思考模式；非思考为 null） */
+  reasoningContent: string | null
   model: string | null
   createdAt: string
   images: AiChatImageDto[]
@@ -126,6 +128,8 @@ export interface AiChatDone {
 
 export interface AiChatStreamHandlers {
   onMeta: (meta: AiChatMeta) => void
+  /** 思考内容增量（思考模式且上游支持时才有；先于正文输出） */
+  onReasoning: (delta: string) => void
   onDelta: (text: string) => void
   onDone: (done: AiChatDone) => void
   onError: (message: string) => void
@@ -135,6 +139,8 @@ export interface AiChatSendBody {
   conversationId?: number
   content: string
   imageIds?: number[]
+  /** 思考模式开关：true 时上游先输出思维链再给正文 */
+  thinking?: boolean
 }
 
 /** 429 配额错误的响应体（SSE 建立前返回 JSON） */
@@ -145,7 +151,7 @@ export interface AiChatQuotaError extends ApiError {
 /**
  * 发送消息并流式接收回复。
  *
- * 事件序列：{meta} → {delta}* → {done,…} | {error}。
+ * 事件序列：{meta} → {reasoning}* → {delta}* → {done,…} | {error}。
  * SSE 建立前的错误（401/400/429/503）是普通 JSON，统一转成带 status 的
  * ApiError 抛出（429 时额外携带 quota 字段）；建立后的错误走 onError。
  */
@@ -202,6 +208,8 @@ export async function streamAiChatMessage(
     }
     if (typeof payload.meta === 'object' && payload.meta !== null) {
       handlers.onMeta(payload.meta as unknown as AiChatMeta)
+    } else if (typeof payload.reasoning === 'string') {
+      handlers.onReasoning(payload.reasoning)
     } else if (typeof payload.delta === 'string') {
       handlers.onDelta(payload.delta)
     } else if (payload.error !== undefined) {

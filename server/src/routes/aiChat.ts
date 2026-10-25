@@ -262,8 +262,8 @@ router.delete('/images/:id', aiChatWriteLimiter, asyncHandler(async (req: Reques
 // === 发消息（SSE 流式回复） ===
 
 // POST /api/ai-chat/messages — 发送消息并流式接收回复
-// 请求体: { conversationId?, content, imageIds? }
-// SSE 事件: { meta } → { delta }* → { done, ... } | { error }
+// 请求体: { conversationId?, content, imageIds?, thinking? }
+// SSE 事件: { meta } → { reasoning }* → { delta }* → { done, ... } | { error }
 router.post('/messages', aiChatWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
   const userId = currentUserId(req)
   const parsed = parseInput(aiChatMessageSchema, req.body)
@@ -378,10 +378,14 @@ router.post('/messages', aiChatWriteLimiter, asyncHandler(async (req: Request, r
       userMessageId: userMessage.id,
       userContent: content,
       userImageRows,
+      thinking: parsed.thinking ?? false,
     },
     {
       onChunk: (delta) => {
         if (!clientGone) send({ delta })
+      },
+      onReasoning: (delta) => {
+        if (!clientGone) send({ reasoning: delta })
       },
       onDone: (result) => {
         if (clientGone) return

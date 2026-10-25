@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import type { ChatCompletionCreateParamsStreaming } from 'openai/resources/chat/completions.js'
 import prisma from '../lib/prisma.js'
 import { AppError } from '../middleware/errorHandler.js'
 import { getDateKey, toAiError } from './aiService.js'
@@ -154,6 +155,8 @@ export interface AiChatMessageDto {
   id: number
   role: 'user' | 'assistant'
   content: string
+  /** 思考模型的思维链（仅 assistant 且思考模式；非思考为 null） */
+  reasoningContent: string | null
   model: string | null
   createdAt: Date
   images: AiChatImageDto[]
@@ -164,6 +167,7 @@ export function toMessageDto(msg: {
   id: number
   role: string
   content: string
+  reasoningContent: string | null
   model: string | null
   createdAt: Date
   images: { id: number; width: number; height: number; size: number }[]
@@ -172,6 +176,7 @@ export function toMessageDto(msg: {
     id: msg.id,
     role: msg.role === 'assistant' ? 'assistant' : 'user',
     content: msg.content,
+    reasoningContent: msg.role === 'assistant' ? msg.reasoningContent : null,
     model: msg.model,
     createdAt: msg.createdAt,
     images: [...msg.images].sort((a, b) => a.id - b.id).map(i => ({ id: i.id, width: i.width, height: i.height, size: i.size })),
@@ -230,14 +235,26 @@ export interface AiChatStreamParams {
   userMessageId: number
   userContent: string
   userImageRows: { id: number; imagePath: string }[]
+  /** 思考模式：true 时向上游传 thinking:{type:'enabled'}，回复含思维链 */
+  thinking: boolean
 }
 
 export interface AiChatStreamHandlers {
   onChunk: (delta: string) => void
+  /** 思考内容增量（thinking=true 且上游支持时才有） */
+  onReasoning: (delta: string) => void
   onDone: (result: { assistantMessageId: number | null; model: string; partial: boolean }) => void
   onError: (message: string) => void
   /** 客户端是否已断开（路由传 !res.writableEnded）；中断时把已生成的部分落库 */
   isAborted?: () => boolean
+}
+
+/**
+ * 上游 thinking 参数（DeepSeek 官方 API 的思考开关）。
+ * 开与关都显式传：当前 DeepSeek 模型默认 enabled，关闭时必须显式 disabled 才能压过默认值。
+ */
+export function buildThinkingParam(thinking: boolean): { type: 'enabled' | 'disabled' } {
+  return { type: thinking ? 'enabled' : 'disabled' }
 }
 
 /**
@@ -252,7 +269,7 @@ export async function streamAiChatReply(
   params: AiChatStreamParams,
   handlers: AiChatStreamHandlers,
 ): Promise<void> {
-  const { config, conversationId, userMessageId, userContent, userImageRows } = params
+  const { config, conversationId, userMessageId, userContent, userImageRows, thinking } = params
 
   try {
     // === 组装上下文 ===
@@ -289,21 +306,33 @@ export async function streamAiChatReply(
       maxRetries: 1,
     })
 
-    const stream = await client.chat.completions.create({
+    // thinking 是 DeepSeek 扩展参数（OpenAI SDK 类型未收录），仅此一处断言放宽；
+    // 断言到 Streaming 变体以保住 Stream 返回类型（asyncIterator / controller）
+    const upstreamBody = {
       model: config.model,
       messages,
       max_tokens: 4000,
       temperature: 0.7,
       stream: true,
-    })
+      thinking: buildThinkingParam(thinking),
+    }
+    const stream = await client.chat.completions.create(
+      upstreamBody as unknown as ChatCompletionCreateParamsStreaming,
+    )
 
     let fullText = ''
+    let fullReasoning = ''
     let aborted = false
     for await (const part of stream) {
-      const delta = part.choices[0]?.delta?.content
-      if (delta) {
-        fullText += delta
-        handlers.onChunk(delta)
+      // reasoning_content 是 DeepSeek 扩展字段（思维链，先于正文输出）
+      const delta = part.choices[0]?.delta as { content?: string | null; reasoning_content?: string | null } | undefined
+      if (delta?.reasoning_content) {
+        fullReasoning += delta.reasoning_content
+        handlers.onReasoning(delta.reasoning_content)
+      }
+      if (delta?.content) {
+        fullText += delta.content
+        handlers.onChunk(delta.content)
       }
       if (handlers.isAborted?.()) {
         aborted = true
@@ -325,6 +354,7 @@ export async function streamAiChatReply(
         conversationId,
         role: 'assistant',
         content: text,
+        reasoningContent: fullReasoning.trim() || null,
         model: config.model,
       },
     })

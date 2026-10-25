@@ -195,6 +195,8 @@ export const aiChatMessageSchema = z.object({
   conversationId: z.number().int().positive().optional(),
   content: z.string().max(4000, '消息过长（上限 4000 字）').default(''),
   imageIds: z.array(z.number().int().positive()).max(4, '每条消息最多 4 张图片').default([]),
+  // 思考模式开关：true 时向上游传 thinking:{type:'enabled'}，回复先产出思维链（reasoning_content）再给正文
+  thinking: z.boolean().optional(),
 })
 
 // === 第三方应用授权 Schemas（/oauth/*） ===
