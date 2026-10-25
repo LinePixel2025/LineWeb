@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolvePreviewKind, TEXT_PREVIEW_MAX_BYTES } from '../drivePreview'
+import { MARKDOWN_PREVIEW_MAX_BYTES, resolvePreviewKind, TEXT_PREVIEW_MAX_BYTES } from '../drivePreview'
 import type { DriveItem } from '../../types/drive'
 
 function makeItem(overrides: Partial<DriveItem> = {}): DriveItem {
@@ -58,6 +58,13 @@ describe('resolvePreviewKind', () => {
     expect(resolvePreviewKind(makeItem({ name: 'big.txt', size: big }))).toBeNull()
     expect(resolvePreviewKind(makeItem({ name: 'big.md', size: big }))).toBeNull()
     expect(resolvePreviewKind(makeItem({ name: 'ok.txt', size: String(TEXT_PREVIEW_MAX_BYTES) }))).toBe('text')
+  })
+
+  it('双上限：文本/代码 20MB、markdown 2MB', () => {
+    const betweenLimits = String(5 * 1024 * 1024) // 5MB：文本可预览，markdown 超限
+    expect(resolvePreviewKind(makeItem({ name: 'big-source.ts', size: betweenLimits }))).toBe('text')
+    expect(resolvePreviewKind(makeItem({ name: 'big-doc.md', size: betweenLimits }))).toBeNull()
+    expect(resolvePreviewKind(makeItem({ name: 'md-ok.md', size: String(MARKDOWN_PREVIEW_MAX_BYTES) }))).toBe('markdown')
   })
 
   it('媒体类型不受文本大小上限约束', () => {

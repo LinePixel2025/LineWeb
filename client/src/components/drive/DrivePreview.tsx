@@ -1,4 +1,4 @@
-import { useState, memo, useEffect } from 'react'
+import { useState, memo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { DriveItem } from '../../types/drive'
 import { resolvePreviewKind } from '../../lib/drivePreview'
@@ -151,19 +151,46 @@ const PdfPreview = memo(function PdfPreview({ item, onClose }: DrivePreviewProps
   )
 })
 
-/* ---------- Text / Code Preview ---------- */
+/* ---------- Text / Code Preview（CodeMirror 6 虚拟化渲染，GitHub 代码预览同款方案） ---------- */
 
 const TextPreview = memo(function TextPreview({ item, onClose }: DrivePreviewProps) {
-  const [text, setText] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const hostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let cancelled = false
+    let view: { destroy: () => void } | null = null
+
     api.text(`/drive/download/${item.id}`)
-      .then(content => { if (!cancelled) { setText(content); setLoading(false) } })
+      .then(async text => {
+        if (cancelled) return
+        // 动态加载 CodeMirror：只在真正打开文本预览时才下载这个 chunk
+        const [{ EditorView, lineNumbers }, { EditorState }] = await Promise.all([
+          import('@codemirror/view'),
+          import('@codemirror/state'),
+        ])
+        if (cancelled || !hostRef.current) return
+        view = new EditorView({
+          state: EditorState.create({
+            doc: text,
+            extensions: [
+              lineNumbers(),
+              EditorView.lineWrapping,
+              EditorView.editable.of(false),
+              EditorState.readOnly.of(true),
+            ],
+          }),
+          parent: hostRef.current,
+        })
+        setLoading(false)
+      })
       .catch(e => { if (!cancelled) { setError(e instanceof Error ? e.message : '读取失败'); setLoading(false) } })
-    return () => { cancelled = true }
+
+    return () => {
+      cancelled = true
+      view?.destroy()
+    }
   }, [item.id])
 
   return createPortal(
@@ -177,7 +204,7 @@ const TextPreview = memo(function TextPreview({ item, onClose }: DrivePreviewPro
         ) : error ? (
           <p className="gh-drive-preview-error">{error}</p>
         ) : (
-          <pre className="gh-drive-preview-code"><code>{text}</code></pre>
+          <div ref={hostRef} className="gh-drive-preview-cm" />
         )}
         <button className="gh-drive-preview-close" onClick={onClose} aria-label="关闭预览"><CloseIcon size={16} /></button>
       </div>

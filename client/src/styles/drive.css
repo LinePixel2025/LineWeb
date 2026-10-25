@@ -1688,6 +1688,53 @@
   white-space: pre;
 }
 
+/* 大文本预览：CodeMirror 6 虚拟化渲染容器（只渲染可视行，20MB 内文本流畅） */
+.gh-drive-preview-cm {
+  width: min(920px, 92vw);
+  height: calc(100vh - 200px);
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--gh-bg);
+  border: 1px solid var(--gh-border-muted);
+}
+
+.gh-drive-preview-cm .cm-editor {
+  height: 100%;
+  background: var(--gh-bg);
+  color: var(--gh-text);
+}
+
+.gh-drive-preview-cm .cm-editor.cm-focused {
+  outline: none;
+}
+
+.gh-drive-preview-cm .cm-scroller {
+  overflow: auto;
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-sm);
+  line-height: 1.6;
+}
+
+.gh-drive-preview-cm .cm-content {
+  padding: 8px 0;
+  cursor: text;
+}
+
+.gh-drive-preview-cm .cm-gutters {
+  background: var(--gh-bg);
+  color: var(--gh-text-tertiary);
+  border-right: 1px solid var(--gh-border-muted);
+}
+
+.gh-drive-preview-cm .cm-lineNumbers .cm-gutterElement {
+  padding: 0 10px 0 14px;
+  min-width: 44px;
+}
+
+.gh-drive-preview-cm .cm-selectionBackground {
+  background: var(--gh-accent-soft) !important;
+}
+
 .gh-drive-preview-markdown {
   width: min(860px, 92vw);
   max-height: calc(100vh - 160px);

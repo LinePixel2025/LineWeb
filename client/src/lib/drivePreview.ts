@@ -20,8 +20,14 @@ const CODE_EXTS = [
 ]
 const PLAINTEXT_EXTS = ['txt', 'log', 'csv', 'tsv', 'ini', 'conf', 'cfg', 'env', 'properties', 'bat', 'cmd', 'ps1', 'diff', 'patch']
 
-/** 文本类预览的大小上限：文本只能整文件取回渲染，超过则不预览（调用方回落为下载） */
-export const TEXT_PREVIEW_MAX_BYTES = 2 * 1024 * 1024
+/**
+ * 文本类预览的大小上限：
+ * - 文本/代码走 CodeMirror 虚拟化渲染（GitHub 同款方案），只渲染可视区域，可放宽到 20MB；
+ * - markdown 是整篇正则渲染成 HTML，撑不了大文件，维持 2MB。
+ * 超限不预览，调用方回落为下载。
+ */
+export const TEXT_PREVIEW_MAX_BYTES = 20 * 1024 * 1024
+export const MARKDOWN_PREVIEW_MAX_BYTES = 2 * 1024 * 1024
 
 function extOf(name: string): string {
   const lower = name.toLowerCase()
@@ -48,7 +54,8 @@ export function resolvePreviewKind(item: Pick<DriveItem, 'name' | 'mimeType' | '
     || CODE_EXTS.includes(ext)
     || PLAINTEXT_EXTS.includes(ext)
   if (!isTextLike) return null
-  if (Number.isFinite(size) && size > TEXT_PREVIEW_MAX_BYTES) return null
-  if (MARKDOWN_EXTS.includes(ext) || mime.includes('markdown')) return 'markdown'
-  return 'text'
+  const isMarkdown = MARKDOWN_EXTS.includes(ext) || mime.includes('markdown')
+  const limit = isMarkdown ? MARKDOWN_PREVIEW_MAX_BYTES : TEXT_PREVIEW_MAX_BYTES
+  if (Number.isFinite(size) && size > limit) return null
+  return isMarkdown ? 'markdown' : 'text'
 }
