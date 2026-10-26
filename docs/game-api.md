@@ -1,4 +1,4 @@
-# LineWeb 游戏 API 接入文档（2048 单机 / 好友联机）
+# LineWeb 游戏 API 接入文档（十款游戏：单机 / 好友联机）
 
 > 适用版本：2026-10（游戏大厅 + 2048 好友联机 + 无 WebSocket 轮询降级）
 > 相关文档：[`chat-api.md`](./chat-api.md)（好友关系与聊天 API）、[`api.md`](./api.md)（全部端点）
@@ -789,7 +789,143 @@ cd client && npx vitest run src/lib/games/__tests__/gomoku.test.ts   # 15 用例
 
 ---
 
-# 八、跨游戏互斥与新增游戏清单
+# 八、骗子酒馆（liar）单机 / 好友联机
+
+## 1. 概述
+
+2–4 人心理战牌桌：20 张牌（K×6 / Q×6 / A×6 / 鬼牌×2），每局每人 5 张，系统随机宣布目标牌面
+（K/Q/A，鬼牌万能）。轮到时盖着出 1–3 张，或质疑上一手；质疑只翻开上一手——全真则质疑者输，
+掺假则被打出者输。输家扣左轮扳机（6 弹巢，子弹数 = 累计死亡人数 + 1），中弹出局；扣扳机后
+无论生死都重洗重发。全员出完无人质疑为流局（flush）。最后存活者获胜。
+
+- **单机**纯前端：`client/src/lib/games/liar.ts`（引擎，与联机逐字同拷贝）+ `LiarPage.tsx`，
+  AI 与联机托管共用 `suggestLiarMove`；战绩存 `lineweb.liar.stats`。
+- **好友联机**：2–4 人，房主 = 座位 0；手牌与牌堆牌面为隐藏信息，DTO 按观看者裁剪
+  （`myHand` 只有自己的手牌，`pile` 只下发 `{userId, count}`），只有被质疑开牌的牌面公开。
+
+## 2. REST 端点（前缀 `/api/games/liar`）
+
+与 UNO / 象棋一样由 `mountGameEndpoints` 挂载：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/friends` | 好友列表（online / inMatch 覆盖全部游戏） |
+| GET | `/invites` | 收到 / 发出的邀请（60 秒有效） |
+| POST | `/invites` | `{friendId}` 邀请好友；无房间时自动创建 |
+| POST | `/invites/:id/respond` | `{action:'accept'\|'decline'}` |
+| DELETE | `/invites/:id` | 取消自己的邀请 |
+| GET | `/sync?matchId=` | 轮询降级：`serverTime + invites + match`（按观看者裁剪） |
+| POST | `/presence` | 轮询降级心跳（跨游戏共享 TTL） |
+| GET | `/matches/active` | 当前等待房间 / 进行中对局或 null |
+| GET | `/matches/:id` | 对局详情（非参与者 404） |
+| POST | `/matches/:id/start` | 房主开始（2–4 人） |
+| POST | `/matches/:id/leave` | 离开等待房间（房主解散） |
+| POST | `/matches/:id/actions` | `{type:'play',cards:[0-19]*1-3}` 或 `{type:'challenge'}` |
+| POST | `/matches/:id/resign` | 认输：自己出局，多人局继续 |
+
+对局 DTO 字段：`round`、`target`、`turn {userId, deadline}`、`pile[]`、`lastReveal`、
+`log[]`（round / play / challenge / reveal / trigger / death / flush）、`gunBullets`、
+`myHand[]`、`players[] {handCount, plays, status}`。
+
+## 3. 规则与结束口径
+
+- 回合 60 秒，超时由服务端 `suggestLiarMove` 自动托管；掉线超过 120 秒且其他存活玩家在线判负出局；
+- 认输 / 掉线出局会推高子弹数；只剩一人 → `last_standing`；
+- 全局 30 分钟超时 → `timeout`（无胜者）；等待房间 30 分钟解散 → `cancelled`；
+- 手牌不跨局保留（站内简化口径，避免「手牌出完跳过」等边角状态）。
+
+## 4. 自检
+
+```bash
+cd server && npm run verify:liar   # 引擎 + 联机状态机（363 断言）
+cd client && npx vitest run src/lib/games/__tests__/liar.test.ts
+```
+
+---
+
+# 九、UNO（uno）单机 / 好友联机
+
+## 1. 概述
+
+2–10 人经典 UNO：108 张（四色各 0×1、1–9×2、禁止×2、反转×2、+2×2，万能×4、万能+4×4）。
+每人 7 张，翻开第一张非万能牌开局，房主（座位 0）先手。同色 / 同数字 / 同功能可出；
+万能牌指定颜色；**万能+4 采用官方限制：手里还有当前颜色的牌时不能出**。
+禁止跳过下一家；反转 2 人局视作禁止；+2 / 万能+4 让下一家摸牌并被跳过（不叠加）。
+摸一张后可立即打出（只能打刚摸到的那张）或跳过；先出完手牌者获胜。
+
+- **单机**纯前端：`client/src/lib/games/uno.ts` + `UnoPage.tsx`，AI 与联机托管共用
+  `suggestUnoMove`（下家手牌 ≤2 时优先功能牌，否则保留功能牌打普通牌；万能牌选择手里最多的颜色）；
+- **联机**：2–10 人，DTO 按观看者裁剪（`myHand` 只有自己手牌，其他玩家只下发张数，牌堆只下发张数）；
+  `drawnCardId` 为该回合摸到的牌 id（所有观看者可见，但只有该玩家能打出）。
+
+## 2. REST 端点（前缀 `/api/games/uno`）
+
+端点形状与骗子酒馆 / 象棋完全一致；动作体：
+
+```json
+{ "type": "play", "cardId": 42, "color": "red" }   // color 仅万能牌需要
+{ "type": "draw" }
+{ "type": "pass" }                                  // 仅摸牌后可用
+```
+
+对局 DTO：`currentColor`、`direction`（1 / -1）、`topCard`、`deckCount`、`discardCount`、
+`drawnCardId`、`turn {userId, deadline}`、`lastAction`、`myHand[]`、
+`players[] {handCount, plays, status}`。
+
+## 3. 结束口径
+
+- 有人出完手牌 → `hand_empty`；认输 / 掉线 120 秒出局，最后存活者 → `last_standing`；
+- 全局 30 分钟超时 → `timeout`；等待解散 → `cancelled`；
+- 回合 60 秒超时由服务端自动托管（摸牌后若可出会继续自动打完，不淘汰）。
+
+## 4. 自检
+
+```bash
+cd server && npm run verify:uno   # 牌堆/规则/效果/AI 自对弈/联机状态机（310 断言）
+cd client && npx vitest run src/lib/games/__tests__/uno.test.ts
+```
+
+---
+
+# 十、中国象棋（xiangqi）单机 / 好友联机
+
+## 1. 概述
+
+9×10 标准棋盘，红方（下方）先行，黑方（上方）。完整走子规则：帅/将九宫一步、仕/士斜行、
+相/象田字且不过河（象眼不能有子）、马走日别马腿、车走直线、炮隔子吃、兵/卒过河可横走。
+走子后不得使己方将帅被将军（含将帅照面）；被将军且无合法着法 = 绝杀（checkmate）；
+无合法着法但未被将军 = 困毙（stalemate，判负）；连续 120 个半回合无吃子判和（draw）。
+
+- **单机**：`client/src/lib/games/xiangqi.ts` 引擎 + alpha-beta 搜索（简单 / 普通 / 困难 = 1/2/3 层），
+  可选执红 / 执黑；战绩存 `lineweb.xiangqi.stats`；
+- **联机**（恰好 2 人）：房主 = 座位 0 执红先行，另一位执黑；棋盘全量下发，无隐藏信息。
+
+## 2. REST 端点（前缀 `/api/games/xiangqi`）
+
+动作体 `{ "type": "move", "from": 64, "to": 37 }`（下标 = y×9+x，0–89）。
+非法走子 / 送将 400；非当前回合 409。
+
+对局 DTO：`board`（90 一维，正数红 / 负数黑 / 0 空）、`turn {userId, deadline}`、
+`lastMove {userId, from, to, captured, auto}`、`checked`（当前行棋方是否被将军）、
+`halfMoveClock`、`players[] {side:'red'|'black', moves, status}`。
+
+## 3. 结束口径
+
+- 绝杀 → `checkmate`；困毙 → `stalemate`；认输 → `resign`；掉线 120 秒 → `forfeit`；
+- 连续 120 半回合无吃子 → `draw`；全局 30 分钟 → `timeout`；等待解散 → `cancelled`；
+- 回合 60 秒超时由服务端自动托管走子（`lastMove.auto = true`，不淘汰）。
+
+## 4. 自检
+
+```bash
+cd server && npm run verify:xiangqi   # 规则/将军/绝杀/困毙/AI/联机状态机（91 断言）
+cd client && npx vitest run src/lib/games/__tests__/xiangqi.test.ts
+```
+
+
+---
+
+# 十一、跨游戏互斥与新增游戏清单
 
 - 所有游戏的房间/邀请都通过 `gameService.registerGameModule({ name, isUserInMatch, sweep })`
   注册进同一张表，`isUserBusyInOtherGames(userId, selfName)` 是**跨游戏互斥的唯一口径**
