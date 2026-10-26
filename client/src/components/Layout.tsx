@@ -7,6 +7,9 @@ export default memo(function Layout() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
+  // 聊天页需要「整页固定高度 + 内部滚动」的外壳：用显式类名而不是 :has()，
+  // 避免旧内核（不支持 :has）下页脚把整页撑高
+  const isChatRoute = location.pathname === '/chat' || location.pathname.startsWith('/chat/')
 
   useEffect(() => {
     setMobileOpen(false)
@@ -35,7 +38,7 @@ export default memo(function Layout() {
         onClose={() => setMobileOpen(false)}
         onToggleCollapse={() => setCollapsed(prev => !prev)}
       />
-      <main className={`gh-content ${collapsed ? 'gh-content--collapsed' : ''}`}>
+      <main className={`gh-content ${collapsed ? 'gh-content--collapsed' : ''} ${isChatRoute ? 'gh-content--chat' : ''}`}>
         <Outlet />
         <footer className="gh-footer">
           <div className="gh-footer-links">

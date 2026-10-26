@@ -11,22 +11,43 @@
   margin: 0 auto;
   flex-direction: column;
   gap: var(--gh-space-2);
-  /* 与 .gh-content 的上下内边距保持一致（上 24 / 下 24）：聊天容器占满可视高度，历史消息只在内部滚动 */
+  /* 兜底：模块单独使用时按视口高度计算；聊天页外壳内会被下面的 flex 规则覆盖 */
   height: calc(100vh - var(--gh-nav-height) - var(--gh-space-5) * 2);
   height: calc(100dvh - var(--gh-nav-height) - var(--gh-space-5) * 2);
   /* 不设最小高度：视口再矮也只在聊天容器内部滚动，绝不把整页撑高 */
   min-height: 0;
 }
 
-/* 聊天页内部滚动，避免与页脚形成双滚动条；底部留白收窄，把高度让给消息区 */
-.gh-content:has(.gh-chat-page) .gh-footer {
+/* 聊天页外壳：把 .gh-content 变成占满视口的 flex 列容器。
+   不依赖 :has()，也不手算 nav / 内边距——旧内核下页脚不会再把整页撑高；
+   群聊消息再多也只会在 .gh-chat-messages 内部滚动。 */
+.gh-content--chat {
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 聊天页内部滚动，避免与页脚形成双滚动条 */
+.gh-content--chat .gh-footer {
   display: none;
 }
 
+/* 底部留白收窄，把高度让给消息区（手机端内边距由 responsive.css 负责） */
 @media (min-width: 768px) {
-  .gh-content:has(.gh-chat-page) {
+  .gh-content--chat {
     padding-bottom: var(--gh-space-5);
   }
+}
+
+/* 外壳内由 flex 决定高度：消息数量只影响内部滚动，不会撑高整页 */
+.gh-content--chat .gh-chat-page {
+  height: auto;
+  max-height: 100%;
+  flex: 1 1 0%;
+  min-height: 0;
 }
 
 /* ===== 提示条 ===== */
