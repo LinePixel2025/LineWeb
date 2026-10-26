@@ -6,9 +6,21 @@
  */
 
 import type { DoudizhuCombo } from '../lib/games/doudizhu'
+import type { UnoCard, UnoColor } from '../lib/games/uno'
+import type { LiarDeathCause, LiarTarget } from '../lib/games/liar'
 
 /** 游戏种类（邀请与对局 DTO 的 game 字段；旧邀请缺省视为 2048） */
-export type GameKind = '2048' | 'doudizhu' | 'snake' | 'minesweeper' | 'jump' | 'minecraft' | 'gomoku'
+export type GameKind =
+  | '2048'
+  | 'doudizhu'
+  | 'snake'
+  | 'minesweeper'
+  | 'jump'
+  | 'minecraft'
+  | 'gomoku'
+  | 'liar'
+  | 'uno'
+  | 'xiangqi'
 
 /** 2048 移动方向 */
 export type Game2048Direction = 'up' | 'down' | 'left' | 'right'
@@ -230,6 +242,9 @@ export type AnyGameMatch =
   | GameJumpMatch
   | GameMinecraftMatch
   | GameGomokuMatch
+  | GameLiarMatch
+  | GameUnoMatch
+  | GameXiangqiMatch
 
 /** GET/POST /api/games/doudizhu/* 对局响应 */
 export interface DoudizhuMatchResponse {
@@ -542,6 +557,213 @@ export interface GameGomokuMatch {
 
 /** POST /api/games/gomoku/matches/:id/actions 的动作体（落子坐标） */
 export type GomokuActionBody = { type: 'place'; x: number; y: number }
+
+// ==================== 骗子酒馆（liar，2–4 人出牌 / 质疑） ====================
+
+export type GameLiarPlayerStatus = 'waiting' | 'playing' | 'won' | 'lost'
+export type GameLiarMatchStatus = 'waiting' | 'playing' | 'finished'
+export type GameLiarEndReason = 'last_standing' | 'timeout' | 'cancelled'
+
+export interface LiarTurnDto {
+  userId: number
+  deadline: string
+}
+
+export interface LiarPileEntryDto {
+  userId: number
+  count: number
+}
+
+export interface LiarRevealDto {
+  round: number
+  userId: number
+  cards: number[]
+  truthful: boolean
+  challengerId: number
+}
+
+export type GameLiarLogEntry =
+  | { type: 'round'; round: number; target: LiarTarget; starterUserId: number }
+  | { type: 'play'; round: number; userId: number; count: number }
+  | { type: 'challenge'; round: number; userId: number; targetUserId: number }
+  | { type: 'reveal'; round: number; userId: number; cards: number[]; truthful: boolean }
+  | { type: 'trigger'; round: number; userId: number; bullets: number; died: boolean }
+  | { type: 'death'; round: number; userId: number; cause: LiarDeathCause }
+  | { type: 'flush'; round: number }
+
+export interface GameLiarPlayer {
+  userId: number
+  username: string
+  online: boolean
+  status: GameLiarPlayerStatus
+  handCount: number
+  plays: number
+}
+
+export interface GameLiarMatch {
+  id: number
+  game: 'liar'
+  hostId: number
+  status: GameLiarMatchStatus
+  version: number
+  startedAt: string
+  endsAt: string
+  endedAt: string | null
+  winnerId: number | null
+  reason: GameLiarEndReason | null
+  round: number
+  target: LiarTarget | null
+  turn: LiarTurnDto | null
+  pile: LiarPileEntryDto[]
+  lastReveal: LiarRevealDto | null
+  log: GameLiarLogEntry[]
+  gunBullets: number
+  myHand: number[]
+  players: GameLiarPlayer[]
+}
+
+export type LiarActionBody =
+  | { type: 'play'; cards: number[] }
+  | { type: 'challenge' }
+
+export interface LiarMatchResponse {
+  match: GameLiarMatch
+}
+export interface LiarActiveMatchResponse {
+  match: GameLiarMatch | null
+}
+export interface LiarSyncResponse {
+  serverTime: string
+  invites: GameInvitesResponse
+  match: GameLiarMatch | null
+}
+
+// ==================== UNO（uno，2–10 人经典牌局） ====================
+
+export type GameUnoPlayerStatus = 'waiting' | 'playing' | 'won' | 'lost'
+export type GameUnoMatchStatus = 'waiting' | 'playing' | 'finished'
+export type GameUnoEndReason = 'hand_empty' | 'last_standing' | 'timeout' | 'cancelled'
+
+/** 牌 DTO 与双端引擎的 UnoCard 结构一致 */
+export type UnoCardDto = UnoCard
+
+export interface GameUnoPlayer {
+  userId: number
+  username: string
+  online: boolean
+  status: GameUnoPlayerStatus
+  handCount: number
+  plays: number
+}
+
+export type UnoLatelyDto =
+  | { type: 'play'; userId: number; card: UnoCardDto; color: UnoColor }
+  | { type: 'draw'; userId: number; count: number }
+  | { type: 'pass'; userId: number }
+
+export interface GameUnoMatch {
+  id: number
+  game: 'uno'
+  hostId: number
+  status: GameUnoMatchStatus
+  version: number
+  startedAt: string
+  endsAt: string
+  endedAt: string | null
+  winnerId: number | null
+  reason: GameUnoEndReason | null
+  currentColor: UnoColor | null
+  direction: 1 | -1
+  topCard: UnoCardDto | null
+  deckCount: number
+  discardCount: number
+  /** 当前回合玩家摸到的牌 id（仅自己可打出） */
+  drawnCardId: number | null
+  turn: { userId: number; deadline: string } | null
+  lastAction: UnoLatelyDto | null
+  myHand: UnoCardDto[]
+  players: GameUnoPlayer[]
+}
+
+export type UnoActionBody =
+  | { type: 'play'; cardId: number; color?: UnoColor }
+  | { type: 'draw' }
+  | { type: 'pass' }
+
+export interface UnoMatchResponse {
+  match: GameUnoMatch
+}
+export interface UnoActiveMatchResponse {
+  match: GameUnoMatch | null
+}
+export interface UnoSyncResponse {
+  serverTime: string
+  invites: GameInvitesResponse
+  match: GameUnoMatch | null
+}
+
+// ==================== 中国象棋（xiangqi，2 人轮流走子） ====================
+
+export type GameXiangqiPlayerStatus = 'waiting' | 'playing' | 'won' | 'lost'
+export type GameXiangqiMatchStatus = 'waiting' | 'playing' | 'finished'
+export type GameXiangqiEndReason =
+  | 'checkmate'
+  | 'stalemate'
+  | 'resign'
+  | 'forfeit'
+  | 'timeout'
+  | 'draw'
+  | 'cancelled'
+
+export interface XiangqiLastMoveDto {
+  userId: number
+  from: number
+  to: number
+  captured: number
+  auto: boolean
+}
+
+export interface GameXiangqiPlayer {
+  userId: number
+  username: string
+  online: boolean
+  status: GameXiangqiPlayerStatus
+  side: 'red' | 'black' | null
+  moves: number
+}
+
+export interface GameXiangqiMatch {
+  id: number
+  game: 'xiangqi'
+  hostId: number
+  status: GameXiangqiMatchStatus
+  version: number
+  startedAt: string
+  endsAt: string
+  endedAt: string | null
+  winnerId: number | null
+  reason: GameXiangqiEndReason | null
+  board: number[]
+  turn: { userId: number; deadline: string } | null
+  lastMove: XiangqiLastMoveDto | null
+  checked: boolean
+  halfMoveClock: number
+  players: GameXiangqiPlayer[]
+}
+
+export type XiangqiActionBody = { type: 'move'; from: number; to: number }
+
+export interface XiangqiMatchResponse {
+  match: GameXiangqiMatch
+}
+export interface XiangqiActiveMatchResponse {
+  match: GameXiangqiMatch | null
+}
+export interface XiangqiSyncResponse {
+  serverTime: string
+  invites: GameInvitesResponse
+  match: GameXiangqiMatch | null
+}
 
 // ==================== 通用对局响应（新游戏复用同一形状） ====================
 

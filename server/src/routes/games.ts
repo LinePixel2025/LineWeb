@@ -17,6 +17,9 @@ import {
   minecraftActionSchema,
   minecraftSyncQuerySchema,
   gomokuActionSchema,
+  liarActionSchema,
+  unoActionSchema,
+  xiangqiActionSchema,
 } from '../config/index.js'
 import { markGamePresence } from '../services/gamePresence.js'
 import {
@@ -117,11 +120,55 @@ import {
   respondGomokuInvite,
   startGomokuMatch,
 } from '../services/gameGomokuService.js'
+import {
+  applyLiarAction,
+  cancelLiarInvite,
+  createLiarInvite,
+  getActiveLiarMatch,
+  getLiarMatch,
+  getLiarSync,
+  leaveLiarMatch,
+  listLiarFriends,
+  listLiarInvites,
+  resignLiarMatch,
+  respondLiarInvite,
+  startLiarMatch,
+} from '../services/gameLiarService.js'
+import {
+  applyUnoAction,
+  cancelUnoInvite,
+  createUnoInvite,
+  getActiveUnoMatch,
+  getUnoMatch,
+  getUnoSync,
+  leaveUnoMatch,
+  listUnoFriends,
+  listUnoInvites,
+  resignUnoMatch,
+  respondUnoInvite,
+  startUnoMatch,
+} from '../services/gameUnoService.js'
+import {
+  applyXiangqiAction,
+  cancelXiangqiInvite,
+  createXiangqiInvite,
+  getActiveXiangqiMatch,
+  getXiangqiMatch,
+  getXiangqiSync,
+  leaveXiangqiMatch,
+  listXiangqiFriends,
+  listXiangqiInvites,
+  resignXiangqiMatch,
+  respondXiangqiInvite,
+  startXiangqiMatch,
+} from '../services/gameXiangqiService.js'
 
 /**
  * 游戏联机 REST 路由（挂载于 /api/games）：
  *   2048（2–10 人竞速）+ 斗地主（3 人）+ 贪吃蛇（2–8 人大地图）
  *   + 扫雷（2–4 人轮流点）+ 跳一跳（2–6 人轮流跳）+ 五子棋（2 人轮流落子）
+ *   + 骗子酒馆（2–4 人出牌 / 质疑 + 左轮轮盘）
+ *   + UNO（2–10 人经典牌局）+ 中国象棋（2 人轮流走子）
  *
  * 全部端点要求账号登录令牌（router 内 authenticate 兜底）；没有公开端点。
  * 第三方应用令牌 / 下载票据不可用（全局认证白名单会拒绝 /games/*）。
@@ -541,6 +588,57 @@ mountGameEndpoints({
   applyAction: applyGomokuAction,
   resignMatch: resignGomokuMatch,
   actionSchema: gomokuActionSchema,
+})
+
+mountGameEndpoints({
+  base: 'liar',
+  listFriends: listLiarFriends,
+  listInvites: listLiarInvites,
+  createInvite: createLiarInvite,
+  respondInvite: respondLiarInvite,
+  cancelInvite: cancelLiarInvite,
+  sync: getLiarSync,
+  getActiveMatch: getActiveLiarMatch,
+  getMatch: getLiarMatch,
+  startMatch: startLiarMatch,
+  leaveMatch: leaveLiarMatch,
+  applyAction: applyLiarAction,
+  resignMatch: resignLiarMatch,
+  actionSchema: liarActionSchema,
+})
+
+mountGameEndpoints({
+  base: 'uno',
+  listFriends: listUnoFriends,
+  listInvites: listUnoInvites,
+  createInvite: createUnoInvite,
+  respondInvite: respondUnoInvite,
+  cancelInvite: cancelUnoInvite,
+  sync: getUnoSync,
+  getActiveMatch: getActiveUnoMatch,
+  getMatch: getUnoMatch,
+  startMatch: startUnoMatch,
+  leaveMatch: leaveUnoMatch,
+  applyAction: applyUnoAction,
+  resignMatch: resignUnoMatch,
+  actionSchema: unoActionSchema,
+})
+
+mountGameEndpoints({
+  base: 'xiangqi',
+  listFriends: listXiangqiFriends,
+  listInvites: listXiangqiInvites,
+  createInvite: createXiangqiInvite,
+  respondInvite: respondXiangqiInvite,
+  cancelInvite: cancelXiangqiInvite,
+  sync: getXiangqiSync,
+  getActiveMatch: getActiveXiangqiMatch,
+  getMatch: getXiangqiMatch,
+  startMatch: startXiangqiMatch,
+  leaveMatch: leaveXiangqiMatch,
+  applyAction: applyXiangqiAction,
+  resignMatch: resignXiangqiMatch,
+  actionSchema: xiangqiActionSchema,
 })
 
 // ============================================================

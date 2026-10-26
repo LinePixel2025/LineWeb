@@ -1,0 +1,732 @@
+/* ============================================================
+   骗子酒馆（单人 + 联机）
+   命名空间：.gh-liar-*
+   ============================================================ */
+
+.gh-liar-page,
+.gh-liar-online {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-4);
+}
+
+.gh-liar-header-actions,
+.gh-liar-online-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+.gh-liar-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+  padding: var(--gh-space-3) var(--gh-space-4);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: 12px;
+}
+
+.gh-liar-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+.gh-liar-toolbar-label {
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-liar-toolbar-hint {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-sm);
+}
+
+/* ===== 牌面 ===== */
+
+.gh-liar-card {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 10px;
+  border: 1px solid var(--gh-border);
+  background: var(--gh-bg);
+  color: var(--gh-text);
+  font-family: var(--gh-font-mono);
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(31, 35, 40, 0.12);
+  transition:
+    transform var(--gh-transition),
+    box-shadow var(--gh-transition),
+    border-color var(--gh-transition);
+  user-select: none;
+}
+
+.gh-liar-card--md {
+  width: 64px;
+  height: 92px;
+  font-size: 1.6rem;
+}
+
+.gh-liar-card--sm {
+  width: 42px;
+  height: 60px;
+  font-size: 1.05rem;
+  border-radius: 7px;
+}
+
+.gh-liar-card--k {
+  color: #9a6700;
+  background: linear-gradient(150deg, #fff8e6, var(--gh-bg));
+  border-color: #d4a72c;
+}
+
+.gh-liar-card--q {
+  color: #0969da;
+  background: linear-gradient(150deg, #eef6ff, var(--gh-bg));
+  border-color: #54aeff;
+}
+
+.gh-liar-card--a {
+  color: #cf222e;
+  background: linear-gradient(150deg, #fff1f0, var(--gh-bg));
+  border-color: #ff8182;
+}
+
+.gh-liar-card--joker {
+  color: #8250df;
+  background: linear-gradient(150deg, #f6f0ff, var(--gh-bg));
+  border-color: #a475f9;
+}
+
+.gh-liar-card--back {
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.09) 0 6px, transparent 6px 12px),
+    linear-gradient(145deg, #2b3138, #161b22);
+  border-color: #444c56;
+}
+
+.gh-liar-card--clickable {
+  cursor: pointer;
+}
+
+.gh-liar-card--clickable:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(31, 35, 40, 0.22);
+}
+
+.gh-liar-card--selected {
+  transform: translateY(-8px);
+  border-color: var(--gh-accent);
+  box-shadow: 0 0 0 2px var(--gh-accent), 0 10px 18px rgba(31, 35, 40, 0.22);
+}
+
+.gh-liar-card--disabled {
+  opacity: 0.72;
+  cursor: default;
+}
+
+.gh-liar-card-corner {
+  position: absolute;
+  font-size: 0.62em;
+  opacity: 0.85;
+}
+
+.gh-liar-card-corner--tl {
+  top: 5px;
+  left: 6px;
+}
+
+.gh-liar-card-corner--br {
+  right: 6px;
+  bottom: 5px;
+  transform: rotate(180deg);
+}
+
+.gh-liar-card-main {
+  font-size: 1em;
+}
+
+/* ===== 单机牌桌 ===== */
+
+.gh-liar-table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+}
+
+.gh-liar-opponents {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--gh-space-3);
+}
+
+.gh-liar-opponent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-1);
+  padding: var(--gh-space-3);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: 12px;
+  min-height: 108px;
+}
+
+.gh-liar-opponent--turn {
+  border-color: var(--gh-accent);
+  box-shadow: 0 0 0 1px var(--gh-accent);
+}
+
+.gh-liar-opponent--dead {
+  opacity: 0.62;
+}
+
+.gh-liar-opponent-name {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  font-weight: 600;
+}
+
+.gh-liar-opponent-meta {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-liar-hand-stack {
+  display: flex;
+  margin-top: auto;
+  padding-top: var(--gh-space-2);
+}
+
+.gh-liar-hand-stack .gh-liar-card + .gh-liar-card {
+  margin-left: -22px;
+}
+
+.gh-liar-center {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-4);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(130, 80, 223, 0.10), transparent 60%),
+    var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: 16px;
+  max-width: 860px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.gh-liar-round-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+}
+
+.gh-liar-round-chip {
+  padding: 4px 10px;
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+  border-radius: 999px;
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+}
+
+.gh-liar-target {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--gh-space-2);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-liar-target strong {
+  color: var(--gh-text);
+  font-family: var(--gh-font-mono);
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.gh-liar-gun {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-liar-gun--danger {
+  color: var(--gh-danger);
+  font-weight: 600;
+}
+
+.gh-liar-gun-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.gh-liar-gun-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gh-border);
+  border: 1px solid var(--gh-border-muted);
+}
+
+.gh-liar-gun-dot--loaded {
+  background: var(--gh-danger);
+  border-color: var(--gh-danger);
+}
+
+.gh-liar-pile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+}
+
+.gh-liar-pile-label {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gh-liar-pile-cards {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+  min-height: 46px;
+  padding: var(--gh-space-2);
+  background: var(--gh-bg);
+  border: 1px dashed var(--gh-border);
+  border-radius: 10px;
+}
+
+.gh-liar-pile-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: 8px;
+  font-size: var(--gh-text-xs);
+}
+
+.gh-liar-pile-count {
+  font-family: var(--gh-font-mono);
+  font-weight: 700;
+  color: var(--gh-accent);
+}
+
+.gh-liar-pile-name {
+  color: var(--gh-text-secondary);
+}
+
+.gh-liar-pile-empty {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-liar-turn {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+  padding: var(--gh-space-3);
+  background: var(--gh-bg);
+  border: 1px solid var(--gh-border);
+  border-radius: 10px;
+}
+
+.gh-liar-turn--me {
+  border-color: var(--gh-accent);
+  background: var(--gh-accent-soft);
+}
+
+.gh-liar-turn-label {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-liar-turn strong {
+  font-size: var(--gh-text-md);
+}
+
+.gh-liar-turn-hint {
+  margin-left: auto;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-liar-countdown {
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-liar-countdown--low {
+  color: var(--gh-danger);
+  font-weight: 700;
+}
+
+.gh-liar-reveal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-3);
+  border-radius: 10px;
+  border: 1px solid var(--gh-border);
+  background: var(--gh-bg);
+}
+
+.gh-liar-reveal--true {
+  border-color: rgba(26, 127, 55, 0.5);
+  background: rgba(26, 127, 55, 0.06);
+}
+
+.gh-liar-reveal--lie {
+  border-color: rgba(207, 34, 46, 0.5);
+  background: rgba(207, 34, 46, 0.06);
+}
+
+.gh-liar-reveal-title {
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-liar-reveal-cards {
+  display: flex;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+.gh-liar-reveal-verdict {
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-liar-actions,
+.gh-liar-online-actions-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+.gh-liar-me {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-3) var(--gh-space-4);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: 14px;
+}
+
+.gh-liar-me-header {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+.gh-liar-me-name {
+  font-weight: 600;
+}
+
+.gh-liar-me-meta {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-liar-me-hint {
+  margin-left: auto;
+  color: var(--gh-accent);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-liar-hand {
+  display: flex;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+  min-height: 96px;
+  align-items: flex-end;
+  padding: var(--gh-space-2) 0;
+}
+
+.gh-liar-hand-tip {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-liar-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: var(--gh-space-3);
+}
+
+.gh-liar-log,
+.gh-liar-rules,
+.gh-liar-online-side .gh-liar-log,
+.gh-liar-online-players {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-3) var(--gh-space-4);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: 12px;
+  min-width: 0;
+}
+
+.gh-liar-log-title {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.gh-liar-log-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.gh-liar-log-item {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-secondary);
+  padding: 4px 8px;
+  border-left: 2px solid var(--gh-border);
+  background: var(--gh-bg);
+  border-radius: 0 6px 6px 0;
+}
+
+.gh-liar-log-item--reveal,
+.gh-liar-log-item--trigger,
+.gh-liar-log-item--death {
+  border-left-color: var(--gh-danger);
+  color: var(--gh-text);
+}
+
+.gh-liar-log-item--flush {
+  border-left-color: var(--gh-warning);
+}
+
+.gh-liar-log-empty {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+/* 规则折叠按钮在浅色卡片上沿用斗地主的深色文案会看不见，这里统一改为常规文字色 */
+.gh-liar-rules .gh-ddz-rules-toggle,
+.gh-uno-log .gh-ddz-rules-toggle,
+.gh-xq-info-card .gh-ddz-rules-toggle {
+  color: var(--gh-text-secondary);
+}
+
+.gh-liar-rules .gh-ddz-rules-toggle:hover,
+.gh-uno-log .gh-ddz-rules-toggle:hover,
+.gh-xq-info-card .gh-ddz-rules-toggle:hover {
+  color: var(--gh-text);
+}
+
+.gh-liar-rules .gh-ddz-rules-list,
+.gh-uno-log .gh-ddz-rules-list,
+.gh-xq-info-card .gh-ddz-rules-list {
+  color: var(--gh-text-secondary);
+}
+
+/* ===== 联机对局布局 ===== */
+
+.gh-liar-online-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+}
+
+.gh-liar-online-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.9fr);
+  gap: var(--gh-space-4);
+  align-items: start;
+}
+
+.gh-liar-online-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-4);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(130, 80, 223, 0.10), transparent 60%),
+    var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: 16px;
+  min-width: 0;
+}
+
+.gh-liar-online-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+  min-width: 0;
+}
+
+.gh-liar-player-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+}
+
+.gh-liar-player {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  padding: 6px 8px;
+  border: 1px solid var(--gh-border);
+  border-radius: 8px;
+  background: var(--gh-bg);
+}
+
+.gh-liar-player--me {
+  border-color: var(--gh-accent);
+}
+
+.gh-liar-player--turn {
+  box-shadow: 0 0 0 1px var(--gh-accent);
+}
+
+.gh-liar-player--out {
+  opacity: 0.6;
+}
+
+.gh-liar-player-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gh-liar-player-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+}
+
+.gh-liar-player-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-liar-action-pending {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+/* ===== 结算遮罩 ===== */
+
+.gh-liar-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gh-space-4);
+  background: rgba(1, 4, 9, 0.62);
+  backdrop-filter: blur(2px);
+}
+
+.gh-liar-overlay-card {
+  width: min(100%, 480px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-5);
+  background: var(--gh-bg);
+  border: 1px solid var(--gh-border);
+  border-radius: 16px;
+  box-shadow: var(--gh-shadow-lg);
+  text-align: center;
+}
+
+.gh-liar-overlay-eyebrow {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gh-liar-overlay-title {
+  margin: 0;
+  font-size: var(--gh-text-lg);
+}
+
+.gh-liar-overlay-title--win {
+  color: var(--gh-success);
+}
+
+.gh-liar-overlay-detail {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-liar-overlay-actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .gh-liar-bottom,
+  .gh-liar-online-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .gh-liar-opponents {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+
+  .gh-liar-card--md {
+    width: 56px;
+    height: 82px;
+    font-size: 1.4rem;
+  }
+
+  .gh-liar-turn-hint {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}

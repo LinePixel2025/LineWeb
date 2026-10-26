@@ -62,6 +62,18 @@ export const GAME_MINECRAFT_ONLINE_ROUTE = '/games/minecraft/online'
 export const GAME_GOMOKU_ROUTE = '/games/gomoku'
 /** 五子棋联机（轮流落子）大厅路由 */
 export const GAME_GOMOKU_ONLINE_ROUTE = '/games/gomoku/online'
+/** 骗子酒馆单机（人机对战）路由 */
+export const GAME_LIAR_ROUTE = '/games/liar'
+/** 骗子酒馆联机（2–4 人）大厅路由 */
+export const GAME_LIAR_ONLINE_ROUTE = '/games/liar/online'
+/** UNO 单机（人机对战）路由 */
+export const GAME_UNO_ROUTE = '/games/uno'
+/** UNO 联机（2–10 人）大厅路由 */
+export const GAME_UNO_ONLINE_ROUTE = '/games/uno/online'
+/** 中国象棋单机（人机对战）路由 */
+export const GAME_XIANGQI_ROUTE = '/games/xiangqi'
+/** 中国象棋联机（2 人）大厅路由 */
+export const GAME_XIANGQI_ONLINE_ROUTE = '/games/xiangqi/online'
 
 /** 大厅完整目录：可玩游戏在前，即将上线占位在后 */
 export const GAME_CATALOG: readonly GameCatalogEntry[] = [
@@ -141,6 +153,39 @@ export const GAME_CATALOG: readonly GameCatalogEntry[] = [
     playable: true,
     route: GAME_GOMOKU_ROUTE,
     onlineRoute: GAME_GOMOKU_ONLINE_ROUTE,
+  },
+  {
+    id: 'liar',
+    name: '骗子酒馆',
+    description: '虚张声势的牌桌心理战：盖牌声称目标牌面，质疑开牌、左轮轮盘定生死；支持单机 AI 与 2–4 人联机。',
+    icon: '🍻',
+    modes: ['single', 'online'],
+    status: 'available',
+    playable: true,
+    route: GAME_LIAR_ROUTE,
+    onlineRoute: GAME_LIAR_ONLINE_ROUTE,
+  },
+  {
+    id: 'uno',
+    name: 'UNO',
+    description: '经典 108 张 UNO：同色同数出牌、禁止反转 +2、万能牌指定颜色；支持单机 AI 与 2–10 人好友联机。',
+    icon: '🎴',
+    modes: ['single', 'online'],
+    status: 'available',
+    playable: true,
+    route: GAME_UNO_ROUTE,
+    onlineRoute: GAME_UNO_ONLINE_ROUTE,
+  },
+  {
+    id: 'xiangqi',
+    name: '中国象棋',
+    description: '9×10 标准象棋：车马炮兵士象全规则、将军与绝杀判定；支持单机三档 AI 与好友两人对弈。',
+    icon: '♟️',
+    modes: ['single', 'online'],
+    status: 'available',
+    playable: true,
+    route: GAME_XIANGQI_ROUTE,
+    onlineRoute: GAME_XIANGQI_ONLINE_ROUTE,
   },
 ]
 

@@ -183,7 +183,7 @@ let nextMatchId = 1
 // === 跨游戏模块注册（斗地主等后加的游戏通过这里与 2048 互斥） ===
 
 export interface GameModuleHook {
-  /** 模块名（'doudizhu' / 'snake' / 'minesweeper' / 'jump'），自查时用来排除自己 */
+  /** 模块名（'doudizhu' / 'snake' / 'minesweeper' / 'jump' / 'gomoku' / 'liar' / 'uno' / 'xiangqi'），自查时用来排除自己 */
   name: string
   /** 该游戏模块中用户是否在未结束的房间/对局中 */
   isUserInMatch: (userId: number) => boolean

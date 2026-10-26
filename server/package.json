@@ -17,6 +17,9 @@
     "verify:jump": "tsx scripts/verify-jump.ts",
     "verify:minecraft": "tsx scripts/verify-minecraft.ts",
     "verify:gomoku": "tsx scripts/verify-gomoku.ts",
+    "verify:liar": "tsx scripts/verify-liar.ts",
+    "verify:uno": "tsx scripts/verify-uno.ts",
+    "verify:xiangqi": "tsx scripts/verify-xiangqi.ts",
     "verify:aichat": "tsx scripts/verify-aichat.ts"
   },
   "prisma": {

@@ -463,9 +463,9 @@ describe('确定性', () => {
 })
 
 describe('catalog：游戏大厅目录', () => {
-  it('包含 2048 / 斗地主 / 贪吃蛇 / 扫雷 / 跳一跳 / 我的世界 / 五子棋（占位可留空）', () => {
-    expect(GAME_CATALOG.length).toBeGreaterThanOrEqual(5)
-    expect(GAME_CATALOG.length).toBeLessThanOrEqual(9)
+  it('包含 2048 / 斗地主 / 贪吃蛇 / 扫雷 / 跳一跳 / 我的世界 / 五子棋 / 骗子酒馆 / UNO / 中国象棋', () => {
+    expect(GAME_CATALOG.length).toBeGreaterThanOrEqual(7)
+    expect(GAME_CATALOG.length).toBeLessThanOrEqual(12)
 
     const first = GAME_CATALOG[0]
     expect(first.id).toBe('2048')
@@ -509,6 +509,9 @@ describe('catalog：游戏大厅目录', () => {
       'jump',
       'minecraft',
       'gomoku',
+      'liar',
+      'uno',
+      'xiangqi',
     ])
     expect(COMING_SOON_GAMES.every((game) => game.status === 'coming-soon')).toBe(true)
     expect(PLAYABLE_GAMES.length + COMING_SOON_GAMES.length).toBe(GAME_CATALOG.length)

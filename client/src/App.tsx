@@ -35,6 +35,12 @@ const MinecraftPage = lazy(() => import('./pages/games/MinecraftPage'))
 const MinecraftOnlinePage = lazy(() => import('./pages/games/MinecraftOnlinePage'))
 const GomokuPage = lazy(() => import('./pages/games/GomokuPage'))
 const GomokuOnlinePage = lazy(() => import('./pages/games/GomokuOnlinePage'))
+const LiarPage = lazy(() => import('./pages/games/LiarPage'))
+const LiarOnlinePage = lazy(() => import('./pages/games/LiarOnlinePage'))
+const UnoPage = lazy(() => import('./pages/games/UnoPage'))
+const UnoOnlinePage = lazy(() => import('./pages/games/UnoOnlinePage'))
+const XiangqiPage = lazy(() => import('./pages/games/XiangqiPage'))
+const XiangqiOnlinePage = lazy(() => import('./pages/games/XiangqiOnlinePage'))
 const DeepSeekChatPage = lazy(() => import('./pages/DeepSeekChatPage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const DynamicPage = lazy(() => import('./pages/DynamicPage'))
@@ -171,6 +177,27 @@ export default function App() {
                     } />
                     <Route path="/games/gomoku/online/:matchId" element={
                       <ProtectedRoute><GomokuOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/liar" element={<LiarPage />} />
+                    <Route path="/games/liar/online" element={
+                      <ProtectedRoute><LiarOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/liar/online/:matchId" element={
+                      <ProtectedRoute><LiarOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/uno" element={<UnoPage />} />
+                    <Route path="/games/uno/online" element={
+                      <ProtectedRoute><UnoOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/uno/online/:matchId" element={
+                      <ProtectedRoute><UnoOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/xiangqi" element={<XiangqiPage />} />
+                    <Route path="/games/xiangqi/online" element={
+                      <ProtectedRoute><XiangqiOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/xiangqi/online/:matchId" element={
+                      <ProtectedRoute><XiangqiOnlinePage /></ProtectedRoute>
                     } />
                     <Route path="/profile" element={
                       <ProtectedRoute><ProfilePage /></ProtectedRoute>
