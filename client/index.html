@@ -10,25 +10,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Line Web" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="stylesheet" href="/boot.css" />
     <meta name="description" content="Line Web — 个人网站" />
     <title>Line Web</title>
-    <style>
-      #root:empty::before {
-        content: '';
-        display: block;
-        width: 32px;
-        height: 32px;
-        margin: 40vh auto 0;
-        border: 3px solid rgba(128,128,128,0.15);
-        border-top-color: rgba(128,128,128,0.5);
-        border-radius: 50%;
-        animation: lw-spin 0.8s linear infinite;
-      }
-      @keyframes lw-spin {
-        to { transform: rotate(360deg); }
-      }
-      body { background: #ffffff; }
-    </style>
   </head>
   <body>
     <div id="root"></div>
