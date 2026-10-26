@@ -296,7 +296,12 @@ export default function LiarPage() {
             <span className="gh-liar-round-chip">第 {table.round} 局</span>
             <span className="gh-liar-target">
               目标牌面
-              <strong>{table.target}</strong>
+              <span
+                className={`gh-liar-target-card gh-liar-target-card--${table.target.toLowerCase()}`}
+                aria-label={`目标牌面 ${table.target}`}
+              >
+                {table.target}
+              </span>
             </span>
             <span className={`gh-liar-gun${bullets >= 4 ? ' gh-liar-gun--danger' : ''}`} title={`左轮 ${bullets}/6 有子弹`}>
               左轮 {bullets}/6
@@ -317,6 +322,11 @@ export default function LiarPage() {
               {table.pile.length === 0 && <span className="gh-liar-pile-empty">本局还没有人出牌</span>}
               {table.pile.map((entry, index) => (
                 <span key={`${entry.seat}-${index}`} className="gh-liar-pile-entry">
+                  <span className="gh-liar-pile-backs" aria-hidden="true">
+                    {Array.from({ length: Math.min(entry.count, 3) }, (_, cardIndex) => (
+                      <span key={cardIndex} className="gh-liar-pile-back" />
+                    ))}
+                  </span>
                   <span className="gh-liar-pile-count">×{entry.count}</span>
                   <span className="gh-liar-pile-name">{seatName(table, entry.seat)}</span>
                 </span>
@@ -344,6 +354,9 @@ export default function LiarPage() {
 
           {table.lastReveal && (
             <div className={`gh-liar-reveal${table.lastReveal.truthful ? ' gh-liar-reveal--true' : ' gh-liar-reveal--lie'}`}>
+              <span className="gh-liar-reveal-stamp" aria-hidden="true">
+                {table.lastReveal.truthful ? '真' : '假'}
+              </span>
               <span className="gh-liar-reveal-title">
                 最近开牌 · {seatName(table, table.lastReveal.seat)} 的第 {table.lastReveal.round} 局出牌
               </span>

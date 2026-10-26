@@ -730,3 +730,649 @@
     flex-basis: 100%;
   }
 }
+
+/* ============================================================
+   沉浸式牌桌视觉（2026-10 升级）
+   深绿绒面 + 黄铜描边 + 左轮弹巢 + 开牌印章
+   命名空间不变，仅重绘单机与联机共用的 .gh-liar-* 元素
+   ============================================================ */
+
+/* ---- 牌桌房间：整块深色背景把牌桌从浅色页面里托起来 ---- */
+.gh-liar-table,
+.gh-liar-online-body {
+  padding: clamp(12px, 1.6vw, 22px);
+  border-radius: 20px;
+  border: 1px solid rgba(242, 196, 109, 0.16);
+  background:
+    radial-gradient(120% 90% at 50% -10%, rgba(242, 196, 109, 0.10), transparent 55%),
+    radial-gradient(90% 80% at 50% 120%, rgba(0, 0, 0, 0.55), transparent 72%),
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.02) 0 2px, transparent 2px 7px),
+    linear-gradient(160deg, #1a3228, #0e211a 58%, #081410);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 22px 48px rgba(15, 26, 20, 0.32);
+}
+
+/* ---- 深色牌桌上的设计令牌：子元素自动切换成浅色文字 ---- */
+.gh-liar-center,
+.gh-liar-me,
+.gh-liar-opponent,
+.gh-liar-online-main,
+.gh-liar-online-side > section {
+  --gh-text: #f8f2e5;
+  --gh-text-secondary: #c9d3cb;
+  --gh-text-tertiary: #9faea4;
+  --gh-text-placeholder: #8d9c93;
+  --gh-bg: rgba(6, 16, 12, 0.45);
+  --gh-canvas: rgba(255, 255, 255, 0.055);
+  --gh-canvas-inset: rgba(0, 0, 0, 0.35);
+  --gh-border: rgba(242, 196, 109, 0.22);
+  --gh-border-muted: rgba(255, 255, 255, 0.10);
+  --gh-accent: #f2c46d;
+  --gh-accent-hover: #ffdb95;
+  --gh-accent-soft: rgba(242, 196, 109, 0.16);
+  --gh-btn-hover: rgba(255, 255, 255, 0.08);
+  --gh-btn-active: rgba(255, 255, 255, 0.12);
+  --gh-danger: #ff7a6e;
+  --gh-danger-soft: rgba(255, 122, 110, 0.16);
+  --gh-success: #74e0a6;
+  --gh-success-soft: rgba(116, 224, 166, 0.14);
+  --gh-warning: #f2c46d;
+  --gh-warning-soft: rgba(242, 196, 109, 0.16);
+  color: var(--gh-text);
+}
+
+/* ---- 绒面主桌 ---- */
+.gh-liar-center,
+.gh-liar-online-main {
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(242, 196, 109, 0.10), transparent 60%),
+    radial-gradient(90% 70% at 50% 110%, rgba(0, 0, 0, 0.38), transparent 72%),
+    rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(242, 196, 109, 0.24);
+  border-radius: 16px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 0 48px rgba(0, 0, 0, 0.32);
+}
+
+/* ---- 对手座位 ---- */
+.gh-liar-opponent {
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(242, 196, 109, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
+.gh-liar-opponent--turn {
+  border-color: rgba(242, 196, 109, 0.7);
+  animation: gh-liar-seat-pulse 2.4s ease-in-out infinite;
+}
+
+.gh-liar-opponent--dead {
+  filter: grayscale(0.55);
+  opacity: 0.5;
+}
+
+@keyframes gh-liar-seat-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgba(242, 196, 109, 0.4), 0 0 18px rgba(242, 196, 109, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(242, 196, 109, 0.72), 0 0 30px rgba(242, 196, 109, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  }
+}
+
+.gh-liar-hand-stack {
+  padding-top: 6px;
+}
+
+.gh-liar-hand-stack .gh-liar-card + .gh-liar-card {
+  margin-left: -30px;
+}
+
+.gh-liar-hand-stack .gh-liar-card:nth-child(2) { transform: rotate(4deg) translateY(2px); }
+.gh-liar-hand-stack .gh-liar-card:nth-child(3) { transform: rotate(-2deg) translateY(1px); }
+.gh-liar-hand-stack .gh-liar-card:nth-child(4) { transform: rotate(6deg) translateY(3px); }
+.gh-liar-hand-stack .gh-liar-card:nth-child(5) { transform: rotate(-3deg); }
+
+/* ---- 局数 / 目标牌面 / 左轮弹巢 ---- */
+.gh-liar-round-chip {
+  background: rgba(242, 196, 109, 0.14);
+  border: 1px solid rgba(242, 196, 109, 0.4);
+  color: #f2c46d;
+  letter-spacing: 0.04em;
+}
+
+.gh-liar-target {
+  gap: 10px;
+  color: var(--gh-text-tertiary);
+}
+
+.gh-liar-target-card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 46px;
+  border-radius: 6px;
+  border: 1px solid #c9a13c;
+  background:
+    radial-gradient(120% 90% at 25% 0%, rgba(255, 255, 255, 0.9), transparent 55%),
+    linear-gradient(160deg, #fff8dd, #ecd9ac);
+  color: #7a570d;
+  font-family: Georgia, 'Times New Roman', 'Songti SC', serif;
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.25), 0 8px 14px rgba(0, 0, 0, 0.28);
+  transform: rotate(-4deg);
+}
+
+.gh-liar-target-card--q {
+  border-color: #7db1e6;
+  background:
+    radial-gradient(120% 90% at 25% 0%, rgba(255, 255, 255, 0.9), transparent 55%),
+    linear-gradient(160deg, #eaf4ff, #cfe2f9);
+  color: #1a5aa0;
+}
+
+.gh-liar-target-card--a {
+  border-color: #df938c;
+  background:
+    radial-gradient(120% 90% at 25% 0%, rgba(255, 255, 255, 0.9), transparent 55%),
+    linear-gradient(160deg, #fff1ef, #f6d6d2);
+  color: #a8231c;
+}
+
+.gh-liar-gun {
+  color: #d8c9ad;
+}
+
+.gh-liar-gun-dots {
+  position: relative;
+  display: inline-block;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #5c5c5c, #2a2a2a 60%, #151515);
+  border: 2px solid #6b6b6b;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.55), 0 3px 8px rgba(0, 0, 0, 0.4);
+}
+
+.gh-liar-gun-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #1c1c1c, #050505);
+  border: 1px solid #4a4a4a;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.gh-liar-gun-dot:nth-child(1) { transform: rotate(0deg) translateY(-11px); }
+.gh-liar-gun-dot:nth-child(2) { transform: rotate(60deg) translateY(-11px); }
+.gh-liar-gun-dot:nth-child(3) { transform: rotate(120deg) translateY(-11px); }
+.gh-liar-gun-dot:nth-child(4) { transform: rotate(180deg) translateY(-11px); }
+.gh-liar-gun-dot:nth-child(5) { transform: rotate(240deg) translateY(-11px); }
+.gh-liar-gun-dot:nth-child(6) { transform: rotate(300deg) translateY(-11px); }
+
+.gh-liar-gun-dot--loaded {
+  background: radial-gradient(circle at 35% 30%, #ffe9a8, #e0ae3f 55%, #8a5a12);
+  border-color: #f2c46d;
+  box-shadow: 0 0 7px rgba(242, 196, 109, 0.8), inset 0 0 2px rgba(0, 0, 0, 0.4);
+}
+
+.gh-liar-gun--danger .gh-liar-gun-dots {
+  border-color: rgba(255, 122, 110, 0.8);
+  animation: gh-liar-cylinder 2.6s ease-in-out infinite;
+}
+
+@keyframes gh-liar-cylinder {
+  0%, 100% { transform: rotate(0deg); }
+  8% { transform: rotate(-7deg); }
+  16% { transform: rotate(6deg); }
+  24% { transform: rotate(-3deg); }
+  32% { transform: rotate(0deg); }
+}
+
+/* ---- 牌堆 ---- */
+.gh-liar-pile-cards {
+  gap: 8px;
+  min-height: 58px;
+  padding: 10px;
+  background: rgba(4, 12, 9, 0.38);
+  border: 1px dashed rgba(242, 196, 109, 0.28);
+  border-radius: 12px;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.gh-liar-pile-entry {
+  padding: 5px 10px 5px 7px;
+  border-radius: 10px;
+  border: 1px solid rgba(242, 196, 109, 0.22);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.22);
+}
+
+.gh-liar-pile-backs {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 2px;
+}
+
+.gh-liar-pile-back {
+  width: 16px;
+  height: 24px;
+  border-radius: 3px;
+  border: 1px solid rgba(242, 196, 109, 0.45);
+  background:
+    repeating-linear-gradient(45deg, rgba(242, 196, 109, 0.35) 0 1px, transparent 1px 4px),
+    linear-gradient(150deg, #3a2433, #1c1120);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.gh-liar-pile-back + .gh-liar-pile-back {
+  margin-left: -10px;
+  transform: rotate(6deg);
+}
+
+.gh-liar-pile-count {
+  color: #f2c46d;
+}
+
+.gh-liar-pile-name {
+  color: var(--gh-text-secondary);
+}
+
+.gh-liar-pile-empty {
+  color: var(--gh-text-tertiary);
+}
+
+/* ---- 回合提示 ---- */
+.gh-liar-turn {
+  background: rgba(255, 255, 255, 0.045);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.gh-liar-turn--me {
+  border-color: rgba(242, 196, 109, 0.5);
+  background: linear-gradient(120deg, rgba(242, 196, 109, 0.14), rgba(242, 196, 109, 0.03));
+  box-shadow: inset 0 0 0 1px rgba(242, 196, 109, 0.14);
+}
+
+.gh-liar-countdown {
+  color: #f2c46d;
+}
+
+.gh-liar-countdown--low {
+  color: #ff7a6e;
+  text-shadow: 0 0 10px rgba(255, 122, 110, 0.5);
+}
+
+/* ---- 开牌结果 ---- */
+.gh-liar-reveal {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.gh-liar-reveal--true {
+  border-color: rgba(116, 224, 166, 0.4);
+  background: linear-gradient(120deg, rgba(116, 224, 166, 0.12), rgba(116, 224, 166, 0.03));
+}
+
+.gh-liar-reveal--lie {
+  border-color: rgba(255, 122, 110, 0.45);
+  background: linear-gradient(120deg, rgba(255, 122, 110, 0.14), rgba(255, 122, 110, 0.03));
+}
+
+.gh-liar-reveal-title {
+  padding-right: 64px;
+}
+
+.gh-liar-reveal-cards {
+  padding: 2px 0;
+}
+
+.gh-liar-reveal-cards .gh-liar-card:nth-child(odd) { transform: rotate(-4deg); }
+.gh-liar-reveal-cards .gh-liar-card:nth-child(even) { transform: rotate(3deg) translateY(2px); }
+
+.gh-liar-reveal-stamp {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  border: 3px double currentColor;
+  border-radius: 50%;
+  font-family: Georgia, 'Times New Roman', 'Songti SC', serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0.92;
+  transform: rotate(-14deg);
+  pointer-events: none;
+}
+
+.gh-liar-reveal--true .gh-liar-reveal-stamp {
+  color: #74e0a6;
+  box-shadow: 0 0 18px rgba(116, 224, 166, 0.25);
+}
+
+.gh-liar-reveal--lie .gh-liar-reveal-stamp {
+  color: #ff7a6e;
+  box-shadow: 0 0 18px rgba(255, 122, 110, 0.28);
+}
+
+/* ---- 手牌区 ---- */
+.gh-liar-me {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(242, 196, 109, 0.2);
+  border-radius: 16px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.gh-liar-me .gh-liar-hand {
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 0 4px;
+  min-height: 112px;
+}
+
+/* ---- 按钮（金色主按钮配深色字） ---- */
+.gh-liar-center .gh-btn--primary,
+.gh-liar-me .gh-btn--primary,
+.gh-liar-online-main .gh-btn--primary {
+  color: #17211c;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+}
+
+/* ---- 联机侧栏 ---- */
+.gh-liar-online-side > section {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(242, 196, 109, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.gh-liar-online-side .gh-liar-log-item {
+  background: rgba(255, 255, 255, 0.045);
+  border-left-color: rgba(242, 196, 109, 0.3);
+  color: var(--gh-text-secondary);
+}
+
+.gh-liar-online-side .gh-liar-log-item--reveal,
+.gh-liar-online-side .gh-liar-log-item--trigger,
+.gh-liar-online-side .gh-liar-log-item--death {
+  border-left-color: #ff7a6e;
+  color: var(--gh-text);
+}
+
+.gh-liar-player {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.09);
+}
+
+.gh-liar-player--me {
+  border-color: rgba(242, 196, 109, 0.65);
+  background: rgba(242, 196, 109, 0.1);
+}
+
+.gh-liar-player--turn {
+  box-shadow: 0 0 0 1px rgba(242, 196, 109, 0.6);
+}
+
+/* ---- 牌面重绘 ---- */
+.gh-liar-card {
+  --liar-ink: #3a2e1b;
+  --liar-border: #cbb27a;
+  --liar-face:
+    radial-gradient(120% 90% at 22% 0%, rgba(255, 255, 255, 0.92), transparent 55%),
+    linear-gradient(160deg, #fdf7e7, #ecd9ac);
+  color: var(--liar-ink);
+  border: 1px solid var(--liar-border);
+  background: var(--liar-face);
+  font-family: Georgia, 'Times New Roman', 'Songti SC', 'SimSun', serif;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.22), 0 10px 20px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.gh-liar-card::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1px solid rgba(90, 70, 30, 0.18);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.gh-liar-card--k {
+  --liar-ink: #7a570d;
+  --liar-border: #c9a13c;
+  --liar-face:
+    radial-gradient(120% 90% at 22% 0%, rgba(255, 255, 255, 0.92), transparent 55%),
+    linear-gradient(160deg, #fff8dd, #f0dda6);
+}
+
+.gh-liar-card--q {
+  --liar-ink: #1a5aa0;
+  --liar-border: #7db1e6;
+  --liar-face:
+    radial-gradient(120% 90% at 22% 0%, rgba(255, 255, 255, 0.92), transparent 55%),
+    linear-gradient(160deg, #eaf4ff, #cfe2f9);
+}
+
+.gh-liar-card--a {
+  --liar-ink: #a8231c;
+  --liar-border: #df938c;
+  --liar-face:
+    radial-gradient(120% 90% at 22% 0%, rgba(255, 255, 255, 0.92), transparent 55%),
+    linear-gradient(160deg, #fff1ef, #f6d6d2);
+}
+
+.gh-liar-card--joker {
+  --liar-ink: #6a35c4;
+  --liar-border: #a98ae0;
+  --liar-face:
+    radial-gradient(120% 90% at 22% 0%, rgba(255, 255, 255, 0.92), transparent 55%),
+    linear-gradient(160deg, #f6f0ff, #e0d2fb);
+}
+
+.gh-liar-card--md {
+  width: 68px;
+  height: 98px;
+  font-size: 1.6rem;
+}
+
+.gh-liar-card--sm {
+  width: 42px;
+  height: 60px;
+  font-size: 1.05rem;
+}
+
+.gh-liar-card-main {
+  font-size: 1.45em;
+  line-height: 1;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.gh-liar-card--joker .gh-liar-card-main {
+  font-size: 1.2em;
+}
+
+.gh-liar-card-corner {
+  color: inherit;
+  opacity: 0.82;
+  font-size: 0.62em;
+}
+
+.gh-liar-card--back {
+  --liar-border: rgba(242, 196, 109, 0.5);
+  background:
+    radial-gradient(circle at 50% 45%, rgba(242, 196, 109, 0.16), transparent 55%),
+    repeating-linear-gradient(45deg, rgba(242, 196, 109, 0.18) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(-45deg, rgba(242, 196, 109, 0.18) 0 1px, transparent 1px 7px),
+    linear-gradient(155deg, #3a2433, #1f1220 70%);
+  box-shadow:
+    inset 0 0 0 3px rgba(10, 6, 12, 0.9),
+    inset 0 0 0 4px rgba(242, 196, 109, 0.25),
+    0 10px 20px rgba(0, 0, 0, 0.35);
+}
+
+.gh-liar-card--back::after {
+  display: none;
+}
+
+.gh-liar-card--back::before {
+  content: '◆';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(242, 196, 109, 0.55);
+  font-size: 0.8em;
+  text-shadow: 0 0 8px rgba(242, 196, 109, 0.35);
+}
+
+.gh-liar-card--clickable:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 0 0 1px rgba(242, 196, 109, 0.55), 0 16px 26px rgba(0, 0, 0, 0.4);
+}
+
+.gh-liar-card--selected {
+  transform: translateY(-10px);
+  border-color: #f2c46d;
+  box-shadow: 0 0 0 2px rgba(242, 196, 109, 0.85), 0 14px 26px rgba(0, 0, 0, 0.4);
+}
+
+.gh-liar-card--disabled {
+  opacity: 0.8;
+  filter: saturate(0.85);
+}
+
+/* 结算浮层沿用浅色对话框，只加一条黄铜顶线呼应牌桌 */
+.gh-liar-overlay-card {
+  border-top: 3px solid #d9a83e;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-liar-opponent--turn,
+  .gh-liar-gun--danger .gh-liar-gun-dots {
+    animation: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .gh-liar-table,
+  .gh-liar-online-body {
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .gh-liar-card--md {
+    width: 56px;
+    height: 82px;
+    font-size: 1.4rem;
+  }
+
+  .gh-liar-hand-stack .gh-liar-card + .gh-liar-card {
+    margin-left: -24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .gh-liar-table,
+  .gh-liar-online-body {
+    padding: 8px;
+  }
+
+  .gh-liar-center,
+  .gh-liar-online-main {
+    padding: var(--gh-space-3);
+  }
+
+  .gh-liar-gun-dots {
+    width: 30px;
+    height: 30px;
+  }
+
+  .gh-liar-gun-dot {
+    width: 7px;
+    height: 7px;
+    margin: -3.5px 0 0 -3.5px;
+  }
+
+  .gh-liar-gun-dot:nth-child(1) { transform: rotate(0deg) translateY(-9px); }
+  .gh-liar-gun-dot:nth-child(2) { transform: rotate(60deg) translateY(-9px); }
+  .gh-liar-gun-dot:nth-child(3) { transform: rotate(120deg) translateY(-9px); }
+  .gh-liar-gun-dot:nth-child(4) { transform: rotate(180deg) translateY(-9px); }
+  .gh-liar-gun-dot:nth-child(5) { transform: rotate(240deg) translateY(-9px); }
+  .gh-liar-gun-dot:nth-child(6) { transform: rotate(300deg) translateY(-9px); }
+
+  .gh-liar-reveal-stamp {
+    width: 44px;
+    height: 44px;
+    font-size: 1.2rem;
+  }
+
+  .gh-liar-reveal-title {
+    padding-right: 52px;
+  }
+
+  .gh-liar-me .gh-liar-hand {
+    gap: 8px;
+    min-height: 100px;
+  }
+}
+
+/* 开牌结果压缩为横向：牌面在左、标题/判词在右，避免把本家手牌挤出首屏 */
+.gh-liar-reveal {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'cards title'
+    'cards verdict';
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 4px;
+  padding: 8px 72px 8px 10px;
+}
+
+.gh-liar-reveal-cards {
+  grid-area: cards;
+  padding: 0;
+  flex-wrap: nowrap;
+}
+
+.gh-liar-reveal-title {
+  grid-area: title;
+  padding-right: 0;
+  line-height: 1.4;
+}
+
+.gh-liar-reveal-verdict {
+  grid-area: verdict;
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .gh-liar-reveal {
+    padding: 8px 56px 8px 10px;
+    column-gap: 10px;
+  }
+
+  .gh-liar-reveal-cards .gh-liar-card--sm {
+    width: 38px;
+    height: 54px;
+  }
+}

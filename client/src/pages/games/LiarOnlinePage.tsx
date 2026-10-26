@@ -454,7 +454,15 @@ function LiarOnlineStage({
         <section className="gh-liar-online-main">
           <div className="gh-liar-round-bar">
             <span className="gh-liar-round-chip">第 {match.round} 局</span>
-            <span className="gh-liar-target">目标牌面 <strong>{match.target ?? '—'}</strong></span>
+            <span className="gh-liar-target">
+              目标牌面
+              <span
+                className={`gh-liar-target-card${match.target ? ` gh-liar-target-card--${match.target.toLowerCase()}` : ''}`}
+                aria-label={`目标牌面 ${match.target ?? '未定'}`}
+              >
+                {match.target ?? '—'}
+              </span>
+            </span>
             <span className={`gh-liar-gun${match.gunBullets >= 4 ? ' gh-liar-gun--danger' : ''}`}>
               左轮 {match.gunBullets}/6
               <span className="gh-liar-gun-dots" aria-hidden="true">
@@ -490,6 +498,11 @@ function LiarOnlineStage({
               {match.pile.length === 0 && <span className="gh-liar-pile-empty">本局还没有人出牌</span>}
               {match.pile.map((entry, index) => (
                 <span key={`${entry.userId}-${index}`} className="gh-liar-pile-entry">
+                  <span className="gh-liar-pile-backs" aria-hidden="true">
+                    {Array.from({ length: Math.min(entry.count, 3) }, (_, cardIndex) => (
+                      <span key={cardIndex} className="gh-liar-pile-back" />
+                    ))}
+                  </span>
                   <span className="gh-liar-pile-count">×{entry.count}</span>
                   <span className="gh-liar-pile-name">{nameOf(match, entry.userId)}</span>
                 </span>
@@ -499,6 +512,9 @@ function LiarOnlineStage({
 
           {match.lastReveal && (
             <div className={`gh-liar-reveal${match.lastReveal.truthful ? ' gh-liar-reveal--true' : ' gh-liar-reveal--lie'}`}>
+              <span className="gh-liar-reveal-stamp" aria-hidden="true">
+                {match.lastReveal.truthful ? '真' : '假'}
+              </span>
               <span className="gh-liar-reveal-title">
                 最近开牌 · {nameOf(match, match.lastReveal.userId)} 的第 {match.lastReveal.round} 局出牌
               </span>
@@ -543,25 +559,6 @@ function LiarOnlineStage({
             </div>
           </div>
 
-          {match.status === 'finished' && (
-            <div className="gh-liar-overlay" role="dialog" aria-modal="true" aria-label="对局结算">
-              <div className="gh-liar-overlay-card">
-                <p className="gh-liar-overlay-eyebrow">牌局结束</p>
-                <h2 className={`gh-liar-overlay-title${winner?.userId === meId ? ' gh-liar-overlay-title--win' : ''}`}>
-                  {winner ? `${winner.username} 获胜` : '本场无胜者'}
-                </h2>
-                <p className="gh-liar-overlay-detail">
-                  {match.reason ? END_REASON_LABELS[match.reason] : '本场已结束'} · 共 {match.round} 局
-                </p>
-                <div className="gh-liar-overlay-actions">
-                  <button type="button" className="gh-btn gh-btn--primary gh-btn--lg" onClick={onBackToLobby}>
-                    {isHost ? '回大厅再开一局' : '返回大厅'}
-                  </button>
-                  <Link className="gh-btn gh-btn--secondary gh-btn--lg" to={GAME_LIAR_ROUTE}>单机 AI</Link>
-                </div>
-              </div>
-            </div>
-          )}
         </section>
 
         <aside className="gh-liar-online-side">
@@ -608,6 +605,26 @@ function LiarOnlineStage({
           </section>
         </aside>
       </div>
+
+      {match.status === 'finished' && (
+        <div className="gh-liar-overlay" role="dialog" aria-modal="true" aria-label="对局结算">
+          <div className="gh-liar-overlay-card">
+            <p className="gh-liar-overlay-eyebrow">牌局结束</p>
+            <h2 className={`gh-liar-overlay-title${winner?.userId === meId ? ' gh-liar-overlay-title--win' : ''}`}>
+              {winner ? `${winner.username} 获胜` : '本场无胜者'}
+            </h2>
+            <p className="gh-liar-overlay-detail">
+              {match.reason ? END_REASON_LABELS[match.reason] : '本场已结束'} · 共 {match.round} 局
+            </p>
+            <div className="gh-liar-overlay-actions">
+              <button type="button" className="gh-btn gh-btn--primary gh-btn--lg" onClick={onBackToLobby}>
+                {isHost ? '回大厅再开一局' : '返回大厅'}
+              </button>
+              <Link className="gh-btn gh-btn--secondary gh-btn--lg" to={GAME_LIAR_ROUTE}>单机 AI</Link>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
