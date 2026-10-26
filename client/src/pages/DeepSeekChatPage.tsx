@@ -42,6 +42,8 @@ function AiSparkIcon({ size = 14 }: { size?: number }) {
 
 /** 思考开关的本地持久化键（跨会话记住用户偏好） */
 const THINKING_PREF_KEY = 'lineweb_aichat_thinking'
+/** 联网搜索开关的本地持久化键 */
+const SEARCH_PREF_KEY = 'lineweb_aichat_search'
 
 function readThinkingPref(): boolean {
   try {
@@ -50,6 +52,16 @@ function readThinkingPref(): boolean {
     return false
   }
 }
+
+function readSearchPref(): boolean {
+  try {
+    return localStorage.getItem(SEARCH_PREF_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+type SearchStatus = { phase: 'start' | 'done'; query: string; results?: number }
 
 /**
  * 思考过程折叠块：流式生成中默认展开并自动滚动，正文开始后自动收起；
@@ -120,6 +132,9 @@ export default function DeepSeekChatPage() {
   /** 当前流式回复的思考过程（仅思考模式且上游支持时非空；先于正文输出） */
   const [streamReasoning, setStreamReasoning] = useState('')
   const [thinking, setThinking] = useState(readThinkingPref)
+  /** 联网搜索偏好（管理员配置可用时才会随请求发送） */
+  const [search, setSearch] = useState(readSearchPref)
+  const [searchStatus, setSearchStatus] = useState<SearchStatus | null>(null)
   const [error, setError] = useState('')
   const [cameraOpen, setCameraOpen] = useState(false)
   const [listOpen, setListOpen] = useState(false)
@@ -133,6 +148,8 @@ export default function DeepSeekChatPage() {
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
 
   const featureEnabled = quota ? quota.enabled : true // 加载中先按可用渲染，避免闪烁
+  const searchAvailable = Boolean(quota?.searchAvailable)
+  const searchOn = search && searchAvailable
 
   // === 切换会话时加载历史 ===
   useEffect(() => {
@@ -214,6 +231,7 @@ export default function DeepSeekChatPage() {
     setStreamText('')
     setStreamReasoning('')
     setStreamWaiting(true)
+    setSearchStatus(null)
     setError('')
     streamTextRef.current = ''
     streamReasoningRef.current = ''
@@ -225,7 +243,7 @@ export default function DeepSeekChatPage() {
 
     try {
       await streamAiChatMessage(
-        { conversationId: activeId ?? undefined, content, imageIds, thinking },
+        { conversationId: activeId ?? undefined, content, imageIds, thinking, search: searchOn },
         {
           onMeta: (meta) => {
             conversationIdForServer = meta.conversationId
@@ -237,6 +255,13 @@ export default function DeepSeekChatPage() {
                 ? { ...m, id: meta.userMessageId }
                 : m,
             ))
+          },
+          onSearch: (event) => {
+            setSearchStatus({
+              phase: event.status,
+              query: event.query,
+              results: event.results,
+            })
           },
           onReasoning: (delta) => {
             // 思考内容开始即视为有输出，替换"正在思考"点点点
@@ -303,6 +328,7 @@ export default function DeepSeekChatPage() {
       setStreamText('')
       setStreamReasoning('')
       setStreamWaiting(false)
+      setSearchStatus(null)
       // 未正常完成（中断 / 上游失败）时对齐服务端真实状态：
       // 上游失败该条消息不计入配额，中断则服务端已落库部分回复
       if (!completed && conversationIdForServer !== null) {
@@ -460,7 +486,7 @@ export default function DeepSeekChatPage() {
           <p className="gh-g2048-eyebrow"><Link to="/features">← 功能页面</Link></p>
           <h1 className="gh-games-title">DeepSeek 对话</h1>
           <p className="gh-games-subtitle">
-            与站内 AI 多轮对话，支持图片提问；每天有提问次数上限，由站内服务统一代理。
+            与站内 AI 多轮对话，支持图片提问与联网搜索；每天有提问次数上限，由站内服务统一代理。
             {quota && quota.enabled ? <span className="gh-ds-model"> 当前模型：{quota.model}</span> : null}
           </p>
         </div>
@@ -557,13 +583,21 @@ export default function DeepSeekChatPage() {
                   <div className="gh-ds-message-body">
                     {streamWaiting ? (
                       <div className="gh-ai-bubble gh-ai-typing">
-                        <span className="gh-ai-typing-label">正在思考</span>
+                        <span className="gh-ai-typing-label">
+                          {searchStatus?.phase === 'start' ? '正在联网搜索' : '正在思考'}
+                        </span>
                         <span className="gh-ai-dot" />
                         <span className="gh-ai-dot" />
                         <span className="gh-ai-dot" />
                       </div>
                     ) : (
                       <>
+                        {searchStatus?.phase === 'done' && (
+                          <div className="gh-ds-search-note" role="status">
+                            已联网搜索「{searchStatus.query}」
+                            {typeof searchStatus.results === 'number' ? ` · ${searchStatus.results} 条网页结果` : ''}
+                          </div>
+                        )}
                         {streamReasoning && (
                           <ReasoningBlock
                             text={streamReasoning}
@@ -619,6 +653,27 @@ export default function DeepSeekChatPage() {
                   })}
                 >
                   深度思考{thinking ? ' · 开' : ''}
+                </button>
+                <button
+                  type="button"
+                  className={`gh-ds-tool${searchOn ? ' gh-ds-tool--active' : ''}`}
+                  aria-pressed={searchOn}
+                  aria-label="联网搜索开关"
+                  title={
+                    !searchAvailable
+                      ? '管理员尚未配置联网搜索（搜索 API Key）'
+                      : searchOn
+                        ? '联网搜索已开启：回答前会先检索网页资料'
+                        : '开启联网搜索：先检索网页资料再回答'
+                  }
+                  disabled={!featureEnabled || streaming || uploading || !searchAvailable}
+                  onClick={() => setSearch(current => {
+                    const next = !current
+                    try { localStorage.setItem(SEARCH_PREF_KEY, next ? '1' : '0') } catch { /* 存不下也不阻断 */ }
+                    return next
+                  })}
+                >
+                  联网搜索{searchOn ? ' · 开' : ''}
                 </button>
                 <button
                   type="button"

@@ -188,6 +188,10 @@ export const aiChatConfigUpdateSchema = z.object({
   // 每用户每日提问上限；0 = 不限
   dailyLimit: z.number().int().min(0).max(100000).optional(),
   isEnabled: z.boolean().optional(),
+  // 联网搜索（第三方搜索 API）
+  searchEnabled: z.boolean().optional(),
+  searchProvider: z.enum(['bocha', 'tavily']).optional(),
+  searchApiKey: z.string().max(200).optional(),
 })
 
 /** 发送 AI 对话消息（content 与 imageIds 至少其一，路由层校验以给出明确文案） */
@@ -197,6 +201,8 @@ export const aiChatMessageSchema = z.object({
   imageIds: z.array(z.number().int().positive()).max(4, '每条消息最多 4 张图片').default([]),
   // 思考模式开关：true 时向上游传 thinking:{type:'enabled'}，回复先产出思维链（reasoning_content）再给正文
   thinking: z.boolean().optional(),
+  // 联网搜索开关：true 时先调用搜索服务，把网页资料注入本轮上下文
+  search: z.boolean().optional(),
 })
 
 // === 第三方应用授权 Schemas（/oauth/*） ===

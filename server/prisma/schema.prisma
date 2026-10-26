@@ -172,6 +172,10 @@ model AiChatConfig {
   systemPrompt String   @default("你是一个乐于助人的中文 AI 助手。请用中文回答，回答准确、简洁，适当使用 Markdown 格式组织内容。")
   dailyLimit   Int      @default(20) // 每用户每日提问上限；0 = 不限
   isEnabled    Boolean  @default(false)
+  // 联网搜索（第三方搜索 API；DeepSeek 官方 API 不自带搜索能力）
+  searchEnabled  Boolean @default(false)
+  searchProvider String  @default("bocha") // bocha | tavily
+  searchApiKey   String  @default("")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("ai_chat_config")

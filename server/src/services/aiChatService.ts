@@ -5,6 +5,14 @@ import { AppError } from '../middleware/errorHandler.js'
 import { getDateKey, toAiError } from './aiService.js'
 import { isNodeConnected } from './storageTunnel.js'
 import { readAiImageBase64 } from './aiChatImageService.js'
+import {
+  buildSearchContext,
+  isWebSearchConfigured,
+  normalizeSearchQuery,
+  searchWeb,
+  toSearchSources,
+  type WebSearchSource,
+} from './webSearch.js'
 
 /**
  * AI 对话（DeepSeek）服务
@@ -29,6 +37,10 @@ export interface AiChatConfigData {
   systemPrompt: string
   dailyLimit: number
   isEnabled: boolean
+  /** 联网搜索：管理员开关 + provider（bocha | tavily）+ 第三方搜索 Key */
+  searchEnabled: boolean
+  searchProvider: string
+  searchApiKey: string
   updatedAt: Date
 }
 
@@ -50,6 +62,9 @@ export async function updateAiChatConfig(data: {
   systemPrompt?: string
   dailyLimit?: number
   isEnabled?: boolean
+  searchEnabled?: boolean
+  searchProvider?: string
+  searchApiKey?: string
 }): Promise<AiChatConfigData> {
   const config = await getAiChatConfig()
   return prisma.aiChatConfig.update({
@@ -112,6 +127,8 @@ export interface DailyUsage {
   used: number
   remaining: number | null
   unlimited: boolean
+  /** 联网搜索是否可用（管理员开启且已配置搜索 Key） */
+  searchAvailable: boolean
   /** 配额重置日期（Asia/Shanghai，YYYY-MM-DD，即明天） */
   resetDate: string
 }
@@ -136,6 +153,7 @@ export async function getDailyUsage(userId: number): Promise<DailyUsage> {
     used,
     remaining: computeRemaining(unlimited, config.dailyLimit, used),
     unlimited,
+    searchAvailable: isWebSearchConfigured(config),
     resetDate: getDateKey(1),
   }
 }
@@ -237,12 +255,25 @@ export interface AiChatStreamParams {
   userImageRows: { id: number; imagePath: string }[]
   /** 思考模式：true 时向上游传 thinking:{type:'enabled'}，回复含思维链 */
   thinking: boolean
+  /** 联网搜索：true 时先调用搜索服务，把网页资料注入本轮上下文 */
+  search: boolean
+}
+
+export interface AiChatSearchEvent {
+  status: 'start' | 'done'
+  query: string
+  /** done 时返回结果数 */
+  results?: number
+  /** done 时返回来源（用于前端展示；回答正文由模型按 Markdown 链接引用） */
+  sources?: WebSearchSource[]
 }
 
 export interface AiChatStreamHandlers {
   onChunk: (delta: string) => void
   /** 思考内容增量（thinking=true 且上游支持时才有） */
   onReasoning: (delta: string) => void
+  /** 联网搜索进度（仅在 search=true 时出现，先于 reasoning / delta） */
+  onSearch?: (event: AiChatSearchEvent) => void
   onDone: (result: { assistantMessageId: number | null; model: string; partial: boolean }) => void
   onError: (message: string) => void
   /** 客户端是否已断开（路由传 !res.writableEnded）；中断时把已生成的部分落库 */
@@ -269,9 +300,25 @@ export async function streamAiChatReply(
   params: AiChatStreamParams,
   handlers: AiChatStreamHandlers,
 ): Promise<void> {
-  const { config, conversationId, userMessageId, userContent, userImageRows, thinking } = params
+  const { config, conversationId, userMessageId, userContent, userImageRows, thinking, search } = params
 
   try {
+    // === 联网搜索（可选）：先检索，再把资料作为额外 system 上下文注入 ===
+    let searchContext: string | null = null
+    if (search) {
+      const query = normalizeSearchQuery(userContent)
+      handlers.onSearch?.({ status: 'start', query })
+      const results = await searchWeb(query, config)
+      searchContext = buildSearchContext(query, results, Date.now())
+      handlers.onSearch?.({
+        status: 'done',
+        query,
+        results: results.length,
+        sources: toSearchSources(results),
+      })
+      if (handlers.isAborted?.()) return
+    }
+
     // === 组装上下文 ===
     const history = await buildHistoryMessages(conversationId, userMessageId)
     const hasImages = userImageRows.length > 0
@@ -293,7 +340,11 @@ export async function streamAiChatReply(
     }
 
     const messages: ApiMessage[] = [
-      { role: 'system', content: config.systemPrompt },
+      // 联网资料并入同一条 system，兼容只接受单条 system 的 OpenAI 兼容上游
+      {
+        role: 'system',
+        content: searchContext ? `${config.systemPrompt}\n\n${searchContext}` : config.systemPrompt,
+      },
       ...history,
       currentMessage,
     ]
@@ -371,6 +422,7 @@ export async function streamAiChatReply(
       where: { id: userMessageId },
       data: { counted: false },
     }).catch(() => {})
-    handlers.onError(toAiError(err, 'AiChat').message)
+    // 搜索/存储等本地 AppError 保留明确文案；上游错误仍走统一映射
+    handlers.onError(err instanceof AppError ? err.message : toAiError(err, 'AiChat').message)
   }
 }

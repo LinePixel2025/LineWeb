@@ -255,6 +255,18 @@
 
 /* 思考过程折叠块（思考模式：流式生成中默认展开，正文开始后收起；历史消息默认收起） */
 
+.gh-ds-search-note {
+  align-self: flex-start;
+  padding: 3px 10px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 999px;
+  background: var(--gh-canvas);
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
 .gh-ds-reasoning {
   border: 1px solid var(--gh-border-muted);
   border-radius: var(--gh-radius);
@@ -387,6 +399,7 @@
 .gh-ds-composer-tools {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--gh-space-2);
 }
 

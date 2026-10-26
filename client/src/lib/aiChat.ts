@@ -17,6 +17,8 @@ export interface AiChatQuota {
   used: number
   remaining: number | null
   unlimited: boolean
+  /** 联网搜索是否可用（管理员开启并配置搜索 Key） */
+  searchAvailable: boolean
   /** 配额重置日期（Asia/Shanghai，YYYY-MM-DD，即明天） */
   resetDate: string
 }
@@ -126,10 +128,25 @@ export interface AiChatDone {
   unlimited: boolean
 }
 
+export interface AiChatSearchSource {
+  title: string
+  url: string
+  siteName?: string
+}
+
+export interface AiChatSearchEvent {
+  status: 'start' | 'done'
+  query: string
+  results?: number
+  sources?: AiChatSearchSource[]
+}
+
 export interface AiChatStreamHandlers {
   onMeta: (meta: AiChatMeta) => void
   /** 思考内容增量（思考模式且上游支持时才有；先于正文输出） */
   onReasoning: (delta: string) => void
+  /** 联网搜索进度（先于 reasoning / delta） */
+  onSearch?: (event: AiChatSearchEvent) => void
   onDelta: (text: string) => void
   onDone: (done: AiChatDone) => void
   onError: (message: string) => void
@@ -141,6 +158,8 @@ export interface AiChatSendBody {
   imageIds?: number[]
   /** 思考模式开关：true 时上游先输出思维链再给正文 */
   thinking?: boolean
+  /** 联网搜索开关：true 时先联网检索再把资料注入本轮上下文 */
+  search?: boolean
 }
 
 /** 429 配额错误的响应体（SSE 建立前返回 JSON） */
@@ -208,6 +227,8 @@ export async function streamAiChatMessage(
     }
     if (typeof payload.meta === 'object' && payload.meta !== null) {
       handlers.onMeta(payload.meta as unknown as AiChatMeta)
+    } else if (typeof payload.search === 'object' && payload.search !== null) {
+      handlers.onSearch?.(payload.search as unknown as AiChatSearchEvent)
     } else if (typeof payload.reasoning === 'string') {
       handlers.onReasoning(payload.reasoning)
     } else if (typeof payload.delta === 'string') {

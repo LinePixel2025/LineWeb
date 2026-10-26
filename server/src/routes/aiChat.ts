@@ -17,6 +17,7 @@ import {
   toMessageDto,
   updateAiChatConfig,
 } from '../services/aiChatService.js'
+import { isWebSearchConfigured } from '../services/webSearch.js'
 import {
   AI_IMAGE_MAX_BYTES,
   claimAiChatImages,
@@ -269,12 +270,19 @@ router.post('/messages', aiChatWriteLimiter, asyncHandler(async (req: Request, r
   const parsed = parseInput(aiChatMessageSchema, req.body)
   const content = parsed.content.trim()
   const imageIds: number[] = parsed.imageIds ?? []
+  const search = parsed.search ?? false
   if (!content && imageIds.length === 0) {
     throw new AppError('消息内容不能为空', 400)
+  }
+  if (search && !content) {
+    throw new AppError('联网搜索需要输入文字问题', 400)
   }
 
   // === 就绪与配额检查（在 SSE 头之前，保证前端能收到普通 JSON 错误） ===
   const config = await assertAiChatReady()
+  if (search && !isWebSearchConfigured(config)) {
+    throw new AppError('联网搜索未配置，请联系管理员', 503)
+  }
   const usage = await getDailyUsage(userId)
   if (!usage.unlimited && usage.remaining !== null && usage.remaining <= 0) {
     res.status(429).json({
@@ -379,6 +387,7 @@ router.post('/messages', aiChatWriteLimiter, asyncHandler(async (req: Request, r
       userContent: content,
       userImageRows,
       thinking: parsed.thinking ?? false,
+      search,
     },
     {
       onChunk: (delta) => {
@@ -386,6 +395,9 @@ router.post('/messages', aiChatWriteLimiter, asyncHandler(async (req: Request, r
       },
       onReasoning: (delta) => {
         if (!clientGone) send({ reasoning: delta })
+      },
+      onSearch: (event) => {
+        if (!clientGone) send({ search: event })
       },
       onDone: (result) => {
         if (clientGone) return
@@ -413,6 +425,18 @@ router.post('/messages', aiChatWriteLimiter, asyncHandler(async (req: Request, r
 
 // === 管理配置 ===
 
+/** 搜索 Key 的脱敏展示（博查 sk- / Tavily tvly- 都可能是任意前缀，只露末 4 位） */
+function maskSearchKey(key: string): string {
+  if (!key) return ''
+  if (key.length <= 4) return '****'
+  return `…${key.slice(-4)}`
+}
+
+/** 脱敏值（含省略号或全星号）视为未修改 */
+function isMaskedValue(value: string): boolean {
+  return value.includes('…') || value === '****'
+}
+
 function toConfigResponse(config: {
   id: number
   provider: string
@@ -422,6 +446,9 @@ function toConfigResponse(config: {
   systemPrompt: string
   dailyLimit: number
   isEnabled: boolean
+  searchEnabled: boolean
+  searchProvider: string
+  searchApiKey: string
   updatedAt: Date
 }) {
   return {
@@ -433,6 +460,9 @@ function toConfigResponse(config: {
     systemPrompt: config.systemPrompt,
     dailyLimit: config.dailyLimit,
     isEnabled: config.isEnabled,
+    searchEnabled: config.searchEnabled,
+    searchProvider: config.searchProvider,
+    searchApiKey: maskSearchKey(config.searchApiKey),
     updatedAt: config.updatedAt,
   }
 }
@@ -447,10 +477,13 @@ router.get('/config', authenticate, requireCapability('ai:configure'), asyncHand
 router.put('/config', authenticate, requireCapability('ai:configure'), asyncHandler(async (req: Request, res: Response) => {
   const parsed = parseInput(aiChatConfigUpdateSchema, req.body)
 
-  // 如果 apiKey 传入的是脱敏后的值（sk-…xxxx），说明未修改，剔除该字段
+  // 如果 apiKey / searchApiKey 传入的是脱敏后的值，说明未修改，剔除该字段
   const data: Record<string, unknown> = { ...parsed }
   if (typeof data.apiKey === 'string' && data.apiKey.startsWith('sk-…')) {
     delete data.apiKey
+  }
+  if (typeof data.searchApiKey === 'string' && isMaskedValue(data.searchApiKey)) {
+    delete data.searchApiKey
   }
 
   const config = await updateAiChatConfig(data)
