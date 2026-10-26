@@ -76,11 +76,13 @@ export default function ChatThread({
   const previousCountRef = useRef(0)
 
   const [membersOpen, setMembersOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState('')
   const [previewImage, setPreviewImage] = useState<Message | null>(null)
   // 用于「撤回」按钮的 2 分钟窗口自动消失：低频 tick 触发重渲染
   const [now, setNow] = useState(() => Date.now())
+  const menuRef = useRef<HTMLDivElement | null>(null)
 
   const conversationId = conversation?.id ?? null
   const isOwner = conversation !== null && conversation.ownerId === meId
@@ -92,11 +94,29 @@ export default function ChatThread({
     pendingPrependRef.current = false
     previousLastIdRef.current = null
     setMembersOpen(false)
+    setMenuOpen(false)
     setRenaming(false)
     setPreviewImage(null)
     const element = listRef.current
     if (element) element.scrollTop = element.scrollHeight
   }, [conversationId])
+
+  // 群聊操作菜单：点击外部关闭
+  useEffect(() => {
+    if (!menuOpen) return
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false)
+    }
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    window.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [menuOpen])
 
   // 低频刷新当前时间，让超过 2 分钟的「撤回」按钮自动消失（卸载时清理）
   useEffect(() => {
@@ -237,39 +257,80 @@ export default function ChatThread({
         </div>
         <div className="gh-chat-thread-actions">
           {isGroup && (
-            <>
-              {isOwner && (
-                <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm" onClick={onAddMembers}>
-                  添加成员
-                </button>
-              )}
-              {isOwner && (
-                <button
-                  type="button"
-                  className="gh-btn gh-btn--secondary gh-btn--sm"
-                  onClick={() => {
-                    setRenameValue(conversation.name)
-                    setRenaming((prev) => !prev)
-                  }}
-                >
-                  改名
-                </button>
-              )}
+            <div className="gh-chat-thread-more" ref={menuRef}>
               <button
                 type="button"
-                className="gh-btn gh-btn--secondary gh-btn--sm"
-                aria-expanded={membersOpen}
-                onClick={() => setMembersOpen((prev) => !prev)}
+                className="gh-chat-thread-more-btn"
+                aria-label="群聊操作"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((prev) => !prev)}
               >
-                成员
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                  <circle cx="3" cy="8" r="1.4" />
+                  <circle cx="8" cy="8" r="1.4" />
+                  <circle cx="13" cy="8" r="1.4" />
+                </svg>
               </button>
-            </>
+              {menuOpen && (
+                <div className="gh-chat-thread-menu" role="menu" aria-label="群聊操作">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="gh-chat-thread-menu-item"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      setMembersOpen(true)
+                    }}
+                  >
+                    群成员（{conversation.members.length}）
+                  </button>
+                  {isOwner && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="gh-chat-thread-menu-item"
+                      onClick={() => {
+                        setMenuOpen(false)
+                        onAddMembers()
+                      }}
+                    >
+                      添加成员
+                    </button>
+                  )}
+                  {isOwner && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="gh-chat-thread-menu-item"
+                      onClick={() => {
+                        setMenuOpen(false)
+                        setRenameValue(conversation.name)
+                        setRenaming(true)
+                      }}
+                    >
+                      修改群名
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
 
         {isGroup && membersOpen && (
           <div className="gh-chat-members-popover" role="dialog" aria-label="群聊成员">
-            <p className="gh-chat-members-title">成员（{conversation.members.length}）</p>
+            <div className="gh-chat-members-head">
+              <p className="gh-chat-members-title">成员（{conversation.members.length}）</p>
+              <button
+                type="button"
+                className="gh-chat-members-close"
+                aria-label="关闭成员列表"
+                onClick={() => setMembersOpen(false)}
+              >
+                ×
+              </button>
+            </div>
             <ul className="gh-chat-members-list">
               {conversation.members.map((member) => (
                 <li key={member.id} className="gh-chat-member-row">

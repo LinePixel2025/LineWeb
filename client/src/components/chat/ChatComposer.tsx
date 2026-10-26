@@ -97,28 +97,58 @@ export default function ChatComposer({
 
   return (
     <div className="gh-chat-composer">
+      <textarea
+        className="gh-chat-composer-input"
+        value={value}
+        rows={2}
+        maxLength={maxLength}
+        placeholder={placeholder}
+        aria-label="消息输入框"
+        onChange={(event) => setValue(event.target.value.slice(0, maxLength))}
+        onKeyDown={handleKeyDown}
+      />
+      <div className="gh-chat-composer-bar">
+        {onSendImage && (
+          <div className="gh-chat-composer-tools">
+            <button
+              type="button"
+              className="gh-chat-composer-tool"
+              aria-label="发送图片"
+              title="发送图片"
+              disabled={!canAttach}
+              onClick={() => imageInputRef.current?.click()}
+            >
+              {uploading ? '发送中…' : '图片'}
+            </button>
+            <button
+              type="button"
+              className="gh-chat-composer-tool"
+              aria-label="拍照"
+              title="拍照"
+              disabled={!canAttach}
+              onClick={handleCameraClick}
+            >
+              拍照
+            </button>
+          </div>
+        )}
+        <span className={`gh-chat-composer-count ${value.length > maxLength - 200 ? 'gh-chat-composer-count--warn' : ''}`}>
+          {value.length}/{maxLength}
+        </span>
+        <span className="gh-chat-composer-tip">Enter 发送 · Shift+Enter 换行</span>
+        <button
+          type="button"
+          className="gh-btn gh-btn--primary gh-btn--sm"
+          aria-label="发送消息"
+          disabled={!canSubmit}
+          onClick={() => void submit()}
+        >
+          {sending ? '发送中…' : '发送'}
+        </button>
+      </div>
+
       {onSendImage && (
-        <div className="gh-chat-composer-tools">
-          <button
-            type="button"
-            className="gh-chat-composer-tool"
-            aria-label="发送图片"
-            title="发送图片"
-            disabled={!canAttach}
-            onClick={() => imageInputRef.current?.click()}
-          >
-            {uploading ? '发送中…' : '图片'}
-          </button>
-          <button
-            type="button"
-            className="gh-chat-composer-tool"
-            aria-label="拍照"
-            title="拍照"
-            disabled={!canAttach}
-            onClick={handleCameraClick}
-          >
-            拍照
-          </button>
+        <>
           <input
             ref={imageInputRef}
             type="file"
@@ -138,42 +168,13 @@ export default function ChatComposer({
             tabIndex={-1}
             onChange={handleFileChange}
           />
-        </div>
-      )}
-
-      <textarea
-        className="gh-chat-composer-input"
-        value={value}
-        rows={2}
-        maxLength={maxLength}
-        placeholder={placeholder}
-        aria-label="消息输入框"
-        onChange={(event) => setValue(event.target.value.slice(0, maxLength))}
-        onKeyDown={handleKeyDown}
-      />
-      <div className="gh-chat-composer-bar">
-        <span className={`gh-chat-composer-count ${value.length > maxLength - 200 ? 'gh-chat-composer-count--warn' : ''}`}>
-          {value.length}/{maxLength}
-        </span>
-        <span className="gh-chat-composer-tip">Enter 发送 · Shift+Enter 换行</span>
-        <button
-          type="button"
-          className="gh-btn gh-btn--primary gh-btn--sm"
-          aria-label="发送消息"
-          disabled={!canSubmit}
-          onClick={() => void submit()}
-        >
-          {sending ? '发送中…' : '发送'}
-        </button>
-      </div>
-
-      {onSendImage && (
-        <ChatCameraDialog
-          open={cameraOpen}
-          onClose={() => setCameraOpen(false)}
-          onCapture={uploadImage}
-          onFallback={() => cameraInputRef.current?.click()}
-        />
+          <ChatCameraDialog
+            open={cameraOpen}
+            onClose={() => setCameraOpen(false)}
+            onCapture={uploadImage}
+            onFallback={() => cameraInputRef.current?.click()}
+          />
+        </>
       )}
     </div>
   )

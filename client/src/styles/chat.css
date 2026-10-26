@@ -6,20 +6,27 @@
 .gh-chat-page {
   display: flex;
   width: 100%;
-  max-width: var(--gh-max-width);
+  /* 聊天页比常规内容页更宽：宽屏下把空白留给消息区，而不是两侧留白 */
+  max-width: 1600px;
   margin: 0 auto;
   flex-direction: column;
-  gap: var(--gh-space-3);
-  /* 与 .gh-content 的上下内边距保持一致：聊天容器占满可视高度，历史消息只在内部滚动 */
-  height: calc(100vh - var(--gh-nav-height) - var(--gh-space-5) - var(--gh-space-7));
-  height: calc(100dvh - var(--gh-nav-height) - var(--gh-space-5) - var(--gh-space-7));
+  gap: var(--gh-space-2);
+  /* 与 .gh-content 的上下内边距保持一致（上 24 / 下 24）：聊天容器占满可视高度，历史消息只在内部滚动 */
+  height: calc(100vh - var(--gh-nav-height) - var(--gh-space-5) * 2);
+  height: calc(100dvh - var(--gh-nav-height) - var(--gh-space-5) * 2);
   /* 不设最小高度：视口再矮也只在聊天容器内部滚动，绝不把整页撑高 */
   min-height: 0;
 }
 
-/* 聊天页内部滚动，避免与页脚形成双滚动条 */
+/* 聊天页内部滚动，避免与页脚形成双滚动条；底部留白收窄，把高度让给消息区 */
 .gh-content:has(.gh-chat-page) .gh-footer {
   display: none;
+}
+
+@media (min-width: 768px) {
+  .gh-content:has(.gh-chat-page) {
+    padding-bottom: var(--gh-space-5);
+  }
 }
 
 /* ===== 提示条 ===== */
@@ -55,7 +62,10 @@
 /* ===== 主容器：左侧列表 + 右侧会话 ===== */
 .gh-chat-layout {
   display: flex;
+  width: 100%;
+  max-width: 100%;
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--gh-border);
@@ -374,6 +384,8 @@
 .gh-chat-thread {
   position: relative;
   display: flex;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   min-height: 0;
   flex: 1;
@@ -413,7 +425,8 @@
   display: flex;
   align-items: center;
   gap: var(--gh-space-2);
-  min-height: 60px;
+  min-width: 0;
+  min-height: 56px;
   padding: var(--gh-space-2) var(--gh-space-4);
   border-bottom: 1px solid var(--gh-border);
 }
@@ -468,18 +481,82 @@
   display: flex;
   align-items: center;
   gap: var(--gh-space-1);
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+/* 群聊操作收进「⋯」菜单：标题永远优先拿宽度，窄屏也不会被按钮挤成一条缝 */
+.gh-chat-thread-more {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.gh-chat-thread-more-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--gh-radius);
+  background: transparent;
+  color: var(--gh-text-secondary);
+  cursor: pointer;
+  transition: background var(--gh-transition), color var(--gh-transition), border-color var(--gh-transition);
+}
+
+.gh-chat-thread-more-btn:hover,
+.gh-chat-thread-more-btn[aria-expanded='true'] {
+  border-color: var(--gh-border);
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+}
+
+.gh-chat-thread-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  min-width: 168px;
+  flex-direction: column;
+  padding: var(--gh-space-1);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-bg);
+  box-shadow: var(--gh-shadow-lg);
+}
+
+.gh-chat-thread-menu-item {
+  padding: 6px var(--gh-space-2);
+  border: none;
+  border-radius: calc(var(--gh-radius) - 2px);
+  background: transparent;
+  color: var(--gh-text);
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-sm);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--gh-transition);
+}
+
+.gh-chat-thread-menu-item:hover {
+  background: var(--gh-btn-hover);
 }
 
 .gh-chat-rename-form {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: var(--gh-space-1);
 }
 
 .gh-chat-rename-input {
-  width: 160px;
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 120px;
+  max-width: 220px;
 }
 
 /* ===== 群成员弹层 ===== */
@@ -499,12 +576,35 @@
   box-shadow: var(--gh-shadow-lg);
 }
 
-.gh-chat-members-title {
-  margin: 0 0 var(--gh-space-2);
+.gh-chat-members-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-2);
+  margin-bottom: var(--gh-space-2);
   padding: 0 var(--gh-space-1);
+}
+
+.gh-chat-members-title {
+  margin: 0;
   color: var(--gh-text-secondary);
   font-size: var(--gh-text-xs);
   font-weight: 600;
+}
+
+.gh-chat-members-close {
+  padding: 0 4px;
+  border: none;
+  background: none;
+  color: var(--gh-text-tertiary);
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-lg);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gh-chat-members-close:hover {
+  color: var(--gh-text);
 }
 
 .gh-chat-members-list {
@@ -557,11 +657,13 @@
 /* ===== 消息列表 ===== */
 .gh-chat-messages {
   display: flex;
+  min-width: 0;
   min-height: 0;
   flex: 1;
   flex-direction: column;
   gap: var(--gh-space-3);
   padding: var(--gh-space-4);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -614,7 +716,7 @@
 .gh-chat-message-body {
   display: flex;
   min-width: 0;
-  max-width: 72%;
+  max-width: 78%;
   flex-direction: column;
   gap: 2px;
 }
@@ -895,8 +997,8 @@
 .gh-chat-composer {
   display: flex;
   flex-direction: column;
-  gap: var(--gh-space-2);
-  padding: var(--gh-space-3) var(--gh-space-4);
+  gap: 6px;
+  padding: var(--gh-space-2) var(--gh-space-3);
   border-top: 1px solid var(--gh-border);
   background: var(--gh-bg);
 }
@@ -907,9 +1009,10 @@
   min-height: 72px;
 }
 
-/* 图片 / 拍照 工具栏 */
+/* 图片 / 拍照 工具栏（与发送栏同一行，节省垂直空间） */
 .gh-chat-composer-tools {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: var(--gh-space-1);
 }
@@ -959,9 +1062,9 @@
 
 .gh-chat-composer-input {
   width: 100%;
-  min-height: 48px;
+  min-height: 44px;
   max-height: 140px;
-  padding: var(--gh-space-2) var(--gh-space-3);
+  padding: 6px var(--gh-space-3);
   border: 1px solid var(--gh-border);
   border-radius: var(--gh-radius);
   background: var(--gh-canvas);
@@ -989,6 +1092,7 @@
 }
 
 .gh-chat-composer-count {
+  flex-shrink: 0;
   color: var(--gh-text-tertiary);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
@@ -1251,6 +1355,9 @@
 .gh-chat-tab:focus-visible,
 .gh-chat-new-group:focus-visible,
 .gh-chat-back:focus-visible,
+.gh-chat-thread-more-btn:focus-visible,
+.gh-chat-thread-menu-item:focus-visible,
+.gh-chat-members-close:focus-visible,
 .gh-chat-dialog-close:focus-visible,
 .gh-chat-message-image-wrap:focus-visible,
 .gh-chat-recall-btn:focus-visible,
@@ -1295,11 +1402,16 @@
 
   .gh-chat-thread-header {
     padding: var(--gh-space-2) var(--gh-space-3);
+    gap: var(--gh-space-1);
   }
 
-  .gh-chat-thread-actions .gh-btn {
-    padding: 4px 8px;
-    font-size: var(--gh-text-xs);
+  .gh-chat-rename-form {
+    flex-wrap: wrap;
+  }
+
+  .gh-chat-rename-input {
+    flex: 1 1 120px;
+    max-width: none;
   }
 
   .gh-chat-message-body {
@@ -1347,7 +1459,8 @@
   }
 
   .gh-chat-rename-input {
-    width: 110px;
+    flex: 1 1 120px;
+    max-width: none;
   }
 
   .gh-chat-members-popover {
