@@ -10,8 +10,11 @@
   margin: 0 auto;
   flex-direction: column;
   gap: var(--gh-space-3);
+  /* 与 .gh-content 的上下内边距保持一致：聊天容器占满可视高度，历史消息只在内部滚动 */
+  height: calc(100vh - var(--gh-nav-height) - var(--gh-space-5) - var(--gh-space-7));
   height: calc(100dvh - var(--gh-nav-height) - var(--gh-space-5) - var(--gh-space-7));
-  min-height: 520px;
+  /* 不设最小高度：视口再矮也只在聊天容器内部滚动，绝不把整页撑高 */
+  min-height: 0;
 }
 
 /* 聊天页内部滚动，避免与页脚形成双滚动条 */
@@ -64,6 +67,7 @@
 .gh-chat-sidebar {
   display: flex;
   width: 320px;
+  min-height: 0;
   flex-shrink: 0;
   flex-direction: column;
   border-right: 1px solid var(--gh-border);
@@ -371,6 +375,7 @@
   position: relative;
   display: flex;
   min-width: 0;
+  min-height: 0;
   flex: 1;
   flex-direction: column;
   background: var(--gh-bg);
@@ -1259,13 +1264,8 @@
 
 /* ===== 移动端：单栏切换 ===== */
 @media (max-width: 900px) {
-  .gh-chat-page {
-    height: calc(
-      100dvh - var(--gh-nav-height) - var(--gh-safe-top) - var(--gh-safe-bottom) -
-        var(--gh-space-4) * 2
-    );
-    min-height: 420px;
-  }
+  /* 768–900px 的平板仍沿用 .gh-content 的桌面内边距（上 24 + 下 48），
+     高度口径由基础规则负责，避免整页被撑高 40px（历史消息本就在 .gh-chat-messages 内滚动）。 */
 
   .gh-chat-sidebar {
     width: 100%;
@@ -1364,6 +1364,21 @@
   .gh-chat-mode-chip {
     padding: 0 5px;
     font-size: 9px;
+  }
+}
+
+/* 手机（≤767px）：.gh-content 的内边距改为 nav + safe + space-4*2，聊天页高度同步该口径 */
+@media (max-width: 767px) {
+  .gh-chat-page {
+    height: calc(
+      100vh - var(--gh-nav-height) - var(--gh-safe-top) - var(--gh-safe-bottom) -
+        var(--gh-space-4) * 2
+    );
+    height: calc(
+      100dvh - var(--gh-nav-height) - var(--gh-safe-top) - var(--gh-safe-bottom) -
+        var(--gh-space-4) * 2
+    );
+    min-height: 0;
   }
 }
 
