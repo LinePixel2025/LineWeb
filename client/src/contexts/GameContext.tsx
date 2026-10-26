@@ -26,7 +26,7 @@ import type {
 const INVITE_SWEEP_MS = 1_000
 
 /**
- * 十款游戏的 API 前缀唯一映射（新增游戏时改这里 + catalog + App 路由）。
+ * 十一款游戏的 API 前缀唯一映射（新增游戏时改这里 + catalog + App 路由）。
  */
 const GAME_API_BASE: Record<GameKind, string> = {
   '2048': '/games/2048',
@@ -39,6 +39,7 @@ const GAME_API_BASE: Record<GameKind, string> = {
   liar: '/games/liar',
   uno: '/games/uno',
   xiangqi: '/games/xiangqi',
+  parkour: '/games/parkour',
 }
 
 /** 需要一并拉取邀请 / 对局状态的全部游戏 */

@@ -8,6 +8,7 @@
 import type { DoudizhuCombo } from '../lib/games/doudizhu'
 import type { UnoCard, UnoColor } from '../lib/games/uno'
 import type { LiarDeathCause, LiarTarget } from '../lib/games/liar'
+import type { ParkourLane, ParkourPose } from '../lib/games/parkour'
 
 /** 游戏种类（邀请与对局 DTO 的 game 字段；旧邀请缺省视为 2048） */
 export type GameKind =
@@ -21,6 +22,7 @@ export type GameKind =
   | 'liar'
   | 'uno'
   | 'xiangqi'
+  | 'parkour'
 
 /** 2048 移动方向 */
 export type Game2048Direction = 'up' | 'down' | 'left' | 'right'
@@ -245,6 +247,7 @@ export type AnyGameMatch =
   | GameLiarMatch
   | GameUnoMatch
   | GameXiangqiMatch
+  | GameParkourMatch
 
 /** GET/POST /api/games/doudizhu/* 对局响应 */
 export interface DoudizhuMatchResponse {
@@ -763,6 +766,91 @@ export interface XiangqiSyncResponse {
   serverTime: string
   invites: GameInvitesResponse
   match: GameXiangqiMatch | null
+}
+
+// ==================== 霓虹跑酷（parkour，3D 三车道联机） ====================
+
+export type GameParkourMatchStatus = 'waiting' | 'playing' | 'finished'
+export type GameParkourPlayerStatus = 'waiting' | 'playing' | 'finished' | 'lost'
+export type GameParkourEndReason = 'finish' | 'elimination' | 'timeout' | 'cancelled'
+export type GameParkourCause = 'hit' | 'pit' | 'resign' | 'forfeit'
+
+/** 联机对局中的单个跑者（服务端权威进度 + 客户端本地渲染） */
+export interface GameParkourPlayer {
+  userId: number
+  username: string
+  online: boolean
+  /** 跑者配色索引（0–5，由座位决定） */
+  colorIndex: number
+  status: GameParkourPlayerStatus
+  /** 服务端已接受的最远距离（米，单调） */
+  distanceM: number
+  coins: number
+  maxCombo: number
+  /** 服务端按同一公式计算的得分 */
+  score: number
+  /** 当前车道 0 / 1 / 2 */
+  lane: ParkourLane
+  /** 当前姿态（幽灵渲染用） */
+  pose: ParkourPose
+  rank: number | null
+  /** 完赛用时（毫秒，从 startsAt 起算；未完赛为 null） */
+  finishMs: number | null
+  cause: GameParkourCause | null
+}
+
+/** 跑酷对局 DTO（webSocket game:match:* 事件与 REST 共用） */
+export interface GameParkourMatch {
+  id: number
+  game: 'parkour'
+  hostId: number
+  status: GameParkourMatchStatus
+  version: number
+  createdAt: string
+  startedAt: string | null
+  startsAt: string | null
+  endsAt: string
+  endedAt: string | null
+  winnerId: number | null
+  reason: GameParkourEndReason | null
+  /** 等待房间为 0，开始后为服务端权威 seed */
+  seed: number
+  trackLengthM: number
+  /** 距起跑的剩余毫秒（服务端算好） */
+  countdownMs: number
+  /** 距比赛结束的剩余毫秒（服务端算好） */
+  remainingMs: number
+  players: GameParkourPlayer[]
+}
+
+export type ParkourActionBody =
+  | {
+      type: 'progress'
+      distanceM: number
+      coins: number
+      maxCombo: number
+      lane: ParkourLane
+      pose: ParkourPose
+      alive: boolean
+      cause?: 'hit' | 'pit'
+    }
+  | {
+      type: 'finish'
+      distanceM: number
+      coins: number
+      maxCombo: number
+    }
+
+export interface ParkourMatchResponse {
+  match: GameParkourMatch
+}
+export interface ParkourActiveMatchResponse {
+  match: GameParkourMatch | null
+}
+export interface ParkourSyncResponse {
+  serverTime: string
+  invites: GameInvitesResponse
+  match: GameParkourMatch | null
 }
 
 // ==================== 通用对局响应（新游戏复用同一形状） ====================

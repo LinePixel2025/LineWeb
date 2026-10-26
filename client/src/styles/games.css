@@ -162,6 +162,11 @@
   --cover-b: #1e3a1f;
 }
 
+.gh-games-cover[data-game='parkour'] {
+  --cover-a: #22d3ee;
+  --cover-b: #2e1065;
+}
+
 .gh-games-cover::before {
   content: '';
   position: absolute;

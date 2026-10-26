@@ -465,3 +465,29 @@ export const xiangqiActionSchema = z.object({
   from: z.number().int().min(0).max(89),
   to: z.number().int().min(0).max(89),
 })
+
+// === 游戏（霓虹跑酷 3D 三车道联机）Schemas ===
+
+/**
+ * POST /api/games/parkour/matches/:id/actions
+ * progress：绝对进度上报（约 2Hz；距离单调、服务端再做速度/金币上限校验）；
+ * finish：冲线，服务端按收到顺序排名。
+ */
+export const parkourActionSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('progress'),
+    distanceM: z.number().finite().min(0).max(20_000),
+    coins: z.number().int().min(0).max(10_000),
+    maxCombo: z.number().int().min(0).max(10_000),
+    lane: z.union([z.literal(0), z.literal(1), z.literal(2)]),
+    pose: z.enum(['run', 'jump', 'slide']),
+    alive: z.boolean(),
+    cause: z.enum(['hit', 'pit']).optional(),
+  }),
+  z.object({
+    type: z.literal('finish'),
+    distanceM: z.number().finite().min(0).max(20_000),
+    coins: z.number().int().min(0).max(10_000),
+    maxCombo: z.number().int().min(0).max(10_000),
+  }),
+])

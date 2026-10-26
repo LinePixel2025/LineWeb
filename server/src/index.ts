@@ -132,6 +132,9 @@ const apiLimiterSkipPaths = [
   /^\/games\/xiangqi\/matches\/\d+\/actions\/?$/,
   /^\/games\/xiangqi\/sync\/?$/,
   /^\/games\/xiangqi\/presence\/?$/,
+  /^\/games\/parkour\/matches\/\d+\/actions\/?$/,
+  /^\/games\/parkour\/sync\/?$/,
+  /^\/games\/parkour\/presence\/?$/,
 ]
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -478,6 +481,23 @@ app.get('/api', (_req, res) => {
       resign: { method: 'POST', path: '/api/games/xiangqi/matches/:id/resign', auth: true, description: '认输：对方立即获胜' },
       rules: '中国象棋好友联机（恰好 2 人）：9×10 标准棋盘，房主执红先行。帅/将九宫一步、仕/士斜行、相/象田字不过河、马走日别马腿、车走直线、炮隔子吃、兵/卒过河可横走。走子后不得使己方将帅被将军（含将帅照面）；被将军且无合法着法为绝杀（checkmate），无着可走但未被将军为困毙（stalemate，判负）。连续 120 个半回合无吃子判和（draw）。回合 60 秒，超时由服务端自动托管走子（不淘汰）；掉线 120 秒判负；全局 30 分钟超时无胜者（timeout）。棋盘全量下发，无隐藏信息。单机模式为纯前端人机对战（AI 与服务端托管共用同一引擎），不走这些端点。',
       ws: '实时推送复用 /ws/chat：game:match:started/update/ended（match.game === "xiangqi"）。无 WebSocket 时 POST /presence + GET /sync 轮询降级。',
+    },
+    parkour: {
+      friends: { method: 'GET', path: '/api/games/parkour/friends', auth: true, description: '霓虹跑酷好友大厅：好友列表（online / inMatch 覆盖全部游戏）' },
+      invites: { method: 'GET', path: '/api/games/parkour/invites', auth: true, description: '收到/发出的跑酷邀请（60 秒有效；invite 带 game:"parkour"）' },
+      inviteCreate: { method: 'POST', path: '/api/games/parkour/invites', auth: true, description: '邀请好友加入跑酷等待房间（body: {friendId}；2–6 人）' },
+      inviteRespond: { method: 'POST', path: '/api/games/parkour/invites/:id/respond', auth: true, description: '接受/拒绝邀请（body: {action:"accept"|"decline"}）' },
+      inviteCancel: { method: 'DELETE', path: '/api/games/parkour/invites/:id', auth: true, description: '取消自己发出的邀请' },
+      sync: { method: 'GET', path: '/api/games/parkour/sync?matchId=', auth: true, description: '轮询降级：serverTime + 邀请 + 当前/指定对局（players 带实时 distance/coins/lane/pose）' },
+      presence: { method: 'POST', path: '/api/games/parkour/presence', auth: true, description: '轮询降级心跳（与 2048 共用 presence TTL 存储）' },
+      activeMatch: { method: 'GET', path: '/api/games/parkour/matches/active', auth: true, description: '本人仍在等待/比赛中的房间，或 null（已冲线/已出局返回 null）' },
+      matchDetail: { method: 'GET', path: '/api/games/parkour/matches/:id', auth: true, description: '房间/对局详情（含最终排名与完赛用时；非参与者 404）' },
+      start: { method: 'POST', path: '/api/games/parkour/matches/:id/start', auth: true, description: '房主开始比赛（2–6 人；服务端下发 seed + 3 秒倒计时，800m 同赛道幽灵竞速）' },
+      leave: { method: 'POST', path: '/api/games/parkour/matches/:id/leave', auth: true, description: '离开等待房间；房主离开即解散（已开局请用 resign 退出并记为 DNF）' },
+      action: { method: 'POST', path: '/api/games/parkour/matches/:id/actions', auth: true, description: '统一动作入口：{type:"progress",distanceM,coins,maxCombo,lane:0-2,pose,alive,cause?} 约 2Hz 上报；{type:"finish",distanceM,coins,maxCombo} 冲线。服务端做单调/速度/金币/车道校验并按下线顺序排名；限流 1500/5min/用户' },
+      resign: { method: 'POST', path: '/api/games/parkour/matches/:id/resign', auth: true, description: '中途退出：本局记为 lost（cause: resign），其他玩家继续' },
+      rules: '霓虹跑酷（3D 第三人称三车道，2–6 人）：自动前进，左右换道、跳跃、按住滑铲；撞列车/低路障/悬空牌或掉坑即出局，护盾抵挡一次撞击，磁铁吸金币，冲刺 4 秒无敌加速。800m 同 seed 赛道，先冲线者胜；全员结束或 150 秒超时按 距离 > 金币 > maxCombo 排名。3 秒倒计时；掉线 30 秒 DNF；等待房 30 分钟、结果保留 5 分钟。客户端本地 60fps 模拟并 2Hz 上报，服务端只做进度校验（速度上限），不做逐帧物理。单机无尽模式为纯前端 three.js 玩法，不走这些端点。',
+      ws: '实时推送复用 /ws/chat：game:match:started/update/ended（match.game === "parkour"，progress 阶段 400ms 节流；DTO 含所有玩家 distance/coins/lane/pose/rank）。无 WebSocket 时 POST /presence + GET /sync 轮询降级。',
     },
   })
 })

@@ -41,6 +41,8 @@ const UnoPage = lazy(() => import('./pages/games/UnoPage'))
 const UnoOnlinePage = lazy(() => import('./pages/games/UnoOnlinePage'))
 const XiangqiPage = lazy(() => import('./pages/games/XiangqiPage'))
 const XiangqiOnlinePage = lazy(() => import('./pages/games/XiangqiOnlinePage'))
+const ParkourPage = lazy(() => import('./pages/games/ParkourPage'))
+const ParkourOnlinePage = lazy(() => import('./pages/games/ParkourOnlinePage'))
 const DeepSeekChatPage = lazy(() => import('./pages/DeepSeekChatPage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const DynamicPage = lazy(() => import('./pages/DynamicPage'))
@@ -198,6 +200,13 @@ export default function App() {
                     } />
                     <Route path="/games/xiangqi/online/:matchId" element={
                       <ProtectedRoute><XiangqiOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/parkour" element={<ParkourPage />} />
+                    <Route path="/games/parkour/online" element={
+                      <ProtectedRoute><ParkourOnlinePage /></ProtectedRoute>
+                    } />
+                    <Route path="/games/parkour/online/:matchId" element={
+                      <ProtectedRoute><ParkourOnlinePage /></ProtectedRoute>
                     } />
                     <Route path="/profile" element={
                       <ProtectedRoute><ProfilePage /></ProtectedRoute>

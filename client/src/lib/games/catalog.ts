@@ -74,6 +74,10 @@ export const GAME_UNO_ONLINE_ROUTE = '/games/uno/online'
 export const GAME_XIANGQI_ROUTE = '/games/xiangqi'
 /** 中国象棋联机（2 人）大厅路由 */
 export const GAME_XIANGQI_ONLINE_ROUTE = '/games/xiangqi/online'
+/** 霓虹跑酷单机无尽路由 */
+export const GAME_PARKOUR_ROUTE = '/games/parkour'
+/** 霓虹跑酷联机（2–6 人）大厅路由 */
+export const GAME_PARKOUR_ONLINE_ROUTE = '/games/parkour/online'
 
 /** 大厅完整目录：可玩游戏在前，即将上线占位在后 */
 export const GAME_CATALOG: readonly GameCatalogEntry[] = [
@@ -186,6 +190,17 @@ export const GAME_CATALOG: readonly GameCatalogEntry[] = [
     playable: true,
     route: GAME_XIANGQI_ROUTE,
     onlineRoute: GAME_XIANGQI_ONLINE_ROUTE,
+  },
+  {
+    id: 'parkour',
+    name: '霓虹跑酷',
+    description: '3D 三车道霓虹都市：换道、跳跃、滑铲躲避列车与路障，收集金币与护盾/磁铁/冲刺；单机无尽，2–6 人同赛道幽灵竞速。',
+    icon: '🏃',
+    modes: ['single', 'online'],
+    status: 'available',
+    playable: true,
+    route: GAME_PARKOUR_ROUTE,
+    onlineRoute: GAME_PARKOUR_ONLINE_ROUTE,
   },
 ]
 

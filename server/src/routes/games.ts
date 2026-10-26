@@ -1,4 +1,4 @@
-import { Router, type Request } from 'express'
+import { Router, type Request, type RequestHandler } from 'express'
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import { z } from 'zod'
 import { AppError } from '../middleware/errorHandler.js'
@@ -20,6 +20,7 @@ import {
   liarActionSchema,
   unoActionSchema,
   xiangqiActionSchema,
+  parkourActionSchema,
 } from '../config/index.js'
 import { markGamePresence } from '../services/gamePresence.js'
 import {
@@ -78,6 +79,20 @@ import {
   respondMinesweeperInvite,
   startMinesweeperMatch,
 } from '../services/gameMinesweeperService.js'
+import {
+  applyParkourAction,
+  cancelParkourInvite,
+  createParkourInvite,
+  getActiveParkourMatch,
+  getParkourMatch,
+  getParkourSync,
+  leaveParkourMatch,
+  listParkourFriends,
+  listParkourInvites,
+  resignParkourMatch,
+  respondParkourInvite,
+  startParkourMatch,
+} from '../services/gameParkourService.js'
 import {
   applyJumpAction,
   cancelJumpInvite,
@@ -207,6 +222,19 @@ const moveLimiter = rateLimit({
 const minecraftActionLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
   max: 3000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKeyGenerator,
+  message: { error: '操作过于频繁，请稍后再试' },
+})
+
+/**
+ * 跑酷专用动作限流：progress 约 2Hz（70s ≈ 140 次/局），共享的 900/5min
+ * 会被多局连打挤占，这里单独放宽到 1500/5min。
+ */
+const parkourActionLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 1500,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: userKeyGenerator,
@@ -450,6 +478,8 @@ interface GameEndpointBundle<A> {
   applyAction: (userId: number, matchId: number, body: A) => unknown
   resignMatch: (userId: number, matchId: number) => unknown
   actionSchema: z.ZodType<A>
+  /** 动作端点限流（默认 moveLimiter；高频上报的游戏可传独立 limiter） */
+  actionLimiter?: RequestHandler
 }
 
 function mountGameEndpoints<A>(bundle: GameEndpointBundle<A>): void {
@@ -510,7 +540,7 @@ function mountGameEndpoints<A>(bundle: GameEndpointBundle<A>): void {
     res.json(bundle.leaveMatch(currentUserId(req), matchId))
   })
 
-  router.post(`${base}/matches/:id/actions`, moveLimiter, (req, res) => {
+  router.post(`${base}/matches/:id/actions`, bundle.actionLimiter ?? moveLimiter, (req, res) => {
     const matchId = parseIdParam(req.params.id, '对局 ID')
     const body = parseInput(bundle.actionSchema, req.body)
     res.json(bundle.applyAction(currentUserId(req), matchId, body))
@@ -639,6 +669,24 @@ mountGameEndpoints({
   applyAction: applyXiangqiAction,
   resignMatch: resignXiangqiMatch,
   actionSchema: xiangqiActionSchema,
+})
+
+mountGameEndpoints({
+  base: 'parkour',
+  listFriends: listParkourFriends,
+  listInvites: listParkourInvites,
+  createInvite: createParkourInvite,
+  respondInvite: respondParkourInvite,
+  cancelInvite: cancelParkourInvite,
+  sync: getParkourSync,
+  getActiveMatch: getActiveParkourMatch,
+  getMatch: getParkourMatch,
+  startMatch: startParkourMatch,
+  leaveMatch: leaveParkourMatch,
+  applyAction: applyParkourAction,
+  resignMatch: resignParkourMatch,
+  actionSchema: parkourActionSchema,
+  actionLimiter: parkourActionLimiter,
 })
 
 // ============================================================

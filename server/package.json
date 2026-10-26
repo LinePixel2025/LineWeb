@@ -20,6 +20,7 @@
     "verify:liar": "tsx scripts/verify-liar.ts",
     "verify:uno": "tsx scripts/verify-uno.ts",
     "verify:xiangqi": "tsx scripts/verify-xiangqi.ts",
+    "verify:parkour": "tsx scripts/verify-parkour.ts",
     "verify:aichat": "tsx scripts/verify-aichat.ts"
   },
   "prisma": {

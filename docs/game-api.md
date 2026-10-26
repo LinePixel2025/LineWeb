@@ -1,4 +1,4 @@
-# LineWeb 游戏 API 接入文档（十款游戏：单机 / 好友联机）
+# LineWeb 游戏 API 接入文档（十一款游戏：单机 / 好友联机）
 
 > 适用版本：2026-10（游戏大厅 + 2048 好友联机 + 无 WebSocket 轮询降级）
 > 相关文档：[`chat-api.md`](./chat-api.md)（好友关系与聊天 API）、[`api.md`](./api.md)（全部端点）
@@ -925,7 +925,76 @@ cd client && npx vitest run src/lib/games/__tests__/xiangqi.test.ts
 
 ---
 
-# 十一、跨游戏互斥与新增游戏清单
+# 十一、霓虹跑酷（parkour，3D 第三人称三车道）
+
+## 1. 概述
+
+three.js 第三人称三车道跑酷（Subway Surfers / Temple Run 式）：自动前进，左右换道、跳跃、按住滑铲；
+躲避列车 / 低路障 / 悬空牌 / 坑洞，收集金币与护盾 / 磁铁 / 冲刺。
+
+- **单机**：`/games/parkour`，无尽霓虹都市，最高纪录存 `lineweb.parkour.best`；
+  3D 视图在点击开始时动态加载（three.js 与「我的世界」共用按需 chunk，不进主包）。
+- **联机**：`/games/parkour/online`，**2–6 人**在**同一条 seed 的 800m 赛道**上幽灵竞速；
+  各端本地 60fps 模拟，互不碰撞；服务端只做进度校验与排名。
+- 引擎双端唯一真相源：`server/src/services/gameParkour.ts` ≡ `client/src/lib/games/parkour.ts`
+  （client 测试读取双端源码断言逐字一致）；渲染在 `client/src/lib/games/parkourScene.ts`。
+- 一次撞击或掉坑即出局；护盾抵挡一次撞击，冲刺 4 秒无敌加速；**没有生命值 / 二段跳**。
+
+## 2. 常量与计分（双端必须一致）
+
+| 项 | 值 |
+| --- | --- |
+| 车道 | 3 条，宽 2.4m，中心 -2.4 / 0 / +2.4 |
+| 速度 | `min(cap, 10 + distanceM × 0.014)`；联机 cap 21m/s，单机 cap 26m/s |
+| 跳跃 | 初速 9.8m/s，重力 26m/s²；站立高 1.7m，滑铲高 0.9m |
+| 冲刺 | 4s，速度 ×1.4，无敌并可飞越坑洞 |
+| 磁铁 | 8s，吸附 4.5m 范围内金币 |
+| 护盾 | 抵挡一次撞击 + 1.2s 无敌；不救坑洞 |
+| 得分 | `floor(distanceM) + coins × 10 + maxCombo × 20` |
+
+关卡从 40m 后按 seed 确定性生成；前 40m 净空、前 120m 不出列车；同一排只使用一种障碍，
+列车绝不占满三条车道；生成器不变量 + 贪心机器人 200 seed × 800m 零碰撞兜底。
+
+## 3. REST 端点（前缀 `/api/games/parkour`）
+
+统一动作入口 `POST /matches/:id/actions`：
+
+```json
+{ "type": "progress", "distanceM": 123.4, "coins": 12, "maxCombo": 8,
+  "lane": 1, "pose": "run", "alive": true, "cause": "hit" }
+{ "type": "finish", "distanceM": 800, "coins": 24, "maxCombo": 12 }
+```
+
+- `progress` 约 2Hz；服务端做距离单调、速度上限（约 31m/s）、金币上限、车道 0–2、姿态枚举校验；
+  返回 `{ ok: true }`，不返回完整 DTO；广播 `game:match:update` 做 400ms 节流。
+- `finish` 要求距离 ≥ 795m 且速度上限允许；按**服务端收到顺序**记名次，距离定格 800m。
+- 动作端点专用限流 1500/5min/用户；`sync` / `presence` 与全局 skip 白名单同其他游戏。
+- 对局 DTO：`seed`、`startsAt`、`countdownMs`（3 秒倒计时）、`remainingMs`（150 秒，倒计时期间不叠加）、
+  `players[] {userId, username, colorIndex, status, distanceM, coins, maxCombo, score, lane, pose,
+  rank, finishMs, cause}`；`game:invite` / `game:match:*` 复用 `/ws/chat`。
+
+## 4. 规则与结束口径
+
+- 房主开始后 3 秒倒计时；`startsAt = 开始处理时间 + 3s`，`endsAt = startsAt + 150s`。
+- 排名：先按冲线顺序；未冲线者按 距离 > 金币 > maxCombo；无人冲线则最远者胜。
+- 全员完赛/出局立即结束；150 秒超时按距离结算；
+  原因 `finish`（至少一人冲线）/ `elimination`（全员出局）/ `timeout` / `cancelled`（等待房解散）。
+- 掉线：连续 30 秒无 WS/presence 且无进度上报，且仍有其他可用者 → `forfeit`；
+  全员不可用不逐个判负，等超时；结果保留 5 分钟，等待房 30 分钟。
+- 刷新恢复：客户端从 DTO 的 `distanceM / lane / coins / maxCombo` 重建，给 1.5s 无敌。
+- 客户端模拟：服务端不做逐帧物理；防作弊为单调/速度/金币/车道校验，排名以服务端收到 `finish` 的顺序为准。
+
+## 5. 自检
+
+```bash
+cd server && npm run verify:parkour   # 引擎/生成器/机器人 + 联机状态机/排名/掉线/互斥（3602 断言）
+cd client && npx vitest run src/lib/games/__tests__/parkour.test.ts src/lib/games/__tests__/parkourRecords.test.ts
+```
+
+
+---
+
+# 十二、跨游戏互斥与新增游戏清单
 
 - 所有游戏的房间/邀请都通过 `gameService.registerGameModule({ name, isUserInMatch, sweep })`
   注册进同一张表，`isUserBusyInOtherGames(userId, selfName)` 是**跨游戏互斥的唯一口径**
@@ -937,6 +1006,9 @@ cd client && npx vitest run src/lib/games/__tests__/xiangqi.test.ts
   `server/src/index.ts`（`apiLimiterSkipPaths` 三条豁免 + `/api` 自描述条目）、
   `client/src/types/game.ts`、`client/src/lib/games/catalog.ts`、`client/src/App.tsx`（路由）、
   `client/src/contexts/GameContext.tsx`（`GAME_API_BASE` 映射）、`client/src/styles/globals.css`（CSS import）。
+  高频进度上报（如霓虹跑酷 2Hz）应在 `routes/games.ts` 给 `mountGameEndpoints` 传 `actionLimiter`
+  并新增独立限流器，避免挤占跨游戏共享的 `moveLimiter`。
+- 当前已注册：2048、斗地主、贪吃蛇、扫雷、跳一跳、我的世界、五子棋、骗子酒馆、UNO、中国象棋、霓虹跑酷。
 - 对局详情页路由统一为 `/games/<id>/online/:matchId`，因此 `GameContext.gameMatchPath()` 可直接拼字符串，
   邀请与对局的 WS 事件名跨游戏共用（`game:invite` / `game:invite:removed` / `game:match:started|update|ended`），
   由载荷里的 `match.game` / `invite.game` 判别。
