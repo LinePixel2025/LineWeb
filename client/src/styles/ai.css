@@ -359,22 +359,36 @@
   border: 0;
 }
 
-.gh-ai-markdown { font-size: var(--gh-text-sm); line-height: 1.55; white-space: normal; }
+.gh-ai-markdown { font-size: var(--gh-text-sm); line-height: 1.55; white-space: normal; overflow-wrap: anywhere; }
 .gh-ai-markdown > :first-child { margin-top: 0; }
 .gh-ai-markdown > :last-child { margin-bottom: 0; }
 .gh-ai-markdown p { margin: 0 0 var(--gh-space-2); }
-.gh-ai-markdown h1, .gh-ai-markdown h2, .gh-ai-markdown h3, .gh-ai-markdown h4 { margin: var(--gh-space-4) 0 var(--gh-space-2); color: var(--gh-text); font-weight: 600; }
+.gh-ai-markdown h1, .gh-ai-markdown h2, .gh-ai-markdown h3, .gh-ai-markdown h4, .gh-ai-markdown h5, .gh-ai-markdown h6 { margin: var(--gh-space-4) 0 var(--gh-space-2); color: var(--gh-text); font-weight: 600; }
 .gh-ai-markdown h1 { font-size: 1.05rem; }
 .gh-ai-markdown h2 { font-size: 1rem; }
 .gh-ai-markdown h3, .gh-ai-markdown h4 { font-size: 0.925rem; }
+.gh-ai-markdown h5, .gh-ai-markdown h6 { font-size: 0.875rem; }
 .gh-ai-markdown ul, .gh-ai-markdown ol { margin: 0 0 var(--gh-space-2); padding-left: var(--gh-space-5); }
 .gh-ai-markdown li { margin: 2px 0; }
+.gh-ai-markdown li > p { margin: 0 0 2px; }
 .gh-ai-markdown a { color: var(--gh-accent); text-decoration: none; }
 .gh-ai-markdown a:hover { text-decoration: underline; }
 .gh-ai-markdown code { padding: 2px 5px; color: var(--gh-text); background: var(--gh-canvas); border: 1px solid var(--gh-border-muted); border-radius: 5px; font-family: var(--gh-font-mono); font-size: 0.85em; }
 .gh-ai-markdown pre { margin: var(--gh-space-2) 0; padding: var(--gh-space-3); overflow-x: auto; background: var(--gh-canvas); border: 1px solid var(--gh-border); border-radius: var(--gh-radius); }
-.gh-ai-markdown pre code { display: block; padding: 0; color: var(--gh-text); background: transparent; border: 0; border-radius: 0; }
+.gh-ai-markdown pre code { display: block; padding: 0; color: var(--gh-text); background: transparent; border: 0; border-radius: 0; white-space: pre; }
+.gh-ai-markdown blockquote { margin: 0 0 var(--gh-space-2); padding: 2px var(--gh-space-3); border-left: 3px solid var(--gh-border); color: var(--gh-text-secondary); }
+.gh-ai-markdown blockquote > :last-child { margin-bottom: 0; }
+.gh-ai-markdown hr { height: 1px; margin: var(--gh-space-3) 0; border: 0; background: var(--gh-border); }
+.gh-ai-markdown table { display: block; width: max-content; max-width: 100%; margin: 0 0 var(--gh-space-3); overflow-x: auto; border-collapse: collapse; font-size: var(--gh-text-xs); }
+.gh-ai-markdown th, .gh-ai-markdown td { padding: 5px 10px; border: 1px solid var(--gh-border-muted); text-align: left; }
+.gh-ai-markdown th { background: var(--gh-canvas); font-weight: 600; }
+.gh-ai-markdown img { max-width: 100%; height: auto; border-radius: var(--gh-radius); }
+.gh-ai-markdown input[type='checkbox'] { margin-right: 4px; accent-color: var(--gh-accent); }
 .gh-ai-markdown strong { font-weight: 600; }
+/* KaTeX：独立公式可横向滚动，避免宽公式撑破气泡 */
+.gh-ai-markdown .katex { font-size: 1.02em; }
+.gh-ai-markdown .katex-display { margin: var(--gh-space-2) 0; padding: 2px 0; overflow-x: auto; overflow-y: hidden; }
+.gh-ai-markdown .katex-display > .katex { white-space: nowrap; }
 .gh-ai-message--user .gh-ai-bubble .gh-ai-markdown a { color: #fff; text-decoration: underline; }
 .gh-ai-message--user .gh-ai-bubble .gh-ai-markdown code { color: #fff; background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.32); }
 .gh-ai-message--user .gh-ai-bubble .gh-ai-markdown pre { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.28); }
