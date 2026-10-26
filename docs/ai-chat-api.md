@@ -14,7 +14,7 @@ AI 对话是由**站内后端统一代理**的通用对话功能（用户无需�
 - **多会话**：每个用户可创建多个会话，标题取首条消息前 20 字，历史落库（换设备登录后仍在）。
 - **流式回复**：`POST /messages` 返回 `text/event-stream`，逐块下发 delta，服务端同时落库。
 - **思考模式**：消息请求体带 `thinking: true` 时向上游传 `thinking:{type:'enabled'}`（DeepSeek 扩展参数），思维链经 SSE `{reasoning}` 事件逐块透传并随回复落库；前端输入区有「深度思考」开关（localStorage 记住偏好），气泡上方以折叠块展示思考过程，正文开始后自动收起。
-- **联网搜索**：请求体带 `search: true` 时，服务端先调用管理员配置的第三方搜索 API（博查 / Tavily），把「标题 + URL + 摘要」注入本轮 system 上下文，要求模型用 Markdown 链接标注来源；搜索进度经 SSE `{search:{status:'start'|'done',...}}` 下发。DeepSeek 官方 API 不自带搜索能力。搜索失败该条提问退还配额。
+- **联网搜索**：请求体带 `search: true` 时，服务端先调用管理员配置的搜索 API（DeepSeek 官方搜索 / 博查 / Tavily），把「标题 + URL + 摘要」注入本轮 system 上下文，要求模型用 Markdown 链接标注来源；搜索进度经 SSE `{search:{status:'start'|'done',...}}` 下发。搜索失败该条提问退还配额。
 - **每日提问上限**：管理员可设每用户每日上限（Asia/Shanghai 0 点重置，0 = 不限）；**上游调用失败不计数**（该条 user 消息 `counted=false` 自动退还）。
 - **图片提问**：上传/拍照附件（≤4 张/条）统一 sharp 转 WebP 存到存储节点 `_ai/<userId>/`，发送时以 OpenAI 多模态 `image_url`（base64 data URL）传给模型；**需模型支持视觉输入**（DeepSeek 官方 API 为纯文本，管理页有提示）。
 - **Markdown + LaTeX**：AI 回复使用 `marked`（GFM：表格 / 引用 / 列表 / 代码块等）+ KaTeX 渲染（`$...$`、`$$...$$`、`\(...\)`、`\[...\]`），再过 DOMPurify 消毒；流式输出中的未闭合公式不会报错。
@@ -176,11 +176,11 @@ data: {"done":true,"assistantMessageId":10,"model":"deepseek-chat","partial":fal
 
 ### 5.2 `PUT /api/ai-chat/config`
 
-请求（全部可选）：`{ provider?, model?, apiKey?, baseUrl?(可 null), systemPrompt?, dailyLimit?(0–100000，0=不限), isEnabled?, searchEnabled?, searchProvider?('bocha'|'tavily'), searchApiKey? }`。
+请求（全部可选）：`{ provider?, model?, apiKey?, baseUrl?(可 null), systemPrompt?, dailyLimit?(0–100000，0=不限), isEnabled?, searchEnabled?, searchProvider?('deepseek'|'bocha'|'tavily'), searchApiKey? }`。
 
 - `apiKey` / `searchApiKey` 传入脱敏值（含 `…` 或 `****`）视为未修改并剔除。
 - 保存即时生效，无需重启。
-- 联网搜索需第三方搜索 Key（与模型 Key 分开）：博查在 `open.bochaai.com` 申请，Tavily 在 `tavily.com` 申请；未配置时对话页「联网搜索」按钮置灰。
+- 联网搜索可用三种服务：`deepseek`（DeepSeek 官方自研搜索，2026-10-17 开放 `POST /v1/tools/search`，可直接复用 DeepSeek API Key，响应 `summary` 长摘要注入上下文、`query` 上限 128 字）、`bocha`（`open.bochaai.com` 申请 Key）、`tavily`（`tavily.com` 申请 Key）。未配置时对话页「联网搜索」按钮置灰。
 - 可选环境变量 `BOCHA_SEARCH_ENDPOINT` / `TAVILY_SEARCH_ENDPOINT` 可覆盖搜索端点（企业代理 / 本地 mock 联调用），默认走官方地址。
 
 > **图片提问约束**：DeepSeek 官方 API（deepseek-chat / deepseek-reasoner）为纯文本模型；需要图片理解时把 `baseUrl` + `model` 指向支持视觉的 OpenAI 兼容端点（如通义千问 qwen-vl 系列、GLM-4V 等）。模型不支持时上游会报错，经统一错误映射返回 502 文案。
@@ -194,7 +194,7 @@ data: {"done":true,"assistantMessageId":10,"model":"deepseek-chat","partial":fal
 | `/deepseek` | 对话页（`ProtectedRoute`，登录可见）：双栏布局（会话列表 + 对话区，窄屏折叠）、流式渲染、Markdown 表格/引用/代码块 + KaTeX 公式、「深度思考」「联网搜索」开关（localStorage 持久化）、思考过程折叠块（生成中展开、正文开始自动收起）、图片/拍照按钮（复用 `ChatCameraDialog`，无 getUserMedia 时退回 `capture` 文件输入）、额度徽标 |
 | `/features` | 「功能页面」入口卡（badge「需登录」） |
 | 侧边栏 | Personal 分组「AI 对话」项（登录过滤） |
-| `/admin/ai-chat` | 「AI 对话设置」管理页：启用开关、DeepSeek/OpenAI/通义千问预设、每日上限、System Prompt、联网搜索（博查/Tavily + 搜索 Key）、图片能力提示 |
+| `/admin/ai-chat` | 「AI 对话设置」管理页：启用开关、DeepSeek/OpenAI/通义千问预设、每日上限、System Prompt、联网搜索（DeepSeek 官方搜索 / 博查 / Tavily + 搜索 Key）、图片能力提示 |
 | `lib/aiChat.ts` | REST 封装 + `streamAiChatMessage()`（原生 fetch 解析 SSE；429 错误携带 `quota`；search 事件回调） |
 | `lib/markdown.ts` | `renderMarkdown`（marked GFM + KaTeX + DOMPurify；DeepSeek 对话 / 首页 AI 助手 / Markdown 文件预览共用） |
 

@@ -425,7 +425,7 @@ router.post('/messages', aiChatWriteLimiter, asyncHandler(async (req: Request, r
 
 // === 管理配置 ===
 
-/** 搜索 Key 的脱敏展示（博查 sk- / Tavily tvly- 都可能是任意前缀，只露末 4 位） */
+/** 搜索 Key 的脱敏展示（DeepSeek / 博查 / Tavily 的 Key 前缀各异，只露末 4 位） */
 function maskSearchKey(key: string): string {
   if (!key) return ''
   if (key.length <= 4) return '****'

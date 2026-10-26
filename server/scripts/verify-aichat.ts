@@ -166,6 +166,10 @@ async function main(): Promise<void> {
     webSearch.isWebSearchConfigured({ ...baseSearchConfig, searchProvider: 'tavily' }),
     '搜索配置：Tavily 合法',
   )
+  assert(
+    webSearch.isWebSearchConfigured({ ...baseSearchConfig, searchProvider: 'deepseek', searchApiKey: 'sk-deepseek' }),
+    '搜索配置：DeepSeek 官方搜索合法',
+  )
 
   assertEqual(webSearch.normalizeSearchQuery('  今天\n北京   天气  '), '今天 北京 天气', '搜索词：压缩空白并去首尾')
   assertEqual(webSearch.normalizeSearchQuery('a'.repeat(400)).length, 300, '搜索词：超长截断到 300 字')
@@ -263,6 +267,48 @@ async function main(): Promise<void> {
   }, { fetchImpl: tavilyFetch })
   assertEqual(tavilyCapturedUrl, 'https://api.tavily.com/search', '搜索调用：Tavily 端点')
   assertEqual(tavilyFetched.length, 1, '搜索调用：Tavily 结果解析')
+
+  // DeepSeek 官方 Search API（2026-10 开放）：summary 长摘要映射为 snippet，query 上限 128
+  const deepseekPayload = {
+    results: [
+      {
+        rerank_score: 0.91,
+        title: 'DeepSeek 搜索一',
+        url: 'https://deepseek.example/1',
+        snippet: '短摘要',
+        summary: '长摘要'.repeat(20),
+        site_name: 'DeepSeek',
+        date: '2026-10-20',
+      },
+      { title: '非法链接', url: 'ftp://example.com/x', summary: 'x' },
+    ],
+  }
+  const deepseekResults = webSearch.parseDeepSeekSearchResponse(deepseekPayload)
+  assertEqual(deepseekResults.length, 1, 'DeepSeek 解析：过滤非法 URL')
+  assertEqual(deepseekResults[0].siteName, 'DeepSeek', 'DeepSeek 解析：site_name → siteName')
+  assertEqual(deepseekResults[0].publishedAt, '2026-10-20', 'DeepSeek 解析：date → publishedAt')
+  assert(deepseekResults[0].snippet.startsWith('长摘要'), 'DeepSeek 解析：优先 summary 长摘要')
+
+  let deepseekCapturedUrl = ''
+  let deepseekBody: Record<string, unknown> = {}
+  const deepseekFetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    deepseekCapturedUrl = String(url)
+    deepseekBody = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return new Response(JSON.stringify(deepseekPayload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }) as typeof fetch
+  const deepseekFetched = await webSearch.searchWeb('长'.repeat(200), {
+    searchEnabled: true,
+    searchProvider: 'deepseek',
+    searchApiKey: 'sk-deepseek',
+  }, { fetchImpl: deepseekFetch })
+  assertEqual(deepseekCapturedUrl, 'https://api.deepseek.com/v1/tools/search', '搜索调用：DeepSeek 官方端点')
+  assertEqual(String(deepseekBody.query).length, webSearch.WEB_SEARCH_DEEPSEEK_QUERY_MAX, '搜索调用：DeepSeek query 截断到 128 字')
+  assertEqual(deepseekBody.count, webSearch.WEB_SEARCH_RESULT_LIMIT, '搜索调用：DeepSeek 结果数上限')
+  assertEqual(deepseekBody.need_content, false, '搜索调用：DeepSeek 不抓正文')
+  assertEqual(deepseekFetched.length, 1, '搜索调用：DeepSeek 结果解析')
 
   let unauthorized = false
   try {

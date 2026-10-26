@@ -190,7 +190,7 @@ export const aiChatConfigUpdateSchema = z.object({
   isEnabled: z.boolean().optional(),
   // 联网搜索（第三方搜索 API）
   searchEnabled: z.boolean().optional(),
-  searchProvider: z.enum(['bocha', 'tavily']).optional(),
+  searchProvider: z.enum(['deepseek', 'bocha', 'tavily']).optional(),
   searchApiKey: z.string().max(200).optional(),
 })
 
@@ -421,4 +421,47 @@ export const gomokuActionSchema = z.object({
   type: z.literal('place'),
   x: z.number().int().min(0).max(14),
   y: z.number().int().min(0).max(14),
+})
+
+// === 游戏（骗子酒馆好友联机，出牌 / 质疑）Schemas ===
+
+/**
+ * POST /api/games/liar/matches/:id/actions
+ * play：盖着出 1–3 张牌（牌 id 0–19，必须来自自己手牌，服务层再校验）；
+ * challenge：质疑上一手（开牌定真假，输家扣扳机）。
+ */
+export const liarActionSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('play'),
+    cards: z.array(z.number().int().min(0).max(19)).min(1).max(3),
+  }),
+  z.object({ type: z.literal('challenge') }),
+])
+
+// === 游戏（UNO 好友联机，2–10 人）Schemas ===
+
+/**
+ * POST /api/games/uno/matches/:id/actions
+ * play：出牌（万能牌必须带 color）；draw：摸一张；pass：摸牌后跳过。
+ */
+export const unoActionSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('play'),
+    cardId: z.number().int().min(0).max(107),
+    color: z.enum(['red', 'yellow', 'green', 'blue']).optional(),
+  }),
+  z.object({ type: z.literal('draw') }),
+  z.object({ type: z.literal('pass') }),
+])
+
+// === 游戏（中国象棋好友联机，2 人）Schemas ===
+
+/**
+ * POST /api/games/xiangqi/matches/:id/actions —— 走子
+ * from / to 为 0–89 的一维下标（y*9+x），合法性由服务端引擎判定。
+ */
+export const xiangqiActionSchema = z.object({
+  type: z.literal('move'),
+  from: z.number().int().min(0).max(89),
+  to: z.number().int().min(0).max(89),
 })

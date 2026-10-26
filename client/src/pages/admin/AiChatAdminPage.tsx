@@ -25,6 +25,7 @@ interface AiChatConfigData {
 }
 
 const SEARCH_PROVIDER_PRESETS: { value: string; label: string; hint: string }[] = [
+  { value: 'deepseek', label: 'DeepSeek 搜索', hint: 'DeepSeek 官方自研搜索（2026-10 开放，/v1/tools/search），可直接填写 DeepSeek API Key' },
   { value: 'bocha', label: '博查 Bocha', hint: '国内可用，中文结果好（open.bochaai.com 申请 Key）' },
   { value: 'tavily', label: 'Tavily', hint: '海外搜索 API（tavily.com 申请 tvly- 开头的 Key）' },
 ]
@@ -368,7 +369,7 @@ export default function AiChatAdminPage() {
               <div style={{ fontWeight: 600 }}>联网搜索</div>
               <div className="gh-text-tertiary" style={{ fontSize: 'var(--gh-text-xs)' }}>
                 开启后，登录用户可在对话页打开「联网搜索」，回答前先检索网页资料。
-                DeepSeek 官方 API 不自带搜索，需要单独的搜索服务 Key。
+                可选用 DeepSeek 官方搜索（与对话模型同 Key）或博查 / Tavily 等第三方服务。
               </div>
             </div>
             <button

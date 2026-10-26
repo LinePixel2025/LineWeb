@@ -1,9 +1,11 @@
 import { AppError } from '../middleware/errorHandler.js'
 
 /**
- * DeepSeek 对话的联网搜索（第三方搜索 API）
+ * DeepSeek 对话的联网搜索（第三方 / 官方搜索 API）
  *
- * DeepSeek 官方 API 不自带联网搜索，这里接入可配置的搜索服务：
+ * 支持的搜索服务（管理员在 /admin/ai-chat 选择并填 Key）：
+ *   - deepseek（DeepSeek 官方自研搜索，2026-10-17 开放；POST /v1/tools/search，
+ *     使用 DeepSeek API Key，成功请求按次计费，https://api-docs.deepseek.com/zh-cn/guides/search）
  *   - bocha  （博查 Web Search，国内可用，https://open.bochaai.com）
  *   - tavily （Tavily Search，海外，https://tavily.com）
  *
@@ -11,7 +13,7 @@ import { AppError } from '../middleware/errorHandler.js'
  * 要求模型在引用处用 Markdown 链接标注来源。搜索失败会抛 AppError（该条提问退还配额）。
  */
 
-export type WebSearchProvider = 'bocha' | 'tavily'
+export type WebSearchProvider = 'deepseek' | 'bocha' | 'tavily'
 
 /** 只用配置里的搜索字段，避免与 aiChatService 循环依赖 */
 export interface WebSearchConfigLike {
@@ -36,11 +38,14 @@ export interface WebSearchSource {
 
 export const WEB_SEARCH_RESULT_LIMIT = 6
 export const WEB_SEARCH_QUERY_MAX = 300
+/** DeepSeek Search API 的 query 上限为 128 字符（官方约束），超出会被上游 400 */
+export const WEB_SEARCH_DEEPSEEK_QUERY_MAX = 128
 export const WEB_SEARCH_SNIPPET_MAX = 700
 export const WEB_SEARCH_CONTEXT_MAX = 6000
 export const WEB_SEARCH_TIMEOUT_MS = 15_000
 
 // 允许用环境变量覆盖（企业代理 / 本地联调 mock）；默认走官方端点
+const DEEPSEEK_SEARCH_ENDPOINT = process.env.DEEPSEEK_SEARCH_ENDPOINT || 'https://api.deepseek.com/v1/tools/search'
 const BOCHA_ENDPOINT = process.env.BOCHA_SEARCH_ENDPOINT || 'https://api.bochaai.com/v1/web-search'
 const TAVILY_ENDPOINT = process.env.TAVILY_SEARCH_ENDPOINT || 'https://api.tavily.com/search'
 
@@ -70,7 +75,7 @@ export function compactSearchText(value: unknown, max = WEB_SEARCH_SNIPPET_MAX):
 }
 
 export function isSupportedSearchProvider(value: string): value is WebSearchProvider {
-  return value === 'bocha' || value === 'tavily'
+  return value === 'deepseek' || value === 'bocha' || value === 'tavily'
 }
 
 /** 联网搜索是否可用：管理员开启 + provider 合法 + 已填 Key */
@@ -82,9 +87,9 @@ export function isWebSearchConfigured(config: WebSearchConfigLike): boolean {
   )
 }
 
-/** 搜索词：压空白并限制长度（超长问题只取前 300 字） */
-export function normalizeSearchQuery(content: string): string {
-  return content.replace(/\s+/g, ' ').trim().slice(0, WEB_SEARCH_QUERY_MAX)
+/** 搜索词：压空白并限制长度（超长问题只取前 N 字，默认 300；DeepSeek 官方上限 128） */
+export function normalizeSearchQuery(content: string, max = WEB_SEARCH_QUERY_MAX): string {
+  return content.replace(/\s+/g, ' ').trim().slice(0, max)
 }
 
 /** 搜索时间（Asia/Shanghai，YYYY-MM-DD HH:mm） */
@@ -157,9 +162,35 @@ export function parseTavilySearchResponse(payload: unknown, limit = WEB_SEARCH_R
   return results
 }
 
+/**
+ * DeepSeek 官方 Search API 响应解析（results[]）。
+ * 字段：rerank_score / title / url / snippet / summary / content / site_name / site_icon / date / authority。
+ * summary 是与 query 相关的长摘要（约 600–800 字），最适合注入模型上下文；
+ * snippet 更短，summary 缺失时回退到 snippet / content。
+ */
+export function parseDeepSeekSearchResponse(payload: unknown, limit = WEB_SEARCH_RESULT_LIMIT): WebSearchResult[] {
+  const root = asRecord(payload)
+  const rows = Array.isArray(root.results) ? root.results : []
+  const results: WebSearchResult[] = []
+  for (const row of rows) {
+    const item = asRecord(row)
+    const normalized = normalizeResult({
+      title: item.title,
+      url: item.url,
+      snippet: item.summary ?? item.snippet ?? item.content,
+      siteName: item.site_name,
+      publishedAt: item.date,
+    })
+    if (normalized) results.push(normalized)
+    if (results.length >= limit) break
+  }
+  return results
+}
+
 function providerErrorMessage(payload: unknown): string {
   const root = asRecord(payload)
-  const message = root.message ?? root.msg ?? root.error ?? root.detail
+  const nested = asRecord(root.error)
+  const message = root.message ?? root.msg ?? nested.message ?? root.error ?? root.detail
   return compactSearchText(message, 160)
 }
 
@@ -224,7 +255,10 @@ export async function searchWeb(
     throw new AppError('联网搜索未配置，请联系管理员', 503)
   }
 
-  const normalizedQuery = normalizeSearchQuery(query)
+  const normalizedQuery = normalizeSearchQuery(
+    query,
+    config.searchProvider === 'deepseek' ? WEB_SEARCH_DEEPSEEK_QUERY_MAX : WEB_SEARCH_QUERY_MAX,
+  )
   if (!normalizedQuery) {
     throw new AppError('联网搜索需要输入文字问题', 400)
   }
@@ -235,25 +269,36 @@ export async function searchWeb(
   const timer = setTimeout(() => controller.abort(), WEB_SEARCH_TIMEOUT_MS)
 
   try {
-    const request = provider === 'bocha'
-      ? {
-          url: BOCHA_ENDPOINT,
-          body: {
-            query: normalizedQuery,
-            count: WEB_SEARCH_RESULT_LIMIT,
-            summary: true,
-            freshness: 'noLimit',
-          },
-        }
-      : {
-          url: TAVILY_ENDPOINT,
-          body: {
-            query: normalizedQuery,
-            max_results: WEB_SEARCH_RESULT_LIMIT,
-            search_depth: 'basic',
-            include_answer: false,
-          },
-        }
+    const request =
+      provider === 'deepseek'
+        ? {
+            url: DEEPSEEK_SEARCH_ENDPOINT,
+            body: {
+              query: normalizedQuery,
+              count: WEB_SEARCH_RESULT_LIMIT,
+              // 只需要摘要注入上下文，不抓正文（正文按页面计费且容易超长）
+              need_content: false,
+            },
+          }
+        : provider === 'bocha'
+          ? {
+              url: BOCHA_ENDPOINT,
+              body: {
+                query: normalizedQuery,
+                count: WEB_SEARCH_RESULT_LIMIT,
+                summary: true,
+                freshness: 'noLimit',
+              },
+            }
+          : {
+              url: TAVILY_ENDPOINT,
+              body: {
+                query: normalizedQuery,
+                max_results: WEB_SEARCH_RESULT_LIMIT,
+                search_depth: 'basic',
+                include_answer: false,
+              },
+            }
 
     const res = await fetchImpl(request.url, {
       method: 'POST',
@@ -273,6 +318,7 @@ export async function searchWeb(
       throw new AppError(`联网搜索失败（${res.status}）${detail ? `：${detail}` : '，请稍后重试'}`, 502)
     }
 
+    if (provider === 'deepseek') return parseDeepSeekSearchResponse(payload)
     return provider === 'bocha'
       ? parseBochaSearchResponse(payload)
       : parseTavilySearchResponse(payload)
