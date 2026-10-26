@@ -218,14 +218,29 @@ function verifySearch(): void {
   const capture = engine.suggestXiangqiMove(captureBoard, engine.XIANGQI_RED, { depth: 2 })
   assertEqual(capture, { from: idx(0, 5), to: idx(0, 3) }, 'AI 应吃掉无保护的黑车')
 
-  // 自对弈 20 个半回合，每步合法
+  // 不吃受保护的子：黑车吃 (0,4) 的红马会被 (0,7) 的红车立刻反吃，净亏
+  // （静态搜索未生效时，各难度都会贪吃这一步 —— 即玩家看到的「乱吃棋子」）
+  const defendedBoard = kingsOnly()
+  defendedBoard[idx(0, 2)] = -engine.XIANGQI_CHARIOT
+  defendedBoard[idx(0, 4)] = engine.XIANGQI_HORSE
+  defendedBoard[idx(0, 7)] = engine.XIANGQI_CHARIOT
+  for (const depth of [1, 2, 3] as const) {
+    const choice = engine.suggestXiangqiMove(defendedBoard, engine.XIANGQI_BLACK, { depth })
+    assert(Boolean(choice), `深度 ${depth}：AI 应能给出着法`)
+    if (choice) {
+      assert(engine.isXiangqiMoveLegal(defendedBoard, choice.from, choice.to, engine.XIANGQI_BLACK), `深度 ${depth}：AI 着法合法`)
+      assert(choice.to !== idx(0, 4), `深度 ${depth}：AI 不应白吃受保护的马（会被反吃车）`)
+    }
+  }
+
+  // 自对弈 20 个半回合，每步合法（深度 2 才能稳定走满；深度 1 可能很快被绝杀）
   let state = engine.createXiangqiBoard()
   let side: 1 | -1 = engine.XIANGQI_RED
   let plies = 0
   for (; plies < 20; plies += 1) {
     const status = engine.evaluateXiangqiStatus(state, side)
     if (status.finished) break
-    const next = engine.suggestXiangqiMove(state, side, { depth: 1 })
+    const next = engine.suggestXiangqiMove(state, side, { depth: 2 })
     if (!next) break
     assert(engine.isXiangqiMoveLegal(state, next.from, next.to, side), `自对弈第 ${plies + 1} 步合法`)
     engine.makeXiangqiMove(state, next.from, next.to)

@@ -8,6 +8,7 @@ import {
   createXiangqiBoard,
   evaluateXiangqiStatus,
   findXiangqiGeneral,
+  generateLegalXiangqiMoves,
   isXiangqiMoveLegal,
   makeXiangqiMove,
   suggestXiangqiMove,
@@ -170,7 +171,12 @@ export default function XiangqiPage() {
       }
       const move = suggestXiangqiMove(current.board, aiSide, { depth: DEPTHS[difficulty] })
       if (!move) return
-      setState((prev) => applyMove(prev, move.from, move.to, true))
+      // 兜底：AI 的着法必须过一遍规则校验，绝不允许出现「乱吃」（引擎回归时退回首个合法着法）
+      const safeMove = isXiangqiMoveLegal(current.board, move.from, move.to, aiSide)
+        ? move
+        : generateLegalXiangqiMoves(current.board, aiSide)[0]
+      if (!safeMove) return
+      setState((prev) => applyMove(prev, safeMove.from, safeMove.to, true))
     }, AI_THINK_MS)
     return () => window.clearTimeout(timer)
   }, [state.playing, state.turn, aiSide, difficulty, state.board])

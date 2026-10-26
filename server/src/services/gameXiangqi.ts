@@ -400,24 +400,32 @@ export function isXiangqiInCheck(board: number[], side: XiangqiSide): boolean {
   return false
 }
 
+/** 走后是否会让己方被将军（含照面）；已知伪合法时走这条快路径，避免重复生成伪着法 */
+function isXiangqiMoveSafe(board: number[], from: number, to: number, side: XiangqiSide): boolean {
+  const captured = makeXiangqiMove(board, from, to)
+  if (captured === null) return false
+  const safe = !isXiangqiInCheck(board, side)
+  undoXiangqiMove(board, from, to, captured)
+  return safe
+}
+
 /** 走后是否会让己方被将军（含照面） */
 export function isXiangqiMoveLegal(board: number[], from: number, to: number, side: XiangqiSide): boolean {
   if (xiangqiSideOf(board[from]) !== side) return false
   if (to < 0 || to >= XIANGQI_CELLS) return false
   if (xiangqiSideOf(board[to]) === side) return false
   if (!generatePseudoXiangqiMoves(board, from).includes(to)) return false
-  const captured = makeXiangqiMove(board, from, to)
-  if (captured === null) return false
-  const legal = !isXiangqiInCheck(board, side)
-  undoXiangqiMove(board, from, to, captured)
-  return legal
+  return isXiangqiMoveSafe(board, from, to, side)
 }
 
 /** 某方所有合法着法（已过滤送将 / 照面） */
 export function generateLegalXiangqiMoves(board: number[], side: XiangqiSide): XiangqiMove[] {
   const result: XiangqiMove[] = []
-  for (const move of generatePseudoXiangqiSideMoves(board, side)) {
-    if (isXiangqiMoveLegal(board, move.from, move.to, side)) result.push(move)
+  for (let from = 0; from < XIANGQI_CELLS; from += 1) {
+    if (xiangqiSideOf(board[from]) !== side) continue
+    for (const to of generatePseudoXiangqiMoves(board, from)) {
+      if (isXiangqiMoveSafe(board, from, to, side)) result.push({ from, to })
+    }
   }
   return result
 }
@@ -464,6 +472,13 @@ const XIANGQI_VALUES: Record<number, number> = {
 }
 
 const XIANGQI_MATE_SCORE = 10_000_000
+
+/**
+ * 静态搜索（quiescence）延伸深度：只继续「吃子」着法。
+ * 没有它时，搜索在边界上会直接按子力打分，AI 就会贪吃受保护的子
+ * （吃完立刻被反吃也照吃），玩家看到的就是「乱吃棋子」。
+ */
+const XIANGQI_QUIESCE_DEPTH = 2
 
 /** 位置分：兵过河、马炮占中路、车活跃度（从 side 视角返回正分） */
 function xiangqiPositionalValue(board: number[], side: XiangqiSide): number {
@@ -512,6 +527,19 @@ function orderXiangqiMoves(board: number[], moves: XiangqiMove[]): XiangqiMove[]
   })
 }
 
+/** 某方所有合法吃子着法（静态搜索专用：先筛吃子，省掉大量空着的合法性判定） */
+function generateLegalXiangqiCaptures(board: number[], side: XiangqiSide): XiangqiMove[] {
+  const result: XiangqiMove[] = []
+  for (let from = 0; from < XIANGQI_CELLS; from += 1) {
+    if (xiangqiSideOf(board[from]) !== side) continue
+    for (const to of generatePseudoXiangqiMoves(board, from)) {
+      if (board[to] === 0) continue
+      if (isXiangqiMoveSafe(board, from, to, side)) result.push({ from, to })
+    }
+  }
+  return result
+}
+
 /**
  * negamax + alpha-beta。
  * 返回值始终从 aiSide 视角计算（score > 0 对 AI 有利）。
@@ -529,7 +557,9 @@ function searchXiangqi(
     // 无着可走的一方输（绝杀 / 困毙）
     return sideToMove === aiSide ? -XIANGQI_MATE_SCORE - depth : XIANGQI_MATE_SCORE + depth
   }
-  if (depth <= 0) return evaluateXiangqiBoard(board, aiSide)
+  if (depth <= 0) {
+    return searchXiangqiCaptures(board, sideToMove, aiSide, alpha, beta, XIANGQI_QUIESCE_DEPTH)
+  }
 
   const ordered = orderXiangqiMoves(board, moves)
   if (sideToMove === aiSide) {
@@ -557,6 +587,53 @@ function searchXiangqi(
     if (alpha >= beta) break
   }
   return best === Infinity ? evaluateXiangqiBoard(board, aiSide) : best
+}
+
+/**
+ * 静态搜索：在 alpha-beta 的叶子节点上只延伸吃子着法，避免「地平线效应」
+ * 让 AI 吃掉受保护的子（吃完就被反吃，净亏一个大子）。
+ * 返回值始终从 aiSide 视角计算；remaining 为还可延伸的吃子层数。
+ */
+function searchXiangqiCaptures(
+  board: number[],
+  sideToMove: XiangqiSide,
+  aiSide: XiangqiSide,
+  alpha: number,
+  beta: number,
+  remaining: number,
+): number {
+  const standPat = evaluateXiangqiBoard(board, aiSide)
+  if (remaining <= 0) return standPat
+
+  const captures = generateLegalXiangqiCaptures(board, sideToMove)
+  if (captures.length === 0) return standPat
+  const ordered = orderXiangqiMoves(board, captures)
+
+  if (sideToMove === aiSide) {
+    if (standPat >= beta) return standPat
+    let best = Math.max(standPat, alpha)
+    for (const move of ordered) {
+      const captured = makeXiangqiMove(board, move.from, move.to)
+      if (captured === null) continue
+      const score = searchXiangqiCaptures(board, xiangqiOpponent(sideToMove), aiSide, best, beta, remaining - 1)
+      undoXiangqiMove(board, move.from, move.to, captured)
+      if (score > best) best = score
+      if (best >= beta) break
+    }
+    return best
+  }
+
+  if (standPat <= alpha) return standPat
+  let best = Math.min(standPat, beta)
+  for (const move of ordered) {
+    const captured = makeXiangqiMove(board, move.from, move.to)
+    if (captured === null) continue
+    const score = searchXiangqiCaptures(board, xiangqiOpponent(sideToMove), aiSide, alpha, best, remaining - 1)
+    undoXiangqiMove(board, move.from, move.to, captured)
+    if (score < best) best = score
+    if (best <= alpha) break
+  }
+  return best
 }
 
 /** 搜索选项 */
