@@ -651,3 +651,561 @@
     min-height: auto;
   }
 }
+
+/* ============================================================
+   沉浸式牌桌视觉（2026-10 升级）
+   深蓝绒面 + 官方牌面 + 手牌扇面 + 牌堆 / 弃牌堆叠
+   命名空间不变，仅重绘单机与联机共用的 .gh-uno-* 元素
+   ============================================================ */
+
+/* ---- 牌桌房间 ---- */
+.gh-uno-table,
+.gh-uno-online-body {
+  padding: clamp(12px, 1.6vw, 22px);
+  border-radius: 20px;
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  background:
+    radial-gradient(120% 90% at 50% -10%, rgba(56, 189, 248, 0.14), transparent 55%),
+    radial-gradient(90% 80% at 50% 120%, rgba(0, 0, 0, 0.55), transparent 72%),
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.02) 0 2px, transparent 2px 7px),
+    linear-gradient(160deg, #123049, #0b1e2e 58%, #071420);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 22px 48px rgba(9, 24, 38, 0.34);
+}
+
+/* ---- 深色牌桌令牌 ---- */
+.gh-uno-center,
+.gh-uno-opponent,
+.gh-uno-online-main,
+.gh-uno-online-side > section {
+  --gh-text: #f2f7ff;
+  --gh-text-secondary: #c3d3e4;
+  --gh-text-tertiary: #98aec4;
+  --gh-text-placeholder: #8ba3ba;
+  --gh-bg: rgba(5, 15, 24, 0.45);
+  --gh-canvas: rgba(255, 255, 255, 0.055);
+  --gh-canvas-inset: rgba(0, 0, 0, 0.35);
+  --gh-border: rgba(125, 211, 252, 0.22);
+  --gh-border-muted: rgba(255, 255, 255, 0.10);
+  --gh-accent: #7dd3fc;
+  --gh-accent-hover: #a5e2ff;
+  --gh-accent-soft: rgba(125, 211, 252, 0.16);
+  --gh-btn-hover: rgba(255, 255, 255, 0.08);
+  --gh-btn-active: rgba(255, 255, 255, 0.12);
+  --gh-danger: #ff7a6e;
+  --gh-danger-soft: rgba(255, 122, 110, 0.16);
+  --gh-success: #74e0a6;
+  --gh-success-soft: rgba(116, 224, 166, 0.14);
+  --gh-warning: #ffd166;
+  --gh-warning-soft: rgba(255, 209, 102, 0.16);
+  color: var(--gh-text);
+}
+
+/* ---- 绒面主桌 + UNO 水印 ---- */
+.gh-uno-center,
+.gh-uno-online-main {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(56, 189, 248, 0.14), transparent 62%),
+    radial-gradient(90% 70% at 50% 110%, rgba(0, 0, 0, 0.38), transparent 72%),
+    rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(125, 211, 252, 0.24);
+  border-radius: 16px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 0 48px rgba(0, 0, 0, 0.32);
+}
+
+.gh-uno-center::after,
+.gh-uno-online-main::after {
+  content: 'UNO';
+  position: absolute;
+  right: 16px;
+  bottom: 0;
+  z-index: 0;
+  color: rgba(255, 255, 255, 0.05);
+  font-family: var(--gh-font);
+  font-size: clamp(52px, 8vw, 96px);
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  line-height: 0.9;
+  transform: rotate(-8deg);
+  pointer-events: none;
+}
+
+.gh-uno-center > *,
+.gh-uno-online-main > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- 对手座位 ---- */
+.gh-uno-opponent {
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
+.gh-uno-opponent--turn {
+  border-color: rgba(125, 211, 252, 0.7);
+  animation: gh-uno-seat-pulse 2.4s ease-in-out infinite;
+}
+
+.gh-uno-opponent--out {
+  filter: grayscale(0.55);
+  opacity: 0.5;
+}
+
+@keyframes gh-uno-seat-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.4), 0 0 18px rgba(125, 211, 252, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(125, 211, 252, 0.72), 0 0 30px rgba(125, 211, 252, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  }
+}
+
+.gh-uno-card-stack {
+  padding-top: 8px;
+}
+
+.gh-uno-card-stack .gh-uno-card + .gh-uno-card {
+  margin-left: -28px;
+}
+
+.gh-uno-card-stack .gh-uno-card:nth-child(2) { transform: rotate(5deg) translateY(2px); }
+.gh-uno-card-stack .gh-uno-card:nth-child(3) { transform: rotate(-3deg) translateY(1px); }
+.gh-uno-card-stack .gh-uno-card:nth-child(4) { transform: rotate(7deg) translateY(3px); }
+.gh-uno-card-stack .gh-uno-card:nth-child(5) { transform: rotate(-4deg); }
+
+/* ---- 状态条 ---- */
+.gh-uno-turn-chip {
+  background: rgba(125, 211, 252, 0.16);
+  border: 1px solid rgba(125, 211, 252, 0.35);
+  color: #a5e2ff;
+}
+
+.gh-uno-color-chip {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
+}
+
+.gh-uno-direction {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--gh-text-secondary);
+}
+
+.gh-uno-last-action {
+  color: var(--gh-text-tertiary);
+}
+
+/* ---- 中央三栏 ---- */
+.gh-uno-pile-box,
+.gh-uno-discard,
+.gh-uno-action-box {
+  background: rgba(4, 14, 22, 0.38);
+  border: 1px dashed rgba(125, 211, 252, 0.24);
+  border-radius: 12px;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.22);
+}
+
+.gh-uno-pile-label {
+  color: var(--gh-text-tertiary);
+}
+
+.gh-uno-deck {
+  border: 2px solid #e9edf2;
+  box-shadow:
+    4px 4px 0 rgba(233, 237, 242, 0.75),
+    8px 8px 0 rgba(6, 16, 24, 0.9),
+    0 14px 24px rgba(0, 0, 0, 0.4);
+}
+
+.gh-uno-deck-count {
+  color: #f7fbff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.gh-uno-discard-count {
+  color: var(--gh-text-tertiary);
+}
+
+/* 弃牌堆顶：下方两张斜放的旧牌 + 当前颜色光晕 */
+.gh-uno-discard-stack {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.35));
+}
+
+.gh-uno-discard-under {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  border: 3px solid rgba(255, 255, 255, 0.7);
+  background: linear-gradient(150deg, #26303c, #141a22);
+  transform: rotate(-8deg) translate(-4px, 2px);
+  z-index: -1;
+}
+
+.gh-uno-discard-under::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 3px solid rgba(255, 255, 255, 0.55);
+  background: linear-gradient(150deg, #222b35, #10161d);
+  transform: rotate(15deg) translate(9px, 2px);
+  z-index: -1;
+}
+
+.gh-uno-discard--red .gh-uno-discard-stack { filter: drop-shadow(0 0 16px rgba(236, 76, 76, 0.5)) drop-shadow(0 12px 18px rgba(0, 0, 0, 0.35)); }
+.gh-uno-discard--yellow .gh-uno-discard-stack { filter: drop-shadow(0 0 16px rgba(255, 217, 61, 0.45)) drop-shadow(0 12px 18px rgba(0, 0, 0, 0.35)); }
+.gh-uno-discard--green .gh-uno-discard-stack { filter: drop-shadow(0 0 16px rgba(66, 196, 99, 0.5)) drop-shadow(0 12px 18px rgba(0, 0, 0, 0.35)); }
+.gh-uno-discard--blue .gh-uno-discard-stack { filter: drop-shadow(0 0 16px rgba(63, 139, 247, 0.5)) drop-shadow(0 12px 18px rgba(0, 0, 0, 0.35)); }
+.gh-uno-discard--wild .gh-uno-discard-stack { filter: drop-shadow(0 0 16px rgba(255, 255, 255, 0.3)) drop-shadow(0 12px 18px rgba(0, 0, 0, 0.35)); }
+
+.gh-uno-drawn-hint {
+  color: var(--gh-text-secondary);
+}
+
+/* ---- 手牌区 ---- */
+.gh-uno-hand-wrap {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.gh-uno-me-name {
+  color: var(--gh-text);
+}
+
+.gh-uno-me-hint {
+  color: #a5e2ff;
+}
+
+.gh-uno-hand {
+  justify-content: center;
+  align-items: flex-end;
+  gap: 0;
+  padding: 16px 4px 6px;
+  min-height: 118px;
+}
+
+.gh-uno-hand .gh-uno-card + .gh-uno-card {
+  margin-left: -12px;
+}
+
+.gh-uno-hand .gh-uno-card:hover {
+  z-index: 4;
+}
+
+.gh-uno-uno-badge {
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: linear-gradient(140deg, #ff5a5a, #d21f1f);
+  box-shadow: 0 0 12px rgba(255, 90, 90, 0.45);
+  transform: rotate(-4deg);
+}
+
+/* ---- 按钮 ---- */
+.gh-uno-center .gh-btn--primary,
+.gh-uno-online-main .gh-btn--primary {
+  color: #06121c;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+}
+
+/* ---- 联机侧栏 ---- */
+.gh-uno-online-side > section {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.gh-uno-player {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.09);
+}
+
+.gh-uno-player--me {
+  border-color: rgba(125, 211, 252, 0.6);
+  background: rgba(125, 211, 252, 0.08);
+}
+
+.gh-uno-player--turn {
+  box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.6);
+}
+
+.gh-uno-online-side .gh-ddz-rules-toggle {
+  color: var(--gh-text-secondary);
+}
+
+.gh-uno-online-tips {
+  color: var(--gh-text-secondary);
+}
+
+/* ---- 牌面：官方白边 + 白椭圆 + 彩色数字 ---- */
+.gh-uno-card {
+  --uno-face: linear-gradient(155deg, #ec4c4c, #bf1b1b);
+  --uno-main-ink: #b31616;
+  --uno-corner-ink: #ffffff;
+  border: 3px solid #fdfdfd;
+  background: var(--uno-face);
+  color: var(--uno-corner-ink);
+  font-family: var(--gh-font);
+  font-weight: 900;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.18), 0 10px 18px rgba(0, 0, 0, 0.3);
+  isolation: isolate;
+}
+
+.gh-uno-card--tone-red {
+  --uno-face: linear-gradient(155deg, #ec4c4c, #bf1b1b);
+  --uno-main-ink: #b31616;
+  --uno-corner-ink: #ffffff;
+}
+
+.gh-uno-card--tone-yellow {
+  --uno-face: linear-gradient(155deg, #ffd93d, #efb400);
+  --uno-main-ink: #8a6200;
+  --uno-corner-ink: #5a3f00;
+}
+
+.gh-uno-card--tone-green {
+  --uno-face: linear-gradient(155deg, #42c463, #1c8a39);
+  --uno-main-ink: #166c2c;
+  --uno-corner-ink: #ffffff;
+}
+
+.gh-uno-card--tone-blue {
+  --uno-face: linear-gradient(155deg, #3f8bf7, #1248b0);
+  --uno-main-ink: #0d3f9a;
+  --uno-corner-ink: #ffffff;
+}
+
+.gh-uno-card--tone-wild {
+  --uno-face: linear-gradient(155deg, #2b2b2b, #121212);
+  --uno-main-ink: #ffffff;
+  --uno-corner-ink: #ffffff;
+}
+
+.gh-uno-card-oval {
+  inset: 17% 11%;
+  border-radius: 50%;
+  background: #fdfdfd;
+  border: none;
+  transform: rotate(-20deg);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.gh-uno-card--tone-wild .gh-uno-card-oval {
+  background: conic-gradient(from -20deg, #e53935 0 25%, #fdd835 0 50%, #43a047 0 75%, #1e88e5 0);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+
+.gh-uno-card-main {
+  z-index: 2;
+  color: var(--uno-main-ink);
+  font-size: 1.5em;
+  text-shadow: none;
+}
+
+.gh-uno-card-main--compact {
+  font-size: 0.95em;
+  letter-spacing: -0.03em;
+}
+
+.gh-uno-card--tone-wild .gh-uno-card-main {
+  color: #ffffff;
+  font-size: 1.05em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.gh-uno-card-corner {
+  color: var(--uno-corner-ink);
+  opacity: 0.95;
+  font-size: 0.55em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.gh-uno-card--tone-yellow .gh-uno-card-corner {
+  text-shadow: none;
+}
+
+/* 牌背：红椭圆 + UNO 字样 */
+.gh-uno-card--back {
+  background:
+    radial-gradient(circle at 30% 18%, rgba(255, 255, 255, 0.12), transparent 45%),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.08) 0 4px, transparent 4px 9px),
+    linear-gradient(150deg, #2c3440, #11161c);
+  border-color: #e9edf2;
+  color: #ffffff;
+}
+
+.gh-uno-card--back::before {
+  content: '';
+  position: absolute;
+  inset: 18% 9%;
+  border-radius: 50%;
+  background: linear-gradient(150deg, #e03333, #b3141c);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.35);
+  transform: rotate(-20deg);
+}
+
+.gh-uno-card--back::after {
+  content: 'UNO';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-family: var(--gh-font);
+  font-size: 0.5em;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  transform: rotate(-18deg);
+}
+
+.gh-uno-card--playable {
+  outline: 2px solid #74e0a6;
+  outline-offset: 2px;
+}
+
+.gh-uno-card--playable:hover {
+  transform: translateY(-10px);
+  box-shadow:
+    0 18px 26px rgba(0, 0, 0, 0.4),
+    0 0 22px rgba(116, 224, 166, 0.35);
+}
+
+.gh-uno-card--selected {
+  transform: translateY(-10px);
+}
+
+.gh-uno-card--disabled {
+  filter: saturate(0.75) brightness(0.94);
+  opacity: 0.92;
+}
+
+/* ---- 颜色选择与结算浮层 ---- */
+.gh-uno-color-dialog {
+  border-top: 3px solid #e03333;
+}
+
+.gh-uno-color-btn {
+  min-height: 56px;
+  border: 3px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+  font-size: var(--gh-text-base);
+}
+
+.gh-uno-color-btn--red { background: linear-gradient(155deg, #ec4c4c, #bf1b1b); }
+.gh-uno-color-btn--yellow { background: linear-gradient(155deg, #ffd93d, #efb400); color: #4a3400; }
+.gh-uno-color-btn--green { background: linear-gradient(155deg, #42c463, #1c8a39); }
+.gh-uno-color-btn--blue { background: linear-gradient(155deg, #3f8bf7, #1248b0); }
+
+.gh-uno-overlay-card {
+  border-top: 3px solid #e03333;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-uno-opponent--turn {
+    animation: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .gh-uno-table,
+  .gh-uno-online-body {
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .gh-uno-card--md {
+    width: 56px;
+    height: 82px;
+  }
+
+  .gh-uno-card-stack .gh-uno-card + .gh-uno-card {
+    margin-left: -24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .gh-uno-table,
+  .gh-uno-online-body {
+    padding: 8px;
+  }
+
+  .gh-uno-center,
+  .gh-uno-online-main {
+    padding: var(--gh-space-3);
+  }
+
+  .gh-uno-hand .gh-uno-card + .gh-uno-card {
+    margin-left: -8px;
+  }
+
+  .gh-uno-hand {
+    min-height: 108px;
+  }
+
+  .gh-uno-center::after,
+  .gh-uno-online-main::after {
+    font-size: 52px;
+    right: 8px;
+  }
+}
+
+/* 移动端中央区压缩：牌堆 / 弃牌并排、回合提示压成一行，避免整桌拉成长条 */
+@media (max-width: 640px) {
+  .gh-uno-center-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .gh-uno-pile-box,
+  .gh-uno-discard {
+    min-height: 0;
+    padding: 10px 8px;
+    gap: 6px;
+  }
+
+  .gh-uno-deck {
+    width: 52px;
+    height: 74px;
+  }
+
+  .gh-uno-action-box {
+    grid-column: 1 / -1;
+    min-height: 0;
+    padding: 8px 10px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 10px;
+  }
+
+  .gh-uno-action-box .gh-uno-pile-label {
+    display: none;
+  }
+
+  .gh-uno-drawn-hint {
+    font-size: var(--gh-text-sm);
+  }
+}

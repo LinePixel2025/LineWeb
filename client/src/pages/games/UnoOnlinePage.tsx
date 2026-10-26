@@ -453,6 +453,11 @@ function UnoOnlineStage({
                 {turnSeconds} 秒
               </span>
             )}
+            {currentColor && (
+              <span className={`gh-uno-color-chip gh-uno-color-chip--${currentColor}`}>
+                当前颜色 {UNO_COLOR_LABELS[currentColor]}
+              </span>
+            )}
             <span className="gh-uno-last-action">{actionText(match, match.lastAction)}</span>
           </div>
 
@@ -472,9 +477,12 @@ function UnoOnlineStage({
               </button>
             </div>
 
-            <div className="gh-uno-discard">
+            <div className={`gh-uno-discard${currentColor ? ` gh-uno-discard--${currentColor}` : ''}`}>
               <span className="gh-uno-pile-label">弃牌堆顶</span>
-              {top && <UnoCardView card={top} size="lg" />}
+              <span className="gh-uno-discard-stack">
+                <span className="gh-uno-discard-under" aria-hidden="true" />
+                {top && <UnoCardView card={top} size="lg" />}
+              </span>
               <span className="gh-uno-discard-count">弃牌 {match.discardCount} 张</span>
             </div>
 
@@ -525,50 +533,6 @@ function UnoOnlineStage({
             </div>
           </div>
 
-          {pendingWild !== null && (
-            <div className="gh-uno-color-overlay" role="dialog" aria-modal="true" aria-label="选择万能牌颜色">
-              <div className="gh-uno-color-dialog">
-                <p className="gh-uno-color-title">选择万能牌的颜色</p>
-                <div className="gh-uno-color-options">
-                  {(['red', 'yellow', 'green', 'blue'] as UnoColor[]).map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      className={`gh-uno-color-btn gh-uno-color-btn--${color}`}
-                      onClick={() => {
-                        const cardId = pendingWild
-                        setPendingWild(null)
-                        onSubmit({ type: 'play', cardId, color })
-                      }}
-                    >
-                      {UNO_COLOR_LABELS[color]}
-                    </button>
-                  ))}
-                </div>
-                <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm" onClick={() => setPendingWild(null)}>
-                  取消
-                </button>
-              </div>
-            </div>
-          )}
-
-          {match.status === 'finished' && (
-            <div className="gh-uno-overlay" role="dialog" aria-modal="true" aria-label="对局结算">
-              <div className="gh-uno-overlay-card">
-                <p className="gh-uno-overlay-eyebrow">牌局结束</p>
-                <h2 className={`gh-uno-overlay-title${winner?.userId === meId ? ' gh-uno-overlay-title--win' : ''}`}>
-                  {winner ? `${winner.username} 获胜` : '本局无胜者'}
-                </h2>
-                <p className="gh-uno-overlay-detail">{match.reason ? END_REASON_LABELS[match.reason] : '本局已结束'}</p>
-                <div className="gh-uno-overlay-actions">
-                  <button type="button" className="gh-btn gh-btn--primary gh-btn--lg" onClick={onBackToLobby}>
-                    {isHost ? '回大厅再开一局' : '返回大厅'}
-                  </button>
-                  <Link className="gh-btn gh-btn--secondary gh-btn--lg" to={GAME_UNO_ROUTE}>单机练习</Link>
-                </div>
-              </div>
-            </div>
-          )}
         </section>
 
         <aside className="gh-uno-online-side">
@@ -615,6 +579,51 @@ function UnoOnlineStage({
           </section>
         </aside>
       </div>
+
+      {pendingWild !== null && (
+        <div className="gh-uno-color-overlay" role="dialog" aria-modal="true" aria-label="选择万能牌颜色">
+          <div className="gh-uno-color-dialog">
+            <p className="gh-uno-color-title">选择万能牌的颜色</p>
+            <div className="gh-uno-color-options">
+              {(['red', 'yellow', 'green', 'blue'] as UnoColor[]).map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  className={`gh-uno-color-btn gh-uno-color-btn--${color}`}
+                  onClick={() => {
+                    const cardId = pendingWild
+                    setPendingWild(null)
+                    onSubmit({ type: 'play', cardId, color })
+                  }}
+                >
+                  {UNO_COLOR_LABELS[color]}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm" onClick={() => setPendingWild(null)}>
+              取消
+            </button>
+          </div>
+        </div>
+      )}
+
+      {match.status === 'finished' && (
+        <div className="gh-uno-overlay" role="dialog" aria-modal="true" aria-label="对局结算">
+          <div className="gh-uno-overlay-card">
+            <p className="gh-uno-overlay-eyebrow">牌局结束</p>
+            <h2 className={`gh-uno-overlay-title${winner?.userId === meId ? ' gh-uno-overlay-title--win' : ''}`}>
+              {winner ? `${winner.username} 获胜` : '本局无胜者'}
+            </h2>
+            <p className="gh-uno-overlay-detail">{match.reason ? END_REASON_LABELS[match.reason] : '本局已结束'}</p>
+            <div className="gh-uno-overlay-actions">
+              <button type="button" className="gh-btn gh-btn--primary gh-btn--lg" onClick={onBackToLobby}>
+                {isHost ? '回大厅再开一局' : '返回大厅'}
+              </button>
+              <Link className="gh-btn gh-btn--secondary gh-btn--lg" to={GAME_UNO_ROUTE}>单机练习</Link>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

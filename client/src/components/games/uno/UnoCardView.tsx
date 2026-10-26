@@ -38,7 +38,8 @@ export default function UnoCardView({
   const label = faceDown ? '' : unoCardLabel(card)
   // 牌面主字：万能+4 用 +4 显示，避免四字撑出 64px 手牌
   const displayLabel = card.kind === 'wild4' ? '+4' : label
-  const compact = displayLabel.length > 2
+  // 中文功能牌（禁止 / 反转 / 万能）用紧凑字号，数字与 +2 / +4 保持大号
+  const compact = /[\u4e00-\u9fa5]/.test(displayLabel)
   const tone = faceDown ? 'back' : TONE_CLASS[card.color] ?? 'gh-uno-card--wild'
   const className = [
     'gh-uno-card',

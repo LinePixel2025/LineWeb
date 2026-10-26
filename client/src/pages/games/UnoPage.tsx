@@ -333,9 +333,12 @@ export default function UnoPage() {
               </button>
             </div>
 
-            <div className="gh-uno-discard">
+            <div className={`gh-uno-discard gh-uno-discard--${table.currentColor}`}>
               <span className="gh-uno-pile-label">弃牌堆顶</span>
-              {top && <UnoCardView card={top} size="lg" />}
+              <span className="gh-uno-discard-stack">
+                <span className="gh-uno-discard-under" aria-hidden="true" />
+                {top && <UnoCardView card={top} size="lg" />}
+              </span>
               <span className="gh-uno-discard-count">弃牌 {table.discard.length} 张</span>
             </div>
 
@@ -363,6 +366,7 @@ export default function UnoPage() {
             <div className="gh-uno-me-header">
               <span className="gh-uno-me-name">你的手牌</span>
               <span className="gh-uno-me-count">{myHand.length} 张</span>
+              {myHand.length === 1 && <span className="gh-uno-uno-badge">UNO!</span>}
               {myTurn && <span className="gh-uno-me-hint">高亮 = 当前可出</span>}
             </div>
             <div className="gh-uno-hand">
