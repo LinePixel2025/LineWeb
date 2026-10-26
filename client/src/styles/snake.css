@@ -475,6 +475,8 @@
 
 .gh-snake-dpad-btn {
   display: flex;
+  min-height: 48px;
+  font-size: 1.4rem;
   align-items: center;
   justify-content: center;
   background: var(--gh-canvas);
@@ -533,6 +535,53 @@
   color: var(--gh-text-tertiary);
   font-size: var(--gh-text-xs);
   text-align: center;
+  margin: var(--gh-space-1) 0 0;
+}
+
+/* 单机方向键：默认只在触屏 / 窄屏显示（桌面有键盘，不占版面） */
+.gh-snake-dpad--solo {
+  display: none;
+  margin-top: var(--gh-space-3);
+}
+
+/* 同屏双人：两位玩家各一组方向键，触屏设备上左右分列 */
+.gh-snake-versus-pads {
+  display: none;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--gh-space-4);
+  margin-top: var(--gh-space-3);
+}
+
+.gh-snake-versus-pad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gh-space-1);
+}
+
+.gh-snake-versus-pad-label {
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.gh-snake-versus-pad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 48px);
+  grid-template-rows: repeat(2, 42px);
+  gap: 6px;
+}
+
+@media (hover: none), (pointer: coarse), (max-width: 900px) {
+  .gh-snake-dpad--solo {
+    display: grid;
+  }
+
+  .gh-snake-versus-pads {
+    display: flex;
+  }
 }
 
 /* --- 计分板 --- */

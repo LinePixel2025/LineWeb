@@ -635,8 +635,11 @@ function JumpBoard({ dark }: { dark: boolean }) {
       drawBackdrop(ctx, layout, darkRef.current, camAxis)
 
       const boxes = session.course
-      const visibleFrom = Math.max(0, Math.floor((camAxis - 260) / 60) - 2)
-      const visibleTo = Math.min(boxes.length - 1, session.boxIndex + 12)
+      // 可见窗口按「当前盒子序号」取，而不是按 camAxis / 平均间距估算：
+      // 盒子间距在 60–150 之间随机，早期用 /60 估算会让 visibleFrom 随跳数增长
+      // 迅速超过 boxIndex + 12，跳约 25 格后画面上的盒子会整体消失。
+      const visibleFrom = Math.max(0, session.boxIndex - 5)
+      const visibleTo = Math.min(boxes.length - 1, session.boxIndex + 14)
       // 远处先画（沿轴越远越靠后），避免近盒被覆盖
       for (let index = visibleTo; index >= visibleFrom; index -= 1) {
         const box = boxes[index]

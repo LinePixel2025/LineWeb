@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useChat } from '../../contexts/ChatContext'
 import { useGame } from '../../contexts/GameContext'
 import { useTheme } from '../../contexts/ThemeContext'
+import { useSwipeDirection } from '../../hooks/useSwipeDirection'
 import api from '../../lib/api'
 import { GAME_POLL_INTERVALS } from '../../lib/realtime'
 import {
@@ -1320,6 +1321,9 @@ function SnakeOnlineStage({
   const winner = match.players.find((player) => player.userId === match.winnerId) ?? null
   const iAmAlive = myStatusOf(match, meId) === 'playing'
   const ranked = [...match.players].sort((a, b) => b.score - a.score || b.length - a.length)
+
+  // 平板 / 手机：在棋盘上滑动即可改向（Pointer Events，兼容触控笔与鼠标拖拽）
+  useSwipeDirection(stageRef, onDirection, playing && iAmAlive && !turnPending)
 
   const boardLabel = playing
     ? `贪吃蛇大地图，${match.board.width} 乘 ${match.board.height} 格，第 ${match.step} 步，剩余 ${remainingSeconds} 秒。${match.players

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import { Link } from 'react-router-dom'
 import { useTheme } from '../../contexts/ThemeContext'
+import { useSwipeDirection } from '../../hooks/useSwipeDirection'
 import { GAME_SNAKE_ONLINE_ROUTE } from '../../lib/games/catalog'
 import {
   SNAKE_COLORS,
@@ -362,69 +363,7 @@ const VERSUS_KEY_MAP: Array<{ keys: Record<string, SnakeDirection>; player: 0 | 
   },
 ]
 
-const SWIPE_THRESHOLD = 24
-
-function directionFromDelta(dx: number, dy: number): SnakeDirection | null {
-  if (Math.abs(dx) < SWIPE_THRESHOLD && Math.abs(dy) < SWIPE_THRESHOLD) return null
-  if (Math.abs(dx) >= Math.abs(dy)) return dx > 0 ? 'right' : 'left'
-  return dy > 0 ? 'down' : 'up'
-}
-
-/** 移动端滑动改向的触摸处理器 */
-function useSwipeDirection(
-  wrapRef: RefObject<HTMLDivElement | null>,
-  onDirection: (direction: SnakeDirection) => void,
-  enabled: boolean
-): void {
-  const callbackRef = useRef(onDirection)
-  callbackRef.current = onDirection
-  const enabledRef = useRef(enabled)
-  enabledRef.current = enabled
-
-  useEffect(() => {
-    const node = wrapRef.current
-    if (!node) return
-    let origin: { x: number; y: number } | null = null
-
-    const handleStart = (event: TouchEvent) => {
-      const point = event.touches[0]
-      origin = point ? { x: point.clientX, y: point.clientY } : null
-    }
-    const handleEnd = (event: TouchEvent) => {
-      if (!origin || !enabledRef.current) {
-        origin = null
-        return
-      }
-      const point = event.changedTouches[0]
-      const start = origin
-      origin = null
-      if (!point) return
-      const direction = directionFromDelta(point.clientX - start.x, point.clientY - start.y)
-      if (direction) {
-        event.preventDefault()
-        callbackRef.current(direction)
-      }
-    }
-    const handleMove = (event: TouchEvent) => {
-      // 棋盘上滑动不滚页
-      if (origin) event.preventDefault()
-    }
-    const handleCancel = () => {
-      origin = null
-    }
-
-    node.addEventListener('touchstart', handleStart, { passive: true })
-    node.addEventListener('touchmove', handleMove, { passive: false })
-    node.addEventListener('touchend', handleEnd, { passive: false })
-    node.addEventListener('touchcancel', handleCancel)
-    return () => {
-      node.removeEventListener('touchstart', handleStart)
-      node.removeEventListener('touchmove', handleMove)
-      node.removeEventListener('touchend', handleEnd)
-      node.removeEventListener('touchcancel', handleCancel)
-    }
-  }, [wrapRef])
-}
+/** 移动端滑动改向：复用全局 Pointer Events 实现（见 hooks/useSwipeDirection） */
 
 // ==================== 单机棋盘 ====================
 
@@ -662,6 +601,24 @@ function SoloBoard({ speedMs, dark }: { speedMs: number; dark: boolean }) {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="gh-snake-dpad gh-snake-dpad--solo" aria-label="方向按钮（触屏可用）">
+        {(['up', 'left', 'down', 'right'] as SnakeDirection[]).map((direction) => (
+          <button
+            key={direction}
+            type="button"
+            className={`gh-snake-dpad-btn gh-snake-dpad-btn--${direction}`}
+            onClick={() => handleDirection(direction)}
+            disabled={!hud.alive || paused}
+            aria-label={`向${direction === 'up' ? '上' : direction === 'down' ? '下' : direction === 'left' ? '左' : '右'}移动`}
+          >
+            {direction === 'up' ? '↑' : direction === 'down' ? '↓' : direction === 'left' ? '←' : '→'}
+          </button>
+        ))}
+        <span className="gh-snake-dpad-hint">
+          平板 / 手机可直接在棋盘上滑动，或用上方方向键
+        </span>
       </div>
 
       <p className="gh-snake-sr-only" aria-live="polite">
@@ -941,6 +898,28 @@ function VersusBoard({ speedMs, dark }: { speedMs: number; dark: boolean }) {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="gh-snake-versus-pads" aria-label="同屏双人触屏方向键">
+        {([0, 1] as const).map((player) => (
+          <div key={player} className={`gh-snake-versus-pad gh-snake-versus-pad--p${player + 1}`}>
+            <span className="gh-snake-versus-pad-label">P{player + 1}</span>
+            <div className="gh-snake-versus-pad-grid">
+              {(['up', 'left', 'down', 'right'] as SnakeDirection[]).map((direction) => (
+                <button
+                  key={direction}
+                  type="button"
+                  className={`gh-snake-dpad-btn gh-snake-dpad-btn--${direction}`}
+                  onClick={() => handleDirection(player, direction)}
+                  disabled={hud.finished || paused || !hud.alive[player]}
+                  aria-label={`P${player + 1} 向${direction === 'up' ? '上' : direction === 'down' ? '下' : direction === 'left' ? '左' : '右'}移动`}
+                >
+                  {direction === 'up' ? '↑' : direction === 'down' ? '↓' : direction === 'left' ? '←' : '→'}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )
