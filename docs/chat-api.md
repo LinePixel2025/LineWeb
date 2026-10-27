@@ -1,13 +1,83 @@
 # LineWeb 聊天 API 接入文档
 
-> 适用版本：2026-10（好友 / 私聊 / 群聊 + 图片消息 / 2 分钟撤回 + WebSocket 实时推送）
+> 适用版本：2026-10（**聊天已迁移到独立 XMPP 服务 internet_neko**；好友关系仍以 LineWeb 为准）
 > 相关文档：[`api.md`](./api.md)（全部端点）、[`auth-api.md`](./auth-api.md)（账号登录令牌与角色能力）
-> 服务端实现：`server/src/routes/chat.ts`、`server/src/services/chatService.ts`、`server/src/services/chatHub.ts`
-> 前端实现：`client/src/pages/ChatPage.tsx`、`client/src/contexts/ChatContext.tsx`
+> 服务端实现：`server/src/routes/chatXmpp.ts`、`server/src/routes/chatUploads.ts`、`server/src/services/nekoChat.ts`、`server/src/services/nekoWsProxy.ts`；好友：`routes/chat.ts` + `services/chatService.ts`
+> 前端实现：`client/src/pages/ChatPage.tsx`、`client/src/contexts/XmppChatContext.tsx`、`client/src/lib/xmpp/*`
 
 ---
 
-## 1. 概述
+## 0. 聊天已迁移到 XMPP（2026-10）
+
+**结论先说**：私信 / 群聊的**消息收发与历史**已整体搬到 `senlinjun/internet_neko` 独立 XMPP 服务（LineWeb 只读调用其迁移 API，未修改 neko 一行代码）。用户**不需要重新注册**：LineWeb 账号由服务端自动同步为 neko 账号，浏览器始终只访问 LineWeb 同源地址。
+
+### 0.1 账号与 JID 映射
+
+| 概念 | 规则 |
+|---|---|
+| neko 账号 id | `1000000000000 + LineWeb userId`（`NEKO_CHAT_ACCOUNT_BASE`） |
+| neko 用户名 | `lw_<LineWeb userId>`，固定不变；LineWeb 用户名写入 `displayName` |
+| 单聊 JID | `lw_<U>@<domain>`；neko 原生账号为 `<username>@<domain>` |
+| 群聊 JID | `room-<roomId>@muc.<domain>` |
+| 会话键（前端） | 单聊 `u<nekoId>`、群聊 `r<roomId>`；游戏邀请需换算回 LineWeb id |
+
+> neko 侧账号由服务端幂等创建（启动后台批量同步 + 注册/改名按需补建 + 停用/删除时同步停用）。密钥（`NEKO_CHAT_TOKEN`）只存在于服务器 `.env`，绝不下发浏览器。
+
+### 0.2 新增端点（前缀 `/api/chat/xmpp`，均需登录）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/bootstrap` | 一次性票据 + 过滤后的状态（好友 / 有往来的原生联系人 / 群 / 申请 / 置顶） |
+| GET | `/ticket` | 重连前换新票据（neko 票据一次性） |
+| GET | `/state` | 刷新状态（轮询降级用） |
+| GET | `/directory?q=` | 搜 neko 用户（≤30 条；`lw_*` 只回好友；原生账号受 `NEKO_CHAT_ALLOW_NATIVE` 控制） |
+| GET | `/users?jids=` | 陌生来信反查 `{nekoId, username, displayName, online}` |
+| POST | `/rooms` | 建群 `{name, memberIds}` → `{ok, roomId}` |
+| POST | `/rooms/:id/name` | 改群名 `{name}` |
+| POST | `/rooms/:id/members` | 加人 `{addIds}` / 移人 `{removeIds}` |
+| POST | `/rooms/:id/leave` | 退群 |
+| POST | `/rooms/:id/disband` | 解散（群主） |
+| POST | `/rooms/:id/role` `/transfer` `/mute` `/mute-all` `/announcement` | 群权限、转让、禁言、公告 |
+| POST | `/messages/recall` | 撤回 `{id}`（**窗口 5 分钟**，仅本人的消息） |
+| POST | `/messages/admin-recall` | 群主 / 管理员撤回群消息 |
+| POST | `/uploads` | 图片上传（`multipart/form-data`，字段 `file`）→ `{ok, url, id, mime}` |
+| POST | `/http-session` | 轮询降级：创建 HTTP 会话 |
+| POST | `/http-stanza` | 轮询降级：发送一帧（**同样做单聊好友校验**，非好友 403） |
+| GET | `/http-poll` | 轮询降级：长轮询取帧（最长 25 秒） |
+| POST | `/http-close` | 轮询降级：关闭会话 |
+
+**实时连接**：`wss://<站点>/ws/xmpp?token=<登录令牌>` —— Express 字节级中继到 neko `/xmpp-websocket`（剥 Origin、注入内部令牌、空闲 120 秒关闭、单聊好友校验）。WebSocket 不可用或 `?transport=polling` 时自动降级为上面的 `http-*` 长轮询。
+
+**图片读取**：`GET /chat/uploads/<24 位 hex id>?token=<登录令牌>`（挂在 `/api` 之外的同源路径，未带令牌 401；字节透传 neko）。
+
+### 0.3 旧端点去向
+
+| 端点 | 现状 |
+|---|---|
+| `GET/POST /api/chat/conversations*`、`/api/chat/messages*` | **410 Gone**，`{error:'聊天已迁移到 XMPP 服务', code:'CHAT_MIGRATED'}` |
+| `POST /api/chat/conversations/:id/images`、`GET /api/chat/messages/:id/image` | 410（改用 `/api/chat/xmpp/uploads` 与 `/chat/uploads/:id`） |
+| `GET /api/chat/summary` | 保留，`unreadTotal` 恒为 `0`（未读改由客户端统计），`pendingFriendRequests` 照旧 |
+| 好友：`/api/chat/friends*`、`/users/search`、申请 `respond/remove/remark` | 保留不变（LineWeb Prisma 仍是唯一真相源） |
+| `/ws/chat` | 保留，**只承载 `game:*` 与好友事件**；聊天消息不再从这里推送 |
+
+### 0.4 行为差异（与迁移前对比）
+
+- **撤回窗口 2 分钟 → 5 分钟**（neko 固定，前端文案与判断同步）。
+- **未读数是客户端水位**（`localStorage['lineweb_neko_read:<会话键>']`）：neko 没有服务端未读接口，换设备 / 清缓存后首屏未读可能偏少。
+- **历史消息不迁移**：旧消息仍在 Prisma 表与存储节点 `_chat/` 中，仅作只读存档，UI 不再展示。
+- **原生 neko 用户可互通**（默认开放）：能单聊、拉群、被搜到；但他们不是 LineWeb 好友，因此**没有好友申请 / 备注 / 游戏邀请**。关闭开关 `NEKO_CHAT_ALLOW_NATIVE=false` 后只保留 LineWeb 好友之间的会话。
+- **单聊好友校验**：发往 `lw_*` 的单聊消息在服务端中继层校验 Prisma 好友关系（WS 与轮询两条路径口径一致），非好友回 `not-authorized`。
+
+### 0.5 下线与降级
+
+- `NEKO_CHAT_ENABLED=false`（或缺少令牌）：`/api/chat/xmpp/*` 返回 `503 NEKO_UNAVAILABLE`，聊天页显示「聊天服务未配置/暂不可用」，站点其他功能不受影响。
+- neko 主机不可达：同上（503），不影响文章、网盘、游戏等模块。
+
+> 以下第 1～7 章为**迁移前的自建聊天实现**，仅作存档参考；其中会话 / 消息相关端点已全部返回 410。
+
+---
+
+## 1. 概述（迁移前存档）
 
 聊天模块提供：
 
