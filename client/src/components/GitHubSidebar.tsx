@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { useChat } from '../contexts/ChatContext'
+import { useXmppChat } from '../contexts/XmppChatContext'
 import { formatUnread } from '../lib/chat'
 import { canAccessAdminPath } from '../lib/permissions'
 
@@ -62,7 +62,7 @@ const sections = [
 
 export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onToggleCollapse }: Props) {
   const { user } = useAuth()
-  const { unreadTotal } = useChat()
+  const { unreadTotal } = useXmppChat()
   const location = useLocation()
   const chatUnreadLabel = formatUnread(unreadTotal)
 

@@ -43,6 +43,11 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
+      // 聊天图片同源直链（只代理图片前缀，避免影响 SPA 的 /chat 路由）
+      '^/chat/uploads': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
       '/ws': {
         target: 'http://localhost:3001',
         changeOrigin: true,

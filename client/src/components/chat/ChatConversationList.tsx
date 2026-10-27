@@ -1,18 +1,17 @@
 import { memo } from 'react'
 import UserAvatar from '../UserAvatar'
-import { displayName, formatUnread, messagePreview } from '../../lib/chat'
-import type { Conversation } from '../../types/chat'
+import { conversationPreview, formatUnread } from '../../lib/chat'
+import type { NekoConversation } from '../../types/chat'
 
 interface Props {
-  conversations: Conversation[]
-  activeId: number | null
-  meId: number
+  conversations: NekoConversation[]
+  activeKey: string | null
   loading?: boolean
   error?: string | null
-  onSelect: (conversation: Conversation) => void
+  onSelect: (conversation: NekoConversation) => void
 }
 
-function formatListTime(value: string | null | undefined): string {
+function formatListTime(value: number): string {
   if (!value) return ''
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
@@ -23,27 +22,9 @@ function formatListTime(value: string | null | undefined): string {
   return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
 }
 
-function previewText(conversation: Conversation): string {
-  const lastMessage = conversation.lastMessage
-  if (!lastMessage) return '暂无消息'
-  const prefix = conversation.type === 'group' ? `${lastMessage.sender.username}：` : ''
-  // 图片消息显示 [图片]，已撤回显示 [已撤回]
-  return `${prefix}${messagePreview(lastMessage)}`
-}
-
-function avatarTarget(conversation: Conversation, meId: number): { id: number; username: string; name: string } {
-  const name = displayName(conversation, meId)
-  if (conversation.type === 'group') {
-    return { id: conversation.id, username: name, name }
-  }
-  const other = conversation.members.find((member) => member.id !== meId)
-  return { id: other?.id ?? conversation.id, username: other?.username ?? name, name }
-}
-
 export default memo(function ChatConversationList({
   conversations,
-  activeId,
-  meId,
+  activeKey,
   loading = false,
   error = null,
   onSelect,
@@ -73,30 +54,36 @@ export default memo(function ChatConversationList({
   return (
     <ul className="gh-chat-conv-list" aria-label="会话列表">
       {conversations.map((conversation) => {
-        const target = avatarTarget(conversation, meId)
-        const unread = formatUnread(conversation.unreadCount)
-        const active = conversation.id === activeId
+        const unread = formatUnread(conversation.unread)
+        const active = conversation.key === activeKey
         return (
-          <li key={conversation.id}>
+          <li key={conversation.key}>
             <button
               type="button"
               className={`gh-chat-conv-item ${active ? 'gh-chat-conv-item--active' : ''}`}
               aria-current={active ? 'true' : undefined}
               onClick={() => onSelect(conversation)}
             >
-              <UserAvatar userId={target.id} username={target.username} size="md" />
+              <UserAvatar
+                userId={conversation.avatarId}
+                username={conversation.avatarName}
+                size="md"
+              />
               <span className="gh-chat-conv-main">
                 <span className="gh-chat-conv-top">
                   <span className="gh-chat-conv-name">
-                    {conversation.type === 'group' && <span className="gh-chat-group-tag">群</span>}
-                    {target.name}
+                    {conversation.kind === 'room' && <span className="gh-chat-group-tag">群</span>}
+                    {conversation.title}
+                    {conversation.kind === 'direct' && conversation.online && (
+                      <span className="gh-chat-online-dot" aria-label="在线" title="在线" />
+                    )}
                   </span>
                   <span className="gh-chat-conv-time">{formatListTime(conversation.lastMessageAt)}</span>
                 </span>
                 <span className="gh-chat-conv-bottom">
-                  <span className="gh-chat-conv-preview">{previewText(conversation)}</span>
+                  <span className="gh-chat-conv-preview">{conversationPreview(conversation)}</span>
                   {unread && (
-                    <span className="gh-chat-unread" aria-label={`${conversation.unreadCount} 条未读`}>
+                    <span className="gh-chat-unread" aria-label={`${conversation.unread} 条未读`}>
                       {unread}
                     </span>
                   )}

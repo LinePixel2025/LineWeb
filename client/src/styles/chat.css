@@ -340,6 +340,16 @@
   line-height: 14px;
 }
 
+/* 私聊对方在线的小绿点 */
+.gh-chat-online-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gh-success, #2da44e);
+  flex-shrink: 0;
+}
+
 .gh-chat-conv-time {
   margin-left: auto;
   flex-shrink: 0;
@@ -665,6 +675,20 @@
 .gh-chat-member-role {
   color: var(--gh-text-tertiary);
   font-size: 11px;
+}
+
+/* 原生 neko 账号标记（非 LineWeb 好友） */
+.gh-chat-member-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 4px;
+  border: 1px solid var(--gh-border);
+  border-radius: 4px;
+  color: var(--gh-text-tertiary);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 14px;
+  vertical-align: middle;
 }
 
 .gh-chat-members-footer {

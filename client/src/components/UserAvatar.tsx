@@ -19,7 +19,8 @@ function getInitials(name: string): string {
 }
 
 function getColor(userId: number): string {
-  const hue = (userId * 137.508) % 360
+  // 负数 id（原生 neko 账号 / 群聊）取绝对值，避免出现负色相
+  const hue = (Math.abs(userId) * 137.508) % 360
   return `hsl(${hue}, 50%, 50%)`
 }
 
@@ -31,6 +32,11 @@ export default memo(function UserAvatar({ userId, username, size = 'md' }: UserA
   useEffect(() => {
     setImgSrc(null)
     setFailed(false)
+    // 负数 id 是原生 neko 账号 / 群聊的合成标识，不存在 LineWeb 头像，直接用首字母兜底
+    if (userId <= 0) {
+      setFailed(true)
+      return
+    }
     const controller = new AbortController()
 
     const token = localStorage.getItem('lineweb_token')

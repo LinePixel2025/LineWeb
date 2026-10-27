@@ -2,13 +2,14 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import UserAvatar from '../UserAvatar'
 import ChatComposer from './ChatComposer'
 import ChatImageLightbox from './ChatImageLightbox'
-import { canRecall, chatImageUrl, displayName } from '../../lib/chat'
-import type { Conversation, Message } from '../../types/chat'
+import { canRecall, chatImageUrl, senderLabel } from '../../lib/chat'
+import type { NekoConversation, NekoMessage } from '../../types/chat'
 
 interface Props {
-  conversation: Conversation | null
-  meId: number
-  messages: Message[]
+  conversation: NekoConversation | null
+  /** 自己的 neko id（用于群成员「移出」按钮的显示） */
+  selfNekoId: number | null
+  messages: NekoMessage[]
   loading?: boolean
   loadingMore?: boolean
   hasMore?: boolean
@@ -22,35 +23,33 @@ interface Props {
   onRecall?: (messageId: number) => Promise<void> | void
   onLoadMore: () => void
   onAddMembers: () => void
-  onRemoveMember: (userId: number) => void
+  onRemoveMember: (nekoId: number) => void
   onRename: (name: string) => Promise<void> | void
   onDissolve: () => void
   onLeave: () => void
 }
 
-function formatMessageTime(value: string): string {
+function formatMessageTime(value: number): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
-/** 图片消息的 width/height 属性（有元数据时用于占位防跳动） */
-function imageDimensions(message: Message): { width?: number; height?: number } {
-  const width = message.image?.width
-  const height = message.image?.height
-  if (typeof width === 'number' && width > 0 && typeof height === 'number' && height > 0) {
-    return { width, height }
+function avatarOf(conversation: NekoConversation, message: NekoMessage): { id: number; name: string } {
+  if (conversation.kind === 'direct') {
+    return { id: conversation.avatarId, name: conversation.avatarName }
   }
-  return {}
-}
-
-function groupAvatarName(conversation: Conversation, meId: number): string {
-  return displayName(conversation, meId)
+  const member = conversation.members.find((item) => item.username === message.fromUsername)
+  if (!member) return { id: -1, name: message.fromUsername || '未知用户' }
+  return {
+    id: member.linewebId ?? -member.nekoId,
+    name: member.displayName || member.username,
+  }
 }
 
 export default function ChatThread({
   conversation,
-  meId,
+  selfNekoId,
   messages,
   loading = false,
   loadingMore = false,
@@ -79,14 +78,15 @@ export default function ChatThread({
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState('')
-  const [previewImage, setPreviewImage] = useState<Message | null>(null)
-  // 用于「撤回」按钮的 2 分钟窗口自动消失：低频 tick 触发重渲染
+  const [previewImage, setPreviewImage] = useState<string | null>(null)
+  // 「撤回」按钮的 5 分钟窗口需要自动消失：低频 tick 触发重渲染
   const [now, setNow] = useState(() => Date.now())
   const menuRef = useRef<HTMLDivElement | null>(null)
 
-  const conversationId = conversation?.id ?? null
-  const isOwner = conversation !== null && conversation.ownerId === meId
-  const isGroup = conversation?.type === 'group'
+  const conversationKey = conversation?.key ?? null
+  const myRole = conversation?.room?.myRole ?? ''
+  const isOwner = conversation?.kind === 'room' && (myRole === 'owner' || myRole === 'admin')
+  const isGroup = conversation?.kind === 'room'
 
   // 切换会话时回到最新消息
   useEffect(() => {
@@ -99,7 +99,7 @@ export default function ChatThread({
     setPreviewImage(null)
     const element = listRef.current
     if (element) element.scrollTop = element.scrollHeight
-  }, [conversationId])
+  }, [conversationKey])
 
   // 群聊操作菜单：点击外部关闭
   useEffect(() => {
@@ -118,7 +118,7 @@ export default function ChatThread({
     }
   }, [menuOpen])
 
-  // 低频刷新当前时间，让超过 2 分钟的「撤回」按钮自动消失（卸载时清理）
+  // 低频刷新当前时间，让超过 5 分钟的「撤回」按钮自动消失（卸载时清理）
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 15_000)
     return () => window.clearInterval(timer)
@@ -166,7 +166,7 @@ export default function ChatThread({
     await onSend(content)
   }
 
-  const handleRecall = async (message: Message) => {
+  const handleRecall = async (message: NekoMessage) => {
     if (!onRecall) return
     if (!window.confirm('确定撤回这条消息吗？')) return
     try {
@@ -192,21 +192,20 @@ export default function ChatThread({
     )
   }
 
-  const title = displayName(conversation, meId)
-  const partner = conversation.type === 'direct'
-    ? conversation.members.find((member) => member.id !== meId)
-    : null
-  const avatarId = partner?.id ?? conversation.id
-  const avatarName = partner?.username ?? groupAvatarName(conversation, meId)
-  const subtitle = conversation.type === 'group'
+  const title = conversation.title
+  const subtitle = isGroup
     ? `${conversation.members.length} 位成员`
-    : conversation.canSend
-      ? '私聊'
-      : '你们已不是好友'
+    : conversation.contact
+      ? conversation.contact.kind === 'native'
+        ? `@${conversation.contact.username} · neko 用户`
+        : conversation.contact.online
+          ? '在线'
+          : '私聊'
+      : '私聊'
 
   const submitRename = async () => {
     const next = renameValue.trim()
-    if (!next || next === conversation.name) {
+    if (!next || next === conversation.room?.name) {
       setRenaming(false)
       return
     }
@@ -226,7 +225,7 @@ export default function ChatThread({
             <path d="m9.5 3.5-4.5 4.5 4.5 4.5" />
           </svg>
         </button>
-        <UserAvatar userId={avatarId} username={avatarName} size="md" />
+        <UserAvatar userId={conversation.avatarId} username={conversation.avatarName} size="md" />
         <div className="gh-chat-thread-title">
           {renaming ? (
             <form
@@ -239,7 +238,7 @@ export default function ChatThread({
               <input
                 className="gh-input gh-chat-rename-input"
                 value={renameValue}
-                maxLength={40}
+                maxLength={30}
                 aria-label="群聊名称"
                 onChange={(event) => setRenameValue(event.target.value)}
               />
@@ -249,9 +248,7 @@ export default function ChatThread({
           ) : (
             <>
               <p className="gh-chat-thread-name">{title}</p>
-              <p className={`gh-chat-thread-subtitle ${!conversation.canSend && conversation.type === 'direct' ? 'gh-chat-thread-subtitle--warn' : ''}`}>
-                {subtitle}
-              </p>
+              <p className="gh-chat-thread-subtitle">{subtitle}</p>
             </>
           )}
         </div>
@@ -305,7 +302,7 @@ export default function ChatThread({
                       className="gh-chat-thread-menu-item"
                       onClick={() => {
                         setMenuOpen(false)
-                        setRenameValue(conversation.name)
+                        setRenameValue(conversation.room?.name ?? '')
                         setRenaming(true)
                       }}
                     >
@@ -332,27 +329,36 @@ export default function ChatThread({
               </button>
             </div>
             <ul className="gh-chat-members-list">
-              {conversation.members.map((member) => (
-                <li key={member.id} className="gh-chat-member-row">
-                  <UserAvatar userId={member.id} username={member.username} size="sm" />
-                  <span className="gh-chat-member-name">{member.username}</span>
-                  {(member.role === 'owner' || member.id === conversation.ownerId) && (
-                    <span className="gh-chat-member-role">群主</span>
-                  )}
-                  {isOwner && member.id !== meId && (
-                    <button
-                      type="button"
-                      className="gh-btn gh-btn--danger gh-btn--sm"
-                      onClick={() => onRemoveMember(member.id)}
-                    >
-                      移出
-                    </button>
-                  )}
-                </li>
-              ))}
+              {conversation.members.map((member) => {
+                const isMe = selfNekoId !== null && member.nekoId === selfNekoId
+                return (
+                  <li key={member.nekoId} className="gh-chat-member-row">
+                    <UserAvatar
+                      userId={member.linewebId ?? -member.nekoId}
+                      username={member.displayName || member.username}
+                      size="sm"
+                    />
+                    <span className="gh-chat-member-name">
+                      {member.displayName || member.username}
+                      {member.kind === 'native' && <span className="gh-chat-member-tag">neko</span>}
+                    </span>
+                    {member.role === 'owner' && <span className="gh-chat-member-role">群主</span>}
+                    {member.role === 'admin' && <span className="gh-chat-member-role">管理员</span>}
+                    {isOwner && !isMe && member.role !== 'owner' && (
+                      <button
+                        type="button"
+                        className="gh-btn gh-btn--danger gh-btn--sm"
+                        onClick={() => onRemoveMember(member.nekoId)}
+                      >
+                        移出
+                      </button>
+                    )}
+                  </li>
+                )
+              })}
             </ul>
             <div className="gh-chat-members-footer">
-              {isOwner ? (
+              {myRole === 'owner' ? (
                 <button type="button" className="gh-btn gh-btn--danger gh-btn--sm" onClick={onDissolve}>
                   解散群聊
                 </button>
@@ -396,31 +402,34 @@ export default function ChatThread({
 
         {!loading &&
           messages.map((message) => {
-            const own = message.senderId === meId
+            const own = message.mine
 
             // 已撤回：不渲染气泡，改为居中系统行
-            if (message.recalledAt) {
+            if (message.recalled) {
+              const who = own ? '你' : senderLabel(message, conversation)
               return (
                 <div key={message.id} className="gh-chat-recall-line" role="status">
-                  {own ? '你撤回了一条消息' : `${message.sender.username} 撤回了一条消息`}
+                  {`${who}撤回了一条消息`}
+                  {message.byAdmin && !own ? '（管理员）' : ''}
                 </div>
               )
             }
 
-            const recallable = own && onRecall !== undefined && canRecall(message, meId, now)
-            const isImage = message.type === 'image'
+            const recallable = own && onRecall !== undefined && canRecall(message, now)
+            const isImage = Boolean(message.image)
+            const sender = avatarOf(conversation, message)
 
             return (
               <div
                 key={message.id}
                 className={`gh-chat-message ${own ? 'gh-chat-message--own' : ''}`}
               >
-                {!own && <UserAvatar userId={message.sender.id} username={message.sender.username} size="sm" />}
+                {!own && <UserAvatar userId={sender.id} username={sender.name} size="sm" />}
                 <div className="gh-chat-message-body">
                   <div className="gh-chat-message-meta">
-                    {!own && <span className="gh-chat-message-sender">{message.sender.username}</span>}
-                    <time className="gh-chat-message-time" dateTime={message.createdAt}>
-                      {formatMessageTime(message.createdAt)}
+                    {!own && <span className="gh-chat-message-sender">{sender.name}</span>}
+                    <time className="gh-chat-message-time" dateTime={new Date(message.ts).toISOString()}>
+                      {formatMessageTime(message.ts)}
                     </time>
                     {recallable && (
                       <button
@@ -438,18 +447,17 @@ export default function ChatThread({
                       type="button"
                       className="gh-chat-message-image-wrap"
                       aria-label="查看大图"
-                      onClick={() => setPreviewImage(message)}
+                      onClick={() => setPreviewImage(message.image)}
                     >
                       <img
                         className="gh-chat-message-image"
-                        src={chatImageUrl(message.id)}
+                        src={chatImageUrl(message.image)}
                         alt="图片消息"
                         loading="lazy"
-                        {...imageDimensions(message)}
                       />
                     </button>
                   ) : (
-                    <div className="gh-chat-message-bubble">{message.content}</div>
+                    <div className="gh-chat-message-bubble">{message.body}</div>
                   )}
                 </div>
               </div>
@@ -459,7 +467,7 @@ export default function ChatThread({
 
       {previewImage && (
         <ChatImageLightbox
-          src={chatImageUrl(previewImage.id)}
+          src={chatImageUrl(previewImage)}
           alt="图片预览"
           onClose={() => setPreviewImage(null)}
         />
@@ -469,7 +477,11 @@ export default function ChatThread({
         onSend={handleSend}
         onSendImage={onSendImage}
         disabled={!conversation.canSend}
-        disabledHint={conversation.type === 'direct' ? '你们已不是好友，无法继续发送消息' : '当前会话已禁止发送消息'}
+        disabledHint={
+          conversation.kind === 'room'
+            ? '全员禁言中，只有群主和管理员可以发言'
+            : '当前会话已禁止发送消息'
+        }
       />
     </section>
   )

@@ -1,28 +1,30 @@
 import { useEffect, useState } from 'react'
 import UserAvatar from '../UserAvatar'
-import type { Friend } from '../../types/chat'
+import { contactLabel } from '../../lib/chat'
+import type { NekoContact } from '../../types/chat'
 
 interface Props {
   open: boolean
   title: string
   submitLabel: string
-  friends: Friend[]
-  /** 已在该会话中的成员，从可选列表中排除 */
-  excludeIds?: number[]
+  /** 可选联系人：LineWeb 好友 + 已有往来的 neko 用户 */
+  contacts: NekoContact[]
+  /** 已在该群中的成员 nekoId，从可选列表中排除 */
+  excludeNekoIds?: number[]
   /** 是否显示群名输入（新建群聊时需要，添加成员时不需要） */
   showNameInput?: boolean
   loading?: boolean
   error?: string | null
   onClose: () => void
-  onSubmit: (name: string, memberIds: number[]) => void
+  onSubmit: (name: string, memberNekoIds: number[]) => void
 }
 
 export default function GroupDialog({
   open,
   title,
   submitLabel,
-  friends,
-  excludeIds = [],
+  contacts,
+  excludeNekoIds = [],
   showNameInput = true,
   loading = false,
   error = null,
@@ -50,15 +52,16 @@ export default function GroupDialog({
 
   if (!open) return null
 
-  const candidates = friends.filter((friend) => !excludeIds.includes(friend.id))
+  const excluded = new Set(excludeNekoIds)
+  const candidates = contacts.filter((contact) => !excluded.has(contact.nekoId))
   const nameInvalid = showNameInput && name.trim().length === 0
   const canSubmit = !loading && !nameInvalid && selected.size > 0
 
-  const toggle = (userId: number) => {
+  const toggle = (nekoId: number) => {
     setSelected((prev) => {
       const next = new Set(prev)
-      if (next.has(userId)) next.delete(userId)
-      else next.add(userId)
+      if (next.has(nekoId)) next.delete(nekoId)
+      else next.add(nekoId)
       return next
     })
   }
@@ -100,20 +103,29 @@ export default function GroupDialog({
             </span>
             {candidates.length === 0 ? (
               <p className="gh-chat-friend-empty">
-                {friends.length === 0 ? '还没有好友，先去添加好友吧。' : '所有好友都已在该会话中。'}
+                {contacts.length === 0
+                  ? '还没有可选的联系人，先去添加好友或发起私聊吧。'
+                  : '所有联系人都已在该群中。'}
               </p>
             ) : (
               <ul className="gh-chat-picker-list">
-                {candidates.map((friend) => (
-                  <li key={friend.id} className="gh-chat-picker-row">
+                {candidates.map((contact) => (
+                  <li key={contact.key} className="gh-chat-picker-row">
                     <label className="gh-chat-picker-label">
                       <input
                         type="checkbox"
-                        checked={selected.has(friend.id)}
-                        onChange={() => toggle(friend.id)}
+                        checked={selected.has(contact.nekoId)}
+                        onChange={() => toggle(contact.nekoId)}
                       />
-                      <UserAvatar userId={friend.id} username={friend.username} size="sm" />
-                      <span className="gh-chat-friend-name">{friend.username}</span>
+                      <UserAvatar
+                        userId={contact.linewebId ?? -contact.nekoId}
+                        username={contact.displayName || contact.username}
+                        size="sm"
+                      />
+                      <span className="gh-chat-friend-name">
+                        {contactLabel(contact)}
+                        {contact.kind === 'native' && <span className="gh-chat-member-tag">neko</span>}
+                      </span>
                     </label>
                   </li>
                 ))}

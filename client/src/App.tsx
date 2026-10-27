@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './contexts/AuthContext'
 import { ChatProvider } from './contexts/ChatContext'
+import { XmppChatProvider } from './contexts/XmppChatContext'
 import { GameProvider } from './contexts/GameContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { DownloadProvider } from './contexts/DownloadContext'
@@ -115,6 +116,7 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <ChatProvider>
+        <XmppChatProvider>
         <GameProvider>
         <ThemeProvider>
           <DownloadProvider>
@@ -258,6 +260,7 @@ export default function App() {
             </DownloadProvider>
         </ThemeProvider>
         </GameProvider>
+        </XmppChatProvider>
         </ChatProvider>
       </AuthProvider>
       </QueryClientProvider>

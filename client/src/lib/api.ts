@@ -103,6 +103,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       throw new ApiError(data.error || `请求失败 (${res.status})`, res.status)
     }
 
+    // 204 No Content（如 XMPP 长轮询的 stanza 上报）没有响应体
+    if (res.status === 204) return undefined as T
+
     return res.json()
   } catch (err) {
     // 超时/取消 — 包装为可识别错误
@@ -130,8 +133,8 @@ async function requestText(path: string): Promise<string> {
 }
 
 export const api = {
-  get: <T>(path: string, opts?: { signal?: AbortSignal; noRedirect?: boolean }) =>
-    request<T>(path, { signal: opts?.signal, noRedirect: opts?.noRedirect }),
+  get: <T>(path: string, opts?: { signal?: AbortSignal; noRedirect?: boolean; timeoutMs?: number }) =>
+    request<T>(path, { signal: opts?.signal, noRedirect: opts?.noRedirect, timeoutMs: opts?.timeoutMs }),
   post: <T>(path: string, body?: unknown, opts?: { noRedirect?: boolean }) =>
     request<T>(path, { method: 'POST', body, noRedirect: opts?.noRedirect }),
   /** multipart/form-data 上传（图片等）：不设置 Content-Type，超时放宽到 120s */

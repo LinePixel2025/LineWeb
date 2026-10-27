@@ -152,14 +152,11 @@ export interface SendMessageResponse {
 
 /**
  * 服务端通过 /ws/chat 推送的事件。
+ * 聊天消息已迁移到 neko XMPP（见 XmppChatContext），这里只剩好友关系与游戏事件。
  * ping / pong 为心跳，ChatProvider 内部处理，不会转发给页面订阅者。
  */
 export type ChatServerEvent =
   | { type: 'auth_ok' }
-  | { type: 'message:new'; conversationId: number; message: Message }
-  | { type: 'message:recalled'; conversationId: number; message: Message }
-  | { type: 'conversation:updated'; conversationId: number }
-  | { type: 'conversation:removed'; conversationId: number }
   | { type: 'friend:request'; request: FriendRequestEventPayload }
   | { type: 'friend:accepted'; friend: Friend }
   | { type: 'friend:rejected'; userId: number }
@@ -182,3 +179,141 @@ export type ChatConnectionState = 'connecting' | 'open' | 'closed'
 
 /** 事件监听器 */
 export type ChatEventListener = (event: ChatEvent) => void
+
+// === neko XMPP 聊天（数据层已迁移；旧类型保留供游戏与历史代码引用） ===
+
+/** 单条消息（neko 存证 id 全局唯一） */
+export interface NekoMessage {
+  /** neko 消息 id（用于历史分页、去重、撤回） */
+  id: number
+  /** 所属会话键：单聊 u<nekoId> / 群聊 r<roomId> */
+  key: string
+  /** 发送者完整 JID */
+  from: string
+  /** 发送者用户名（lw_<id> 或 neko 原生用户名） */
+  fromUsername: string
+  /** 发送者 neko id（由上下文补齐；未知时为 null） */
+  fromNekoId: number | null
+  /** 接收方 JID（群聊为空串） */
+  to: string
+  /** 群聊 id（单聊为 null） */
+  roomId: number | null
+  /** 发送时间（毫秒时间戳） */
+  ts: number
+  body: string
+  mine: boolean
+  recalled: boolean
+  /** 被群主/管理员撤回 */
+  byAdmin: boolean
+  /** 图片地址（已归一化为 /chat/uploads/<id>，渲染时再追加 token） */
+  image: string | null
+}
+
+/** 联系人（LineWeb 好友 / 有往来的 neko 原生账号） */
+export interface NekoContact {
+  key: string
+  nekoId: number
+  /** LineWeb 用户 id；neko 原生账号为 null */
+  linewebId: number | null
+  username: string
+  displayName: string
+  kind: 'lineweb' | 'native'
+  online: boolean
+  /** 最近消息时间（毫秒），0 表示没有往来 */
+  lastMessageAt: number
+  isFriend: boolean
+  remark: string
+}
+
+export interface NekoRoomMember {
+  nekoId: number
+  linewebId: number | null
+  username: string
+  displayName: string
+  role: 'owner' | 'admin' | 'member' | string
+  online: boolean
+  kind: 'lineweb' | 'native'
+}
+
+export interface NekoRoom {
+  key: string
+  id: number
+  name: string
+  ownerId: number
+  myRole: string
+  allMuted: boolean
+  announcement: string
+  notifyMuted: boolean
+  lastMessageAt: number
+  members: NekoRoomMember[]
+}
+
+export interface NekoSelf {
+  nekoId: number
+  linewebId: number
+  username: string
+  displayName: string
+}
+
+/** 好友申请（LineWeb Prisma 为准；nekoId 用于直接发起会话） */
+export interface NekoFriendRequest {
+  id: number
+  linewebId: number
+  nekoId: number
+  username: string
+  displayName: string
+  createdAt: string
+}
+
+/** GET /api/chat/xmpp/bootstrap 的响应 */
+export interface NekoBootstrap {
+  ticket: string
+  domain: string
+  mucDomain: string
+  historyLimit: number
+  wsPath: string
+  self: NekoSelf
+  friends: NekoContact[]
+  contacts: NekoContact[]
+  requestsIn: NekoFriendRequest[]
+  requestsOut: NekoFriendRequest[]
+  rooms: NekoRoom[]
+  pinnedChats: string[]
+}
+
+/** GET /api/chat/xmpp/state 的响应（无 ticket） */
+export type NekoStateView = Omit<NekoBootstrap, 'ticket' | 'wsPath'>
+
+/** GET /api/chat/xmpp/directory、/users 的条目 */
+export interface NekoDirectoryUser {
+  nekoId: number
+  linewebId: number | null
+  username: string
+  displayName: string
+  isLineWeb: boolean
+  online: boolean
+  lastMessageAt: number
+}
+
+/** 聊天页的会话聚合（联系人 + 群 + 最近消息 + 未读） */
+export interface NekoConversation {
+  key: string
+  kind: 'direct' | 'room'
+  title: string
+  /** 头像用的用户 id（LineWeb 用户取 id，原生账号取 nekoId 负数域不会命中头像 → 首字母兜底） */
+  avatarId: number
+  avatarName: string
+  contact: NekoContact | null
+  room: NekoRoom | null
+  lastMessage: NekoMessage | null
+  lastMessageAt: number
+  unread: number
+  pinned: boolean
+  online: boolean
+  /** 群成员（仅群聊） */
+  members: NekoRoomMember[]
+  /** 私聊对象是否为好友（非好友仍可发消息，仅提示） */
+  isFriend: boolean
+  canSend: boolean
+}
+

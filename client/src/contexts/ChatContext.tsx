@@ -34,16 +34,15 @@ interface ChatContextValue {
    * 当前实时传输模式：
    * - 'ws'：WebSocket 已认证打开，事件实时推送
    * - 'polling'：连接中/已断开/环境不支持/被强制降级，由页面轮询兜底
+   *
+   * 注意：聊天消息已迁移到 neko XMPP（见 `XmppChatContext`），这里的连接只承载
+   * `game:*` 推送与好友申请事件；未读角标由 `useXmppChat().unreadTotal` 提供。
    */
   transport: ChatTransport
-  /** 全部会话的未读消息总数（侧边栏角标） */
-  unreadTotal: number
   /** 待处理的好友申请数 */
   pendingFriendRequests: number
   /** 认证失败等需要展示给用户的错误 */
   error: string | null
-  /** 当前正在查看的会话 id —— 用于判断 message:new 是否需要增加未读 */
-  setActiveConversationId: (conversationId: number | null) => void
   /** 订阅服务端推送事件，返回取消订阅函数 */
   subscribe: (listener: ChatEventListener) => () => void
   /** 主动刷新摘要（登录后、事件驱动时调用） */
@@ -62,7 +61,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const userId = user?.id ?? null
 
   const [connectionState, setConnectionState] = useState<ChatConnectionState>('closed')
-  const [unreadTotal, setUnreadTotal] = useState(0)
   const [pendingFriendRequests, setPendingFriendRequests] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
@@ -76,14 +74,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   )
 
   const listenersRef = useRef<Set<ChatEventListener>>(new Set())
-  const activeConversationIdRef = useRef<number | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reconnectAttemptsRef = useRef(0)
-
-  const setActiveConversationId = useCallback((conversationId: number | null) => {
-    activeConversationIdRef.current = conversationId
-  }, [])
 
   const subscribe = useCallback((listener: ChatEventListener) => {
     listenersRef.current.add(listener)
@@ -96,7 +89,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     if (!userId) return
     try {
       const data = await api.get<ChatSummary>('/chat/summary')
-      if (typeof data?.unreadTotal === 'number') setUnreadTotal(data.unreadTotal)
       if (typeof data?.pendingFriendRequests === 'number') {
         setPendingFriendRequests(data.pendingFriendRequests)
       }
@@ -109,7 +101,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     // 未登录：清空状态，不建立连接
     if (!userId) {
       setConnectionState('closed')
-      setUnreadTotal(0)
       setPendingFriendRequests(0)
       setError(null)
       return
@@ -247,25 +238,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
         emit(payload as ChatEvent)
 
+        // 聊天消息不再经过这里（已迁移到 neko XMPP）；只关心好友关系的角标刷新
         switch (payload.type) {
-          case 'message:new': {
-            // 自己的消息不增加未读；当前正在查看的会话也不增加
-            if (
-              payload.message.senderId !== userId &&
-              payload.conversationId !== activeConversationIdRef.current
-            ) {
-              void refreshSummary()
-            }
-            break
-          }
           case 'friend:request':
           case 'friend:accepted':
           case 'friend:rejected':
           case 'friend:removed':
-            void refreshSummary()
-            break
-          case 'conversation:removed':
-            // 被移出/群解散后，未读总数需要同步下降
             void refreshSummary()
             break
           default:
@@ -342,20 +320,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     () => ({
       connectionState,
       transport,
-      unreadTotal,
       pendingFriendRequests,
       error,
-      setActiveConversationId,
       subscribe,
       refreshSummary,
     }),
     [
       connectionState,
       transport,
-      unreadTotal,
       pendingFriendRequests,
       error,
-      setActiveConversationId,
       subscribe,
       refreshSummary,
     ]
