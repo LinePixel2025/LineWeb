@@ -1025,6 +1025,10 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
             wsFailures += 1
             if (wsFailures >= 2) preferHttp = true
             client.close()
+            // 票据是一次性的：超时的 WS 可能已被上游消费，降级前必须换新的
+            const fresh = await api.get<{ ticket: string }>('/chat/xmpp/ticket')
+            if (disposed) return
+            if (fresh?.ticket) credentials.password = fresh.ticket
             await client.connectHttp(view.domain, credentials)
           }
         } else {

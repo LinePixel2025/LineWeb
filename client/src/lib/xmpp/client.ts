@@ -13,8 +13,12 @@
 import api from '../api'
 import { escXml, parseStanza, type XmppElement } from './protocol'
 
-/** WS 连接（含认证 + 绑定）超时 */
-export const XMPP_CONNECT_TIMEOUT_MS = 8_000
+/**
+ * WS 连接（含认证 + 绑定）超时。
+ * 15s：经 Cloudflare Tunnel 时握手常在 3–8s，页面首屏并发（会话/游戏 sync）时会超过 8s，
+ * 过早超时会白白消耗一次性票据并误降级到轮询。
+ */
+export const XMPP_CONNECT_TIMEOUT_MS = 15_000
 /** 长轮询降级握手超时 */
 const HTTP_CONNECT_TIMEOUT_MS = 12_000
 /** 单次长轮询请求超时（服务端挂 25s，留足余量） */
@@ -191,7 +195,9 @@ export class XmppClient extends EventTarget {
       } catch (err) {
         if (this.httpSessionId !== sessionId) return
         const status = (err as { status?: number } | null)?.status
-        if (status === 401 || status === 403) {
+        // 只有 401 才是登录失效；403 多为上游会话已被回收（换票据/切网/另一标签），
+        // 交给 onClose 走指数退避重连即可，否则会把可恢复的断线误判成「认证失败」。
+        if (status === 401) {
           this.dispatchEvent(new CustomEvent('auth-error'))
         }
         this.httpClosed()
