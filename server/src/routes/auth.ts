@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth.js'
 import { registerUser, loginUser, getUserById, updateUserSettings, updateUserProfile, invalidateUserTokens } from '../services/authService.js'
 import { registerSchema, loginSchema, updateSettingsSchema, updateProfileSchema } from '../config/index.js'
 import { getErrorMessage, getErrorStatus } from '../lib/utils.js'
+import { ensureNekoAccount } from '../services/nekoAccountSync.js'
 
 const router = Router()
 
@@ -28,6 +29,8 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
   const { username, email, password } = parsed.data
   try {
     const data = await registerUser(username, email, password)
+    // 聊天账号按需补建（失败只告警，不阻塞注册）
+    void ensureNekoAccount(data.user.id)
     res.status(201).json(data)
   } catch (err: unknown) {
     if (getErrorStatus(err) === 409) {
@@ -79,6 +82,10 @@ router.put('/profile', authenticate, async (req: Request, res: Response) => {
 
   try {
     const result = await updateUserProfile(req.user!.userId, parsed.data)
+    // 改名后同步 neko displayName；kick 让在线端重连并刷新显示名（用户名 lw_<id> 不变）
+    if (parsed.data.username) {
+      void ensureNekoAccount(req.user!.userId, { kick: true })
+    }
     // 修改密码会使 tokenValidAfter 前移，旧 token 在下一次请求即失效（无需清缓存）
     res.json(result)
   } catch (err: unknown) {

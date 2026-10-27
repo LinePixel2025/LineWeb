@@ -22,11 +22,15 @@ import aiRoutes from './routes/ai.js'
 import aiChatRoutes from './routes/aiChat.js'
 import oauthRoutes from './routes/oauth.js'
 import chatRoutes from './routes/chat.js'
+import chatXmppRoutes from './routes/chatXmpp.js'
+import chatUploadsRoutes from './routes/chatUploads.js'
 import gameRoutes from './routes/games.js'
 import { authenticate } from './middleware/auth.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel, isNodeConnected } from './services/storageTunnel.js'
 import { initChatHub } from './services/chatHub.js'
+import { initNekoXmppProxy } from './services/nekoWsProxy.js'
+import { startNekoAccountSync, stopNekoAccountSync } from './services/nekoAccountSync.js'
 import { startGameSweeper } from './services/gameService.js'
 import { syncDriveFiles } from './services/storageSync.js'
 import { deduplicateDriveFiles } from './services/dedupDriveFiles.js'
@@ -86,6 +90,8 @@ app.use(compression({
     && !req.originalUrl.includes('/download')
     && !req.originalUrl.includes('/ai/write/draft')
     && !req.originalUrl.includes('/ai-chat/messages')
+    && !req.originalUrl.includes('/chat/uploads')
+    && !req.originalUrl.includes('/chat/xmpp/http-poll')
     && !/\/chat\/messages\/\d+\/image(\?|$)/.test(req.originalUrl)
     && !/\/ai-chat\/images\/\d+\/image(\?|$)/.test(req.originalUrl),
 }))
@@ -135,6 +141,8 @@ const apiLimiterSkipPaths = [
   /^\/games\/parkour\/matches\/\d+\/actions\/?$/,
   /^\/games\/parkour\/sync\/?$/,
   /^\/games\/parkour\/presence\/?$/,
+  // 聊天 XMPP 长轮询（25s 挂起）由路由内按用户限流接管
+  /^\/chat\/xmpp\/http-/,
 ]
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -194,6 +202,8 @@ app.use('/api/health', healthRoutes)
 app.use('/api/ai', aiRoutes)
 app.use('/api/ai-chat', aiChatRoutes)
 app.use('/api/oauth', oauthRoutes)
+// 聊天已迁移到 neko XMPP：/api/chat/xmpp/* 必须在 /api/chat 之前挂载（前缀更长）
+app.use('/api/chat/xmpp', chatXmppRoutes)
 app.use('/api/chat', chatRoutes)
 app.use('/api/games', gameRoutes)
 
@@ -297,12 +307,18 @@ app.get('/api', (_req, res) => {
       flow: '授权码 + PKCE：应用跳转 /authorize?client_id&redirect_uri&scope&state&code_challenge → 用户登录并同意 → 回调带回一次性 code → 应用用 code + code_verifier 调用 /api/oauth/token 换取 access_token（1 小时）与 refresh_token（30 天，每次刷新轮换）。应用令牌是作用域令牌（role=app），只能访问白名单端点，无法获得任何管理能力。',
     },
     chat: {
-      summary: { method: 'GET', path: '/api/chat/summary', auth: true, description: '未读消息总数与待处理好友申请数' },
+      note: '私信 / 群聊已迁移到独立 XMPP 服务（internet_neko）：消息与会话走 /api/chat/xmpp/*，浏览器经 /ws/xmpp 中继（不可用时降级 /api/chat/xmpp/http-* 长轮询）。好友关系仍以 LineWeb Prisma 为唯一真相源。',
+      summary: { method: 'GET', path: '/api/chat/summary', auth: true, description: '待处理好友申请数（unreadTotal 恒为 0，未读改由客户端水位统计）' },
       friends: { method: 'GET', path: '/api/chat/friends', auth: true, description: '好友列表（DELETE /api/chat/friends/:userId 删除好友）' },
       friendRequests: { method: 'GET', path: '/api/chat/friend-requests', auth: true, description: '收到/发出的好友申请；POST /api/chat/friend-requests 发送，POST /api/chat/friend-requests/:id/accept|reject 处理' },
-      conversations: { method: 'GET', path: '/api/chat/conversations', auth: true, description: '我的会话列表（含最后一条消息与未读数）；POST /api/chat/conversations/direct 发起私聊，POST /api/chat/conversations/group 创建群聊（≤50 人，仅可邀请好友）' },
-      messages: { method: 'GET', path: '/api/chat/conversations/:id/messages?before=&limit=', auth: true, description: '历史消息（游标分页，id 正序）；POST /api/chat/conversations/:id/messages 发送纯文本消息；POST /api/chat/conversations/:id/images 发送图片（multipart/form-data，字段名 file）；GET /api/chat/messages/:id/image 读取图片（支持 ?token= 直链）；POST /api/chat/messages/:id/recall 撤回自己发送的消息（2 分钟内）；PUT /api/chat/conversations/:id/read 更新已读位置' },
-      ws: '实时推送：ws(s)://<host>/ws/chat，连接后 5 秒内发送 {"type":"auth","token":"<登录令牌>"}，服务端回 {"type":"auth_ok","userId":N}；推送 message:new / message:recalled / conversation:updated / conversation:removed / friend:request / friend:accepted / friend:rejected / friend:removed，客户端 {type:"ping"} ↔ 服务端 {type:"pong"}。认证失败以 close code 4001 断开。',
+      bootstrap: { method: 'GET', path: '/api/chat/xmpp/bootstrap', auth: true, description: '一次性票据 + 过滤后的聊天状态（好友 / 有往来的原生联系人 / 群 / 申请 / 置顶）' },
+      state: { method: 'GET', path: '/api/chat/xmpp/state', auth: true, description: '刷新聊天状态（轮询降级时使用）；GET /api/chat/xmpp/ticket 换新票据' },
+      directory: { method: 'GET', path: '/api/chat/xmpp/directory?q=', auth: true, description: '搜索 neko 用户（≤30 条；lw_* 只回好友；受 NEKO_CHAT_ALLOW_NATIVE 控制）；GET /api/chat/xmpp/users?jids= 反查陌生来信' },
+      rooms: { method: 'POST', path: '/api/chat/xmpp/rooms', auth: true, description: '建群 { name, memberIds }；群管理 POST /api/chat/xmpp/rooms/:id/name|members|leave|disband|role|transfer|mute|mute-all|announcement' },
+      messages: { method: 'POST', path: '/api/chat/xmpp/messages/recall', auth: true, description: '撤回消息（5 分钟内，仅本人）；群主/管理员用 /messages/admin-recall' },
+      uploads: { method: 'POST', path: '/api/chat/xmpp/uploads', auth: true, description: '图片上传（multipart/form-data，字段名 file）→ {ok,url:"/chat/uploads/<24hex>",id,mime}；读取 GET /chat/uploads/:id?token=<登录令牌>' },
+      legacy: { method: 'GET', path: '/api/chat/conversations', auth: true, description: '已废弃：会话/消息相关旧端点全部返回 410 CHAT_MIGRATED；旧 Prisma 聊天表与存储节点 _chat/ 图片仅作只读存档' },
+      ws: '实时连接：ws(s)://<host>/ws/xmpp?token=<登录令牌>（Express 字节级中继到 neko /xmpp-websocket，SASL/bind 由浏览器侧完成）。/ws/chat 保留给游戏与好友事件：连接后 5 秒内发送 {"type":"auth","token":"<登录令牌>"}，推送 game:* / friend:*，客户端 {type:"ping"} ↔ 服务端 {type:"pong"}，认证失败以 close code 4001 断开。',
     },
     aiChat: {
       quota: { method: 'GET', path: '/api/ai-chat/quota', auth: true, description: 'AI 对话功能开关与当日已用/剩余提问次数（Asia/Shanghai 0 点重置；dailyLimit=0 不限）' },
@@ -535,6 +551,9 @@ app.get('/api/health', async (_req, res) => {
   }
 })
 
+// === 聊天图片中继（同源）— 必须在静态资源 / SPA fallback 之前 ===
+app.use('/chat', chatUploadsRoutes)
+
 // 生产环境：serve 构建后的前端 + SPA fallback（必须在 errorHandler 之前）
 if (process.env.NODE_ENV === 'production') {
   const clientDist = path.join(__dirname, '../../client/dist')
@@ -565,11 +584,18 @@ const server = http.createServer(app)
 // 初始化 WebSocket 隧道
 initStorageTunnel(server)
 
-// 初始化聊天 WebSocket Hub（/ws/chat）
+// 聊天 XMPP 中继（/ws/xmpp）：必须在 initChatHub 之前注册，
+// chatHub 会快照并转发未知路径的 upgrade
+initNekoXmppProxy(server)
+
+// 初始化聊天 WebSocket Hub（/ws/chat）——现只承载游戏事件
 initChatHub(server)
 
 // 游戏定时器：邀请过期、超时结算、掉线判负、结束对局回收（每 15 秒，unref）
 startGameSweeper()
+
+// 聊天账号全量同步（延迟 10 秒，失败只告警，不影响站点启动）
+startNekoAccountSync()
 
 // 网盘文件定期同步
 const syncInterval = setInterval(() => {
@@ -617,6 +643,7 @@ const shutdown = (signal: string) => {
 
   clearInterval(syncInterval)
   clearTimeout(startupTimer)
+  stopNekoAccountSync()
 
   server.close((err) => {
     if (err) {

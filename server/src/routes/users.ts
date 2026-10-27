@@ -7,6 +7,7 @@ import { adminSetAvatar } from '../services/avatarService.js'
 import { sendCommand, isNodeConnected } from '../services/storageTunnel.js'
 import { updateUserSchema, updateUserQuotaSchema } from '../config/index.js'
 import { authenticate, requireCapability } from '../middleware/auth.js'
+import { deactivateNekoAccount } from '../services/nekoAccountSync.js'
 
 const router = Router()
 
@@ -345,6 +346,9 @@ router.delete('/:id', async (req: Request, res: Response) => {
       await prisma.conversation.deleteMany({ where: { id: { in: orphanIds } } }).catch(() => {})
     }
   }
+
+  // 停用 neko 聊天账号并踢线（聊天记录保留，账号不可再登录）
+  await deactivateNekoAccount(id)
 
   res.json({ message: '已删除' })
 })

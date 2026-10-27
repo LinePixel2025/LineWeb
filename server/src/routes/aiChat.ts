@@ -29,7 +29,7 @@ import {
 import { ChatImageLimitError, chatImageLimitBody } from '../services/chatImageService.js'
 import { getDriveQuota, formatQuotaSize } from '../services/driveQuota.js'
 import { isNodeConnected, sendCommand, streamRead } from '../services/storageTunnel.js'
-import { receiveMultipartImage } from './chat.js'
+import { receiveMultipartImage } from '../lib/multipartImage.js'
 import prisma from '../lib/prisma.js'
 
 /**
