@@ -16,8 +16,11 @@ import { fetchUpload, sessionHashOf } from '../services/nekoChat.js'
  */
 const router = Router()
 
-router.use(authenticate)
-
+/**
+ * 认证只加在 /uploads/:id 上。
+ * ⚠️ 不能写 `router.use(authenticate)`：本路由挂在 `/chat`，会把 SPA 的 `/chat`、
+ * `/chat/u<id>`、`/chat/r<id>` 页面请求一并拦成 401 JSON。
+ */
 /** 24 位小写 hex（neko 的 upload id 格式） */
 const UPLOAD_ID_RE = /^[0-9a-f]{24}$/
 
@@ -29,6 +32,7 @@ function rawToken(req: Request): string {
 
 router.get(
   '/uploads/:id',
+  authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     const id = String(req.params.id || '')
     if (!UPLOAD_ID_RE.test(id)) {
