@@ -77,6 +77,7 @@ export interface NekoSticker {
   url: string
   mime: string
 }
+
 export interface NekoState {
   domain: string
   mucDomain: string
@@ -86,7 +87,7 @@ export interface NekoState {
   friends: NekoStateFriend[]
   friendRequestsIn: NekoStateFriendRequest[]
   friendRequestsOut: NekoStateFriendRequest[]
-  stickers: Array<Record<string, unknown>>
+  stickers: NekoSticker[]
   pinnedChats: string[]
   users: NekoStateUser[]
   rooms: NekoStateRoom[]

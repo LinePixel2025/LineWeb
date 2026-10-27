@@ -8,6 +8,7 @@ import {
   type NekoStateFriendRequest,
   type NekoStateRoom,
   type NekoStateUser,
+  type NekoSticker,
 } from './nekoChat.js'
 
 /**
@@ -86,6 +87,7 @@ export interface ChatBootstrapView {
   contacts: ChatContactView[]
   requestsIn: ChatRequestView[]
   requestsOut: ChatRequestView[]
+  stickers: NekoSticker[]
   rooms: ChatRoomView[]
   pinnedChats: string[]
 }
@@ -199,6 +201,24 @@ function nekoRequest(item: NekoStateFriendRequest): ChatRequestView {
     displayName: item.displayName || item.username,
     createdAt: isoStamp(item.createdAt),
   }
+}
+
+const STICKER_URL_RE = /^\/chat\/uploads\/[0-9a-f]{24}$/
+
+/** 会话键统一且只接受 `/chat/uploads/<24hex>` 的表情地址 */
+function toStickers(state: NekoState): NekoSticker[] {
+  const rows = Array.isArray(state.stickers) ? state.stickers : []
+  const result: NekoSticker[] = []
+  const seen = new Set<number>()
+  for (const row of rows) {
+    const id = Number(row?.id)
+    const url = String(row?.url || '')
+    if (!Number.isInteger(id) || id <= 0 || seen.has(id)) continue
+    if (!STICKER_URL_RE.test(url)) continue
+    seen.add(id)
+    result.push({ id, url, mime: String(row?.mime || 'image/png') })
+  }
+  return result
 }
 
 /** 按「好友 → 联系人 → 群 → 置顶」顺序组装聊天页状态 */
@@ -337,6 +357,7 @@ export function buildChatView(input: BuildChatViewInput): ChatBootstrapView {
     contacts,
     requestsIn,
     requestsOut,
+    stickers: toStickers(state),
     rooms,
     pinnedChats,
   }

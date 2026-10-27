@@ -267,6 +267,14 @@ export interface NekoFriendRequest {
   createdAt: string
 }
 
+/** 表情包（neko 收藏的聊天图片） */
+export interface NekoSticker {
+  id: number
+  /** 归一化地址 `/chat/uploads/<24hex>`，渲染时再追加登录令牌 */
+  url: string
+  mime: string
+}
+
 /** GET /api/chat/xmpp/bootstrap 的响应 */
 export interface NekoBootstrap {
   ticket: string
@@ -279,6 +287,7 @@ export interface NekoBootstrap {
   contacts: NekoContact[]
   requestsIn: NekoFriendRequest[]
   requestsOut: NekoFriendRequest[]
+  stickers: NekoSticker[]
   rooms: NekoRoom[]
   pinnedChats: string[]
 }

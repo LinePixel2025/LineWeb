@@ -201,7 +201,7 @@ router.get(
   }),
 )
 
-// === neko 原生好友 ===
+// === neko 原生好友与表情包 ===
 
 /**
  * LineWeb↔LineWeb 仍以 Prisma 为准；neko 原生账号的好友关系走 neko 自带好友系统。
@@ -313,6 +313,49 @@ router.post(
       user,
       sessionHash,
       body: { userId: nekoId },
+    })
+    res.json(result ?? { ok: true })
+  }),
+)
+
+const stickerSchema = z.object({
+  // neko 上传 id：24 位小写十六进制
+  uploadId: z.string().regex(/^[0-9a-f]{24}$/, '无效的图片'),
+})
+
+// POST /api/chat/xmpp/stickers — 收藏图片为表情
+router.post(
+  '/stickers',
+  chatWriteLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const parsed = stickerSchema.safeParse(req.body || {})
+    if (!parsed.success) throw new AppError('无效的图片', 400)
+    const user = await currentUser(req)
+    const sessionHash = await currentSessionHash(req)
+    const result = await callBrowserApi('POST', '/chat/stickers', {
+      user,
+      sessionHash,
+      body: { uploadId: parsed.data.uploadId },
+    })
+    res.json(result ?? { ok: true })
+  }),
+)
+
+const stickerRemoveSchema = z.object({ id: z.number().int().positive() })
+
+// POST /api/chat/xmpp/stickers/remove — 移出表情包
+router.post(
+  '/stickers/remove',
+  chatWriteLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const parsed = stickerRemoveSchema.safeParse(req.body || {})
+    if (!parsed.success) throw new AppError('无效的表情', 400)
+    const user = await currentUser(req)
+    const sessionHash = await currentSessionHash(req)
+    const result = await callBrowserApi('POST', '/chat/stickers/remove', {
+      user,
+      sessionHash,
+      body: { id: parsed.data.id },
     })
     res.json(result ?? { ok: true })
   }),

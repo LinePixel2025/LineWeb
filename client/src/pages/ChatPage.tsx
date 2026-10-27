@@ -43,6 +43,7 @@ export default function ChatPage() {
     incoming,
     outgoing,
     unreadTotal,
+    stickers,
     setActiveKey,
     messages,
     messagesLoading,
@@ -52,6 +53,9 @@ export default function ChatPage() {
     loadMore,
     sendText,
     sendImage,
+    sendSticker,
+    addSticker,
+    removeSticker,
     recallMessage,
     startDirect,
     createGroup,
@@ -453,6 +457,12 @@ export default function ChatPage() {
           onBack={() => navigate('/chat')}
           onSend={handleSend}
           onSendImage={handleSendImage}
+          onSendSticker={(sticker) => {
+            if (activeKey) void sendSticker(activeKey, sticker)
+          }}
+          stickers={stickers}
+          onAddSticker={addSticker}
+          onRemoveSticker={removeSticker}
           onRecall={handleRecall}
           onLoadMore={() => {
             if (activeKey) loadMore(activeKey)

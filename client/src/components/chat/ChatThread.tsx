@@ -2,8 +2,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import UserAvatar from '../UserAvatar'
 import ChatComposer from './ChatComposer'
 import ChatImageLightbox from './ChatImageLightbox'
+import ChatStickerPanel from './ChatStickerPanel'
 import { canRecall, chatImageUrl, senderLabel } from '../../lib/chat'
-import type { NekoConversation, NekoMessage } from '../../types/chat'
+import type { NekoConversation, NekoMessage, NekoSticker } from '../../types/chat'
 
 interface Props {
   conversation: NekoConversation | null
@@ -19,6 +20,11 @@ interface Props {
   onSend: (content: string) => Promise<void> | void
   /** 发送图片（页面负责上传与错误提示） */
   onSendImage?: (file: File) => Promise<void> | void
+  /** 表情包（三项都传入才渲染表情入口） */
+  stickers?: NekoSticker[]
+  onSendSticker?: (sticker: NekoSticker) => void
+  onAddSticker?: (file: File) => Promise<void> | void
+  onRemoveSticker?: (id: number) => Promise<void> | void
   /** 撤回消息（确认逻辑在 ChatThread 内，页面只负责请求） */
   onRecall?: (messageId: number) => Promise<void> | void
   onLoadMore: () => void
@@ -59,6 +65,10 @@ export default function ChatThread({
   onBack,
   onSend,
   onSendImage,
+  stickers = [],
+  onSendSticker,
+  onAddSticker,
+  onRemoveSticker,
   onRecall,
   onLoadMore,
   onAddMembers,
@@ -79,6 +89,7 @@ export default function ChatThread({
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState('')
   const [previewImage, setPreviewImage] = useState<string | null>(null)
+  const [stickersOpen, setStickersOpen] = useState(false)
   // 「撤回」按钮的 5 分钟窗口需要自动消失：低频 tick 触发重渲染
   const [now, setNow] = useState(() => Date.now())
   const menuRef = useRef<HTMLDivElement | null>(null)
@@ -97,6 +108,7 @@ export default function ChatThread({
     setMenuOpen(false)
     setRenaming(false)
     setPreviewImage(null)
+    setStickersOpen(false)
     const element = listRef.current
     if (element) element.scrollTop = element.scrollHeight
   }, [conversationKey])
@@ -416,7 +428,9 @@ export default function ChatThread({
             }
 
             const recallable = own && onRecall !== undefined && canRecall(message, now)
-            const isImage = Boolean(message.image)
+            // neko 的表情消息 = body 固定 [表情] + XHTML 图片；渲染成无气泡贴纸
+            const isSticker = Boolean(message.image) && message.body === '[表情]'
+            const isImage = Boolean(message.image) && !isSticker
             const sender = avatarOf(conversation, message)
 
             return (
@@ -442,7 +456,14 @@ export default function ChatThread({
                       </button>
                     )}
                   </div>
-                  {isImage ? (
+                  {isSticker ? (
+                    <img
+                      className="gh-chat-message-sticker"
+                      src={chatImageUrl(message.image)}
+                      alt="表情"
+                      loading="lazy"
+                    />
+                  ) : isImage ? (
                     <button
                       type="button"
                       className="gh-chat-message-image-wrap"
@@ -473,9 +494,27 @@ export default function ChatThread({
         />
       )}
 
+      {onSendSticker && onAddSticker && onRemoveSticker && (
+        <ChatStickerPanel
+          open={stickersOpen}
+          stickers={stickers}
+          onSend={(sticker) => {
+            onSendSticker(sticker)
+            setStickersOpen(false)
+          }}
+          onAdd={onAddSticker}
+          onRemove={onRemoveSticker}
+          onClose={() => setStickersOpen(false)}
+        />
+      )}
+
       <ChatComposer
         onSend={handleSend}
         onSendImage={onSendImage}
+        onToggleStickers={
+          onSendSticker ? () => setStickersOpen((open) => !open) : undefined
+        }
+        stickersOpen={stickersOpen}
         disabled={!conversation.canSend}
         disabledHint={
           conversation.kind === 'room'

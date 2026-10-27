@@ -44,6 +44,8 @@
 | POST | `/friends/request` | 向 neko 原生账号发好友申请 `{nekoId}`（`lw_*` 目标返回 400，请走站内好友申请） |
 | POST | `/friends/respond` | 处理 neko 侧好友申请 `{requestId, accept}`；接受 `lw_*` 申请会同时补建 Prisma 双向好友 |
 | POST | `/friends/remove` | 删除 neko 原生好友 `{nekoId}`（`lw_*` 目标返回 400） |
+| POST | `/stickers` | 收藏表情 `{uploadId}`（先调 `/uploads` 拿 24 位 hex id） |
+| POST | `/stickers/remove` | 移出表情包 `{id}` |
 | POST | `/http-session` | 轮询降级：创建 HTTP 会话 |
 | POST | `/http-stanza` | 轮询降级：发送一帧（**同样做单聊好友校验**，非好友 403） |
 | GET | `/http-poll` | 轮询降级：长轮询取帧（最长 25 秒） |
@@ -55,7 +57,7 @@
 
 **好友关系合并**：`/bootstrap` 与 `/state` 的 `contacts` / `friends` 由两套关系合并而来——LineWeb↔LineWeb 以 Prisma 为准（`source:'lineweb'`，带 `linewebId`），LineWeb↔neko 原生账号用 neko 自带好友系统（`source:'neko'`，`linewebId:null`）。系统账号 `notice`、文件传输助手 `file` 与停用账号一律过滤。`NEKO_CHAT_ALLOW_NATIVE=false` 时原生好友、原生申请与原生搜索全部隐藏（此时单聊守卫也会拒绝发往原生账号，避免「加了好友却发不出」）。删除 LineWeb 好友时会 best-effort 清理 neko 侧遗留关系。
 
-**历史图片**：neko 的历史查询把 XHTML 以转义文本塞进 `<html>` 子节点，因此 `parseHistoryMessages` 会同时尝试帧属性与 `<html>` 子节点的文本两条路径提取图片；两条路径都只认 `/chat/uploads/<24 位 hex>` 白名单。
+**历史图片与表情**：neko 的历史查询把 XHTML 以转义文本塞进 `<html>` 子节点，因此 `parseHistoryMessages` 会同时尝试帧属性与 `<html>` 子节点的文本两条路径提取图片；两条路径都只认 `/chat/uploads/<24 位 hex>` 白名单。表情消息没有独立类型：`body === '[表情]'` 且带图片即为贴纸，客户端按无气泡贴纸渲染。
 
 ### 0.3 旧端点去向
 

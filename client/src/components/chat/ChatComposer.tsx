@@ -7,6 +7,9 @@ interface Props {
   onSend: (content: string) => Promise<void> | void
   /** 发送图片：页面负责上传并在失败时展示错误 */
   onSendImage?: (file: File) => Promise<void> | void
+  /** 打开/收起表情包面板（传入才渲染「表情」按钮） */
+  onToggleStickers?: () => void
+  stickersOpen?: boolean
   /** 禁用输入（如对方已不是好友） */
   disabled?: boolean
   disabledHint?: string
@@ -17,6 +20,8 @@ interface Props {
 export default function ChatComposer({
   onSend,
   onSendImage,
+  onToggleStickers,
+  stickersOpen = false,
   disabled = false,
   disabledHint,
   placeholder = '输入消息…',
@@ -108,28 +113,45 @@ export default function ChatComposer({
         onKeyDown={handleKeyDown}
       />
       <div className="gh-chat-composer-bar">
-        {onSendImage && (
+        {(onSendImage || onToggleStickers) && (
           <div className="gh-chat-composer-tools">
-            <button
-              type="button"
-              className="gh-chat-composer-tool"
-              aria-label="发送图片"
-              title="发送图片"
-              disabled={!canAttach}
-              onClick={() => imageInputRef.current?.click()}
-            >
-              {uploading ? '发送中…' : '图片'}
-            </button>
-            <button
-              type="button"
-              className="gh-chat-composer-tool"
-              aria-label="拍照"
-              title="拍照"
-              disabled={!canAttach}
-              onClick={handleCameraClick}
-            >
-              拍照
-            </button>
+            {onToggleStickers && (
+              <button
+                type="button"
+                className={`gh-chat-composer-tool ${stickersOpen ? 'gh-chat-composer-tool--active' : ''}`}
+                aria-label="表情包"
+                aria-expanded={stickersOpen}
+                title="表情包"
+                disabled={!canAttach}
+                onClick={onToggleStickers}
+              >
+                表情
+              </button>
+            )}
+            {onSendImage && (
+              <>
+                <button
+                  type="button"
+                  className="gh-chat-composer-tool"
+                  aria-label="发送图片"
+                  title="发送图片"
+                  disabled={!canAttach}
+                  onClick={() => imageInputRef.current?.click()}
+                >
+                  {uploading ? '发送中…' : '图片'}
+                </button>
+                <button
+                  type="button"
+                  className="gh-chat-composer-tool"
+                  aria-label="拍照"
+                  title="拍照"
+                  disabled={!canAttach}
+                  onClick={handleCameraClick}
+                >
+                  拍照
+                </button>
+              </>
+            )}
           </div>
         )}
         <span className={`gh-chat-composer-count ${value.length > maxLength - 200 ? 'gh-chat-composer-count--warn' : ''}`}>

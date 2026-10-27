@@ -129,7 +129,11 @@ function makeState(): NekoChat['NekoState'] {
     friendRequestsOut: [
       { requestId: 601, userId: 31, username: 'quiet', displayName: '潜水', isAdmin: false, createdAt: 1700000001000 },
     ],
-    stickers: [],
+    stickers: [
+      { id: 1, url: '/chat/uploads/0123456789abcdef01234567', mime: 'image/png' },
+      { id: 2, url: 'https://evil.example/x.png', mime: 'image/png' },
+      { id: 3, url: '/static/a.png', mime: 'image/png' },
+    ],
     pinnedChats: [`u${BASE + 2}`, 'r7', `u${BASE + 99}`, 'r1', 'garbage'],
     users: [
       stateUser(BASE + 1, 'lw_1', '我', 100, true), // 自己
@@ -307,6 +311,9 @@ function checkView(): void {
   assertEqual(built.requestsIn[1].createdAt, new Date(1700000000000).toISOString(), '申请：毫秒时间戳转 ISO')
   assertEqual(built.requestsOut.map((r) => `${r.source}:${r.username}`), ['neko:quiet'], '申请：发出的 neko 申请')
 
+  assertEqual(built.stickers.length, 1, '表情：只保留合法上传地址')
+  assertEqual(built.stickers[0].url, '/chat/uploads/0123456789abcdef01234567', '表情：地址透传')
+
   assertEqual(built.rooms.map((r) => r.key), ['r7'], '群：剔除大厅与非成员群')
   assertEqual(built.rooms[0].name, '项目组', '群：名称')
   assertEqual(built.rooms[0].announcement, '本周目标', '群：公告')
@@ -322,6 +329,7 @@ function checkView(): void {
   assertEqual(noNative.contacts.map((c) => c.username), ['lw_2'], '开关：allowNative=false 时剔除原生账号')
   assertEqual(noNative.friends.map((c) => c.username), ['lw_2'], '开关：allowNative=false 时剔除原生好友')
   assertEqual(noNative.requestsIn.map((r) => r.source), ['lineweb'], '开关：allowNative=false 时剔除 neko 申请')
+  assertEqual(noNative.stickers.length, 1, '表情：与原生开关无关')
 
   const missingFriend = buildView(true, { friends: [{ id: 5, username: '新朋友' }] })
   const fallback = missingFriend.friends.find((item) => item.linewebId === 5)

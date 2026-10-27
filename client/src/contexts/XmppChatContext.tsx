@@ -9,7 +9,7 @@
  *   - 会话集合（`u<nekoId>` 单聊 / `r<roomId>` 群聊）与历史分页
  *   - 实时消息 / 撤回 / 群变更 / 在线状态
  *   - 客户端未读水位（neko 没有未读查询接口）
- *   - 发送文本 / 图片、撤回、群管理
+ *   - 发送文本 / 图片 / 表情包、撤回、群管理
  *   - 好友关系：LineWeb↔LineWeb 以 Prisma 为准，LineWeb↔neko 原生账号走 neko 好友系统，
  *     服务端把两套关系合并进 bootstrap，申请项用 `source` 区分来源
  */
@@ -35,7 +35,7 @@ import {
   totalUnread,
 } from '../lib/chat'
 import { XmppClient } from '../lib/xmpp/client'
-import { prepareChatImage } from '../lib/xmpp/image'
+import { prepareChatImage, prepareStickerImage } from '../lib/xmpp/image'
 import {
   directJidOf,
   directKeyOf,
@@ -68,6 +68,7 @@ import type {
   NekoRoom,
   NekoSelf,
   NekoStateView,
+  NekoSticker,
 } from '../types/chat'
 
 const INITIAL_RECONNECT_DELAY = 1_000
@@ -137,6 +138,11 @@ export interface XmppChatValue {
   loadMore: (key: string) => void
   sendText: (key: string, text: string) => Promise<void>
   sendImage: (key: string, file: File) => Promise<void>
+  /** 发送表情包（与图片消息同构，body 固定 [表情]） */
+  sendSticker: (key: string, sticker: NekoSticker) => void
+  /** 收藏图片为表情（自动压到 360px PNG） */
+  addSticker: (file: File) => Promise<void>
+  removeSticker: (id: number) => Promise<void>
   recallMessage: (key: string, messageId: number, admin?: boolean) => Promise<void>
   /** 打开/创建单聊，返回会话键 */
   startDirect: (target: NekoContact | NekoDirectoryUser) => string
@@ -154,6 +160,7 @@ export interface XmppChatValue {
   removeFriend: (contact: NekoContact) => Promise<void>
   searchDirectory: (query: string) => Promise<NekoDirectoryUser[]>
   refresh: () => Promise<void>
+  stickers: NekoSticker[]
 }
 
 const XmppChatContext = createContext<XmppChatValue | null>(null)
@@ -238,6 +245,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   const [rooms, setRooms] = useState<NekoRoom[]>([])
   const [incoming, setIncoming] = useState<NekoFriendRequest[]>([])
   const [outgoing, setOutgoing] = useState<NekoFriendRequest[]>([])
+  const [stickers, setStickers] = useState<NekoSticker[]>([])
   const [activeKey, setActiveKeyState] = useState<string | null>(null)
   const [messagesByKey, setMessagesByKey] = useState<Record<string, NekoMessage[]>>({})
   const [historyMeta, setHistoryMeta] = useState<Record<string, HistoryMeta>>({})
@@ -577,6 +585,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       commitContacts(view.contacts ?? [])
       setIncoming(view.requestsIn ?? [])
       setOutgoing(view.requestsOut ?? [])
+      setStickers(view.stickers ?? [])
 
       const pinned = new Set(pinnedRef.current)
       const prevMap = new Map(conversationsRef.current.map((conversation) => [conversation.key, conversation]))
@@ -1223,6 +1232,48 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
     [requireClient, requireTarget],
   )
 
+  const sendSticker = useCallback(
+    (key: string, sticker: NekoSticker) => {
+      if (!sticker?.url) return
+      const client = requireClient()
+      const target = requireTarget(key)
+      // 与 neko 原生客户端一致：正文固定 [表情]，图片走 XHTML-IM
+      client.sendMessage({
+        to: target.to,
+        type: target.type,
+        body: '[表情]',
+        xhtml: `<img src="${escXml(sticker.url)}" alt="表情"/>`,
+      })
+    },
+    [requireClient, requireTarget],
+  )
+
+  /** 上传图片并收藏为表情（复用聊天图片上传通道） */
+  const addSticker = useCallback(
+    async (file: File) => {
+      const prepared = await prepareStickerImage(file)
+      const form = new FormData()
+      form.append('file', prepared)
+      const uploaded = await api.postForm<{ ok: boolean; url: string; id: string }>(
+        '/chat/xmpp/uploads',
+        form,
+      )
+      const uploadId = uploaded?.id || ''
+      if (!uploadId) throw new Error('图片上传失败')
+      await api.post('/chat/xmpp/stickers', { uploadId })
+      await refreshView()
+    },
+    [refreshView],
+  )
+
+  const removeSticker = useCallback(
+    async (id: number) => {
+      await api.post('/chat/xmpp/stickers/remove', { id })
+      await refreshView()
+    },
+    [refreshView],
+  )
+
   const recallMessage = useCallback(
     async (key: string, messageId: number, admin = false) => {
       await api.post(admin ? '/chat/xmpp/messages/admin-recall' : '/chat/xmpp/messages/recall', {
@@ -1410,6 +1461,9 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       loadMore: loadMoreFor,
       sendText,
       sendImage,
+      sendSticker,
+      addSticker,
+      removeSticker,
       recallMessage,
       startDirect,
       createGroup,
@@ -1425,6 +1479,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       removeFriend,
       searchDirectory,
       refresh,
+      stickers,
     }),
     [
       connectionState,
@@ -1446,6 +1501,9 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       loadMoreFor,
       sendText,
       sendImage,
+      sendSticker,
+      addSticker,
+      removeSticker,
       recallMessage,
       startDirect,
       createGroup,
@@ -1461,6 +1519,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       removeFriend,
       searchDirectory,
       refresh,
+      stickers,
     ],
   )
 

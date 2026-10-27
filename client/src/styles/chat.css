@@ -1154,6 +1154,134 @@
   font-size: 11px;
 }
 
+.gh-chat-composer-tool--active {
+  border-color: var(--gh-accent);
+  background: var(--gh-btn-hover);
+  color: var(--gh-accent);
+}
+
+/* ===== 表情包 ===== */
+.gh-chat-sticker-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-2) var(--gh-space-3);
+  border-top: 1px solid var(--gh-border-muted);
+  background: var(--gh-canvas);
+}
+
+.gh-chat-sticker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-2);
+}
+
+.gh-chat-sticker-title {
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+}
+
+.gh-chat-sticker-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-1);
+}
+
+.gh-chat-sticker-close {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--gh-radius);
+  background: transparent;
+  color: var(--gh-text-tertiary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gh-chat-sticker-close:hover {
+  background: var(--gh-btn-hover);
+  color: var(--gh-text);
+}
+
+.gh-chat-sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: var(--gh-space-2);
+  max-height: 208px;
+  overflow-y: auto;
+}
+
+.gh-chat-sticker-item {
+  position: relative;
+}
+
+.gh-chat-sticker-send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 4px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+  background: var(--gh-bg);
+  cursor: pointer;
+}
+
+.gh-chat-sticker-send:hover {
+  border-color: var(--gh-accent);
+}
+
+.gh-chat-sticker-send img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.gh-chat-sticker-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--gh-border);
+  border-radius: 50%;
+  background: var(--gh-bg);
+  color: var(--gh-text-tertiary);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gh-chat-sticker-remove:hover:not(:disabled) {
+  border-color: var(--gh-danger);
+  color: var(--gh-danger);
+}
+
+.gh-chat-sticker-empty {
+  margin: 0;
+  padding: var(--gh-space-2) 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-sm);
+  text-align: center;
+}
+
+/* 贴纸消息：无气泡、无边框，与原生客户端观感一致 */
+.gh-chat-message-sticker {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 120px;
+  max-height: 120px;
+  object-fit: contain;
+  image-rendering: auto;
+}
+
 /* ===== 好友面板 ===== */
 .gh-chat-friends {
   display: flex;
