@@ -153,6 +153,17 @@ export function extractImageSrc(xml: string): string | null {
   return null
 }
 
+/**
+ * 取 `<html>` 子节点的文本（XHTML-IM）。
+ *
+ * neko 的历史查询把 XHTML 当**转义文本**塞进 `<html>`（`msg.c('html').t(row.xhtml)`），
+ * DOM 解析后 `.text` 就是还原好的 XHTML 字符串；实时消息则直接是元素结构。
+ * 两条路径都要能提取图片，因此历史解析需要这个回退。
+ */
+export function xhtmlTextOf(el: XmppElement): string {
+  return el.children.find((child) => child.name === 'html')?.text ?? ''
+}
+
 /** 给 `/chat/uploads/<id>` 追加登录令牌（`<img>` 无法带 Authorization 头） */
 export function withToken(src: string, token: string): string {
   const id = uploadIdOf(src)
@@ -283,7 +294,8 @@ export function parseHistoryMessages(
       mine,
       recalled,
       byAdmin: row.attrs.byAdmin === '1',
-      image: recalled ? null : extractImageSrc(row.xml),
+      // 历史行里的 XHTML 是转义文本（见 xhtmlTextOf），必须两条路径都试
+      image: recalled ? null : extractImageSrc(row.xml) || extractImageSrc(xhtmlTextOf(row)),
     })
   }
   return {
