@@ -9,7 +9,9 @@
  *   - 会话集合（`u<nekoId>` 单聊 / `r<roomId>` 群聊）与历史分页
  *   - 实时消息 / 撤回 / 群变更 / 在线状态
  *   - 客户端未读水位（neko 没有未读查询接口）
- *   - 发送文本 / 图片、撤回、群管理、好友申请（关系仍以 LineWeb Prisma 为准）
+ *   - 发送文本 / 图片、撤回、群管理
+ *   - 好友关系：LineWeb↔LineWeb 以 Prisma 为准，LineWeb↔neko 原生账号走 neko 好友系统，
+ *     服务端把两套关系合并进 bootstrap，申请项用 `source` 区分来源
  */
 
 import {
@@ -144,10 +146,12 @@ export interface XmppChatValue {
   renameRoom: (roomId: number, name: string) => Promise<void>
   leaveRoom: (roomId: number) => Promise<void>
   disbandRoom: (roomId: number) => Promise<void>
-  acceptRequest: (requestId: number) => Promise<void>
-  rejectRequest: (requestId: number) => Promise<void>
+  acceptRequest: (request: NekoFriendRequest) => Promise<void>
+  rejectRequest: (request: NekoFriendRequest) => Promise<void>
   addFriend: (linewebId: number) => Promise<void>
-  removeFriend: (linewebId: number) => Promise<void>
+  /** 向 neko 原生账号发起好友申请 */
+  addNativeFriend: (nekoId: number) => Promise<void>
+  removeFriend: (contact: NekoContact) => Promise<void>
   searchDirectory: (query: string) => Promise<NekoDirectoryUser[]>
   refresh: () => Promise<void>
 }
@@ -1295,8 +1299,12 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   )
 
   const acceptRequest = useCallback(
-    async (requestId: number) => {
-      await api.post(`/chat/friend-requests/${requestId}/accept`)
+    async (request: NekoFriendRequest) => {
+      if (request.source === 'neko') {
+        await api.post('/chat/xmpp/friends/respond', { requestId: request.id, accept: true })
+      } else {
+        await api.post(`/chat/friend-requests/${request.id}/accept`)
+      }
       await refreshView()
       void refreshSummary()
     },
@@ -1304,8 +1312,12 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   )
 
   const rejectRequest = useCallback(
-    async (requestId: number) => {
-      await api.post(`/chat/friend-requests/${requestId}/reject`)
+    async (request: NekoFriendRequest) => {
+      if (request.source === 'neko') {
+        await api.post('/chat/xmpp/friends/respond', { requestId: request.id, accept: false })
+      } else {
+        await api.post(`/chat/friend-requests/${request.id}/reject`)
+      }
       await refreshView()
       void refreshSummary()
     },
@@ -1321,11 +1333,23 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
     [refreshSummary, refreshView],
   )
 
-  const removeFriend = useCallback(
-    async (linewebId: number) => {
-      await api.delete(`/chat/friends/${linewebId}`)
+  const addNativeFriend = useCallback(
+    async (nekoId: number) => {
+      await api.post('/chat/xmpp/friends/request', { nekoId })
       await refreshView()
-      void refreshSummary()
+    },
+    [refreshView],
+  )
+
+  const removeFriend = useCallback(
+    async (contact: NekoContact) => {
+      if (contact.linewebId !== null) {
+        await api.delete(`/chat/friends/${contact.linewebId}`)
+        void refreshSummary()
+      } else {
+        await api.post('/chat/xmpp/friends/remove', { nekoId: contact.nekoId })
+      }
+      await refreshView()
     },
     [refreshSummary, refreshView],
   )
@@ -1353,7 +1377,8 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   // === 派生 ===
 
   const friends = useMemo(
-    () => contacts.filter((contact) => contact.kind === 'lineweb' && contact.isFriend),
+    // 好友 = LineWeb（Prisma）+ neko 原生（neko 好友系统），以服务端 isFriend 为准
+    () => contacts.filter((contact) => contact.isFriend),
     [contacts],
   )
   const unreadTotal = useMemo(() => totalUnread(conversations), [conversations])
@@ -1396,6 +1421,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       acceptRequest,
       rejectRequest,
       addFriend,
+      addNativeFriend,
       removeFriend,
       searchDirectory,
       refresh,
@@ -1431,6 +1457,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       acceptRequest,
       rejectRequest,
       addFriend,
+      addNativeFriend,
       removeFriend,
       searchDirectory,
       refresh,

@@ -41,6 +41,9 @@
 | POST | `/messages/recall` | 撤回 `{id}`（**窗口 5 分钟**，仅本人的消息） |
 | POST | `/messages/admin-recall` | 群主 / 管理员撤回群消息 |
 | POST | `/uploads` | 图片上传（`multipart/form-data`，字段 `file`）→ `{ok, url, id, mime}` |
+| POST | `/friends/request` | 向 neko 原生账号发好友申请 `{nekoId}`（`lw_*` 目标返回 400，请走站内好友申请） |
+| POST | `/friends/respond` | 处理 neko 侧好友申请 `{requestId, accept}`；接受 `lw_*` 申请会同时补建 Prisma 双向好友 |
+| POST | `/friends/remove` | 删除 neko 原生好友 `{nekoId}`（`lw_*` 目标返回 400） |
 | POST | `/http-session` | 轮询降级：创建 HTTP 会话 |
 | POST | `/http-stanza` | 轮询降级：发送一帧（**同样做单聊好友校验**，非好友 403） |
 | GET | `/http-poll` | 轮询降级：长轮询取帧（最长 25 秒） |
@@ -49,6 +52,10 @@
 **实时连接**：`wss://<站点>/ws/xmpp?token=<登录令牌>` —— Express 字节级中继到 neko `/xmpp-websocket`（剥 Origin、注入内部令牌、空闲 120 秒关闭、单聊好友校验）。WebSocket 不可用或 `?transport=polling` 时自动降级为上面的 `http-*` 长轮询。
 
 **图片读取**：`GET /chat/uploads/<24 位 hex id>?token=<登录令牌>`（挂在 `/api` 之外的同源路径，未带令牌 401；字节透传 neko）。
+
+**好友关系合并**：`/bootstrap` 与 `/state` 的 `contacts` / `friends` 由两套关系合并而来——LineWeb↔LineWeb 以 Prisma 为准（`source:'lineweb'`，带 `linewebId`），LineWeb↔neko 原生账号用 neko 自带好友系统（`source:'neko'`，`linewebId:null`）。系统账号 `notice`、文件传输助手 `file` 与停用账号一律过滤。`NEKO_CHAT_ALLOW_NATIVE=false` 时原生好友、原生申请与原生搜索全部隐藏（此时单聊守卫也会拒绝发往原生账号，避免「加了好友却发不出」）。删除 LineWeb 好友时会 best-effort 清理 neko 侧遗留关系。
+
+**历史图片**：neko 的历史查询把 XHTML 以转义文本塞进 `<html>` 子节点，因此 `parseHistoryMessages` 会同时尝试帧属性与 `<html>` 子节点的文本两条路径提取图片；两条路径都只认 `/chat/uploads/<24 位 hex>` 白名单。
 
 ### 0.3 旧端点去向
 
@@ -65,7 +72,7 @@
 - **撤回窗口 2 分钟 → 5 分钟**（neko 固定，前端文案与判断同步）。
 - **未读数是客户端水位**（`localStorage['lineweb_neko_read:<会话键>']`）：neko 没有服务端未读接口，换设备 / 清缓存后首屏未读可能偏少。
 - **历史消息不迁移**：旧消息仍在 Prisma 表与存储节点 `_chat/` 中，仅作只读存档，UI 不再展示。
-- **原生 neko 用户可互通**（默认开放）：能单聊、拉群、被搜到；但他们不是 LineWeb 好友，因此**没有好友申请 / 备注 / 游戏邀请**。关闭开关 `NEKO_CHAT_ALLOW_NATIVE=false` 后只保留 LineWeb 好友之间的会话。
+- **原生 neko 用户可互通**（默认开放）：能单聊、拉群、被搜到，并且可以**双向加好友**（neko 好友系统承载，LineWeb 与原生端都能发起/接受）；他们的申请在好友页带 `neko` 标签。关闭开关 `NEKO_CHAT_ALLOW_NATIVE=false` 后原生好友 / 申请 / 搜索整体隐藏，只保留 LineWeb 好友之间的会话。
 - **单聊好友校验**：发往 `lw_*` 的单聊消息在服务端中继层校验 Prisma 好友关系（WS 与轮询两条路径口径一致），非好友回 `not-authorized`。
 
 ### 0.5 下线与降级

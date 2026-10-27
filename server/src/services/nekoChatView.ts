@@ -5,6 +5,7 @@ import {
   toNekoId,
   toNekoUsername,
   type NekoState,
+  type NekoStateFriendRequest,
   type NekoStateRoom,
   type NekoStateUser,
 } from './nekoChat.js'
@@ -14,14 +15,19 @@ import {
  *
  * 原则：
  *   - 会话键统一 `u<nekoId>` / `r<roomId>`，原生联系人与 LineWeb 好友在同一键空间；
- *   - LineWeb 好友关系（Prisma）是唯一真相源：`lw_*` 联系人只保留好友；
- *   - 原生账号只在「有往来（lastMessageAt > 0）」时出现，且受 allowNative 开关控制；
+ *   - LineWeb 好友关系（Prisma）是 `lw_*` 账号的唯一真相源；
+ *   - neko 原生账号的好友关系以 neko 自身好友系统为准（`state.friends`），
+ *     两者在出口处合并，联系人/申请用 `source` 区分来源；
+ *   - 原生账号的可见性受 allowNative 开关控制（guard 同样拒绝向原生账号发私聊）；
  *   - 全员大厅、系统助理、文件传输助手、自己一律不出现在列表里。
  */
 
 export interface ChatRequestView {
+  /** LineWeb 好友申请为 Prisma id；neko 申请为 neko requestId */
   id: number
-  linewebId: number
+  /** 申请来源：lineweb = Prisma（LineWeb↔LineWeb），neko = neko 好友系统（原生账号） */
+  source: 'lineweb' | 'neko'
+  linewebId: number | null
   nekoId: number
   username: string
   displayName: string
@@ -109,10 +115,15 @@ function kindOfUsername(username: string): 'lineweb' | 'native' {
   return isLineWebUsername(username) ? 'lineweb' : 'native'
 }
 
+/** 系统助理 / 文件传输助手（文件助手会和每个启用账号自动互加好友） */
+function isSystemUsername(state: NekoState, username: string): boolean {
+  return username === state.systemUsername || username === state.fileHelperUsername
+}
+
 /** 原生账号过滤：系统助理 / 文件传输助手 / 无往来 / 开关关闭时都不出现 */
 function nativeAllowed(user: NekoStateUser, state: NekoState, allowNative: boolean): boolean {
   if (!allowNative) return false
-  if (user.username === state.systemUsername || user.username === state.fileHelperUsername) return false
+  if (isSystemUsername(state, user.username)) return false
   return user.lastMessageAt > 0
 }
 
@@ -150,14 +161,43 @@ function toRoomMember(
   }
 }
 
-function toRequest(item: LineWebFriendRequestItem): ChatRequestView {
+/** 兼容 neko 侧毫秒时间戳与 ISO 字符串 */
+function isoStamp(value: unknown): string {
+  if (value instanceof Date) return value.toISOString()
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return new Date(value).toISOString()
+  }
+  const text = typeof value === 'string' ? value : ''
+  if (text) {
+    const numeric = Number(text)
+    if (Number.isFinite(numeric) && numeric > 0) return new Date(numeric).toISOString()
+    const parsed = Date.parse(text)
+    if (!Number.isNaN(parsed)) return new Date(parsed).toISOString()
+  }
+  return new Date(0).toISOString()
+}
+
+function prismaRequest(item: LineWebFriendRequestItem): ChatRequestView {
   return {
     id: item.id,
+    source: 'lineweb',
     linewebId: item.user.id,
     nekoId: toNekoId(item.user.id),
     username: toNekoUsername(item.user.id),
     displayName: item.user.username,
-    createdAt: item.createdAt instanceof Date ? item.createdAt.toISOString() : String(item.createdAt),
+    createdAt: isoStamp(item.createdAt),
+  }
+}
+
+function nekoRequest(item: NekoStateFriendRequest): ChatRequestView {
+  return {
+    id: item.requestId,
+    source: 'neko',
+    linewebId: linewebIdOf(item.userId),
+    nekoId: item.userId,
+    username: item.username,
+    displayName: item.displayName || item.username,
+    createdAt: isoStamp(item.createdAt),
   }
 }
 
@@ -172,11 +212,13 @@ export function buildChatView(input: BuildChatViewInput): ChatBootstrapView {
     usersByName.set(user.username, user)
   }
 
-  const friendIds = new Set(input.friends.map((friend) => friend.id))
-  const friends: ChatContactView[] = input.friends.map((friend) => {
+  // 同一 neko 账号只出现一次：先 LineWeb 好友，再 neko 原生好友，最后有往来的原生账号
+  const contactByNekoId = new Map<number, ChatContactView>()
+
+  for (const friend of input.friends) {
     const nekoId = toNekoId(friend.id)
     const known = usersById.get(nekoId)
-    return toContact(
+    const contact = toContact(
       known ?? {
         id: nekoId,
         username: toNekoUsername(friend.id),
@@ -187,21 +229,76 @@ export function buildChatView(input: BuildChatViewInput): ChatBootstrapView {
       true,
       state.friends.find((row) => row.id === nekoId)?.remark || '',
     )
-  })
+    contactByNekoId.set(contact.nekoId, contact)
+  }
 
-  const contacts: ChatContactView[] = []
-  for (const friend of friends) contacts.push(friend)
+  if (allowNative) {
+    for (const friend of state.friends) {
+      if (friend.id === selfNekoId) continue
+      if (linewebIdOfUsername(friend.username) !== null) continue
+      if (isSystemUsername(state, friend.username)) continue
+      if (friend.enabled === false) continue
+      if (contactByNekoId.has(friend.id)) continue
+      const known = usersById.get(friend.id)
+      contactByNekoId.set(
+        friend.id,
+        toContact(
+          known ?? {
+            id: friend.id,
+            username: friend.username,
+            displayName: friend.displayName,
+            lastMessageAt: friend.lastMessageAt,
+            online: friend.online,
+          },
+          true,
+          friend.remark || '',
+        ),
+      )
+    }
+  }
+
   for (const user of state.users) {
     if (user.id === selfNekoId) continue
-    // LineWeb 账号只在好友列表里出现（好友已在上面加入）
+    // LineWeb 账号只在好友列表里出现
     if (linewebIdOfUsername(user.username) !== null) continue
     if (!nativeAllowed(user, state, allowNative)) continue
-    contacts.push(toContact(user, false))
+    if (contactByNekoId.has(user.id)) continue
+    contactByNekoId.set(user.id, toContact(user, false))
   }
-  contacts.sort((a, b) => {
+
+  const contacts = [...contactByNekoId.values()].sort((a, b) => {
     if (a.isFriend !== b.isFriend) return a.isFriend ? -1 : 1
     return b.lastMessageAt - a.lastMessageAt
   })
+  const friends = contacts.filter((contact) => contact.isFriend)
+
+  // 好友申请：Prisma（LineWeb↔LineWeb）与 neko（原生账号，含原生客户端操作的 lw_* 账号）合并
+  const prismaInIds = new Set(input.requestsIn.map((item) => item.user.id))
+  const prismaOutIds = new Set(input.requestsOut.map((item) => item.user.id))
+  const nekoVisible = (item: NekoStateFriendRequest): boolean => {
+    if (!allowNative) return false
+    if (item.userId === selfNekoId) return false
+    if (isSystemUsername(state, item.username)) return false
+    // 原生账号必须真实存在；lw_* 允许（state.users 未必列全所有 LineWeb 账号）
+    if (linewebIdOf(item.userId) === null && !usersById.has(item.userId)) return false
+    return true
+  }
+  const mergeRequests = (
+    prismaItems: LineWebFriendRequestItem[],
+    nekoItems: NekoStateFriendRequest[],
+    prismaIds: Set<number>,
+  ): ChatRequestView[] => [
+    ...prismaItems.map(prismaRequest),
+    ...nekoItems
+      .filter(nekoVisible)
+      .filter((item) => {
+        const linewebId = linewebIdOf(item.userId)
+        return linewebId === null || !prismaIds.has(linewebId)
+      })
+      .map(nekoRequest),
+  ]
+  const requestsIn = mergeRequests(input.requestsIn, state.friendRequestsIn || [], prismaInIds)
+  const requestsOut = mergeRequests(input.requestsOut, state.friendRequestsOut || [], prismaOutIds)
 
   const rooms: ChatRoomView[] = state.rooms
     .filter((room) => !room.isLobby && !!room.myRole)
@@ -238,8 +335,8 @@ export function buildChatView(input: BuildChatViewInput): ChatBootstrapView {
     },
     friends,
     contacts,
-    requestsIn: input.requestsIn.map(toRequest),
-    requestsOut: input.requestsOut.map(toRequest),
+    requestsIn,
+    requestsOut,
     rooms,
     pinnedChats,
   }

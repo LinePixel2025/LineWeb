@@ -444,6 +444,32 @@ export async function sendFriendRequest(
 }
 
 /**
+ * 双向好友写入（幂等）——Prisma 接受流程与 neko 来源的接受流程共用。
+ *
+ * 两个 upsert 必须一起提交，避免出现「只有单向好友」的半成品状态。
+ */
+function mutualFriendshipWrites(userId: number, friendId: number) {
+  return [
+    prisma.friendship.upsert({
+      where: { userId_friendId: { userId, friendId } },
+      create: { userId, friendId },
+      update: {},
+    }),
+    prisma.friendship.upsert({
+      where: { userId_friendId: { userId: friendId, friendId: userId } },
+      create: { userId: friendId, friendId: userId },
+      update: {},
+    }),
+  ]
+}
+
+/** 双向建立好友关系（幂等；neko 原生客户端操作 `lw_*` 账号时用于补齐 Prisma） */
+export async function ensureMutualFriendship(userId: number, friendId: number): Promise<void> {
+  if (userId === friendId) return
+  await prisma.$transaction(mutualFriendshipWrites(userId, friendId))
+}
+
+/**
  * POST /chat/friend-requests/:id/accept|reject —— 处理好友申请
  *
  * 仅收件人且状态为 pending 可操作（不存在 404、非收件人 403、已处理 409）；
@@ -468,16 +494,7 @@ export async function respondFriendRequest(
         data: { status: 'accepted', respondedAt: now },
       }),
       // 双向好友关系：upsert 保证幂等（SQLite 不支持 createMany + skipDuplicates）
-      prisma.friendship.upsert({
-        where: { userId_friendId: { userId: request.fromUserId, friendId: request.toUserId } },
-        create: { userId: request.fromUserId, friendId: request.toUserId },
-        update: {},
-      }),
-      prisma.friendship.upsert({
-        where: { userId_friendId: { userId: request.toUserId, friendId: request.fromUserId } },
-        create: { userId: request.toUserId, friendId: request.fromUserId },
-        update: {},
-      }),
+      ...mutualFriendshipWrites(request.fromUserId, request.toUserId),
     ])
   } else {
     await prisma.friendRequest.update({

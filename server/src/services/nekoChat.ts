@@ -60,6 +60,23 @@ export interface NekoStateRoom {
   members: NekoStateRoomMember[]
 }
 
+export interface NekoStateFriendRequest {
+  requestId: number
+  userId: number
+  username: string
+  displayName: string
+  isAdmin: boolean
+  /** neko 侧时间戳（毫秒）或 ISO 字符串，读取时两种都兼容 */
+  createdAt: number | string
+}
+
+/** 个人表情包（收藏的聊天图片） */
+export interface NekoSticker {
+  id: number
+  /** 归一化后的图片地址：`/chat/uploads/<24hex>` */
+  url: string
+  mime: string
+}
 export interface NekoState {
   domain: string
   mucDomain: string
@@ -67,8 +84,8 @@ export interface NekoState {
   fileHelperUsername: string
   historyLimit: number
   friends: NekoStateFriend[]
-  friendRequestsIn: Array<Record<string, unknown>>
-  friendRequestsOut: Array<Record<string, unknown>>
+  friendRequestsIn: NekoStateFriendRequest[]
+  friendRequestsOut: NekoStateFriendRequest[]
   stickers: Array<Record<string, unknown>>
   pinnedChats: string[]
   users: NekoStateUser[]
@@ -382,4 +399,29 @@ export async function fetchUpload(
   const mime = res.headers.get('content-type') || 'application/octet-stream'
   const data = Buffer.from(await res.arrayBuffer())
   return { data, mime }
+}
+
+/**
+ * 删除 neko 侧的好友关系（best-effort）。
+ *
+ * LineWeb 的好友关系以 Prisma 为准；但同一个 `lw_*` 账号也可能用 neko 原生客户端登录，
+ * neko 侧可能残留好友行，因此删除 LineWeb 好友时顺带清一次。失败只记日志、不影响主流程。
+ */
+export async function removeFriendOnNeko(
+  linewebUserId: number,
+  targetNekoId: number,
+): Promise<void> {
+  if (!isNekoChatEnabled()) return
+  try {
+    await callBrowserApi('POST', '/chat/friends/remove', {
+      user: { id: linewebUserId, username: toNekoUsername(linewebUserId) },
+      body: { userId: targetNekoId },
+      timeoutMs: 5000,
+    })
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    console.warn(
+      `[nekoChat] 清理 neko 好友关系失败（user=${linewebUserId} → ${targetNekoId}）：${detail}`,
+    )
+  }
 }

@@ -255,10 +255,12 @@ export interface NekoSelf {
   displayName: string
 }
 
-/** 好友申请（LineWeb Prisma 为准；nekoId 用于直接发起会话） */
+/** 好友申请（LineWeb Prisma 或 neko 好友系统；source 决定接受/拒绝走哪套接口） */
 export interface NekoFriendRequest {
   id: number
-  linewebId: number
+  source: 'lineweb' | 'neko'
+  /** LineWeb 用户 id；neko 原生账号为 null */
+  linewebId: number | null
   nekoId: number
   username: string
   displayName: string

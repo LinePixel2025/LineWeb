@@ -84,9 +84,51 @@ function makeState(): NekoChat['NekoState'] {
         lastMessageAt: 50,
         online: true,
       },
+      // 原生好友：没有往来也应出现在好友列表
+      {
+        id: 41,
+        username: 'bob',
+        displayName: 'Bobby',
+        remark: '笔友',
+        isAdmin: false,
+        enabled: true,
+        avatarVersion: 0,
+        lastMessageAt: 0,
+        online: true,
+      },
+      // 系统账号自动互为好友，必须过滤
+      {
+        id: 9000000002,
+        username: 'file',
+        displayName: '文件传输助手',
+        remark: '',
+        isAdmin: false,
+        enabled: true,
+        avatarVersion: 0,
+        lastMessageAt: 9,
+        online: true,
+      },
+      // 停用账号不出现
+      {
+        id: 42,
+        username: 'dead',
+        displayName: '停用',
+        remark: '',
+        isAdmin: false,
+        enabled: false,
+        avatarVersion: 0,
+        lastMessageAt: 0,
+        online: false,
+      },
     ],
-    friendRequestsIn: [],
-    friendRequestsOut: [],
+    friendRequestsIn: [
+      { requestId: 501, userId: 41, username: 'bob', displayName: 'Bobby', isAdmin: false, createdAt: 1700000000000 },
+      // 同一 LineWeb 用户已通过 Prisma 申请过：neko 侧重复项应被剔除
+      { requestId: 502, userId: BASE + 3, username: 'lw_3', displayName: '陌生人', isAdmin: false, createdAt: '2026-01-01T00:00:00.000Z' },
+    ],
+    friendRequestsOut: [
+      { requestId: 601, userId: 31, username: 'quiet', displayName: '潜水', isAdmin: false, createdAt: 1700000001000 },
+    ],
     stickers: [],
     pinnedChats: [`u${BASE + 2}`, 'r7', `u${BASE + 99}`, 'r1', 'garbage'],
     users: [
@@ -95,6 +137,8 @@ function makeState(): NekoChat['NekoState'] {
       stateUser(BASE + 3, 'lw_3', '陌生人', 70, true), // 非好友 LineWeb 账号
       stateUser(27, 'fxq', 'Novalee', 30, true), // 有往来的原生账号
       stateUser(31, 'quiet', '潜水', 0, false), // 无往来原生账号
+      stateUser(41, 'bob', 'Bobby', 0, true), // 原生好友（无往来）
+      stateUser(42, 'dead', '停用', 0, false), // 停用的原生好友
       stateUser(9000000002, 'file', '文件传输助手', 9, true), // 系统
       stateUser(9000000001, 'notice', '系统助理', 9, true), // 系统
     ],
@@ -153,7 +197,7 @@ function buildView(allowNative: boolean, overrides: Partial<NekoChatView['BuildC
     me: { id: 1, username: '我' },
     state: makeState(),
     friends: [{ id: 2, username: '好友' }],
-    requestsIn: [],
+    requestsIn: [{ id: 77, user: { id: 3, username: '陌生人' }, createdAt: new Date(1700000002000) }],
     requestsOut: [],
     allowNative,
     ...overrides,
@@ -233,20 +277,35 @@ function checkView(): void {
   assertEqual(built.historyLimit, 50, '状态：透出历史上限')
   assertEqual(built.self, { nekoId: BASE + 1, linewebId: 1, username: 'lw_1', displayName: '我' }, '状态：自己')
 
-  assertEqual(built.friends.length, 1, '联系人：好友数量')
+  assertEqual(built.friends.length, 2, '联系人：好友数量（LineWeb + neko 原生）')
   assertEqual(built.friends[0].key, `u${BASE + 2}`, '联系人：会话键 u<nekoId>')
   assertEqual(built.friends[0].remark, '老友', '联系人：备注来自 neko')
   assertEqual(built.friends[0].kind, 'lineweb', '联系人：好友归类 LineWeb')
   assertEqual(built.friends[0].linewebId, 2, '联系人：好友带 LineWeb id')
+  assertEqual(built.friends[1].username, 'bob', '好友：neko 原生好友并入')
+  assertEqual(built.friends[1].isFriend, true, '好友：原生好友标记 isFriend')
+  assertEqual(built.friends[1].remark, '笔友', '好友：原生好友备注来自 neko')
+  assertEqual(built.friends[1].lastMessageAt, 0, '好友：没有往来也保留')
 
   assertEqual(
     built.contacts.map((c) => c.username),
-    ['lw_2', 'fxq'],
-    '联系人：好友 + 有往来原生账号（剔除自己/非好友 lw_*/无往来/系统）',
+    ['lw_2', 'bob', 'fxq'],
+    '联系人：好友 + 有往来原生账号（剔除自己/非好友 lw_*/无往来/系统/停用）',
   )
-  assertEqual(built.contacts[1].isFriend, false, '联系人：原生账号不是好友')
-  assertEqual(built.contacts[1].kind, 'native', '联系人：原生账号归类 native')
-  assertEqual(built.contacts[1].linewebId, null, '联系人：原生账号无 LineWeb id')
+  assertEqual(built.contacts[1].kind, 'native', '联系人：原生好友归类 native')
+  assertEqual(built.contacts[2].isFriend, false, '联系人：有往来的原生账号不是好友')
+  assertEqual(built.contacts[2].linewebId, null, '联系人：原生账号无 LineWeb id')
+
+  assertEqual(
+    built.requestsIn.map((r) => `${r.source}:${r.username}`),
+    ['lineweb:lw_3', 'neko:bob'],
+    '申请：Prisma 与 neko 合并，重复的 lw_* 申请只保留 Prisma 一条',
+  )
+  assertEqual(built.requestsIn[0].displayName, '陌生人', '申请：Prisma 申请显示名取用户昵称')
+  assertEqual(built.requestsIn[1].nekoId, 41, '申请：neko 来源带 nekoId')
+  assertEqual(built.requestsIn[1].linewebId, null, '申请：原生账号无 LineWeb id')
+  assertEqual(built.requestsIn[1].createdAt, new Date(1700000000000).toISOString(), '申请：毫秒时间戳转 ISO')
+  assertEqual(built.requestsOut.map((r) => `${r.source}:${r.username}`), ['neko:quiet'], '申请：发出的 neko 申请')
 
   assertEqual(built.rooms.map((r) => r.key), ['r7'], '群：剔除大厅与非成员群')
   assertEqual(built.rooms[0].name, '项目组', '群：名称')
@@ -261,12 +320,15 @@ function checkView(): void {
 
   const noNative = buildView(false)
   assertEqual(noNative.contacts.map((c) => c.username), ['lw_2'], '开关：allowNative=false 时剔除原生账号')
+  assertEqual(noNative.friends.map((c) => c.username), ['lw_2'], '开关：allowNative=false 时剔除原生好友')
+  assertEqual(noNative.requestsIn.map((r) => r.source), ['lineweb'], '开关：allowNative=false 时剔除 neko 申请')
 
   const missingFriend = buildView(true, { friends: [{ id: 5, username: '新朋友' }] })
-  assertEqual(missingFriend.friends.length, 1, '兜底：neko 侧缺失的好友仍出现')
-  assertEqual(missingFriend.friends[0].username, 'lw_5', '兜底：按 LineWeb id 生成用户名')
-  assertEqual(missingFriend.friends[0].displayName, '新朋友', '兜底：显示名取 LineWeb 用户名')
-  assertEqual(missingFriend.friends[0].online, false, '兜底：缺失账号视为离线')
+  const fallback = missingFriend.friends.find((item) => item.linewebId === 5)
+  assert(!!fallback, '兜底：neko 侧缺失的好友仍出现')
+  assertEqual(fallback?.username, 'lw_5', '兜底：按 LineWeb id 生成用户名')
+  assertEqual(fallback?.displayName, '新朋友', '兜底：显示名取 LineWeb 用户名')
+  assertEqual(fallback?.online, false, '兜底：缺失账号视为离线')
   assertEqual(missingFriend.rooms.length, 1, '兜底：好友缺失不影响群列表')
 }
 

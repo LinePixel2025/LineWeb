@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../lib/api'
 import { isConversationKey } from '../lib/chat'
-import { useChat } from '../contexts/ChatContext'
 import { useXmppChat } from '../contexts/XmppChatContext'
 import ChatConversationList from '../components/chat/ChatConversationList'
 import ChatThread from '../components/chat/ChatThread'
@@ -13,6 +12,7 @@ import type {
   NekoConversation,
   NekoDirectoryUser,
   NekoContact,
+  NekoFriendRequest,
   UserSearchResponse,
 } from '../types/chat'
 
@@ -31,7 +31,6 @@ export default function ChatPage() {
   /** 会话键：单聊 u<nekoId> / 群聊 r<roomId> */
   const activeKey = keyParam && isConversationKey(keyParam) ? keyParam : null
 
-  const { pendingFriendRequests } = useChat()
   const {
     connectionState,
     transport,
@@ -64,6 +63,7 @@ export default function ChatPage() {
     acceptRequest,
     rejectRequest,
     addFriend,
+    addNativeFriend,
     removeFriend,
     searchDirectory,
   } = useXmppChat()
@@ -256,10 +256,10 @@ export default function ChatPage() {
   )
 
   const handleAcceptRequest = useCallback(
-    async (requestId: number) => {
+    async (request: NekoFriendRequest) => {
       setActionError(null)
       try {
-        await acceptRequest(requestId)
+        await acceptRequest(request)
       } catch (error) {
         setActionError(errorMessage(error, '接受好友申请失败'))
       }
@@ -268,10 +268,10 @@ export default function ChatPage() {
   )
 
   const handleRejectRequest = useCallback(
-    async (requestId: number) => {
+    async (request: NekoFriendRequest) => {
       setActionError(null)
       try {
-        await rejectRequest(requestId)
+        await rejectRequest(request)
       } catch (error) {
         setActionError(errorMessage(error, '拒绝好友申请失败'))
       }
@@ -292,11 +292,24 @@ export default function ChatPage() {
     [addFriend],
   )
 
-  const handleRemoveFriend = useCallback(
-    async (linewebId: number) => {
+  const handleAddNativeFriend = useCallback(
+    async (nekoId: number) => {
       setActionError(null)
       try {
-        await removeFriend(linewebId)
+        await addNativeFriend(nekoId)
+      } catch (error) {
+        setActionError(errorMessage(error, '发送好友申请失败'))
+        throw error
+      }
+    },
+    [addNativeFriend],
+  )
+
+  const handleRemoveFriend = useCallback(
+    async (contact: NekoContact) => {
+      setActionError(null)
+      try {
+        await removeFriend(contact)
       } catch (error) {
         setActionError(errorMessage(error, '删除好友失败'))
       }
@@ -371,8 +384,8 @@ export default function ChatPage() {
                 onClick={() => setPanelTab('friends')}
               >
                 好友
-                {pendingFriendRequests > 0 && (
-                  <span className="gh-chat-tab-badge">{pendingFriendRequests > 99 ? '99+' : pendingFriendRequests}</span>
+                {incoming.length > 0 && (
+                  <span className="gh-chat-tab-badge">{incoming.length > 99 ? '99+' : incoming.length}</span>
                 )}
               </button>
             </div>
@@ -421,6 +434,7 @@ export default function ChatPage() {
                 searchUsers={searchUsers}
                 searchDirectory={searchDirectory}
                 onAddFriend={handleAddFriend}
+                onAddNativeFriend={handleAddNativeFriend}
                 onInviteGame={inviteGame}
               />
             )}

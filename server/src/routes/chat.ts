@@ -16,6 +16,7 @@ import {
   getUserBrief,
 } from '../services/chatService.js'
 import { sendToUser } from '../services/chatHub.js'
+import { removeFriendOnNeko, toNekoId } from '../services/nekoChat.js'
 
 /**
  * 好友关系 REST 路由（挂载于 /api/chat）
@@ -93,6 +94,8 @@ router.delete('/friends/:userId', chatWriteLimiter, asyncHandler(async (req: Req
   const userId = currentUserId(req)
   const friendId = parseIdParam(req.params.userId, '用户 ID')
   await removeFriend(userId, friendId)
+  // neko 侧可能残留好友行（同一 lw_* 账号也可能用原生客户端登录）：best-effort 清理
+  void removeFriendOnNeko(userId, toNekoId(friendId))
   // 双方各自收到「对方已把你删除好友」事件
   sendToUser(friendId, { type: 'friend:removed', userId })
   sendToUser(userId, { type: 'friend:removed', userId: friendId })

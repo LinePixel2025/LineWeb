@@ -8,6 +8,7 @@ import { authenticate } from '../middleware/auth.js'
 import { receiveMultipartImage } from '../lib/multipartImage.js'
 import {
   getUserBrief,
+  ensureMutualFriendship,
   listFriendRequests,
   listFriends,
 } from '../services/chatService.js'
@@ -197,6 +198,123 @@ router.get(
     res.json({
       users: resolveUsers(state, toNekoId(user.id), friendIds, usernames, config.nekoChatAllowNative),
     })
+  }),
+)
+
+// === neko 原生好友 ===
+
+/**
+ * LineWeb↔LineWeb 仍以 Prisma 为准；neko 原生账号的好友关系走 neko 自带好友系统。
+ * 原生账号的私聊受 NEKO_CHAT_ALLOW_NATIVE 约束（nekoChatGuard），因此好友相关操作也在同一开关下。
+ */
+function assertNativeAllowed(): void {
+  if (!config.nekoChatAllowNative) {
+    throw new AppError('当前未开启与 neko 原生账号聊天', 403)
+  }
+}
+
+const nativeTargetSchema = z.object({
+  nekoId: z.number().int().positive(),
+})
+
+// POST /api/chat/xmpp/friends/request — 向 neko 原生账号发起好友申请
+router.post(
+  '/friends/request',
+  chatWriteLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const parsed = nativeTargetSchema.safeParse(req.body || {})
+    if (!parsed.success) throw new AppError('无效的用户', 400)
+    assertNativeAllowed()
+    const nekoId = parsed.data.nekoId
+    if (linewebIdOf(nekoId) !== null) {
+      throw new AppError('LineWeb 用户请使用站内好友申请', 400)
+    }
+    const user = await currentUser(req)
+    if (nekoId === toNekoId(user.id)) throw new AppError('不能添加自己为好友', 400)
+
+    const state = await fetchState(user)
+    const target = state.users.find((item) => item.id === nekoId)
+    if (
+      !target
+      || target.username === state.systemUsername
+      || target.username === state.fileHelperUsername
+    ) {
+      throw new AppError('用户不存在', 404)
+    }
+
+    const sessionHash = await currentSessionHash(req)
+    const result = await callBrowserApi<{ ok: boolean; state?: string }>(
+      'POST',
+      '/chat/friends/request',
+      { user, sessionHash, body: { userId: nekoId } },
+    )
+    res.json(result ?? { ok: true })
+  }),
+)
+
+const friendRespondSchema = z.object({
+  requestId: z.number().int().positive(),
+  accept: z.boolean(),
+})
+
+// POST /api/chat/xmpp/friends/respond — 接受 / 拒绝 neko 好友申请
+router.post(
+  '/friends/respond',
+  chatWriteLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const parsed = friendRespondSchema.safeParse(req.body || {})
+    if (!parsed.success) throw new AppError('无效的好友申请', 400)
+    assertNativeAllowed()
+    const user = await currentUser(req)
+    const state = await fetchState(user)
+    const entry = state.friendRequestsIn.find((item) => item.requestId === parsed.data.requestId)
+    if (!entry) throw new AppError('好友申请不存在或已处理', 404)
+
+    const sessionHash = await currentSessionHash(req)
+    const result = await callBrowserApi('POST', '/chat/friends/respond', {
+      user,
+      sessionHash,
+      body: { requestId: parsed.data.requestId, accept: parsed.data.accept },
+    })
+
+    // 申请方是 `lw_*`（用原生客户端操作的 LineWeb 账号）时，补齐 Prisma 双向好友，
+    // 否则站内好友列表、游戏邀请等依赖 Prisma 的功能会看不到这层关系。
+    if (parsed.data.accept) {
+      const peerLinewebId = linewebIdOf(entry.userId)
+      if (peerLinewebId !== null && peerLinewebId !== user.id) {
+        try {
+          await ensureMutualFriendship(user.id, peerLinewebId)
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : String(err)
+          console.warn(`[chatXmpp] 补齐 Prisma 好友关系失败：${detail}`)
+        }
+      }
+    }
+
+    res.json(result ?? { ok: true })
+  }),
+)
+
+// POST /api/chat/xmpp/friends/remove — 删除 neko 原生好友
+router.post(
+  '/friends/remove',
+  chatWriteLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const parsed = nativeTargetSchema.safeParse(req.body || {})
+    if (!parsed.success) throw new AppError('无效的用户', 400)
+    assertNativeAllowed()
+    const nekoId = parsed.data.nekoId
+    if (linewebIdOf(nekoId) !== null) {
+      throw new AppError('LineWeb 好友请使用站内删除', 400)
+    }
+    const user = await currentUser(req)
+    const sessionHash = await currentSessionHash(req)
+    const result = await callBrowserApi('POST', '/chat/friends/remove', {
+      user,
+      sessionHash,
+      body: { userId: nekoId },
+    })
+    res.json(result ?? { ok: true })
   }),
 )
 
