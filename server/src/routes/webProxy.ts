@@ -26,6 +26,7 @@ import {
   proxyUrlToUpstream,
   rewriteCss,
   rewriteHtml,
+  type RewriteContext,
 } from '../services/webProxyService.js'
 
 /**
@@ -40,12 +41,53 @@ import {
  * 换设备登录全部失效；这里由服务端持 Cookie 罐，浏览器只和 LineWeb 同源交互。
  */
 
+import {
+  MEDIA_SEGMENT,
+  classifyMediaContentType,
+  looksLikePlaylist,
+  mediaReferer,
+  parseMediaTarget,
+  rewritePlaylist,
+} from '../services/webProxyMedia.js'
+
 /** 反代会话 Cookie 有效期（与账号登录令牌一致，7 天） */
 const PROXY_SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 const MAX_UPSTREAM_BODY = 10 * 1024 * 1024
 const MAX_UPSTREAM_TIMEOUT_MS = 30 * 1000
 const MAX_REWRITE_BYTES = 12 * 1024 * 1024
 const MAX_SITES_PER_USER = 60
+
+/** 媒体请求只等响应头：视频本体可能持续几十分钟，不能被整体超时打断 */
+const MEDIA_HEADER_TIMEOUT_MS = 25 * 1000
+/** 探测首段字节（识别 HLS 播放列表） */
+const MEDIA_PEEK_BYTES = 8 * 1024
+/** 播放列表重写上限（正常 HLS 清单只有几十 KB） */
+const MAX_PLAYLIST_BYTES = 4 * 1024 * 1024
+
+/** 媒体请求允许透传的请求头（其余一律不转发，避免把 LineWeb 的头部带出去） */
+const MEDIA_REQUEST_HEADERS = new Set([
+  'accept',
+  'accept-language',
+  'range',
+  'if-range',
+  'if-none-match',
+  'if-modified-since',
+  'user-agent',
+  'sec-ch-ua',
+])
+
+const MEDIA_PASS_RESPONSE_HEADERS = [
+  'content-type',
+  'content-length',
+  'content-range',
+  'accept-ranges',
+  'cache-control',
+  'expires',
+  'last-modified',
+  'etag',
+  'vary',
+  'content-language',
+]
 
 const HOP_BY_HOP = new Set([
   'connection',
@@ -309,6 +351,248 @@ async function persistCookies(siteId: number, previous: string, jar: ReturnType<
   }
 }
 
+// ============================================================
+// 同源媒体代理（/proxy/<siteId>/__lw_media__/...）
+// ============================================================
+
+interface MediaRequestOptions {
+  siteId: number
+  siteOrigin: string
+  forceDesktop: boolean
+  /** 落库比对基准（本次请求开始时的 Cookie 串） */
+  cookiesBefore: string
+  jar: ReturnType<typeof readCookieJar>
+  /** 去掉 /proxy/<siteId> 后的路径（含 __lw_media__ 段） */
+  pathname: string
+  search: string
+}
+
+function buildMediaHeaders(
+  req: Request,
+  target: URL,
+  jar: ReturnType<typeof readCookieJar>,
+  options: MediaRequestOptions,
+): Headers {
+  const headers = new Headers()
+  for (const [name, value] of Object.entries(req.headers)) {
+    if (typeof value !== 'string') continue
+    if (!MEDIA_REQUEST_HEADERS.has(name.toLowerCase())) continue
+    headers.set(name, value)
+  }
+  if (options.forceDesktop) {
+    headers.set('user-agent', DESKTOP_USER_AGENT)
+    headers.set('sec-ch-ua', '"Chromium";v="131", "Google Chrome";v="131", "Not_A Brand";v="24"')
+    headers.set('sec-ch-ua-mobile', '?0')
+    headers.set('sec-ch-ua-platform', '"Windows"')
+  }
+  // 媒体不压缩：保留 Content-Length / Content-Range，播放器可精确 seek
+  headers.set('accept-encoding', 'identity')
+  const cookie = cookieHeaderForUrl(jar, target)
+  if (cookie) headers.set('cookie', cookie)
+  headers.set('referer', mediaReferer(req.headers.referer, options.siteOrigin, options.siteId))
+  headers.set('origin', options.siteOrigin)
+  const forwardedFor = req.headers['x-forwarded-for']
+  const clientIp = req.ip || ''
+  headers.set('x-forwarded-for', forwardedFor ? `${forwardedFor}, ${clientIp}` : clientIp)
+  return headers
+}
+
+/** 读取一小段头部字节用于识别播放列表，剩余部分保留为可回传的流 */
+async function peekBody(body: ReadableStream<Uint8Array>, maxBytes: number): Promise<{ head: Buffer; remaining: Readable }> {
+  const reader = body.getReader()
+  const chunks: Buffer[] = []
+  let size = 0
+  while (size < maxBytes) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (value && value.byteLength > 0) {
+      const chunk = Buffer.from(value)
+      chunks.push(chunk)
+      size += chunk.byteLength
+    }
+  }
+  const remaining = Readable.from((async function* () {
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) return
+        if (value) yield Buffer.from(value)
+      }
+    } finally {
+      try {
+        reader.releaseLock()
+      } catch {
+        /* ignore */
+      }
+    }
+  })())
+  return { head: Buffer.concat(chunks), remaining }
+}
+
+function prependChunk(head: Buffer, remaining: Readable): Readable {
+  return Readable.from((async function* () {
+    if (head.byteLength > 0) yield head
+    for await (const chunk of remaining) yield chunk as Buffer
+  })())
+}
+
+function pipeMediaStream(res: Response, stream: Readable): void {
+  stream.on('error', () => {
+    if (!res.headersSent) res.status(502).end()
+    else res.end()
+  })
+  res.on('close', () => stream.destroy())
+  stream.pipe(res)
+}
+
+async function handleMediaRequest(req: Request, res: Response, options: MediaRequestOptions): Promise<void> {
+  const method = req.method.toUpperCase()
+  if (method !== 'GET' && method !== 'HEAD') {
+    res.status(405).setHeader('allow', 'GET, HEAD').type('text/plain; charset=utf-8').send('媒体代理只支持 GET / HEAD')
+    return
+  }
+  const target = parseMediaTarget(options.siteId, options.pathname, options.search)
+  if (!target) {
+    res.status(400).type('text/plain; charset=utf-8').send('媒体地址无效')
+    return
+  }
+  // 防止把反代指回 LineWeb 自己
+  const selfHost = String(req.headers.host || '').replace(/:\d+$/, '').toLowerCase()
+  if (selfHost && target.hostname.toLowerCase() === selfHost) {
+    res.status(400).type('text/plain; charset=utf-8').send('不允许反代 LineWeb 自身')
+    return
+  }
+
+  let jar = options.jar
+  let current = target
+  let hops = 0
+  let upstream: globalThis.Response | null = null
+  const controller = new AbortController()
+  const headerTimer = setTimeout(() => controller.abort(), MEDIA_HEADER_TIMEOUT_MS)
+  try {
+    while (hops <= 5) {
+      await assertPublicHost(current.hostname)
+      const response = await fetch(current, {
+        method,
+        headers: buildMediaHeaders(req, current, jar, options),
+        redirect: 'manual',
+        signal: controller.signal,
+      })
+      const setCookies = getSetCookies(response.headers)
+      if (setCookies.length > 0) {
+        const parsedCookies = setCookies
+          .map((header) => parseSetCookie(header, current))
+          .filter((item): item is NonNullable<typeof item> => !!item)
+        if (parsedCookies.length > 0) {
+          jar = mergeCookieJar(jar, parsedCookies)
+          await persistCookies(options.siteId, options.cookiesBefore, jar)
+        }
+      }
+      const location = response.headers.get('location')
+      if (response.status >= 300 && response.status < 400 && location) {
+        if (hops >= 5) {
+          res.status(508).type('text/plain; charset=utf-8').send('媒体重定向次数过多')
+          return
+        }
+        let next: URL
+        try {
+          next = new URL(location, current)
+        } catch {
+          upstream = response
+          break
+        }
+        hops += 1
+        current = next
+        continue
+      }
+      upstream = response
+      break
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    const timedOut = /abort|timeout/i.test(message)
+    const status = err instanceof AppError ? err.status : timedOut ? 504 : 502
+    const detail = err instanceof AppError ? err.message : timedOut ? '媒体源 25 秒内没有响应' : '无法连接媒体源'
+    if (!res.headersSent) {
+      res.status(status).type('text/plain; charset=utf-8').send(detail)
+    }
+    return
+  } finally {
+    // 响应头已到：解除整体超时，避免长视频被 30 秒掐断
+    clearTimeout(headerTimer)
+  }
+
+  if (!upstream) {
+    res.status(502).type('text/plain; charset=utf-8').send('媒体源没有返回可用响应')
+    return
+  }
+
+  const kind = classifyMediaContentType(upstream.headers.get('content-type'))
+  if (kind === 'blocked') {
+    try {
+      await upstream.body?.cancel()
+    } catch {
+      /* ignore */
+    }
+    res.status(415).type('text/plain; charset=utf-8').send('该资源类型不能通过媒体代理访问')
+    return
+  }
+
+  res.status(upstream.status)
+  for (const name of MEDIA_PASS_RESPONSE_HEADERS) {
+    const value = upstream.headers.get(name)
+    if (value) res.setHeader(name, value)
+  }
+  res.setHeader('x-content-type-options', 'nosniff')
+  res.setHeader('x-lineweb-proxy', '1')
+  if (!res.getHeader('content-type')) res.setHeader('content-type', 'application/octet-stream')
+
+  if (method === 'HEAD' || !upstream.body) {
+    res.end()
+    return
+  }
+
+  // DASH / Smooth 清单：原样透传（媒体地址由页面脚本映射）
+  if (kind === 'manifest') {
+    pipeMediaStream(res, Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]))
+    return
+  }
+
+  const { head, remaining } = await peekBody(upstream.body as ReadableStream<Uint8Array>, MEDIA_PEEK_BYTES)
+  if (looksLikePlaylist(head)) {
+    const parts: Buffer[] = [head]
+    let total = head.byteLength
+    let overflow = false
+    for await (const chunk of remaining) {
+      const buffer = chunk as Buffer
+      total += buffer.byteLength
+      if (total > MAX_PLAYLIST_BYTES) {
+        overflow = true
+        break
+      }
+      parts.push(buffer)
+    }
+    if (overflow) {
+      res.status(502)
+      res.removeHeader('content-length')
+      res.removeHeader('content-range')
+      res.type('text/plain; charset=utf-8').send('播放列表过大，已拒绝')
+      return
+    }
+    const text = Buffer.concat(parts).toString('utf8')
+    const rewritten = Buffer.from(rewritePlaylist(text, current, options.siteId), 'utf8')
+    res.status(200)
+    res.setHeader('content-type', 'application/vnd.apple.mpegurl; charset=utf-8')
+    res.removeHeader('content-range')
+    res.setHeader('content-length', String(rewritten.byteLength))
+    res.end(rewritten)
+    return
+  }
+
+  // 普通媒体分片：原样流式回传（首段探测的字节先补回）
+  pipeMediaStream(res, prependChunk(head, remaining))
+}
+
 export const proxyHttpRouter = Router()
 
 proxyHttpRouter.use((req, res) => {
@@ -368,16 +652,31 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
 
   const upstreamPath = parsed.pathname.slice(`/${siteId}`.length) || '/'
   const target = new URL(`${site.origin}${upstreamPath}${parsed.search}`)
-  const ctx = {
+  const ctx: RewriteContext = {
     siteId: site.id,
     siteOrigin: site.origin,
     activeOrigin: target.origin,
     forceDesktop: site.forceDesktop,
+    pageUrl: target.href,
   }
 
   const cookiesBefore = site.cookies
   let jar = readCookieJar(site.cookies)
   const clientCookies = sanitizeClientCookies(req.headers['x-lw-cookie'] as string | undefined)
+
+  // 同源媒体代理：视频 / 音频 / HLS 分片，不走 HTML 重写，直接流式回传
+  if (upstreamPath.startsWith(`/${MEDIA_SEGMENT}/`)) {
+    await handleMediaRequest(req, res, {
+      siteId: site.id,
+      siteOrigin: site.origin,
+      forceDesktop: site.forceDesktop,
+      cookiesBefore,
+      jar,
+      pathname: upstreamPath,
+      search: parsed.search,
+    })
+    return
+  }
 
   const { body, tooLarge } = await readRequestBody(req)
   if (tooLarge) {
@@ -425,68 +724,75 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
   let upstream: globalThis.Response | null = null
   let hops = 0
 
-  while (hops <= 5) {
-    await assertPublicHost(currentUrl.hostname)
-    let response: globalThis.Response
-    try {
-      response = await fetch(currentUrl, {
-        method,
-        headers: buildHeaders(currentUrl),
-        body: body ? toArrayBuffer(body) : undefined,
-        redirect: 'manual',
-        signal: AbortSignal.timeout(MAX_UPSTREAM_TIMEOUT_MS),
-      })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      const timedOut = /abort|timeout/i.test(message)
-      res.status(timedOut ? 504 : 502).type('html').send(buildProxyErrorPage(
-        timedOut ? '上游响应超时' : '无法连接目标网站',
-        timedOut ? '目标网站在 30 秒内没有响应，请稍后重试。' : '反代服务无法访问该网站，请确认地址是否可正常打开。',
-        { retry: true },
-      ))
-      await persistCookies(site.id, cookiesBefore, jar)
-      return
-    }
-
-    const setCookies = getSetCookies(response.headers)
-    if (setCookies.length > 0) {
-      const parsedCookies = setCookies
-        .map((header) => parseSetCookie(header, currentUrl))
-        .filter((item): item is NonNullable<typeof item> => !!item)
-      if (parsedCookies.length > 0) jar = mergeCookieJar(jar, parsedCookies)
-    }
-    // 每次拿到新响应都落库（跨域跳转时 Cookie 可能来自不同域）
-    await persistCookies(site.id, cookiesBefore, jar)
-
-    const location = response.headers.get('location')
-    if (response.status >= 300 && response.status < 400 && location) {
-      let next: URL
+  // 只给「响应头」设超时：大文件 / 视频的响应体可能持续很久，不能被整体超时打断
+  const upstreamController = new AbortController()
+  const upstreamTimer = setTimeout(() => upstreamController.abort(), MAX_UPSTREAM_TIMEOUT_MS)
+  try {
+    while (hops <= 5) {
+      await assertPublicHost(currentUrl.hostname)
+      let response: globalThis.Response
       try {
-        next = new URL(location, currentUrl)
-      } catch {
-        upstream = response
-        break
-      }
-      if (next.origin === currentUrl.origin) {
-        // 同源跳转：交回浏览器，让 iframe 地址栏与相对路径跟着更新
-        res.status(response.status)
-        res.setHeader('location', `/proxy/${site.id}${next.pathname}${next.search}`)
-        res.setHeader('cache-control', 'no-store')
-        res.setHeader('X-LineWeb-Proxy', '1')
-        res.end()
+        response = await fetch(currentUrl, {
+          method,
+          headers: buildHeaders(currentUrl),
+          body: body ? toArrayBuffer(body) : undefined,
+          redirect: 'manual',
+          signal: upstreamController.signal,
+        })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        const timedOut = /abort|timeout/i.test(message)
+        res.status(timedOut ? 504 : 502).type('html').send(buildProxyErrorPage(
+          timedOut ? '上游响应超时' : '无法连接目标网站',
+          timedOut ? '目标网站在 30 秒内没有响应，请稍后重试。' : '反代服务无法访问该网站，请确认地址是否可正常打开。',
+          { retry: true },
+        ))
+        await persistCookies(site.id, cookiesBefore, jar)
         return
       }
-      if (hops >= 5) {
-        res.status(508).type('html').send(buildProxyErrorPage('重定向次数过多', '目标网站的重定向链路过长，已停止跟随。'))
-        return
-      }
-      hops += 1
-      currentUrl = next
-      continue
-    }
 
-    upstream = response
-    break
+      const setCookies = getSetCookies(response.headers)
+      if (setCookies.length > 0) {
+        const parsedCookies = setCookies
+          .map((header) => parseSetCookie(header, currentUrl))
+          .filter((item): item is NonNullable<typeof item> => !!item)
+        if (parsedCookies.length > 0) jar = mergeCookieJar(jar, parsedCookies)
+      }
+      // 每次拿到新响应都落库（跨域跳转时 Cookie 可能来自不同域）
+      await persistCookies(site.id, cookiesBefore, jar)
+
+      const location = response.headers.get('location')
+      if (response.status >= 300 && response.status < 400 && location) {
+        let next: URL
+        try {
+          next = new URL(location, currentUrl)
+        } catch {
+          upstream = response
+          break
+        }
+        if (next.origin === currentUrl.origin) {
+          // 同源跳转：交回浏览器，让 iframe 地址栏与相对路径跟着更新
+          res.status(response.status)
+          res.setHeader('location', `/proxy/${site.id}${next.pathname}${next.search}`)
+          res.setHeader('cache-control', 'no-store')
+          res.setHeader('X-LineWeb-Proxy', '1')
+          res.end()
+          return
+        }
+        if (hops >= 5) {
+          res.status(508).type('html').send(buildProxyErrorPage('重定向次数过多', '目标网站的重定向链路过长，已停止跟随。'))
+          return
+        }
+        hops += 1
+        currentUrl = next
+        continue
+      }
+
+      upstream = response
+      break
+    }
+  } finally {
+    clearTimeout(upstreamTimer)
   }
 
   if (!upstream) {
@@ -495,6 +801,7 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
   }
 
   ctx.activeOrigin = currentUrl.origin
+  ctx.pageUrl = currentUrl.href
   const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
   const lowerType = contentType.toLowerCase()
   const isHtml = lowerType.includes('text/html') || lowerType.includes('application/xhtml+xml')
@@ -520,11 +827,15 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
 
   if (isHtml || isCss) {
     let buffer: Buffer
+    // 文本要整体读入才能改写，这一段保留 30 秒兜底超时
+    const bodyTimer = setTimeout(() => upstreamController.abort(), MAX_UPSTREAM_TIMEOUT_MS)
     try {
       buffer = Buffer.from(await upstream.arrayBuffer())
     } catch {
       res.end()
       return
+    } finally {
+      clearTimeout(bodyTimer)
     }
     if (buffer.byteLength > MAX_REWRITE_BYTES) {
       // 超大文档不重写，直接原样回传（至少保证能打开）

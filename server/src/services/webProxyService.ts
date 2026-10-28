@@ -3,6 +3,7 @@ import net from 'net'
 import { AppError } from '../middleware/errorHandler.js'
 import { buildBootstrapScript } from './webProxyBootstrap.js'
 import { publicCookiesForUrl, type ProxyCookie } from './proxyCookies.js'
+import { buildMediaProxyPath, isMediaProxyPath } from './webProxyMedia.js'
 
 /**
  * 网页反代核心（纯函数 + 少量网络探测）
@@ -26,6 +27,8 @@ export interface RewriteContext {
   activeOrigin: string
   /** 该站点是否强制桌面模式（UA 与 navigator 伪装） */
   forceDesktop?: boolean
+  /** 本次文档的实际地址（用于解析相对媒体地址，如 media/rabbit.mp4） */
+  pageUrl?: string
 }
 
 /** 把用户输入规范化为 origin（协议 + 主机 + 端口），非法输入抛 AppError */
@@ -185,6 +188,49 @@ export function mapUrlToProxy(value: string, ctx: RewriteContext): string {
   return raw
 }
 
+/**
+ * 媒体 URL 重写（只用于 <video>/<audio>/<source> 这类媒体标签）。
+ *
+ * 同站与跨站资源都改走同源媒体代理：该分支有独立超时（只等响应头）、
+ * 保留 Content-Length / Range，长视频不会被普通反代的整体超时掐断；
+ * 跨站资源还顺带绕开 CDN 热链校验（Referer 变成 LineWeb）与跨域限制。
+ */
+export function mapMediaUrl(value: string, ctx: RewriteContext): string {
+  if (typeof value !== 'string') return value
+  const raw = value
+  const trimmed = value.trim()
+  if (!trimmed) return raw
+  if (isMediaProxyPath(trimmed, ctx.siteId)) return raw
+  const lower = trimmed.toLowerCase()
+  if (
+    lower.startsWith('javascript:')
+    || lower.startsWith('data:')
+    || lower.startsWith('blob:')
+    || lower.startsWith('mailto:')
+    || lower.startsWith('tel:')
+    || lower.startsWith('about:')
+    || lower.startsWith('file:')
+    || lower.startsWith('#')
+  ) {
+    return raw
+  }
+  try {
+    if (trimmed.startsWith('//')) return buildMediaProxyPath(new URL(`https:${trimmed}`), ctx.siteId)
+    if (trimmed.startsWith('/')) {
+      const url = new URL(trimmed, ctx.activeOrigin)
+      return url.protocol === 'http:' || url.protocol === 'https:' ? buildMediaProxyPath(url, ctx.siteId) : raw
+    }
+    if (/^https?:\/\//i.test(trimmed)) return buildMediaProxyPath(new URL(trimmed), ctx.siteId)
+    // 纯相对路径：只有知道页面地址、且看起来是媒体文件时才改写
+    if (!ctx.pageUrl) return raw
+    const resolved = new URL(trimmed, ctx.pageUrl)
+    if (!MEDIA_FILE_RE.test(resolved.pathname)) return raw
+    return buildMediaProxyPath(resolved, ctx.siteId)
+  } catch {
+    return raw
+  }
+}
+
 /** WebSocket URL → 反代 WS 路径（页面脚本里的 WebSocket 构造函数会调用同名逻辑） */
 export function mapWsUrlToProxy(value: string, ctx: RewriteContext, pageHost: string, secure: boolean): string {
   const scheme = secure ? 'wss://' : 'ws://'
@@ -226,6 +272,10 @@ export function proxyUrlToUpstream(referer: string | undefined, ctx: RewriteCont
 
 const ATTR_RE = /(\s(?:href|src|action|poster|formaction|data-src|data-href|data-action|xlink:href)\s*=\s*)(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi
 const SRCSET_RE = /(\ssrcset\s*=\s*)(?:"([^"]*)"|'([^']*)')/gi
+const MEDIA_TAG_RE = /<(video|audio|source)\b[^>]*>/gi
+const MEDIA_ATTR_RE = /(\s(?:src|data-src|data-lazy-src|data-original)\s*=\s*)(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi
+/** 相对媒体地址的扩展名判断（只用于把相对路径也纳入媒体代理） */
+const MEDIA_FILE_RE = /\.(m3u8|mpd|ts|m4s|mp4|m4v|webm|flv|mp3|m4a|aac|ogg|oga|opus|vtt|srt)$/i
 
 function rewriteSrcset(value: string, ctx: RewriteContext): string {
   return value
@@ -259,7 +309,9 @@ export function rewriteCss(css: string, ctx: RewriteContext): string {
 }
 
 function rewriteAttributes(html: string, ctx: RewriteContext): string {
-  let out = html.replace(ATTR_RE, (match, head: string, dq?: string, sq?: string, bare?: string) => {
+  // 媒体标签先扫：同站/跨站媒体都改写成媒体代理路径，之后通用重写会把这些地址视为已反代
+  let out = rewriteMediaTags(html, ctx)
+  out = out.replace(ATTR_RE, (match, head: string, dq?: string, sq?: string, bare?: string) => {
     const value = dq ?? sq ?? bare ?? ''
     const mapped = mapUrlToProxy(value, ctx)
     if (mapped === value) return match
@@ -271,6 +323,19 @@ function rewriteAttributes(html: string, ctx: RewriteContext): string {
     return mapped === value ? match : `${head}"${mapped}"`
   })
   return out
+}
+
+/** 媒体标签单独扫一遍：<video>/<audio>/<source> 的 src 交给媒体代理 */
+function rewriteMediaTags(html: string, ctx: RewriteContext): string {
+  return html.replace(MEDIA_TAG_RE, (tag) => tag.replace(
+    MEDIA_ATTR_RE,
+    (match, head: string, dq?: string, sq?: string, bare?: string) => {
+      const value = dq ?? sq ?? bare ?? ''
+      const mapped = mapMediaUrl(value, ctx)
+      if (mapped === value) return match
+      return `${head}"${mapped}"`
+    },
+  ))
 }
 
 const META_CSP_RE = /<meta\b[^>]*http-equiv\s*=\s*["']?content-security-policy["']?[^>]*>/gi

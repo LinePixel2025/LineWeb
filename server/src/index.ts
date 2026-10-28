@@ -322,6 +322,7 @@ app.get('/api', (_req, res) => {
       clearCookies: { method: 'DELETE', path: '/api/proxy/sites/:id/cookies', auth: true, description: '清除该站点的服务端登录态' },
       open: { method: 'POST', path: '/api/proxy/sites/:id/open', auth: true, description: '签发 7 天反代会话 Cookie 并返回 iframe 地址 /proxy/<id>/' },
       proxy: '同源反代入口：/proxy/<siteId>/*（lw_proxy Cookie 认证，服务端补 Cookie、改写 HTML/CSS、跟随跨域跳转；10MB 上传上限）',
+      media: '同源媒体代理：/proxy/<siteId>/__lw_media__/<scheme>/<host>/<path>（跨域视频/音频/HLS 分片与播放列表，流式回传并保留 Range/206；只放行媒体类型，HTML/JS/CSS 一律 415）',
       ws: 'WebSocket 中继：/proxy-ws/<siteId>/*，上游不可达时直接拒绝升级，由站点自身的轮询降级接管。',
     },
     chat: {

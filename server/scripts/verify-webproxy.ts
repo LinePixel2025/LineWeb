@@ -10,6 +10,8 @@
  *   - 站点规范化：补 https、去路径、拒账号密码、拒非 http(s)；
  *   - URL 重写：根路径 / 同源绝对 / 协议相对 / 已反代 / 外链 / 伪协议，WebSocket 映射与
  *     Referer 还原，CSS url() 与 @import；
+ *   - 同源媒体代理：路径编码/解析、Content-Type 白名单、HLS 播放列表改写（含 URI="..." 标签）、
+ *     媒体标签属性改写与引导脚本补丁；
  *   - HTML 重写：属性 / srcset / style / meta refresh 改写，meta CSP / base / integrity
  *     剥离，引导脚本注入位置与内容；
  *   - SSRF 防护：localhost / 内网 / 云元数据 / 公网 IP；
@@ -23,11 +25,13 @@ process.env.NODE_ENV ||= 'development'
 type CookiesModule = typeof import('../src/services/proxyCookies.js')
 type ProxyServiceModule = typeof import('../src/services/webProxyService.js')
 type BootstrapModule = typeof import('../src/services/webProxyBootstrap.js')
+type MediaModule = typeof import('../src/services/webProxyMedia.js')
 type ProxyCookie = import('../src/services/proxyCookies.js').ProxyCookie
 
 let cookies: CookiesModule
 let proxy: ProxyServiceModule
 let bootstrap: BootstrapModule
+let media: MediaModule
 
 let passed = 0
 
@@ -77,6 +81,7 @@ async function main(): Promise<void> {
   cookies = await import('../src/services/proxyCookies.js')
   proxy = await import('../src/services/webProxyService.js')
   bootstrap = await import('../src/services/webProxyBootstrap.js')
+  media = await import('../src/services/webProxyMedia.js')
 
   // ============================================================
   // 1. Cookie：默认 Path 与 Set-Cookie 解析
@@ -311,6 +316,148 @@ async function main(): Promise<void> {
   assert(rewrittenCss.includes('url(data:image/png;base64,AA)'), 'CSS 重写：data URI 保持')
 
   // ============================================================
+  // 4.5 同源媒体代理
+  // ============================================================
+  assertEqual(media.MEDIA_SEGMENT, '__lw_media__', '媒体代理：路径段常量')
+  assertEqual(media.mediaPathPrefix(7), '/proxy/7/__lw_media__/', '媒体代理：路径前缀')
+
+  const mediaUrl = new URL('https://cdn.example.com/hls/index.m3u8?token=a%2Fb&x=1')
+  const mediaPath = media.buildMediaProxyPath(mediaUrl, 7)
+  assertEqual(
+    mediaPath,
+    '/proxy/7/__lw_media__/https/cdn.example.com/hls/index.m3u8?token=a%2Fb&x=1',
+    '媒体代理：路径保留大小写与查询串',
+  )
+  assertEqual(
+    media.buildMediaProxyPath(new URL('http://cdn.example.com:8080/a/b.ts'), 9),
+    '/proxy/9/__lw_media__/http/cdn.example.com:8080/a/b.ts',
+    '媒体代理：保留 http 协议与端口',
+  )
+  assertEqual(
+    media.buildMediaProxyPath(new URL('https://cdn.example.com'), 7),
+    '/proxy/7/__lw_media__/https/cdn.example.com/',
+    '媒体代理：无路径时补 /',
+  )
+  assert(media.isMediaProxyPath(mediaPath, 7), '媒体代理：识别自身路径')
+  assert(!media.isMediaProxyPath(mediaPath, 8), '媒体代理：站点编号不同不算')
+
+  const parsedMedia = media.parseMediaTarget(7, mediaPath.split('?')[0], '?token=a%2Fb&x=1')
+  assertEqual(parsedMedia?.href, 'https://cdn.example.com/hls/index.m3u8?token=a%2Fb&x=1', '媒体代理：解析回上游 URL')
+  assertEqual(media.parseMediaTarget(7, '/proxy/7/index.html'), null, '媒体代理：非媒体路径解析失败')
+  assertEqual(media.parseMediaTarget(7, '/proxy/7/__lw_media__/ftp/cdn.com/a'), null, '媒体代理：拒绝非 http(s) 协议')
+  assertEqual(media.parseMediaTarget(7, '/proxy/7/__lw_media__/https/user:pass@cdn.com/a'), null, '媒体代理：拒绝带账号密码')
+  assertEqual(media.parseMediaTarget(7, '/proxy/7/__lw_media__/https/'), null, '媒体代理：缺少主机名')
+
+  assertEqual(media.classifyMediaContentType('video/mp4'), 'stream', '媒体类型：video/mp4')
+  assertEqual(media.classifyMediaContentType('audio/mpeg; charset=binary'), 'stream', '媒体类型：audio 带参数')
+  assertEqual(media.classifyMediaContentType('application/octet-stream'), 'stream', '媒体类型：octet-stream')
+  assertEqual(media.classifyMediaContentType(''), 'stream', '媒体类型：缺失按流处理')
+  assertEqual(media.classifyMediaContentType('application/vnd.apple.mpegurl'), 'playlist', '媒体类型：HLS 清单')
+  assertEqual(media.classifyMediaContentType('APPLICATION/X-MPEGURL'), 'playlist', '媒体类型：忽略大小写')
+  assertEqual(media.classifyMediaContentType('application/dash+xml'), 'manifest', '媒体类型：DASH 清单')
+  assertEqual(media.classifyMediaContentType('text/plain'), 'text', '媒体类型：纯文本')
+  assertEqual(media.classifyMediaContentType('text/vtt'), 'text', '媒体类型：WebVTT 字幕')
+  assertEqual(media.classifyMediaContentType('text/html'), 'blocked', '媒体类型：拒绝 HTML')
+  assertEqual(media.classifyMediaContentType('application/xhtml+xml'), 'blocked', '媒体类型：拒绝 XHTML')
+  assertEqual(media.classifyMediaContentType('text/css'), 'blocked', '媒体类型：拒绝 CSS')
+  assertEqual(media.classifyMediaContentType('application/javascript'), 'blocked', '媒体类型：拒绝 JS')
+  assertEqual(media.classifyMediaContentType('image/svg+xml'), 'blocked', '媒体类型：拒绝 SVG')
+  assertEqual(media.classifyMediaContentType('application/json'), 'blocked', '媒体类型：拒绝 JSON')
+
+  assert(media.looksLikePlaylist(Buffer.from('#EXTM3U\n#EXT-X-VERSION:3')), '播放列表识别：标准头')
+  assert(media.looksLikePlaylist(Buffer.from('\uFEFF  \n#EXTM3U\n')), '播放列表识别：BOM 与前导空白')
+  assert(!media.looksLikePlaylist(Buffer.from('<!doctype html><html>')), '播放列表识别：HTML 不算')
+  assert(!media.looksLikePlaylist(Buffer.alloc(0)), '播放列表识别：空内容')
+
+  const playlistBase = new URL('https://cdn.example.com/hls/index.m3u8')
+  const playlist = [
+    '#EXTM3U',
+    '#EXT-X-VERSION:3',
+    '#EXT-X-TARGETDURATION:6',
+    '#EXT-X-KEY:METHOD=AES-128,URI="https://keys.example.com/k1.bin",IV=0x01',
+    '#EXT-X-MAP:URI="../init.mp4"',
+    '#EXTINF:6.0,',
+    'seg-1.ts',
+    '#EXTINF:6.0,',
+    '/hls/seg-2.ts?token=a%2Fb',
+    '#EXTINF:6.0,',
+    'https://other.cdn.com/seg-3.ts',
+    '#EXT-X-ENDLIST',
+  ].join('\n')
+  const rewrittenPlaylist = media.rewritePlaylist(playlist, playlistBase, 7)
+  assert(rewrittenPlaylist.includes('URI="/proxy/7/__lw_media__/https/keys.example.com/k1.bin"'), '播放列表：EXT-X-KEY 的 URI')
+  assert(rewrittenPlaylist.includes('URI="../init.mp4"'), '播放列表：相对 URI 保持')
+  assert(rewrittenPlaylist.includes('\nseg-1.ts\n'), '播放列表：相对分片保持')
+  assert(rewrittenPlaylist.includes('/proxy/7/__lw_media__/https/cdn.example.com/hls/seg-2.ts?token=a%2Fb'), '播放列表：根路径分片')
+  assert(rewrittenPlaylist.includes('/proxy/7/__lw_media__/https/other.cdn.com/seg-3.ts'), '播放列表：跨域绝对分片')
+  assert(rewrittenPlaylist.includes('#EXT-X-VERSION:3'), '播放列表：普通标签保持')
+  assertEqual(
+    media.rewritePlaylist('#EXTM3U\n#EXT-X-KEY:METHOD=NONE', playlistBase, 7),
+    '#EXTM3U\n#EXT-X-KEY:METHOD=NONE',
+    '播放列表：无 URI 标签不改变',
+  )
+  assert(
+    media.rewritePlaylist('#EXTM3U\nhttps://cdn.example.com/a.ts', playlistBase, 7)
+      .includes('/proxy/7/__lw_media__/https/cdn.example.com/a.ts'),
+    '播放列表：已同源绝对地址也映射',
+  )
+
+  assertEqual(
+    media.mediaReferer('https://lineweb.test/proxy/7/watch/1?x=1', 'https://example.com', 7),
+    'https://example.com/watch/1?x=1',
+    '媒体 Referer：页面地址还原上游',
+  )
+  assertEqual(
+    media.mediaReferer('https://lineweb.test/proxy/7/__lw_media__/https/cdn.com/a.ts', 'https://example.com', 7),
+    'https://example.com/',
+    '媒体 Referer：媒体路径退回站点根',
+  )
+  assertEqual(media.mediaReferer(undefined, 'https://example.com', 7), 'https://example.com/', '媒体 Referer：缺省站点根')
+
+  const imageCtx = { ...ctx, siteId: 7 }
+  assertEqual(
+    proxy.mapMediaUrl('https://cdn.example.com/movie.mp4?sign=1', imageCtx),
+    '/proxy/7/__lw_media__/https/cdn.example.com/movie.mp4?sign=1',
+    '媒体 URL：跨域绝对地址走媒体代理',
+  )
+  assertEqual(
+    proxy.mapMediaUrl('//cdn.example.com/live.m3u8', imageCtx),
+    '/proxy/7/__lw_media__/https/cdn.example.com/live.m3u8',
+    '媒体 URL：协议相对地址走媒体代理',
+  )
+  assertEqual(proxy.mapMediaUrl('/video.mp4', imageCtx), '/proxy/7/__lw_media__/https/example.com/video.mp4', '媒体 URL：根路径按站点源站解析')
+  assertEqual(proxy.mapMediaUrl('https://example.com/video.mp4', imageCtx), '/proxy/7/__lw_media__/https/example.com/video.mp4', '媒体 URL：同站绝对地址也走媒体代理')
+  assertEqual(proxy.mapMediaUrl('seg-1.ts', imageCtx), 'seg-1.ts', '媒体 URL：相对地址保持')
+  const pageCtx = { ...imageCtx, pageUrl: 'https://example.com/watch/1.html' }
+  assertEqual(
+    proxy.mapMediaUrl('media/rabbit.mp4', pageCtx),
+    '/proxy/7/__lw_media__/https/example.com/watch/media/rabbit.mp4',
+    '媒体 URL：相对媒体文件按页面地址解析',
+  )
+  assertEqual(proxy.mapMediaUrl('app.js', pageCtx), 'app.js', '媒体 URL：相对非媒体文件保持')
+  assertEqual(proxy.mapMediaUrl('/proxy/7/__lw_media__/https/cdn.com/a.ts', imageCtx), '/proxy/7/__lw_media__/https/cdn.com/a.ts', '媒体 URL：已映射地址保持')
+  assertEqual(proxy.mapMediaUrl('blob:https://lineweb.test/abc', imageCtx), 'blob:https://lineweb.test/abc', '媒体 URL：blob 保持')
+
+  const mediaHtml = proxy.rewriteHtml(
+    [
+      '<html><head></head><body>',
+      '<video src="https://cdn.example.com/movie.mp4" poster="/poster.jpg"><source src="//cdn.example.com/a.m3u8"></video>',
+      '<video src="/local.mp4"></video>',
+      '<audio src="https://cdn.example.com/b.mp3"></audio>',
+      '<img src="https://cdn.example.com/p.png">',
+      '</body></html>',
+    ].join(''),
+    ctx,
+    { cookies: [] },
+  )
+  assert(mediaHtml.includes('<video src="/proxy/7/__lw_media__/https/cdn.example.com/movie.mp4"'), 'HTML 媒体：video 跨域 src')
+  assert(mediaHtml.includes('poster="/proxy/7/poster.jpg"'), 'HTML 媒体：poster 仍走普通反代')
+  assert(mediaHtml.includes('<source src="/proxy/7/__lw_media__/https/cdn.example.com/a.m3u8"'), 'HTML 媒体：source 协议相对')
+  assert(mediaHtml.includes('<video src="/proxy/7/__lw_media__/https/example.com/local.mp4"'), 'HTML 媒体：同站 video 也走媒体代理')
+  assert(mediaHtml.includes('<audio src="/proxy/7/__lw_media__/https/cdn.example.com/b.mp3"'), 'HTML 媒体：audio 跨域 src')
+  assert(mediaHtml.includes('<img src="https://cdn.example.com/p.png"'), 'HTML 媒体：图片链接不受影响')
+
+  // ============================================================
   // 5. HTML 重写与引导脚本注入
   // ============================================================
   const html = [
@@ -369,6 +516,13 @@ async function main(): Promise<void> {
   assert(boot.includes('window.EventSource='), '引导脚本：EventSource 改写')
   assert(boot.includes('MutationObserver'), '引导脚本：动态节点补写')
   assert(boot.includes('serviceWorker'), '引导脚本：禁用 Service Worker')
+  assert(boot.includes("var MEDIA_PREFIX=PREFIX+'/__lw_media__/'"), '引导脚本：媒体代理前缀')
+  assert(boot.includes('function mapMediaUrl'), '引导脚本：媒体 URL 映射')
+  assert(boot.includes('if(isMediaFile(p))return toMediaPath(p)'), '引导脚本：fetch/XHR 媒体后缀走媒体代理')
+  assert(boot.includes("defineProperty(HTMLMediaElement.prototype,'src'"), '引导脚本：media.src 改写')
+  assert(boot.includes("defineProperty(sourceProto,'src'"), '引导脚本：source.src 改写')
+  assert(boot.includes('Element.prototype.setAttribute=function'), '引导脚本：setAttribute 媒体补写')
+  assert(boot.includes('mediaPrefix:MEDIA_PREFIX'), '引导脚本：全局标记暴露媒体前缀')
   assert(boot.includes('"desktop":false'), '引导脚本：默认跟随设备 UA')
 
   const desktopBoot = bootstrap.buildBootstrapScript({
