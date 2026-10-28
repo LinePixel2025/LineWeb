@@ -1054,6 +1054,13 @@
   min-height: 72px;
 }
 
+/* 拖入图片时的落点提示（与 neko 的 drop 上传对应） */
+.gh-chat-composer--dragover {
+  outline: 2px dashed var(--gh-accent);
+  outline-offset: -4px;
+  background: var(--gh-accent-soft);
+}
+
 /* 图片 / 拍照 工具栏（与发送栏同一行，节省垂直空间） */
 .gh-chat-composer-tools {
   display: flex;

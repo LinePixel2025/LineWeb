@@ -1,11 +1,10 @@
-import { Router, type Request, type Response } from 'express'
+import express, { Router, type Request, type Response } from 'express'
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import { z } from 'zod'
 import { config } from '../config/index.js'
 import { AppError } from '../middleware/errorHandler.js'
 import { asyncHandler } from '../lib/asyncHandler.js'
 import { authenticate } from '../middleware/auth.js'
-import { receiveMultipartImage } from '../lib/multipartImage.js'
 import {
   getUserBrief,
   ensureMutualFriendship,
@@ -533,19 +532,46 @@ router.post('/messages/admin-recall', chatWriteLimiter, recallHandler('/chat/mes
 
 // === 图片上传 ===
 
+/**
+ * 与 neko 的 `/chat/uploads` 同构：客户端直接 POST 图片字节（raw body），
+ * Content-Type 只用于让 express.raw 收下整块请求体，真实类型仍按魔数判定。
+ * 超限时返回 JSON（默认错误页是 HTML，前端只能显示兜底文案）。
+ */
+const rawChatImage = express.raw({
+  type: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
+  limit: UPLOAD_MAX_BYTES,
+})
+
+function receiveRawChatImage(req: Request, res: Response, next: () => void): void {
+  rawChatImage(req, res, (err?: unknown) => {
+    if (!err) {
+      next()
+      return
+    }
+    const status = (err as { status?: number; statusCode?: number }).status
+      ?? (err as { statusCode?: number }).statusCode
+    const tooLarge = status === 413
+    res
+      .status(tooLarge ? 413 : 400)
+      .json({ error: tooLarge ? '图片不能超过 8MB' : '图片上传失败' })
+  })
+}
+
 router.post(
   '/uploads',
+  receiveRawChatImage,
   asyncHandler(async (req: Request, res: Response) => {
     const user = await currentUser(req)
     const sessionHash = await currentSessionHash(req)
-    const file = await receiveMultipartImage(req, UPLOAD_MAX_BYTES)
-    if (file.limitHit) throw new AppError('图片不能超过 8MB', 413)
-    const mime = sniffImageMime(file.buffer)
+    const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)
+    if (buffer.length === 0) throw new AppError('图片上传失败', 400)
+    // 与 neko 完全一致：类型按魔数判定，请求头只用于让 express.raw 收下整块 body
+    const mime = sniffImageMime(buffer)
     if (!mime) throw new AppError('仅支持 PNG/JPEG/GIF/WebP 图片', 415)
     const result = await callBrowserApi<{ ok: boolean; url: string; mime: string }>(
       'POST',
       '/chat/uploads',
-      { user, sessionHash, raw: file.buffer, contentType: mime, timeoutMs: 30000 },
+      { user, sessionHash, raw: buffer, contentType: mime, timeoutMs: 30000 },
     )
     if (!result?.url) throw new AppError('图片上传失败', 503)
     const id = result.url.split('/').filter(Boolean).pop() || ''

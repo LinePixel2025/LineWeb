@@ -1,7 +1,16 @@
-import { useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
+import {
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ClipboardEvent,
+  type DragEvent,
+  type KeyboardEvent,
+} from 'react'
 import ChatCameraDialog from './ChatCameraDialog'
 
 const DEFAULT_MAX_LENGTH = 2000
+/** 与 neko `PHOTO_ACCEPT` 一致：只列服务端按魔数支持的四种 */
+const PHOTO_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif'
 
 export interface ComposerReply {
   /** 被引用消息 id */
@@ -45,6 +54,7 @@ export default function ChatComposer({
   const [sending, setSending] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [cameraOpen, setCameraOpen] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
 
   // 相册选择（普通文件选择）
   const imageInputRef = useRef<HTMLInputElement | null>(null)
@@ -88,11 +98,63 @@ export default function ChatComposer({
     }
   }
 
+  /**
+   * 与 neko `uploadPhotos` 一致：一次可多选，逐张上传（每张各发一条图片消息）。
+   * 单张失败不阻塞后续文件，错误由页面 banner 展示。
+   */
+  const uploadImages = async (files: File[]) => {
+    if (!onSendImage || uploading) return
+    const images = files.filter((file) => file.type.startsWith('image/'))
+    if (images.length === 0) return
+    setUploading(true)
+    try {
+      for (const file of images) {
+        try {
+          await onSendImage(file)
+        } catch {
+          // 继续上传剩余图片
+        }
+      }
+    } finally {
+      setUploading(false)
+    }
+  }
+
   /** 读取文件输入并立即重置 value，保证连续选择同一文件也能触发 change */
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
+    const files = Array.from(event.target.files ?? [])
     event.target.value = ''
-    if (file) void uploadImage(file)
+    if (files.length > 0) void uploadImages(files)
+  }
+
+  /** 粘贴图片（与 neko 的 paste 处理一致：剪贴板里有图片就直接上传） */
+  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!onSendImage || !canAttach) return
+    const files = Array.from(event.clipboardData?.files ?? []).filter((file) =>
+      file.type.startsWith('image/'),
+    )
+    if (files.length === 0) return
+    event.preventDefault()
+    void uploadImages(files)
+  }
+
+  /** 拖入图片（与 neko 的 drop 处理一致） */
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!onSendImage || !canAttach) return
+    if (!Array.from(event.dataTransfer.types).includes('Files')) return
+    event.preventDefault()
+    setDragOver(true)
+  }
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (!onSendImage || !canAttach) return
+    const files = Array.from(event.dataTransfer.files ?? []).filter((file) =>
+      file.type.startsWith('image/'),
+    )
+    if (files.length === 0) return
+    event.preventDefault()
+    setDragOver(false)
+    void uploadImages(files)
   }
 
   /** 拍照：支持 getUserMedia 时用实时预览弹窗，否则退回 capture 文件输入 */
@@ -115,7 +177,12 @@ export default function ChatComposer({
   }
 
   return (
-    <div className="gh-chat-composer">
+    <div
+      className={`gh-chat-composer ${dragOver ? 'gh-chat-composer--dragover' : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={handleDrop}
+    >
       {replyTo && (
         <div className="gh-chat-reply-bar">
           <span className="gh-chat-reply-copy">
@@ -141,6 +208,7 @@ export default function ChatComposer({
         aria-label="消息输入框"
         onChange={(event) => setValue(event.target.value.slice(0, maxLength))}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
       />
       <div className="gh-chat-composer-bar">
         {(onSendImage || onToggleStickers) && (
@@ -204,7 +272,8 @@ export default function ChatComposer({
           <input
             ref={imageInputRef}
             type="file"
-            accept="image/*"
+            accept={PHOTO_ACCEPT}
+            multiple
             className="gh-chat-visually-hidden"
             aria-hidden="true"
             tabIndex={-1}
@@ -213,7 +282,7 @@ export default function ChatComposer({
           <input
             ref={cameraInputRef}
             type="file"
-            accept="image/*"
+            accept={PHOTO_ACCEPT}
             capture="environment"
             className="gh-chat-visually-hidden"
             aria-hidden="true"

@@ -37,7 +37,7 @@ const ENDPOINTS = [
     { method: 'GET', path: '/api/chat/xmpp/directory', note: '搜索 neko 用户（?q=，lw_* 只回好友）' },
     { method: 'POST', path: '/api/chat/xmpp/rooms', note: '建群 { name, memberIds }（groupchat 走 neko rooms）' },
     { method: 'POST', path: '/api/chat/xmpp/messages/recall', note: '撤回消息（5 分钟内，仅本人）' },
-    { method: 'POST', path: '/api/chat/xmpp/uploads', note: '图片消息上传（multipart，字段 file）→ /chat/uploads/<id>?token=' },
+    { method: 'POST', path: '/api/chat/xmpp/uploads', note: '图片消息上传（raw 二进制，Content-Type 图片类型）→ /chat/uploads/<id>?token=' },
     { method: 'WS', path: '/ws/xmpp?token=', note: 'XMPP over WebSocket 中继：SASL/bind 由浏览器侧客户端完成；不可用时降级为 /api/chat/xmpp/http-* 长轮询' },
     { method: 'WS', path: '/ws/chat', note: '游戏与好友事件推送：连接后先发 {type:"auth",token}，推送 game:* 与 friend:*（聊天消息不再经过这里）' },
     { method: 'GET', path: '/api/chat/conversations', note: '已废弃：返回 410 CHAT_MIGRATED（旧聊天表仅作只读存档）' },

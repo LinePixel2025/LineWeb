@@ -145,8 +145,7 @@ export interface XmppChatValue {
   sendImage: (key: string, file: File) => Promise<void>
   /**
    * 转发聊天记录：
-   *   - merge：合并转发（服务端生成快照卡片）；neko 按「目标会话」校验快照来源，
-   *     因此只能转发回原会话，跨会话请用 separate
+   *   - merge：合并转发（neko 按消息行推导源会话并生成快照卡片），可发往任意会话
    *   - separate：逐条转发（按原消息内容重新发送，可发往任意会话）
    */
   forwardMessages: (
@@ -1291,8 +1290,8 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   /**
    * 转发聊天记录。
    *
-   * 合并转发依赖 neko 按「目标会话」生成快照（单聊双方匹配 / 同群），因此跨会话
-   * 只能逐条转发；这条限制来自上游协议，不是前端取舍。
+   * 合并转发由 neko 按所选消息行自身推导源会话（不再依赖目标会话），因此可以发往
+   * 任意好友或群：全部条目须同属发送者可读的一个会话，跨会话转发是本功能的主路径。
    */
   const forwardMessages = useCallback(
     async (
@@ -1308,17 +1307,13 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       if (ids.length === 0) throw new Error('没有可转发的消息')
       const targets = Array.from(new Set(targetKeys.filter((key) => isConversationKey(key))))
       if (targets.length === 0) throw new Error('请选择转发对象')
-      if (mode === 'merge' && targets.some((key) => key !== sourceKey)) {
-        throw new Error('合并转发只能发回原会话，跨会话请使用逐条转发')
-      }
       if (mode === 'separate' && ids.length * targets.length > 100) {
         throw new Error('一次最多逐条转发 100 条（消息数 × 会话数），请减少选择')
       }
 
       if (mode === 'merge') {
-        const target = requireTarget(sourceKey)
         for (const key of targets) {
-          if (key !== sourceKey) continue
+          const target = requireTarget(key)
           client.sendMessage({
             to: target.to,
             type: target.type,
@@ -1356,11 +1351,11 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       const client = requireClient()
       const target = requireTarget(key)
       const prepared = await prepareChatImage(file)
-      const form = new FormData()
-      form.append('file', prepared)
-      const uploaded = await api.postForm<{ ok: boolean; url: string; id: string }>(
+      // 与 neko 原生客户端一致：raw 二进制 + Content-Type，服务端按魔数复核
+      const uploaded = await api.postBinary<{ ok: boolean; url: string; id: string }>(
         '/chat/xmpp/uploads',
-        form,
+        prepared,
+        prepared.type || 'image/jpeg',
       )
       const id = uploaded?.id || ''
       if (!id) throw new Error('图片上传失败')
@@ -1395,11 +1390,10 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   const addSticker = useCallback(
     async (file: File) => {
       const prepared = await prepareStickerImage(file)
-      const form = new FormData()
-      form.append('file', prepared)
-      const uploaded = await api.postForm<{ ok: boolean; url: string; id: string }>(
+      const uploaded = await api.postBinary<{ ok: boolean; url: string; id: string }>(
         '/chat/xmpp/uploads',
-        form,
+        prepared,
+        prepared.type || 'image/png',
       )
       const uploadId = uploaded?.id || ''
       if (!uploadId) throw new Error('图片上传失败')

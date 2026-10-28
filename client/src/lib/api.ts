@@ -9,6 +9,8 @@ interface RequestOptions {
   body?: unknown
   /** multipart/form-data 表单；与 body 互斥，设置后不写 Content-Type（交给浏览器补 boundary） */
   form?: FormData
+  /** 原始二进制请求体（图片上传用；与 form/body 互斥，Content-Type 由调用方指定） */
+  raw?: Blob
   headers?: Record<string, string>
   signal?: AbortSignal
   noRedirect?: boolean
@@ -66,7 +68,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     headers['Cache-Control'] = 'no-cache'
   }
 
-  if (options.body && !options.form && !headers['Content-Type']) {
+  if (options.body && !options.form && !options.raw && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json'
   }
   // multipart 表单不设置 Content-Type：浏览器会自动补上带 boundary 的值
@@ -90,7 +92,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     const res = await fetch(`${API_BASE}${path}`, {
       method: options.method || 'GET',
       headers,
-      body: options.form ?? (options.body ? JSON.stringify(options.body) : undefined),
+      body: options.form ?? options.raw ?? (options.body ? JSON.stringify(options.body) : undefined),
       signal: controller.signal,
     })
 
@@ -142,6 +144,24 @@ export const api = {
     request<T>(path, {
       method: 'POST',
       form,
+      signal: opts?.signal,
+      noRedirect: opts?.noRedirect,
+      timeoutMs: UPLOAD_TIMEOUT_MS,
+    }),
+  /**
+   * 原始二进制上传（与 neko 的 `/chat/uploads` 同构）：
+   * 请求体即图片字节，类型由 Content-Type 声明，服务端按魔数复核。
+   */
+  postBinary: <T>(
+    path: string,
+    blob: Blob,
+    contentType: string,
+    opts?: { signal?: AbortSignal; noRedirect?: boolean },
+  ) =>
+    request<T>(path, {
+      method: 'POST',
+      raw: blob,
+      headers: { 'Content-Type': contentType },
       signal: opts?.signal,
       noRedirect: opts?.noRedirect,
       timeoutMs: UPLOAD_TIMEOUT_MS,
