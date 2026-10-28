@@ -5,6 +5,7 @@ import { buildBootstrapScript } from './webProxyBootstrap.js'
 import { publicCookiesForUrl, type ProxyCookie } from './proxyCookies.js'
 import { buildMediaProxyPath, isMediaProxyPath } from './webProxyMedia.js'
 import { buildResProxyPath, isResProxyPath } from './webProxyRes.js'
+import { RESOURCE_CDN_SUFFIXES, isResourceCdnHost } from './webProxyHosts.js'
 import { isProxyHostBlacklisted } from './proxyBlacklist.js'
 
 /**
@@ -178,6 +179,9 @@ export function mapUrlToProxy(value: string, ctx: RewriteContext): string {
     try {
       const url = new URL(`https:${trimmed}`)
       if (isProxyableHost(url.host, ctx)) return `${prefix}${url.pathname}${url.search}${url.hash}`
+      // 懒加载属性（data-src / data-original 等）里的已知 CDN 资源同样走同源资源代理，
+      // 否则脚本把原地址写回 src 后，浏览器仍会带 LineWeb 的 Referer 直连 CDN
+      if (isResourceCdnHost(url.host)) return buildResProxyPath(url, ctx.siteId)
     } catch {
       /* ignore */
     }
@@ -187,6 +191,7 @@ export function mapUrlToProxy(value: string, ctx: RewriteContext): string {
     try {
       const url = new URL(trimmed)
       if (isProxyableHost(url.host, ctx)) return `${prefix}${url.pathname}${url.search}${url.hash}`
+      if (isResourceCdnHost(url.host)) return buildResProxyPath(url, ctx.siteId)
     } catch {
       /* ignore */
     }
@@ -501,6 +506,7 @@ export function rewriteHtml(
     cookies: options.cookies,
     forceDesktop: !!ctx.forceDesktop,
     desktopUserAgent: DESKTOP_USER_AGENT,
+    cdnHosts: RESOURCE_CDN_SUFFIXES,
   })}</script>`
   const headMatch = /<head\b[^>]*>/i.exec(out)
   if (headMatch) {

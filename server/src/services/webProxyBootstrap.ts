@@ -19,6 +19,8 @@ export interface BootstrapOptions {
   forceDesktop?: boolean
   /** 桌面 UA 字符串（由服务端统一定义，避免双份漂移） */
   desktopUserAgent?: string
+  /** 需要在脚本层也改写进资源代理的 CDN 主机后缀（如 hdslb.com） */
+  cdnHosts?: string[]
 }
 
 /** 生成可内联的 <script> 内容（不含 <script> 标签本身） */
@@ -29,6 +31,7 @@ export function buildBootstrapScript(options: BootstrapOptions): string {
     cookies: options.cookies,
     desktop: !!options.forceDesktop,
     ua: options.desktopUserAgent || '',
+    cdnHosts: options.cdnHosts || [],
   })
   // 防止上游域名中出现奇怪字符破坏脚本（域名本身已由 URL 解析校验）
   const safePayload = payload.replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/\u2028|\u2029/g, '')
@@ -39,6 +42,8 @@ var SITE_ID=cfg.siteId;
 var PREFIX='/proxy/'+SITE_ID;
 var WS_PREFIX='/proxy-ws/'+SITE_ID;
 var siteHost='';try{siteHost=new URL(cfg.origin).host}catch(e){}
+var CDN_HOSTS=cfg.cdnHosts||[];
+function isCdnHost(host){host=String(host||'').toLowerCase();for(var i=0;i<CDN_HOSTS.length;i++){var s=String(CDN_HOSTS[i]||'').toLowerCase();if(!s)continue;if(host===s||host.slice(-(s.length+1))==='.'+s)return true}return false}
 var pageHost=location.host;
 var wsScheme=location.protocol==='https:'?'wss://':'ws://';
 if(cfg.desktop&&cfg.ua){try{Object.defineProperty(navigator,'userAgent',{configurable:true,get:function(){return cfg.ua}})}catch(e){}try{Object.defineProperty(navigator,'platform',{configurable:true,get:function(){return 'Win32'}})}catch(e){}try{Object.defineProperty(navigator,'userAgentData',{configurable:true,get:function(){return {brands:[{brand:'Chromium',version:'131'},{brand:'Google Chrome',version:'131'},{brand:'Not_A Brand',version:'24'}],mobile:false,platform:'Windows'}}})}catch(e){}}
@@ -65,7 +70,7 @@ function toResPath(u){return RES_PREFIX+(u.protocol==='http:'?'http':'https')+'/
 function isMediaFile(u){return MEDIA_EXT_RE.test(u.pathname||'')}
 function isResFile(u){return RES_EXT_RE.test(u.pathname||'')}
 function isSpecialUrl(s){var l=s.toLowerCase();return l.indexOf('javascript:')===0||l.indexOf('data:')===0||l.indexOf('blob:')===0||l.indexOf('mailto:')===0||l.indexOf('tel:')===0||l.indexOf('about:')===0||l.indexOf('file:')===0}
-function mapHttpUrl(value){if(typeof value!=='string')return value;var s=value.trim();if(!s)return value;if(isSpecialUrl(s))return value;if(s.charAt(0)==='#')return value;if(isMediaPath(s)||isResPath(s))return value;if(s.charAt(0)==='/'&&s.charAt(1)!=='/'){if(s===PREFIX||s.indexOf(PREFIX+'/')===0)return value;return PREFIX+s}if(s.charAt(0)==='/'&&s.charAt(1)==='/'){try{var p=new URL('https:'+s);if(isSiteHost(p.host))return toProxyPath(p);if(isMediaFile(p))return toMediaPath(p);if(isResFile(p))return toResPath(p)}catch(e){}return value}var lower=s.toLowerCase();if(lower.indexOf('http://')===0||lower.indexOf('https://')===0){try{var u=new URL(s);if(isSiteHost(u.host))return toProxyPath(u);if(isMediaFile(u))return toMediaPath(u);if(isResFile(u))return toResPath(u)}catch(e){}return value}return value}
+function mapHttpUrl(value){if(typeof value!=='string')return value;var s=value.trim();if(!s)return value;if(isSpecialUrl(s))return value;if(s.charAt(0)==='#')return value;if(isMediaPath(s)||isResPath(s))return value;if(s.charAt(0)==='/'&&s.charAt(1)!=='/'){if(s===PREFIX||s.indexOf(PREFIX+'/')===0)return value;return PREFIX+s}if(s.charAt(0)==='/'&&s.charAt(1)==='/'){try{var p=new URL('https:'+s);if(isSiteHost(p.host))return toProxyPath(p);if(isCdnHost(p.host))return isMediaFile(p)?toMediaPath(p):toResPath(p);if(isMediaFile(p))return toMediaPath(p);if(isResFile(p))return toResPath(p)}catch(e){}return value}var lower=s.toLowerCase();if(lower.indexOf('http://')===0||lower.indexOf('https://')===0){try{var u=new URL(s);if(isSiteHost(u.host))return toProxyPath(u);if(isCdnHost(u.host))return isMediaFile(u)?toMediaPath(u):toResPath(u);if(isMediaFile(u))return toMediaPath(u);if(isResFile(u))return toResPath(u)}catch(e){}return value}return value}
 function mapMediaUrl(value){if(typeof value!=='string')return value;var s=value.trim();if(!s)return value;if(isSpecialUrl(s))return value;if(isMediaPath(s))return value;if(s.charAt(0)==='/'&&s.charAt(1)!=='/'){if(s===PREFIX||s.indexOf(PREFIX+'/')===0)return value;try{return toMediaPath(new URL(s,cfg.origin))}catch(e){return PREFIX+s}}if(s.charAt(0)==='/'&&s.charAt(1)==='/'){try{return toMediaPath(new URL('https:'+s))}catch(e){}return value}if(/^https?:\\/\\//i.test(s)){try{return toMediaPath(new URL(s))}catch(e){}return value}try{var pp=location.pathname;var base=cfg.origin;if(pp===PREFIX||pp.indexOf(PREFIX+'/')===0){base=cfg.origin+(pp.slice(PREFIX.length)||'/')+location.search}var ru=new URL(s,base);if(isMediaFile(ru))return toMediaPath(ru)}catch(e){}return value}
 function mapWsUrl(value){if(typeof value!=='string')return value;var s=value.trim();if(!s)return value;if(s.charAt(0)==='/'){if(s.indexOf(WS_PREFIX)===0)return value;return wsScheme+pageHost+WS_PREFIX+s}var lower=s.toLowerCase();if(lower.indexOf('ws://')===0||lower.indexOf('wss://')===0){try{var u=new URL(s);if(isSiteHost(u.host))return wsScheme+pageHost+WS_PREFIX+u.pathname+u.search+u.hash}catch(e){}return value}return value}
 function addCookieHeader(init){var c=cookieString();if(!c)return init;var next=init?Object.assign({},init):{};try{var h=new Headers(next.headers||{});if(!h.has('x-lw-cookie'))h.set('x-lw-cookie',c);next.headers=h}catch(e){}return next}
@@ -76,6 +81,7 @@ if(window.EventSource){var NativeES=window.EventSource;var LWES=function(url,opt
 if(navigator.sendBeacon){var nativeBeacon=navigator.sendBeacon.bind(navigator);navigator.sendBeacon=function(url,data){return nativeBeacon(mapHttpUrl(String(url)),data)}}
 if(window.WebSocket){var NativeWS=window.WebSocket;var LWWS=function(url,protocols){var target=mapWsUrl(String(url));return protocols===undefined?new NativeWS(target):new NativeWS(target,protocols)};LWWS.prototype=NativeWS.prototype;try{Object.setPrototypeOf(LWWS,NativeWS)}catch(e){}window.WebSocket=LWWS}
 try{['pushState','replaceState'].forEach(function(name){var orig=history[name];if(typeof orig!=='function')return;history[name]=function(state,title,url){if(typeof url==='string'&&url.charAt(0)==='/'&&url.charAt(1)!=='/'&&url.indexOf(PREFIX)!==0)url=PREFIX+url;return orig.call(this,state,title,url)}})}catch(e){}
+try{var imgDesc=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');if(imgDesc&&imgDesc.set&&imgDesc.configurable){Object.defineProperty(HTMLImageElement.prototype,'src',{configurable:true,enumerable:imgDesc.enumerable,get:imgDesc.get,set:function(v){return imgDesc.set.call(this,mapHttpUrl(String(v)))}})}}catch(e){}
 try{var mediaDesc=Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'src');if(mediaDesc&&mediaDesc.set&&mediaDesc.configurable){Object.defineProperty(HTMLMediaElement.prototype,'src',{configurable:true,enumerable:mediaDesc.enumerable,get:mediaDesc.get,set:function(v){return mediaDesc.set.call(this,mapMediaUrl(String(v)))}})}}catch(e){}
 try{var sourceProto=window.HTMLSourceElement&&HTMLSourceElement.prototype;var sourceDesc=sourceProto&&Object.getOwnPropertyDescriptor(sourceProto,'src');if(sourceDesc&&sourceDesc.set&&sourceDesc.configurable){Object.defineProperty(sourceProto,'src',{configurable:true,enumerable:sourceDesc.enumerable,get:sourceDesc.get,set:function(v){return sourceDesc.set.call(this,mapMediaUrl(String(v)))}})}}catch(e){}
 try{var rawSetAttribute=Element.prototype.setAttribute;Element.prototype.setAttribute=function(name,value){try{var n=String(name).toLowerCase();if(n==='src'||n==='data-src'){var t=this&&this.tagName;if(t==='VIDEO'||t==='AUDIO'||t==='SOURCE')value=mapMediaUrl(String(value))}}catch(e){}return rawSetAttribute.call(this,name,value)}}catch(e){}

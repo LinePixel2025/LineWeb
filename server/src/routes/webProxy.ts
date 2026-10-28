@@ -59,6 +59,7 @@ import {
   guessResourceKindFromPath,
   parseResTarget,
 } from '../services/webProxyRes.js'
+import { refererOverrideFor } from '../services/webProxyHosts.js'
 
 /** 反代会话 Cookie 有效期（与账号登录令牌一致，7 天） */
 const PROXY_SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
@@ -438,8 +439,17 @@ function buildMediaHeaders(
   headers.set('accept-encoding', 'identity')
   const cookie = cookieHeaderForUrl(jar, target)
   if (cookie) headers.set('cookie', cookie)
-  headers.set('referer', mediaReferer(req.headers.referer, options.siteOrigin, options.siteId))
-  headers.set('origin', options.siteOrigin)
+  // 按 Referer 防盗链的 CDN（hdslb.com 等）改用对方认的来源；
+  // 反代站点本身就是该来源时保持页面地址还原出来的 Referer
+  let referer = mediaReferer(req.headers.referer, options.siteOrigin, options.siteId)
+  let origin = options.siteOrigin
+  const refererOverride = refererOverrideFor(target.hostname, referer)
+  if (refererOverride) {
+    referer = refererOverride.referer
+    if (refererOverride.origin) origin = refererOverride.origin
+  }
+  headers.set('referer', referer)
+  headers.set('origin', origin)
   const forwardedFor = req.headers['x-forwarded-for']
   const clientIp = req.ip || ''
   headers.set('x-forwarded-for', forwardedFor ? `${forwardedFor}, ${clientIp}` : clientIp)
