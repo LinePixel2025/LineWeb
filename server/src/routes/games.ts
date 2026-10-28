@@ -27,6 +27,7 @@ import {
   applyGameMove,
   cancelGameInvite,
   createGameInvite,
+  forceResetGameState,
   getActiveGameMatch,
   getGameMatch,
   getGameSync,
@@ -337,6 +338,17 @@ router.get('/2048/sync', syncLimiter, (req, res) => {
 router.post('/2048/presence', presenceLimiter, (req, res) => {
   markGamePresence(currentUserId(req))
   res.json({ ok: true, serverTime: nowIso() })
+})
+
+// === 强制清除联机状态（所有游戏共用） ===
+
+/**
+ * 客户端与服务端失步时（例如已经离开页面但服务端仍认为在房间/对局中）手动清理：
+ * 等待房间 → 离开/解散，进行中 → 认输（按各游戏规则结算），并清掉 presence 心跳。
+ * 返回本次处理过的房间数。
+ */
+router.post('/force-reset', gameWriteLimiter, (req, res) => {
+  res.json(forceResetGameState(currentUserId(req)))
 })
 
 // === 对局 ===

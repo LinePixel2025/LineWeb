@@ -3,6 +3,7 @@ import { areFriends, getUserBrief, listFriends } from './chatService.js'
 import { sendToUser } from './chatHub.js'
 import { pruneGamePresence } from './gamePresence.js'
 import { nextGameInviteId } from './gameIds.js'
+import { resetUserInMatches } from './gameExit.js'
 import {
   GAME_DISCONNECT_FORFEIT_MS,
   GAME_FINISHED_RETENTION_MS,
@@ -252,9 +253,16 @@ function seatOf(match: LiarMatchState, userId: number): number {
   return match.players.findIndex((player) => player.userId === userId)
 }
 
+/**
+ * 当前用户「仍在其中」的房间/对局：等待房间，或进行中且本人仍存活。
+ * 认输 / 中弹出局后不再返回，避免大厅与邀请把玩家卡在「你正在对局中」。
+ */
 function activeMatchFor(userId: number): LiarMatchState | null {
   for (const match of matches.values()) {
-    if (match.status !== 'finished' && isParticipant(match, userId)) return match
+    if (match.status === 'finished') continue
+    const seat = seatOf(match, userId)
+    if (seat < 0) continue
+    if (match.status === 'waiting' || playerStatusOf(match, seat) === 'playing') return match
   }
   return null
 }
@@ -693,7 +701,14 @@ export function leaveLiarMatch(
 ): { ok: true; dissolved: boolean } {
   const match = matches.get(matchId)
   if (!match || !isParticipant(match, userId)) throw new AppError('房间不存在', 404)
-  if (match.status !== 'waiting') throw new AppError('对局已开始，无法离开房间', 409)
+  if (match.status !== 'waiting') {
+    const seat = seatOf(match, userId)
+    if (match.status === 'playing' && seat >= 0 && playerStatusOf(match, seat) === 'playing') {
+      throw new AppError('对局进行中，请先认输再退出房间', 409)
+    }
+    removeInvitesForUsers([userId], 'cancelled')
+    return { ok: true, dissolved: false }
+  }
 
   removeInvitesForUsers([userId], 'cancelled')
   if (match.hostId === userId) {
@@ -1087,4 +1102,38 @@ function isUserInLiarMatch(userId: number): boolean {
   return activeMatchFor(userId) !== null
 }
 
-registerGameModule({ name: 'liar', isUserInMatch: isUserInLiarMatch, sweep: runLiarSweeper })
+/** 强制清除该用户在骗子酒馆里的房间 / 对局状态（等待房间离开，进行中认输） */
+export function resetLiarUser(userId: number): number {
+  let cleared = 0
+  for (const match of Array.from(matches.values())) {
+    const seat = seatOf(match, userId)
+    if (seat < 0) continue
+    if (match.status === 'waiting') {
+      try {
+        leaveLiarMatch(userId, match.id)
+        cleared += 1
+      } catch {
+        // 已被 sweeper 结算 / 并发离开：忽略
+      }
+      continue
+    }
+    if (match.status === 'playing' && playerStatusOf(match, seat) === 'playing') {
+      try {
+        resignLiarMatch(userId, match.id)
+        cleared += 1
+      } catch {
+        // 结算竞态：忽略
+      }
+      continue
+    }
+    cleared += 1
+  }
+  return cleared
+}
+
+registerGameModule({
+  name: 'liar',
+  isUserInMatch: isUserInLiarMatch,
+  sweep: runLiarSweeper,
+  resetUser: resetLiarUser,
+})

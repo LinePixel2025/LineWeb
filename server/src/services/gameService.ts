@@ -1,8 +1,9 @@
 import { AppError } from '../middleware/errorHandler.js'
 import { areFriends, getUserBrief, listFriends } from './chatService.js'
 import { isUserOnline, sendToUser } from './chatHub.js'
-import { isGamePresent, pruneGamePresence } from './gamePresence.js'
+import { clearGamePresence, isGamePresent, pruneGamePresence } from './gamePresence.js'
 import { nextGameInviteId } from './gameIds.js'
+import { resetUserInMatches } from './gameExit.js'
 import {
   GAME2048_TARGET,
   applyMove,
@@ -189,6 +190,11 @@ export interface GameModuleHook {
   isUserInMatch: (userId: number) => boolean
   /** 定时清理钩子（由 runGameSweeper 每轮调用） */
   sweep: (now: number) => void
+  /**
+   * 强制清除该用户的房间 / 对局状态（POST /api/games/force-reset）。
+   * 等待房间走 leave，进行中走 resign；返回处理过的房间数。
+   */
+  resetUser?: (userId: number) => number
 }
 
 const gameModuleHooks: GameModuleHook[] = []
@@ -235,10 +241,18 @@ function isParticipant(match: MatchState, userId: number): boolean {
   return match.players.some((player) => player.userId === userId)
 }
 
-/** 当前用户所在的房间/对局（等待或进行中） */
+/**
+ * 当前用户「仍在其中」的房间/对局：等待房间，或进行中且本人仍在竞速（status === 'playing'）。
+ *
+ * 认输 / 出局 / 掉线判负之后不再返回，避免大厅与邀请把玩家卡在「你正在对局中」；
+ * 已结束的对局同样不返回（结算结果仍可用 GET /matches/:id 补拉）。
+ */
 function activeMatchFor(userId: number): MatchState | null {
   for (const match of matches.values()) {
-    if (match.status !== 'finished' && isParticipant(match, userId)) return match
+    if (match.status === 'finished') continue
+    const me = match.players.find((player) => player.userId === userId)
+    if (!me) continue
+    if (match.status === 'waiting' || me.status === 'playing') return match
   }
   return null
 }
@@ -459,13 +473,22 @@ export function startGameMatch(
 }
 
 /**
- * 离开等待房间：房主离开 = 解散房间；普通玩家离开 = 从房间移除。
- * 已开始的对局不能走这个接口（请使用 resign）。
+ * 离开房间：等待房间 → 房主解散 / 普通玩家移出；
+ * 对局已结束或本人已出局 → 直接放行（此时 active 查询本就不会再返回该对局，
+ * 客户端点「退出房间 / 返回大厅」不再报错）；仍在竞速的玩家需先认输。
  */
 export function leaveGameMatch(userId: number, matchId: number, now: number = Date.now()): { ok: true; dissolved: boolean } {
   const match = matches.get(matchId)
   if (!match || !isParticipant(match, userId)) throw new AppError('房间不存在', 404)
-  if (match.status !== 'waiting') throw new AppError('对局已开始，无法离开房间', 409)
+
+  if (match.status !== 'waiting') {
+    const me = match.players.find((player) => player.userId === userId)
+    if (match.status === 'playing' && me?.status === 'playing') {
+      throw new AppError('对局进行中，请先认输再退出房间', 409)
+    }
+    removeInvitesForUsers([userId], 'cancelled')
+    return { ok: true, dissolved: false }
+  }
 
   const isHost = match.hostId === userId
   removeInvitesForUsers([userId], 'cancelled')
@@ -953,6 +976,36 @@ export function startGameSweeper(): void {
 }
 
 /**
+ * 强制清除某用户的联机状态（2048 部分）：等待房间 → 离开，进行中 → 认输。
+ * 返回处理过的房间数。
+ */
+export function resetGameUser(userId: number, now: number = Date.now()): number {
+  return resetUserInMatches(matches.values(), userId, {
+    leave: (uid, id) => leaveGameMatch(uid, id, now),
+    resign: (uid, id) => resignGameMatch(uid, id, now),
+  })
+}
+
+/**
+ * 强制清除联机状态（POST /api/games/force-reset）：
+ * 逐个游戏模块清理该用户的房间 / 对局，并清掉 presence 心跳，
+ * 用于「服务端以为我在房间里，但客户端已经不在」的失步场景。
+ */
+export function forceResetGameState(userId: number): { ok: true; cleared: number } {
+  let cleared = 0
+  for (const hook of gameModuleHooks) {
+    if (!hook.resetUser) continue
+    try {
+      cleared += hook.resetUser(userId)
+    } catch (err) {
+      console.warn(`[games] 清理 ${hook.name} 联机状态失败：`, err instanceof Error ? err.message : err)
+    }
+  }
+  clearGamePresence(userId)
+  return { ok: true, cleared }
+}
+
+/**
  * 把 2048 自己也注册进跨游戏互斥注册表，这样后加的游戏（斗地主 / 贪吃蛇 /
  * 扫雷 / 跳一跳）用 isUserBusyInOtherGames 就能查到 2048 的房间。
  * sweep 留空：2048 的清理就是 runGameSweeper 本身，注册会造成自我递归。
@@ -961,4 +1014,5 @@ registerGameModule({
   name: '2048',
   isUserInMatch: (userId) => activeMatchFor(userId) !== null,
   sweep: () => {},
+  resetUser: (userId) => resetGameUser(userId),
 })

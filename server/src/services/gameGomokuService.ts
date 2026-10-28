@@ -3,6 +3,7 @@ import { areFriends, getUserBrief, listFriends } from './chatService.js'
 import { sendToUser } from './chatHub.js'
 import { pruneGamePresence } from './gamePresence.js'
 import { nextGameInviteId } from './gameIds.js'
+import { resetUserInMatches } from './gameExit.js'
 import {
   GAME_DISCONNECT_FORFEIT_MS,
   GAME_FINISHED_RETENTION_MS,
@@ -249,7 +250,9 @@ function seatOf(match: GomokuMatchState, userId: number): number {
 
 function activeMatchFor(userId: number): GomokuMatchState | null {
   for (const match of matches.values()) {
-    if (match.status !== 'finished' && isParticipant(match, userId)) return match
+    if (match.status === 'finished') continue
+    const me = match.players.find((player) => player.userId === userId)
+    if (me && (match.status === 'waiting' || me.status === 'playing')) return match
   }
   return null
 }
@@ -655,7 +658,14 @@ export function leaveGomokuMatch(
 ): { ok: true; dissolved: boolean } {
   const match = matches.get(matchId)
   if (!match || !isParticipant(match, userId)) throw new AppError('房间不存在', 404)
-  if (match.status !== 'waiting') throw new AppError('对局已开始，无法离开房间', 409)
+  if (match.status !== 'waiting') {
+    const me = match.players.find((player) => player.userId === userId)
+    if (match.status === 'playing' && me?.status === 'playing') {
+      throw new AppError('对局进行中，请先认输再退出房间', 409)
+    }
+    removeInvitesForUsers([userId], 'cancelled')
+    return { ok: true, dissolved: false }
+  }
 
   removeInvitesForUsers([userId], 'cancelled')
   if (match.hostId === userId) {
@@ -1051,4 +1061,17 @@ function isUserInGomokuMatch(userId: number): boolean {
   return activeMatchFor(userId) !== null
 }
 
-registerGameModule({ name: 'gomoku', isUserInMatch: isUserInGomokuMatch, sweep: runGomokuSweeper })
+/** 强制清除该用户在五子棋里的房间 / 对局状态（等待房间离开，进行中认输） */
+export function resetGomokuUser(userId: number): number {
+  return resetUserInMatches(matches.values(), userId, {
+    leave: (uid, id) => leaveGomokuMatch(uid, id),
+    resign: (uid, id) => resignGomokuMatch(uid, id),
+  })
+}
+
+registerGameModule({
+  name: 'gomoku',
+  isUserInMatch: isUserInGomokuMatch,
+  sweep: runGomokuSweeper,
+  resetUser: resetGomokuUser,
+})

@@ -600,7 +600,11 @@ function verifyServiceRoomStart(): void {
   assert(guestActive?.id === room.matchId, '客人 active 查询应返回本局')
   expectThrow(() => service.getParkourMatch(703, room.matchId, now), '对局不存在', '非参与者不能看详情')
   expectThrow(() => service.startParkourMatch(701, room.matchId, now), '已经开始', '不能重复开始')
-  expectThrow(() => service.leaveParkourMatch(701, room.matchId, now), '请使用认输', '比赛中不能用 leave')
+  expectThrow(
+    () => service.leaveParkourMatch(701, room.matchId, now),
+    '对局进行中',
+    '比赛中不能用 leave（须先认输）',
+  )
 
   const resigned = service.resignParkourMatch(701, room.matchId, now)
   assertEqual(playerDto(resigned.match, 701).cause, 'resign', 'resign 应记录 cause')

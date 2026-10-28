@@ -643,8 +643,8 @@ function verifyStartAndDtoCropping(): void {
   )
   expectThrow(
     () => service.leaveLiarMatch(HOST, matchId, base + 5),
-    '对局已开始，无法离开房间',
-    '开始后不能走 leave',
+    '对局进行中，请先认输再退出房间',
+    '开始后不能走 leave（须先认输）',
   )
   return { matchId }
 }

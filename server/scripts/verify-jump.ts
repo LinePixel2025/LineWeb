@@ -492,7 +492,11 @@ function verifyResignLeaveAndCapacity(): void {
   assertEqual(service.getJumpMatch(8311, waitingRoom.matchId, base + 12).players.length, 2, '离开后房间应剩 2 人')
   expectThrow(() => service.leaveJumpMatch(8399, waitingRoom.matchId, base + 13), '房间不存在', '非参与者离开应 404')
   const started2 = service.startJumpMatch(8311, waitingRoom.matchId, base + 14)
-  expectThrow(() => service.leaveJumpMatch(8312, waitingRoom.matchId, base + 15), '已开始', '已开始对局不能走 leave')
+  expectThrow(
+    () => service.leaveJumpMatch(8312, waitingRoom.matchId, base + 15),
+    '对局进行中',
+    '进行中且本人仍在场时不能走 leave（须先认输）',
+  )
   assertEqual(started2.match.status, 'playing', '开局后应正常进行')
 
   const hostRoom = service.createJumpRoomForTest(8321, 'u8321', [8322], base + 16)

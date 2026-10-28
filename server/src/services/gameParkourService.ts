@@ -3,6 +3,7 @@ import { areFriends, getUserBrief, listFriends } from './chatService.js'
 import { sendToUser } from './chatHub.js'
 import { pruneGamePresence } from './gamePresence.js'
 import { nextGameInviteId } from './gameIds.js'
+import { resetUserInMatches } from './gameExit.js'
 import {
   GAME_FINISHED_RETENTION_MS,
   GAME_INVITE_TTL_MS,
@@ -576,7 +577,14 @@ export function leaveParkourMatch(
 ): { ok: true; dissolved: boolean } {
   const match = matches.get(matchId)
   if (!match || !isParticipant(match, userId)) throw new AppError('房间不存在', 404)
-  if (match.status !== 'waiting') throw new AppError('对局已开始，请使用认输退出', 409)
+  if (match.status !== 'waiting') {
+    const me = match.players.find((player) => player.userId === userId)
+    if (match.status === 'playing' && me?.status === 'playing') {
+      throw new AppError('对局进行中，请先认输再退出房间', 409)
+    }
+    removeInvitesForUsers([userId], 'cancelled')
+    return { ok: true, dissolved: false }
+  }
 
   removeInvitesForUsers([userId], 'cancelled')
   if (match.hostId === userId) {
@@ -1056,8 +1064,17 @@ function isUserInParkourMatch(userId: number): boolean {
   return activeRaceForUser(userId) !== null
 }
 
+/** 强制清除该用户在跑酷里的房间 / 比赛状态（等待房间离开，比赛中 DNF） */
+export function resetParkourUser(userId: number): number {
+  return resetUserInMatches(matches.values(), userId, {
+    leave: (uid, id) => leaveParkourMatch(uid, id),
+    resign: (uid, id) => resignParkourMatch(uid, id),
+  })
+}
+
 registerGameModule({
   name: 'parkour',
   isUserInMatch: isUserInParkourMatch,
   sweep: runParkourSweeper,
+  resetUser: resetParkourUser,
 })

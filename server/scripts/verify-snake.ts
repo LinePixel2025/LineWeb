@@ -620,7 +620,10 @@ function verifyMatchFlow(): void {
   assertEqual(sync.invites.outgoing, [], 'sync 应携带邀请结构 outgoing')
   assertEqual(service.getSnakeSync(HOST, undefined, base + 9).match, null, '不带 matchId 的 sync 不应返回已结束对局')
   assertEqual(service.getActiveSnakeMatch(HOST, base + 9), null, '主动查询不应返回已结束对局')
-  expectThrow(() => service.leaveSnakeMatch(GUEST, matchId, base + 9), '无法离开', '开局后不能离开房间')
+  // 新语义：对局已结束（本人 won/lost）后允许退出房间，仅清理残留座位
+  const leftAfterFinish = service.leaveSnakeMatch(GUEST, matchId, base + 9)
+  assertEqual(leftAfterFinish.ok, true, '对局结束后允许退出房间')
+  assertEqual(leftAfterFinish.dissolved, false, '结束后退出不应解散已结束房间')
 }
 
 // === 服务：邀请边缘流程 / 离开 / 认输 ===
@@ -671,8 +674,8 @@ function verifyInvitesAndLeaveAndResign(): void {
   assertEqual(started.match.status, 'playing', '3 人房间应能开局')
   expectThrow(
     () => service.leaveSnakeMatch(6211, full.matchId, base + 17),
-    '无法离开',
-    '开局后房主不能离开房间',
+    '对局进行中',
+    '开局后房主不能直接离开房间（须先认输）',
   )
 
   // === 认输淘汰：仍有 2 人存活时继续，只剩 1 人时按 resign 结束 ===

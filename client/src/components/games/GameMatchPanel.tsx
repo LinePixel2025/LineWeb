@@ -226,14 +226,25 @@ export default function GameMatchPanel({
               </article>
             ))}
           </div>
-          <button
-            type="button"
-            className="gh-btn gh-btn--danger gh-btn--md gh-game-resign"
-            onClick={onResign}
-            disabled={finished}
-          >
-            认输
-          </button>
+          {!finished && me?.status === 'lost' ? (
+            // 已出局：不必再认输，直接退场（服务端会按出局口径放行）
+            <button
+              type="button"
+              className="gh-btn gh-btn--secondary gh-btn--md gh-game-resign"
+              onClick={onBackToLobby}
+            >
+              退出对局
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="gh-btn gh-btn--danger gh-btn--md gh-game-resign"
+              onClick={onResign}
+              disabled={finished}
+            >
+              认输
+            </button>
+          )}
         </aside>
       </div>
 

@@ -1037,4 +1037,27 @@ function isUserInMinecraftMatch(userId: number): boolean {
   return activeMatchFor(userId) !== null
 }
 
-registerGameModule({ name: 'minecraft', isUserInMatch: isUserInMinecraftMatch, sweep: runMinecraftSweeper })
+/**
+ * 强制清除该用户在世界里的房间 / 世界状态。
+ * 沙盒没有认输概念，统一走 leave：等待房间房主 = 解散，其余 = 移出并移交房主。
+ */
+export function resetMinecraftUser(userId: number): number {
+  let cleared = 0
+  for (const match of Array.from(matches.values())) {
+    if (!match.players.some((player) => player.userId === userId)) continue
+    try {
+      leaveMinecraftMatch(userId, match.id)
+      cleared += 1
+    } catch {
+      // 已结束 / 并发离开：忽略
+    }
+  }
+  return cleared
+}
+
+registerGameModule({
+  name: 'minecraft',
+  isUserInMatch: isUserInMinecraftMatch,
+  sweep: runMinecraftSweeper,
+  resetUser: resetMinecraftUser,
+})

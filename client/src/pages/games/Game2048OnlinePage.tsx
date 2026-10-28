@@ -391,16 +391,24 @@ export default function Game2048OnlinePage() {
 
   const handleBackToLobby = useCallback(() => {
     const current = matchRef.current
-    if (current && current.status === 'playing') {
-      const leave = window.confirm('对局仍在进行中，确定返回大厅吗？你可以重新进入该对局。')
-      if (!leave) return
+    if (current) {
+      const me = current.players.find((player) => player.userId === meId)
+      if (current.status === 'playing' && me?.status === 'playing') {
+        const leave = window.confirm('对局仍在进行中，确定返回大厅吗？你可以重新进入该对局。')
+        if (!leave) return
+      } else {
+        // 已结束 / 已出局：顺手在服务端退场，避免大厅被「正在对局中」卡住
+        void api.post(`/games/2048/matches/${current.id}/leave`).catch(() => {
+          // 忽略：本地返回大厅不受影响
+        })
+      }
     }
     skipActiveCheckRef.current = true
     setMatch(null)
     setMatchError(null)
     setActionError(null)
     navigate(LOBBY_PATH, { replace: true })
-  }, [navigate])
+  }, [navigate, meId])
 
   const handleRematch = useCallback(() => {
     skipActiveCheckRef.current = true

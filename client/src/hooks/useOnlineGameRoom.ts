@@ -552,16 +552,27 @@ export function useOnlineGameRoom<T extends AnyGameMatch>(options: OnlineGameRoo
 
   const backToLobby = useCallback(() => {
     const current = matchRef.current
-    if (current && current.status === 'playing') {
-      const leave = window.confirm('对局仍在进行中，确定返回大厅吗？掉线超时会判负。')
-      if (!leave) return
+    if (current) {
+      const me = current.players.find((player) => player.userId === meId)
+      // 「我的世界」玩家 DTO 没有 status 字段（允许中途离开），按在场处理
+      const meStatus = me && 'status' in me ? (me.status as string) : undefined
+      if (current.status === 'playing' && (meStatus === undefined || meStatus === 'playing')) {
+        // 仍在场：离开 = 掉线，可能被判负，需要确认
+        const leave = window.confirm('对局仍在进行中，确定返回大厅吗？掉线超时会判负。')
+        if (!leave) return
+      } else {
+        // 对局已结束 / 本人已出局：顺手在服务端退场，避免大厅再被「正在对局中」卡住
+        void api.post(`${apiBase}/matches/${current.id}/leave`).catch(() => {
+          // 服务端已按出局口径放行，失败不影响本地返回大厅
+        })
+      }
     }
     skipActiveCheckRef.current = true
     setMatch(null)
     setMatchError(null)
     setActionError(null)
     navigate(lobbyPath, { replace: true })
-  }, [navigate, lobbyPath])
+  }, [navigate, lobbyPath, apiBase, meId])
 
   const isHost = match !== null && match.hostId === meId
   const playerCount = match?.players.length ?? 0
