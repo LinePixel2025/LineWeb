@@ -732,3 +732,12 @@ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/users" -H "Authorization: Be
 - [ ] 应用登出时调用 `POST /api/oauth/revoke` 失效刷新令牌
 - [ ] 令牌未写入日志或崩溃报告；持久化位置有访问限制
 - [ ] 已验证第 6.1 节表格中"永远无法访问"的端点确实返回 403
+
+---
+
+## 2026-10 全站登录后的变更
+
+- 全站业务 API 默认需要登录；第三方应用令牌仍可访问 `APP_ENDPOINT_RULES` 白名单端点。
+- 为保持只读应用兼容，`content:read` 新增：`GET /api/posts`、`GET /api/posts/:slug`（排除 admin）、`GET /api/pages/featured`、`GET /api/pages/slug/:slug`、`GET /api/comments/post/:postId`。
+- `POST /api/oauth/token`、`POST /api/oauth/revoke` 仍匿名可用；`/api/features`、`/api/health`、`/api/version` 也保留公开。
+- 游戏战绩、聊天、用户管理、功能开关等端点不在应用白名单 → 应用令牌 403。

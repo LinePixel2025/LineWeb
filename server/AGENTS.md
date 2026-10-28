@@ -121,3 +121,17 @@ npm run db:seed       # prisma db seed
 npm run db:studio     # prisma studio
 npm run verify:game   # tsx scripts/verify-game2048.ts —— 2048 引擎 + presence TTL 自检（无 DB/网络依赖）
 ```
+
+---
+
+## 2026-10 账号体系 / 开关 / 战绩 / 聊天增强（实现口径）
+
+- **全站登录门禁**：`server/src/index.ts` 的 `publicApiPaths` 是精确集合：`/auth/login`、`/auth/register`、`/health`、`/version`、`/oauth/token`、`/oauth/revoke`、`/features`。其余 `/api/**` 全部经 `authenticate`；`cachePublic` 已删除。
+- **限流分层**：`middleware/rateLimits.ts`：认证前 `ipHardLimiter`（默认 3000/15min，管理员 JWT role 豁免）+ 认证后 `userApiLimiter`（`User.apiRateLimit` 默认 600/15min，0=不限，管理员豁免）。模块限流（games/chat/chatXmpp/aiChat）加 admin skip；登录/注册/OAuth 限流不豁免；AI 对话每日上限对管理员豁免。
+- **账号状态**：`User.status`（pending/active/rejected，默认 active），注册显式 pending 且不签 token；`loginUser` 对 pending/rejected 返回 403 + code；`resolveAuthContext`/`resolveAppAuthContext` 非 active 直接失败；`nekoAccountSync` 只同步 active；`chatService.searchUsers/sendFriendRequest` 过滤 active。
+- **审批**：`GET /users?status=`、`GET /users/pending-count`、`PUT /users/:id/status`；拒绝 `invalidateUserTokens` + 停用 neko，通过补建 neko。
+- **功能开关**：`lib/features.ts`（唯一定义）、`FeatureFlag` 表、`featureService`（5s 缓存）、`requireFeature`、`/api/features` 公开、`/api/admin/features` 需 `feature:manage`；管理员始终放行。
+- **游戏战绩**：`GameStat` 表；`lib/gameStatsRules.ts` 纯函数（禁 prisma）、`services/gameStatsHooks.ts` 纯内存回调、`services/gameStatsService.ts` DB 实现、`routes/gameStats.ts` 挂 `/api/game-stats`（守卫 `games`）。联机在各 `finish*` 后 `publishGameEnd`；单机客户端上报/旧记录 import；`verify:gamestats` 覆盖合并规则。
+- **排行榜**：`lib/gameLeaderboard.ts` 指标白名单；`GET /api/game-stats/leaderboard`；扫雷 bestTimeMs 升序过滤 null；胜负型 wins 降序；单机成绩客户端上报。
+- **联系人备注**：`PUT /api/chat/friends/remark`；LineWeb 好友先 `importFriendships`（neko `/internal/import`）再 `setFriendRemarkOnNeko`，原生好友直接写 neko；≤30 字、仅自己可见。
+- **迁移**：`User.status/apiRateLimit/gameStatsImportedAt`、`GameStat`、`FeatureFlag` 均为 additive；`prisma db push` 时注意 SQLite FTS 影子表冲突（必要时先删 `drive_files_fts*`，启动时 `ensureFTSTable` 重建）。

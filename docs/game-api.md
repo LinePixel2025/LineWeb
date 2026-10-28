@@ -1012,3 +1012,36 @@ cd client && npx vitest run src/lib/games/__tests__/parkour.test.ts src/lib/game
 - 对局详情页路由统一为 `/games/<id>/online/:matchId`，因此 `GameContext.gameMatchPath()` 可直接拼字符串，
   邀请与对局的 WS 事件名跨游戏共用（`game:invite` / `game:invite:removed` / `game:match:started|update|ended`），
   由载荷里的 `match.game` / `invite.game` 判别。
+
+---
+
+## 12. 游戏战绩与站内排行榜（2026-10）
+
+### 12.1 原则
+
+- 单机 + 联机战绩随账号保存在 `GameStat`（`@@unique([userId, game, variant])`），不再写 localStorage。
+- 我的世界存档、贪吃蛇同屏双人战绩仍留本地浏览器。
+- 单机结果由客户端上报（服务端白名单 + 上限校验，仅供娱乐）；联机结果由服务端在 `finish*` 后通过 `publishGameEnd` 落库（进程重启后不可回溯）。
+- 旧 localStorage 在首次登录后调用 `POST /api/game-stats/import` 一次性合并；服务端用 `User.gameStatsImportedAt` 保证幂等。
+
+### 12.2 端点（全部需登录）
+
+| 端点 | 说明 |
+|---|---|
+| `GET /api/game-stats` | `{ imported, stats[] }` |
+| `POST /api/game-stats/result` | 单机一局 `{game,variant,outcome?,score?,scoreDelta?,timeMs?,distanceM?,coins?,maxCombo?,jumps?,offset?,deaths?}`；120 次/5min/用户 |
+| `POST /api/game-stats/import` | `{records:[…]}`，最多 100 条；已导入返回 `imported:false` |
+| `GET /api/game-stats/leaderboard?game=&variant=&limit=&page=` | 站内总榜 |
+
+合并规则：`games` 每次 +1；胜负计 wins/losses/draws；`score` 累加且 bestScore 取 max；扫雷 bestTimeMs 仅在胜利时取 min；斗地主 scoreDelta 可负；跑酷距离/金币/连击取 max；跳一跳跳跃/偏差累加。
+
+### 12.3 排行榜
+
+- 全站总榜，不做日/周榜；单机/联机分开；我的世界不参与。
+- 指标：2048/贪吃蛇/跳一跳 = bestScore 降序；跑酷 = bestDistance 降序；扫雷单机 = bestTimeMs 升序（排除 null）；扫雷联机/五子棋/骗子酒馆/UNO/中国象棋 = wins 降序；斗地主 = scoreTotal 降序。
+- 返回 `entries[]`（rank/userId/username/value/secondary/isMe）、`me`（即使不在当前页）、`total`、`metric/label/unit`；同分使用「比它更好的人数 +1」并列名次。
+- 前端 `/games/leaderboard`：游戏 chips、单机/联机/扫雷难度 tabs、前三领奖台、我的名次、空态；单机榜标注「客户端上报，仅供娱乐」。
+
+### 12.4 兼容说明
+
+本文件第 1 节「不提供战绩历史、排行榜」为旧口径，现已被本节替代；对局/邀请仍为内存态，重启失效。

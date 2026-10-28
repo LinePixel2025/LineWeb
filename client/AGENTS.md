@@ -135,3 +135,15 @@ npm run build       # tsc -b && vite build
 npm run test        # vitest run
 npm run test:watch  # vitest
 ```
+
+---
+
+## 2026-10 账号 / 开关 / 战绩 / 聊天增强 / 计算器（实现口径）
+
+- **全站登录**：`App.tsx` 主站 `Layout` 下只有 `/login`、`/register` 不守卫；其余主站路由包在 `RequireAuth`（`Guards.tsx`）内。管理区仍由 `AdminRoute` 守卫。
+- **功能开关**：`lib/features.ts`（与服务端同拷贝）、`contexts/FeatureContext.tsx`（公开 `/api/features`，默认全开，管理员恒 true）、`RequireFeature`（关闭显示卡片）。`gamesSingle/gamesOnline` 叠加 `games`。导航/首页/游戏大厅/登录注册链接按开关过滤；纯前端功能（计算器、单机游戏）只能前端拦截。
+- **401/回跳**：`lib/api.ts` 保存 `?returnTo=`、并发幂等；`LoginPage` 优先 `state.from`，其次 `returnTo`，做同源校验；`AuthCacheReset` 在登出时清 React Query。
+- **注册审核**：`AuthContext.register` 不写 token；`RegisterPage` 显示待审核成功卡；`LoginPage` 按 `ApiError.code` 显示 warning/danger；`UserAdminPage` 支持状态 tabs、通过/拒绝、API 限额编辑；`AdminLayout` 待审角标。
+- **游戏战绩**：`contexts/GameStatsContext.tsx`（登录后 GET、旧 localStorage 一次性 import、乐观 recordResult）；`lib/games/gameStatsMerge.ts`、`legacyStats.ts`。单机页不再读写 localStorage（我的世界存档/贪吃蛇同屏例外）。排行榜：`pages/games/GameLeaderboardPage.tsx` + `hooks/useLeaderboard.ts` + `lib/games/leaderboard.ts`。
+- **聊天增强**：`lib/xmpp/protocol.ts` 解析 `mention="1"` 与 `data-lw-poke`；`ChatComposer` @ 选择器；`XmppChatContext` `sendPoke`/`sendText(...,mentions)`/`saveStickerFromMessage`/`peerRead`/`mentionUnread`；`ChatThread` 已读标签、@高亮、拍一拍系统行、长按/右键 `MessageActionMenu`（`hooks/useLongPress.ts`）；样式在 `chat.css`。
+- **科学计算器**：`CalculatorPage` + `lib/calculator/*` 纯函数解析/求值，无 `eval`；DEG/RAD、记忆、历史 50 条；测试在 `lib/calculator/__tests__`。

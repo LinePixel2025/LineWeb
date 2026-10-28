@@ -1791,3 +1791,44 @@ curl -s -X DELETE http://<ECS 公网 IP>:3001/api/posts/1 \
 > 原「API 密钥」模块（5 个端点）与屏幕时间 Token 相关端点（`/api/health/tokens` 3 个、`/api/health/screen-time/data`、`/api/health/daily-goal/data`）已于 2026-09 随 API Key / 屏幕时间 Token 一并移除。
 
 > **缓存说明**：公开 GET 端点有服务端缓存（posts/pages/comments 5 分钟、stats 1 分钟）；管理端点（`/admin/*`）不缓存；认证 API 一律 `Cache-Control: no-store`。
+
+---
+
+## 19. 全站登录、账号状态与功能开关（2026-10）
+
+### 19.1 公开端点（其余 `/api/**` 均需登录）
+
+| 端点 | 说明 |
+|---|---|
+| `POST /api/auth/login` | 登录；`pending`/`rejected` 返回 403 + `ACCOUNT_PENDING` / `ACCOUNT_REJECTED` |
+| `POST /api/auth/register` | 提交注册申请，进入 `pending`；不返回 token |
+| `GET /api/features` | 功能开关只读（登录页也可见） |
+| `GET /api/health` / `GET /api/version` | 运维探针 |
+| `POST /api/oauth/token` / `POST /api/oauth/revoke` | 第三方应用匿名入口 |
+
+`/api/auth/avatar/:userId`、文章、评论、页面、统计、AI、聊天、游戏、网盘等均需登录。第三方应用令牌只可达 `server/src/lib/appScopes.ts` 白名单（已补 `GET /api/posts`、`GET /api/posts/:slug`、`GET /api/pages/featured`、`GET /api/pages/slug/:slug`、`GET /api/comments/post/:id` 的 `content:read`）。
+
+### 19.2 限流
+
+- 认证前：IP 防滥用硬上限（默认 3000 次/15min，`API_IP_HARD_LIMIT` 可调）。
+- 认证后：每用户全局 API 限额（`User.apiRateLimit`，默认 600 次/15min，0=不限；管理员恒不受限）。
+- 游戏/聊天/AI 专用限流保持原值，管理员豁免；登录/注册与 OAuth 应用侧限流不豁免。
+- 管理端 `PUT /api/users/:id/rate-limit` 可逐个用户调整。
+
+### 19.3 账号状态与审批
+
+- `User.status`：`pending | active | rejected`，默认 `active`；新注册为 `pending`。
+- 管理端 `GET /api/users?status=pending`、`GET /api/users/pending-count`、`PUT /api/users/:id/status {status:'active'|'rejected'}`。
+- 拒绝会使该账号所有旧令牌立即失效；待审核账号不会创建聊天账号，也不会出现在用户搜索/好友申请目标中。
+
+### 19.4 功能开关
+
+模块键：`posts`、`comments`、`pages`、`drive`、`chat`、`games`、`gamesSingle`、`gamesOnline`、`aiAssistant`、`aiChat`、`webProxy`、`calculator`、`oauthApps`、`registration`。管理员可通过 `GET/PUT /api/admin/features/:key` 管理；关闭后普通用户收到 `403 FEATURE_DISABLED`，管理员仍可访问。`gamesSingle`/`gamesOnline` 还依赖 `games` 总开关。
+
+### 19.5 游戏战绩与排行榜
+
+- `GET /api/game-stats`：当前账号全部聚合战绩 + `imported` 标记。
+- `POST /api/game-stats/result`：单机一局上报（120 次/5min/用户；需 `gamesSingle`）。
+- `POST /api/game-stats/import`：旧 localStorage 一次性导入（幂等，空数组也置位）。
+- `GET /api/game-stats/leaderboard?game=&variant=&limit=&page=`：站内排行榜；单机/联机分开，扫雷按最短用时升序，胜负型按胜场；`me` 返回当前用户排名。
+- 单机成绩由客户端上报（仅供娱乐），联机成绩由服务端结算；我的世界无排行。

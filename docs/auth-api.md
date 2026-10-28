@@ -599,3 +599,35 @@ try { Invoke-RestMethod "$base/auth/me" -Headers $h } catch { $_.Exception.Respo
 - [ ] 429 有退避策略；设备脚本缓存令牌而非每次请求都登录
 - [ ] 设备/脚本账号使用 `rememberDays` 而非共享管理员账号
 - [ ] 下载使用「先申请票据、再用 `?token=` 直链」的流程，未把票据复用到其它 API
+
+---
+
+## 13. 注册审核、账号状态与 API 限额（2026-10）
+
+### 13.1 注册
+
+`POST /api/auth/register` 成功返回 `201`：
+
+```json
+{ "user": { "id": 12, "username": "alice", "email": "a@example.com", "status": "pending" }, "message": "注册成功，等待管理员审核" }
+```
+
+**不返回 token**。`pending` 用户登录返回 `403 { "error": "...", "code": "ACCOUNT_PENDING" }`；`rejected` 返回 `403 ACCOUNT_REJECTED`；通过后才能登录。
+
+### 13.2 审核与状态
+
+- `GET /api/users?status=pending|active|rejected`（`user:manage`；响应附 `counts`）
+- `GET /api/users/pending-count`
+- `PUT /api/users/:id/status` body `{ "status": "active" | "rejected" }`
+  - `pending → active|rejected`；`rejected → active`；不能修改自己。
+  - 拒绝会 `invalidateUserTokens` 并 best-effort 停用 neko 账号；通过会 best-effort 补建 neko 账号。
+
+### 13.3 每用户 API 限额
+
+- `User.apiRateLimit` 默认 600（次/15min），0=不限；管理员恒不受限。
+- 管理端 `PUT /api/users/:id/rate-limit` body `{ "apiRateLimit": 0 }`（0–100000）。
+- 游戏/聊天/AI 专用限流对管理员豁免；登录/注册/OAuth 限流不豁免。
+
+### 13.4 `/auth/me`
+
+响应新增 `status`；能力仍按角色逐请求从 DB 解析。账号被拒绝/停用后旧令牌在下一次请求即 401。

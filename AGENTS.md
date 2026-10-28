@@ -351,3 +351,17 @@ cd storage-node && python main.py     # 本地 Windows 存储节点，config.jso
 - **聊天图片与网盘共用配额** — `driveQuota.getDriveUsage` = `DriveFile.size` + `Message.imageSize`（未撤回图片）；聊天图片写节点后**先落库再复核**（复核必须能看到本张图，否则并发上传各超一张），超限回滚消息行 + 删除节点文件。撤回图片会清空 image 字段并删除节点文件，配额立即释放；`storageSync` 必须排除 `_chat/`，否则聊天图片会被扫进网盘。
 - **`compression` 过滤器要用 `req.originalUrl`** — 响应头阶段（onHeaders）执行时，Express 挂载路由会把 `req.path` 剥成路由内相对路径（如 `/messages/17/image`），用 `req.path` 匹配完整路径会失效。聊天图片路由已按此排除压缩（WebP 无需 gzip，且保留 `Content-Length`）。
 - **第三方应用的 `content:write` 语义已收窄** — 应用只能管理所属账号自己的文章；`/api/pages*` 已从应用白名单移除，页面管理改为管理员专属 `content:manage`（breaking change，见 `docs/app-auth-api.md`）。
+
+---
+
+## 2026-10 账号体系综合改造（实现口径）
+
+- **全站登录**：除 `/api/auth/login|register`、`/api/health`、`/api/version`、`/api/oauth/token|revoke`、`/api/features` 外，所有 API 需登录；`cachePublic` 已移除，认证响应统一 `no-store`。
+- **限流**：认证前 IP 硬上限 + 认证后按用户 `User.apiRateLimit`（默认 600/15min，0=不限）；管理员豁免全局与模块限流、AI 每日上限；管理端可逐个用户调整。游戏/聊天/AI 专用限流保留。
+- **功能开关**：`FeatureFlag` 表 + `feature:manage`；14 个模块键；管理员始终可访问被关闭功能；关闭对普通用户返回 `403 FEATURE_DISABLED`。
+- **注册审核**：`User.status`（默认 active；新注册 pending）；pending/rejected 不能登录；管理员通过/拒绝；待审账号不建 neko 账号、不可被搜索。
+- **游戏战绩**：`GameStat` 表；单机上报 + 联机结算回调；旧 localStorage 一次性导入；我的世界存档/贪吃蛇同屏仍本地；`/api/game-stats` + 排行榜 `/games/leaderboard`。
+- **联系人备注**：neko 存储（LineWeb 好友先 import 再 remark），仅自己可见、≤30 字；显示名 `remark || displayName || username`。
+- **聊天增强**：群聊 @、单聊已读、拍一拍（普通消息 + XHTML 标记，不改 neko）、收藏他人表情、长按/右键气泡菜单。
+- **科学计算器**：纯函数解析，无 eval；DEG/RAD、记忆、历史。
+- **数据库**：`User.status/apiRateLimit/gameStatsImportedAt` + `FeatureFlag` + `GameStat` 均为 additive；`prisma db push` 后启动 `ensureFTSTable` 重建 FTS。生产仍走本地构建 + `Dockerfile.prebuilt`，不要在 ECS 上 `docker compose up --build`。

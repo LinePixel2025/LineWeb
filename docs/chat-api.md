@@ -507,3 +507,45 @@ curl -X POST $BASE/chat/messages/88/recall -H "Authorization: Bearer $TOKEN"
 - 轮询模式只合并最近 50 条消息，极旧消息的撤回可能延迟到刷新。
 - 调试/排障：`?transport=polling` 强制轮询，`?transport=auto` 恢复自动检测。
 - 单标签页轮询约 180 次 / 15 分钟，低于全局 600 次限制；多标签页时请注意频率。
+
+---
+
+## 9. 联系人备注、@、已读、拍一拍与长按菜单（2026-10）
+
+### 9.1 联系人备注
+
+`PUT /api/chat/friends/remark`（登录，`chatWriteLimiter`）：
+
+```json
+{ "nekoId": 1000000000002, "remark": "老友" }
+```
+
+- 仅自己可见；trim 后 ≤30 字；空串清除。
+- LineWeb 好友：服务端先幂等补齐 neko accepted 好友关系（`/internal/import`），再调用 neko `POST /chat/friends/remark`；neko 原生好友直接调用。
+- 成功后 neko 向该用户所有在线端发 `friend-update`，多标签页自动刷新；显示名优先级 `remark || displayName || username`。
+
+### 9.2 @ 提及（群聊）
+
+- 发送：`<x xmlns="urn:wlxx:chat"><mention user="<nekoId>"/>…</x>`，上限 20；`user="0"` 表示 @所有人（仅群主/管理员有效）。
+- 接收：neko 对被 @ 者下发 `mention="1"`；LineWeb 解析为 `mentionedMe`，高亮气泡、会话 `@` 角标，并在免打扰群仍弹出提示。
+- 单聊 @ 不落库；群成员列表/群昵称是另一套数据，本轮不做备注覆盖。
+
+### 9.3 单聊已读
+
+- neko 单聊 `chat_read_cursors` 已有；前端显示「已读/未读」仅针对自己发送的单聊消息，群聊不展示已读人数（neko 无群读游标）。
+- 打开会话时继续发送 read 标记；读到对端 read headline 后更新。
+
+### 9.4 拍一拍
+
+- 复用普通消息通道：`body="[拍一拍]"` + XHTML `<span data-lw-poke="<targetNekoId>">[拍一拍]</span>`。
+- 实时/历史解析只读取 `data-lw-poke` 属性，渲染为系统行「A 拍了拍 B」；客户端 2 秒节流。
+- **不修改 neko**；neko 原生门户会显示为普通文本 `[拍一拍]`。
+
+### 9.5 收藏表情
+
+- 收到的表情消息（`body="[表情]"` + `/chat/uploads/<24hex>`）可长按「添加到表情」，调用 `POST /api/chat/xmpp/stickers { uploadId }`；neko 按用户去重，无需改 neko。
+
+### 9.6 长按菜单
+
+- 长按（500ms，位移 >10px 取消）或桌面右键消息气泡打开菜单；菜单项按消息类型裁剪：复制、回复、转发、多选、撤回（本人 5 分钟内）、管理员撤回（群主/管理员）、添加到表情、拍一拍。
+- 原来的常驻「引用/转发/撤回」小按钮已移除；键盘/悬浮可通过「···」按钮打开同一菜单。
