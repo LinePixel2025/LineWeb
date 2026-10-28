@@ -18,6 +18,12 @@ export interface ProxySite {
   /** 是否强制使用桌面浏览器 UA 打开上游站点 */
   forceDesktop: boolean
   lastVisitedAt: string | null
+  /** 累计反代请求数（含子资源，服务端每 15 秒批量落库） */
+  requestCount?: number
+  /** 累计失败请求数（状态码 ≥ 400） */
+  errorCount?: number
+  lastStatusCode?: number | null
+  lastErrorAt?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -49,11 +55,100 @@ export const webProxyApi = {
   open: (siteId: number) => api.post<ProxyOpenResponse>(`/proxy/sites/${siteId}/open`),
 }
 
+/** ============================================================
+ * 管理端（/api/proxy/admin，需要 proxy:manage 能力）
+ * ============================================================ */
+
+export interface ProxyAdminOverview {
+  queue: {
+    active: number
+    queued: number
+    maxConcurrent: number
+    queueLimit: number
+    timeoutMs: number
+    lastWaitMs: number
+  }
+  statsPending: number
+  totals: {
+    sites: number
+    users: number
+    requests: number
+    errors: number
+    exemptUsers: number
+    blacklistEntries: number
+  }
+}
+
+export interface ProxyBlacklistEntry {
+  id: number
+  pattern: string
+  reason: string | null
+  createdById: number | null
+  createdAt: string
+}
+
+export interface ProxyStatsRankItem {
+  siteId: number
+  name: string
+  origin: string
+  ownerId: number | null
+  ownerName: string
+  requests: number
+  errors: number
+  totalRequests: number
+  totalErrors: number
+  lastVisitedAt: string | null
+  lastStatusCode: number | null
+  lastErrorAt: string | null
+}
+
+export interface ProxyStatsUserItem {
+  userId: number
+  username: string
+  role: string
+  exempt: boolean
+  requests: number
+  errors: number
+}
+
+export interface ProxyStatsResponse {
+  days: number
+  from: string
+  to: string
+  sites: ProxyStatsRankItem[]
+  users: ProxyStatsUserItem[]
+  daily: Array<{ day: string; requests: number; errors: number }>
+}
+
+export interface ProxyAdminUser {
+  id: number
+  username: string
+  email: string
+  role: string
+  exempt: boolean
+  siteCount: number
+}
+
+export const webProxyAdminApi = {
+  overview: () => api.get<ProxyAdminOverview>('/proxy/admin/overview'),
+  blacklist: () => api.get<{ entries: ProxyBlacklistEntry[] }>('/proxy/admin/blacklist'),
+  addBlacklist: (pattern: string, reason?: string) =>
+    api.post<{ entry: ProxyBlacklistEntry }>('/proxy/admin/blacklist', { pattern, reason: reason?.trim() || undefined }),
+  removeBlacklist: (id: number) => api.delete<void>(`/proxy/admin/blacklist/${id}`),
+  stats: (days: number) => api.get<ProxyStatsResponse>(`/proxy/admin/stats?days=${days}`),
+  users: (q?: string) =>
+    api.get<{ users: ProxyAdminUser[] }>(`/proxy/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  setExemption: (userId: number, exempt: boolean) =>
+    api.put<{ user: { id: number; username: string; role: string; exempt: boolean } }>(
+      `/proxy/admin/users/${userId}/exemption`,
+      { exempt },
+    ),
+}
+
 /**
  * 清掉页面在浏览器本地为某个反代站点留下的数据
  * （bootstrap 把 localStorage / sessionStorage 键名加了 `__lw<siteId>__` 前缀）
- */
-export function clearProxyLocalData(siteId: number): void {
+ */export function clearProxyLocalData(siteId: number): void {
   const prefix = `__lw${siteId}__`
   try {
     const keys: string[] = []
