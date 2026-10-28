@@ -3,7 +3,7 @@
 > 适用版本：2026-10（**聊天已迁移到独立 XMPP 服务 internet_neko**；好友关系仍以 LineWeb 为准）
 > 相关文档：[`api.md`](./api.md)（全部端点）、[`auth-api.md`](./auth-api.md)（账号登录令牌与角色能力）
 > 服务端实现：`server/src/routes/chatXmpp.ts`、`server/src/routes/chatUploads.ts`、`server/src/services/nekoChat.ts`、`server/src/services/nekoWsProxy.ts`；好友：`routes/chat.ts` + `services/chatService.ts`
-> 前端实现：`client/src/pages/ChatPage.tsx`、`client/src/contexts/XmppChatContext.tsx`、`client/src/lib/xmpp/*`
+> 前端实现：`client/src/pages/ChatPage.tsx`、`client/src/contexts/XmppChatContext.tsx`、`client/src/lib/xmpp/*`、`client/src/components/chat/*`（引用条 / 转发弹窗 / 聊天记录卡片 / NekoAvatar）
 
 ---
 
@@ -58,6 +58,24 @@
 **好友关系合并**：`/bootstrap` 与 `/state` 的 `contacts` / `friends` 由两套关系合并而来——LineWeb↔LineWeb 以 Prisma 为准（`source:'lineweb'`，带 `linewebId`），LineWeb↔neko 原生账号用 neko 自带好友系统（`source:'neko'`，`linewebId:null`）。系统账号 `notice`、文件传输助手 `file` 与停用账号一律过滤。`NEKO_CHAT_ALLOW_NATIVE=false` 时原生好友、原生申请与原生搜索全部隐藏（此时单聊守卫也会拒绝发往原生账号，避免「加了好友却发不出」）。删除 LineWeb 好友时会 best-effort 清理 neko 侧遗留关系。
 
 **历史图片与表情**：neko 的历史查询把 XHTML 以转义文本塞进 `<html>` 子节点，因此 `parseHistoryMessages` 会同时尝试帧属性与 `<html>` 子节点的文本两条路径提取图片；两条路径都只认 `/chat/uploads/<24 位 hex>` 白名单。表情消息没有独立类型：`body === '[表情]'` 且带图片即为贴纸，客户端按无气泡贴纸渲染。
+
+### 0.2.1 引用、合并转发与头像（2026-10 neko 新功能）
+
+**引用回复**：发消息时附带 `urn:wlxx:chat` 扩展 `<x xmlns="urn:wlxx:chat" reply="<被引用消息 id>"/>`。neko 校验被引用消息属于同一会话（群聊同房间 / 单聊双方匹配）；无效引用不阻断发送，只退化为普通消息。投递与历史行带 `<quote id="…" from="…" text="…"/>`（text 是原文前 120 字，原文已撤回时为「消息已撤回」）。前端在气泡上方渲染引用块，点击跳到原消息。
+
+**合并转发**：发送 `<x xmlns="urn:wlxx:chat" forward="id1,id2,..."/>`（最多 30 条）。neko 在服务端生成快照，以 `body="[聊天记录]"` + `<bundle>[{u,n,t,b,h,r},…]</bundle>` 投递，历史查询同样带 `<bundle>`。`bundle` 上限 64KB、单条正文截断 2000 字、撤回条目保留 `r=1` 占位，嵌套转发只显示 `[聊天记录]` 占位文本。
+
+> ⚠️ 上游限制：快照按**目标会话**校验来源（单聊双方匹配 / 同一群），所以合并转发只能发回原会话；跨会话请使用「逐条转发」（客户端按原消息 body + XHTML 重新发送，图片/表情可正常保留）。前端转发弹窗在合并模式下会锁定来源会话并给出说明。
+
+**头像**：neko 在 `accounts.avatar` 存头像 dataURL（仅 png/jpeg/webp，≤200KB），`avatarVersion` 随 `contacts` / `rooms[].members` / 请求 / 目录一起下发（0 = 无头像，前端不发请求）。LineWeb 头像上传或删除后由服务端 best-effort 调用 neko `POST /internal/avatar` 同步；历史上传的头像在聊天页 `/bootstrap` 时补同步。浏览器通过同源中继读取：
+
+```
+GET /chat/avatars/<nekoId>?v=<avatarVersion>&token=<LineWeb 登录令牌>
+```
+
+返回头像字节（`Cache-Control: private, max-age=300`），无头像返回 404；前端 `NekoAvatar` 在缺失时回退到 LineWeb 头像（`lw_*`）或首字母。
+
+**表情商店**：纯前端素材（`client/public/stickers/shop/`），保存时栅格化为 360px PNG 后走 `/uploads` + `/stickers` 上传。`dango` / `cat` / `misc` 为站内原创 SVG；`twemoji` 为 Twemoji 子集（72 个，图形 CC-BY 4.0，署名见 `client/public/stickers/shop/twemoji/LICENSE.txt`）。
 
 ### 0.3 旧端点去向
 
