@@ -311,7 +311,10 @@ async function main(): Promise<void> {
   const rewrittenCss = proxy.rewriteCss(css, ctx)
   assert(rewrittenCss.includes('url(/proxy/7/img/a.png)'), 'CSS 重写：根路径 url()')
   assert(rewrittenCss.includes('url("/proxy/7/b.png")'), 'CSS 重写：同源绝对 url() 保留引号')
-  assert(rewrittenCss.includes('url(https://cdn.com/c.png)'), 'CSS 重写：外链 url() 保持')
+  assert(
+    rewrittenCss.includes('url(/proxy/7/__lw_res__/https/cdn.com/c.png)'),
+    'CSS 重写：外链 url() 走资源代理',
+  )
   assert(rewrittenCss.includes('@import "/proxy/7/style/d.css"'), 'CSS 重写：@import')
   assert(rewrittenCss.includes('url(data:image/png;base64,AA)'), 'CSS 重写：data URI 保持')
 
@@ -455,7 +458,10 @@ async function main(): Promise<void> {
   assert(mediaHtml.includes('<source src="/proxy/7/__lw_media__/https/cdn.example.com/a.m3u8"'), 'HTML 媒体：source 协议相对')
   assert(mediaHtml.includes('<video src="/proxy/7/__lw_media__/https/example.com/local.mp4"'), 'HTML 媒体：同站 video 也走媒体代理')
   assert(mediaHtml.includes('<audio src="/proxy/7/__lw_media__/https/cdn.example.com/b.mp3"'), 'HTML 媒体：audio 跨域 src')
-  assert(mediaHtml.includes('<img src="https://cdn.example.com/p.png"'), 'HTML 媒体：图片链接不受影响')
+  assert(
+    mediaHtml.includes('<img src="/proxy/7/__lw_res__/https/cdn.example.com/p.png"'),
+    'HTML 媒体：图片跨域 src 走资源代理',
+  )
 
   // ============================================================
   // 5. HTML 重写与引导脚本注入
@@ -477,7 +483,7 @@ async function main(): Promise<void> {
   ].join('')
 
   const out = proxy.rewriteHtml(html, ctx, { cookies: [{ name: 'sid', value: 'abc' }] })
-  assert(!out.includes('<base'), 'HTML 重写：剥离 <base>')
+  assert(out.includes('<base href="/proxy/7/">'), 'HTML 重写：<base> 改写为同源前缀')
   assert(!/content-security-policy/i.test(out), 'HTML 重写：剥离 meta CSP')
   assert(!out.includes('integrity='), 'HTML 重写：剥离 integrity')
   assert(out.includes('src="/proxy/7/app.js"'), 'HTML 重写：脚本 src')
@@ -485,7 +491,10 @@ async function main(): Promise<void> {
   assert(out.includes('href="/proxy/7/docs"'), 'HTML 重写：链接 href')
   assert(out.includes('action="/proxy/7/search"'), 'HTML 重写：表单 action')
   assert(out.includes('src="/proxy/7/logo.png"'), 'HTML 重写：协议相对 img')
-  assert(out.includes('srcset="/proxy/7/small.png 1x, https://cdn.com/big.png 2x"'), 'HTML 重写：srcset 只映射同源')
+  assert(
+    out.includes('srcset="/proxy/7/small.png 1x, /proxy/7/__lw_res__/https/cdn.com/big.png 2x"'),
+    'HTML 重写：srcset 同源直连 + 跨域走资源代理',
+  )
   assert(out.includes('background:url(/proxy/7/bg.png)'), 'HTML 重写：<style> 内 url()')
   assert(out.includes("background:url('/proxy/7/inline.png')"), 'HTML 重写：style 属性内 url()')
   assert(out.includes('3;url=/proxy/7/next'), 'HTML 重写：meta refresh')

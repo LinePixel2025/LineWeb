@@ -4,6 +4,7 @@ import { sendToUser } from './chatHub.js'
 import { pruneGamePresence } from './gamePresence.js'
 import { nextGameInviteId } from './gameIds.js'
 import { resetUserInMatches } from './gameExit.js'
+import { publishGameEnd } from './gameStatsHooks.js'
 import {
   GAME_DISCONNECT_FORFEIT_MS,
   GAME_FINISHED_RETENTION_MS,
@@ -458,6 +459,15 @@ function finishGomokuMatch(
     player.status = winnerId === null ? 'lost' : (player.userId === winnerId ? 'won' : 'lost')
   }
   broadcastMatch(match, 'game:match:ended')
+  publishGameEnd({
+    game: 'gomoku',
+    matchId: match.id,
+    reason,
+    results: match.players.map((player) => ({
+      userId: player.userId,
+      outcome: winnerId === null ? 'draw' : player.userId === winnerId ? 'win' : 'loss',
+    })),
+  })
 }
 
 /** 把回合交给座位 fromSeat 之后的下一名在场玩家；deadline 由调用方给出 */

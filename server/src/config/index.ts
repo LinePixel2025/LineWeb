@@ -141,6 +141,14 @@ export const updateUserSchema = z.object({
   password: z.string().min(6).max(100).optional(),
 })
 
+export const updateUserStatusSchema = z.object({
+  status: z.enum(['active', 'rejected']),
+})
+
+export const updateUserRateLimitSchema = z.object({
+  apiRateLimit: z.number().int().min(0).max(100000),
+})
+
 export const pushScreenTimeSchema = z.object({
   totalSeconds: z.number().int().min(0).max(86400),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -318,6 +326,12 @@ export const chatGroupMembersSchema = z.object({
 
 export const chatSearchSchema = z.object({
   q: z.string().trim().min(1).max(50),
+})
+
+/** 联系人备注：nekoId 是聊天账号 id（LineWeb 好友或 neko 原生好友） */
+export const chatContactRemarkSchema = z.object({
+  nekoId: z.number().int().positive(),
+  remark: z.string().trim().max(30, '备注最多 30 个字'),
 })
 
 // === 网盘空间配额 Schema ===

@@ -140,6 +140,12 @@ export const APP_ENDPOINT_RULES: readonly AppEndpointRule[] = [
   { method: 'GET', pattern: /^\/api\/auth\/me$/, scope: 'profile:read' },
   { method: 'GET', pattern: /^\/api\/auth\/avatar(\/\d+)?$/, scope: 'profile:read' },
   { method: 'GET', pattern: /^\/api\/comments$/, scope: 'content:read' },
+  { method: 'GET', pattern: /^\/api\/comments\/post\/\d+$/, scope: 'content:read' },
+  { method: 'GET', pattern: /^\/api\/posts$/, scope: 'content:read' },
+  // 详情：排除管理路径 /api/posts/admin*
+  { method: 'GET', pattern: /^\/api\/posts\/(?!admin(?:\/|$))[^/]+$/, scope: 'content:read' },
+  { method: 'GET', pattern: /^\/api\/pages\/featured$/, scope: 'content:read' },
+  { method: 'GET', pattern: /^\/api\/pages\/slug\/[^/]+$/, scope: 'content:read' },
   { method: 'GET', pattern: /^\/api\/posts\/admin(\/all|\/\d+)?$/, scope: 'content:write' },
   { method: 'GET', pattern: /^\/api\/comments\/admin\/.+$/, scope: 'comment:moderate' },
   { method: 'GET', pattern: /^\/api\/health\/screen-time(\/range)?$/, scope: 'health:read' },

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express'
-import { authenticate, requireCapability, optionalAuthenticate } from '../middleware/auth.js'
+import { authenticate, requireCapability } from '../middleware/auth.js'
 import { asyncHandler } from '../lib/asyncHandler.js'
 import {
   aiChatSchema,
@@ -44,7 +44,7 @@ router.get('/chat/public', asyncHandler(async (_req: Request, res: Response) => 
  * 请求体: { message: string, history?: { role: 'user'|'assistant', content: string }[] }
  * 响应: { reply: string, model: string }
  */
-router.post('/chat', optionalAuthenticate, asyncHandler(async (req: Request, res: Response) => {
+router.post('/chat', authenticate, asyncHandler(async (req: Request, res: Response) => {
   const parsed = aiChatSchema.safeParse(req.body)
   if (!parsed.success) {
     throw new AppError('请求参数无效: ' + parsed.error.errors.map(e => e.message).join('; '), 400)

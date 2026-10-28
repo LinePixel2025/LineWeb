@@ -16,6 +16,7 @@ import {
   serializeCookieJar,
 } from '../services/proxyCookies.js'
 import { PROXY_SESSION_COOKIE, resolveProxySessionInfo } from '../services/proxySession.js'
+import { isFeatureEnabled } from '../services/featureService.js'
 import { ProxyQueueError, acquireProxySlot, getProxyQueueStats } from '../services/proxyQueue.js'
 import { addProxyBlacklistEntry, isProxyHostBlacklisted, normalizeBlacklistPattern } from '../services/proxyBlacklist.js'
 import { recordProxyRequest } from '../services/proxyStats.js'
@@ -877,6 +878,10 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
   const session = await resolveProxySession(req)
   if (!session) {
     res.status(401).type('html').send(buildProxyLoginPage('反代会话已失效（可能登出或更换了账号），请回到 LineWeb 的「网页反代」重新打开目标网站。'))
+    return
+  }
+  if (!(await isFeatureEnabled('webProxy', session.role))) {
+    res.status(403).type('html').send(buildProxyErrorPage('功能已关闭', '网页反代功能当前已关闭。'))
     return
   }
   const userId = session.userId

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express'
 import rateLimit from 'express-rate-limit'
 import { authenticate } from '../middleware/auth.js'
 import { requireCapability } from '../middleware/auth.js'
+import { requireFeature } from '../middleware/featureGuard.js'
 import { AppError } from '../middleware/errorHandler.js'
 import { asyncHandler } from '../lib/asyncHandler.js'
 import { getErrorMessage, getErrorStatus, parseId } from '../lib/utils.js'
@@ -196,7 +197,7 @@ router.post('/revoke', oauthLimiter, asyncHandler(async (req: Request, res: Resp
  * 授权页上下文 —— 授权页据此渲染「应用信息 + 权限清单」
  * 回调地址非法或 scope 超范围时返回 400，前端只展示错误、绝不做任何跳转
  */
-router.get('/authorize-context', authenticate, asyncHandler(async (req: Request, res: Response) => {
+router.get('/authorize-context', authenticate, requireFeature('oauthApps'), asyncHandler(async (req: Request, res: Response) => {
   const parsed = oauthAuthorizeQuerySchema.safeParse(req.query)
   if (!parsed.success) {
     res.status(400).json({ error: '授权请求参数无效', details: parsed.error.flatten() })
@@ -237,7 +238,7 @@ router.get('/authorize-context', authenticate, asyncHandler(async (req: Request,
  * 授权决定 —— 同意则签发一次性授权码并返回跳转地址，拒绝则返回错误跳转
  * 跳转地址由服务端拼装（回调地址必须精确匹配已注册值），前端不得自行构造
  */
-router.post('/authorize', authenticate, asyncHandler(async (req: Request, res: Response) => {
+router.post('/authorize', authenticate, requireFeature('oauthApps'), asyncHandler(async (req: Request, res: Response) => {
   const parsed = oauthAuthorizeDecisionSchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: '授权请求参数无效', details: parsed.error.flatten() })

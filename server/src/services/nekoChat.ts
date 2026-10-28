@@ -479,3 +479,37 @@ export async function removeFriendOnNeko(
     )
   }
 }
+
+export interface NekoImportFriendship {
+  requesterId: number
+  addresseeId: number
+  requesterRemark?: string
+  addresseeRemark?: string
+  createdAt?: number
+}
+
+/**
+ * 幂等补齐 neko accepted 好友关系（用于 LineWeb 好友在 neko 侧没有行的情况）。
+ * neko 的 import 只在关系不存在时插入，不会覆盖已有备注。
+ */
+export async function importFriendships(items: NekoImportFriendship[]): Promise<void> {
+  if (items.length === 0) return
+  await requestJson('/internal/import', {
+    method: 'POST',
+    body: { friendships: items },
+    timeoutMs: 8000,
+  })
+}
+
+/** 设置联系人备注（仅自己可见；成功后 neko 会给当前用户所有在线端发 friend-update） */
+export async function setFriendRemarkOnNeko(
+  user: LineWebUserLike,
+  targetNekoId: number,
+  remark: string,
+): Promise<void> {
+  await callBrowserApi('POST', '/chat/friends/remark', {
+    user,
+    body: { userId: targetNekoId, remark },
+    timeoutMs: 5000,
+  })
+}

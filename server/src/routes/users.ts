@@ -5,9 +5,10 @@ import { parsePagination, parseId, getErrorMessage, getErrorStatus } from '../li
 import busboy from 'busboy'
 import { adminSetAvatar } from '../services/avatarService.js'
 import { sendCommand, isNodeConnected } from '../services/storageTunnel.js'
-import { updateUserSchema, updateUserQuotaSchema } from '../config/index.js'
+import { updateUserSchema, updateUserQuotaSchema, updateUserStatusSchema, updateUserRateLimitSchema } from '../config/index.js'
 import { authenticate, requireCapability } from '../middleware/auth.js'
-import { deactivateNekoAccount } from '../services/nekoAccountSync.js'
+import { deactivateNekoAccount, ensureNekoAccount } from '../services/nekoAccountSync.js'
+import { invalidateUserTokens } from '../services/authService.js'
 
 const router = Router()
 
@@ -25,9 +26,16 @@ router.use(authenticate, requireCapability('user:manage'))
 // 列出用户（分页）— 附带空间配额与已用空间
 router.get('/', async (req: Request, res: Response) => {
   const { page, limit, skip } = parsePagination(req.query)
+  const statusQuery = typeof req.query.status === 'string' ? req.query.status : ''
+  if (statusQuery && !['pending', 'active', 'rejected'].includes(statusQuery)) {
+    res.status(400).json({ error: '无效的审核状态' })
+    return
+  }
+  const where = statusQuery ? { status: statusQuery } : {}
 
-  const [users, total, usageGroups, chatImageGroups] = await Promise.all([
+  const [users, total, statusGroups, usageGroups, chatImageGroups] = await Promise.all([
     prisma.user.findMany({
+      where,
       skip,
       take: limit,
       select: {
@@ -35,13 +43,16 @@ router.get('/', async (req: Request, res: Response) => {
         username: true,
         email: true,
         role: true,
+        status: true,
+        apiRateLimit: true,
         canAccessDrive: true,
         storageQuota: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
     }),
-    prisma.user.count(),
+    prisma.user.count({ where }),
+    prisma.user.groupBy({ by: ['status'], _count: { _all: true } }),
     // 单次 groupBy 汇总所有用户的已用空间，避免逐用户 N+1
     prisma.driveFile.groupBy({
       by: ['uploadedById'],
@@ -55,6 +66,11 @@ router.get('/', async (req: Request, res: Response) => {
       _sum: { imageSize: true },
     }),
   ])
+
+  const counts = { pending: 0, active: 0, rejected: 0 }
+  for (const row of statusGroups) {
+    if (row.status in counts) counts[row.status as keyof typeof counts] = row._count._all
+  }
 
   const usageByUser = new Map<number, bigint>()
   for (const row of usageGroups) {
@@ -76,7 +92,14 @@ router.get('/', async (req: Request, res: Response) => {
     page,
     limit,
     totalPages: Math.ceil(total / limit),
+    counts,
   })
+})
+
+// 待审核数量（管理端角标）— 必须放在 /:id 之前
+router.get('/pending-count', async (_req: Request, res: Response) => {
+  const pending = await prisma.user.count({ where: { status: 'pending' } })
+  res.json({ pending })
 })
 
 // 查看单个用户
@@ -94,6 +117,8 @@ router.get('/:id', async (req: Request, res: Response) => {
       username: true,
       email: true,
       role: true,
+      status: true,
+      apiRateLimit: true,
       canAccessDrive: true,
       storageQuota: true,
       createdAt: true,
@@ -148,12 +173,90 @@ router.put('/:id', async (req: Request, res: Response) => {
       username: true,
       email: true,
       role: true,
+      status: true,
+      apiRateLimit: true,
       canAccessDrive: true,
       createdAt: true,
     },
   })
 
   res.json(updated)
+})
+
+// 审核用户（通过 / 拒绝）
+router.put('/:id/status', async (req: Request, res: Response) => {
+  const id = parseId(req.params.id)
+  if (id === null) {
+    res.status(400).json({ error: '无效的用户 ID' })
+    return
+  }
+
+  const parsed = updateUserStatusSchema.safeParse(req.body)
+  if (!parsed.success) {
+    res.status(400).json({ error: '输入数据无效', details: parsed.error.flatten() })
+    return
+  }
+
+  if (req.user!.userId === id) {
+    res.status(400).json({ error: '不能修改自己的审核状态' })
+    return
+  }
+
+  const user = await prisma.user.findUnique({ where: { id }, select: { id: true, status: true } })
+  if (!user) {
+    res.status(404).json({ error: '用户不存在' })
+    return
+  }
+
+  const target = parsed.data.status
+  const allowed =
+    (user.status === 'pending' && (target === 'active' || target === 'rejected')) ||
+    (user.status === 'rejected' && target === 'active')
+  if (!allowed) {
+    res.status(409).json({ error: '当前审核状态不允许该操作' })
+    return
+  }
+
+  await prisma.user.update({ where: { id }, data: { status: target } })
+
+  if (target === 'rejected') {
+    await invalidateUserTokens(id)
+    void deactivateNekoAccount(id)
+  } else {
+    // 审核通过：补建聊天账号（失败不阻塞审批，首次使用聊天时会再尝试）
+    void ensureNekoAccount(id)
+  }
+
+  res.json({ id, status: target })
+})
+
+// 调整用户的 API 限额（0=不限业务配额）
+router.put('/:id/rate-limit', async (req: Request, res: Response) => {
+  const id = parseId(req.params.id)
+  if (id === null) {
+    res.status(400).json({ error: '无效的用户 ID' })
+    return
+  }
+
+  const parsed = updateUserRateLimitSchema.safeParse(req.body)
+  if (!parsed.success) {
+    res.status(400).json({ error: '输入数据无效', details: parsed.error.flatten() })
+    return
+  }
+
+  const user = await prisma.user.findUnique({ where: { id }, select: { id: true } })
+  if (!user) {
+    res.status(404).json({ error: '用户不存在' })
+    return
+  }
+
+  const updated = await prisma.user.update({
+    where: { id },
+    data: { apiRateLimit: parsed.data.apiRateLimit },
+    select: { id: true, apiRateLimit: true, role: true },
+  })
+
+  res.json({ ...updated, unlimited: updated.role === 'admin' || updated.apiRateLimit === 0 })
 })
 
 // 调整用户的网盘空间配额（字节字符串 → BigInt，0 ~ 10 TiB）

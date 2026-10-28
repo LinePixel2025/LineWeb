@@ -4,6 +4,7 @@ import { isUserOnline, sendToUser } from './chatHub.js'
 import { clearGamePresence, isGamePresent, pruneGamePresence } from './gamePresence.js'
 import { nextGameInviteId } from './gameIds.js'
 import { resetUserInMatches } from './gameExit.js'
+import { publishGameEnd } from './gameStatsHooks.js'
 import {
   GAME2048_TARGET,
   applyMove,
@@ -533,6 +534,16 @@ function finishMatch(
     else player.status = player.userId === winnerId ? 'won' : 'lost'
   }
   broadcastMatch(match, 'game:match:ended')
+  publishGameEnd({
+    game: '2048',
+    matchId: match.id,
+    reason: match.reason ?? 'unknown',
+    results: match.players.map((player) => ({
+      userId: player.userId,
+      outcome: winnerId === null ? 'draw' : player.userId === winnerId ? 'win' : 'loss',
+      score: player.score,
+    })),
+  })
 }
 
 /** 在指定玩家集合中按分数选最高者；最高分并列时返回 null（平局） */

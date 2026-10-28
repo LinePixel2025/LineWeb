@@ -6,6 +6,7 @@ import { assertPublicHost } from './webProxyService.js'
 import { cookieHeaderForUrl, readCookieJar } from './proxyCookies.js'
 import { acquireProxyWsSlot } from './proxyQueue.js'
 import { resolveProxySessionInfo } from './proxySession.js'
+import { isFeatureEnabled } from './featureService.js'
 
 /**
  * /proxy-ws/<siteId>/* —— 反代站点的 WebSocket 中继
@@ -72,6 +73,10 @@ export function initWebProxyWs(server: HttpServer): WebProxyWsHandle {
     const session = await resolveProxySessionInfo(req.headers)
     if (!session) {
       rejectUpgrade(socket, '401 Unauthorized')
+      return
+    }
+    if (!(await isFeatureEnabled('webProxy', session.role))) {
+      rejectUpgrade(socket, '403 Forbidden')
       return
     }
     const userId = session.userId

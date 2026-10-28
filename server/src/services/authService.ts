@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken'
 import prisma from '../lib/prisma.js'
 import { config } from '../config/index.js'
 import { capabilitiesForRole, type Capability } from '../lib/permissions.js'
+import { AppError } from '../middleware/errorHandler.js'
 
 export interface TokenResponse {
   token: string
@@ -11,9 +12,19 @@ export interface TokenResponse {
     username: string
     email: string
     role: string
+    status: string
     capabilities: Capability[]
     settings: string | null
     canAccessDrive: boolean
+  }
+}
+
+export interface RegisterResponse {
+  user: {
+    id: number
+    username: string
+    email: string
+    status: string
   }
 }
 
@@ -37,14 +48,14 @@ function signToken(
 }
 
 function buildTokenResponse(user: {
-  id: number; username: string; email: string; role: string;
+  id: number; username: string; email: string; role: string; status: string;
   settings: string | null; canAccessDrive: boolean;
 }, expiresInDays?: number): TokenResponse {
   return {
     token: signToken(user, expiresInDays),
     user: {
       id: user.id, username: user.username, email: user.email,
-      role: user.role, capabilities: capabilitiesForRole(user.role),
+      role: user.role, status: user.status, capabilities: capabilitiesForRole(user.role),
       settings: user.settings, canAccessDrive: user.canAccessDrive,
     },
   }
@@ -59,7 +70,7 @@ async function findExistingUser(email: string, username: string) {
 /**
  * 用户注册
  */
-export async function registerUser(username: string, email: string, password: string): Promise<TokenResponse> {
+export async function registerUser(username: string, email: string, password: string): Promise<RegisterResponse> {
   const exists = await findExistingUser(email, username)
   if (exists) {
     throw Object.assign(new Error('用户名或邮箱已被注册'), { status: 409 })
@@ -68,10 +79,11 @@ export async function registerUser(username: string, email: string, password: st
   const hashed = await bcrypt.hash(password, 10)  // 成本因子 10: ~100ms vs 12 的 ~300ms, 仍足够安全
   const user = await prisma.user.create({
     // 所有注册用户默认作者角色（可发布自己的文章）；schema 默认值同样是 author，这里显式声明意图
-    data: { username, email, password: hashed, role: 'author' },
+    // 新注册必须等待管理员审核，审核通过前不签发 token
+    data: { username, email, password: hashed, role: 'author', status: 'pending' },
   })
 
-  return buildTokenResponse(user)
+  return { user: { id: user.id, username: user.username, email: user.email, status: user.status } }
 }
 
 /**
@@ -92,6 +104,16 @@ export async function loginUser(identifier: string, password: string, rememberDa
     throw Object.assign(new Error('用户名或邮箱与密码不匹配'), { status: 401 })
   }
 
+  if (user.status === 'pending') {
+    throw new AppError('账号正在等待管理员审核，请稍后再试', 403, 'ACCOUNT_PENDING')
+  }
+  if (user.status === 'rejected') {
+    throw new AppError('账号审核未通过，请联系管理员', 403, 'ACCOUNT_REJECTED')
+  }
+  if (user.status !== 'active') {
+    throw new AppError('账号不可用，请联系管理员', 403, 'ACCOUNT_DISABLED')
+  }
+
   return buildTokenResponse(user, rememberDays)
 }
 
@@ -101,7 +123,7 @@ export async function loginUser(identifier: string, password: string, rememberDa
 export async function getUserById(userId: number) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, username: true, email: true, role: true, settings: true, canAccessDrive: true, createdAt: true },
+    select: { id: true, username: true, email: true, role: true, status: true, settings: true, canAccessDrive: true, createdAt: true },
   })
   if (!user) return null
   return { ...user, capabilities: capabilitiesForRole(user.role) }
@@ -114,7 +136,7 @@ export async function updateUserSettings(userId: number, settings: string) {
   const user = await prisma.user.update({
     where: { id: userId },
     data: { settings },
-    select: { id: true, username: true, email: true, role: true, settings: true, canAccessDrive: true },
+    select: { id: true, username: true, email: true, role: true, status: true, settings: true, canAccessDrive: true },
   })
   return { ...user, capabilities: capabilitiesForRole(user.role) }
 }
@@ -159,7 +181,7 @@ export async function updateUserProfile(userId: number, input: UpdateProfileInpu
   const updated = await prisma.user.update({
     where: { id: userId },
     data,
-    select: { id: true, username: true, email: true, role: true, settings: true, canAccessDrive: true },
+    select: { id: true, username: true, email: true, role: true, status: true, settings: true, canAccessDrive: true },
   })
   const updatedWithCapabilities = { ...updated, capabilities: capabilitiesForRole(updated.role) }
 

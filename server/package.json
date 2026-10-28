@@ -21,6 +21,7 @@
     "verify:uno": "tsx scripts/verify-uno.ts",
     "verify:xiangqi": "tsx scripts/verify-xiangqi.ts",
     "verify:parkour": "tsx scripts/verify-parkour.ts",
+    "verify:gamestats": "tsx scripts/verify-gamestats.ts",
     "verify:aichat": "tsx scripts/verify-aichat.ts",
     "verify:neko": "tsx scripts/verify-neko-chat.ts",
     "verify:webproxy": "tsx scripts/verify-webproxy.ts"

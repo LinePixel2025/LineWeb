@@ -258,7 +258,7 @@ export async function searchUsers(
   q: string,
 ): Promise<{ users: Array<ChatUserBrief & { relation: 'none' | 'friend' | 'outgoing' | 'incoming' }> }> {
   const users = await prisma.user.findMany({
-    where: { id: { not: userId }, username: { contains: q } },
+    where: { id: { not: userId }, username: { contains: q }, status: 'active' },
     select: { id: true, username: true },
     orderBy: { username: 'asc' },
     take: 20,
@@ -394,9 +394,9 @@ export async function sendFriendRequest(
 
   const target = await prisma.user.findUnique({
     where: { id: targetUserId },
-    select: { id: true, username: true },
+    select: { id: true, username: true, status: true },
   })
-  if (!target) throw new AppError('用户不存在', 404)
+  if (!target || target.status !== 'active') throw new AppError('用户不存在', 404)
 
   if (await areFriends(userId, targetUserId)) {
     throw new AppError('你们已经是好友', 409)

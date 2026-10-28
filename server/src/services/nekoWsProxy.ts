@@ -4,6 +4,7 @@ import type { Duplex } from 'stream'
 import { WebSocket, WebSocketServer } from 'ws'
 import { config } from '../config/index.js'
 import { resolveAuthContext } from '../middleware/auth.js'
+import { isFeatureEnabled } from './featureService.js'
 import { isAllowedOutboundStanza } from './nekoChatGuard.js'
 
 /**
@@ -86,6 +87,10 @@ export function initNekoXmppProxy(server: HttpServer): NekoXmppProxy | null {
     const auth = await resolveAuthContext(token)
     if (!auth.ok || auth.user.type === 'download' || auth.user.type === config.oauthAccessTokenType) {
       rejectUpgrade(socket, '401 Unauthorized')
+      return
+    }
+    if (!(await isFeatureEnabled('chat', auth.user.role))) {
+      rejectUpgrade(socket, '403 Forbidden')
       return
     }
     const userId = auth.user.userId

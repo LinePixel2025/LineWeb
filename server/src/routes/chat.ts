@@ -4,7 +4,8 @@ import { z } from 'zod'
 import { AppError } from '../middleware/errorHandler.js'
 import { asyncHandler } from '../lib/asyncHandler.js'
 import { authenticate } from '../middleware/auth.js'
-import { chatUserTargetSchema, chatSearchSchema } from '../config/index.js'
+import { config } from '../config/index.js'
+import { chatUserTargetSchema, chatSearchSchema, chatContactRemarkSchema } from '../config/index.js'
 import {
   getSummary,
   searchUsers,
@@ -14,9 +15,18 @@ import {
   sendFriendRequest,
   respondFriendRequest,
   getUserBrief,
+  areFriends,
 } from '../services/chatService.js'
 import { sendToUser } from '../services/chatHub.js'
-import { removeFriendOnNeko, toNekoId } from '../services/nekoChat.js'
+import {
+  assertNekoChatEnabled,
+  importFriendships,
+  linewebIdOf,
+  removeFriendOnNeko,
+  setFriendRemarkOnNeko,
+  toNekoId,
+} from '../services/nekoChat.js'
+import { ensureNekoAccounts } from '../services/nekoAccountSync.js'
 
 /**
  * 好友关系 REST 路由（挂载于 /api/chat）
@@ -42,6 +52,7 @@ const chatWriteLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => String(req.user?.userId ?? ipKeyGenerator(req.ip ?? '')),
   message: { error: '操作过于频繁，请稍后再试' },
+  skip: (req) => req.user?.role === 'admin',
 })
 
 /** 当前登录用户 id（authenticate 已保证存在；这里集中处理类型与兜底） */
@@ -100,6 +111,38 @@ router.delete('/friends/:userId', chatWriteLimiter, asyncHandler(async (req: Req
   sendToUser(friendId, { type: 'friend:removed', userId })
   sendToUser(userId, { type: 'friend:removed', userId: friendId })
   res.json({ ok: true })
+}))
+
+/**
+ * PUT /api/chat/friends/remark — 设置联系人备注（仅自己可见，≤30 字，空串清除）
+ *
+ * LineWeb 好友：先幂等补齐 neko accepted 关系，再写 neko 备注；
+ * neko 原生好友：直接由 neko 校验并写入。
+ */
+router.put('/friends/remark', chatWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const userId = currentUserId(req)
+  const { nekoId, remark } = parseInput(chatContactRemarkSchema, req.body)
+  if (nekoId === toNekoId(userId)) throw new AppError('不能给自己设置备注', 400)
+  assertNekoChatEnabled()
+
+  const linewebId = linewebIdOf(nekoId)
+  const me = await getUserBrief(userId)
+
+  if (linewebId !== null && await areFriends(userId, linewebId)) {
+    // 先确保双方 neko 账号存在，再幂等补齐 accepted 关系（已存在时不会覆盖备注）
+    await ensureNekoAccounts([userId, linewebId])
+    await importFriendships([{
+      requesterId: toNekoId(userId),
+      addresseeId: nekoId,
+      requesterRemark: remark,
+      createdAt: Date.now(),
+    }])
+  } else if (linewebId === null && !config.nekoChatAllowNative) {
+    throw new AppError('当前不允许与 neko 原生账号设置备注', 403)
+  }
+
+  await setFriendRemarkOnNeko(me, nekoId, remark)
+  res.json({ ok: true, nekoId, remark })
 }))
 
 // GET /api/chat/friend-requests — 收到 / 发出的好友申请

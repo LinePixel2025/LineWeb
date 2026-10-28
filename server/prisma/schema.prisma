@@ -8,38 +8,45 @@ datasource db {
 }
 
 model User {
-  id               Int       @id @default(autoincrement())
-  username         String    @unique
-  email            String    @unique
-  password         String
-  role             String    @default("author") // 新注册用户默认 author（可发布自己的文章）
-  settings         String?   // JSON：用户个性化设置（背景类型、颜色等）
-  canAccessDrive   Boolean   @default(false) // 是否有网盘访问权限
-  storageQuota     BigInt    @default(2147483648) @map("storage_quota") // 网盘空间上限（字节，默认 2 GiB）
-  avatarPath       String?   @map("avatar_path") // 存储节点路径（如 _avatars/1.webp）
-  tokenValidAfter  DateTime  @default(now()) @map("token_valid_after") // JWT 失效校验基准时间
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
-  posts            Post[]
-  comments         Comment[]
-  driveFiles       DriveFile[] // 上传的文件
-  driveFavorites   DriveFavorite[]
-  screenTimeLogs   ScreenTimeLog[]
-  oauthGrants      OAuthGrant[] // 该用户授权过的第三方应用
-  createdOAuthClients OAuthClient[] @relation("OAuthClientCreatedBy")
-  friendshipsA         Friendship[]         @relation("FriendshipUser")
-  friendshipsB         Friendship[]         @relation("FriendshipFriend")
-  friendRequestsSent   FriendRequest[]      @relation("FriendRequestSender")
-  friendRequestsReceived FriendRequest[]    @relation("FriendRequestReceiver")
-  conversationMembers  ConversationMember[]
-  messages             Message[]
-  ownedConversations   Conversation[]       @relation("ConversationOwner")
-  aiConversations      AiConversation[]     // AI 对话（DeepSeek）会话
-  aiChatImages         AiChatImage[]        // AI 对话上传的图片附件
-  proxySites           ProxySite[]          // 网页反代站点（含账号级的登录 Cookie）
-  /** 网页反代排队赦免：不受并发闸门限制（管理员另有 role 兜底） */
-  proxyQueueExempt     Boolean   @default(false) @map("proxy_queue_exempt")
+  id                     Int                  @id @default(autoincrement())
+  username               String               @unique
+  email                  String               @unique
+  password               String
+  role                   String               @default("author") // 新注册用户默认 author（可发布自己的文章）
+  status                 String               @default("active") // pending | active | rejected（注册审核）
+  apiRateLimit           Int                  @default(600) @map("api_rate_limit") // 次/15min；0=不限业务配额
+  settings               String? // JSON：用户个性化设置（背景类型、颜色等）
+  canAccessDrive         Boolean              @default(false) // 是否有网盘访问权限
+  storageQuota           BigInt               @default(2147483648) @map("storage_quota") // 网盘空间上限（字节，默认 2 GiB）
+  avatarPath             String?              @map("avatar_path") // 存储节点路径（如 _avatars/1.webp）
+  tokenValidAfter        DateTime             @default(now()) @map("token_valid_after") // JWT 失效校验基准时间
+  gameStatsImportedAt    DateTime?            @map("game_stats_imported_at") // 本地战绩一次性迁移标记
+  createdAt              DateTime             @default(now()) @map("created_at")
+  updatedAt              DateTime             @updatedAt @map("updated_at")
+  posts                  Post[]
+  comments               Comment[]
+  driveFiles             DriveFile[] // 上传的文件
+  driveFavorites         DriveFavorite[]
+  screenTimeLogs         ScreenTimeLog[]
+  oauthGrants            OAuthGrant[] // 该用户授权过的第三方应用
+  createdOAuthClients    OAuthClient[]        @relation("OAuthClientCreatedBy")
+  friendshipsA           Friendship[]         @relation("FriendshipUser")
+  friendshipsB           Friendship[]         @relation("FriendshipFriend")
+  friendRequestsSent     FriendRequest[]      @relation("FriendRequestSender")
+  friendRequestsReceived FriendRequest[]      @relation("FriendRequestReceiver")
+  conversationMembers    ConversationMember[]
+  messages               Message[]
+  ownedConversations     Conversation[]       @relation("ConversationOwner")
+  aiConversations        AiConversation[] // AI 对话（DeepSeek）会话
+  aiChatImages           AiChatImage[] // AI 对话上传的图片附件
+  proxySites             ProxySite[] // 网页反代站点（含账号级的登录 Cookie）
+  gameStats              GameStat[] // 游戏战绩（单机 + 联机）
+  /**
+   * 网页反代排队赦免：不受并发闸门限制（管理员另有 role 兜底）
+   */
+  proxyQueueExempt       Boolean              @default(false) @map("proxy_queue_exempt")
 
+  @@index([status, createdAt])
   @@map("users")
 }
 
@@ -85,11 +92,11 @@ model Page {
   id           Int      @id @default(autoincrement())
   slug         String   @unique
   title        String
-  schema       String   // JSON string，存储控件树结构
+  schema       String // JSON string，存储控件树结构
   published    Boolean  @default(false)
   featured     Boolean  @default(false)
-  featureEmoji String?  // 功能界面显示的图标 emoji
-  featureDesc  String?  // 功能界面显示的简介
+  featureEmoji String? // 功能界面显示的图标 emoji
+  featureDesc  String? // 功能界面显示的简介
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -99,15 +106,15 @@ model Page {
 
 model DriveFile {
   id           Int         @id @default(autoincrement())
-  name         String                              // 文件名或文件夹名
-  isFolder     Boolean     @default(false)         // true = 文件夹
-  parentId     Int?                                // 父文件夹ID（null=根目录）
+  name         String // 文件名或文件夹名
+  isFolder     Boolean     @default(false) // true = 文件夹
+  parentId     Int? // 父文件夹ID（null=根目录）
   parent       DriveFile?  @relation("DriveHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
   children     DriveFile[] @relation("DriveHierarchy")
-  size         BigInt      @default(0)             // 文件大小（字节）
-  mimeType     String?                             // MIME 类型（文件才有）
-  storagePath  String   @unique                     // 存储节点上的相对路径
-  uploadedById Int?                                // 上传者 ID（null=用户已删除，归属管理员）
+  size         BigInt      @default(0) // 文件大小（字节）
+  mimeType     String? // MIME 类型（文件才有）
+  storagePath  String      @unique // 存储节点上的相对路径
+  uploadedById Int? // 上传者 ID（null=用户已删除，归属管理员）
   uploadedBy   User?       @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
   createdAt    DateTime    @default(now()) @map("created_at")
   updatedAt    DateTime    @updatedAt @map("updated_at")
@@ -126,7 +133,7 @@ model DriveFavorite {
   order      Int      @default(0)
   createdAt  DateTime @default(now()) @map("created_at")
 
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, folderId])
   @@index([userId])
@@ -134,15 +141,15 @@ model DriveFavorite {
 }
 
 model ScreenTimeLog {
-  id            Int      @id @default(autoincrement())
-  userId        Int      @map("user_id")
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date          String   // YYYY-MM-DD
-  totalSeconds      Int      @map("total_seconds")
-  dailyGoalSeconds  Int?     @map("daily_goal_seconds")
-  reportedAt        DateTime @map("reported_at")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id               Int      @id @default(autoincrement())
+  userId           Int      @map("user_id")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date             String // YYYY-MM-DD
+  totalSeconds     Int      @map("total_seconds")
+  dailyGoalSeconds Int?     @map("daily_goal_seconds")
+  reportedAt       DateTime @map("reported_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   @@unique([userId, date])
   @@index([userId])
@@ -167,30 +174,30 @@ model AiConfig {
 /// AI 对话功能配置 — 全站单行（与首页 AI 助手的 AiConfig 互不影响，
 /// 便于图片提问时单独指向支持视觉的模型端点）
 model AiChatConfig {
-  id           Int      @id @default(autoincrement())
-  provider     String   @default("deepseek")
-  model        String   @default("deepseek-chat")
-  apiKey       String   @default("")
-  baseUrl      String?  @default("https://api.deepseek.com")
-  systemPrompt String   @default("你是一个乐于助人的中文 AI 助手。请用中文回答，回答准确、简洁，适当使用 Markdown 格式组织内容。")
-  dailyLimit   Int      @default(20) // 每用户每日提问上限；0 = 不限
-  isEnabled    Boolean  @default(false)
+  id             Int      @id @default(autoincrement())
+  provider       String   @default("deepseek")
+  model          String   @default("deepseek-chat")
+  apiKey         String   @default("")
+  baseUrl        String?  @default("https://api.deepseek.com")
+  systemPrompt   String   @default("你是一个乐于助人的中文 AI 助手。请用中文回答，回答准确、简洁，适当使用 Markdown 格式组织内容。")
+  dailyLimit     Int      @default(20) // 每用户每日提问上限；0 = 不限
+  isEnabled      Boolean  @default(false)
   // 联网搜索（第三方搜索 API；DeepSeek 官方 API 不自带搜索能力）
-  searchEnabled  Boolean @default(false)
-  searchProvider String  @default("bocha") // bocha | tavily
-  searchApiKey   String  @default("")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  searchEnabled  Boolean  @default(false)
+  searchProvider String   @default("bocha") // bocha | tavily
+  searchApiKey   String   @default("")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   @@map("ai_chat_config")
 }
 
 model AiConversation {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String   @default("新对话") // 首条消息发出时取内容前 20 字
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id        Int         @id @default(autoincrement())
+  userId    Int         @map("user_id")
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String      @default("新对话") // 首条消息发出时取内容前 20 字
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
   messages  AiMessage[]
 
   @@index([userId])
@@ -198,16 +205,16 @@ model AiConversation {
 }
 
 model AiMessage {
-  id             Int            @id @default(autoincrement())
-  conversationId Int            @map("conversation_id")
-  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  role           String         // 'user' | 'assistant'
-  content        String         @default("")
-  reasoningContent String?      @map("reasoning_content") // 思考模型的思维链（assistant 消息；非思考为 null）
-  model          String?        // 生成该回复的模型（assistant 消息）
-  counted        Boolean        @default(true) // 是否计入每日提问配额（仅 user 消息；上游调用失败置 false 退还）
-  createdAt      DateTime       @default(now()) @map("created_at")
-  images         AiChatImage[]
+  id               Int            @id @default(autoincrement())
+  conversationId   Int            @map("conversation_id")
+  conversation     AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role             String // 'user' | 'assistant'
+  content          String         @default("")
+  reasoningContent String?        @map("reasoning_content") // 思考模型的思维链（assistant 消息；非思考为 null）
+  model            String? // 生成该回复的模型（assistant 消息）
+  counted          Boolean        @default(true) // 是否计入每日提问配额（仅 user 消息；上游调用失败置 false 退还）
+  createdAt        DateTime       @default(now()) @map("created_at")
+  images           AiChatImage[]
 
   @@index([conversationId])
   @@map("ai_messages")
@@ -222,7 +229,7 @@ model AiChatImage {
   imagePath String     @map("image_path") // 存储节点路径：_ai/<userId>/<uuid>.webp
   width     Int
   height    Int
-  size      Int        // WebP 字节数
+  size      Int // WebP 字节数
   createdAt DateTime   @default(now()) @map("created_at")
 
   @@index([userId])
@@ -234,14 +241,14 @@ model AiChatImage {
 
 model OAuthClient {
   id            Int      @id @default(autoincrement())
-  clientId      String   @unique @map("client_id")      // 公开标识，形如 lw_xxxxx
-  clientSecret  String?  @map("client_secret")          // bcrypt 哈希；公开客户端为 null
+  clientId      String   @unique @map("client_id") // 公开标识，形如 lw_xxxxx
+  clientSecret  String?  @map("client_secret") // bcrypt 哈希；公开客户端为 null
   clientType    String   @default("confidential") @map("client_type") // confidential | public
   name          String
   description   String?
   homepage      String?
-  redirectUris  String   @map("redirect_uris")          // JSON 数组字符串，回调地址需精确匹配
-  allowedScopes String   @map("allowed_scopes")         // JSON 数组字符串：管理员允许该应用申请的最大 scope 集
+  redirectUris  String   @map("redirect_uris") // JSON 数组字符串，回调地址需精确匹配
+  allowedScopes String   @map("allowed_scopes") // JSON 数组字符串：管理员允许该应用申请的最大 scope 集
   isActive      Boolean  @default(true) @map("is_active")
   createdById   Int?     @map("created_by_id")
   createdBy     User?    @relation("OAuthClientCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -257,16 +264,16 @@ model OAuthClient {
 }
 
 model OAuthGrant {
-  id         Int       @id @default(autoincrement())
-  userId     Int       @map("user_id")
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clientId   Int       @map("client_id")
+  id         Int         @id @default(autoincrement())
+  userId     Int         @map("user_id")
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId   Int         @map("client_id")
   client     OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  scopes     String    // JSON 数组字符串：用户实际同意的 scope
-  revokedAt  DateTime? @map("revoked_at")    // 非空 = 用户已撤销授权
-  lastUsedAt DateTime? @map("last_used_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
+  scopes     String // JSON 数组字符串：用户实际同意的 scope
+  revokedAt  DateTime?   @map("revoked_at") // 非空 = 用户已撤销授权
+  lastUsedAt DateTime?   @map("last_used_at")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
 
   codes         OAuthCode[]
   refreshTokens OAuthRefreshToken[]
@@ -278,18 +285,18 @@ model OAuthGrant {
 
 model OAuthCode {
   id                  Int         @id @default(autoincrement())
-  codeHash            String      @unique @map("code_hash")   // 仅存 sha256，明文只回传给应用一次
+  codeHash            String      @unique @map("code_hash") // 仅存 sha256，明文只回传给应用一次
   grantId             Int         @map("grant_id")
   grant               OAuthGrant  @relation(fields: [grantId], references: [id], onDelete: Cascade)
   clientId            Int         @map("client_id")
   client              OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
   userId              Int         @map("user_id")
   redirectUri         String      @map("redirect_uri")
-  scopes              String      // JSON 数组字符串
+  scopes              String // JSON 数组字符串
   codeChallenge       String      @map("code_challenge")
   codeChallengeMethod String      @default("S256") @map("code_challenge_method")
   expiresAt           DateTime    @map("expires_at")
-  usedAt              DateTime?   @map("used_at")            // 一次性核销标记（防重放）
+  usedAt              DateTime?   @map("used_at") // 一次性核销标记（防重放）
   createdAt           DateTime    @default(now()) @map("created_at")
 
   @@index([grantId])
@@ -298,16 +305,16 @@ model OAuthCode {
 
 model OAuthRefreshToken {
   id             Int         @id @default(autoincrement())
-  tokenHash      String      @unique @map("token_hash")      // 仅存 sha256
+  tokenHash      String      @unique @map("token_hash") // 仅存 sha256
   grantId        Int         @map("grant_id")
   grant          OAuthGrant  @relation(fields: [grantId], references: [id], onDelete: Cascade)
   clientId       Int         @map("client_id")
   client         OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
   userId         Int         @map("user_id")
-  scopes         String      // JSON 数组字符串
+  scopes         String // JSON 数组字符串
   expiresAt      DateTime    @map("expires_at")
   revokedAt      DateTime?   @map("revoked_at")
-  replacedByHash String?     @map("replaced_by_hash")        // 轮换后继任令牌的哈希
+  replacedByHash String?     @map("replaced_by_hash") // 轮换后继任令牌的哈希
   lastUsedAt     DateTime?   @map("last_used_at")
   createdAt      DateTime    @default(now()) @map("created_at")
 
@@ -347,8 +354,8 @@ model FriendRequest {
 
 model Conversation {
   id            Int      @id @default(autoincrement())
-  type          String   // direct | group
-  name          String?  // 群名；direct 为 null
+  type          String // direct | group
+  name          String? // 群名；direct 为 null
   ownerId       Int?     @map("owner_id")
   directKey     String?  @unique @map("direct_key") // direct 会话去重键：`minUserId:maxUserId`
   lastMessageAt DateTime @default(now()) @map("last_message_at")
@@ -401,21 +408,25 @@ model Message {
 }
 
 model ProxySite {
-  id            Int       @id @default(autoincrement())
-  userId        Int       @map("user_id")
-  name          String
-  origin        String    // 上游站点源站，形如 https://example.com（无路径、无末尾斜杠）
-  cookies       String    @default("[]") // JSON：ProxyCookie[]，站点登录态（跨设备共享）
-  /** 强制用桌面浏览器 UA 访问上游（手机打开只服务桌面端的站点时使用） */
-  forceDesktop  Boolean   @default(false) @map("force_desktop")
-  lastVisitedAt DateTime? @map("last_visited_at")
-  /** 访问统计（累计值，由 proxyStats 定时批量累加，不逐请求写库） */
-  requestCount  Int       @default(0) @map("request_count")
-  errorCount    Int       @default(0) @map("error_count")
-  lastStatusCode Int?     @map("last_status_code")
-  lastErrorAt   DateTime? @map("last_error_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id             Int       @id @default(autoincrement())
+  userId         Int       @map("user_id")
+  name           String
+  origin         String // 上游站点源站，形如 https://example.com（无路径、无末尾斜杠）
+  cookies        String    @default("[]") // JSON：ProxyCookie[]，站点登录态（跨设备共享）
+  /**
+   * 强制用桌面浏览器 UA 访问上游（手机打开只服务桌面端的站点时使用）
+   */
+  forceDesktop   Boolean   @default(false) @map("force_desktop")
+  lastVisitedAt  DateTime? @map("last_visited_at")
+  /**
+   * 访问统计（累计值，由 proxyStats 定时批量累加，不逐请求写库）
+   */
+  requestCount   Int       @default(0) @map("request_count")
+  errorCount     Int       @default(0) @map("error_count")
+  lastStatusCode Int?      @map("last_status_code")
+  lastErrorAt    DateTime? @map("last_error_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   daily ProxyDailyStat[]
@@ -425,21 +436,27 @@ model ProxySite {
   @@map("proxy_sites")
 }
 
-/** 反代黑名单条目：命中后禁止新建站点与转发请求（pattern 为域名或 *.域名） */
+/**
+ * 反代黑名单条目：命中后禁止新建站点与转发请求（pattern 为域名或 *.域名）
+ */
 model ProxyBlacklist {
   id          Int      @id @default(autoincrement())
   pattern     String   @unique // 归一化后的域名，如 example.com 或 *.example.com
-  reason      String?  // 拉黑原因（管理端展示）
+  reason      String? // 拉黑原因（管理端展示）
   createdById Int?     @map("created_by_id")
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@map("proxy_blacklist")
 }
 
-/** 反代每日访问统计（按站点聚合，管理端排名数据源） */
+/**
+ * 反代每日访问统计（按站点聚合，管理端排名数据源）
+ */
 model ProxyDailyStat {
   id       Int    @id @default(autoincrement())
-  /** 统计日期（Asia/Shanghai），格式 YYYY-MM-DD */
+  /**
+   * 统计日期（Asia/Shanghai），格式 YYYY-MM-DD
+   */
   day      String
   siteId   Int    @map("site_id")
   userId   Int    @map("user_id")
@@ -452,4 +469,55 @@ model ProxyDailyStat {
   @@index([day])
   @@index([userId, day])
   @@map("proxy_daily_stats")
+}
+
+// === 站点功能开关 ===
+
+/**
+ * 模块级功能开关；缺失的 key 按代码默认值 true 处理
+ */
+model FeatureFlag {
+  key       String   @id
+  enabled   Boolean  @default(true)
+  updatedBy Int?     @map("updated_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("feature_flags")
+}
+
+// === 游戏战绩 ===
+
+/**
+ * 游戏战绩聚合（单机 solo / 联机 online / 扫雷难度）
+ */
+model GameStat {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game         String // 2048|doudizhu|snake|minesweeper|jump|gomoku|liar|uno|xiangqi|parkour
+  variant      String   @default("solo") // solo|online|beginner|intermediate|expert
+  games        Int      @default(0)
+  wins         Int      @default(0)
+  losses       Int      @default(0)
+  draws        Int      @default(0)
+  deaths       Int      @default(0)
+  scoreTotal   Int      @default(0) @map("score_total") // 斗地主积分可为负
+  bestScore    Int      @default(0) @map("best_score")
+  bestTimeMs   Int?     @map("best_time_ms") // 扫雷最短用时
+  bestCombo    Int      @default(0) @map("best_combo")
+  bestCoins    Int      @default(0) @map("best_coins")
+  bestDistance Float    @default(0) @map("best_distance")
+  totalJumps   Int      @default(0) @map("total_jumps")
+  offsetSum    Float    @default(0) @map("offset_sum")
+  offsetCount  Int      @default(0) @map("offset_count")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, game, variant])
+  @@index([userId])
+  @@index([game, variant, bestScore])
+  @@index([game, variant, scoreTotal])
+  @@index([game, variant, wins])
+  @@index([game, variant, bestTimeMs])
+  @@map("game_stats")
 }

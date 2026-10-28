@@ -30,9 +30,9 @@ export function ensureNekoAccount(userId: number, options: { kick?: boolean } = 
     try {
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { id: true, username: true },
+        select: { id: true, username: true, status: true },
       })
-      if (!user) return
+      if (!user || user.status !== 'active') return
       await ensureAccount(user, options)
     } catch (err) {
       console.warn(`[nekoChat] 账号同步失败 #${userId}：`, err instanceof Error ? err.message : err)
@@ -68,7 +68,7 @@ export async function syncAllNekoAccounts(): Promise<number> {
   let total = 0
   for (;;) {
     const users = await prisma.user.findMany({
-      where: { id: { gt: cursor } },
+      where: { id: { gt: cursor }, status: 'active' },
       select: { id: true, username: true },
       orderBy: { id: 'asc' },
       take: 100,

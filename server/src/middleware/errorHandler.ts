@@ -5,10 +5,12 @@ import { Request, Response, NextFunction } from 'express'
  */
 export class AppError extends Error {
   status: number
-  constructor(message: string, status: number = 500) {
+  code?: string
+  constructor(message: string, status: number = 500, code?: string) {
     super(message)
     this.name = 'AppError'
     this.status = status
+    this.code = code
   }
 }
 
@@ -25,7 +27,7 @@ export function errorHandler(
 ) {
   // 已知的应用错误
   if (err instanceof AppError) {
-    res.status(err.status).json({ error: err.message })
+    res.status(err.status).json(err.code ? { error: err.message, code: err.code } : { error: err.message })
     return
   }
 

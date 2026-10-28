@@ -50,6 +50,7 @@ const chatWriteLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => String(req.user?.userId ?? ipKeyGenerator(req.ip ?? '')),
   message: { error: '操作过于频繁，请稍后再试' },
+  skip: (req) => req.user?.role === 'admin',
 })
 
 /** 图片上限与 neko 一致（8MB，按魔数判定类型） */

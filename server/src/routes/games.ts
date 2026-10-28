@@ -196,6 +196,14 @@ import {
  *   - 其它写操作（邀请 / 响应 / 取消 / 认输）：60 次 / 5 分钟
  * 上述三个高频端点同时在 index.ts 的全局 apiLimiter 中按精确路径豁免（否则会被 600/15min 卡住）。
  */
+import { setGameResultListener } from '../services/gameStatsHooks.js'
+import { recordOnlineMatchResult } from '../services/gameStatsService.js'
+
+// 联机结算落库：仅在加载路由时注册（verify 脚本不加载本文件，保持纯内存）
+setGameResultListener((payload) => {
+  void recordOnlineMatchResult(payload)
+})
+
 const router = Router()
 router.use(authenticate)
 
@@ -214,6 +222,7 @@ const moveLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: userKeyGenerator,
   message: { error: '操作过于频繁，请稍后再试' },
+  skip: (req) => req.user?.role === 'admin',
 })
 
 /**
@@ -227,6 +236,7 @@ const minecraftActionLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: userKeyGenerator,
   message: { error: '操作过于频繁，请稍后再试' },
+  skip: (req) => req.user?.role === 'admin',
 })
 
 /**
@@ -240,6 +250,7 @@ const parkourActionLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: userKeyGenerator,
   message: { error: '操作过于频繁，请稍后再试' },
+  skip: (req) => req.user?.role === 'admin',
 })
 
 const syncLimiter = rateLimit({
@@ -249,6 +260,7 @@ const syncLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: userKeyGenerator,
   message: { error: '同步过于频繁，请稍后再试' },
+  skip: (req) => req.user?.role === 'admin',
 })
 
 const presenceLimiter = rateLimit({
@@ -258,6 +270,7 @@ const presenceLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: userKeyGenerator,
   message: { error: '在线心跳过于频繁，请稍后再试' },
+  skip: (req) => req.user?.role === 'admin',
 })
 
 const gameWriteLimiter = rateLimit({
@@ -267,6 +280,7 @@ const gameWriteLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: userKeyGenerator,
   message: { error: '操作过于频繁，请稍后再试' },
+  skip: (req) => req.user?.role === 'admin',
 })
 
 /** 当前登录用户 id（authenticate 已保证存在；集中处理类型与兜底） */

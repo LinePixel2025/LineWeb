@@ -31,6 +31,8 @@ export interface AuthPayload {
   role: string
   capabilities: Capability[]
   canAccessDrive: boolean
+  /** 全局 API 限额（次/15min，0=不限）；应用令牌使用所属账号的限额 */
+  apiRateLimit: number
   /** 网盘空间上限（字节）；应用令牌使用所属账号的配额 */
   storageQuota: bigint
   // 下载票据相关（由 /api/drive/download-ticket/:id 签发）
@@ -80,9 +82,10 @@ async function resolveAppAuthContext(
   try {
     const user = await prisma.user.findUnique({
       where: { id: claims.userId },
-      select: { tokenValidAfter: true, role: true, canAccessDrive: true, storageQuota: true },
+      select: { tokenValidAfter: true, role: true, status: true, canAccessDrive: true, apiRateLimit: true, storageQuota: true },
     })
     if (!user) return { ok: false, reason: '账号不存在或已注销，请重新登录' }
+    if (user.status !== 'active') return { ok: false, reason: '账号未通过审核或已被停用' }
 
     const issuedAtMs = typeof claims.ts === 'number' ? claims.ts : (claims.iat ?? 0) * 1000
     if (issuedAtMs < user.tokenValidAfter.getTime()) {
@@ -123,6 +126,7 @@ async function resolveAppAuthContext(
         role: 'app',
         capabilities: capabilityScopes as Capability[],
         canAccessDrive: !!user.canAccessDrive,
+        apiRateLimit: user.apiRateLimit,
         storageQuota: user.storageQuota,
         type: config.oauthAccessTokenType,
         clientId,
@@ -165,9 +169,10 @@ export async function resolveAuthContext(token: string): Promise<
 
   const user = await prisma.user.findUnique({
     where: { id: claims.userId },
-    select: { tokenValidAfter: true, role: true, canAccessDrive: true, storageQuota: true },
+    select: { tokenValidAfter: true, role: true, status: true, canAccessDrive: true, apiRateLimit: true, storageQuota: true },
   })
   if (!user) return { ok: false, reason: '账号不存在或已注销，请重新登录' }
+  if (user.status !== 'active') return { ok: false, reason: '账号未通过审核或已被停用' }
 
   // 失效校验：优先用毫秒级 ts claim（登出/改密后同一秒内也能立即失效）；
   // 旧令牌没有 ts 时回退到 iat（秒级），与 tokenValidAfter 同粒度比较
@@ -185,6 +190,7 @@ export async function resolveAuthContext(token: string): Promise<
       role: user.role,
       capabilities: capabilitiesForRole(user.role),
       canAccessDrive: !!user.canAccessDrive,
+      apiRateLimit: user.apiRateLimit,
       storageQuota: user.storageQuota,
       type: claims.type,
       downloadFileId: claims.downloadFileId,
@@ -315,34 +321,6 @@ export function requireCapability(...required: Capability[]) {
     }
     next()
   }
-}
-
-/**
- * 可选认证中间件：解析登录令牌，成功时挂载 req.user，失败时不拦截（游客照常放行）
- * 用于 /api/ai/chat 等公开端点——登录用户可获得额外上下文（如屏幕使用时间）
- *
- * 下载票据与应用令牌都按游客处理：它们只表达「下载某个文件」/「以应用身份访问白名单端点」，
- * 不应在公开端点上获得登录用户的额外上下文。
- */
-export async function optionalAuthenticate(req: Request, res: Response, next: NextFunction) {
-  const header = req.headers.authorization
-  if (!header?.startsWith('Bearer ') || req.user) {
-    next()
-    return
-  }
-
-  try {
-    const result = await resolveAuthContext(header.slice(7).trim())
-    const excluded = result.ok && (
-      result.user.type === 'download'
-      || result.user.type === config.oauthAccessTokenType
-      || result.user.type === 'proxy'
-    )
-    if (result.ok && !excluded) req.user = result.user
-  } catch (err) {
-    console.error('[Auth] 可选认证解析失败（按游客处理）:', err)
-  }
-  next()
 }
 
 /** 角色是否具备能力（供路由内部做数据范围判断，如网盘越权豁免） */

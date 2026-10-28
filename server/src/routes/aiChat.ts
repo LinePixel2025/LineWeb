@@ -56,6 +56,7 @@ const aiChatWriteLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => String(req.user?.userId ?? ipKeyGenerator(req.ip ?? '')),
   message: { error: '操作过于频繁，请稍后再试' },
+  skip: (req) => req.user?.role === 'admin',
 })
 
 /** 当前登录用户 id（authenticate 已保证存在；集中处理类型与兜底） */
@@ -95,7 +96,9 @@ async function assertConversationOwner(conversationId: number, userId: number) {
 
 // GET /api/ai-chat/quota — 功能开关 + 当日已用/剩余提问次数
 router.get('/quota', asyncHandler(async (req: Request, res: Response) => {
-  res.json(await getDailyUsage(currentUserId(req)))
+  const usage = await getDailyUsage(currentUserId(req))
+  // 管理员不受每日提问上限约束
+  res.json(req.user?.role === 'admin' ? { ...usage, unlimited: true, remaining: null } : usage)
 }))
 
 // === 会话 ===
@@ -283,7 +286,10 @@ router.post('/messages', aiChatWriteLimiter, asyncHandler(async (req: Request, r
   if (search && !isWebSearchConfigured(config)) {
     throw new AppError('联网搜索未配置，请联系管理员', 503)
   }
-  const usage = await getDailyUsage(userId)
+  let usage = await getDailyUsage(userId)
+  if (req.user?.role === 'admin') {
+    usage = { ...usage, unlimited: true, remaining: null }
+  }
   if (!usage.unlimited && usage.remaining !== null && usage.remaining <= 0) {
     res.status(429).json({
       error: '今日提问次数已用完，请明天再来',

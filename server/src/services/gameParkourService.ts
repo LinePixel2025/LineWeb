@@ -4,6 +4,7 @@ import { sendToUser } from './chatHub.js'
 import { pruneGamePresence } from './gamePresence.js'
 import { nextGameInviteId } from './gameIds.js'
 import { resetUserInMatches } from './gameExit.js'
+import { publishGameEnd } from './gameStatsHooks.js'
 import {
   GAME_FINISHED_RETENTION_MS,
   GAME_INVITE_TTL_MS,
@@ -487,6 +488,19 @@ function finishParkourMatch(
   const winner = match.players.find((player) => player.rank === 1) ?? null
   match.winnerId = winner === null ? null : winner.userId
   broadcastMatch(match, 'game:match:ended', now)
+  publishGameEnd({
+    game: 'parkour',
+    matchId: match.id,
+    reason,
+    results: match.players.map((player) => ({
+      userId: player.userId,
+      outcome: match.winnerId === null ? 'draw' : player.userId === match.winnerId ? 'win' : 'loss',
+      score: parkourScore(player),
+      distanceM: player.distanceM,
+      coins: player.coins,
+      maxCombo: player.maxCombo,
+    })),
+  })
 }
 
 /** 单个玩家冲线：记录服务端到达顺序，不结束其他玩家 */

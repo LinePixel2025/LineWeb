@@ -5,7 +5,6 @@ import compression from 'compression'
 import http from 'http'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import rateLimit from 'express-rate-limit'
 import { config } from './config/index.js'
 import authRoutes from './routes/auth.js'
 import postRoutes from './routes/posts.js'
@@ -25,11 +24,15 @@ import chatRoutes from './routes/chat.js'
 import chatXmppRoutes from './routes/chatXmpp.js'
 import chatUploadsRoutes from './routes/chatUploads.js'
 import gameRoutes from './routes/games.js'
+import gameStatsRoutes from './routes/gameStats.js'
+import { featuresRouter, adminFeaturesRouter } from './routes/features.js'
 import { proxyApiRouter, proxyHttpRouter } from './routes/webProxy.js'
 import { proxyAdminRouter } from './routes/proxyAdmin.js'
 import { startProxyStatsFlusher } from './services/proxyStats.js'
 import { refreshProxyBlacklist } from './services/proxyBlacklist.js'
 import { authenticate } from './middleware/auth.js'
+import { ipHardLimiter, userApiLimiter } from './middleware/rateLimits.js'
+import { requireFeature } from './middleware/featureGuard.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel, isNodeConnected } from './services/storageTunnel.js'
 import { initChatHub } from './services/chatHub.js'
@@ -108,57 +111,10 @@ app.set('trust proxy', 1)  // 信任反向代理，用于 rate-limiter 正确获
 app.use('/api', express.json({ limit: '1mb' }))
 app.use('/api', express.urlencoded({ limit: '1mb', extended: true }))
 
-// === 全局速率限制 ===
-// 所有 /api 端点每 IP 每 15 分钟最多 600 次请求。
-// 例外：游戏的高频端点（移动 / 轮询 sync / presence 心跳）由 routes/games.ts 内
-// 按用户的精确限流接管，这里必须按精确路径跳过，否则正常对局/轮询会被全局 IP 限流卡住。
-// 注意：apiLimiter 挂在 /api 上，req.path 不含 /api 前缀（如 /games/2048/sync）。
-const apiLimiterSkipPaths = [
-  /^\/games\/2048\/matches\/\d+\/moves\/?$/,
-  /^\/games\/2048\/sync\/?$/,
-  /^\/games\/2048\/presence\/?$/,
-  /^\/games\/doudizhu\/matches\/\d+\/actions\/?$/,
-  /^\/games\/doudizhu\/sync\/?$/,
-  /^\/games\/doudizhu\/presence\/?$/,
-  /^\/games\/snake\/matches\/\d+\/actions\/?$/,
-  /^\/games\/snake\/sync\/?$/,
-  /^\/games\/snake\/presence\/?$/,
-  /^\/games\/minesweeper\/matches\/\d+\/actions\/?$/,
-  /^\/games\/minesweeper\/sync\/?$/,
-  /^\/games\/minesweeper\/presence\/?$/,
-  /^\/games\/jump\/matches\/\d+\/actions\/?$/,
-  /^\/games\/jump\/sync\/?$/,
-  /^\/games\/jump\/presence\/?$/,
-  /^\/games\/minecraft\/matches\/\d+\/actions\/?$/,
-  /^\/games\/minecraft\/sync\/?$/,
-  /^\/games\/minecraft\/presence\/?$/,
-  /^\/games\/gomoku\/matches\/\d+\/actions\/?$/,
-  /^\/games\/gomoku\/sync\/?$/,
-  /^\/games\/gomoku\/presence\/?$/,
-  /^\/games\/liar\/matches\/\d+\/actions\/?$/,
-  /^\/games\/liar\/sync\/?$/,
-  /^\/games\/liar\/presence\/?$/,
-  /^\/games\/uno\/matches\/\d+\/actions\/?$/,
-  /^\/games\/uno\/sync\/?$/,
-  /^\/games\/uno\/presence\/?$/,
-  /^\/games\/xiangqi\/matches\/\d+\/actions\/?$/,
-  /^\/games\/xiangqi\/sync\/?$/,
-  /^\/games\/xiangqi\/presence\/?$/,
-  /^\/games\/parkour\/matches\/\d+\/actions\/?$/,
-  /^\/games\/parkour\/sync\/?$/,
-  /^\/games\/parkour\/presence\/?$/,
-  // 聊天 XMPP 长轮询（25s 挂起）由路由内按用户限流接管
-  /^\/chat\/xmpp\/http-/,
-]
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 600,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => apiLimiterSkipPaths.some((pattern) => pattern.test(req.path)),
-  message: { error: '请求过于频繁，请稍后再试' },
-})
-app.use('/api', apiLimiter)
+// === 全局限流（分层）===
+// 认证前：IP 防滥用硬上限；认证后：按用户可配置的业务限额（管理员豁免）。
+// 高频端点（游戏 sync/move/presence、XMPP 长轮询）由路由内限流接管。
+app.use('/api', ipHardLimiter)
 
 // 设备追踪中间件 — 记录所有 API 请求来源
 app.use('/api', (req, _res, next) => {
@@ -166,12 +122,21 @@ app.use('/api', (req, _res, next) => {
   next()
 })
 
-// 全局认证中间件 — 除公开路径外，所有 API 请求必须携带账号登录令牌
+// 全局认证中间件 — 除精确公开路径外，所有 API 请求必须携带账号登录令牌
 // 注意：req.path 在 /api 中间件中不含 /api 前缀（如 /auth/login 而非 /api/auth/login）
-// 共 13 条；OAuth 的 token / revoke 端点是应用侧匿名调用入口（授权页等其他端点仍需登录令牌）
-const publicApiPaths = ['/auth/login', '/auth/register', '/auth/avatar', '/health', '/posts', '/pages/featured', '/pages/slug', '/stats/public', '/version', '/comments/post', '/ai/chat', '/oauth/token', '/oauth/revoke']
+// 只保留登录/注册、运维探针、OAuth 应用侧匿名入口与公开功能开关。
+const publicApiPaths = new Set([
+  '/auth/login',
+  '/auth/register',
+  '/health',
+  '/version',
+  '/oauth/token',
+  '/oauth/revoke',
+  '/features',
+])
 app.use('/api', (req, res, next) => {
-  if (publicApiPaths.some(p => req.path === p || req.path.startsWith(p + '/'))) {
+  const path = req.path.length > 1 && req.path.endsWith('/') ? req.path.slice(0, -1) : req.path
+  if (publicApiPaths.has(path)) {
     next()
     return
   }
@@ -184,38 +149,35 @@ app.use('/api', (req, res, next) => {
   authenticate(req, res, next)
 })
 
-// 公开端点缓存中间件 — 减少不必要的 API 请求（仅对 GET 请求）
-// 注意：排除 /admin 路径，管理端接口不应被浏览器缓存
-const cachePublic = (maxAge = 300) => (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  if (req.method === 'GET' && !req.path.startsWith('/admin')) {
-    res.set('Cache-Control', `public, max-age=${maxAge}`)
-  }
-  next()
-}
+// 认证后按用户限流（管理员与 apiRateLimit=0 的用户跳过；公开路径没有 req.user 时跳过）
+app.use('/api', userApiLimiter)
 
-// Routes
-app.use('/api/posts', cachePublic(300), postRoutes)
-app.use('/api/pages', cachePublic(300), pageRoutes)
-app.use('/api/comments', cachePublic(300), commentRoutes)
-app.use('/api/stats', cachePublic(60), statsRoutes)
+// Routes / 功能开关
+app.use('/api/features', featuresRouter)
+app.use('/api/admin/features', adminFeaturesRouter)
+app.use('/api/posts', requireFeature('posts'), postRoutes)
+app.use('/api/pages', requireFeature('pages'), pageRoutes)
+app.use('/api/comments', requireFeature('comments'), commentRoutes)
+app.use('/api/stats', statsRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
-app.use('/api/drive', driveRoutes)
-app.use('/api/drive/favorites', driveFavoritesRoutes)
+app.use('/api/drive', requireFeature('drive'), driveRoutes)
+app.use('/api/drive/favorites', requireFeature('drive'), driveFavoritesRoutes)
 app.use('/api/devices', deviceRoutes)
 app.use('/api/auth/avatar', avatarRoutes)
 app.use('/api/health', healthRoutes)
-app.use('/api/ai', aiRoutes)
-app.use('/api/ai-chat', aiChatRoutes)
+app.use('/api/ai', requireFeature('aiAssistant'), aiRoutes)
+app.use('/api/ai-chat', requireFeature('aiChat'), aiChatRoutes)
 app.use('/api/oauth', oauthRoutes)
 // 聊天已迁移到 neko XMPP：/api/chat/xmpp/* 必须在 /api/chat 之前挂载（前缀更长）
-app.use('/api/chat/xmpp', chatXmppRoutes)
-app.use('/api/chat', chatRoutes)
-app.use('/api/games', gameRoutes)
+app.use('/api/chat/xmpp', requireFeature('chat'), chatXmppRoutes)
+app.use('/api/chat', requireFeature('chat'), chatRoutes)
+app.use('/api/game-stats', requireFeature('games'), gameStatsRoutes)
+app.use('/api/games', requireFeature('gamesOnline'), gameRoutes)
 // 网页反代：站点管理（需登录令牌）
-app.use('/api/proxy', proxyApiRouter)
+app.use('/api/proxy', requireFeature('webProxy'), proxyApiRouter)
 // 网页反代管理（黑名单 / 统计排名 / 排队赦免，需 proxy:manage 能力）
-app.use('/api/proxy/admin', proxyAdminRouter)
+app.use('/api/proxy/admin', requireFeature('webProxy'), proxyAdminRouter)
 
 // === 网页反代（同源代理，Cookie 会话认证）— 必须在静态资源 / SPA fallback 之前 ===
 app.use('/proxy', proxyHttpRouter)
@@ -228,12 +190,13 @@ app.get('/api', (_req, res) => {
     baseUrl: '/api',
     auth: {
       login: { method: 'POST', path: '/api/auth/login', auth: 'public', description: '账号登录，返回访问令牌（可选 rememberDays 申请最多 90 天有效期）' },
-      register: { method: 'POST', path: '/api/auth/register', auth: 'public', description: '用户注册（默认 author 角色，可发布文章）' },
-      me: { method: 'GET', path: '/api/auth/me', auth: true, description: '获取当前用户信息（含角色与 capabilities 能力清单）' },
+      register: { method: 'POST', path: '/api/auth/register', auth: 'public', description: '提交注册申请（pending，等待管理员审核；不返回 token）' },
+      me: { method: 'GET', path: '/api/auth/me', auth: true, description: '获取当前用户信息（含角色、status 与 capabilities 能力清单）' },
+      features: { method: 'GET', path: '/api/features', auth: 'public', description: '公开功能开关（缺失 key 默认开启；管理员始终可访问被关闭功能）' },
       settings: { method: 'PUT', path: '/api/auth/settings', auth: true, description: '更新用户设置' },
       avatarUpload: { method: 'POST', path: '/api/auth/avatar', auth: true, description: '上传/更新头像 (multipart/form-data)' },
       avatarGet: { method: 'GET', path: '/api/auth/avatar', auth: true, description: '获取当前用户头像' },
-      avatarGetById: { method: 'GET', path: '/api/auth/avatar/:userId', auth: 'public', description: '获取指定用户头像' },
+      avatarGetById: { method: 'GET', path: '/api/auth/avatar/:userId', auth: true, description: '获取指定用户头像（需登录）' },
       avatarDelete: { method: 'DELETE', path: '/api/auth/avatar', auth: true, description: '删除头像' },
     },
     posts: {
@@ -277,9 +240,12 @@ app.get('/api', (_req, res) => {
       sync: { method: 'POST', path: '/api/drive/sync', auth: 'drive', description: '手动触发文件同步' },
     },
     users: {
-      list: { method: 'GET', path: '/api/users?page=&limit=', auth: 'admin', description: '用户列表（分页）' },
+      list: { method: 'GET', path: '/api/users?page=&limit=&status=', auth: 'admin', description: '用户列表（分页；status=pending|active|rejected；附带 counts）' },
+      pendingCount: { method: 'GET', path: '/api/users/pending-count', auth: 'admin', description: '待审核数量' },
       detail: { method: 'GET', path: '/api/users/:id', auth: 'admin', description: '用户详情' },
       update: { method: 'PUT', path: '/api/users/:id', auth: 'admin', description: '更新用户（角色/密码）' },
+      status: { method: 'PUT', path: '/api/users/:id/status', auth: 'admin', description: '审核用户 { status: active | rejected }（拒绝会使旧 token 立即失效）' },
+      rateLimit: { method: 'PUT', path: '/api/users/:id/rate-limit', auth: 'admin', description: '设置全局 API 限额 { apiRateLimit: 0–100000 }（0 = 不限；管理员恒不受限）' },
       driveAccess: { method: 'PUT', path: '/api/users/:id/drive-access', auth: 'admin', description: '切换网盘访问权限' },
       avatarSet: { method: 'PUT', path: '/api/users/:id/avatar', auth: 'admin', description: '管理员设置用户头像 (multipart/form-data)' },
       delete: { method: 'DELETE', path: '/api/users/:id', auth: 'admin', description: '删除用户' },
@@ -289,7 +255,7 @@ app.get('/api', (_req, res) => {
     },
     stats: {
       dashboard: { method: 'GET', path: '/api/stats', auth: 'admin', description: 'Dashboard 统计汇总' },
-      public: { method: 'GET', path: '/api/stats/public', auth: 'public', description: '公开统计数据（文章/用户/评论/页面数量）' },
+      public: { method: 'GET', path: '/api/stats/public', auth: true, description: '站点统计（文章/用户/评论/页面数量；需登录）' },
     },
     apiKeys: '已废弃 —— LineWeb 只使用账号登录令牌访问全部端点，不再提供 API Key。',
 
@@ -303,7 +269,7 @@ app.get('/api', (_req, res) => {
     system: {
       health: { method: 'GET', path: '/api/health', auth: 'public', description: '服务健康检查（公开端点之一）' },
       apiIndex: { method: 'GET', path: '/api', auth: true, description: 'API 端点列表（需认证）' },
-      authMethods: '账号登录令牌：POST /api/auth/login → Authorization: Bearer <token>。权限由账号角色的 capabilities 决定（admin 自动拥有全部能力；普通账号可访问全部非管理端点，网盘受 canAccessDrive 开关约束）。第三方应用请改用 OAuth 2.0 授权码 + PKCE 流程（见 docs/app-auth-api.md），不要保存用户密码；应用令牌只能访问白名单端点。',
+      authMethods: '全站业务端点默认需要登录：POST /api/auth/login → Authorization: Bearer <token>。权限由账号角色的 capabilities 决定（admin 自动拥有全部能力）。公开端点仅登录/注册、/api/features、/api/health、/api/version、OAuth token/revoke。第三方应用请改用 OAuth 2.0 授权码 + PKCE 流程（见 docs/app-auth-api.md），应用令牌只能访问白名单端点。',
     },
     oauth: {
       token: { method: 'POST', path: '/api/oauth/token', auth: 'public', description: '授权码换令牌 / 刷新令牌轮换（支持 PKCE，JSON 或表单编码）' },
@@ -331,10 +297,17 @@ app.get('/api', (_req, res) => {
       media: '同源媒体代理：/proxy/<siteId>/__lw_media__/<scheme>/<host>/<path>（跨域视频/音频/HLS 分片与播放列表，流式回传并保留 Range/206；只放行媒体类型，HTML/JS/CSS 一律 415）',
       ws: 'WebSocket 中继：/proxy-ws/<siteId>/*，上游不可达时直接拒绝升级，由站点自身的轮询降级接管。',
     },
+    gameStats: {
+      list: { method: 'GET', path: '/api/game-stats', auth: true, description: '当前账号全部游戏战绩（导入标记 + 聚合行）' },
+      result: { method: 'POST', path: '/api/game-stats/result', auth: true, description: '单机一局上报（120 次/5min；服务端白名单合并；需 gamesSingle）' },
+      import: { method: 'POST', path: '/api/game-stats/import', auth: true, description: '旧 localStorage 战绩一次性合并（幂等；空数组也会置位）' },
+      leaderboard: { method: 'GET', path: '/api/game-stats/leaderboard?game=&variant=&limit=&page=', auth: true, description: '站内排行榜（单机/联机分开；扫雷按最短用时，胜负型按胜场）' },
+    },
     chat: {
       note: '私信 / 群聊已迁移到独立 XMPP 服务（internet_neko）：消息与会话走 /api/chat/xmpp/*，浏览器经 /ws/xmpp 中继（不可用时降级 /api/chat/xmpp/http-* 长轮询）。好友关系仍以 LineWeb Prisma 为唯一真相源。',
       summary: { method: 'GET', path: '/api/chat/summary', auth: true, description: '待处理好友申请数（unreadTotal 恒为 0，未读改由客户端水位统计）' },
       friends: { method: 'GET', path: '/api/chat/friends', auth: true, description: '好友列表（DELETE /api/chat/friends/:userId 删除好友）' },
+      remark: { method: 'PUT', path: '/api/chat/friends/remark', auth: true, description: '设置联系人备注 { nekoId, remark }（≤30 字，空串清除，仅自己可见）' },
       friendRequests: { method: 'GET', path: '/api/chat/friend-requests', auth: true, description: '收到/发出的好友申请；POST /api/chat/friend-requests 发送，POST /api/chat/friend-requests/:id/accept|reject 处理' },
       bootstrap: { method: 'GET', path: '/api/chat/xmpp/bootstrap', auth: true, description: '一次性票据 + 过滤后的聊天状态（好友 / 有往来的原生联系人 / 群 / 申请 / 置顶）' },
       state: { method: 'GET', path: '/api/chat/xmpp/state', auth: true, description: '刷新聊天状态（轮询降级时使用）；GET /api/chat/xmpp/ticket 换新票据' },

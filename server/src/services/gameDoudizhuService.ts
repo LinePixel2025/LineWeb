@@ -4,6 +4,7 @@ import { isUserOnline, sendToUser } from './chatHub.js'
 import { isGamePresent } from './gamePresence.js'
 import { nextGameInviteId } from './gameIds.js'
 import { resetUserInMatches } from './gameExit.js'
+import { publishGameEnd } from './gameStatsHooks.js'
 import { isUserBusyInOtherGames, registerGameModule } from './gameService.js'
 import {
   canDoudizhuBeat,
@@ -482,6 +483,18 @@ function finishMatch(
     }
   }
   broadcastMatch(match, 'game:match:ended')
+  publishGameEnd({
+    game: 'doudizhu',
+    matchId: match.id,
+    reason,
+    results: match.players.map((player) => ({
+      userId: player.userId,
+      outcome: winnerSide === null
+        ? 'draw'
+        : player.status === 'won' ? 'win' : 'loss',
+      scoreDelta: player.scoreDelta ?? 0,
+    })),
+  })
 }
 
 /** 按当前倍率结算积分：地主 ±2 份、农民各 ∓1 份（须在 winnerSide 赋值后调用） */

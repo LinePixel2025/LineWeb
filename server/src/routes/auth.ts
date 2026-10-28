@@ -6,6 +6,7 @@ import { registerUser, loginUser, getUserById, updateUserSettings, updateUserPro
 import { registerSchema, loginSchema, updateSettingsSchema, updateProfileSchema } from '../config/index.js'
 import { getErrorMessage, getErrorStatus } from '../lib/utils.js'
 import { ensureNekoAccount } from '../services/nekoAccountSync.js'
+import { requireFeature } from '../middleware/featureGuard.js'
 
 const router = Router()
 
@@ -19,7 +20,7 @@ const authLimiter = rateLimit({
 })
 
 // 注册
-router.post('/register', authLimiter, async (req: Request, res: Response) => {
+router.post('/register', authLimiter, requireFeature('registration'), async (req: Request, res: Response) => {
   const parsed = registerSchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: '输入数据无效', details: parsed.error.flatten() })
@@ -29,9 +30,8 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
   const { username, email, password } = parsed.data
   try {
     const data = await registerUser(username, email, password)
-    // 聊天账号按需补建（失败只告警，不阻塞注册）
-    void ensureNekoAccount(data.user.id)
-    res.status(201).json(data)
+    // 待审核用户不创建 neko 聊天账号；管理员通过审批后再补建
+    res.status(201).json({ ...data, message: '注册成功，等待管理员审核' })
   } catch (err: unknown) {
     if (getErrorStatus(err) === 409) {
       res.status(409).json({ error: getErrorMessage(err) })
@@ -55,8 +55,10 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
     const data = await loginUser(loginIdentifier, password, rememberDays)
     res.json(data)
   } catch (err: unknown) {
-    if (getErrorStatus(err) === 401) {
-      res.status(401).json({ error: getErrorMessage(err) })
+    const status = getErrorStatus(err)
+    if (status === 401 || status === 403) {
+      const code = (err as { code?: string }).code
+      res.status(status).json(code ? { error: getErrorMessage(err), code } : { error: getErrorMessage(err) })
       return
     }
     throw err
