@@ -17,6 +17,8 @@ import {
 } from '../services/proxyCookies.js'
 import { PROXY_SESSION_COOKIE, resolveProxySessionInfo } from '../services/proxySession.js'
 import { ProxyQueueError, acquireProxySlot, getProxyQueueStats } from '../services/proxyQueue.js'
+import { addProxyBlacklistEntry, isProxyHostBlacklisted, normalizeBlacklistPattern } from '../services/proxyBlacklist.js'
+import { recordProxyRequest } from '../services/proxyStats.js'
 import {
   DESKTOP_USER_AGENT,
   assertPublicHost,
@@ -51,20 +53,29 @@ import {
   parseMediaTarget,
   rewritePlaylist,
 } from '../services/webProxyMedia.js'
+import {
+  RES_SEGMENT,
+  classifyResContentType,
+  guessResourceKindFromPath,
+  parseResTarget,
+} from '../services/webProxyRes.js'
 
 /** 反代会话 Cookie 有效期（与账号登录令牌一致，7 天） */
 const PROXY_SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 const MAX_UPSTREAM_BODY = 10 * 1024 * 1024
-const MAX_UPSTREAM_TIMEOUT_MS = 30 * 1000
-const MAX_REWRITE_BYTES = 12 * 1024 * 1024
+/** 上游超时（只等响应头）：长视频 / 大文件不受整体超时限制，可用环境变量调整 */
+const MAX_UPSTREAM_TIMEOUT_MS = config.proxyUpstreamTimeoutMs
+const MAX_REWRITE_BYTES = 24 * 1024 * 1024
 const MAX_SITES_PER_USER = 60
 
 /** 媒体请求只等响应头：视频本体可能持续几十分钟，不能被整体超时打断 */
-const MEDIA_HEADER_TIMEOUT_MS = 25 * 1000
+const MEDIA_HEADER_TIMEOUT_MS = 45 * 1000
 /** 探测首段字节（识别 HLS 播放列表） */
 const MEDIA_PEEK_BYTES = 8 * 1024
 /** 播放列表重写上限（正常 HLS 清单只有几十 KB） */
 const MAX_PLAYLIST_BYTES = 4 * 1024 * 1024
+/** 资源代理里 CSS 需要整体读入才能改写 */
+const MAX_RES_REWRITE_BYTES = 8 * 1024 * 1024
 
 /** 媒体请求允许透传的请求头（其余一律不转发，避免把 LineWeb 的头部带出去） */
 const MEDIA_REQUEST_HEADERS = new Set([
@@ -89,6 +100,20 @@ const MEDIA_PASS_RESPONSE_HEADERS = [
   'etag',
   'vary',
   'content-language',
+]
+
+const RES_PASS_RESPONSE_HEADERS = [
+  'content-type',
+  'content-length',
+  'content-range',
+  'accept-ranges',
+  'cache-control',
+  'expires',
+  'last-modified',
+  'etag',
+  'vary',
+  'content-language',
+  'content-disposition',
 ]
 
 const HOP_BY_HOP = new Set([
@@ -160,7 +185,20 @@ function getSetCookies(headers: Headers): string[] {
   return raw.split(/,(?=\s*[^;,=]+=[^;,]*)/).map((s) => s.trim()).filter(Boolean)
 }
 
-function siteDto(site: { id: number; name: string; origin: string; cookies: string; forceDesktop: boolean; lastVisitedAt: Date | null; createdAt: Date; updatedAt: Date }) {
+function siteDto(site: {
+  id: number
+  name: string
+  origin: string
+  cookies: string
+  forceDesktop: boolean
+  lastVisitedAt: Date | null
+  requestCount?: number
+  errorCount?: number
+  lastStatusCode?: number | null
+  lastErrorAt?: Date | null
+  createdAt: Date
+  updatedAt: Date
+}) {
   const jar = readCookieJar(site.cookies)
   return {
     id: site.id,
@@ -170,6 +208,10 @@ function siteDto(site: { id: number; name: string; origin: string; cookies: stri
     cookieCount: countSessionCookies(jar),
     forceDesktop: site.forceDesktop,
     lastVisitedAt: site.lastVisitedAt,
+    requestCount: site.requestCount ?? 0,
+    errorCount: site.errorCount ?? 0,
+    lastStatusCode: site.lastStatusCode ?? null,
+    lastErrorAt: site.lastErrorAt ?? null,
     createdAt: site.createdAt,
     updatedAt: site.updatedAt,
   }
@@ -195,6 +237,11 @@ proxyApiRouter.post('/sites', asyncHandler(async (req, res) => {
   const data = proxySiteCreateSchema.parse(req.body ?? {})
   const origin = normalizeSiteOrigin(data.url)
   await assertPublicHost(new URL(origin).hostname)
+  // 黑名单单独给一句可读的提示（assertPublicHost 的消息里已经带域名）
+  if (await isProxyHostBlacklisted(new URL(origin).hostname)) {
+    res.status(403).json({ error: '该网站已被管理员加入反代黑名单，不能添加' })
+    return
+  }
 
   const existing = await prisma.proxySite.findUnique({ where: { userId_origin: { userId, origin } } })
   if (existing) {
@@ -474,12 +521,11 @@ async function handleMediaRequest(req: Request, res: Response, options: MediaReq
   try {
     while (hops <= 5) {
       await assertPublicHost(current.hostname)
-      const response = await fetch(current, {
+      const response = await fetchUpstream(current, {
         method,
         headers: buildMediaHeaders(req, current, jar, options),
         redirect: 'manual',
-        signal: controller.signal,
-      })
+      }, controller.signal)
       const setCookies = getSetCookies(response.headers)
       if (setCookies.length > 0) {
         const parsedCookies = setCookies
@@ -595,6 +641,183 @@ async function handleMediaRequest(req: Request, res: Response, options: MediaReq
   pipeMediaStream(res, prependChunk(head, remaining))
 }
 
+/** 上游 fetch：网络类错误按配置重试（超时 / 已取消不重试） */
+async function fetchUpstream(url: URL, init: RequestInit, signal: AbortSignal): Promise<globalThis.Response> {
+  let lastError: unknown = null
+  for (let attempt = 0; attempt <= config.proxyUpstreamRetries; attempt += 1) {
+    try {
+      return await fetch(url, { ...init, signal })
+    } catch (err) {
+      lastError = err
+      if (signal.aborted) throw err
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('上游请求失败')
+}
+
+/** 上游错误 → 友好页面（黑名单 / 解析失败等 AppError 直接展示其消息） */
+function proxyErrorStatus(err: unknown): { status: number; title: string; detail: string } {
+  if (err instanceof AppError) {
+    const isBlacklist = err.status === 403 && err.message.includes('黑名单')
+    return {
+      status: err.status,
+      title: isBlacklist ? '该网站已被屏蔽' : '反代请求被拒绝',
+      detail: err.message,
+    }
+  }
+  const message = err instanceof Error ? err.message : String(err)
+  const timedOut = /abort|timeout/i.test(message)
+  return timedOut
+    ? { status: 504, title: '上游响应超时', detail: `目标网站在 ${Math.round(MAX_UPSTREAM_TIMEOUT_MS / 1000)} 秒内没有响应，请稍后重试。` }
+    : { status: 502, title: '无法连接目标网站', detail: '反代服务无法访问该网站，请确认地址是否可正常打开。' }
+}
+
+async function handleResourceRequest(req: Request, res: Response, options: MediaRequestOptions): Promise<void> {
+  const method = req.method.toUpperCase()
+  if (method !== 'GET' && method !== 'HEAD') {
+    res.status(405).setHeader('allow', 'GET, HEAD').type('text/plain; charset=utf-8').send('资源代理只支持 GET / HEAD')
+    return
+  }
+  const target = parseResTarget(options.siteId, options.pathname, options.search)
+  if (!target) {
+    res.status(400).type('text/plain; charset=utf-8').send('资源地址无效')
+    return
+  }
+  const selfHost = String(req.headers.host || '').replace(/:\d+$/, '').toLowerCase()
+  if (selfHost && target.hostname.toLowerCase() === selfHost) {
+    res.status(400).type('text/plain; charset=utf-8').send('不允许反代 LineWeb 自身')
+    return
+  }
+
+  let jar = options.jar
+  let current = target
+  let hops = 0
+  let upstream: globalThis.Response | null = null
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), MAX_UPSTREAM_TIMEOUT_MS)
+  try {
+    while (hops <= 5) {
+      await assertPublicHost(current.hostname)
+      const response = await fetchUpstream(current, {
+        method,
+        headers: buildMediaHeaders(req, current, jar, options),
+        redirect: 'manual',
+      }, controller.signal)
+      const setCookies = getSetCookies(response.headers)
+      if (setCookies.length > 0) {
+        const parsedCookies = setCookies
+          .map((header) => parseSetCookie(header, current))
+          .filter((item): item is NonNullable<typeof item> => !!item)
+        if (parsedCookies.length > 0) {
+          jar = mergeCookieJar(jar, parsedCookies)
+          await persistCookies(options.siteId, options.cookiesBefore, jar)
+        }
+      }
+      const location = response.headers.get('location')
+      if (response.status >= 300 && response.status < 400 && location) {
+        if (hops >= 5) {
+          res.status(508).type('text/plain; charset=utf-8').send('资源重定向次数过多')
+          return
+        }
+        let next: URL
+        try {
+          next = new URL(location, current)
+        } catch {
+          upstream = response
+          break
+        }
+        if (next.protocol !== 'http:' && next.protocol !== 'https:') {
+          upstream = response
+          break
+        }
+        hops += 1
+        current = next
+        continue
+      }
+      upstream = response
+      break
+    }
+  } catch (err) {
+    const { status, title, detail } = proxyErrorStatus(err)
+    const isBlacklist = status === 403
+    if (!res.headersSent) {
+      if (isBlacklist) {
+        res.status(status).type('html').send(buildProxyErrorPage(title, detail))
+      } else {
+        res.status(status).type('text/plain; charset=utf-8').send(detail)
+      }
+    }
+    return
+  } finally {
+    clearTimeout(timer)
+  }
+
+  if (!upstream) {
+    res.status(502).type('text/plain; charset=utf-8').send('资源源站没有返回可用响应')
+    return
+  }
+
+  const rawType = upstream.headers.get('content-type')
+  const kind = rawType ? classifyResContentType(rawType) : guessResourceKindFromPath(current.pathname)
+  if (kind === 'blocked') {
+    try {
+      await upstream.body?.cancel()
+    } catch {
+      /* ignore */
+    }
+    res.status(415).type('text/plain; charset=utf-8').send('该资源类型不能通过资源代理访问')
+    return
+  }
+
+  res.status(upstream.status)
+  for (const name of RES_PASS_RESPONSE_HEADERS) {
+    const value = upstream.headers.get(name)
+    if (value) res.setHeader(name, value)
+  }
+  res.setHeader('x-content-type-options', 'nosniff')
+  res.setHeader('x-lineweb-proxy', '1')
+  if (!res.getHeader('content-type')) res.setHeader('content-type', 'application/octet-stream')
+
+  if (method === 'HEAD' || !upstream.body) {
+    res.end()
+    return
+  }
+
+  // CSS 要整体读入才能改写里面的 url()（字体 / 背景图可能也在 CDN 上）
+  if (kind === 'css') {
+    let buffer: Buffer
+    try {
+      buffer = Buffer.from(await upstream.arrayBuffer())
+    } catch {
+      res.end()
+      return
+    }
+    if (buffer.byteLength > MAX_RES_REWRITE_BYTES) {
+      res.removeHeader('content-length')
+      res.removeHeader('content-range')
+      res.setHeader('content-length', String(buffer.byteLength))
+      res.end(buffer)
+      return
+    }
+    const charset = charsetOf(rawType || 'text/css', buffer)
+    const text = decodeBody(buffer, charset)
+    const rewritten = Buffer.from(rewriteCss(text, {
+      siteId: options.siteId,
+      siteOrigin: options.siteOrigin,
+      activeOrigin: current.origin,
+      forceDesktop: options.forceDesktop,
+      pageUrl: current.href,
+    }), 'utf8')
+    res.setHeader('content-type', 'text/css; charset=utf-8')
+    res.removeHeader('content-range')
+    res.setHeader('content-length', String(rewritten.byteLength))
+    res.end(rewritten)
+    return
+  }
+
+  pipeMediaStream(res, Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]))
+}
+
 export const proxyHttpRouter = Router()
 
 proxyHttpRouter.use((req, res) => {
@@ -603,7 +826,8 @@ proxyHttpRouter.use((req, res) => {
     if (!res.headersSent) {
       res.removeHeader('Content-Security-Policy')
       res.removeHeader('X-Frame-Options')
-      res.status(502).type('html').send(buildProxyErrorPage('反代请求失败', '反代服务暂时不可用，请稍后重试。', { retry: true }))
+      const { status, title, detail } = proxyErrorStatus(err)
+      res.status(status).type('html').send(buildProxyErrorPage(title, detail, { retry: status >= 500 }))
     } else {
       res.end()
     }
@@ -647,16 +871,30 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
   }
   const userId = session.userId
 
-  const site = await prisma.proxySite.findFirst({ where: { id: siteId, userId } })
+  const site = await prisma.proxySite.findFirst({
+    where: { id: siteId, userId },
+    include: { user: { select: { role: true, proxyQueueExempt: true } } },
+  })
   if (!site) {
     res.status(404).type('html').send(buildProxyErrorPage('站点不存在', '这个反代站点不存在，或不属于当前账号。'))
     return
   }
 
-  // 并发闸门：管理员（role === 'admin'）不排队、不占并发，其余请求超出上限时排队
+  // 访问统计：请求结束（含客户端断开）时记一次，不阻塞响应
+  let statRecorded = false
+  const recordStat = () => {
+    if (statRecorded) return
+    statRecorded = true
+    recordProxyRequest({ siteId: site.id, userId, statusCode: res.statusCode || 0 })
+  }
+  res.once('finish', recordStat)
+  res.once('close', recordStat)
+
+  // 并发闸门：管理员（role === 'admin'）与被授予「排队豁免」的账号不排队、不占并发
+  const queueBypass = site.user.role === 'admin' || site.user.proxyQueueExempt || session.role === 'admin'
   let releaseSlot: (() => void) | null = null
   try {
-    releaseSlot = await acquireProxySlot({ bypass: session.role === 'admin' })
+    releaseSlot = await acquireProxySlot({ bypass: queueBypass })
   } catch (err) {
     if (err instanceof ProxyQueueError) {
       const stats = getProxyQueueStats()
@@ -694,6 +932,20 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
   let jar = readCookieJar(site.cookies)
   const clientCookies = sanitizeClientCookies(req.headers['x-lw-cookie'] as string | undefined)
 
+  // 同源静态资源代理：CDN 上的 CSS / JS / 图片 / 字体，不走 HTML 重写，直接回传（CSS 会改写内部 url()）
+  if (upstreamPath.startsWith(`/${RES_SEGMENT}/`)) {
+    await handleResourceRequest(req, res, {
+      siteId: site.id,
+      siteOrigin: site.origin,
+      forceDesktop: site.forceDesktop,
+      cookiesBefore,
+      jar,
+      pathname: upstreamPath,
+      search: parsed.search,
+    })
+    return
+  }
+
   // 同源媒体代理：视频 / 音频 / HLS 分片，不走 HTML 重写，直接流式回传
   if (upstreamPath.startsWith(`/${MEDIA_SEGMENT}/`)) {
     await handleMediaRequest(req, res, {
@@ -722,13 +974,22 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
     const headers = new Headers()
     for (const [name, value] of Object.entries(req.headers)) {
       if (typeof value !== 'string') continue
-      if (HOP_BY_HOP.has(name.toLowerCase())) continue
-      if (name.toLowerCase().startsWith('sec-') && name.toLowerCase() !== 'sec-ch-ua') continue
+      const lower = name.toLowerCase()
+      if (HOP_BY_HOP.has(lower)) continue
+      // 浏览器指纹类请求头保留 sec-fetch-* / sec-ch-ua*：上游风控对「缺头」的请求更敏感，
+      // 之前把它们整体丢弃会让 Cloudflare 之类直接回 403 挑战页（现象就是页面只剩文字）
+      if (lower.startsWith('sec-') && !lower.startsWith('sec-fetch-') && !lower.startsWith('sec-ch-ua')) continue
       headers.set(name, value)
     }
+    // 上游风控会拦非浏览器 UA：客户端没带 UA 时兜底成桌面 Chrome
+    if (!headers.get('user-agent')) headers.set('user-agent', DESKTOP_USER_AGENT)
     // 桌面模式：覆盖 UA 与 Client Hints，让上游按电脑版返回页面
     if (ctx.forceDesktop) {
       headers.set('user-agent', DESKTOP_USER_AGENT)
+      headers.set('sec-ch-ua', '"Chromium";v="131", "Google Chrome";v="131", "Not_A Brand";v="24"')
+      headers.set('sec-ch-ua-mobile', '?0')
+      headers.set('sec-ch-ua-platform', '"Windows"')
+    } else if (!headers.get('sec-ch-ua')) {
       headers.set('sec-ch-ua', '"Chromium";v="131", "Google Chrome";v="131", "Not_A Brand";v="24"')
       headers.set('sec-ch-ua-mobile', '?0')
       headers.set('sec-ch-ua-platform', '"Windows"')
@@ -762,21 +1023,15 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
       await assertPublicHost(currentUrl.hostname)
       let response: globalThis.Response
       try {
-        response = await fetch(currentUrl, {
+        response = await fetchUpstream(currentUrl, {
           method,
           headers: buildHeaders(currentUrl),
           body: body ? toArrayBuffer(body) : undefined,
           redirect: 'manual',
-          signal: upstreamController.signal,
-        })
+        }, upstreamController.signal)
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        const timedOut = /abort|timeout/i.test(message)
-        res.status(timedOut ? 504 : 502).type('html').send(buildProxyErrorPage(
-          timedOut ? '上游响应超时' : '无法连接目标网站',
-          timedOut ? '目标网站在 30 秒内没有响应，请稍后重试。' : '反代服务无法访问该网站，请确认地址是否可正常打开。',
-          { retry: true },
-        ))
+        const { status, title, detail } = proxyErrorStatus(err)
+        res.status(status).type('html').send(buildProxyErrorPage(title, detail, { retry: true }))
         await persistCookies(site.id, cookiesBefore, jar)
         return
       }

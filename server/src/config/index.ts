@@ -52,6 +52,10 @@ export const config = {
   proxyQueueTimeoutMs: Math.max(1000, parseInt(process.env.PROXY_QUEUE_TIMEOUT_MS || '15000', 10)),
   // 反代 WebSocket 同时连接数上限（不含管理员）
   proxyWsMaxConnections: Math.max(1, parseInt(process.env.PROXY_WS_MAX_CONNECTIONS || '100', 10)),
+  // 上游「响应头」超时（毫秒）：只等首包，视频本体不受影响；默认 60 秒
+  proxyUpstreamTimeoutMs: Math.max(5_000, parseInt(process.env.PROXY_UPSTREAM_TIMEOUT_MS || '60000', 10)),
+  // 上游网络错误时的重试次数（0 = 不重试）
+  proxyUpstreamRetries: Math.max(0, parseInt(process.env.PROXY_UPSTREAM_RETRIES || '1', 10)),
   // === 聊天服务（neko XMPP）===
   // 聊天已迁移到独立的 internet_neko XMPP 服务；本服务只做代理与账号映射，不存聊天数据。
   // 令牌只在服务端使用（x-internal-token），绝不能下发浏览器；缺失时聊天降级为未配置。

@@ -21,6 +21,7 @@ export const CAPABILITIES = [
   'ai:configure',     // AI 配置读写
   'drive:all',        // 网盘：豁免 canAccessDrive + 可操作他人文件 + 不受空间配额限制
   'app:manage',       // 第三方应用授权管理（注册 / 停用 / 删除应用）
+  'proxy:manage',     // 网页反代管理（黑名单 / 访问统计 / 排队赦免）
 ] as const
 
 export type Capability = typeof CAPABILITIES[number]

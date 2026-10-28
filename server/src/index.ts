@@ -26,6 +26,9 @@ import chatXmppRoutes from './routes/chatXmpp.js'
 import chatUploadsRoutes from './routes/chatUploads.js'
 import gameRoutes from './routes/games.js'
 import { proxyApiRouter, proxyHttpRouter } from './routes/webProxy.js'
+import { proxyAdminRouter } from './routes/proxyAdmin.js'
+import { startProxyStatsFlusher } from './services/proxyStats.js'
+import { refreshProxyBlacklist } from './services/proxyBlacklist.js'
 import { authenticate } from './middleware/auth.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel, isNodeConnected } from './services/storageTunnel.js'
@@ -210,6 +213,8 @@ app.use('/api/chat', chatRoutes)
 app.use('/api/games', gameRoutes)
 // 网页反代：站点管理（需登录令牌）
 app.use('/api/proxy', proxyApiRouter)
+// 网页反代管理（黑名单 / 统计排名 / 排队赦免，需 proxy:manage 能力）
+app.use('/api/proxy/admin', proxyAdminRouter)
 
 // === 网页反代（同源代理，Cookie 会话认证）— 必须在静态资源 / SPA fallback 之前 ===
 app.use('/proxy', proxyHttpRouter)
@@ -615,6 +620,10 @@ initChatHub(server)
 
 // 游戏定时器：邀请过期、超时结算、掉线判负、结束对局回收（每 15 秒，unref）
 startGameSweeper()
+
+// 网页反代：统计批量落库（每 15 秒）+ 黑名单缓存预热（失败只告警）
+startProxyStatsFlusher()
+refreshProxyBlacklist().catch((err) => console.warn('[proxy] 黑名单预热失败:', err instanceof Error ? err.message : err))
 
 // 聊天账号全量同步（延迟 10 秒，失败只告警，不影响站点启动）
 startNekoAccountSync()

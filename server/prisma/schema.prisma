@@ -37,6 +37,8 @@ model User {
   aiConversations      AiConversation[]     // AI 对话（DeepSeek）会话
   aiChatImages         AiChatImage[]        // AI 对话上传的图片附件
   proxySites           ProxySite[]          // 网页反代站点（含账号级的登录 Cookie）
+  /** 网页反代排队赦免：不受并发闸门限制（管理员另有 role 兜底） */
+  proxyQueueExempt     Boolean   @default(false) @map("proxy_queue_exempt")
 
   @@map("users")
 }
@@ -407,12 +409,47 @@ model ProxySite {
   /** 强制用桌面浏览器 UA 访问上游（手机打开只服务桌面端的站点时使用） */
   forceDesktop  Boolean   @default(false) @map("force_desktop")
   lastVisitedAt DateTime? @map("last_visited_at")
+  /** 访问统计（累计值，由 proxyStats 定时批量累加，不逐请求写库） */
+  requestCount  Int       @default(0) @map("request_count")
+  errorCount    Int       @default(0) @map("error_count")
+  lastStatusCode Int?     @map("last_status_code")
+  lastErrorAt   DateTime? @map("last_error_at")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  daily ProxyDailyStat[]
 
   @@unique([userId, origin])
   @@index([userId])
   @@map("proxy_sites")
+}
+
+/** 反代黑名单条目：命中后禁止新建站点与转发请求（pattern 为域名或 *.域名） */
+model ProxyBlacklist {
+  id          Int      @id @default(autoincrement())
+  pattern     String   @unique // 归一化后的域名，如 example.com 或 *.example.com
+  reason      String?  // 拉黑原因（管理端展示）
+  createdById Int?     @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("proxy_blacklist")
+}
+
+/** 反代每日访问统计（按站点聚合，管理端排名数据源） */
+model ProxyDailyStat {
+  id       Int    @id @default(autoincrement())
+  /** 统计日期（Asia/Shanghai），格式 YYYY-MM-DD */
+  day      String
+  siteId   Int    @map("site_id")
+  userId   Int    @map("user_id")
+  requests Int    @default(0)
+  errors   Int    @default(0)
+
+  site ProxySite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([day, siteId])
+  @@index([day])
+  @@index([userId, day])
+  @@map("proxy_daily_stats")
 }

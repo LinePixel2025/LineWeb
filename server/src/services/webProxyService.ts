@@ -4,6 +4,8 @@ import { AppError } from '../middleware/errorHandler.js'
 import { buildBootstrapScript } from './webProxyBootstrap.js'
 import { publicCookiesForUrl, type ProxyCookie } from './proxyCookies.js'
 import { buildMediaProxyPath, isMediaProxyPath } from './webProxyMedia.js'
+import { buildResProxyPath, isResProxyPath } from './webProxyRes.js'
+import { isProxyHostBlacklisted } from './proxyBlacklist.js'
 
 /**
  * 网页反代核心（纯函数 + 少量网络探测）
@@ -105,6 +107,10 @@ const hostCheckCache = new Map<string, { ok: boolean; expires: number }>()
 export async function assertPublicHost(hostname: string): Promise<void> {
   const host = hostname.toLowerCase()
   if (!host) throw new AppError('网址缺少主机名', 400)
+  // 管理员黑名单优先：HTTP / 媒体 / WebSocket 三个入口都经过这里
+  if (await isProxyHostBlacklisted(host)) {
+    throw new AppError(`该网站（${host}）已被管理员加入反代黑名单`, 403)
+  }
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) {
     throw new AppError('不允许反代本机或内网地址', 400)
   }
@@ -231,6 +237,51 @@ export function mapMediaUrl(value: string, ctx: RewriteContext): string {
   }
 }
 
+/**
+ * 静态资源 URL 重写（用于 <link>/<script>/<img> 与 CSS 里的 url()）。
+ *
+ * 与 mapUrlToProxy 的区别：**跨站资源也改写到同源资源代理**
+ * （CDN 上的 CSS / JS / 字体 / 图片常常校验 Referer 或限制 CORS，浏览器直连会失败）。
+ * 同源地址仍复用 mapUrlToProxy 的普通改写，保持原有语义。
+ */
+export function mapResourceUrl(value: string, ctx: RewriteContext): string {
+  if (typeof value !== 'string') return value
+  const raw = value
+  const trimmed = value.trim()
+  if (!trimmed) return raw
+  const lower = trimmed.toLowerCase()
+  if (
+    lower.startsWith('javascript:')
+    || lower.startsWith('data:')
+    || lower.startsWith('blob:')
+    || lower.startsWith('mailto:')
+    || lower.startsWith('tel:')
+    || lower.startsWith('about:')
+    || lower.startsWith('file:')
+    || lower.startsWith('#')
+  ) {
+    return raw
+  }
+  if (isResProxyPath(trimmed, ctx.siteId) || isMediaProxyPath(trimmed, ctx.siteId)) return raw
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) return mapUrlToProxy(trimmed, ctx)
+  let url: URL
+  try {
+    if (trimmed.startsWith('//')) url = new URL(`https:${trimmed}`)
+    else if (/^https?:\/\//i.test(trimmed)) url = new URL(trimmed)
+    else {
+      // 纯相对路径：必须知道页面地址才能解析；解析后同源仍保持相对（浏览器自己会带上前缀）
+      if (!ctx.pageUrl) return mapUrlToProxy(trimmed, ctx)
+      url = new URL(trimmed, ctx.pageUrl)
+    }
+  } catch {
+    return raw
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return raw
+  if (isProxyableHost(url.host, ctx)) return mapUrlToProxy(trimmed, ctx)
+  // 跨站静态资源：交给同源资源代理
+  return buildResProxyPath(url, ctx.siteId)
+}
+
 /** WebSocket URL → 反代 WS 路径（页面脚本里的 WebSocket 构造函数会调用同名逻辑） */
 export function mapWsUrlToProxy(value: string, ctx: RewriteContext, pageHost: string, secure: boolean): string {
   const scheme = secure ? 'wss://' : 'ws://'
@@ -277,7 +328,7 @@ const MEDIA_ATTR_RE = /(\s(?:src|data-src|data-lazy-src|data-original)\s*=\s*)(?
 /** 相对媒体地址的扩展名判断（只用于把相对路径也纳入媒体代理） */
 const MEDIA_FILE_RE = /\.(m3u8|mpd|ts|m4s|mp4|m4v|webm|flv|mp3|m4a|aac|ogg|oga|opus|vtt|srt)$/i
 
-function rewriteSrcset(value: string, ctx: RewriteContext): string {
+function rewriteSrcset(value: string, ctx: RewriteContext, mapper: (url: string, ctx: RewriteContext) => string = mapUrlToProxy): string {
   return value
     .split(',')
     .map((part) => {
@@ -288,21 +339,21 @@ function rewriteSrcset(value: string, ctx: RewriteContext): string {
       const descriptor = space < 0 ? '' : trimmed.slice(space)
       // data: URL 里可能含逗号，原样保留
       if (/^data:/i.test(url)) return trimmed
-      return `${mapUrlToProxy(url, ctx)}${descriptor}`
+      return `${mapper(url, ctx)}${descriptor}`
     })
     .filter(Boolean)
     .join(', ')
 }
 
-/** 重写 CSS 文本里的 url(...) 与 @import */
+/** 重写 CSS 文本里的 url(...) 与 @import（跨站字体/图片同样交给资源代理） */
 export function rewriteCss(css: string, ctx: RewriteContext): string {
   let out = css
   out = out.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (match, quote: string, url: string) => {
-    const mapped = mapUrlToProxy(url, ctx)
+    const mapped = mapResourceUrl(url, ctx)
     return mapped === url ? match : `url(${quote}${mapped}${quote})`
   })
   out = out.replace(/@import\s+(['"])([^'"]+)\1/gi, (match, quote: string, url: string) => {
-    const mapped = mapUrlToProxy(url, ctx)
+    const mapped = mapResourceUrl(url, ctx)
     return mapped === url ? match : `@import ${quote}${mapped}${quote}`
   })
   return out
@@ -311,6 +362,8 @@ export function rewriteCss(css: string, ctx: RewriteContext): string {
 function rewriteAttributes(html: string, ctx: RewriteContext): string {
   // 媒体标签先扫：同站/跨站媒体都改写成媒体代理路径，之后通用重写会把这些地址视为已反代
   let out = rewriteMediaTags(html, ctx)
+  // 外链样式 / 脚本 / 图片：跨站地址改写到同源资源代理（解决 CDN 防盗链导致的「只有文字」）
+  out = rewriteResourceTags(out, ctx)
   out = out.replace(ATTR_RE, (match, head: string, dq?: string, sq?: string, bare?: string) => {
     const value = dq ?? sq ?? bare ?? ''
     const mapped = mapUrlToProxy(value, ctx)
@@ -338,6 +391,69 @@ function rewriteMediaTags(html: string, ctx: RewriteContext): string {
   ))
 }
 
+const RESOURCE_TAG_RE = /<(link|script|img)\b[^>]*>/gi
+const RESOURCE_ATTR_RE = /(\s(?:href|src)\s*=\s*)(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi
+const IMG_SRCSET_RE = /(\ssrcset\s*=\s*)("([^"]*)"|'([^']*)')/i
+/** <link rel> 里属于「可代理资源」的类型；canonical / alternate 等保持原样 */
+const RESOURCE_LINK_RELS = /(stylesheet|icon|shortcut|preload|prefetch|modulepreload|manifest|apple-touch-icon|mask-icon)/
+
+/**
+ * 外链样式 / 脚本 / 图片单独扫一遍：跨站地址改写到同源资源代理。
+ *
+ * 这一步解决的是「CDN 防盗链 / CORS 导致整站只剩文字」：
+ * 服务端带着上游 Referer 去取，浏览器只看到 LineWeb 同源地址。
+ */
+function rewriteResourceTags(html: string, ctx: RewriteContext): string {
+  return html.replace(RESOURCE_TAG_RE, (tag) => {
+    const isLink = /^<link\b/i.test(tag)
+    if (isLink) {
+      const relMatch = /\srel\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(tag)
+      const rel = (relMatch?.[1] ?? relMatch?.[2] ?? relMatch?.[3] ?? '').toLowerCase()
+      if (rel && !RESOURCE_LINK_RELS.test(rel)) return tag
+    }
+    let out = tag.replace(RESOURCE_ATTR_RE, (match, head: string, dq?: string, sq?: string, bare?: string) => {
+      const value = dq ?? sq ?? bare ?? ''
+      const mapped = mapResourceUrl(value, ctx)
+      if (mapped === value) return match
+      return `${head}"${mapped}"`
+    })
+    if (/^<img\b/i.test(tag)) {
+      out = out.replace(IMG_SRCSET_RE, (match, head: string, dq: string, dqValue?: string, sqValue?: string) => {
+        const value = dqValue ?? sqValue ?? ''
+        const mapped = rewriteSrcset(value, ctx, mapResourceUrl)
+        return mapped === value ? match : `${head}"${mapped}"`
+      })
+    }
+    return out
+  })
+}
+
+/**
+ * <base> 标签改写。
+ *
+ * 原来直接删掉 <base>：依赖 base 定位相对资源的站点会整站失联。
+ * 现在改为「同源 → 反代前缀」「跨站 CDN → 资源代理」；
+ * 无法映射（相对 base / 非 http）时才移除。
+ */
+function rewriteBaseTag(tag: string, ctx: RewriteContext): string {
+  const match = /\shref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(tag)
+  const href = (match?.[1] ?? match?.[2] ?? match?.[3] ?? '').trim()
+  if (!href) return ''
+  let url: URL
+  try {
+    url = new URL(href, ctx.activeOrigin)
+  } catch {
+    return ''
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return ''
+  if (isProxyableHost(url.host, ctx)) {
+    const mapped = mapUrlToProxy(href, ctx)
+    return mapped === href ? '' : `<base href="${mapped}">`
+  }
+  // 跨站 base（常见于把静态资源放在 CDN 的站点）：指向资源代理目录
+  return `<base href="${buildResProxyPath(url, ctx.siteId)}">`
+}
+
 const META_CSP_RE = /<meta\b[^>]*http-equiv\s*=\s*["']?content-security-policy["']?[^>]*>/gi
 const BASE_TAG_RE = /<base\b[^>]*>/gi
 const INTEGRITY_RE = /\s+integrity\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi
@@ -356,7 +472,7 @@ export function rewriteHtml(
 ): string {
   let out = html
   out = out.replace(META_CSP_RE, '')
-  out = out.replace(BASE_TAG_RE, '')
+  out = out.replace(BASE_TAG_RE, (tag) => rewriteBaseTag(tag, ctx))
   out = out.replace(INTEGRITY_RE, '')
   out = out.replace(META_REFRESH_RE, (match, head: string, content: string, tail: string) => {
     const idx = content.toLowerCase().indexOf('url=')
