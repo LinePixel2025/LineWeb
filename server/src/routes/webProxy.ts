@@ -16,6 +16,7 @@ import {
 } from '../services/proxyCookies.js'
 import { PROXY_SESSION_COOKIE, resolveProxyUserId } from '../services/proxySession.js'
 import {
+  DESKTOP_USER_AGENT,
   assertPublicHost,
   buildProxyErrorPage,
   buildProxyLoginPage,
@@ -115,7 +116,7 @@ function getSetCookies(headers: Headers): string[] {
   return raw.split(/,(?=\s*[^;,=]+=[^;,]*)/).map((s) => s.trim()).filter(Boolean)
 }
 
-function siteDto(site: { id: number; name: string; origin: string; cookies: string; lastVisitedAt: Date | null; createdAt: Date; updatedAt: Date }) {
+function siteDto(site: { id: number; name: string; origin: string; cookies: string; forceDesktop: boolean; lastVisitedAt: Date | null; createdAt: Date; updatedAt: Date }) {
   const jar = readCookieJar(site.cookies)
   return {
     id: site.id,
@@ -123,6 +124,7 @@ function siteDto(site: { id: number; name: string; origin: string; cookies: stri
     origin: site.origin,
     host: prettySiteName(site.origin),
     cookieCount: countSessionCookies(jar),
+    forceDesktop: site.forceDesktop,
     lastVisitedAt: site.lastVisitedAt,
     createdAt: site.createdAt,
     updatedAt: site.updatedAt,
@@ -166,6 +168,7 @@ proxyApiRouter.post('/sites', async (req, res) => {
       userId,
       origin,
       name: data.name?.trim() || prettySiteName(origin),
+      forceDesktop: data.forceDesktop ?? false,
     },
   })
   res.status(201).json({ site: siteDto(site) })
@@ -178,7 +181,10 @@ proxyApiRouter.patch('/sites/:id', async (req, res) => {
   const data = proxySiteUpdateSchema.parse(req.body ?? {})
   const site = await prisma.proxySite.findFirst({ where: { id: siteId, userId } })
   if (!site) throw new AppError('站点不存在', 404)
-  const updated = await prisma.proxySite.update({ where: { id: site.id }, data: { name: data.name.trim() } })
+  const updates: { name?: string; forceDesktop?: boolean } = {}
+  if (data.name !== undefined) updates.name = data.name.trim()
+  if (data.forceDesktop !== undefined) updates.forceDesktop = data.forceDesktop
+  const updated = await prisma.proxySite.update({ where: { id: site.id }, data: updates })
   res.json({ site: siteDto(updated) })
 })
 
@@ -362,7 +368,12 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
 
   const upstreamPath = parsed.pathname.slice(`/${siteId}`.length) || '/'
   const target = new URL(`${site.origin}${upstreamPath}${parsed.search}`)
-  const ctx = { siteId: site.id, siteOrigin: site.origin, activeOrigin: target.origin }
+  const ctx = {
+    siteId: site.id,
+    siteOrigin: site.origin,
+    activeOrigin: target.origin,
+    forceDesktop: site.forceDesktop,
+  }
 
   const cookiesBefore = site.cookies
   let jar = readCookieJar(site.cookies)
@@ -385,6 +396,13 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
       if (HOP_BY_HOP.has(name.toLowerCase())) continue
       if (name.toLowerCase().startsWith('sec-') && name.toLowerCase() !== 'sec-ch-ua') continue
       headers.set(name, value)
+    }
+    // 桌面模式：覆盖 UA 与 Client Hints，让上游按电脑版返回页面
+    if (ctx.forceDesktop) {
+      headers.set('user-agent', DESKTOP_USER_AGENT)
+      headers.set('sec-ch-ua', '"Chromium";v="131", "Google Chrome";v="131", "Not_A Brand";v="24"')
+      headers.set('sec-ch-ua-mobile', '?0')
+      headers.set('sec-ch-ua-platform', '"Windows"')
     }
     // 让 undici 自动协商压缩并解压；下游由我们自己决定是否压缩（/proxy 已在 compression 过滤器里跳过）
     headers.set('accept-encoding', 'gzip, deflate, br')

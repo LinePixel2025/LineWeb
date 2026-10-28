@@ -14,12 +14,18 @@ import { publicCookiesForUrl, type ProxyCookie } from './proxyCookies.js'
 
 const HOST_CHECK_TTL_MS = 5 * 60 * 1000
 
+/** 强制桌面模式时使用的 UA（与 Chrome Windows 桌面版一致） */
+export const DESKTOP_USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+
 export interface RewriteContext {
   siteId: number
   /** 站点源站（用户创建时录入），用于判断「同站」绝对 URL */
   siteOrigin: string
   /** 本次响应实际来源（跨域跳转时可能不同于 siteOrigin） */
   activeOrigin: string
+  /** 该站点是否强制桌面模式（UA 与 navigator 伪装） */
+  forceDesktop?: boolean
 }
 
 /** 把用户输入规范化为 origin（协议 + 主机 + 端口），非法输入抛 AppError */
@@ -312,6 +318,8 @@ export function rewriteHtml(
     siteId: ctx.siteId,
     origin: ctx.siteOrigin,
     cookies: options.cookies,
+    forceDesktop: !!ctx.forceDesktop,
+    desktopUserAgent: DESKTOP_USER_AGENT,
   })}</script>`
   const headMatch = /<head\b[^>]*>/i.exec(out)
   if (headMatch) {

@@ -134,6 +134,7 @@ export default function ProxyViewer({ site, embedUrl }: Props) {
               <span className="gh-proxy-badge-site" title={site.origin}>
                 {site.host}
               </span>
+              {site.forceDesktop && <span className="gh-proxy-badge-mode">桌面版</span>}
               <button
                 type="button"
                 className="gh-proxy-badge-collapse"

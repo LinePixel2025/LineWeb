@@ -216,6 +216,75 @@
   max-width: 100%;
 }
 
+/* ===== 桌面 UA 开关 ===== */
+.gh-proxy-desktop-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: var(--gh-space-3);
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-secondary);
+  cursor: pointer;
+}
+
+.gh-proxy-desktop-check input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--gh-accent);
+  cursor: pointer;
+}
+
+.gh-proxy-desktop-check-label {
+  font-weight: 600;
+  color: var(--gh-text);
+}
+
+.gh-proxy-desktop-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 7px;
+  border: 1px solid var(--gh-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gh-text-tertiary);
+  font-family: var(--gh-font);
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: border-color var(--gh-transition), background var(--gh-transition), color var(--gh-transition);
+}
+
+.gh-proxy-desktop-toggle:hover:not(:disabled) {
+  border-color: var(--gh-accent);
+  color: var(--gh-text);
+}
+
+.gh-proxy-desktop-toggle:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.gh-proxy-desktop-toggle--on {
+  border-color: var(--gh-accent);
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+}
+
+.gh-proxy-desktop-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gh-text-tertiary);
+  transition: background var(--gh-transition);
+}
+
+.gh-proxy-desktop-toggle--on .gh-proxy-desktop-dot {
+  background: var(--gh-accent);
+}
+
 /* ===== 空状态 / 加载状态 ===== */
 .gh-proxy-state,
 .gh-proxy-empty {
@@ -279,20 +348,24 @@
   line-height: 1.6;
 }
 
-/* ===== 查看器（全高） ===== */
-/* 与聊天页同一思路：显式类名控制整页高度，内部滚动不撑高整页 */
-.gh-content--proxy {
-  display: flex;
-  flex-direction: column;
+/* ===== 查看器（沉浸式全高） ===== */
+/* 反代查看页不渲染顶栏/侧栏/页脚：iframe 独占视口，只留左下角小浮窗 */
+.gh-layout-root--immersive {
   height: 100vh;
   height: 100dvh;
   min-height: 0;
-  padding: calc(var(--gh-nav-height) + var(--gh-safe-top)) 0 0;
   overflow: hidden;
 }
 
-.gh-content--proxy .gh-footer {
-  display: none;
+/* 独立类名，避开 .gh-content 在基础样式与移动端 media query 里的内边距/侧栏偏移 */
+.gh-proxy-immersive {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .gh-proxy-viewer-page {
@@ -381,6 +454,17 @@
   color: var(--gh-text-secondary);
   font-size: var(--gh-text-xs);
   font-weight: 500;
+}
+
+.gh-proxy-badge-mode {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
 }
 
 .gh-proxy-badge-collapse {

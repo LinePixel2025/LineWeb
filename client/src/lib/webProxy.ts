@@ -15,6 +15,8 @@ export interface ProxySite {
   host: string
   /** 服务端保存的 Cookie 条数（仅用于展示） */
   cookieCount: number
+  /** 是否强制使用桌面浏览器 UA 打开上游站点 */
+  forceDesktop: boolean
   lastVisitedAt: string | null
   createdAt: string
   updatedAt: string
@@ -32,10 +34,16 @@ export interface ProxyOpenResponse {
 
 export const webProxyApi = {
   list: () => api.get<ProxySiteListResponse>('/proxy/sites'),
-  create: (url: string, name?: string) =>
-    api.post<{ site: ProxySite }>('/proxy/sites', { url, name: name?.trim() || undefined }),
+  create: (url: string, name?: string, forceDesktop?: boolean) =>
+    api.post<{ site: ProxySite }>('/proxy/sites', {
+      url,
+      name: name?.trim() || undefined,
+      forceDesktop: forceDesktop ? true : undefined,
+    }),
   rename: (siteId: number, name: string) =>
     api.patch<{ site: ProxySite }>(`/proxy/sites/${siteId}`, { name }),
+  setDesktop: (siteId: number, forceDesktop: boolean) =>
+    api.patch<{ site: ProxySite }>(`/proxy/sites/${siteId}`, { forceDesktop }),
   remove: (siteId: number) => api.delete<void>(`/proxy/sites/${siteId}`),
   clearCookies: (siteId: number) => api.delete<{ ok: boolean }>(`/proxy/sites/${siteId}/cookies`),
   open: (siteId: number) => api.post<ProxyOpenResponse>(`/proxy/sites/${siteId}/open`),

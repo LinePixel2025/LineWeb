@@ -35,6 +35,7 @@ interface SiteCardProps {
   onCancelEdit: () => void
   onSaveName: () => void
   onOpen: () => void
+  onToggleDesktop: () => void
   onClearCookies: () => void
   onRemove: () => void
 }
@@ -49,6 +50,7 @@ function SiteCard({
   onCancelEdit,
   onSaveName,
   onOpen,
+  onToggleDesktop,
   onClearCookies,
   onRemove,
 }: SiteCardProps) {
@@ -93,6 +95,17 @@ function SiteCard({
             ) : (
               <span className="gh-badge">未保存登录态</span>
             )}
+            <button
+              type="button"
+              className={`gh-proxy-desktop-toggle ${site.forceDesktop ? 'gh-proxy-desktop-toggle--on' : ''}`}
+              aria-pressed={site.forceDesktop}
+              onClick={onToggleDesktop}
+              disabled={busy}
+              title="强制用电脑版 UA 打开。手机上访问只服务桌面端的站点时更合适。"
+            >
+              <span className="gh-proxy-desktop-dot" aria-hidden="true" />
+              桌面 UA {site.forceDesktop ? '开' : '关'}
+            </button>
           </div>
         </div>
       </div>
@@ -131,6 +144,7 @@ export default function WebProxyPage() {
   const navigate = useNavigate()
   const [url, setUrl] = useState('')
   const [name, setName] = useState('')
+  const [forceDesktop, setForceDesktop] = useState(false)
   const [formError, setFormError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [busyId, setBusyId] = useState<number | null>(null)
@@ -178,9 +192,10 @@ export default function WebProxyPage() {
     setSubmitting(true)
     setFormError('')
     try {
-      const { site } = await webProxyApi.create(normalized, name)
+      const { site } = await webProxyApi.create(normalized, name, forceDesktop)
       setUrl('')
       setName('')
+      setForceDesktop(false)
       await sitesQuery.refetch()
       navigate(`/webproxy/${site.id}`)
     } catch (err) {
@@ -223,6 +238,18 @@ export default function WebProxyPage() {
       setEditingId(null)
     } catch (err) {
       window.alert(err instanceof Error ? err.message : '重命名失败，请稍后再试')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleToggleDesktop = async (site: ProxySite) => {
+    setBusyId(site.id)
+    try {
+      await webProxyApi.setDesktop(site.id, !site.forceDesktop)
+      await sitesQuery.refetch()
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : '切换失败，请稍后再试')
     } finally {
       setBusyId(null)
     }
@@ -295,6 +322,15 @@ export default function WebProxyPage() {
             />
           </label>
         </div>
+        <label className="gh-proxy-desktop-check">
+          <input
+            type="checkbox"
+            checked={forceDesktop}
+            onChange={(event) => setForceDesktop(event.target.checked)}
+          />
+          <span className="gh-proxy-desktop-check-label">强制桌面版 UA</span>
+          <span className="gh-text-tertiary">手机上打开只支持电脑端的网站时使用，可能影响响应式排版</span>
+        </label>
         <div className="gh-proxy-form-foot">
           <button type="submit" className="gh-btn gh-btn--primary gh-btn--md" disabled={submitting}>
             {submitting ? '正在创建…' : '添加并打开'}
@@ -354,6 +390,7 @@ export default function WebProxyPage() {
                 onCancelEdit={() => setEditingId(null)}
                 onSaveName={() => void handleSaveName(site)}
                 onOpen={() => handleOpen(site)}
+                onToggleDesktop={() => void handleToggleDesktop(site)}
                 onClearCookies={() => void handleClearCookies(site)}
                 onRemove={() => void handleRemove(site)}
               />

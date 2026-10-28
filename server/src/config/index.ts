@@ -515,9 +515,16 @@ export const parkourActionSchema = z.discriminatedUnion('type', [
 export const proxySiteCreateSchema = z.object({
   url: z.string().trim().min(1, '请输入网站地址').max(500),
   name: z.string().trim().min(1).max(60).optional(),
+  /** 强制使用桌面浏览器 UA 访问上游 */
+  forceDesktop: z.boolean().optional(),
 })
 
-/** 重命名站点 */
-export const proxySiteUpdateSchema = z.object({
-  name: z.string().trim().min(1, '名称不能为空').max(60),
-})
+/** 更新站点：重命名与「桌面 UA」开关都是可选字段 */
+export const proxySiteUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1, '名称不能为空').max(60).optional(),
+    forceDesktop: z.boolean().optional(),
+  })
+  .refine((data) => data.name !== undefined || data.forceDesktop !== undefined, {
+    message: '没有需要更新的字段',
+  })

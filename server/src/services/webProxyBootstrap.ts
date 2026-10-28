@@ -15,6 +15,10 @@ export interface BootstrapOptions {
   origin: string
   /** 首屏可读的非 HttpOnly Cookie（等价浏览器里 document.cookie 的可见范围） */
   cookies: Array<{ name: string; value: string }>
+  /** 该站点是否强制桌面模式（伪装 navigator，配合服务端 UA 覆盖） */
+  forceDesktop?: boolean
+  /** 桌面 UA 字符串（由服务端统一定义，避免双份漂移） */
+  desktopUserAgent?: string
 }
 
 /** 生成可内联的 <script> 内容（不含 <script> 标签本身） */
@@ -23,6 +27,8 @@ export function buildBootstrapScript(options: BootstrapOptions): string {
     siteId: options.siteId,
     origin: options.origin,
     cookies: options.cookies,
+    desktop: !!options.forceDesktop,
+    ua: options.desktopUserAgent || '',
   })
   // 防止上游域名中出现奇怪字符破坏脚本（域名本身已由 URL 解析校验）
   const safePayload = payload.replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/\u2028|\u2029/g, '')
@@ -35,6 +41,7 @@ var WS_PREFIX='/proxy-ws/'+SITE_ID;
 var siteHost='';try{siteHost=new URL(cfg.origin).host}catch(e){}
 var pageHost=location.host;
 var wsScheme=location.protocol==='https:'?'wss://':'ws://';
+if(cfg.desktop&&cfg.ua){try{Object.defineProperty(navigator,'userAgent',{configurable:true,get:function(){return cfg.ua}})}catch(e){}try{Object.defineProperty(navigator,'platform',{configurable:true,get:function(){return 'Win32'}})}catch(e){}try{Object.defineProperty(navigator,'userAgentData',{configurable:true,get:function(){return {brands:[{brand:'Chromium',version:'131'},{brand:'Google Chrome',version:'131'},{brand:'Not_A Brand',version:'24'}],mobile:false,platform:'Windows'}}})}catch(e){}}
 var STORE_PREFIX='__lw'+SITE_ID+'__';
 var rawGet=Storage.prototype.getItem,rawSet=Storage.prototype.setItem,rawRemove=Storage.prototype.removeItem,rawKey=Storage.prototype.key;
 var jar={};var jarKey=STORE_PREFIX+'cookie_jar';
@@ -60,6 +67,6 @@ try{['pushState','replaceState'].forEach(function(name){var orig=history[name];i
 try{if(navigator.serviceWorker&&navigator.serviceWorker.register){navigator.serviceWorker.register=function(){return Promise.reject(new Error('LineWeb 反代模式已禁用 Service Worker'))}}}catch(e){}
 function fixAttr(el,name){try{var v=el.getAttribute&&el.getAttribute(name);if(!v)return;if(name==='style'){var next=v.replace(/url\\(\\s*(['"]?)([^'")]+)\\1\\s*\\)/gi,function(m,q,u){return 'url('+q+mapHttpUrl(u)+q+')'});if(next!==v)el.setAttribute(name,next);return}var mapped=mapHttpUrl(v);if(mapped!==v)el.setAttribute(name,mapped)}catch(e){}}
 try{if(window.MutationObserver){var mo=new MutationObserver(function(records){for(var i=0;i<records.length;i++){var r=records[i];if(r.type==='attributes'&&r.target&&r.attributeName)fixAttr(r.target,r.attributeName);else if(r.addedNodes){for(var j=0;j<r.addedNodes.length;j++){var n=r.addedNodes[j];if(n&&n.nodeType===1){if(n.hasAttribute&&(n.hasAttribute('src')||n.hasAttribute('href')||n.hasAttribute('poster'))){fixAttr(n,'src');fixAttr(n,'href');fixAttr(n,'poster')}}}}}});mo.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['src','href','poster','action','style']})}}catch(e){}
-window.__LINEWEB_PROXY__={siteId:SITE_ID,origin:cfg.origin,prefix:PREFIX,wsPrefix:WS_PREFIX};
+window.__LINEWEB_PROXY__={siteId:SITE_ID,origin:cfg.origin,prefix:PREFIX,wsPrefix:WS_PREFIX,forceDesktop:!!cfg.desktop};
 }catch(e){console.warn('[LineWeb] 反代引导脚本初始化失败',e)}})();`
 }

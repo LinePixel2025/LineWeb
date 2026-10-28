@@ -369,6 +369,23 @@ async function main(): Promise<void> {
   assert(boot.includes('window.EventSource='), '引导脚本：EventSource 改写')
   assert(boot.includes('MutationObserver'), '引导脚本：动态节点补写')
   assert(boot.includes('serviceWorker'), '引导脚本：禁用 Service Worker')
+  assert(boot.includes('"desktop":false'), '引导脚本：默认跟随设备 UA')
+
+  const desktopBoot = bootstrap.buildBootstrapScript({
+    siteId: 7,
+    origin: 'https://example.com',
+    cookies: [],
+    forceDesktop: true,
+    desktopUserAgent: 'UA-TEST',
+  })
+  assert(desktopBoot.includes('"desktop":true'), '引导脚本：桌面模式标记')
+  assert(desktopBoot.includes('"ua":"UA-TEST"'), '引导脚本：桌面 UA 注入')
+  assert(desktopBoot.includes("defineProperty(navigator,'userAgent'"), '引导脚本：navigator.userAgent 伪装')
+  assert(desktopBoot.includes("defineProperty(navigator,'userAgentData'"), '引导脚本：userAgentData 伪装')
+  assert(desktopBoot.includes('forceDesktop:!!cfg.desktop'), '引导脚本：全局标记暴露桌面模式')
+
+  const desktopHtml = proxy.rewriteHtml('<html><head></head><body></body></html>', { ...ctx, forceDesktop: true }, { cookies: [] })
+  assert(desktopHtml.includes('"desktop":true'), 'HTML 重写：桌面模式传入引导脚本')
 
   // ============================================================
   // 7. 错误页 / 登录页

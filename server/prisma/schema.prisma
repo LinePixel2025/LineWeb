@@ -404,6 +404,8 @@ model ProxySite {
   name          String
   origin        String    // 上游站点源站，形如 https://example.com（无路径、无末尾斜杠）
   cookies       String    @default("[]") // JSON：ProxyCookie[]，站点登录态（跨设备共享）
+  /** 强制用桌面浏览器 UA 访问上游（手机打开只服务桌面端的站点时使用） */
+  forceDesktop  Boolean   @default(false) @map("force_desktop")
   lastVisitedAt DateTime? @map("last_visited_at")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")

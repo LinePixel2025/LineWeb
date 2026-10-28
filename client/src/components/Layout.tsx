@@ -31,6 +31,17 @@ export default memo(function Layout() {
     }
   }, [mobileOpen])
 
+  // 反代查看页是沉浸式的：不渲染顶栏 / 侧栏 / 页脚，只保留 iframe 与左下角小浮窗
+  if (isProxyViewRoute) {
+    return (
+      <div className="gh-layout-root gh-layout-root--immersive">
+        <main className="gh-proxy-immersive">
+          <Outlet />
+        </main>
+      </div>
+    )
+  }
+
   return (
     <div className="gh-layout-root">
       <GitHubHeader onMenuToggle={() => setMobileOpen(prev => !prev)} />
