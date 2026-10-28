@@ -791,6 +791,23 @@ export default function ChatThread({
         items={bundlePreview ?? []}
         conversation={conversation}
         selfNekoId={selfNekoId}
+        resolveSender={(item) => {
+          // 跨会话转发的发送者可能不在当前会话里：按全部会话成员/联系人解析，解析不到回退用户名
+          if (selfNekoId !== null && item.u === selfNekoId) return '你'
+          const pools = [
+            ...forwardTargets,
+            ...(conversation ? [conversation] : []),
+          ]
+          for (const target of pools) {
+            const member = target.members.find((entry) => entry.nekoId === item.u)
+            if (member) return member.displayName || member.username
+            const contact = target.contact
+            if (contact && contact.nekoId === item.u) {
+              return contact.remark || contact.displayName || contact.username
+            }
+          }
+          return null
+        }}
         onClose={() => setBundlePreview(null)}
       />
 

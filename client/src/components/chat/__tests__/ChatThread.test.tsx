@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ChatThread from '../ChatThread'
 import type { NekoConversation, NekoMessage, NekoRoomMember } from '../../../types/chat'
@@ -293,6 +293,92 @@ describe('ChatThread', () => {
     expect(dialog).toHaveTextContent('第一行')
     expect(dialog).toHaveTextContent('消息已撤回')
     expect(screen.getByText('聊天记录（3 条）')).toBeInTheDocument()
+  })
+
+  it('合并转发可选择任意会话作为目标（跨会话）', async () => {
+    const user = userEvent.setup()
+    const onForward = vi.fn().mockResolvedValue(undefined)
+    const source = createConversation()
+    const bob = createConversation({
+      key: 'u1000000000003',
+      title: 'bob',
+      avatarId: 3,
+      avatarName: 'bob',
+      avatarNekoId: 1000000000003,
+      contact: {
+        ...createConversation().contact!,
+        key: 'u1000000000003',
+        nekoId: 1000000000003,
+        linewebId: 3,
+        username: 'bob',
+        displayName: 'bob',
+      },
+    })
+
+    render(
+      <ChatThread
+        conversation={source}
+        messages={[createMessage({ id: 41, body: '跨会话' })]}
+        forwardTargets={[source, bob]}
+        {...baseProps()}
+        onForward={onForward}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '多选' }))
+    await user.click(screen.getByRole('button', { name: '选择该消息' }))
+    await user.click(screen.getByRole('button', { name: '转发' }))
+
+    const dialog = screen.getByRole('dialog', { name: '选择转发对象' })
+    await user.click(within(dialog).getByRole('button', { name: /合并转发/ }))
+
+    const bobRow = within(dialog).getByText('bob').closest('label')
+    expect(bobRow).not.toBeNull()
+    const bobCheckbox = within(bobRow as HTMLElement).getByRole('checkbox')
+    expect(bobCheckbox).not.toBeDisabled()
+    await user.click(bobCheckbox)
+
+    await user.click(within(dialog).getByRole('button', { name: '转发到 1 个会话' }))
+
+    expect(onForward).toHaveBeenCalledWith([41], ['u1000000000003'], 'merge')
+  })
+
+  it('跨会话聊天记录按 neko id 解析发送者显示名', async () => {
+    const user = userEvent.setup()
+    const source = createConversation()
+    const bob = createConversation({
+      key: 'u1000000000003',
+      title: 'bob',
+      avatarId: 3,
+      avatarName: 'bob',
+      avatarNekoId: 1000000000003,
+      contact: {
+        ...createConversation().contact!,
+        key: 'u1000000000003',
+        nekoId: 1000000000003,
+        linewebId: 3,
+        username: 'bob',
+        displayName: '鲍勃',
+        remark: '小鲍',
+      },
+    })
+    const bundle = [
+      { u: 1000000000003, n: 'bob', t: Date.now(), b: '来自另一个群', h: '', r: 0 as const },
+    ]
+
+    render(
+      <ChatThread
+        conversation={source}
+        messages={[createMessage({ id: 51, body: '[聊天记录]', bundle })]}
+        forwardTargets={[source, bob]}
+        {...baseProps()}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '查看聊天记录' }))
+    const dialog = screen.getByRole('dialog', { name: '聊天记录' })
+    expect(dialog).toHaveTextContent('小鲍')
+    expect(dialog).toHaveTextContent('来自另一个群')
   })
 
   it('正在输入中的中文输入法组合不会触发发送', async () => {

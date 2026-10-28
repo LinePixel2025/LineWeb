@@ -4,7 +4,7 @@ import type { NekoConversation } from '../../types/chat'
 
 interface Props {
   open: boolean
-  /** 当前会话键：合并转发只能发回这个会话 */
+  /** 当前会话键（用于标记「当前会话」，不再限制合并转发目标） */
   sourceKey: string
   sourceTitle: string
   /** 待转发的消息条数 */
@@ -22,8 +22,8 @@ type Mode = 'separate' | 'merge'
 /**
  * 转发目标选择弹窗。
  *
- * 合并转发由 neko 按「目标会话」生成快照（单聊双方匹配 / 同群），跨会话会被上游
- * 以 bad-request 拒绝；因此合并模式只允许勾选来源会话，跨会话请用逐条转发。
+ * 两种模式都支持跨会话：合并转发由 neko 按所选消息行推导源会话并生成快照，
+ * 目标可以是任意好友或群；逐条转发则按原消息内容重新发送。
  */
 export default function ChatForwardDialog({
   open,
@@ -65,18 +65,13 @@ export default function ChatForwardDialog({
 
   if (!open) return null
 
-  const mergeLocked = mode === 'merge'
-  const effectiveSelected = mergeLocked ? new Set([sourceKey]) : selected
-  const canSubmit = !loading && effectiveSelected.size > 0 && count > 0
+  const canSubmit = !loading && selected.size > 0 && count > 0
 
   const switchMode = (next: Mode) => {
     setMode(next)
-    // 合并模式只允许来源会话；切回逐条时保留已选
-    if (next === 'merge') setSelected(new Set())
   }
 
   const toggle = (key: string) => {
-    if (mergeLocked) return
     setSelected((prev) => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
@@ -125,7 +120,7 @@ export default function ChatForwardDialog({
               onClick={() => switchMode('merge')}
             >
               合并转发
-              <span className="gh-chat-forward-mode-hint">打包成聊天记录卡片，只能发回原会话</span>
+              <span className="gh-chat-forward-mode-hint">打包成聊天记录卡片，可发往任意会话</span>
             </button>
           </div>
 
@@ -140,18 +135,17 @@ export default function ChatForwardDialog({
           <ul className="gh-chat-forward-list" aria-label="转发对象">
             {rows.map((conversation) => {
               const isSource = conversation.key === sourceKey
-              const disabled = mergeLocked && !isSource
-              const checked = effectiveSelected.has(conversation.key)
+              const checked = selected.has(conversation.key)
               return (
                 <li key={conversation.key}>
                   <label
-                    className={`gh-chat-forward-row ${disabled ? 'gh-chat-forward-row--disabled' : ''}`}
-                    title={disabled ? '合并转发只能发回原会话，跨会话请用逐条转发' : undefined}
+                    className="gh-chat-forward-row"
+                    title={isSource ? '当前会话（也可转发回这里）' : undefined}
                   >
                     <input
                       type="checkbox"
                       checked={checked}
-                      disabled={disabled || loading}
+                      disabled={loading}
                       onChange={() => toggle(conversation.key)}
                     />
                     <NekoAvatar
@@ -173,10 +167,10 @@ export default function ChatForwardDialog({
             {rows.length === 0 && <li className="gh-chat-forward-empty">没有匹配的会话。</li>}
           </ul>
 
-          {mergeLocked && (
+          {mode === 'merge' && (
             <p className="gh-chat-forward-note">
-              合并转发由聊天服务按来源会话生成快照，只能发回「{sourceTitle}」；
-              如需发到其他会话，请改用逐条转发。
+              会把「{sourceTitle}」中选中的 {count} 条消息打包成一张聊天记录卡片（单包上限 30 条），
+              可选择任意好友或群作为目标。
             </p>
           )}
 
@@ -196,9 +190,9 @@ export default function ChatForwardDialog({
             type="button"
             className="gh-btn gh-btn--primary gh-btn--sm"
             disabled={!canSubmit}
-            onClick={() => onSubmit([...effectiveSelected], mode)}
+            onClick={() => onSubmit([...selected], mode)}
           >
-            {loading ? '转发中…' : `转发到 ${effectiveSelected.size} 个会话`}
+            {loading ? '转发中…' : `转发到 ${selected.size} 个会话`}
           </button>
         </footer>
       </div>

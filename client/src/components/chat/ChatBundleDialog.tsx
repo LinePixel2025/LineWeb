@@ -10,6 +10,8 @@ interface Props {
   /** 用于把用户名还原成显示名（转发条目只有用户名） */
   conversation: NekoConversation | null
   selfNekoId: number | null
+  /** 跨会话转发：按 neko id 在全部会话范围内解析显示名（返回 null 时回退用户名） */
+  resolveSender?: (item: NekoBundleItem) => string | null
   onClose: () => void
 }
 
@@ -40,7 +42,7 @@ function displayName(
     if (conversation.contact && username === conversation.contact.username) {
       return conversation.contact.displayName || conversation.contact.username
     }
-    return '你'
+    return username || '未知用户'
   }
   return username || '未知用户'
 }
@@ -56,6 +58,7 @@ export default function ChatBundleDialog({
   items,
   conversation,
   selfNekoId,
+  resolveSender,
   onClose,
 }: Props) {
   useEffect(() => {
@@ -96,7 +99,8 @@ export default function ChatBundleDialog({
                   <li key={`${item.t}-${index}`} className="gh-chat-bundle-item">
                     <div className="gh-chat-bundle-item-meta">
                       <span className="gh-chat-bundle-item-name">
-                        {displayName(item.n, conversation, selfNekoId)}
+                        {resolveSender?.(item) ||
+                          displayName(item.n, conversation, selfNekoId)}
                       </span>
                       <time className="gh-chat-bundle-item-time" dateTime={new Date(item.t).toISOString()}>
                         {formatItemTime(item.t)}

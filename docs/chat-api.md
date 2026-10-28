@@ -40,7 +40,7 @@
 | POST | `/rooms/:id/role` `/transfer` `/mute` `/mute-all` `/announcement` | 群权限、转让、禁言、公告 |
 | POST | `/messages/recall` | 撤回 `{id}`（**窗口 5 分钟**，仅本人的消息） |
 | POST | `/messages/admin-recall` | 群主 / 管理员撤回群消息 |
-| POST | `/uploads` | 图片上传（`multipart/form-data`，字段 `file`）→ `{ok, url, id, mime}` |
+| POST | `/uploads` | 图片上传（**raw 二进制 body**，`Content-Type` 为图片类型；服务端按魔数复核）→ `{ok, url, id, mime}` |
 | POST | `/friends/request` | 向 neko 原生账号发好友申请 `{nekoId}`（`lw_*` 目标返回 400，请走站内好友申请） |
 | POST | `/friends/respond` | 处理 neko 侧好友申请 `{requestId, accept}`；接受 `lw_*` 申请会同时补建 Prisma 双向好友 |
 | POST | `/friends/remove` | 删除 neko 原生好友 `{nekoId}`（`lw_*` 目标返回 400） |
@@ -65,7 +65,7 @@
 
 **合并转发**：发送 `<x xmlns="urn:wlxx:chat" forward="id1,id2,..."/>`（最多 30 条）。neko 在服务端生成快照，以 `body="[聊天记录]"` + `<bundle>[{u,n,t,b,h,r},…]</bundle>` 投递，历史查询同样带 `<bundle>`。`bundle` 上限 64KB、单条正文截断 2000 字、撤回条目保留 `r=1` 占位，嵌套转发只显示 `[聊天记录]` 占位文本。
 
-> ⚠️ 上游限制：快照按**目标会话**校验来源（单聊双方匹配 / 同一群），所以合并转发只能发回原会话；跨会话请使用「逐条转发」（客户端按原消息 body + XHTML 重新发送，图片/表情可正常保留）。前端转发弹窗在合并模式下会锁定来源会话并给出说明。
+> **跨会话合并转发**：快照来源由 neko 按所选消息行自行推导（单聊双方匹配 / 同一群，且发送者须可读），与目标会话无关；因此合并转发可发往任意好友或群，跨会话转发是本功能的主路径（目标侧收到一张「聊天记录」卡片，发送者名按 neko id 映射昵称/备注，未知用户回退账号）。
 
 **头像**：neko 在 `accounts.avatar` 存头像 dataURL（仅 png/jpeg/webp，≤200KB），`avatarVersion` 随 `contacts` / `rooms[].members` / 请求 / 目录一起下发（0 = 无头像，前端不发请求）。LineWeb 头像上传或删除后由服务端 best-effort 调用 neko `POST /internal/avatar` 同步；历史上传的头像在聊天页 `/bootstrap` 时补同步。浏览器通过同源中继读取：
 
@@ -75,7 +75,7 @@ GET /chat/avatars/<nekoId>?v=<avatarVersion>&token=<LineWeb 登录令牌>
 
 返回头像字节（`Cache-Control: private, max-age=300`），无头像返回 404；前端 `NekoAvatar` 在缺失时回退到 LineWeb 头像（`lw_*`）或首字母。
 
-**表情商店**：纯前端素材（`client/public/stickers/shop/`），保存时栅格化为 360px PNG 后走 `/uploads` + `/stickers` 上传。`dango` / `cat` / `misc` 为站内原创 SVG；`twemoji` 为 Twemoji 子集（72 个，图形 CC-BY 4.0，署名见 `client/public/stickers/shop/twemoji/LICENSE.txt`）。
+**表情商店**：纯前端素材（`client/public/stickers/shop/`），保存时 SVG 栅格化为 360px PNG、图片/GIF 原样，再走 `/uploads` + `/stickers` 上传。`dango` / `cat` / `misc` 为站内原创 SVG；`twemoji` 为 Twemoji 子集（72 个，图形 CC-BY 4.0）；`nailong`（奶龙 36 个，静态 JPG + 动态 GIF）与 `felyne`（呆猫 19 个）由 `server/scripts/fetch-sticker-packs.mjs` 从公开表情图库抓取并统一压到 360px，来源/许可见各包目录 `LICENSE.txt`（仅供个人使用）。
 
 ### 0.3 旧端点去向
 
