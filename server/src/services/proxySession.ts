@@ -34,10 +34,24 @@ export function readCookieValue(headers: IncomingHttpHeaders, name: string): str
 
 /** 解析反代会话 → userId；无效 / 类型不符 / 账号失效均返回 null */
 export async function resolveProxyUserId(headers: IncomingHttpHeaders): Promise<number | null> {
+  const session = await resolveProxySessionInfo(headers)
+  return session?.userId ?? null
+}
+
+/**
+ * 解析反代会话 → userId + role。
+ *
+ * role 用于反代排队闸门的管理员豁免（role === 'admin' 不排队、不占并发）。
+ * 角色每次请求都从数据库实时解析（resolveAuthContext 的口径），
+ * 因此降权/提权立即生效，伪造令牌也拿不到 admin。
+ */
+export async function resolveProxySessionInfo(
+  headers: IncomingHttpHeaders,
+): Promise<{ userId: number; role: string } | null> {
   const token = readCookieValue(headers, PROXY_SESSION_COOKIE)
   if (!token) return null
   const result = await resolveAuthContext(token)
   if (!result.ok) return null
   if (result.user.type !== 'proxy') return null
-  return result.user.userId
+  return { userId: result.user.userId, role: result.user.role }
 }

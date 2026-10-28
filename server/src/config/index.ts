@@ -43,6 +43,15 @@ export const config = {
   downloadChunkKB: parseInt(process.env.DOWNLOAD_CHUNK_KB || '256', 10),
   streamChunkKB: parseInt(process.env.STREAM_CHUNK_KB || '4096', 10),
   driveSyncIntervalMs: parseInt(process.env.DRIVE_SYNC_INTERVAL_MS || '300000', 10),
+  // === 网页反代并发闸门（防止同时打开多个站点时把进程打满） ===
+  // 同时进行中的反代请求上限（不含管理员）；超出后进入 FIFO 队列
+  proxyMaxConcurrent: Math.max(1, parseInt(process.env.PROXY_MAX_CONCURRENT || '24', 10)),
+  // 排队队列长度上限；队列也满时直接 503（前端显示排队页）
+  proxyQueueLimit: Math.max(0, parseInt(process.env.PROXY_QUEUE_LIMIT || '64', 10)),
+  // 单个请求最长排队时间；超时 503
+  proxyQueueTimeoutMs: Math.max(1000, parseInt(process.env.PROXY_QUEUE_TIMEOUT_MS || '15000', 10)),
+  // 反代 WebSocket 同时连接数上限（不含管理员）
+  proxyWsMaxConnections: Math.max(1, parseInt(process.env.PROXY_WS_MAX_CONNECTIONS || '100', 10)),
   // === 聊天服务（neko XMPP）===
   // 聊天已迁移到独立的 internet_neko XMPP 服务；本服务只做代理与账号映射，不存聊天数据。
   // 令牌只在服务端使用（x-internal-token），绝不能下发浏览器；缺失时聊天降级为未配置。

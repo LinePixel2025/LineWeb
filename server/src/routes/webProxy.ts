@@ -14,7 +14,8 @@ import {
   sanitizeClientCookies,
   serializeCookieJar,
 } from '../services/proxyCookies.js'
-import { PROXY_SESSION_COOKIE, resolveProxyUserId } from '../services/proxySession.js'
+import { PROXY_SESSION_COOKIE, resolveProxySessionInfo } from '../services/proxySession.js'
+import { ProxyQueueError, acquireProxySlot, getProxyQueueStats } from '../services/proxyQueue.js'
 import {
   DESKTOP_USER_AGENT,
   assertPublicHost,
@@ -284,9 +285,9 @@ proxyApiRouter.post('/sites/:id/open', async (req, res) => {
 // /proxy/<siteId>/* —— HTTP 反向代理（同源 Cookie 认证）
 // ============================================================
 
-/** 解析反代会话 Cookie → userId（只接受 type=proxy 的令牌） */
-export async function resolveProxySession(req: Request): Promise<number | null> {
-  return resolveProxyUserId(req.headers)
+/** 解析反代会话 Cookie → { userId, role }（只接受 type=proxy 的令牌） */
+export async function resolveProxySession(req: Request): Promise<{ userId: number; role: string } | null> {
+  return resolveProxySessionInfo(req.headers)
 }
 
 function readRequestBody(req: Request): Promise<{ body: Buffer | null; tooLarge: boolean }> {
@@ -638,17 +639,45 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
     return
   }
 
-  const userId = await resolveProxySession(req)
-  if (!userId) {
+  const session = await resolveProxySession(req)
+  if (!session) {
     res.status(401).type('html').send(buildProxyLoginPage('反代会话已失效（可能登出或更换了账号），请回到 LineWeb 的「网页反代」重新打开目标网站。'))
     return
   }
+  const userId = session.userId
 
   const site = await prisma.proxySite.findFirst({ where: { id: siteId, userId } })
   if (!site) {
     res.status(404).type('html').send(buildProxyErrorPage('站点不存在', '这个反代站点不存在，或不属于当前账号。'))
     return
   }
+
+  // 并发闸门：管理员（role === 'admin'）不排队、不占并发，其余请求超出上限时排队
+  let releaseSlot: (() => void) | null = null
+  try {
+    releaseSlot = await acquireProxySlot({ bypass: session.role === 'admin' })
+  } catch (err) {
+    if (err instanceof ProxyQueueError) {
+      const stats = getProxyQueueStats()
+      console.log(`[proxy] 排队${err.reason === 'full' ? '队列已满' : '超时'}：site=${siteId} user=${userId} active=${stats.active} queued=${stats.queued}`)
+      res
+        .status(503)
+        .set('Retry-After', '5')
+        .type('html')
+        .send(buildProxyErrorPage(
+          '当前访问人数较多',
+          err.reason === 'timeout'
+            ? '反代请求排队超时，请稍后重试或稍后刷新页面。'
+            : '反代请求队列已满，请稍后重试或稍后刷新页面。',
+          { retry: true },
+        ))
+      return
+    }
+    throw err
+  }
+  // 响应完成 / 连接断开都要归还名额（释放函数幂等）
+  res.once('finish', releaseSlot)
+  res.once('close', releaseSlot)
 
   const upstreamPath = parsed.pathname.slice(`/${siteId}`.length) || '/'
   const target = new URL(`${site.origin}${upstreamPath}${parsed.search}`)

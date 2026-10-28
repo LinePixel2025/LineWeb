@@ -4,7 +4,8 @@ import { WebSocket, WebSocketServer } from 'ws'
 import prisma from '../lib/prisma.js'
 import { assertPublicHost } from './webProxyService.js'
 import { cookieHeaderForUrl, readCookieJar } from './proxyCookies.js'
-import { resolveProxyUserId } from './proxySession.js'
+import { acquireProxyWsSlot } from './proxyQueue.js'
+import { resolveProxySessionInfo } from './proxySession.js'
 
 /**
  * /proxy-ws/<siteId>/* —— 反代站点的 WebSocket 中继
@@ -68,15 +69,30 @@ export function initWebProxyWs(server: HttpServer): WebProxyWsHandle {
       return
     }
     const siteId = Number.parseInt(match[1], 10)
-    const userId = await resolveProxyUserId(req.headers)
-    if (!userId) {
+    const session = await resolveProxySessionInfo(req.headers)
+    if (!session) {
       rejectUpgrade(socket, '401 Unauthorized')
       return
     }
+    const userId = session.userId
     const site = await prisma.proxySite.findFirst({ where: { id: siteId, userId } })
     if (!site) {
       rejectUpgrade(socket, '404 Not Found')
       return
+    }
+
+    // 连接数闸门：管理员不占名额；超出上限直接拒绝升级（页面会降级为轮询）
+    const releaseWsSlot = acquireProxyWsSlot({ bypass: session.role === 'admin' })
+    if (!releaseWsSlot) {
+      console.warn(`[proxy-ws] 连接数已达上限：site=${siteId} user=${userId}`)
+      rejectUpgrade(socket, '503 Service Unavailable')
+      return
+    }
+    let wsSlotReleased = false
+    const releaseWsSlotOnce = () => {
+      if (wsSlotReleased) return
+      wsSlotReleased = true
+      releaseWsSlot()
     }
 
     const rest = match[2] || '/'
@@ -120,6 +136,7 @@ export function initWebProxyWs(server: HttpServer): WebProxyWsHandle {
         })
     } catch (err) {
       console.warn('[proxy-ws] 上游地址无效：', err instanceof Error ? err.message : err)
+      releaseWsSlotOnce()
       rejectUpgrade(socket)
       return
     }
@@ -128,6 +145,7 @@ export function initWebProxyWs(server: HttpServer): WebProxyWsHandle {
     const dialTimer = setTimeout(() => {
       if (!upstreamOpen) {
         try { upstream.terminate() } catch { /* ignore */ }
+        releaseWsSlotOnce()
         rejectUpgrade(socket)
       }
     }, DIAL_TIMEOUT_MS + 1000)
@@ -135,11 +153,17 @@ export function initWebProxyWs(server: HttpServer): WebProxyWsHandle {
 
     upstream.once('error', () => {
       clearTimeout(dialTimer)
-      if (!upstreamOpen) rejectUpgrade(socket)
+      if (!upstreamOpen) {
+        releaseWsSlotOnce()
+        rejectUpgrade(socket)
+      }
     })
     upstream.once('unexpected-response', () => {
       clearTimeout(dialTimer)
-      if (!upstreamOpen) rejectUpgrade(socket)
+      if (!upstreamOpen) {
+        releaseWsSlotOnce()
+        rejectUpgrade(socket)
+      }
     })
     upstream.once('open', () => {
       clearTimeout(dialTimer)
@@ -180,6 +204,7 @@ export function initWebProxyWs(server: HttpServer): WebProxyWsHandle {
         })
 
         browser.on('close', (code, reason) => {
+          releaseWsSlotOnce()
           closeBoth(code, reason.toString())
         })
         browser.on('error', () => closeBoth(1001))
