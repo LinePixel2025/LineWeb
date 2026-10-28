@@ -1271,6 +1271,130 @@
   text-align: center;
 }
 
+/* === 表情面板页签（我的表情 / 表情商店） === */
+.gh-chat-sticker-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.gh-chat-sticker-tab {
+  padding: 4px 10px;
+  border: none;
+  border-radius: var(--gh-radius);
+  background: transparent;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gh-chat-sticker-tab:hover {
+  background: var(--gh-btn-hover);
+  color: var(--gh-text);
+}
+
+.gh-chat-sticker-tab--active {
+  background: var(--gh-btn-hover);
+  color: var(--gh-accent);
+}
+
+/* === 表情商店 === */
+.gh-chat-sticker-shop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+}
+
+.gh-chat-sticker-packs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gh-space-1);
+}
+
+.gh-chat-sticker-pack {
+  padding: 3px 10px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  cursor: pointer;
+}
+
+.gh-chat-sticker-pack:hover {
+  border-color: var(--gh-accent);
+  color: var(--gh-text);
+}
+
+.gh-chat-sticker-pack--active {
+  background: var(--gh-accent-subtle, rgba(47, 129, 247, 0.12));
+  border-color: var(--gh-accent);
+  color: var(--gh-accent);
+}
+
+.gh-chat-sticker-shop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+  gap: var(--gh-space-2);
+  max-height: 236px;
+  padding-right: 2px;
+  overflow-y: auto;
+}
+
+.gh-chat-sticker-shop-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: var(--gh-space-2) var(--gh-space-1);
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+  background: var(--gh-bg);
+}
+
+.gh-chat-sticker-shop-item img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border-radius: var(--gh-radius-sm, 4px);
+}
+
+.gh-chat-sticker-shop-name {
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.2;
+}
+
+.gh-chat-sticker-shop-save {
+  width: 100%;
+  padding: 3px 0;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  font-size: var(--gh-text-xs);
+  cursor: pointer;
+}
+
+.gh-chat-sticker-shop-save:hover:not(:disabled) {
+  border-color: var(--gh-accent);
+  color: var(--gh-accent);
+}
+
+.gh-chat-sticker-shop-save--saved {
+  border-color: var(--gh-border-muted);
+  color: var(--gh-text-tertiary);
+  cursor: default;
+}
+
+.gh-chat-sticker-shop-note {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.5;
+}
+
 /* 贴纸消息：无气泡、无边框，与原生客户端观感一致 */
 .gh-chat-message-sticker {
   display: block;
@@ -1679,5 +1803,147 @@
     padding: 0 3px;
     font-size: 9px;
     line-height: 15px;
+  }
+}
+
+/* === 全局新消息提示（Routes 外，任意页面右下角） === */
+.gh-msg-toast {
+  position: fixed;
+  right: calc(var(--gh-safe-right) + 20px);
+  bottom: calc(var(--gh-safe-bottom) + 20px);
+  z-index: 1300;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gh-space-1);
+  width: min(340px, calc(100vw - 40px));
+  padding: var(--gh-space-2);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+  animation: gh-msg-toast-in 180ms ease-out;
+}
+
+@keyframes gh-msg-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.gh-msg-toast-main {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  gap: var(--gh-space-2);
+  min-width: 0;
+  padding: var(--gh-space-1) var(--gh-space-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--gh-radius);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gh-msg-toast-main:hover {
+  background: var(--gh-btn-hover);
+}
+
+.gh-msg-toast-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gh-msg-toast-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  min-width: 0;
+}
+
+.gh-msg-toast-title {
+  overflow: hidden;
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-msg-toast-count {
+  flex-shrink: 0;
+  min-width: 18px;
+  padding: 0 5px;
+  background: var(--gh-accent);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+.gh-msg-toast-preview {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.gh-msg-toast-hint {
+  margin-top: 2px;
+  color: var(--gh-text-tertiary);
+  font-size: 11px;
+}
+
+.gh-msg-toast-thumb {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+}
+
+.gh-msg-toast-close {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--gh-radius);
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-lg);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gh-msg-toast-close:hover {
+  background: var(--gh-btn-hover);
+  color: var(--gh-text);
+}
+
+@media (max-width: 767px) {
+  .gh-msg-toast {
+    right: calc(var(--gh-safe-right) + 12px);
+    bottom: calc(var(--gh-safe-bottom) + 84px);
+    width: calc(100vw - 24px);
   }
 }

@@ -306,6 +306,34 @@ export interface NekoDirectoryUser {
   lastMessageAt: number
 }
 
+/**
+ * 全局新消息提示（任意页面右下角弹出，包括游戏对局中）
+ *
+ * 由 XmppChatContext 在收到「非当前会话」的实时消息时生成，
+ * 同一会话 10 秒内多条只累加 count，避免连发消息刷屏。
+ */
+export interface NekoMessageNotice {
+  /** 会话键（点击后跳转 /chat/<key>） */
+  key: string
+  kind: 'direct' | 'room'
+  /** 发送者显示名 */
+  fromName: string
+  /** 发送者头像用 id（原生 neko 账号取 nekoId，群聊取负数避免与用户撞色） */
+  avatarId: number
+  /** 会话标题（群名 / 对方显示名） */
+  title: string
+  /** 正文预览：图片与表情已归一为占位文字 */
+  preview: string
+  /** 图片消息缩略图（已追加登录令牌；非图片为 null） */
+  image: string | null
+  /** 最新一条消息时间（毫秒） */
+  ts: number
+  /** 前端收到提示的时间（用于同会话聚合与自动消失，不展示） */
+  receivedAt: number
+  /** 聚合条数（同一会话连续消息累加） */
+  count: number
+}
+
 /** 聊天页的会话聚合（联系人 + 群 + 最近消息 + 未读） */
 export interface NekoConversation {
   key: string

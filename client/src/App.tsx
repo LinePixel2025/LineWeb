@@ -11,6 +11,7 @@ import Layout from './components/Layout'
 import { ProtectedRoute, AdminRoute } from './components/Guards'
 import DownloadToast from './components/drive/DownloadToast'
 import GameInviteToast from './components/games/GameInviteToast'
+import ChatMessageToast from './components/chat/ChatMessageToast'
 
 // 路由级代码分割 — 所有页面和布局懒加载，减少首屏包体积
 const HomePage = lazy(() => import('./pages/HomePage'))
@@ -266,6 +267,8 @@ export default function App() {
               <DownloadToast />
               {/* 游戏邀请/开局提示 — 全局监听，任意页面可接收好友邀请 */}
               <GameInviteToast />
+              {/* 新消息提示 — 任意页面（含游戏对局）都能收到聊天消息提醒 */}
+              <ChatMessageToast />
             </DownloadProvider>
         </ThemeProvider>
         </GameProvider>

@@ -27,6 +27,7 @@ import {
 import api, { getToken } from '../lib/api'
 import {
   NEKO_PAGE_SIZE,
+  chatImageUrl,
   isConversationKey,
   getXmppWsUrl,
   mergeNekoMessages,
@@ -65,6 +66,7 @@ import type {
   NekoDirectoryUser,
   NekoFriendRequest,
   NekoMessage,
+  NekoMessageNotice,
   NekoRoom,
   NekoSelf,
   NekoStateView,
@@ -84,6 +86,8 @@ const LOOKUP_WINDOW_MS = 250
 /** 预览预取的并发与上限（避免登录瞬间打出几十个 IQ） */
 const PREVIEW_CONCURRENCY = 3
 const PREVIEW_LIMIT = 40
+/** 全局新消息提示：同一会话在此窗口内的多条消息只累加计数 */
+const NOTICE_MERGE_WINDOW_MS = 10_000
 
 interface HistoryMeta {
   loaded: boolean
@@ -161,6 +165,9 @@ export interface XmppChatValue {
   searchDirectory: (query: string) => Promise<NekoDirectoryUser[]>
   refresh: () => Promise<void>
   stickers: NekoSticker[]
+  /** 全局新消息提示（仅非当前会话的实时消息；点击/自动消失后清空） */
+  messageNotice: NekoMessageNotice | null
+  dismissMessageNotice: () => void
 }
 
 const XmppChatContext = createContext<XmppChatValue | null>(null)
@@ -249,6 +256,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   const [activeKey, setActiveKeyState] = useState<string | null>(null)
   const [messagesByKey, setMessagesByKey] = useState<Record<string, NekoMessage[]>>({})
   const [historyMeta, setHistoryMeta] = useState<Record<string, HistoryMeta>>({})
+  const [messageNotice, setMessageNotice] = useState<NekoMessageNotice | null>(null)
 
   // === 可变状态（事件回调里读，避免闭包过期）===
   const viewRef = useRef<ViewState>({ domain: '', mucDomain: '', self: null })
@@ -397,6 +405,42 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
     },
     [commitConversations],
   )
+
+  /**
+   * 生成全局新消息提示（仅非当前会话、非本人、非免打扰群）。
+   * 同一会话 10 秒内多条只累加 count，避免连发消息刷屏。
+   */
+  const pushMessageNotice = useCallback((key: string, roomId: number | null, message: NekoMessage) => {
+    const room = roomId ? roomsRef.current.find((item) => item.id === roomId) ?? null : null
+    if (room?.notifyMuted) return
+    const contact = contactByNameRef.current.get(message.fromUsername) ?? null
+    const body = message.body.replace(/\s+/g, ' ').trim()
+    const preview = message.image
+      ? '[图片]'
+      : body === '[表情]'
+        ? '[表情]'
+        : body.slice(0, 80) || '[消息]'
+    const next: NekoMessageNotice = {
+      key,
+      kind: room ? 'room' : 'direct',
+      fromName: contact?.displayName || contact?.username || message.fromUsername || '对方',
+      avatarId: room ? -room.id : contact?.linewebId ?? contact?.nekoId ?? 0,
+      title: room ? room.name : contact?.displayName || contact?.username || message.fromUsername || '聊天',
+      preview,
+      image: message.image ? chatImageUrl(message.image) : null,
+      ts: message.ts || Date.now(),
+      receivedAt: Date.now(),
+      count: 1,
+    }
+    setMessageNotice((prev) => {
+      if (prev && prev.key === key && next.receivedAt - prev.receivedAt < NOTICE_MERGE_WINDOW_MS) {
+        return { ...next, count: prev.count + 1 }
+      }
+      return next
+    })
+  }, [])
+
+  const dismissMessageNotice = useCallback(() => setMessageNotice(null), [])
 
   const markRead = useCallback(
     (key: string) => {
@@ -840,9 +884,11 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
         const unread = message.mine ? prevUnread : prevUnread + 1
         unreadRef.current[key] = unread
         upsertFromMessage(key, message, unread)
+        // 全局提示：不在该会话页面时也弹出（普通页面、游戏对局中都生效）
+        if (!message.mine) pushMessageNotice(key, roomId, message)
       }
     },
-    [commitMessages, markRead, refreshLatest, resolveUnknown, upsertFromMessage],
+    [commitMessages, markRead, pushMessageNotice, refreshLatest, resolveUnknown, upsertFromMessage],
   )
 
   const handleStanza = useCallback(
@@ -889,6 +935,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
     setActiveKeyState(null)
     setMessagesByKey({})
     setHistoryMeta({})
+    setMessageNotice(null)
     setConnectionState('closed')
     setTransport('polling')
   }, [])
@@ -1135,6 +1182,8 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       const next = key && isConversationKey(key) ? key : null
       activeKeyRef.current = next
       setActiveKeyState(next)
+      // 打开某会话时收起指向它的全局提示
+      setMessageNotice((prev) => (prev && prev.key === next ? null : prev))
       if (!next) return
       openedKeysRef.current.add(next)
       // 深链 / 刷新：新对话还没有任何消息，不会出现在会话列表里，
@@ -1480,6 +1529,8 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       searchDirectory,
       refresh,
       stickers,
+      messageNotice,
+      dismissMessageNotice,
     }),
     [
       connectionState,
@@ -1520,6 +1571,8 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       searchDirectory,
       refresh,
       stickers,
+      messageNotice,
+      dismissMessageNotice,
     ],
   )
 
