@@ -220,7 +220,8 @@ export default function ChatStickerPanel({
             })}
           </div>
           <p className="gh-chat-sticker-shop-note" role="status">
-            {shopNote ?? '商店表情为站内原创素材，保存后即可在聊天中发送。'}
+            {shopNote ??
+              '团子 / 橘猫 / 符号为站内原创素材；经典表情来自 Twemoji（图形 © Twitter，CC-BY 4.0）。保存后即可在聊天中发送。'}
           </p>
         </div>
       )}

@@ -1,0 +1,10 @@
+Twemoji graphics
+================
+
+Copyright 2020 Twitter, Inc and other contributors
+Code licensed under the MIT License: https://opensource.org/licenses/MIT
+Graphics licensed under CC-BY 4.0: https://creativecommons.org/licenses/by/4.0/
+
+Source: https://github.com/jdecked/twemoji (assets/svg, v15.1.0)
+This directory contains a curated subset used by the LineWeb sticker shop.
+Do not remove this attribution file.

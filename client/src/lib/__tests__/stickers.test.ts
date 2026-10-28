@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs'
+import { readdirSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { STICKER_SHOP, STICKER_SHOP_PACKS } from '../stickers'
@@ -10,7 +10,14 @@ import { STICKER_SHOP, STICKER_SHOP_PACKS } from '../stickers'
  */
 describe('表情商店素材', () => {
   const dir = resolve(process.cwd(), 'public/stickers/shop')
-  const files = readdirSync(dir)
+  // 素材允许放在子目录（如 twemoji/*.svg），递归收集后统一成 / 分隔的相对路径
+  const collect = (folder: string, prefix = ''): string[] =>
+    readdirSync(folder).flatMap((name) => {
+      const full = resolve(folder, name)
+      const relative = prefix ? `${prefix}/${name}` : name
+      return statSync(full).isDirectory() ? collect(full, relative) : [relative]
+    })
+  const files = collect(dir)
     .filter((name) => name.endsWith('.svg'))
     .sort()
 
