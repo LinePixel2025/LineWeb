@@ -100,6 +100,10 @@ export async function flushProxyStats(): Promise<void> {
         },
       })
     } catch (err) {
+      // 站点在请求进行中被删除时会撞外键（P2003）：统计对该站点已无意义，直接丢弃，
+      // 不重复刷日志（浏览器上一个页面会并行几十个请求，全部都会走到这里）。
+      const code = (err as { code?: string }).code
+      if (code === 'P2003') continue
       console.warn('[proxy] 统计落库失败：', err instanceof Error ? err.message : err)
     }
   }
