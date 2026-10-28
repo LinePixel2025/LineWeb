@@ -219,17 +219,27 @@ proxyAdminRouter.get('/stats', asyncHandler(async (req, res) => {
     }
   })
 
+  // 趋势图按天补齐零值：没有访问的日子也要有一根柱子，
+  // 否则「近 7 天」只有 1 天有数据时，前端会画成一根占满整宽的柱子。
+  const dailyMap = new Map(dailyGroups.map((group) => [group.day, group]))
+  const daily: Array<{ day: string; requests: number; errors: number }> = []
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const day = proxyStatDay(new Date(Date.now() - offset * 24 * 60 * 60 * 1000))
+    const group = dailyMap.get(day)
+    daily.push({
+      day,
+      requests: group?._sum.requests ?? 0,
+      errors: group?._sum.errors ?? 0,
+    })
+  }
+
   res.json({
     days,
     from,
     to: proxyStatDay(),
     sites: siteRanking,
     users: userRanking,
-    daily: dailyGroups.map((group) => ({
-      day: group.day,
-      requests: group._sum.requests ?? 0,
-      errors: group._sum.errors ?? 0,
-    })),
+    daily,
   })
 }))
 

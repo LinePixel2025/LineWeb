@@ -64,6 +64,104 @@ const tdStyle: React.CSSProperties = {
   verticalAlign: 'top',
 }
 
+const CHART_HEIGHT = 112
+
+interface TrendPoint {
+  day: string
+  requests: number
+  errors: number
+}
+
+function formatPercent(part: number, total: number): string {
+  if (!total) return '0%'
+  const ratio = part / total
+  return `${(ratio * 100).toFixed(ratio >= 0.1 ? 0 : 1)}%`
+}
+
+/**
+ * 访问趋势图：按天画柱，失败请求叠在柱顶（红色）。
+ * 服务端已把窗口内没有访问的日子补成 0，所以「近 7 / 30 / 90 天」始终是等距的 N 根柱子。
+ */
+function ProxyTrendChart({ data }: { data: TrendPoint[] }) {
+  const max = Math.max(1, ...data.map((item) => item.requests))
+  const total = data.reduce((sum, item) => sum + item.requests, 0)
+  const errors = data.reduce((sum, item) => sum + item.errors, 0)
+  const peak = data.reduce<TrendPoint | null>(
+    (best, item) => (!best || item.requests > best.requests ? item : best),
+    null,
+  )
+  // 柱子太多时按间隔显示日期，避免标签重叠
+  const labelStep = data.length <= 7 ? 1 : data.length <= 30 ? 5 : 15
+  const barMinWidth = data.length <= 7 ? 24 : data.length <= 30 ? 14 : 8
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--gh-space-3)', flexWrap: 'wrap', marginTop: 'var(--gh-space-3)' }}>
+        <span className="gh-text-tertiary" style={{ fontSize: 'var(--gh-text-sm)' }}>
+          近 {data.length} 天累计 {formatNumber(total)} 次请求
+          {errors > 0 && ` · 失败 ${formatNumber(errors)}（${formatPercent(errors, total)}）`}
+          {peak && peak.requests > 0 && ` · 峰值 ${formatNumber(peak.requests)} 次（${peak.day.slice(5)}）`}
+        </span>
+        <span className="gh-text-tertiary" style={{ display: 'flex', gap: 12, fontSize: 'var(--gh-text-xs)' }}>
+          <span>
+            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: 'var(--gh-accent)', marginRight: 4 }} />
+            成功
+          </span>
+          <span>
+            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: 'var(--gh-danger)', marginRight: 4 }} />
+            失败
+          </span>
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: data.length > 30 ? 3 : 8, marginTop: 'var(--gh-space-3)', overflowX: 'auto', paddingBottom: 2 }}>
+        {data.map((item, index) => {
+          const totalHeight = item.requests > 0 ? Math.max(3, (item.requests / max) * CHART_HEIGHT) : 0
+          const errorHeight = item.requests > 0
+            ? Math.min(totalHeight, Math.max(item.errors > 0 ? 2 : 0, (item.errors / max) * CHART_HEIGHT))
+            : 0
+          const successHeight = Math.max(0, totalHeight - errorHeight)
+          const showLabel = index % labelStep === 0 || index === data.length - 1
+          return (
+            <div
+              key={item.day}
+              title={`${item.day}：请求 ${formatNumber(item.requests)} 次，失败 ${formatNumber(item.errors)} 次`}
+              style={{
+                flex: '1 0 auto',
+                minWidth: barMinWidth,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <div style={{ width: '100%', height: CHART_HEIGHT, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', borderRadius: 3, overflow: 'hidden' }}>
+                {item.requests === 0 ? (
+                  <div style={{ height: 2, borderRadius: 1, background: 'var(--gh-border-muted)' }} />
+                ) : (
+                  <>
+                    {errorHeight > 0 && <div style={{ height: errorHeight, background: 'var(--gh-danger)', opacity: 0.9 }} />}
+                    <div style={{ height: successHeight, background: 'var(--gh-accent)', opacity: 0.85 }} />
+                  </>
+                )}
+              </div>
+              <span className="gh-text-tertiary" style={{ fontSize: 10, whiteSpace: 'nowrap', visibility: showLabel ? 'visible' : 'hidden' }}>
+                {item.day.slice(5)}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+
+      {total === 0 && (
+        <p className="gh-text-tertiary" style={{ marginTop: 'var(--gh-space-2)', fontSize: 'var(--gh-text-sm)' }}>
+          这段时间还没有反代访问记录。
+        </p>
+      )}
+    </div>
+  )
+}
+
 export default function ProxyAdminPage() {
   const [tab, setTab] = useState<Tab>('stats')
   const [overview, setOverview] = useState<ProxyAdminOverview | null>(null)
@@ -189,8 +287,6 @@ export default function ProxyAdminPage() {
     await loadUsers(query.trim())
   }
 
-  const maxDaily = Math.max(1, ...(stats?.daily.map((item) => item.requests) ?? [0]))
-
   return (
     <div>
       <div className="gh-page-header">
@@ -277,25 +373,10 @@ export default function ProxyAdminPage() {
               </div>
             </div>
 
-            {stats && stats.daily.length > 0 ? (
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 120, marginTop: 'var(--gh-space-4)' }}>
-                {stats.daily.map((item) => (
-                  <div key={item.day} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 12 }} title={`${item.day}：${formatNumber(item.requests)} 次（失败 ${formatNumber(item.errors)}）`}>
-                    <div style={{
-                      width: '100%',
-                      height: `${Math.max(4, (item.requests / maxDaily) * 92)}px`,
-                      borderRadius: 4,
-                      background: item.errors > 0 ? 'var(--gh-attention-emphasis, #bf8700)' : 'var(--gh-accent)',
-                      opacity: 0.85,
-                    }} />
-                    <span className="gh-text-tertiary" style={{ fontSize: 10, whiteSpace: 'nowrap' }}>
-                      {item.day.slice(5)}
-                    </span>
-                  </div>
-                ))}
-              </div>
+            {stats ? (
+              <ProxyTrendChart data={stats.daily} />
             ) : (
-              <p className="gh-text-tertiary" style={{ marginTop: 'var(--gh-space-4)' }}>这段时间还没有反代访问记录。</p>
+              <p className="gh-text-tertiary" style={{ marginTop: 'var(--gh-space-4)' }}>正在加载访问趋势…</p>
             )}
           </div>
 
