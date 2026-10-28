@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken'
 import prisma from '../lib/prisma.js'
 import { config, proxySiteCreateSchema, proxySiteUpdateSchema } from '../config/index.js'
 import { AppError } from '../middleware/errorHandler.js'
+import { asyncHandler } from '../lib/asyncHandler.js'
 import {
   cookieHeaderForUrl,
   countSessionCookies,
@@ -180,16 +181,16 @@ function siteDto(site: { id: number; name: string; origin: string; cookies: stri
 
 export const proxyApiRouter = Router()
 
-proxyApiRouter.get('/sites', async (req, res) => {
+proxyApiRouter.get('/sites', asyncHandler(async (req, res) => {
   const userId = req.user!.userId
   const sites = await prisma.proxySite.findMany({
     where: { userId },
     orderBy: [{ lastVisitedAt: 'desc' }, { createdAt: 'desc' }],
   })
   res.json({ sites: sites.map(siteDto) })
-})
+}))
 
-proxyApiRouter.post('/sites', async (req, res) => {
+proxyApiRouter.post('/sites', asyncHandler(async (req, res) => {
   const userId = req.user!.userId
   const data = proxySiteCreateSchema.parse(req.body ?? {})
   const origin = normalizeSiteOrigin(data.url)
@@ -215,9 +216,9 @@ proxyApiRouter.post('/sites', async (req, res) => {
     },
   })
   res.status(201).json({ site: siteDto(site) })
-})
+}))
 
-proxyApiRouter.patch('/sites/:id', async (req, res) => {
+proxyApiRouter.patch('/sites/:id', asyncHandler(async (req, res) => {
   const userId = req.user!.userId
   const siteId = Number.parseInt(req.params.id, 10)
   if (!Number.isFinite(siteId)) throw new AppError('站点不存在', 404)
@@ -229,9 +230,9 @@ proxyApiRouter.patch('/sites/:id', async (req, res) => {
   if (data.forceDesktop !== undefined) updates.forceDesktop = data.forceDesktop
   const updated = await prisma.proxySite.update({ where: { id: site.id }, data: updates })
   res.json({ site: siteDto(updated) })
-})
+}))
 
-proxyApiRouter.delete('/sites/:id', async (req, res) => {
+proxyApiRouter.delete('/sites/:id', asyncHandler(async (req, res) => {
   const userId = req.user!.userId
   const siteId = Number.parseInt(req.params.id, 10)
   if (!Number.isFinite(siteId)) throw new AppError('站点不存在', 404)
@@ -239,10 +240,10 @@ proxyApiRouter.delete('/sites/:id', async (req, res) => {
   if (!site) throw new AppError('站点不存在', 404)
   await prisma.proxySite.delete({ where: { id: site.id } })
   res.status(204).end()
-})
+}))
 
 /** 清除该站点在服务端保存的登录态（换设备前/退出登录用） */
-proxyApiRouter.delete('/sites/:id/cookies', async (req, res) => {
+proxyApiRouter.delete('/sites/:id/cookies', asyncHandler(async (req, res) => {
   const userId = req.user!.userId
   const siteId = Number.parseInt(req.params.id, 10)
   if (!Number.isFinite(siteId)) throw new AppError('站点不存在', 404)
@@ -250,7 +251,7 @@ proxyApiRouter.delete('/sites/:id/cookies', async (req, res) => {
   if (!site) throw new AppError('站点不存在', 404)
   await prisma.proxySite.update({ where: { id: site.id }, data: { cookies: '[]' } })
   res.json({ ok: true })
-})
+}))
 
 /**
  * 打开站点：签发反代会话 Cookie（httpOnly，7 天），返回 iframe 地址
@@ -258,7 +259,7 @@ proxyApiRouter.delete('/sites/:id/cookies', async (req, res) => {
  * Cookie 里只放 `{userId, type:'proxy'}`，与账号令牌同密钥但 type 不同；
  * 全局 authenticate() 会明确拒绝 proxy 类型，因此它不能被当作 API 令牌使用。
  */
-proxyApiRouter.post('/sites/:id/open', async (req, res) => {
+proxyApiRouter.post('/sites/:id/open', asyncHandler(async (req, res) => {
   const userId = req.user!.userId
   const siteId = Number.parseInt(req.params.id, 10)
   if (!Number.isFinite(siteId)) throw new AppError('站点不存在', 404)
@@ -279,7 +280,7 @@ proxyApiRouter.post('/sites/:id/open', async (req, res) => {
   })
   await prisma.proxySite.update({ where: { id: site.id }, data: { lastVisitedAt: new Date() } })
   res.json({ url: `/proxy/${site.id}/`, site: siteDto({ ...site, lastVisitedAt: new Date() }) })
-})
+}))
 
 // ============================================================
 // /proxy/<siteId>/* —— HTTP 反向代理（同源 Cookie 认证）
