@@ -22,6 +22,7 @@ function SidebarIcon({ path }: { path: string }) {
     : path === '/chat' ? <><path d="M8 2.75c-3.1 0-5.5 2.1-5.5 4.7 0 1.4.72 2.62 1.87 3.44l-.57 2.11 2.35-1.1c.58.17 1.2.26 1.85.26 3.1 0 5.5-2.1 5.5-4.71S11.1 2.75 8 2.75Z" /></>
     : path === '/deepseek' ? <><path d="M8 2.75c-3.1 0-5.5 2.1-5.5 4.7 0 1.4.72 2.62 1.87 3.44l-.57 2.11 2.35-1.1c.58.17 1.2.26 1.85.26 3.1 0 5.5-2.1 5.5-4.71S11.1 2.75 8 2.75Z" /><path d="m8 5.35-.66 1.53-1.53.66 1.53.66.66 1.53.66-1.53 1.53-.66-1.53-.66z" fill="currentColor" stroke="none" /></>
     : path === '/features' ? <><circle cx="8" cy="8" r="5" /><path d="m9.8 6.2-1 2.6-2.6 1 1-2.6z" /></>
+    : path === '/webproxy' ? <><circle cx="8" cy="8" r="5.5" /><path d="M2.5 8h11M8 2.5c1.7 1.8 2.5 3.6 2.5 5.5S9.7 11.7 8 13.5C6.3 11.7 5.5 9.9 5.5 8s.8-3.7 2.5-5.5Z" /></>
     : path === '/games' ? <><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h5A2.5 2.5 0 0 1 13 7.5v1A2.5 2.5 0 0 1 10.5 11h-5A2.5 2.5 0 0 1 3 8.5z" /><path d="M5 8h2M6 7v2" /><circle cx="10.5" cy="7.5" r=".45" fill="currentColor" stroke="none" /><circle cx="11.5" cy="9" r=".45" fill="currentColor" stroke="none" /></>
     : <><circle cx="8" cy="5.5" r="2.5" /><path d="M3.5 13a4.5 4.5 0 0 1 9 0" /></>
 
@@ -55,6 +56,7 @@ const sections = [
     items: [
       { path: '/chat', label: '聊天', icon: 'M2.75 2.5h10.5a1.25 1.25 0 0 1 1.25 1.25v6.5a1.25 1.25 0 0 1-1.25 1.25H9l-3.25 2.5v-2.5H2.75A1.25 1.25 0 0 1 1.5 10.25v-6.5A1.25 1.25 0 0 1 2.75 2.5Z' },
       { path: '/deepseek', label: 'AI 对话', icon: 'M8 2.75c-3.1 0-5.5 2.1-5.5 4.7 0 1.4.72 2.62 1.87 3.44l-.57 2.11 2.35-1.1c.58.17 1.2.26 1.85.26 3.1 0 5.5-2.1 5.5-4.71S11.1 2.75 8 2.75Z' },
+      { path: '/webproxy', label: '网页反代', icon: 'M2.5 2.5h11v11h-11z' },
       { path: '/profile', label: 'Profile', icon: 'M2 1.75C2 .784 2.784 0 3.75 0h8.5C13.216 0 14 .784 14 1.75v12.5a1.75 1.75 0 0 1-1.75 1.75h-8.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25V1.75a.25.25 0 0 0-.25-.25Z M5.5 2.75a.75.75 0 0 1 0-1.5h5a.75.75 0 0 1 0 1.5Z M8 12a.75.75 0 0 0 .75-.75v-3.5a.75.75 0 0 0-1.5 0v3.5c0 .414.336.75.75.75Z' },
     ]
   },
@@ -83,6 +85,7 @@ export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onT
               if (item.path.startsWith('/profile') && !user) return false
               if (item.path.startsWith('/chat') && !user) return false
               if (item.path.startsWith('/deepseek') && !user) return false
+              if (item.path.startsWith('/webproxy') && !user) return false
               return true
             })
             if (visibleItems.length === 0) return null

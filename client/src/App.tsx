@@ -45,6 +45,8 @@ const XiangqiOnlinePage = lazy(() => import('./pages/games/XiangqiOnlinePage'))
 const ParkourPage = lazy(() => import('./pages/games/ParkourPage'))
 const ParkourOnlinePage = lazy(() => import('./pages/games/ParkourOnlinePage'))
 const DeepSeekChatPage = lazy(() => import('./pages/DeepSeekChatPage'))
+const WebProxyPage = lazy(() => import('./pages/WebProxyPage'))
+const WebProxyViewPage = lazy(() => import('./pages/WebProxyViewPage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const DynamicPage = lazy(() => import('./pages/DynamicPage'))
 const DrivePage = lazy(() => import('./pages/DrivePage'))
@@ -226,6 +228,13 @@ export default function App() {
                     {/* DeepSeek 对话（站内统一代理 AI 服务，需登录；每日提问上限见 /admin/ai-chat） */}
                     <Route path="/deepseek" element={
                       <ProtectedRoute><DeepSeekChatPage /></ProtectedRoute>
+                    } />
+                    {/* 网页反代：站点与登录态按账号保存在服务端，需登录 */}
+                    <Route path="/webproxy" element={
+                      <ProtectedRoute><WebProxyPage /></ProtectedRoute>
+                    } />
+                    <Route path="/webproxy/:siteId" element={
+                      <ProtectedRoute><WebProxyViewPage /></ProtectedRoute>
                     } />
                     {/* 第三方应用授权的账户验证页（未登录会跳登录并带参数返回） */}
                     <Route path="/authorize" element={

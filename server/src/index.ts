@@ -25,11 +25,13 @@ import chatRoutes from './routes/chat.js'
 import chatXmppRoutes from './routes/chatXmpp.js'
 import chatUploadsRoutes from './routes/chatUploads.js'
 import gameRoutes from './routes/games.js'
+import { proxyApiRouter, proxyHttpRouter } from './routes/webProxy.js'
 import { authenticate } from './middleware/auth.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel, isNodeConnected } from './services/storageTunnel.js'
 import { initChatHub } from './services/chatHub.js'
 import { initNekoXmppProxy } from './services/nekoWsProxy.js'
+import { initWebProxyWs } from './services/webProxyWs.js'
 import { startNekoAccountSync, stopNekoAccountSync } from './services/nekoAccountSync.js'
 import { startGameSweeper } from './services/gameService.js'
 import { syncDriveFiles } from './services/storageSync.js'
@@ -206,6 +208,11 @@ app.use('/api/oauth', oauthRoutes)
 app.use('/api/chat/xmpp', chatXmppRoutes)
 app.use('/api/chat', chatRoutes)
 app.use('/api/games', gameRoutes)
+// 网页反代：站点管理（需登录令牌）
+app.use('/api/proxy', proxyApiRouter)
+
+// === 网页反代（同源代理，Cookie 会话认证）— 必须在静态资源 / SPA fallback 之前 ===
+app.use('/proxy', proxyHttpRouter)
 
 // API 自描述端点 — 列出所有可用路由
 app.get('/api', (_req, res) => {
@@ -305,6 +312,17 @@ app.get('/api', (_req, res) => {
       clientsResetSecret: { method: 'POST', path: '/api/oauth/clients/:id/secret', auth: 'app:manage', description: '管理：重置应用密钥（仅返回一次）' },
       clientsDelete: { method: 'DELETE', path: '/api/oauth/clients/:id', auth: 'app:manage', description: '管理：删除应用（授权一并撤销）' },
       flow: '授权码 + PKCE：应用跳转 /authorize?client_id&redirect_uri&scope&state&code_challenge → 用户登录并同意 → 回调带回一次性 code → 应用用 code + code_verifier 调用 /api/oauth/token 换取 access_token（1 小时）与 refresh_token（30 天，每次刷新轮换）。应用令牌是作用域令牌（role=app），只能访问白名单端点，无法获得任何管理能力。',
+    },
+    webProxy: {
+      note: '网页反代：输入目标网站域名即可在 LineWeb 内打开。站点与登录态（Cookie 罐）按账号保存在服务端，换设备不掉登录；浏览器只持有 httpOnly 的 lw_proxy 会话 Cookie（type=proxy，无法调用任何 /api）。HTML/CSS 由服务端重写，注入引导脚本接管 fetch/XHR/WebSocket/EventSource/document.cookie/localStorage，并可折叠地常驻 LineWeb 标识。',
+      sites: { method: 'GET', path: '/api/proxy/sites', auth: true, description: '我的反代站点（含 cookieCount / lastVisitedAt；每账号上限 60）' },
+      create: { method: 'POST', path: '/api/proxy/sites', auth: true, description: '添加站点 { url, name? }（只允许公开 http/https，内网地址拒绝；重复返回 409 + 已有 site）' },
+      rename: { method: 'PATCH', path: '/api/proxy/sites/:id', auth: true, description: '重命名 { name }' },
+      remove: { method: 'DELETE', path: '/api/proxy/sites/:id', auth: true, description: '删除站点及保存的登录态' },
+      clearCookies: { method: 'DELETE', path: '/api/proxy/sites/:id/cookies', auth: true, description: '清除该站点的服务端登录态' },
+      open: { method: 'POST', path: '/api/proxy/sites/:id/open', auth: true, description: '签发 7 天反代会话 Cookie 并返回 iframe 地址 /proxy/<id>/' },
+      proxy: '同源反代入口：/proxy/<siteId>/*（lw_proxy Cookie 认证，服务端补 Cookie、改写 HTML/CSS、跟随跨域跳转；10MB 上传上限）',
+      ws: 'WebSocket 中继：/proxy-ws/<siteId>/*，上游不可达时直接拒绝升级，由站点自身的轮询降级接管。',
     },
     chat: {
       note: '私信 / 群聊已迁移到独立 XMPP 服务（internet_neko）：消息与会话走 /api/chat/xmpp/*，浏览器经 /ws/xmpp 中继（不可用时降级 /api/chat/xmpp/http-* 长轮询）。好友关系仍以 LineWeb Prisma 为唯一真相源。',
@@ -587,6 +605,9 @@ initStorageTunnel(server)
 // 聊天 XMPP 中继（/ws/xmpp）：必须在 initChatHub 之前注册，
 // chatHub 会快照并转发未知路径的 upgrade
 initNekoXmppProxy(server)
+
+// 网页反代 WebSocket 中继（/proxy-ws/:siteId）——同样必须在 initChatHub 之前注册
+initWebProxyWs(server)
 
 // 初始化聊天 WebSocket Hub（/ws/chat）——现只承载游戏事件
 initChatHub(server)

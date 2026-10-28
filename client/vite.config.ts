@@ -48,6 +48,17 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
+      // 网页反代：/proxy/:siteId/* 与 WebSocket 中继 /proxy-ws/:siteId
+      // 必须先匹配 /proxy-ws（带 ws: true），否则会被 /proxy 前缀吃掉
+      '^/proxy-ws': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        ws: true,
+      },
+      '^/proxy/': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
       '/ws': {
         target: 'http://localhost:3001',
         changeOrigin: true,

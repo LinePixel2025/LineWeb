@@ -147,6 +147,7 @@ export const api = {
       timeoutMs: UPLOAD_TIMEOUT_MS,
     }),
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
+  patch: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PATCH', body }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
   text: (path: string) => requestText(path),
 }

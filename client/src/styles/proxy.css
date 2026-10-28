@@ -1,0 +1,561 @@
+/* ============================================================
+   网页反代（/webproxy）
+   —— 列表页 + 全高 iframe 查看器 + 可折叠 LineWeb 浮动标识
+   ============================================================ */
+
+/* ===== 列表页 ===== */
+.gh-proxy-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-5);
+  padding-bottom: var(--gh-space-7);
+}
+
+.gh-proxy-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-5);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background:
+    radial-gradient(120% 160% at 0% 0%, var(--gh-accent-soft) 0%, transparent 55%),
+    var(--gh-canvas);
+}
+
+.gh-proxy-eyebrow {
+  margin: 0;
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--gh-accent);
+}
+
+.gh-proxy-title {
+  margin: 0;
+  font-size: var(--gh-text-2xl);
+  line-height: 1.2;
+}
+
+.gh-proxy-subtitle {
+  margin: 0;
+  max-width: 68ch;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.65;
+}
+
+/* ===== 新增表单 ===== */
+.gh-proxy-form {
+  padding: var(--gh-space-4);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+}
+
+.gh-proxy-form-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: var(--gh-space-3);
+}
+
+.gh-proxy-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.gh-proxy-field-label {
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  color: var(--gh-text-secondary);
+}
+
+.gh-proxy-form-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+  margin-top: var(--gh-space-3);
+}
+
+.gh-proxy-form-hint {
+  font-size: var(--gh-text-xs);
+  line-height: 1.5;
+}
+
+.gh-proxy-form-error {
+  margin: var(--gh-space-3) 0 0;
+  padding: var(--gh-space-2) var(--gh-space-3);
+  border: 1px solid var(--gh-danger);
+  border-radius: var(--gh-radius);
+  background: var(--gh-danger-soft);
+  color: var(--gh-danger);
+  font-size: var(--gh-text-sm);
+}
+
+/* ===== 站点列表 ===== */
+.gh-proxy-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+}
+
+.gh-proxy-list-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+}
+
+.gh-proxy-list-title {
+  margin: 0;
+  font-size: var(--gh-text-lg);
+}
+
+.gh-proxy-list-sync {
+  font-size: var(--gh-text-xs);
+}
+
+.gh-proxy-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+}
+
+.gh-proxy-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-4);
+  padding: var(--gh-space-4);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-bg);
+  transition: border-color var(--gh-transition), box-shadow var(--gh-transition);
+}
+
+.gh-proxy-card:hover {
+  border-color: var(--gh-accent);
+  box-shadow: var(--gh-shadow-sm);
+}
+
+.gh-proxy-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gh-space-3);
+  min-width: 0;
+}
+
+.gh-proxy-card-avatar {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+  font-size: var(--gh-text-lg);
+  font-weight: 700;
+}
+
+.gh-proxy-card-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.gh-proxy-card-title {
+  margin: 0;
+  font-size: var(--gh-text-base);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-proxy-card-origin {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-proxy-card-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+  margin-top: 2px;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-proxy-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+}
+
+.gh-proxy-rename {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.gh-proxy-rename-input {
+  width: 200px;
+  max-width: 100%;
+}
+
+/* ===== 空状态 / 加载状态 ===== */
+.gh-proxy-state,
+.gh-proxy-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-7) var(--gh-space-4);
+  border: 1px dashed var(--gh-border);
+  border-radius: var(--gh-radius);
+  text-align: center;
+}
+
+.gh-proxy-empty h3 {
+  margin: 0;
+  font-size: var(--gh-text-base);
+}
+
+.gh-proxy-empty p {
+  margin: 0;
+  max-width: 52ch;
+  font-size: var(--gh-text-sm);
+  line-height: 1.65;
+}
+
+.gh-proxy-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+}
+
+/* ===== 使用说明 ===== */
+.gh-proxy-notes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--gh-space-3);
+}
+
+.gh-proxy-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--gh-space-3);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+}
+
+.gh-proxy-note strong {
+  font-size: var(--gh-text-sm);
+}
+
+.gh-proxy-note span {
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.6;
+}
+
+/* ===== 查看器（全高） ===== */
+/* 与聊天页同一思路：显式类名控制整页高度，内部滚动不撑高整页 */
+.gh-content--proxy {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  padding: calc(var(--gh-nav-height) + var(--gh-safe-top)) 0 0;
+  overflow: hidden;
+}
+
+.gh-content--proxy .gh-footer {
+  display: none;
+}
+
+.gh-proxy-viewer-page {
+  display: flex;
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.gh-proxy-viewer-page--state {
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-5);
+}
+
+.gh-proxy-viewer {
+  position: relative;
+  display: flex;
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+  background: #ffffff;
+}
+
+.gh-proxy-viewer-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #ffffff;
+  color-scheme: light;
+}
+
+/* ===== 左下角 LineWeb 浮动标识 ===== */
+.gh-proxy-badge {
+  position: absolute;
+  left: 16px;
+  bottom: calc(16px + var(--gh-safe-bottom));
+  z-index: 30;
+  max-width: min(520px, calc(100% - 32px));
+  font-size: var(--gh-text-sm);
+}
+
+.gh-proxy-badge--open {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--gh-border);
+  border-radius: 12px;
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-lg);
+}
+
+.gh-proxy-badge-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.gh-proxy-badge-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--gh-text);
+  letter-spacing: -0.01em;
+}
+
+.gh-proxy-badge-divider {
+  width: 1px;
+  height: 14px;
+  background: var(--gh-border);
+  flex: 0 0 auto;
+}
+
+.gh-proxy-badge-site {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  font-weight: 500;
+}
+
+.gh-proxy-badge-collapse {
+  margin-left: auto;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gh-text-secondary);
+  cursor: pointer;
+}
+
+.gh-proxy-badge-collapse:hover {
+  background: var(--gh-btn-hover);
+  color: var(--gh-text);
+}
+
+.gh-proxy-badge-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gh-text-tertiary);
+  font-family: var(--gh-font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.gh-proxy-badge-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.gh-proxy-badge-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gh-text);
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-xs);
+  line-height: 1.5;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--gh-transition), color var(--gh-transition);
+}
+
+.gh-proxy-badge-action:hover:not(:disabled) {
+  background: var(--gh-btn-hover);
+  text-decoration: none;
+}
+
+.gh-proxy-badge-action:disabled {
+  color: var(--gh-text-disabled);
+  cursor: not-allowed;
+}
+
+.gh-proxy-badge-action--danger {
+  color: var(--gh-danger);
+}
+
+.gh-proxy-badge-action--danger:hover:not(:disabled) {
+  background: var(--gh-danger-soft);
+}
+
+.gh-proxy-badge-hint {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.gh-proxy-badge-collapsed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--gh-border);
+  border-radius: 999px;
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  box-shadow: var(--gh-shadow-md);
+  opacity: 0.94;
+  transition: opacity var(--gh-transition), box-shadow var(--gh-transition), transform var(--gh-transition);
+}
+
+.gh-proxy-badge-collapsed:hover {
+  opacity: 1;
+  box-shadow: var(--gh-shadow-lg);
+  transform: translateY(-1px);
+}
+
+/* ===== 错误卡片 ===== */
+.gh-proxy-error-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+  width: min(560px, 100%);
+  padding: var(--gh-space-5);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+}
+
+.gh-proxy-error-title {
+  margin: 0;
+  font-size: var(--gh-text-xl);
+}
+
+.gh-proxy-error-actions {
+  display: flex;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 900px) {
+  .gh-proxy-form-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .gh-proxy-notes {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .gh-proxy-hero {
+    padding: var(--gh-space-4);
+  }
+
+  .gh-proxy-title {
+    font-size: var(--gh-text-xl);
+  }
+
+  .gh-proxy-card {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--gh-space-3);
+  }
+
+  .gh-proxy-card-actions {
+    justify-content: flex-start;
+  }
+
+  .gh-proxy-card-actions .gh-btn {
+    flex: 1 1 auto;
+  }
+
+  .gh-proxy-rename-input {
+    width: 100%;
+  }
+
+  .gh-proxy-badge {
+    left: 8px;
+    right: 8px;
+    bottom: calc(8px + var(--gh-safe-bottom));
+    max-width: none;
+  }
+
+  .gh-proxy-badge-hint {
+    display: none;
+  }
+}

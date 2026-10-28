@@ -36,6 +36,7 @@ model User {
   ownedConversations   Conversation[]       @relation("ConversationOwner")
   aiConversations      AiConversation[]     // AI 对话（DeepSeek）会话
   aiChatImages         AiChatImage[]        // AI 对话上传的图片附件
+  proxySites           ProxySite[]          // 网页反代站点（含账号级的登录 Cookie）
 
   @@map("users")
 }
@@ -395,4 +396,21 @@ model Message {
   @@index([conversationId, id])
   @@index([senderId])
   @@map("messages")
+}
+
+model ProxySite {
+  id            Int       @id @default(autoincrement())
+  userId        Int       @map("user_id")
+  name          String
+  origin        String    // 上游站点源站，形如 https://example.com（无路径、无末尾斜杠）
+  cookies       String    @default("[]") // JSON：ProxyCookie[]，站点登录态（跨设备共享）
+  lastVisitedAt DateTime? @map("last_visited_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, origin])
+  @@index([userId])
+  @@map("proxy_sites")
 }

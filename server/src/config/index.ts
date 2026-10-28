@@ -508,3 +508,16 @@ export const parkourActionSchema = z.discriminatedUnion('type', [
     maxCombo: z.number().int().min(0).max(10_000),
   }),
 ])
+
+// === 网页反代（/api/proxy）Schemas ===
+
+/** 新建反代站点：输入域名或完整地址，name 可省略（默认取主机名） */
+export const proxySiteCreateSchema = z.object({
+  url: z.string().trim().min(1, '请输入网站地址').max(500),
+  name: z.string().trim().min(1).max(60).optional(),
+})
+
+/** 重命名站点 */
+export const proxySiteUpdateSchema = z.object({
+  name: z.string().trim().min(1, '名称不能为空').max(60),
+})

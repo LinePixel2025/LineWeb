@@ -275,6 +275,11 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       res.status(403).json({ error: '下载票据仅可用于文件下载' })
       return
     }
+    // 反代会话令牌（/proxy 用）不是账号令牌，禁止访问任何 /api 端点
+    if (result.user.type === 'proxy') {
+      res.status(403).json({ error: '反代会话令牌仅可用于网页反代' })
+      return
+    }
     // 第三方应用令牌仅限白名单端点使用，且需持有对应 scope
     if (result.user.type === config.oauthAccessTokenType) {
       const denied = checkAppTokenAccess(req, result.user)
@@ -328,7 +333,11 @@ export async function optionalAuthenticate(req: Request, res: Response, next: Ne
 
   try {
     const result = await resolveAuthContext(header.slice(7).trim())
-    const excluded = result.ok && (result.user.type === 'download' || result.user.type === config.oauthAccessTokenType)
+    const excluded = result.ok && (
+      result.user.type === 'download'
+      || result.user.type === config.oauthAccessTokenType
+      || result.user.type === 'proxy'
+    )
     if (result.ok && !excluded) req.user = result.user
   } catch (err) {
     console.error('[Auth] 可选认证解析失败（按游客处理）:', err)

@@ -22,7 +22,8 @@
     "verify:xiangqi": "tsx scripts/verify-xiangqi.ts",
     "verify:parkour": "tsx scripts/verify-parkour.ts",
     "verify:aichat": "tsx scripts/verify-aichat.ts",
-    "verify:neko": "tsx scripts/verify-neko-chat.ts"
+    "verify:neko": "tsx scripts/verify-neko-chat.ts",
+    "verify:webproxy": "tsx scripts/verify-webproxy.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
