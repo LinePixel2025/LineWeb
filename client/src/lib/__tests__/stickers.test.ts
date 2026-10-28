@@ -5,12 +5,12 @@ import { STICKER_SHOP, STICKER_SHOP_PACKS } from '../stickers'
 
 /**
  * 表情商店清单与静态素材必须一一对应：
- * 生成脚本（client/scripts/generate-sticker-shop.mjs）新增/删除素材后，
- * 若忘记同步 lib/stickers.ts，这里会直接失败。
+ * 生成/抓取脚本（client/scripts/generate-sticker-shop.mjs、server/scripts/fetch-sticker-packs.mjs）
+ * 新增/删除素材后，若忘记同步 lib/stickers.ts，这里会直接失败。
  */
 describe('表情商店素材', () => {
   const dir = resolve(process.cwd(), 'public/stickers/shop')
-  // 素材允许放在子目录（如 twemoji/*.svg），递归收集后统一成 / 分隔的相对路径
+  // 素材允许放在子目录（如 twemoji/*.svg、nailong/*.jpg），递归收集后统一成 / 分隔的相对路径
   const collect = (folder: string, prefix = ''): string[] =>
     readdirSync(folder).flatMap((name) => {
       const full = resolve(folder, name)
@@ -18,11 +18,13 @@ describe('表情商店素材', () => {
       return statSync(full).isDirectory() ? collect(full, relative) : [relative]
     })
   const files = collect(dir)
-    .filter((name) => name.endsWith('.svg'))
+    .filter((name) => /\.(svg|png|jpe?g|gif)$/i.test(name))
     .sort()
+  const srcPathOf = (item: (typeof STICKER_SHOP)[number]): string =>
+    item.src.replace('/stickers/shop/', '')
 
   it('清单与 public/stickers/shop 文件一一对应', () => {
-    expect(STICKER_SHOP.map((item) => `${item.id}.svg`).sort()).toEqual(files)
+    expect(STICKER_SHOP.map(srcPathOf).sort()).toEqual(files)
   })
 
   it('每项都指向已声明的分类', () => {
@@ -36,7 +38,7 @@ describe('表情商店素材', () => {
     const ids = STICKER_SHOP.map((item) => item.id)
     expect(new Set(ids).size).toBe(ids.length)
     for (const item of STICKER_SHOP) {
-      expect(item.src).toBe(`/stickers/shop/${item.id}.svg`)
+      expect(item.src).toMatch(/^\/stickers\/shop\/.+\.(svg|png|jpe?g|gif)$/)
     }
   })
 })

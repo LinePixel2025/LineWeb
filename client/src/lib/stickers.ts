@@ -1,12 +1,14 @@
 /**
  * 表情商店清单与素材转换
  *
- * 素材放在 `client/public/stickers/shop/*.svg`：
+ * 素材放在 `client/public/stickers/shop/`：
  *   - dango / cat / misc：`client/scripts/generate-sticker-shop.mjs` 生成的原创矢量；
  *   - twemoji：`client/scripts/fetch-twemoji-stickers.mjs` 下载的 Twemoji 子集
- *     （图形 CC-BY 4.0，署名见 `public/stickers/shop/twemoji/LICENSE.txt`）。
+ *     （图形 CC-BY 4.0，署名见 `public/stickers/shop/twemoji/LICENSE.txt`）；
+ *   - nailong / felyne：`server/scripts/fetch-sticker-packs.mjs` 从公开表情图库抓取并统一压到
+ *     360px（来源与许可见各包目录的 `LICENSE.txt`）。
  * 商店只是「素材来源」：
- * 用户点保存后，这里把 SVG 栅格化成 PNG（neko 只接受 PNG/JPEG/GIF/WebP），
+ * 用户点保存后，这里把素材转成可上传文件（SVG 栅格化为 PNG；图片原样），
  * 再交给 XmppChatContext 的 addSticker 走与「收藏表情」完全相同的上传链路。
  */
 
@@ -16,7 +18,7 @@ export interface ShopStickerPack {
 }
 
 export interface ShopSticker {
-  /** 与素材文件名一致（用于记录已保存状态） */
+  /** 与素材文件路径一致（用于记录已保存状态） */
   id: string
   name: string
   pack: string
@@ -25,13 +27,87 @@ export interface ShopSticker {
 }
 
 export const STICKER_SHOP_PACKS: ShopStickerPack[] = [
+  { id: 'nailong', name: '奶龙' },
+  { id: 'felyne', name: '呆猫' },
   { id: 'dango', name: '团子日常' },
   { id: 'cat', name: '橘猫反应' },
   { id: 'misc', name: '通用符号' },
   { id: 'twemoji', name: '经典表情' },
 ]
 
-const ENTRIES: Array<Omit<ShopSticker, 'src'>> = [
+type ShopStickerEntry = Omit<ShopSticker, 'src'> & { ext?: 'svg' | 'jpg' | 'png' | 'gif' }
+
+function packEntries(
+  pack: string,
+  items: Array<[slug: string, name: string, ext: 'jpg' | 'png' | 'gif']>,
+): ShopStickerEntry[] {
+  return items.map(([slug, name, ext]) => ({ id: `${pack}/${slug}`, name, pack, ext }))
+}
+
+const NAILONG_ENTRIES = packEntries('nailong', [
+  ['meeting', '开会', 'jpg'],
+  ['newspaper', '看报', 'jpg'],
+  ['wave', '招手', 'jpg'],
+  ['hug', '抱抱', 'jpg'],
+  ['sweet', '乖巧', 'jpg'],
+  ['defiant', '不服', 'jpg'],
+  ['handstand', '倒立', 'jpg'],
+  ['punch', '出拳', 'jpg'],
+  ['laugh', '大笑', 'jpg'],
+  ['cheer', '欢呼', 'jpg'],
+  ['akimbo', '叉腰', 'jpg'],
+  ['chin', '托腮', 'jpg'],
+  ['soccer', '足球', 'jpg'],
+  ['meditate', '打坐', 'jpg'],
+  ['shush', '嘘', 'jpg'],
+  ['police', '警察', 'jpg'],
+  ['cry', '流泪', 'jpg'],
+  ['shock', '震惊', 'jpg'],
+  ['thumb', '点赞', 'jpg'],
+  ['milktea', '奶茶', 'jpg'],
+  ['rofl', '狂笑', 'jpg'],
+  ['double-thumb', '双赞', 'jpg'],
+  ['eat', '干饭', 'jpg'],
+  ['speechless', '无语', 'jpg'],
+  ['angel', '天使', 'jpg'],
+  ['happy', '开心', 'jpg'],
+  ['glasses', '眼镜', 'jpg'],
+  ['phone', '接电话', 'jpg'],
+  ['heart', '比心', 'gif'],
+  ['laugh-gif', '笑哭', 'gif'],
+  ['wave-gif', '招手', 'gif'],
+  ['swim', '游泳', 'gif'],
+  ['akimbo-gif', '叉腰', 'gif'],
+  ['arms', '抱臂', 'gif'],
+  ['angel-gif', '天使', 'gif'],
+  ['cuddle', '贴贴', 'gif'],
+])
+
+const FELYNE_ENTRIES = packEntries('felyne', [
+  ['hello', '招手', 'gif'],
+  ['light-off', '关灯', 'jpg'],
+  ['knife', '亮刀', 'gif'],
+  ['rice', '吃白饭', 'jpg'],
+  ['cry', '大哭', 'png'],
+  ['shy', '害羞', 'jpg'],
+  ['annoy', '弄你', 'jpg'],
+  ['nose', '抠鼻', 'gif'],
+  ['clap', '拍手', 'gif'],
+  ['punch', '出拳', 'gif'],
+  ['touch', '摸摸', 'gif'],
+  ['roll', '滚蛋', 'png'],
+  ['stare', '瞪眼', 'jpg'],
+  ['spirit', '精神', 'gif'],
+  ['gimme', '给我', 'jpg'],
+  ['run', '跑跑', 'jpg'],
+  ['scratch', '躺挠', 'gif'],
+  ['flower', '送花', 'jpg'],
+  ['ride', '骑', 'gif'],
+])
+
+const ENTRIES: ShopStickerEntry[] = [
+  ...NAILONG_ENTRIES,
+  ...FELYNE_ENTRIES,
   { id: 'dango-hi', name: '打招呼', pack: 'dango' },
   { id: 'dango-laugh', name: '笑死', pack: 'dango' },
   { id: 'dango-shock', name: '震惊', pack: 'dango' },
@@ -118,9 +194,9 @@ const ENTRIES: Array<Omit<ShopSticker, 'src'>> = [
   { id: 'twemoji/26bd', name: '足球', pack: 'twemoji' },
 ]
 
-export const STICKER_SHOP: ShopSticker[] = ENTRIES.map((entry) => ({
+export const STICKER_SHOP: ShopSticker[] = ENTRIES.map(({ ext = 'svg', ...entry }) => ({
   ...entry,
-  src: `/stickers/shop/${entry.id}.svg`,
+  src: `/stickers/shop/${entry.id}.${ext}`,
 }))
 
 const SAVED_KEY = 'lineweb_sticker_shop_saved'
@@ -154,14 +230,17 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   })
 }
 
-/** 把商店素材转成可上传的 PNG 文件（最长边 360，与收藏表情一致） */
+/** 把商店素材转成可上传的文件（SVG → 360px PNG；图片/GIF 原样） */
 export async function shopStickerToFile(sticker: ShopSticker): Promise<File> {
   const response = await fetch(sticker.src)
   if (!response.ok) throw new Error('表情素材下载失败')
   const blob = await response.blob()
 
   if (!sticker.src.endsWith('.svg')) {
-    return new File([blob], `${sticker.id}.png`, { type: blob.type || 'image/png' })
+    const ext = sticker.src.split('.').pop() || 'png'
+    const base = sticker.id.split('/').pop() || 'sticker'
+    const mime = blob.type || (ext === 'jpg' ? 'image/jpeg' : `image/${ext}`)
+    return new File([blob], `${base}.${ext}`, { type: mime })
   }
 
   const url = URL.createObjectURL(blob)
