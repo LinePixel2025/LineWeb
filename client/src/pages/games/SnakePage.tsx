@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
+import { useGameStats } from '../../contexts/GameStatsContext'
 import { Link } from 'react-router-dom'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useSwipeDirection } from '../../hooks/useSwipeDirection'
@@ -13,10 +14,8 @@ import {
   createSoloSnakeState,
   createVersusSnakeState,
   directionDelta,
-  loadSnakeBest,
   loadVersusRecord,
   randomSnakeSeed,
-  saveSnakeBest,
   saveVersusResult,
   setSoloBaseSpeed,
   setSoloDirection,
@@ -387,11 +386,10 @@ function SoloBoard({ speedMs, dark }: { speedMs: number; dark: boolean }) {
 
   const [hud, setHud] = useState<SoloHud>(() => snapshotSoloHud(stateRef.current))
   const [paused, setPaused] = useState(false)
-  const [best, setBest] = useState(() => loadSnakeBest())
+  const { getStat, recordResult } = useGameStats()
+  const best = getStat('snake', 'solo')?.bestScore ?? 0
   const [isRecord, setIsRecord] = useState(false)
-
-  const bestRef = useRef(best)
-  bestRef.current = best
+  const runReportedRef = useRef(false)
 
   useEffect(() => {
     setSoloBaseSpeed(stateRef.current, speedMs)
@@ -422,6 +420,7 @@ function SoloBoard({ speedMs, dark }: { speedMs: number; dark: boolean }) {
       seed: randomSnakeSeed(),
     })
     pausedRef.current = false
+    runReportedRef.current = false
     setPaused(false)
     setIsRecord(false)
     sync()
@@ -431,14 +430,15 @@ function SoloBoard({ speedMs, dark }: { speedMs: number; dark: boolean }) {
     const state = stateRef.current
     const result = stepSoloSnake(state)
     if (result.dead) {
-      if (state.score > bestRef.current) {
-        setBest(saveSnakeBest(state.score))
-        if (state.score > 0) setIsRecord(true)
+      if (!runReportedRef.current) {
+        runReportedRef.current = true
+        setIsRecord(state.score > best && state.score > 0)
+        recordResult({ game: 'snake', variant: 'solo', score: state.score })
       }
       pausedRef.current = false
     }
     sync()
-  }, [sync])
+  }, [best, recordResult, sync])
 
   const getStepMs = useCallback(() => {
     const state = stateRef.current
@@ -558,7 +558,7 @@ function SoloBoard({ speedMs, dark }: { speedMs: number; dark: boolean }) {
               </h2>
               <p className="gh-snake-overlay-detail">
                 {isRecord
-                  ? `恭喜刷新本机最高分：${best} 分。`
+                  ? `恭喜刷新账号最高分：${best} 分。`
                   : '蛇不能撞墙，也不能撞自己的身体。换个速度档位再试一次？'}
               </p>
               <div className="gh-snake-overlay-scores">
@@ -996,7 +996,7 @@ export default function SnakePage() {
           </p>
           <h1 className="gh-games-title">贪吃蛇</h1>
           <p className="gh-games-subtitle">
-            吃果变长、越吃越快：单机冲本机最高分，或一台电脑两个人同屏对掐。想上 40×40 大地图，去右上角「好友联机」。
+            吃果变长、越吃越快：单机冲账号最高分，或一台电脑两个人同屏对掐。想上 40×40 大地图，去右上角「好友联机」。
           </p>
         </div>
         <div className="gh-snake-header-actions">
@@ -1065,7 +1065,7 @@ export default function SnakePage() {
             <li>普通果 10 分、蛇长 +1；金果 30 分、蛇长 +3，且金果会过期消失。</li>
             <li>每吃 5 个果提速 5%（最快 {SNAKE_MIN_STEP_MS} 毫秒/步封顶，防止快到没法操作）。</li>
             <li>撞墙、撞自己立即结束；同屏双人还会撞对方蛇身。</li>
-            <li>最高分与同屏战绩都只保存在本机浏览器。</li>
+            <li>单机最高分随账号保存；同屏双人战绩仍保存在本机浏览器。</li>
           </ul>
           <p className="gh-snake-help-note">
             当前棋盘：单机 20×20、同屏双人 {SNAKE_VERSUS_SIZE}×{SNAKE_VERSUS_SIZE}。

@@ -12,6 +12,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import { GAME_POLL_INTERVALS } from '../lib/realtime'
 import { useAuth } from './AuthContext'
+import { useFeature } from './FeatureContext'
 import { useChat } from './ChatContext'
 import type {
   AnyGameMatch,
@@ -168,8 +169,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setStartedMatch((prev) => (prev && prev.id === match.id ? prev : match))
   }, [])
 
+  const { isEnabled } = useFeature()
+  const gamesOnline = isEnabled('gamesOnline')
+
   const refreshInvites = useCallback(async () => {
-    if (!userId) return
+    if (!userId || !gamesOnline) return
     if (!loadedRef.current) setLoading(true)
     try {
       // 五款游戏的邀请各自独立存放；用 allSettled，某个游戏端点异常不影响其余展示
@@ -194,11 +198,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }, [userId])
+  }, [userId, gamesOnline])
 
-  // 登录 / 登出：初始化或清空
+  // 登录 / 登出 / 联机功能关闭：初始化或清空
   useEffect(() => {
-    if (!userId) {
+    if (!userId || !gamesOnline) {
       setIncomingInvites([])
       setOutgoingInvites([])
       setStartedMatch(null)
@@ -210,16 +214,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
       return
     }
     void refreshInvites()
-  }, [userId, refreshInvites])
+  }, [userId, gamesOnline, refreshInvites])
 
   // WS 建立后补拉一次邀请（登录后 WS 尚未 open 时可能错过事件）
   useEffect(() => {
-    if (userId && connectionState === 'open') void refreshInvites()
-  }, [userId, connectionState, refreshInvites])
+    if (userId && gamesOnline && connectionState === 'open') void refreshInvites()
+  }, [userId, gamesOnline, connectionState, refreshInvites])
 
   // 窗口重新可见 / 获得焦点时刷新，避免离开期间错过邀请
   useEffect(() => {
-    if (!userId) return
+    if (!userId || !gamesOnline) return
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') void refreshInvites()
     }
@@ -232,11 +236,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
       document.removeEventListener('visibilitychange', handleVisibility)
       window.removeEventListener('focus', handleFocus)
     }
-  }, [userId, refreshInvites])
+  }, [userId, gamesOnline, refreshInvites])
 
   // WebSocket 推送：邀请新增 / 移除 / 对局开始（2048 与斗地主共用事件名，按 match.game 区分）
   useEffect(() => {
-    if (!userId) return
+    if (!userId || !gamesOnline) return
     const unsubscribe = subscribe((event) => {
       switch (event.type) {
         case 'game:invite':
@@ -266,11 +270,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
     })
     return unsubscribe
-  }, [userId, subscribe, acceptStartedMatch, goToMatch])
+  }, [userId, gamesOnline, subscribe, acceptStartedMatch, goToMatch])
 
   // 无 WebSocket（transport === 'polling'）时：presence 心跳 + 两个游戏的全量 sync
   useEffect(() => {
-    if (!userId || transport !== 'polling') return
+    if (!userId || !gamesOnline || transport !== 'polling') return
 
     let disposed = false
 
@@ -340,7 +344,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       clearInterval(syncTimer)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [userId, transport, acceptStartedMatch, goToMatch])
+  }, [userId, gamesOnline, transport, acceptStartedMatch, goToMatch])
 
   // 每秒剔除过期邀请（倒计时弹窗与列表保持一致）
   useEffect(() => {

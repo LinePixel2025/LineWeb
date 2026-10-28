@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { usePostsList, usePublicStats, useFeaturedPages } from '../hooks/useQueries'
 import { useAuth } from '../contexts/AuthContext'
+import { useFeature } from '../contexts/FeatureContext'
 import { GitHubButton } from '../components/ui'
 import UserAvatar from '../components/UserAvatar'
 import DigitalHealthCard from '../components/DigitalHealthCard/DigitalHealthCard'
@@ -17,9 +18,12 @@ interface FeaturedPage {
 
 export default function HomePage() {
   const { user } = useAuth()
-  const { data: postsData } = usePostsList(1, undefined, undefined, 3)
+  const { isEnabled } = useFeature()
+  const showPosts = isEnabled('posts')
+  const showPages = isEnabled('pages')
+  const { data: postsData } = usePostsList(1, undefined, undefined, 3, showPosts)
   const { data: statsData } = usePublicStats()
-  const { data: featuredData } = useFeaturedPages()
+  const { data: featuredData } = useFeaturedPages(showPages)
   const recentPosts = (postsData?.posts ?? []) as PostListItemData[]
   const stats = statsData as { posts: number; users: number; comments: number; pages: number } | undefined
   const featuredPages = (featuredData?.pages ?? []) as FeaturedPage[]
@@ -67,7 +71,11 @@ export default function HomePage() {
               <h2 className="gh-page-title">首页</h2>
             </div>
 
-            {recentPosts.length === 0 ? (
+            {!showPosts ? (
+              <div className="gh-box" style={{ textAlign: 'center', padding: '48px 24px' }}>
+                <p className="gh-text-secondary">文章功能当前已关闭。</p>
+              </div>
+            ) : recentPosts.length === 0 ? (
               <div className="gh-box" style={{ textAlign: 'center', padding: '48px 24px' }}>
                 <p className="gh-text-secondary">暂无文章</p>
                 <GitHubButton variant="ghost" href="/posts" style={{ marginTop: '8px' }}>浏览文章库</GitHubButton>
@@ -85,9 +93,11 @@ export default function HomePage() {
               </>
             )}
 
-            <div>
-              <GitHubButton variant="ghost" href="/posts" size="sm">查看全部文章 →</GitHubButton>
-            </div>
+            {showPosts && (
+              <div>
+                <GitHubButton variant="ghost" href="/posts" size="sm">查看全部文章 →</GitHubButton>
+              </div>
+            )}
           </div>
 
           {/* Right: Quick Links */}
@@ -114,18 +124,22 @@ export default function HomePage() {
             <div className="gh-box">
               <h4 className="gh-box-heading">快捷导航</h4>
               <div className="gh-nav-links">
-                <Link to="/posts" className="gh-btn gh-btn--ghost gh-btn--full gh-nav-link">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
-                  </svg>
-                  文章列表
-                </Link>
-                <Link to="/features" className="gh-btn gh-btn--ghost gh-btn--full gh-nav-link">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
-                  </svg>
-                  功能页面
-                </Link>
+                {showPosts && (
+                  <Link to="/posts" className="gh-btn gh-btn--ghost gh-btn--full gh-nav-link">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
+                    </svg>
+                    文章列表
+                  </Link>
+                )}
+                {showPages && (
+                  <Link to="/features" className="gh-btn gh-btn--ghost gh-btn--full gh-nav-link">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+                    </svg>
+                    功能页面
+                  </Link>
+                )}
                 {user && (
                   <Link to="/profile" className="gh-btn gh-btn--ghost gh-btn--full gh-nav-link">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -134,16 +148,18 @@ export default function HomePage() {
                     个人中心
                   </Link>
                 )}
-                <Link to="/calculator" className="gh-btn gh-btn--ghost gh-btn--full gh-nav-link">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="4" y="2" width="16" height="20" rx="2" /><line x1="8" y1="6" x2="16" y2="6" />
-                  </svg>
-                  计算器
-                </Link>
+                {isEnabled('calculator') && (
+                  <Link to="/calculator" className="gh-btn gh-btn--ghost gh-btn--full gh-nav-link">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="4" y="2" width="16" height="20" rx="2" /><line x1="8" y1="6" x2="16" y2="6" />
+                    </svg>
+                    科学计算器
+                  </Link>
+                )}
               </div>
             </div>
 
-            {featuredPages.length > 0 && (
+            {showPages && featuredPages.length > 0 && (
               <div className="gh-box">
                 <h4 className="gh-box-heading">推荐功能</h4>
                 <div className="gh-featured-list">
@@ -164,7 +180,7 @@ export default function HomePage() {
       </div>
 
       {/* AI 助手 — 浮动聊天组件 */}
-      <AiAssistant />
+      {isEnabled('aiAssistant') && <AiAssistant />}
     </>
   )
 }

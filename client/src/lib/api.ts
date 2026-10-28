@@ -19,9 +19,11 @@ interface RequestOptions {
 
 class ApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  code?: string
+  constructor(message: string, status: number, code?: string) {
     super(message)
     this.status = status
+    this.code = code
   }
 }
 
@@ -40,20 +42,24 @@ export function setToken(token: string | null): void {
   cachedToken = token
   if (token) {
     localStorage.setItem(TOKEN_KEY, token)
+    unauthorizedHandled = false
   } else {
     localStorage.removeItem(TOKEN_KEY)
   }
 }
 
+/** 并发 401 只跳一次，避免多个 React Query 同时触发整页刷新 */
+let unauthorizedHandled = false
+
 /** 401 自动登出：清 token 并跳转登录页（除非请求方明确禁用） */
 function handleUnauthorized(noRedirect: boolean): void {
   setToken(null)
-  if (noRedirect) return
-  // 避免登录页自身 401 死循环：仅当当前不在登录/注册页时跳转
-  const path = window.location.pathname
-  if (path !== '/login' && path !== '/register') {
-    window.location.href = '/login'
-  }
+  if (noRedirect || unauthorizedHandled) return
+  const { pathname, search, hash } = window.location
+  if (pathname === '/login' || pathname === '/register') return
+  unauthorizedHandled = true
+  const returnTo = encodeURIComponent(`${pathname}${search}${hash}`)
+  window.location.replace(`/login?returnTo=${returnTo}`)
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -102,7 +108,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
         handleUnauthorized(noRedirect)
       }
       const data = await res.json().catch(() => ({}))
-      throw new ApiError(data.error || `请求失败 (${res.status})`, res.status)
+      throw new ApiError(data.error || `请求失败 (${res.status})`, res.status, data.code)
     }
 
     // 204 No Content（如 XMPP 长轮询的 stanza 上报）没有响应体
@@ -129,7 +135,7 @@ async function requestText(path: string): Promise<string> {
   if (!res.ok) {
     if (res.status === 401) handleUnauthorized(false)
     const data = await res.json().catch(() => ({}))
-    throw new ApiError(data.error || `请求失败 (${res.status})`, res.status)
+    throw new ApiError(data.error || `请求失败 (${res.status})`, res.status, data.code)
   }
   return res.text()
 }

@@ -142,6 +142,17 @@ export function uploadIdOf(src: string): string | null {
  * 正文（body）中的 `<` 已被转义成 `&lt;`，因此正则只可能命中真实的 XHTML 图片元素；
  * 外部图片一律忽略，避免消息里出现第三方追踪像素。
  */
+/**
+ * 拍一拍私有标记：LineWeb 在 XHTML 里写 `<span data-lw-poke="<nekoId>">`。
+ * 只读取属性，不渲染任何 xhtml / HTML。
+ */
+export function extractPoke(xml: string): { toNekoId: number } | null {
+  const match = /data-lw-poke\s*=\s*["'](\d+)["']/i.exec(String(xml || ''))
+  if (!match) return null
+  const toNekoId = Number.parseInt(match[1], 10)
+  return Number.isInteger(toNekoId) && toNekoId > 0 ? { toNekoId } : null
+}
+
 export function extractImageSrc(xml: string): string | null {
   const regex = /<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi
   let match: RegExpExecArray | null
@@ -314,6 +325,7 @@ export function parseLiveMessage(
   const recalled = el.attrs.recalled === '1'
   const id = Number.parseInt(el.attrs.id || '0', 10) || 0
   const ts = delayStamp(el) || context.now || Date.now()
+  const html = el.children.find((child) => child.name === 'html')
 
   return {
     id,
@@ -328,6 +340,9 @@ export function parseLiveMessage(
     mine,
     recalled,
     byAdmin: el.attrs.byAdmin === '1',
+    mentionedMe: el.attrs.mention === '1',
+    // 只扫描 XHTML 子节点，避免正文里手写 data-lw-poke 文本被误判
+    poke: recalled ? null : extractPoke(html?.xml || ''),
     image: recalled ? null : extractImageSrc(el.xml),
     quote: recalled ? null : quoteOf(el),
     bundle: recalled ? null : bundleOf(el),
@@ -350,6 +365,7 @@ export function parseHistoryMessages(
     const from = row.attrs.from || ''
     const isRoom = !!(row.attrs.room || context.roomId)
     const fromUsername = isRoom ? resourceOfJid(from) || localpartOfJid(from) : localpartOfJid(from)
+    const html = row.children.find((child) => child.name === 'html')
     messages.push({
       id,
       key: context.key,
@@ -363,7 +379,9 @@ export function parseHistoryMessages(
       mine,
       recalled,
       byAdmin: row.attrs.byAdmin === '1',
+      mentionedMe: row.attrs.mention === '1',
       // 历史行里的 XHTML 是转义文本（见 xhtmlTextOf），必须两条路径都试
+      poke: recalled ? null : extractPoke(html?.xml || '') || extractPoke(xhtmlTextOf(row)),
       image: recalled ? null : extractImageSrc(row.xml) || extractImageSrc(xhtmlTextOf(row)),
       quote: recalled ? null : quoteOf(row),
       bundle: recalled ? null : bundleOf(row),

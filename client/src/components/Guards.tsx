@@ -1,6 +1,8 @@
-import { Navigate, useLocation } from 'react-router-dom'
+import { Link, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useFeature } from '../contexts/FeatureContext'
 import { canAccessAdminPath, firstAllowedAdminPath } from '../lib/permissions'
+import { FEATURE_DEFINITIONS, type FeatureKey } from '../lib/features'
 
 function LoadingSpinner() {
   return (
@@ -8,6 +10,38 @@ function LoadingSpinner() {
       <div className="gh-spinner" />
     </div>
   )
+}
+
+/** 主站统一登录门禁：登录/注册页不要包在这里 */
+export function RequireAuth() {
+  const { user, loading } = useAuth()
+  const location = useLocation()
+  if (loading) return <LoadingSpinner />
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />
+  return <Outlet />
+}
+
+function FeatureDisabledPage({ feature }: { feature: FeatureKey }) {
+  const label = FEATURE_DEFINITIONS.find((item) => item.key === feature)?.label ?? feature
+  return (
+    <div className="gh-page-container">
+      <div className="gh-box" style={{ maxWidth: '560px', margin: '64px auto', padding: '32px', textAlign: 'center' }}>
+        <p className="gh-text-tertiary" style={{ marginBottom: '8px' }}>功能已关闭</p>
+        <h1 style={{ marginTop: 0 }}>这个功能暂时不可用</h1>
+        <p className="gh-text-secondary">
+          管理员已关闭「{label}」功能。如需使用，请联系站点管理员。
+        </p>
+        <Link className="gh-btn gh-btn--primary gh-btn--md" to="/">返回首页</Link>
+      </div>
+    </div>
+  )
+}
+
+/** 功能开关守卫：关闭时渲染统一提示；管理员由 FeatureContext 放行 */
+export function RequireFeature({ feature, children }: { feature: FeatureKey; children?: React.ReactNode }) {
+  const { isEnabled } = useFeature()
+  if (!isEnabled(feature)) return <FeatureDisabledPage feature={feature} />
+  return children ? <>{children}</> : <Outlet />
 }
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {

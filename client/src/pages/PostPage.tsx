@@ -2,6 +2,7 @@ import { useMemo, lazy, Suspense } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import DOMPurify from 'dompurify'
 import { usePost } from '../hooks/useQueries'
+import { useFeature } from '../contexts/FeatureContext'
 import { GitHubButton } from '../components/ui'
 
 const CommentSection = lazy(() => import('../components/comments/CommentSection'))
@@ -13,6 +14,7 @@ interface PostDetail {
 
 export default function PostPage() {
   const { slug } = useParams<{ slug: string }>()
+  const { isEnabled } = useFeature()
   const { data: post, isLoading: loading, error } = usePost(slug)
 
   const sanitizedContent = useMemo(
@@ -54,11 +56,13 @@ export default function PostPage() {
         <div className="article-content" dangerouslySetInnerHTML={{ __html: sanitizedContent }} />
       </section>
 
-      <div style={{ marginTop: '32px', borderTop: '1px solid var(--gh-color-border-default)', paddingTop: '24px' }}>
-        <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}><div className="gh-spinner" /></div>}>
-          <CommentSection postId={post.id} />
-        </Suspense>
-      </div>
+      {isEnabled('comments') && (
+        <div style={{ marginTop: '32px', borderTop: '1px solid var(--gh-color-border-default)', paddingTop: '24px' }}>
+          <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}><div className="gh-spinner" /></div>}>
+            <CommentSection postId={post.id} />
+          </Suspense>
+        </div>
+      )}
     </article>
   )
 }

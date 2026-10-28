@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import LiarCardView from '../../components/games/liar/LiarCardView'
 import { GAME_LIAR_ONLINE_ROUTE } from '../../lib/games/catalog'
+import { useGameStats } from '../../contexts/GameStatsContext'
 import {
   LIAR_HAND_SIZE,
   LIAR_MAX_PLAYERS,
@@ -19,36 +20,6 @@ import {
 } from '../../lib/games/liar'
 
 const AI_THINK_MS = 750
-const STATS_KEY = 'lineweb.liar.stats'
-
-interface LiarStats {
-  games: number
-  wins: number
-  deaths: number
-}
-
-function loadStats(): LiarStats {
-  try {
-    const raw = localStorage.getItem(STATS_KEY)
-    if (!raw) return { games: 0, wins: 0, deaths: 0 }
-    const parsed = JSON.parse(raw) as Partial<LiarStats>
-    return {
-      games: Number.isFinite(parsed.games) ? Number(parsed.games) : 0,
-      wins: Number.isFinite(parsed.wins) ? Number(parsed.wins) : 0,
-      deaths: Number.isFinite(parsed.deaths) ? Number(parsed.deaths) : 0,
-    }
-  } catch {
-    return { games: 0, wins: 0, deaths: 0 }
-  }
-}
-
-function saveStats(stats: LiarStats): void {
-  try {
-    localStorage.setItem(STATS_KEY, JSON.stringify(stats))
-  } catch {
-    // 隐私模式 / 配额不足时只影响本机战绩
-  }
-}
 
 function seatName(state: LiarTableState, seat: number): string {
   if (seat === 0) return '你'
@@ -88,7 +59,8 @@ export default function LiarPage() {
   const [table, setTable] = useState<LiarTableState>(() => createLiarTable(3))
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
-  const [stats, setStats] = useState<LiarStats>(loadStats)
+  const { getStat, recordResult } = useGameStats()
+  const stat = getStat('liar', 'solo')
   const [rulesOpen, setRulesOpen] = useState(false)
   const recordedRef = useRef(false)
   const tableRef = useRef(table)
@@ -137,16 +109,13 @@ export default function LiarPage() {
   useEffect(() => {
     if (!table.finished || recordedRef.current) return
     recordedRef.current = true
-    setStats((prev) => {
-      const next: LiarStats = {
-        games: prev.games + 1,
-        wins: prev.wins + (table.winnerSeat === 0 ? 1 : 0),
-        deaths: prev.deaths + (table.players[0]?.alive ? 0 : 1),
-      }
-      saveStats(next)
-      return next
+    recordResult({
+      game: 'liar',
+      variant: 'solo',
+      outcome: table.winnerSeat === 0 ? 'win' : 'loss',
+      deaths: table.players[0]?.alive ? 0 : 1,
     })
-  }, [table.finished, table.winnerSeat, table.players])
+  }, [table.finished, table.winnerSeat, table.players, recordResult])
 
   const newGame = useCallback((count?: number) => {
     const nextCount = count ?? playerCount
@@ -257,7 +226,7 @@ export default function LiarPage() {
           ))}
         </div>
         <span className="gh-liar-toolbar-hint">
-          本机战绩：{stats.games} 局 · {stats.wins} 胜 · 中弹 {stats.deaths} 次
+          账号战绩：{stat?.games ?? 0} 局 · {stat?.wins ?? 0} 胜 · 中弹 {stat?.deaths ?? 0} 次
         </span>
       </div>
 

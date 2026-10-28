@@ -1,4 +1,5 @@
 import {
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -7,6 +8,7 @@ import {
   type KeyboardEvent,
 } from 'react'
 import ChatCameraDialog from './ChatCameraDialog'
+import type { NekoRoomMember } from '../../types/chat'
 
 const DEFAULT_MAX_LENGTH = 2000
 /** 与 neko `PHOTO_ACCEPT` 一致：只列服务端按魔数支持的四种 */
@@ -22,7 +24,12 @@ export interface ComposerReply {
 }
 
 interface Props {
-  onSend: (content: string) => Promise<void> | void
+  onSend: (content: string, mentions?: number[]) => Promise<void> | void
+  /** 群成员（传入才启用 @ 选择器） */
+  members?: NekoRoomMember[]
+  selfNekoId?: number | null
+  /** 群主/管理员才能 @所有人 */
+  canMentionAll?: boolean
   /** 发送图片：页面负责上传并在失败时展示错误 */
   onSendImage?: (file: File) => Promise<void> | void
   /** 当前引用（显示在输入框上方） */
@@ -40,6 +47,9 @@ interface Props {
 
 export default function ChatComposer({
   onSend,
+  members = [],
+  selfNekoId = null,
+  canMentionAll = false,
   onSendImage,
   replyTo = null,
   onCancelReply,
@@ -55,11 +65,81 @@ export default function ChatComposer({
   const [uploading, setUploading] = useState(false)
   const [cameraOpen, setCameraOpen] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [mentionStart, setMentionStart] = useState(-1)
+  const [mentionIds, setMentionIds] = useState<number[]>([])
+  const [pickerIndex, setPickerIndex] = useState(0)
 
   // 相册选择（普通文件选择）
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   // 相机兜底：capture=environment 直接调起手机相机
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+
+  const mentionCandidates = useMemo(() => {
+    if (members.length === 0) return []
+    const keyword = (mentionQuery ?? '').trim().toLowerCase()
+    const list = members
+      .filter((member) => member.nekoId !== selfNekoId)
+      .map((member) => ({
+        id: member.nekoId,
+        label: member.displayName || member.username,
+        username: member.username,
+        role: member.role,
+      }))
+    const filtered = keyword
+      ? list.filter((item) => item.label.toLowerCase().includes(keyword) || item.username.toLowerCase().includes(keyword))
+      : list
+    if (canMentionAll && (!keyword || '所有人'.includes(keyword))) {
+      filtered.unshift({ id: 0, label: '所有人', username: '', role: 'all' })
+    }
+    return filtered.slice(0, 8)
+  }, [members, mentionQuery, selfNekoId, canMentionAll])
+
+  const pruneMentions = (next: string, ids: number[]) => {
+    return ids.filter((id) => {
+      if (id === 0) return next.includes('@所有人')
+      const member = members.find((item) => item.nekoId === id)
+      if (!member) return false
+      return next.includes(`@${member.displayName || member.username}`)
+    })
+  }
+
+  const handleValueChange = (next: string) => {
+    setValue(next)
+    setMentionIds((prev) => pruneMentions(next, prev))
+    const textarea = textareaRef.current
+    const cursor = textarea?.selectionStart ?? next.length
+    const before = next.slice(0, cursor)
+    const match = /(?:^|\s)@([^\s@]*)$/.exec(before)
+    if (match && members.length > 0) {
+      setMentionQuery(match[1])
+      setMentionStart(cursor - match[1].length - 1)
+      setPickerIndex(0)
+    } else {
+      setMentionQuery(null)
+      setMentionStart(-1)
+    }
+  }
+
+  const chooseMention = (id: number, label: string) => {
+    const textarea = textareaRef.current
+    const cursor = textarea?.selectionStart ?? value.length
+    const start = mentionStart >= 0 ? mentionStart : cursor
+    const head = value.slice(0, start)
+    const tail = value.slice(cursor)
+    const inserted = `@${label} `
+    const next = `${head}${inserted}${tail}`.slice(0, maxLength)
+    setValue(next)
+    setMentionIds((prev) => [...new Set([...prev, id])])
+    setMentionQuery(null)
+    setMentionStart(-1)
+    window.requestAnimationFrame(() => {
+      const position = Math.min((head + inserted).length, next.length)
+      textarea?.focus()
+      textarea?.setSelectionRange(position, position)
+    })
+  }
 
   const canAttach = !disabled && !sending && !uploading
   const canSubmit = canAttach && value.trim().length > 0
@@ -67,10 +147,18 @@ export default function ChatComposer({
   const submit = async () => {
     if (!canSubmit) return
     const content = value.trim()
+    const mentions = pruneMentions(content, mentionIds).slice(0, 20)
+    if (mentionQuery !== null && mentionCandidates[pickerIndex]) {
+      const picked = mentionCandidates[pickerIndex]
+      chooseMention(picked.id, picked.label)
+      return
+    }
     setSending(true)
     try {
-      await onSend(content)
+      await onSend(content, mentions.length ? mentions : undefined)
       setValue('')
+      setMentionIds([])
+      setMentionQuery(null)
     } catch {
       // 发送失败保留草稿，由页面展示错误
     } finally {
@@ -79,6 +167,23 @@ export default function ChatComposer({
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionQuery !== null && mentionCandidates.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        setPickerIndex((prev) => (prev + 1) % mentionCandidates.length)
+        return
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        setPickerIndex((prev) => (prev - 1 + mentionCandidates.length) % mentionCandidates.length)
+        return
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setMentionQuery(null)
+        return
+      }
+    }
     if (event.key !== 'Enter' || event.shiftKey) return
     // 中文输入法组合中按 Enter 是确认候选词，不应发送
     if (event.nativeEvent.isComposing) return
@@ -199,14 +304,41 @@ export default function ChatComposer({
           </button>
         </div>
       )}
+      {mentionQuery !== null && mentionCandidates.length > 0 && (
+        <div className="gh-chat-mention-picker" role="listbox" aria-label="选择要提醒的成员">
+          {mentionCandidates.map((candidate, index) => (
+            <button
+              key={`${candidate.id}-${candidate.username}`}
+              type="button"
+              role="option"
+              aria-selected={index === pickerIndex}
+              className={`gh-chat-mention-option ${index === pickerIndex ? 'gh-chat-mention-option--active' : ''}`}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => chooseMention(candidate.id, candidate.label)}
+            >
+              <span>{candidate.label}</span>
+              {candidate.id === 0
+                ? <span className="gh-text-tertiary">提醒所有人</span>
+                : <span className="gh-text-tertiary">@{candidate.username}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {mentionIds.length > 0 && (
+        <div className="gh-chat-mention-hint">
+          将提醒 {mentionIds.length} 人
+          <button type="button" className="gh-chat-mention-clear" onClick={() => setMentionIds([])}>清除</button>
+        </div>
+      )}
       <textarea
+        ref={textareaRef}
         className="gh-chat-composer-input"
         value={value}
         rows={2}
         maxLength={maxLength}
         placeholder={placeholder}
         aria-label="消息输入框"
-        onChange={(event) => setValue(event.target.value.slice(0, maxLength))}
+        onChange={(event) => handleValueChange(event.target.value.slice(0, maxLength))}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
       />

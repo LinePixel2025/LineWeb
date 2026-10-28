@@ -64,7 +64,7 @@ interface PublicStats {
 
 // === Hooks ===
 
-export function usePostsList(page: number, sort?: string, search?: string, limit?: number) {
+export function usePostsList(page: number, sort?: string, search?: string, limit?: number, enabled = true) {
   return useQuery({
     queryKey: queryKeys.posts.list(page, sort, search, limit),
     queryFn: async () => {
@@ -74,6 +74,7 @@ export function usePostsList(page: number, sort?: string, search?: string, limit
       if (limit) params.set('limit', String(limit))
       return api.get<PostsListResponse>(`/posts?${params}`)
     },
+    enabled,
   })
 }
 
@@ -97,10 +98,11 @@ export function useComments(postId: number) {
   })
 }
 
-export function useFeaturedPages() {
+export function useFeaturedPages(enabled = true) {
   return useQuery({
     queryKey: queryKeys.pages.featured,
     queryFn: () => api.get<FeaturedPagesResponse>('/pages/featured'),
+    enabled,
   })
 }
 
@@ -113,11 +115,12 @@ export function usePageBySlug(slug: string | undefined) {
   })
 }
 
-export function usePublicStats() {
+export function usePublicStats(enabled = true) {
   return useQuery({
     queryKey: queryKeys.stats.public,
     queryFn: () => api.get<PublicStats>('/stats/public'),
     staleTime: 60_000,
+    enabled,
   })
 }
 

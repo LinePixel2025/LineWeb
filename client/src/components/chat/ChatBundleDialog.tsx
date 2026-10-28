@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { chatImageUrl } from '../../lib/chat'
+import { chatImageUrl, contactLabel } from '../../lib/chat'
 import { extractImageSrc } from '../../lib/xmpp/protocol'
 import type { NekoBundleItem, NekoConversation } from '../../types/chat'
 
@@ -40,7 +40,7 @@ function displayName(
   }
   if (conversation.kind === 'direct') {
     if (conversation.contact && username === conversation.contact.username) {
-      return conversation.contact.displayName || conversation.contact.username
+      return contactLabel(conversation.contact)
     }
     return username || '未知用户'
   }

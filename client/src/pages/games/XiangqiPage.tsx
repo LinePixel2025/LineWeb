@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import XiangqiBoardView, { xiangqiPieceChar } from '../../components/games/xiangqi/XiangqiBoardView'
 import { GAME_XIANGQI_ONLINE_ROUTE } from '../../lib/games/catalog'
+import { useGameStats } from '../../contexts/GameStatsContext'
 import {
   XIANGQI_BLACK,
   XIANGQI_RED,
@@ -19,40 +20,8 @@ import {
 } from '../../lib/games/xiangqi'
 
 const AI_THINK_MS = 450
-const STATS_KEY = 'lineweb.xiangqi.stats'
 type Difficulty = 'easy' | 'normal' | 'hard'
 const DEPTHS: Record<Difficulty, number> = { easy: 1, normal: 2, hard: 3 }
-
-interface XiangqiStats {
-  games: number
-  wins: number
-  losses: number
-  draws: number
-}
-
-function loadStats(): XiangqiStats {
-  try {
-    const raw = localStorage.getItem(STATS_KEY)
-    if (!raw) return { games: 0, wins: 0, losses: 0, draws: 0 }
-    const parsed = JSON.parse(raw) as Partial<XiangqiStats>
-    return {
-      games: Number.isFinite(parsed.games) ? Number(parsed.games) : 0,
-      wins: Number.isFinite(parsed.wins) ? Number(parsed.wins) : 0,
-      losses: Number.isFinite(parsed.losses) ? Number(parsed.losses) : 0,
-      draws: Number.isFinite(parsed.draws) ? Number(parsed.draws) : 0,
-    }
-  } catch {
-    return { games: 0, wins: 0, losses: 0, draws: 0 }
-  }
-}
-
-function saveStats(stats: XiangqiStats): void {
-  try {
-    localStorage.setItem(STATS_KEY, JSON.stringify(stats))
-  } catch {
-    // 隐私模式 / 配额不足时只影响本机战绩
-  }
-}
 
 interface MoveRecord {
   from: number
@@ -116,7 +85,8 @@ export default function XiangqiPage() {
   const [state, setState] = useState<GameState>(newGame)
   const [selected, setSelected] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [stats, setStats] = useState<XiangqiStats>(loadStats)
+  const { getStat, recordResult } = useGameStats()
+  const stat = getStat('xiangqi', 'solo')
   const [rulesOpen, setRulesOpen] = useState(false)
   const stateRef = useRef(state)
   const recordedRef = useRef(false)
@@ -132,17 +102,12 @@ export default function XiangqiPage() {
   useEffect(() => {
     if (state.playing || recordedRef.current) return
     recordedRef.current = true
-    setStats((prev) => {
-      const next: XiangqiStats = {
-        games: prev.games + 1,
-        wins: prev.wins + (state.winner === playerSide ? 1 : 0),
-        losses: prev.losses + (state.winner !== null && state.winner !== playerSide ? 1 : 0),
-        draws: prev.draws,
-      }
-      saveStats(next)
-      return next
+    recordResult({
+      game: 'xiangqi',
+      variant: 'solo',
+      outcome: state.winner === playerSide ? 'win' : state.winner === null ? 'draw' : 'loss',
     })
-  }, [state.playing, state.winner, playerSide])
+  }, [state.playing, state.winner, playerSide, recordResult])
 
   const restart = useCallback((side?: XiangqiSide) => {
     recordedRef.current = false
@@ -323,9 +288,9 @@ export default function XiangqiPage() {
           </section>
 
           <section className="gh-xq-info-card">
-            <h2 className="gh-xq-info-title">本机战绩</h2>
-            <p className="gh-xq-info-line">共 {stats.games} 局 · {stats.wins} 胜 · {stats.losses} 负</p>
-            <p className="gh-xq-info-line">胜率：{stats.games > 0 ? Math.round((stats.wins / stats.games) * 100) : 0}%</p>
+            <h2 className="gh-xq-info-title">账号战绩</h2>
+            <p className="gh-xq-info-line">共 {stat?.games ?? 0} 局 · {stat?.wins ?? 0} 胜 · {stat?.losses ?? 0} 负 · {stat?.draws ?? 0} 和</p>
+            <p className="gh-xq-info-line">胜率：{(stat?.games ?? 0) > 0 ? Math.round(((stat?.wins ?? 0) / (stat?.games ?? 1)) * 100) : 0}%</p>
           </section>
 
           <section className="gh-xq-info-card">

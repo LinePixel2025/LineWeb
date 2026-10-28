@@ -1,27 +1,41 @@
 import { useState } from 'react'
-import { useLocation, useNavigate, Link } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useFeature } from '../contexts/FeatureContext'
+import { ApiError } from '../lib/api'
 import { GitHubButton, GitHubInput } from '../components/ui'
+
+function safeReturnTo(value: string | null | undefined): string {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return ''
+  return value
+}
 
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [errorCode, setErrorCode] = useState('')
   const [loading, setLoading] = useState(false)
-  const { login } = useAuth()
+  const { login, user } = useAuth()
+  const { isEnabled } = useFeature()
   const location = useLocation()
   const navigate = useNavigate()
   const from = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from
-  const redirectTo = from?.pathname ? `${from.pathname}${from.search ?? ''}${from.hash ?? ''}` : '/'
+  const fromPath = from?.pathname ? `${from.pathname}${from.search ?? ''}${from.hash ?? ''}` : ''
+  const returnTo = new URLSearchParams(location.search).get('returnTo')
+  const redirectTo = safeReturnTo(fromPath) || safeReturnTo(returnTo) || '/'
+
+  if (user) return <Navigate to={redirectTo} replace />
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError(''); setLoading(true)
+    setError(''); setErrorCode(''); setLoading(true)
     try {
       await login(identifier, password)
       navigate(redirectTo, { replace: true })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '登录失败')
+      setErrorCode(err instanceof ApiError ? err.code ?? '' : '')
     } finally { setLoading(false) }
   }
 
@@ -34,7 +48,10 @@ export default function LoginPage() {
         </p>
 
         {error && (
-          <div className="gh-alert gh-alert--danger" role="alert">
+          <div
+            className={`gh-alert ${errorCode === 'ACCOUNT_PENDING' ? 'gh-alert--warning' : 'gh-alert--danger'}`}
+            role="alert"
+          >
             {error}
           </div>
         )}
@@ -53,9 +70,11 @@ export default function LoginPage() {
           </GitHubButton>
         </form>
 
-        <p className="gh-text-tertiary" style={{ textAlign: 'center', marginTop: '20px' }}>
-          还没有账号？ <Link to="/register">注册</Link>
-        </p>
+        {isEnabled('registration') && (
+          <p className="gh-text-tertiary" style={{ textAlign: 'center', marginTop: '20px' }}>
+            还没有账号？ <Link to="/register">注册</Link>
+          </p>
+        )}
       </div>
     </div>
   )

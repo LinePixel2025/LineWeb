@@ -7,18 +7,24 @@ import ChatConversationList from '../components/chat/ChatConversationList'
 import ChatThread from '../components/chat/ChatThread'
 import FriendPanel from '../components/chat/FriendPanel'
 import GroupDialog from '../components/chat/GroupDialog'
+import ContactRemarkDialog from '../components/chat/ContactRemarkDialog'
 import type {
   ChatUser,
   NekoConversation,
   NekoDirectoryUser,
   NekoContact,
   NekoFriendRequest,
+  NekoMessage,
   UserSearchResponse,
 } from '../types/chat'
 
 type PanelTab = 'conversations' | 'friends'
 
-type DialogState = { mode: 'create-group' } | { mode: 'add-members' } | null
+type DialogState =
+  | { mode: 'create-group' }
+  | { mode: 'add-members' }
+  | { mode: 'contact-remark'; contact: NekoContact }
+  | null
 
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message
@@ -43,6 +49,7 @@ export default function ChatPage() {
     incoming,
     outgoing,
     unreadTotal,
+    peerRead,
     stickers,
     setActiveKey,
     messages,
@@ -52,10 +59,12 @@ export default function ChatPage() {
     messagesError,
     loadMore,
     sendText,
+    sendPoke,
     forwardMessages,
     sendImage,
     sendSticker,
     addSticker,
+    saveStickerFromMessage,
     removeSticker,
     recallMessage,
     startDirect,
@@ -70,6 +79,7 @@ export default function ChatPage() {
     addFriend,
     addNativeFriend,
     removeFriend,
+    setContactRemark,
     searchDirectory,
   } = useXmppChat()
 
@@ -117,6 +127,11 @@ export default function ChatPage() {
     [navigate],
   )
 
+  const handleSetRemark = useCallback((contact: NekoContact) => {
+    setActionError(null)
+    setDialog({ mode: 'contact-remark', contact })
+  }, [])
+
   const handleStartDirect = useCallback(
     (target: NekoContact | NekoDirectoryUser) => {
       setActionError(null)
@@ -132,11 +147,11 @@ export default function ChatPage() {
   )
 
   const handleSend = useCallback(
-    async (content: string, replyTo?: number) => {
+    async (content: string, replyTo?: number, mentions?: number[]) => {
       if (!activeKey) return
       setActionError(null)
       try {
-        await sendText(activeKey, content, replyTo)
+        await sendText(activeKey, content, replyTo, mentions)
       } catch (error) {
         setActionError(errorMessage(error, '发送消息失败'))
         throw error
@@ -144,6 +159,25 @@ export default function ChatPage() {
     },
     [activeKey, sendText],
   )
+
+  const handleSaveSticker = useCallback(async (message: NekoMessage) => {
+    setActionError(null)
+    try {
+      await saveStickerFromMessage(message)
+    } catch (error) {
+      setActionError(errorMessage(error, '收藏表情失败'))
+    }
+  }, [saveStickerFromMessage])
+
+  const handlePoke = useCallback(async (targetNekoId: number) => {
+    if (!activeKey) return
+    setActionError(null)
+    try {
+      await sendPoke(activeKey, targetNekoId)
+    } catch (error) {
+      setActionError(errorMessage(error, '拍一拍失败'))
+    }
+  }, [activeKey, sendPoke])
 
   const handleForward = useCallback(
     async (
@@ -178,11 +212,11 @@ export default function ChatPage() {
   )
 
   const handleRecall = useCallback(
-    async (messageId: number) => {
+    async (messageId: number, admin = false) => {
       if (!activeKey) return
       setActionError(null)
       try {
-        await recallMessage(activeKey, messageId)
+        await recallMessage(activeKey, messageId, admin)
       } catch (error) {
         setActionError(errorMessage(error, '撤回消息失败'))
         throw error
@@ -459,6 +493,7 @@ export default function ChatPage() {
                 onAddFriend={handleAddFriend}
                 onAddNativeFriend={handleAddNativeFriend}
                 onInviteGame={inviteGame}
+                onSetRemark={handleSetRemark}
               />
             )}
           </div>
@@ -468,6 +503,7 @@ export default function ChatPage() {
           conversation={activeConversation}
           selfNekoId={self?.nekoId ?? null}
           messages={messages}
+          peerRead={activeKey ? peerRead[activeKey] ?? 0 : 0}
           loading={messagesLoading && messages.length === 0}
           loadingMore={messagesLoadingMore}
           hasMore={messagesHasMore}
@@ -476,6 +512,9 @@ export default function ChatPage() {
           forwardTargets={conversations}
           onBack={() => navigate('/chat')}
           onSend={handleSend}
+          onPoke={handlePoke}
+          onSaveSticker={handleSaveSticker}
+          onSetRemark={handleSetRemark}
           onForward={handleForward}
           onSendImage={handleSendImage}
           onSendSticker={(sticker) => {
@@ -497,7 +536,7 @@ export default function ChatPage() {
       </div>
 
       <GroupDialog
-        open={dialog !== null}
+        open={dialog?.mode === 'create-group' || dialog?.mode === 'add-members'}
         title={dialog?.mode === 'add-members' ? '添加成员' : '新建群聊'}
         submitLabel={dialog?.mode === 'add-members' ? '添加' : '创建群聊'}
         contacts={contacts}
@@ -516,6 +555,14 @@ export default function ChatPage() {
         }}
         onSubmit={handleGroupSubmit}
       />
+
+      {dialog?.mode === 'contact-remark' && (
+        <ContactRemarkDialog
+          contact={dialog.contact}
+          onClose={() => setDialog(null)}
+          onSubmit={(remark) => setContactRemark(dialog.contact.nekoId, remark)}
+        />
+      )}
     </div>
   )
 }

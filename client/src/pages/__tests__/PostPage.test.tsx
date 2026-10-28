@@ -20,6 +20,15 @@ vi.mock('dompurify', () => ({
   },
 }))
 
+vi.mock('../../contexts/FeatureContext', () => ({
+  useFeature: () => ({
+    isEnabled: () => true,
+    features: {},
+    ready: true,
+    refresh: async () => {},
+  }),
+}))
+
 const mockUsePost = vi.mocked(usePost)
 
 function Wrapper({ children }: { children: ReactNode }) {

@@ -21,8 +21,8 @@ const featureIcons: Record<string, React.ReactNode> = {
 
 const features = [
   {
-    title: '计算器',
-    desc: '基础运算与百分比计算，清晰直观的交互体验',
+    title: '科学计算器',
+    desc: '三角函数、对数、幂、阶乘、括号、DEG/RAD、记忆与历史',
     path: '/calculator',
     icon: 'calculator',
   },

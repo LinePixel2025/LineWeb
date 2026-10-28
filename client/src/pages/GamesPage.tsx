@@ -1,19 +1,24 @@
 import { useCallback, useState } from 'react'
+import { Link } from 'react-router-dom'
 import GameCard from '../components/games/lobby/GameCard'
-import { useAuth } from '../contexts/AuthContext'
+import { useFeature } from '../contexts/FeatureContext'
 import api from '../lib/api'
 import { COMING_SOON_GAMES, PLAYABLE_GAMES } from '../lib/games/catalog'
 
 /**
  * 游戏大厅：可玩游戏按目录动态渲染（第一款为精选大卡），其余卡片进网格，
- * 即将上线为占位卡。公开页面，联机入口在未登录时标注「需登录」。
+ * 即将上线为占位卡。需登录；单机/联机入口按功能开关过滤。
  *
  * 「清除联机状态」用于客户端与服务端失步（已经离开页面，但服务端仍认为在
  * 房间/对局中）时手动复位：等待房间离开/解散，进行中的对局按认输处理。
  */
 export default function GamesPage() {
-  const { user } = useAuth()
-  const isGuest = !user
+  const { isEnabled } = useFeature()
+  const showSingle = isEnabled('gamesSingle')
+  const showOnline = isEnabled('gamesOnline')
+  const playableGames = PLAYABLE_GAMES.filter((game) =>
+    (showSingle && !!game.route) || (showOnline && !!game.onlineRoute)
+  )
   const [resetting, setResetting] = useState(false)
   const [resetNote, setResetNote] = useState<string | null>(null)
 
@@ -45,23 +50,24 @@ export default function GamesPage() {
           <h1 className="gh-games-title">游戏大厅</h1>
           <p className="gh-games-subtitle">放松一下：单机挑战最高分，或邀请好友实时对战。</p>
         </div>
-        {!isGuest && (
-          <div className="gh-games-tools">
-            <button
-              type="button"
-              className="gh-btn gh-btn--secondary gh-btn--md"
-              onClick={() => void handleForceReset()}
-              disabled={resetting}
-            >
-              {resetting ? '清理中…' : '清除联机状态'}
-            </button>
-            {resetNote && (
-              <p className="gh-games-tools-note" role="status">
-                {resetNote}
-              </p>
-            )}
-          </div>
-        )}
+        <div className="gh-games-tools">
+          <Link className="gh-btn gh-btn--secondary gh-btn--md" to="/games/leaderboard">
+            排行榜
+          </Link>
+          <button
+            type="button"
+            className="gh-btn gh-btn--secondary gh-btn--md"
+            onClick={() => void handleForceReset()}
+            disabled={resetting}
+          >
+            {resetting ? '清理中…' : '清除联机状态'}
+          </button>
+          {resetNote && (
+            <p className="gh-games-tools-note" role="status">
+              {resetNote}
+            </p>
+          )}
+        </div>
       </header>
 
       <section className="gh-games-section" aria-labelledby="gh-games-playable-title">
@@ -69,20 +75,27 @@ export default function GamesPage() {
           <h2 id="gh-games-playable-title" className="gh-games-section-title">
             可玩游戏
           </h2>
-          <span className="gh-badge gh-badge--success">{PLAYABLE_GAMES.length} 款</span>
+          <span className="gh-badge gh-badge--success">{playableGames.length} 款</span>
         </div>
 
-        <div className="gh-games-grid">
-          {PLAYABLE_GAMES.map((game, index) => (
-            <GameCard
-              key={game.id}
-              game={game}
-              variant={index === 0 ? 'featured' : 'grid'}
-              index={index}
-              isGuest={isGuest}
-            />
-          ))}
-        </div>
+        {playableGames.length === 0 ? (
+          <div className="gh-box" style={{ padding: '32px', textAlign: 'center' }}>
+            <p className="gh-text-secondary">单机与联机游戏当前都已关闭。</p>
+          </div>
+        ) : (
+          <div className="gh-games-grid">
+            {playableGames.map((game, index) => (
+              <GameCard
+                key={game.id}
+                game={game}
+                variant={index === 0 ? 'featured' : 'grid'}
+                index={index}
+                showSingle={showSingle}
+                showOnline={showOnline}
+              />
+            ))}
+          </div>
+        )}
 
         <p className="gh-games-footnote">
           联机对战需要登录，并与对方互为好友；无 WebSocket 时自动降级为轮询（约 2–5 秒延迟）。
@@ -104,7 +117,8 @@ export default function GamesPage() {
               game={game}
               variant="soon"
               index={index}
-              isGuest={isGuest}
+              showSingle={showSingle}
+              showOnline={showOnline}
             />
           ))}
         </div>

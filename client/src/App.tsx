@@ -1,14 +1,16 @@
-import { Component, lazy, Suspense, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { AuthProvider } from './contexts/AuthContext'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { FeatureProvider } from './contexts/FeatureContext'
+import { GameStatsProvider } from './contexts/GameStatsContext'
 import { ChatProvider } from './contexts/ChatContext'
 import { XmppChatProvider } from './contexts/XmppChatContext'
 import { GameProvider } from './contexts/GameContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { DownloadProvider } from './contexts/DownloadContext'
 import Layout from './components/Layout'
-import { ProtectedRoute, AdminRoute } from './components/Guards'
+import { ProtectedRoute, AdminRoute, RequireAuth, RequireFeature } from './components/Guards'
 import DownloadToast from './components/drive/DownloadToast'
 import GameInviteToast from './components/games/GameInviteToast'
 import ChatMessageToast from './components/chat/ChatMessageToast'
@@ -23,6 +25,7 @@ const PostPage = lazy(() => import('./pages/PostPage'))
 const CalculatorPage = lazy(() => import('./pages/CalculatorPage'))
 const FeaturesPage = lazy(() => import('./pages/FeaturesPage'))
 const GamesPage = lazy(() => import('./pages/GamesPage'))
+const GameLeaderboardPage = lazy(() => import('./pages/games/GameLeaderboardPage'))
 const Game2048Page = lazy(() => import('./pages/games/Game2048Page'))
 const Game2048OnlinePage = lazy(() => import('./pages/games/Game2048OnlinePage'))
 const DoudizhuPage = lazy(() => import('./pages/games/DoudizhuPage'))
@@ -64,6 +67,7 @@ const AiAdminPage = lazy(() => import('./pages/admin/AiAdminPage'))
 const AiChatAdminPage = lazy(() => import('./pages/admin/AiChatAdminPage'))
 const AppAdminPage = lazy(() => import('./pages/admin/AppAdminPage'))
 const ProxyAdminPage = lazy(() => import('./pages/admin/ProxyAdminPage'))
+const FeatureAdminPage = lazy(() => import('./pages/admin/FeatureAdminPage'))
 const AuthorizePage = lazy(() => import('./pages/AuthorizePage'))
 
 const queryClient = new QueryClient({
@@ -114,11 +118,23 @@ class RouteErrorBoundary extends Component<{ children: ReactNode }, RouteErrorBo
   }
 }
 
+/** 登出/换号时清空 React Query 缓存，避免上一个账号的数据串号 */
+function AuthCacheReset() {
+  const { user } = useAuth()
+  useEffect(() => {
+    if (!user) queryClient.clear()
+  }, [user])
+  return null
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <AuthCacheReset />
+        <FeatureProvider>
+        <GameStatsProvider>
         <ChatProvider>
         <XmppChatProvider>
         <GameProvider>
@@ -129,119 +145,144 @@ export default function App() {
                   <Routes>
                   {/* Main site layout */}
                   <Route element={<Layout />}>
-                    <Route path="/" element={<HomePage />} />
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/register" element={<RegisterPage />} />
-                    <Route path="/posts" element={<PostsPage />} />
-                    <Route path="/posts/:slug" element={<PostPage />} />
-                    <Route path="/features" element={<FeaturesPage />} />
-                    <Route path="/calculator" element={<CalculatorPage />} />
-                    <Route path="/games" element={<GamesPage />} />
-                    <Route path="/games/2048" element={<Game2048Page />} />
-                    <Route path="/games/2048/online" element={
-                      <ProtectedRoute><Game2048OnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/2048/online/:matchId" element={
-                      <ProtectedRoute><Game2048OnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/doudizhu" element={<DoudizhuPage />} />
-                    <Route path="/games/doudizhu/online" element={
-                      <ProtectedRoute><DoudizhuOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/doudizhu/online/:matchId" element={
-                      <ProtectedRoute><DoudizhuOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/snake" element={<SnakePage />} />
-                    <Route path="/games/snake/online" element={
-                      <ProtectedRoute><SnakeOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/snake/online/:matchId" element={
-                      <ProtectedRoute><SnakeOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/minesweeper" element={<MinesweeperPage />} />
-                    <Route path="/games/minesweeper/online" element={
-                      <ProtectedRoute><MinesweeperOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/minesweeper/online/:matchId" element={
-                      <ProtectedRoute><MinesweeperOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/jump" element={<JumpPage />} />
-                    <Route path="/games/jump/online" element={
-                      <ProtectedRoute><JumpOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/jump/online/:matchId" element={
-                      <ProtectedRoute><JumpOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/minecraft" element={<MinecraftPage />} />
-                    <Route path="/games/minecraft/online" element={
-                      <ProtectedRoute><MinecraftOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/minecraft/online/:matchId" element={
-                      <ProtectedRoute><MinecraftOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/gomoku" element={<GomokuPage />} />
-                    <Route path="/games/gomoku/online" element={
-                      <ProtectedRoute><GomokuOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/gomoku/online/:matchId" element={
-                      <ProtectedRoute><GomokuOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/liar" element={<LiarPage />} />
-                    <Route path="/games/liar/online" element={
-                      <ProtectedRoute><LiarOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/liar/online/:matchId" element={
-                      <ProtectedRoute><LiarOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/uno" element={<UnoPage />} />
-                    <Route path="/games/uno/online" element={
-                      <ProtectedRoute><UnoOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/uno/online/:matchId" element={
-                      <ProtectedRoute><UnoOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/xiangqi" element={<XiangqiPage />} />
-                    <Route path="/games/xiangqi/online" element={
-                      <ProtectedRoute><XiangqiOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/xiangqi/online/:matchId" element={
-                      <ProtectedRoute><XiangqiOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/parkour" element={<ParkourPage />} />
-                    <Route path="/games/parkour/online" element={
-                      <ProtectedRoute><ParkourOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/games/parkour/online/:matchId" element={
-                      <ProtectedRoute><ParkourOnlinePage /></ProtectedRoute>
-                    } />
-                    <Route path="/profile" element={
-                      <ProtectedRoute><ProfilePage /></ProtectedRoute>
-                    } />
-                    <Route path="/page/:slug" element={<DynamicPage />} />
-                    <Route path="/drive" element={
-                      <ProtectedRoute><DrivePage /></ProtectedRoute>
-                    } />
-                    <Route path="/chat" element={
-                      <ProtectedRoute><ChatPage /></ProtectedRoute>
-                    } />
-                    <Route path="/chat/:conversationId" element={
-                      <ProtectedRoute><ChatPage /></ProtectedRoute>
-                    } />
-                    {/* DeepSeek 对话（站内统一代理 AI 服务，需登录；每日提问上限见 /admin/ai-chat） */}
-                    <Route path="/deepseek" element={
-                      <ProtectedRoute><DeepSeekChatPage /></ProtectedRoute>
-                    } />
-                    {/* 网页反代：站点与登录态按账号保存在服务端，需登录 */}
-                    <Route path="/webproxy" element={
-                      <ProtectedRoute><WebProxyPage /></ProtectedRoute>
-                    } />
-                    <Route path="/webproxy/:siteId" element={
-                      <ProtectedRoute><WebProxyViewPage /></ProtectedRoute>
-                    } />
-                    {/* 第三方应用授权的账户验证页（未登录会跳登录并带参数返回） */}
-                    <Route path="/authorize" element={
-                      <ProtectedRoute><AuthorizePage /></ProtectedRoute>
-                    } />
+                    <Route element={<RequireAuth />}>
+                      <Route path="/" element={<HomePage />} />
+                      <Route element={<RequireFeature feature="posts" />}>
+                        <Route path="/posts" element={<PostsPage />} />
+                        <Route path="/posts/:slug" element={<PostPage />} />
+                      </Route>
+                      <Route element={<RequireFeature feature="pages" />}>
+                        <Route path="/features" element={<FeaturesPage />} />
+                        <Route path="/page/:slug" element={<DynamicPage />} />
+                      </Route>
+                      <Route element={<RequireFeature feature="calculator" />}>
+                        <Route path="/calculator" element={<CalculatorPage />} />
+                      </Route>
+                      <Route element={<RequireFeature feature="games" />}>
+                        <Route path="/games" element={<GamesPage />} />
+                        <Route path="/games/leaderboard" element={<GameLeaderboardPage />} />
+                        <Route element={<RequireFeature feature="gamesSingle" />}>
+                          <Route path="/games/2048" element={<Game2048Page />} />
+                          <Route path="/games/doudizhu" element={<DoudizhuPage />} />
+                          <Route path="/games/snake" element={<SnakePage />} />
+                          <Route path="/games/minesweeper" element={<MinesweeperPage />} />
+                          <Route path="/games/jump" element={<JumpPage />} />
+                          <Route path="/games/minecraft" element={<MinecraftPage />} />
+                          <Route path="/games/gomoku" element={<GomokuPage />} />
+                          <Route path="/games/liar" element={<LiarPage />} />
+                          <Route path="/games/uno" element={<UnoPage />} />
+                          <Route path="/games/xiangqi" element={<XiangqiPage />} />
+                          <Route path="/games/parkour" element={<ParkourPage />} />
+                        </Route>
+                        <Route element={<RequireFeature feature="gamesOnline" />}>
+                          <Route path="/games/2048/online" element={
+                            <ProtectedRoute><Game2048OnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/2048/online/:matchId" element={
+                            <ProtectedRoute><Game2048OnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/doudizhu/online" element={
+                            <ProtectedRoute><DoudizhuOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/doudizhu/online/:matchId" element={
+                            <ProtectedRoute><DoudizhuOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/snake/online" element={
+                            <ProtectedRoute><SnakeOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/snake/online/:matchId" element={
+                            <ProtectedRoute><SnakeOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/minesweeper/online" element={
+                            <ProtectedRoute><MinesweeperOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/minesweeper/online/:matchId" element={
+                            <ProtectedRoute><MinesweeperOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/jump/online" element={
+                            <ProtectedRoute><JumpOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/jump/online/:matchId" element={
+                            <ProtectedRoute><JumpOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/minecraft/online" element={
+                            <ProtectedRoute><MinecraftOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/minecraft/online/:matchId" element={
+                            <ProtectedRoute><MinecraftOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/gomoku/online" element={
+                            <ProtectedRoute><GomokuOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/gomoku/online/:matchId" element={
+                            <ProtectedRoute><GomokuOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/liar/online" element={
+                            <ProtectedRoute><LiarOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/liar/online/:matchId" element={
+                            <ProtectedRoute><LiarOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/uno/online" element={
+                            <ProtectedRoute><UnoOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/uno/online/:matchId" element={
+                            <ProtectedRoute><UnoOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/xiangqi/online" element={
+                            <ProtectedRoute><XiangqiOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/xiangqi/online/:matchId" element={
+                            <ProtectedRoute><XiangqiOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/parkour/online" element={
+                            <ProtectedRoute><ParkourOnlinePage /></ProtectedRoute>
+                          } />
+                          <Route path="/games/parkour/online/:matchId" element={
+                            <ProtectedRoute><ParkourOnlinePage /></ProtectedRoute>
+                          } />
+                        </Route>
+                      </Route>
+                      <Route path="/profile" element={
+                        <ProtectedRoute><ProfilePage /></ProtectedRoute>
+                      } />
+                      <Route element={<RequireFeature feature="drive" />}>
+                        <Route path="/drive" element={
+                          <ProtectedRoute><DrivePage /></ProtectedRoute>
+                        } />
+                      </Route>
+                      <Route element={<RequireFeature feature="chat" />}>
+                        <Route path="/chat" element={
+                          <ProtectedRoute><ChatPage /></ProtectedRoute>
+                        } />
+                        <Route path="/chat/:conversationId" element={
+                          <ProtectedRoute><ChatPage /></ProtectedRoute>
+                        } />
+                      </Route>
+                      {/* DeepSeek 对话（站内统一代理 AI 服务，需登录；每日提问上限见 /admin/ai-chat） */}
+                      <Route element={<RequireFeature feature="aiChat" />}>
+                        <Route path="/deepseek" element={
+                          <ProtectedRoute><DeepSeekChatPage /></ProtectedRoute>
+                        } />
+                      </Route>
+                      {/* 网页反代：站点与登录态按账号保存在服务端，需登录 */}
+                      <Route element={<RequireFeature feature="webProxy" />}>
+                        <Route path="/webproxy" element={
+                          <ProtectedRoute><WebProxyPage /></ProtectedRoute>
+                        } />
+                        <Route path="/webproxy/:siteId" element={
+                          <ProtectedRoute><WebProxyViewPage /></ProtectedRoute>
+                        } />
+                      </Route>
+                      {/* 第三方应用授权的账户验证页（未登录会跳登录并带参数返回） */}
+                      <Route element={<RequireFeature feature="oauthApps" />}>
+                        <Route path="/authorize" element={
+                          <ProtectedRoute><AuthorizePage /></ProtectedRoute>
+                        } />
+                      </Route>
+                    </Route>
                   </Route>
 
                   {/* Admin layout — separate from main site */}
@@ -254,6 +295,7 @@ export default function App() {
                     <Route path="/admin/pages/new" element={<PageEditor />} />
                     <Route path="/admin/pages/:id/edit" element={<PageEditor />} />
                     <Route path="/admin/users" element={<UserAdminPage />} />
+                    <Route path="/admin/features" element={<FeatureAdminPage />} />
                     <Route path="/admin/api" element={<ApiDocsPage />} />
                     <Route path="/admin/devices" element={<DeviceMonitorPage />} />
                     <Route path="/admin/ai" element={<AiAdminPage />} />
@@ -276,6 +318,8 @@ export default function App() {
         </GameProvider>
         </XmppChatProvider>
         </ChatProvider>
+        </GameStatsProvider>
+        </FeatureProvider>
       </AuthProvider>
       </QueryClientProvider>
     </BrowserRouter>

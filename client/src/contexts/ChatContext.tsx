@@ -18,6 +18,7 @@ import {
   WS_CONNECT_TIMEOUT_MS,
 } from '../lib/realtime'
 import { useAuth } from './AuthContext'
+import { useFeature } from './FeatureContext'
 import type {
   ChatConnectionState,
   ChatEvent,
@@ -58,7 +59,9 @@ const AUTH_FAILED_CODE = 4001
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
+  const { isEnabled } = useFeature()
   const userId = user?.id ?? null
+  const chatEnabled = isEnabled('chat')
 
   const [connectionState, setConnectionState] = useState<ChatConnectionState>('closed')
   const [pendingFriendRequests, setPendingFriendRequests] = useState(0)
@@ -86,7 +89,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refreshSummary = useCallback(async () => {
-    if (!userId) return
+    if (!userId || !chatEnabled) return
     try {
       const data = await api.get<ChatSummary>('/chat/summary')
       if (typeof data?.pendingFriendRequests === 'number') {
@@ -95,9 +98,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     } catch {
       // 摘要拉取失败不影响聊天主流程（连接建立后会再次刷新）
     }
-  }, [userId])
+  }, [userId, chatEnabled])
 
   useEffect(() => {
+    // 聊天关闭时清空好友申请角标；WS 仍保留给游戏邀请事件
+    if (!chatEnabled) setPendingFriendRequests(0)
     // 未登录：清空状态，不建立连接
     if (!userId) {
       setConnectionState('closed')

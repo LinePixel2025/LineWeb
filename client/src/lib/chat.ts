@@ -155,7 +155,8 @@ export function canRecall(message: NekoMessage, now: number = Date.now()): boole
  */
 export function messagePreview(message: NekoMessage): string {
   if (message.recalled) return '[已撤回]'
-  if (message.image) return '[图片]'
+  if (message.poke) return '[拍一拍]'
+  if (message.image) return message.body === '[表情]' ? '[表情]' : '[图片]'
   return message.body
 }
 
@@ -167,24 +168,36 @@ export function conversationPreview(conversation: NekoConversation): string {
   return `${prefix}${messagePreview(last)}`
 }
 
-/** 消息发送者显示名：优先群成员/联系人里的 displayName，退化到用户名 */
+/** 消息发送者显示名：单聊备注 > 群成员/联系人 displayName > 用户名 */
 export function senderLabel(message: NekoMessage, conversation: NekoConversation | null): string {
   if (message.mine && conversation) return '你'
+  if (
+    conversation?.kind === 'direct'
+    && conversation.contact
+    && message.fromUsername === conversation.contact.username
+  ) {
+    const direct = contactLabel(conversation.contact)
+    if (direct) return direct
+  }
   const member = conversation?.members.find((item) => item.username === message.fromUsername)
   if (member?.displayName && member.displayName !== member.username) return member.displayName
   return message.fromUsername || localpartOfJid(message.from) || '未知用户'
 }
 
-/** 联系人的展示名（原生账号补上 @username） */
+/** 联系人的展示名（备注优先；原生账号补上 @username） */
 export function contactLabel(
   contact: {
     username: string
     displayName: string
+    remark?: string
     kind?: 'lineweb' | 'native'
     isLineWeb?: boolean
   } | null,
 ): string {
   if (!contact) return ''
+  const remark = (contact.remark ?? '').trim()
+  // 备注是用户自己起的名字，直接覆盖显示名，不追加原生账号标识
+  if (remark) return remark
   const name = contact.displayName || contact.username
   // 只有 neko 原生账号需要补 @username 区分；lw_* 是内部用户名，不展示给用户
   const native = contact.kind === 'native' || contact.isLineWeb === false

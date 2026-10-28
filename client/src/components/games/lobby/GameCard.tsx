@@ -18,11 +18,12 @@ export interface GameCardProps {
   variant: GameCardVariant
   /** 入场动画错峰序号 */
   index: number
-  /** 未登录访客：联机入口标注「需登录」 */
-  isGuest: boolean
+  /** 单机/联机入口按功能开关显示 */
+  showSingle: boolean
+  showOnline: boolean
 }
 
-export default function GameCard({ game, variant, index, isGuest }: GameCardProps) {
+export default function GameCard({ game, variant, index, showSingle, showOnline }: GameCardProps) {
   const soon = variant === 'soon'
 
   return (
@@ -53,21 +54,28 @@ export default function GameCard({ game, variant, index, isGuest }: GameCardProp
             </span>
           ))}
           {variant === 'featured' && (
-            <span className="gh-badge gh-badge--accent">记录保存在本机</span>
+            <span className="gh-badge gh-badge--accent">战绩随账号保存</span>
           )}
         </div>
 
         {!soon && (
           <div className="gh-games-card-actions">
-            {game.route && (
+            {showSingle && game.route && (
               <Link className="gh-btn gh-btn--primary gh-btn--lg" to={game.route}>
                 单机开始
               </Link>
             )}
-            {game.onlineRoute && (
+            {showOnline && game.onlineRoute && (
               <Link className="gh-btn gh-btn--secondary gh-btn--lg" to={game.onlineRoute}>
                 好友对战
-                {isGuest && <span className="gh-games-login-hint">需登录</span>}
+              </Link>
+            )}
+            {game.id !== 'minecraft' && (
+              <Link
+                className="gh-btn gh-btn--ghost gh-btn--sm"
+                to={`/games/leaderboard?game=${encodeURIComponent(game.id)}&variant=solo`}
+              >
+                查看排行
               </Link>
             )}
           </div>

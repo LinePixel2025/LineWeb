@@ -1,14 +1,17 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import NekoAvatar from './NekoAvatar'
 import ChatComposer, { type ComposerReply } from './ChatComposer'
 import ChatImageLightbox from './ChatImageLightbox'
 import ChatStickerPanel from './ChatStickerPanel'
 import ChatBundleDialog from './ChatBundleDialog'
 import ChatForwardDialog from './ChatForwardDialog'
-import { canRecall, chatImageUrl, senderLabel } from '../../lib/chat'
+import MessageActionMenu, { type MessageActionItem } from './MessageActionMenu'
+import { canRecall, chatImageUrl, contactLabel, senderLabel } from '../../lib/chat'
+import { useLongPress } from '../../hooks/useLongPress'
 import { extractImageSrc } from '../../lib/xmpp/protocol'
 import type {
   NekoBundleItem,
+  NekoContact,
   NekoConversation,
   NekoMessage,
   NekoSticker,
@@ -22,6 +25,8 @@ interface Props {
   /** 自己的 neko id（用于群成员「移出」按钮的显示） */
   selfNekoId: number | null
   messages: NekoMessage[]
+  /** 单聊对方已读到的消息 id（群聊不使用） */
+  peerRead?: number
   loading?: boolean
   loadingMore?: boolean
   hasMore?: boolean
@@ -30,8 +35,14 @@ interface Props {
   /** 可选的转发目标会话 */
   forwardTargets?: NekoConversation[]
   onBack: () => void
-  /** replyTo 为被引用消息 id */
-  onSend: (content: string, replyTo?: number) => Promise<void> | void
+  /** replyTo 为被引用消息 id；mentions 为群聊 @ 的 neko id（0 = 所有人） */
+  onSend: (content: string, replyTo?: number, mentions?: number[]) => Promise<void> | void
+  /** 拍一拍指定成员（双击头像 / 长按菜单） */
+  onPoke?: (targetNekoId: number) => void | Promise<void>
+  /** 收藏别人发来的表情 */
+  onSaveSticker?: (message: NekoMessage) => void | Promise<void>
+  /** 打开联系人备注弹窗 */
+  onSetRemark?: (contact: NekoContact) => void
   /** 转发聊天记录（merge = 合并转发，separate = 逐条转发） */
   onForward: (
     messageIds: number[],
@@ -45,8 +56,8 @@ interface Props {
   onSendSticker?: (sticker: NekoSticker) => void
   onAddSticker?: (file: File) => Promise<void> | void
   onRemoveSticker?: (id: number) => Promise<void> | void
-  /** 撤回消息（确认逻辑在 ChatThread 内，页面只负责请求） */
-  onRecall?: (messageId: number) => Promise<void> | void
+  /** 撤回消息（确认逻辑在 ChatThread 内，页面只负责请求）；admin=true 为管理员撤回 */
+  onRecall?: (messageId: number, admin?: boolean) => Promise<void> | void
   onLoadMore: () => void
   onAddMembers: () => void
   onRemoveMember: (nekoId: number) => void
@@ -59,6 +70,27 @@ function formatMessageTime(value: number): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/** 群聊正文里的 @昵称 高亮（纯文本切分，不渲染 HTML） */
+function renderMentionText(body: string, members: NekoConversation['members']): ReactNode {
+  if (!body || members.length === 0) return body
+  const names = [...new Set([
+    ...members.map((member) => member.displayName || member.username),
+    '所有人',
+  ])].filter(Boolean).sort((a, b) => b.length - a.length)
+  if (names.length === 0) return body
+  const regex = new RegExp(`(@(?:${names.map(escapeRegExp).join('|')}))`, 'g')
+  const parts = body.split(regex)
+  return parts.map((part, index) =>
+    part.startsWith('@') && names.includes(part.slice(1))
+      ? <span key={index} className="gh-chat-mention">{part}</span>
+      : <span key={index}>{part}</span>
+  )
 }
 
 function avatarOf(
@@ -89,6 +121,7 @@ export default function ChatThread({
   conversation,
   selfNekoId,
   messages,
+  peerRead = 0,
   loading = false,
   loadingMore = false,
   hasMore = false,
@@ -97,6 +130,9 @@ export default function ChatThread({
   forwardTargets = [],
   onBack,
   onSend,
+  onPoke,
+  onSaveSticker,
+  onSetRemark,
   onForward,
   onSendImage,
   stickers = [],
@@ -112,6 +148,14 @@ export default function ChatThread({
   onLeave,
 }: Props) {
   const listRef = useRef<HTMLDivElement | null>(null)
+  const lastAvatarTapRef = useRef<{ id: number; at: number } | null>(null)
+  const lastPokeSentRef = useRef(0)
+  const [actionMenu, setActionMenu] = useState<{ message: NekoMessage; x: number; y: number } | null>(null)
+  const pressedMessageRef = useRef<NekoMessage | null>(null)
+  const longPress = useLongPress((x, y) => {
+    const message = pressedMessageRef.current
+    if (message) setActionMenu({ message, x, y })
+  })
   const stickToBottomRef = useRef(true)
   const pendingPrependRef = useRef(false)
   const previousScrollHeightRef = useRef(0)
@@ -230,10 +274,10 @@ export default function ChatThread({
     }
   }
 
-  const handleSend = async (content: string) => {
+  const handleSend = async (content: string, mentions?: number[]) => {
     stickToBottomRef.current = true
     const replyId = replyTo?.id
-    await onSend(content, replyId)
+    await onSend(content, replyId, mentions)
     setReplyTo(null)
   }
 
@@ -247,16 +291,38 @@ export default function ChatThread({
     }
     if (conversation.kind === 'direct') {
       if (conversation.contact && username === conversation.contact.username) {
-        return conversation.contact.displayName || conversation.contact.username
+        return contactLabel(conversation.contact)
       }
       return '你'
     }
     return username || '未知用户'
   }
 
+  const handlePoke = (targetNekoId: number): void => {
+    if (!onPoke) return
+    const now = Date.now()
+    const last = lastAvatarTapRef.current
+    if (last && last.id === targetNekoId && now - last.at < 320) {
+      lastAvatarTapRef.current = null
+      lastPokeSentRef.current = now
+      void onPoke(targetNekoId)
+      return
+    }
+    lastAvatarTapRef.current = { id: targetNekoId, at: now }
+  }
+
+  const nameOfNekoId = (nekoId: number): string => {
+    if (selfNekoId !== null && nekoId === selfNekoId) return '你'
+    const member = conversation?.members.find((item) => item.nekoId === nekoId)
+    if (member) return member.displayName || member.username
+    if (conversation?.contact?.nekoId === nekoId) return contactLabel(conversation.contact)
+    return '对方'
+  }
+
   /** 消息的引用预览文本 */
   const previewOf = (message: NekoMessage): string => {
     if (message.recalled) return '消息已撤回'
+    if (message.poke) return '[拍一拍]'
     if (message.image) return message.body === '[表情]' ? '[表情]' : '[图片]'
     if (message.bundle) return '[聊天记录]'
     return message.body
@@ -341,14 +407,67 @@ export default function ChatThread({
     }
   }
 
-  const handleRecall = async (message: NekoMessage) => {
+  const handleRecall = async (message: NekoMessage, admin = false) => {
     if (!onRecall) return
-    if (!window.confirm('确定撤回这条消息吗？')) return
+    if (!window.confirm(admin ? '确定以管理员身份撤回这条消息吗？' : '确定撤回这条消息吗？')) return
     try {
-      await onRecall(message.id)
+      await onRecall(message.id, admin)
     } catch {
       // 撤回失败由页面 actionError banner 展示
     }
+  }
+
+  const buildActionItems = (
+    message: NekoMessage,
+    own: boolean,
+    sticker: boolean,
+    senderNekoId: number | null,
+  ): MessageActionItem[] => {
+    if (message.poke) return []
+    const items: MessageActionItem[] = []
+    if (message.body && !message.image && !message.bundle) {
+      items.push({
+        key: 'copy',
+        label: '复制',
+        onSelect: () => {
+          void navigator.clipboard.writeText(message.body).catch(() => window.alert('复制失败，请手动选择文字'))
+        },
+      })
+    }
+    if (!message.recalled) {
+      items.push({ key: 'reply', label: '回复', onSelect: () => startReply(message) })
+      items.push({ key: 'forward', label: '转发', onSelect: () => startForward(message) })
+      items.push({
+        key: 'select',
+        label: '多选',
+        onSelect: () => {
+          enterSelectMode()
+          toggleSelect(message.id)
+        },
+      })
+    }
+    if (own && recallableOf(message) && onRecall) {
+      items.push({ key: 'recall', label: '撤回', danger: true, onSelect: () => void handleRecall(message) })
+    }
+    if (!own && conversation?.kind === 'room' && isOwner && onRecall) {
+      items.push({
+        key: 'admin-recall',
+        label: '管理员撤回',
+        danger: true,
+        onSelect: () => void handleRecall(message, true),
+      })
+    }
+    if (!own && sticker && onSaveSticker) {
+      items.push({ key: 'save-sticker', label: '添加到表情', onSelect: () => void onSaveSticker(message) })
+    }
+    if (!own && senderNekoId && onPoke) {
+      items.push({ key: 'poke', label: '拍一拍', onSelect: () => void onPoke(senderNekoId) })
+    }
+    return items
+  }
+
+  const recallableOf = (message: NekoMessage): boolean => {
+    return !!onRecall && canRecall(message, Date.now())
   }
 
   if (!conversation) {
@@ -444,6 +563,39 @@ export default function ChatThread({
             >
               多选
             </button>
+          )}
+          {!isGroup && !selecting && conversation.contact?.isFriend && onSetRemark && (
+            <div className="gh-chat-thread-more" ref={menuRef}>
+              <button
+                type="button"
+                className="gh-chat-thread-more-btn"
+                aria-label="会话操作"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((prev) => !prev)}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                  <circle cx="3" cy="8" r="1.4" />
+                  <circle cx="8" cy="8" r="1.4" />
+                  <circle cx="13" cy="8" r="1.4" />
+                </svg>
+              </button>
+              {menuOpen && (
+                <div className="gh-chat-thread-menu" role="menu" aria-label="会话操作">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="gh-chat-thread-menu-item"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      onSetRemark(conversation.contact!)
+                    }}
+                  >
+                    设置备注
+                  </button>
+                </div>
+              )}
+            </div>
           )}
           {isGroup && !selecting && (
             <div className="gh-chat-thread-more" ref={menuRef}>
@@ -645,7 +797,20 @@ export default function ChatThread({
                   selecting ? 'gh-chat-message--selectable' : ''
                 } ${selected ? 'gh-chat-message--selected' : ''} ${
                   flashId === message.id ? 'gh-chat-message--flash' : ''
-                }`}
+                } ${actionMenu?.message.id === message.id ? 'gh-chat-message--active' : ''}`}
+                onPointerDown={(event) => {
+                  if (selecting) return
+                  pressedMessageRef.current = message
+                  longPress.begin(event)
+                }}
+                onPointerMove={longPress.move}
+                onPointerUp={longPress.end}
+                onPointerCancel={longPress.end}
+                onContextMenu={(event) => {
+                  if (selecting) return
+                  event.preventDefault()
+                  setActionMenu({ message, x: event.clientX, y: event.clientY })
+                }}
               >
                 {selecting && (
                   <button
@@ -659,13 +824,28 @@ export default function ChatThread({
                   </button>
                 )}
                 {!own && (
-                  <NekoAvatar
-                    nekoId={sender.nekoId}
-                    avatarVersion={sender.avatarVersion}
-                    fallbackId={sender.id}
-                    name={sender.name}
-                    size="sm"
-                  />
+                  <span
+                    className="gh-chat-avatar-poke"
+                    title="双击拍一拍"
+                    onDoubleClick={() => {
+                      if (!sender.nekoId) return
+                      // 触屏双击路径已经发过时跳过浏览器补发的 dblclick
+                      if (Date.now() - lastPokeSentRef.current < 500) return
+                      lastPokeSentRef.current = Date.now()
+                      void onPoke?.(sender.nekoId)
+                    }}
+                    onTouchEnd={() => {
+                      if (sender.nekoId) handlePoke(sender.nekoId)
+                    }}
+                  >
+                    <NekoAvatar
+                      nekoId={sender.nekoId}
+                      avatarVersion={sender.avatarVersion}
+                      fallbackId={sender.id}
+                      name={sender.name}
+                      size="sm"
+                    />
+                  </span>
                 )}
                 <div className="gh-chat-message-body">
                   <div className="gh-chat-message-meta">
@@ -673,34 +853,25 @@ export default function ChatThread({
                     <time className="gh-chat-message-time" dateTime={new Date(message.ts).toISOString()}>
                       {formatMessageTime(message.ts)}
                     </time>
+                    {own && conversation?.kind === 'direct' && !message.recalled && (
+                      <span className="gh-chat-read-tag" title="对方是否已读">
+                        {message.id <= peerRead ? '已读' : '未读'}
+                      </span>
+                    )}
+                    {message.mentionedMe && <span className="gh-chat-at-badge">@我</span>}
                     {!selecting && (
                       <button
                         type="button"
-                        className="gh-chat-recall-btn"
-                        title="引用这条消息"
-                        onClick={() => startReply(message)}
+                        className="gh-chat-message-more"
+                        aria-label="消息操作"
+                        title="消息操作"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          const rect = event.currentTarget.getBoundingClientRect()
+                          setActionMenu({ message, x: rect.left, y: rect.bottom + 4 })
+                        }}
                       >
-                        引用
-                      </button>
-                    )}
-                    {!selecting && (
-                      <button
-                        type="button"
-                        className="gh-chat-recall-btn"
-                        title="转发这条消息"
-                        onClick={() => startForward(message)}
-                      >
-                        转发
-                      </button>
-                    )}
-                    {recallable && !selecting && (
-                      <button
-                        type="button"
-                        className="gh-chat-recall-btn"
-                        title="撤回这条消息"
-                        onClick={() => void handleRecall(message)}
-                      >
-                        撤回
+                        ···
                       </button>
                     )}
                   </div>
@@ -715,12 +886,19 @@ export default function ChatThread({
                       <span className="gh-chat-quote-text">{message.quote.text}</span>
                     </button>
                   )}
-                  {message.bundle ? (
+                  {message.poke ? (
+                    <div className={`gh-chat-poke ${message.poke.toNekoId === selfNekoId ? 'gh-chat-poke--me' : ''}`} role="note">
+                      {message.mine ? '你' : sender.name} 拍了拍 {nameOfNekoId(message.poke.toNekoId)}
+                    </div>
+                  ) : message.bundle ? (
                     <button
                       type="button"
                       className="gh-chat-bundle"
                       aria-label="查看聊天记录"
-                      onClick={() => setBundlePreview(message.bundle)}
+                      onClick={() => {
+                        if (longPress.wasLongPress()) return
+                        setBundlePreview(message.bundle)
+                      }}
                     >
                       <span className="gh-chat-bundle-title">聊天记录</span>
                       <span className="gh-chat-bundle-lines">
@@ -746,7 +924,10 @@ export default function ChatThread({
                       type="button"
                       className="gh-chat-message-image-wrap"
                       aria-label="查看大图"
-                      onClick={() => setPreviewImage(message.image)}
+                      onClick={() => {
+                        if (longPress.wasLongPress()) return
+                        setPreviewImage(message.image)
+                      }}
                     >
                       <img
                         className="gh-chat-message-image"
@@ -756,7 +937,11 @@ export default function ChatThread({
                       />
                     </button>
                   ) : (
-                    <div className="gh-chat-message-bubble">{message.body}</div>
+                    <div className={`gh-chat-message-bubble ${message.mentionedMe ? 'gh-chat-message-bubble--mention' : ''}`}>
+                      {conversation?.kind === 'room'
+                        ? renderMentionText(message.body, conversation.members)
+                        : message.body}
+                    </div>
                   )}
                 </div>
               </div>
@@ -811,6 +996,30 @@ export default function ChatThread({
         onClose={() => setBundlePreview(null)}
       />
 
+      {actionMenu && (() => {
+        const message = actionMenu.message
+        const key = conversation?.key
+        const senderNekoId = message.fromNekoId
+          ?? (conversation?.kind === 'direct'
+            ? conversation.contact?.nekoId ?? null
+            : conversation?.members.find((member) => member.username === message.fromUsername)?.nekoId ?? null)
+        const items = buildActionItems(
+          message,
+          message.mine,
+          Boolean(message.image) && message.body === '[表情]',
+          senderNekoId,
+        )
+        return (
+          <MessageActionMenu
+            key={key}
+            x={actionMenu.x}
+            y={actionMenu.y}
+            items={items}
+            onClose={() => setActionMenu(null)}
+          />
+        )
+      })()}
+
       <ChatForwardDialog
         open={forwardOpen}
         sourceKey={conversation.key}
@@ -829,6 +1038,10 @@ export default function ChatThread({
 
       <ChatComposer
         onSend={handleSend}
+        members={conversation.kind === 'room' ? conversation.members : []}
+        selfNekoId={selfNekoId}
+        canMentionAll={conversation.kind === 'room'
+          && (conversation.room?.myRole === 'owner' || conversation.room?.myRole === 'admin')}
         onSendImage={onSendImage}
         replyTo={replyTo}
         onCancelReply={() => setReplyTo(null)}

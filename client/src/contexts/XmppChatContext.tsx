@@ -28,6 +28,7 @@ import api, { getToken } from '../lib/api'
 import {
   NEKO_PAGE_SIZE,
   chatImageUrl,
+  contactLabel,
   isConversationKey,
   getXmppWsUrl,
   mergeNekoMessages,
@@ -50,12 +51,14 @@ import {
   roomIdOfJid,
   roomJidOf,
   roomKeyOf,
+  uploadIdOf,
   writeWatermark,
   type ParseContext,
   type XmppElement,
 } from '../lib/xmpp/protocol'
 import { isWebSocketAvailable, readForcedPolling } from '../lib/realtime'
 import { useAuth } from './AuthContext'
+import { useFeature } from './FeatureContext'
 import { useChat } from './ChatContext'
 import type {
   ChatConnectionState,
@@ -132,6 +135,8 @@ export interface XmppChatValue {
   incoming: NekoFriendRequest[]
   outgoing: NekoFriendRequest[]
   unreadTotal: number
+  /** 单聊对方已读到的消息 id（按会话键）；群聊不使用 */
+  peerRead: Record<string, number>
   activeKey: string | null
   setActiveKey: (key: string | null) => void
   messages: NekoMessage[]
@@ -140,8 +145,10 @@ export interface XmppChatValue {
   messagesHasMore: boolean
   messagesError: string | null
   loadMore: (key: string) => void
-  /** 发送文本；replyTo 为被引用消息 id（neko 会快照原文并校验同会话） */
-  sendText: (key: string, text: string, replyTo?: number) => Promise<void>
+  /** 发送文本；replyTo 为被引用消息 id；mentions 为群聊 @ 的 neko id（0 = 所有人） */
+  sendText: (key: string, text: string, replyTo?: number, mentions?: number[]) => Promise<void>
+  /** 拍一拍（普通消息 + XHTML 私有标记；2 秒节流） */
+  sendPoke: (key: string, targetNekoId: number) => Promise<void>
   sendImage: (key: string, file: File) => Promise<void>
   /**
    * 转发聊天记录：
@@ -158,6 +165,8 @@ export interface XmppChatValue {
   sendSticker: (key: string, sticker: NekoSticker) => void
   /** 收藏图片为表情（自动压到 360px PNG） */
   addSticker: (file: File) => Promise<void>
+  /** 收藏别人发来的表情消息 */
+  saveStickerFromMessage: (message: NekoMessage) => Promise<void>
   removeSticker: (id: number) => Promise<void>
   recallMessage: (key: string, messageId: number, admin?: boolean) => Promise<void>
   /** 打开/创建单聊，返回会话键 */
@@ -174,6 +183,8 @@ export interface XmppChatValue {
   /** 向 neko 原生账号发起好友申请 */
   addNativeFriend: (nekoId: number) => Promise<void>
   removeFriend: (contact: NekoContact) => Promise<void>
+  /** 设置联系人备注（仅自己可见；空串清除） */
+  setContactRemark: (nekoId: number, remark: string) => Promise<void>
   searchDirectory: (query: string) => Promise<NekoDirectoryUser[]>
   refresh: () => Promise<void>
   stickers: NekoSticker[]
@@ -204,12 +215,13 @@ function makeDirectConversation(
   contact: NekoContact,
   pinned: Set<string>,
 ): NekoConversation {
+  const label = contactLabel(contact) || contact.username
   return {
     key: contact.key,
     kind: 'direct',
-    title: contact.displayName || contact.username,
+    title: label,
     avatarId: contact.linewebId ?? -contact.nekoId,
-    avatarName: contact.displayName || contact.username,
+    avatarName: label,
     avatarNekoId: contact.nekoId,
     avatarVersion: contact.avatarVersion || 0,
     contact,
@@ -217,6 +229,7 @@ function makeDirectConversation(
     lastMessage: null,
     lastMessageAt: contact.lastMessageAt || 0,
     unread: 0,
+    mentionUnread: 0,
     pinned: pinned.has(contact.key),
     online: contact.online,
     members: [],
@@ -240,6 +253,7 @@ function makeRoomConversation(room: NekoRoom, pinned: Set<string>): NekoConversa
     lastMessage: null,
     lastMessageAt: room.lastMessageAt || 0,
     unread: 0,
+    mentionUnread: 0,
     pinned: pinned.has(room.key),
     online: false,
     members: room.members,
@@ -256,6 +270,8 @@ function errorText(error: unknown, fallback: string): string {
 export function XmppChatProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const userId = user?.id ?? null
+  const { isEnabled } = useFeature()
+  const chatEnabled = isEnabled('chat')
   // 好友申请的角标仍由 Prisma 侧的 /ws/chat 负责，接受/拒绝后需要同步
   const { refreshSummary } = useChat()
 
@@ -273,6 +289,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   const [activeKey, setActiveKeyState] = useState<string | null>(null)
   const [messagesByKey, setMessagesByKey] = useState<Record<string, NekoMessage[]>>({})
   const [historyMeta, setHistoryMeta] = useState<Record<string, HistoryMeta>>({})
+  const [peerRead, setPeerRead] = useState<Record<string, number>>({})
   const [messageNotice, setMessageNotice] = useState<NekoMessageNotice | null>(null)
 
   // === 可变状态（事件回调里读，避免闭包过期）===
@@ -297,6 +314,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   const lookupQueueRef = useRef<Set<string>>(new Set())
   const lookupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pokeAtRef = useRef<Record<string, number>>({})
 
   const commitConversations = useCallback(
     (updater: (prev: NekoConversation[]) => NekoConversation[]) => {
@@ -317,6 +335,14 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   const commitRooms = useCallback((list: NekoRoom[]) => {
     roomsRef.current = list
     setRooms(list)
+  }, [])
+
+  const commitPeerRead = useCallback((key: string, messageId: number) => {
+    if (!key) return
+    const next = Math.max(peerReadRef.current[key] ?? 0, messageId)
+    if (next === (peerReadRef.current[key] ?? 0)) return
+    peerReadRef.current[key] = next
+    setPeerRead((prev) => ({ ...prev, [key]: next }))
   }, [])
 
   const commitMessages = useCallback(
@@ -373,7 +399,9 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       unreadRef.current[key] = Math.max(0, value)
       commitConversations((prev) =>
         prev.map((conversation) =>
-          conversation.key === key ? { ...conversation, unread: Math.max(0, value) } : conversation,
+          conversation.key === key
+            ? { ...conversation, unread: Math.max(0, value), mentionUnread: value === 0 ? 0 : conversation.mentionUnread ?? 0 }
+            : conversation,
         ),
       )
     },
@@ -382,15 +410,20 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
 
   /** 把最新一条消息落到会话列表（不存在则按联系人 / 房间补建） */
   const upsertFromMessage = useCallback(
-    (key: string, message: NekoMessage, unread?: number) => {
+    (key: string, message: NekoMessage, unread?: number, mentionUnread?: number) => {
       commitConversations((prev) => {
         const index = prev.findIndex((conversation) => conversation.key === key)
         const isActive = key === activeKeyRef.current
+        const current = index >= 0 ? prev[index] : null
         const nextUnread =
-          unread !== undefined ? unread : isActive || message.mine ? 0 : prev[index]?.unread ?? 0
+          unread !== undefined ? unread : isActive || message.mine ? 0 : current?.unread ?? 0
+        const nextMentionUnread = mentionUnread !== undefined
+          ? mentionUnread
+          : isActive || message.mine
+            ? 0
+            : (current?.mentionUnread ?? 0) + (message.mentionedMe ? 1 : 0)
 
-        if (index >= 0) {
-          const current = prev[index]
+        if (index >= 0 && current) {
           const latest =
             !current.lastMessage || message.ts >= current.lastMessage.ts ? message : current.lastMessage
           const copy = [...prev]
@@ -399,6 +432,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
             lastMessage: latest,
             lastMessageAt: Math.max(current.lastMessageAt, message.ts),
             unread: nextUnread,
+            mentionUnread: nextMentionUnread,
           }
           return sortNekoConversations(copy, pinnedRef.current)
         }
@@ -417,6 +451,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
         created.lastMessage = message
         created.lastMessageAt = Math.max(created.lastMessageAt, message.ts)
         created.unread = nextUnread
+        created.mentionUnread = nextMentionUnread
         return sortNekoConversations([created, ...prev], pinnedRef.current)
       })
     },
@@ -429,7 +464,8 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
    */
   const pushMessageNotice = useCallback((key: string, roomId: number | null, message: NekoMessage) => {
     const room = roomId ? roomsRef.current.find((item) => item.id === roomId) ?? null : null
-    if (room?.notifyMuted) return
+    // 免打扰群：@我 与拍一拍仍然提醒（与微信一致）
+    if (room?.notifyMuted && !message.mentionedMe && !message.poke) return
     const contact = contactByNameRef.current.get(message.fromUsername) ?? null
     const body = message.body.replace(/\s+/g, ' ').trim()
     const preview = message.image
@@ -437,15 +473,18 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       : body === '[表情]'
         ? '[表情]'
         : body.slice(0, 80) || '[消息]'
+    const contactName = contactLabel(contact) || message.fromUsername || '对方'
     const next: NekoMessageNotice = {
       key,
       kind: room ? 'room' : 'direct',
-      fromName: contact?.displayName || contact?.username || message.fromUsername || '对方',
+      fromName: contactName,
       avatarId: room ? -room.id : contact?.linewebId ?? contact?.nekoId ?? 0,
       avatarNekoId: room ? null : contact?.nekoId ?? null,
       avatarVersion: room ? 0 : contact?.avatarVersion ?? 0,
-      title: room ? room.name : contact?.displayName || contact?.username || message.fromUsername || '聊天',
+      title: room ? room.name : contactName || '聊天',
       preview,
+      mentioned: !!message.mentionedMe,
+      poke: !!message.poke,
       image: message.image ? chatImageUrl(message.image) : null,
       ts: message.ts || Date.now(),
       receivedAt: Date.now(),
@@ -505,7 +544,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       try {
         const { result, parsed } = await fetchPage(key)
         commitMessages(key, (prev) => mergeNekoMessages(prev, parsed.messages))
-        if (parsed.peerRead) peerReadRef.current[key] = parsed.peerRead
+        if (parsed.peerRead) commitPeerRead(key, parsed.peerRead)
         commitMeta(key, {
           loaded: true,
           loading: false,
@@ -515,14 +554,17 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
         if (last) {
           const watermark = readWatermark(key)
           const unread = parsed.messages.filter((message) => !message.mine && message.id > watermark).length
-          upsertFromMessage(key, last, key === activeKeyRef.current ? 0 : unread)
+          const mentionUnread = parsed.messages.filter((message) =>
+            !message.mine && message.mentionedMe && message.id > watermark
+          ).length
+          upsertFromMessage(key, last, key === activeKeyRef.current ? 0 : unread, key === activeKeyRef.current ? 0 : mentionUnread)
         }
         if (key === activeKeyRef.current) markRead(key)
       } catch (err) {
         commitMeta(key, { loading: false, error: errorText(err, '加载消息失败') })
       }
     },
-    [commitMessages, commitMeta, fetchPage, markRead, upsertFromMessage],
+    [commitMessages, commitMeta, commitPeerRead, fetchPage, markRead, upsertFromMessage],
   )
 
   const refreshLatest = useCallback(
@@ -531,7 +573,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
         const { result, parsed } = await fetchPage(key)
         if (parsed.messages.length === 0) return
         commitMessages(key, (prev) => mergeNekoMessages(prev, parsed.messages))
-        if (parsed.peerRead) peerReadRef.current[key] = parsed.peerRead
+        if (parsed.peerRead) commitPeerRead(key, parsed.peerRead)
         commitMeta(key, {
           loaded: true,
           complete: parsed.complete || result.rows.length < NEKO_PAGE_SIZE,
@@ -539,8 +581,9 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
           error: null,
         })
         const last = parsed.messages[parsed.messages.length - 1]
+        const existingMention = conversationsRef.current.find((item) => item.key === key)?.mentionUnread ?? 0
         if (!previewOnly) {
-          upsertFromMessage(key, last)
+          upsertFromMessage(key, last, undefined, existingMention)
           return
         }
         const existingUnread = unreadRef.current[key]
@@ -549,15 +592,18 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
           const unread = parsed.messages.filter(
             (message) => !message.mine && message.id > watermark,
           ).length
-          upsertFromMessage(key, last, unread)
+          const mentionUnread = parsed.messages.filter(
+            (message) => !message.mine && message.mentionedMe && message.id > watermark,
+          ).length
+          upsertFromMessage(key, last, unread, mentionUnread)
         } else {
-          upsertFromMessage(key, last)
+          upsertFromMessage(key, last, undefined, existingMention)
         }
       } catch {
         // 预览失败静默忽略（打开会话时会重新拉取）
       }
     },
-    [commitMessages, commitMeta, fetchPage, upsertFromMessage],
+    [commitMessages, commitMeta, commitPeerRead, fetchPage, upsertFromMessage],
   )
 
   const loadMore = useCallback(
@@ -668,6 +714,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
           lastMessage: previous?.lastMessage ?? null,
           lastMessageAt: Math.max(conversation.lastMessageAt, previous?.lastMessageAt ?? 0),
           unread: unreadRef.current[key] ?? previous?.unread ?? 0,
+          mentionUnread: previous?.mentionUnread ?? 0,
           pinned: pinned.has(key),
           online: contact.online,
           isFriend: contact.isFriend,
@@ -682,6 +729,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
           lastMessage: previous?.lastMessage ?? null,
           lastMessageAt: Math.max(conversation.lastMessageAt, previous?.lastMessageAt ?? 0),
           unread: unreadRef.current[room.key] ?? previous?.unread ?? 0,
+          mentionUnread: previous?.mentionUnread ?? 0,
           pinned: pinned.has(room.key),
         })
       }
@@ -810,9 +858,11 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
         return
       }
       if (event.event === 'read') {
-        if (event.peer) {
-          const contact = contactByNameRef.current.get(event.peer)
-          if (contact) peerReadRef.current[contact.key] = event.msgId
+        // 被读方的回执没有 peer 属性，但 headline 的 from 就是读者；两条路径都要兼容
+        const peerUsername = event.peer || localpartOfJid(event.from)
+        if (peerUsername) {
+          const contact = contactByNameRef.current.get(peerUsername)
+          if (contact) commitPeerRead(contact.key, event.msgId)
         }
         return
       }
@@ -824,7 +874,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       }
       scheduleViewRefresh()
     },
-    [handleRecall, refreshSummary, scheduleViewRefresh],
+    [commitPeerRead, handleRecall, refreshSummary, scheduleViewRefresh],
   )
 
   const handlePresence = useCallback(
@@ -964,13 +1014,15 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
     setActiveKeyState(null)
     setMessagesByKey({})
     setHistoryMeta({})
+    peerReadRef.current = {}
+    setPeerRead({})
     setMessageNotice(null)
     setConnectionState('closed')
     setTransport('polling')
   }, [])
 
   useEffect(() => {
-    if (!userId) {
+    if (!userId || !chatEnabled) {
       resetState()
       setError(null)
       setLoading(false)
@@ -1194,6 +1246,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
     // 依赖全部是稳定回调；userId 变化时才重建连接
   }, [
     userId,
+    chatEnabled,
     applyView,
     ensureLoaded,
     ensurePreviews,
@@ -1276,13 +1329,42 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const sendText = useCallback(
-    async (key: string, text: string, replyTo?: number) => {
+    async (key: string, text: string, replyTo?: number, mentions?: number[]) => {
       const body = text.trim()
       if (!body) return
       const client = requireClient()
       const target = requireTarget(key)
       const reply = Math.max(0, Math.trunc(replyTo || 0))
-      client.sendMessage({ to: target.to, type: target.type, body, ...(reply ? { reply } : {}) })
+      const mentionIds = target.type === 'groupchat'
+        ? [...new Set((mentions ?? []).filter((id) => Number.isInteger(id) && id >= 0))].slice(0, 20)
+        : []
+      client.sendMessage({
+        to: target.to,
+        type: target.type,
+        body,
+        ...(reply ? { reply } : {}),
+        ...(mentionIds.length ? { mentions: mentionIds } : {}),
+      })
+    },
+    [requireClient, requireTarget],
+  )
+
+  const sendPoke = useCallback(
+    async (key: string, targetNekoId: number) => {
+      if (!Number.isInteger(targetNekoId) || targetNekoId <= 0) return
+      const now = Date.now()
+      if (now - (pokeAtRef.current[key] ?? 0) < 2000) {
+        throw new Error('拍一拍太频繁，请稍后再试')
+      }
+      const client = requireClient()
+      const target = requireTarget(key)
+      pokeAtRef.current[key] = now
+      client.sendMessage({
+        to: target.to,
+        type: target.type,
+        body: '[拍一拍]',
+        xhtml: `<span data-lw-poke="${targetNekoId}">[拍一拍]</span>`,
+      })
     },
     [requireClient, requireTarget],
   )
@@ -1401,6 +1483,20 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       await refreshView()
     },
     [refreshView],
+  )
+
+  const saveStickerFromMessage = useCallback(
+    async (message: NekoMessage) => {
+      if (message.mine || message.body !== '[表情]' || !message.image) return
+      const uploadId = uploadIdOf(message.image)
+      if (!uploadId) throw new Error('这条表情无法收藏')
+      if (stickers.some((sticker) => uploadIdOf(sticker.url) === uploadId)) {
+        throw new Error('这个表情已经在你的表情里了')
+      }
+      await api.post('/chat/xmpp/stickers', { uploadId })
+      await refreshView()
+    },
+    [refreshView, stickers],
   )
 
   const removeSticker = useCallback(
@@ -1542,6 +1638,39 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
     [refreshSummary, refreshView],
   )
 
+  const setContactRemark = useCallback(
+    async (nekoId: number, remark: string) => {
+      const nextRemark = remark.trim()
+      const prevContacts = contactsRef.current
+      const target = prevContacts.find((contact) => contact.nekoId === nekoId)
+      if (!target) throw new Error('联系人不存在')
+      const prevConversations = conversationsRef.current
+
+      commitContacts(prevContacts.map((contact) =>
+        contact.nekoId === nekoId ? { ...contact, remark: nextRemark } : contact,
+      ))
+      commitConversations((prev) => prev.map((conversation) => {
+        if (conversation.kind !== 'direct' || conversation.contact?.nekoId !== nekoId) return conversation
+        const label = contactLabel({ ...conversation.contact, remark: nextRemark }) || conversation.contact.username
+        return {
+          ...conversation,
+          title: label,
+          avatarName: label,
+          contact: { ...conversation.contact, remark: nextRemark },
+        }
+      }))
+
+      try {
+        await api.put('/chat/friends/remark', { nekoId, remark: nextRemark })
+      } catch (err) {
+        commitContacts(prevContacts)
+        commitConversations(() => prevConversations)
+        throw err
+      }
+    },
+    [commitContacts, commitConversations],
+  )
+
   const searchDirectory = useCallback(async (query: string): Promise<NekoDirectoryUser[]> => {
     const keyword = query.trim()
     if (!keyword) return []
@@ -1588,6 +1717,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       incoming,
       outgoing,
       unreadTotal,
+      peerRead,
       activeKey,
       setActiveKey,
       messages: activeMessages,
@@ -1597,10 +1727,12 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       messagesError: activeMeta.error,
       loadMore: loadMoreFor,
       sendText,
+      sendPoke,
       forwardMessages,
       sendImage,
       sendSticker,
       addSticker,
+      saveStickerFromMessage,
       removeSticker,
       recallMessage,
       startDirect,
@@ -1615,6 +1747,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       addFriend,
       addNativeFriend,
       removeFriend,
+      setContactRemark,
       searchDirectory,
       refresh,
       stickers,
@@ -1634,16 +1767,19 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       incoming,
       outgoing,
       unreadTotal,
+      peerRead,
       activeKey,
       setActiveKey,
       activeMessages,
       activeMeta,
       loadMoreFor,
       sendText,
+      sendPoke,
       forwardMessages,
       sendImage,
       sendSticker,
       addSticker,
+      saveStickerFromMessage,
       removeSticker,
       recallMessage,
       startDirect,
@@ -1658,6 +1794,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       addFriend,
       addNativeFriend,
       removeFriend,
+      setContactRemark,
       searchDirectory,
       refresh,
       stickers,

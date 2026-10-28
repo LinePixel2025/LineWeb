@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   extractImageSrc,
+  extractPoke,
   linewebIdOfUsername,
   parseBundleText,
   parseHistoryMessages,
@@ -82,6 +83,30 @@ describe('parseHistoryMessages', () => {
     const parsed = parseHistoryMessages(first(xml), CONTEXT)
     expect(parsed.messages[0].recalled).toBe(true)
     expect(parsed.messages[0].image).toBeNull()
+  })
+})
+
+describe('@ 提及与拍一拍', () => {
+  it('只读取 data-lw-poke 属性', () => {
+    expect(extractPoke('<span data-lw-poke="1000000000002">[拍一拍]</span>')).toEqual({ toNekoId: 1000000000002 })
+    expect(extractPoke('<span data-x="1">[拍一拍]</span>')).toBeNull()
+    expect(extractPoke('<span data-lw-poke="0">x</span>')).toBeNull()
+  })
+
+  it('实时消息解析 mention="1" 与拍一拍', () => {
+    const xml = `<message type="groupchat" from="room-9@${MUC}/alice" to="lw_2@${DOMAIN}" id="21" mention="1"><body>[拍一拍]</body><html xmlns="http://jabber.org/protocol/xhtml-im"><body xmlns="http://www.w3.org/1999/xhtml"><span data-lw-poke="1000000000002">[拍一拍]</span></body></html></message>`
+    const parsed = parseLiveMessage(first(xml), { ...CONTEXT, key: 'r9', roomId: 9 })
+    expect(parsed?.mentionedMe).toBe(true)
+    expect(parsed?.poke).toEqual({ toNekoId: 1000000000002 })
+  })
+
+  it('历史消息解析 mention 与转义后的拍一拍 XHTML', () => {
+    const xml = `<query complete="1"><msg id="22" mine="0" from="alice@${DOMAIN}" ts="1700000000004" mention="1"><body>[拍一拍]</body><html>&lt;span data-lw-poke="1000000000002"&gt;[拍一拍]&lt;/span&gt;</html></msg><msg id="23" mine="0" from="alice@${DOMAIN}" ts="1700000000005"><body>普通消息</body></msg></query>`
+    const parsed = parseHistoryMessages(first(xml), CONTEXT)
+    expect(parsed.messages[0].mentionedMe).toBe(true)
+    expect(parsed.messages[0].poke).toEqual({ toNekoId: 1000000000002 })
+    expect(parsed.messages[1].mentionedMe).toBe(false)
+    expect(parsed.messages[1].poke).toBeNull()
   })
 })
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { GAME_GOMOKU_ONLINE_ROUTE } from '../../lib/games/catalog'
+import { useGameStats } from '../../contexts/GameStatsContext'
 import {
   GOMOKU_BLACK,
   GOMOKU_BOARD_SIZE,
@@ -17,43 +18,6 @@ import {
 
 /** AI 思考延迟（毫秒）：给画面留出落子节奏，也避免长阻塞 */
 const AI_THINK_DELAY_MS = 400
-
-/** 战绩存储 key（与 jump / minesweeper 的 lineweb.* 命名一致） */
-const GOMOKU_STATS_KEY = 'lineweb.gomoku.stats'
-
-/** 本机战绩（人机对战） */
-interface GomokuStats {
-  wins: number
-  losses: number
-  draws: number
-}
-
-function emptyStats(): GomokuStats {
-  return { wins: 0, losses: 0, draws: 0 }
-}
-
-function loadStats(): GomokuStats {
-  try {
-    const raw = localStorage.getItem(GOMOKU_STATS_KEY)
-    if (!raw) return emptyStats()
-    const parsed = JSON.parse(raw) as Partial<GomokuStats>
-    return {
-      wins: Number.isInteger(parsed.wins) ? parsed.wins! : 0,
-      losses: Number.isInteger(parsed.losses) ? parsed.losses! : 0,
-      draws: Number.isInteger(parsed.draws) ? parsed.draws! : 0,
-    }
-  } catch {
-    return emptyStats()
-  }
-}
-
-function saveStats(stats: GomokuStats): void {
-  try {
-    localStorage.setItem(GOMOKU_STATS_KEY, JSON.stringify(stats))
-  } catch {
-    // localStorage 不可用（隐私模式）时仅影响战绩持久化
-  }
-}
 
 type GameStatus = 'playing' | 'won' | 'lost' | 'draw'
 
@@ -85,7 +49,7 @@ function newGame(): GameState {
 /**
  * 五子棋单机（人机对战）：
  * - 15×15 无禁手，玩家可选执黑（先手）或执白（后手），AI 与联机托管共用同一引擎；
- * - 悔棋一次撤销「AI + 自己」各一手；战绩（胜/负/平）保存在 localStorage。
+ * - 悔棋一次撤销「AI + 自己」各一手；战绩（胜/负/平）随账号保存在服务端。
  * - AI 走子用 setTimeout 延迟触发，组件卸载 / 开新局时清理。
  */
 export default function GomokuPage() {
@@ -93,7 +57,8 @@ export default function GomokuPage() {
   const [playerColor, setPlayerColor] = useState<GomokuColor>(GOMOKU_BLACK)
   const [state, setState] = useState<GameState>(newGame)
   const [thinking, setThinking] = useState(false)
-  const [stats, setStats] = useState<GomokuStats>(loadStats)
+  const { getStat, recordResult } = useGameStats()
+  const stat = getStat('gomoku', 'solo')
   const statsRecordedRef = useRef(false)
   const aiTimerRef = useRef<number | null>(null)
   const stageRef = useRef<HTMLDivElement | null>(null)
@@ -132,21 +97,16 @@ export default function GomokuPage() {
   // 卸载时清理 AI 定时器
   useEffect(() => clearAiTimer, [clearAiTimer])
 
-  /** 结算时记一次战绩（每局只记一次） */
+  /** 结算时上报一次战绩（每局只记一次） */
   useEffect(() => {
     if (state.status === 'playing' || statsRecordedRef.current) return
     statsRecordedRef.current = true
-    setStats((prev) => {
-      const next: GomokuStats =
-        state.status === 'won'
-          ? { ...prev, wins: prev.wins + 1 }
-          : state.status === 'lost'
-            ? { ...prev, losses: prev.losses + 1 }
-            : { ...prev, draws: prev.draws + 1 }
-      saveStats(next)
-      return next
+    recordResult({
+      game: 'gomoku',
+      variant: 'solo',
+      outcome: state.status === 'won' ? 'win' : state.status === 'lost' ? 'loss' : 'draw',
     })
-  }, [state.status])
+  }, [state.status, recordResult])
 
   /** 在 (x, y) 落 color 一子并做胜负 / 满盘判定（纯函数式返回新状态） */
   const applyMove = useCallback((prev: GameState, x: number, y: number, color: GomokuColor): GameState => {
@@ -379,13 +339,13 @@ export default function GomokuPage() {
         <span className="gh-gmk-stats-item">
           执子：<strong>{playerColor === GOMOKU_BLACK ? '黑（先手）' : '白（后手）'}</strong>
         </span>
-        <span className="gh-gmk-stats-item">胜 <strong>{stats.wins}</strong></span>
-        <span className="gh-gmk-stats-item">负 <strong>{stats.losses}</strong></span>
-        <span className="gh-gmk-stats-item">平 <strong>{stats.draws}</strong></span>
+        <span className="gh-gmk-stats-item">胜 <strong>{stat?.wins ?? 0}</strong></span>
+        <span className="gh-gmk-stats-item">负 <strong>{stat?.losses ?? 0}</strong></span>
+        <span className="gh-gmk-stats-item">平 <strong>{stat?.draws ?? 0}</strong></span>
       </div>
 
       <p className="gh-games-footnote">
-        悔棋会同时撤销 AI 与你的各一手；战绩仅保存在本机浏览器。想和好友对弈？试试{' '}
+        悔棋会同时撤销 AI 与你的各一手；战绩随账号保存。想和好友对弈？试试{' '}
         <Link to={GAME_GOMOKU_ONLINE_ROUTE}>好友联机</Link>。
       </p>
     </div>

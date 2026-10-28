@@ -231,6 +231,10 @@ export interface NekoMessage {
   recalled: boolean
   /** 被群主/管理员撤回 */
   byAdmin: boolean
+  /** 这条群消息是否 @ 了我（neko 只对被提及者下发 mention="1"） */
+  mentionedMe?: boolean
+  /** 拍一拍目标（仅 LineWeb 私有标记的消息） */
+  poke?: { toNekoId: number } | null
   /** 图片地址（已归一化为 /chat/uploads/<id>，渲染时再追加 token） */
   image: string | null
   /** 引用回复的快照（非引用消息为 null） */
@@ -366,6 +370,10 @@ export interface NekoMessageNotice {
   title: string
   /** 正文预览：图片与表情已归一为占位文字 */
   preview: string
+  /** 这条消息是否 @ 了我（免打扰群仍然提醒） */
+  mentioned?: boolean
+  /** 这条消息是否是拍一拍（免打扰群仍然提醒） */
+  poke?: boolean
   /** 图片消息缩略图（已追加登录令牌；非图片为 null） */
   image: string | null
   /** 最新一条消息时间（毫秒） */
@@ -393,6 +401,8 @@ export interface NekoConversation {
   lastMessage: NekoMessage | null
   lastMessageAt: number
   unread: number
+  /** 未读消息里 @ 我的条数（群聊） */
+  mentionUnread?: number
   pinned: boolean
   online: boolean
   /** 群成员（仅群聊） */

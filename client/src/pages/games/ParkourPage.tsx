@@ -6,12 +6,7 @@ import {
   parkourScore,
   type ParkourRunState,
 } from '../../lib/games/parkour'
-import {
-  readParkourBest,
-  saveParkourRun,
-  type ParkourBest,
-  type ParkourSaveResult,
-} from '../../lib/games/parkourRecords'
+import { useGameStats } from '../../contexts/GameStatsContext'
 import type {
   ParkourEndResult,
   ParkourGameViewProps,
@@ -47,17 +42,42 @@ function causeLabel(cause: ParkourEndResult['cause']): string {
   return '本局结束'
 }
 
-/** 霓虹跑酷单机页：3D 无尽跑酷 + 本机纪录；three.js 场景在点击开始时动态加载 */
+interface ParkourBestView {
+  distanceM: number
+  coins: number
+  score: number
+  maxCombo: number
+  runs: number
+}
+
+interface ParkourSaveView {
+  best: ParkourBestView
+  newDistance: boolean
+  newScore: boolean
+  newCoins: boolean
+  newCombo: boolean
+}
+
+/** 霓虹跑酷单机页：3D 无尽跑酷 + 账号纪录；three.js 场景在点击开始时动态加载 */
 export default function ParkourPage() {
   const [phase, setPhase] = useState<Phase>('intro')
-  const [best, setBest] = useState<ParkourBest>(() => readParkourBest())
+  const { getStat, recordResult } = useGameStats()
+  const stat = getStat('parkour', 'solo')
+  const best: ParkourBestView = {
+    distanceM: stat?.bestDistance ?? 0,
+    coins: stat?.bestCoins ?? 0,
+    score: stat?.bestScore ?? 0,
+    maxCombo: stat?.bestCombo ?? 0,
+    runs: stat?.games ?? 0,
+  }
   const [result, setResult] = useState<ParkourEndResult | null>(null)
-  const [saveInfo, setSaveInfo] = useState<ParkourSaveResult | null>(null)
+  const [saveInfo, setSaveInfo] = useState<ParkourSaveView | null>(null)
   const [gameView, setGameView] = useState<GameViewComponent | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [runVersion, setRunVersion] = useState(0)
   const runRef = useRef<ParkourRunState | null>(null)
   const gameViewRef = useRef<GameViewComponent | null>(null)
+  const runEndedRef = useRef(false)
 
   const startRun = useCallback(async (): Promise<void> => {
     setError(null)
@@ -70,6 +90,7 @@ export default function ParkourPage() {
       }
       const run = createParkourRun({ seed: seed32(), mode: 'endless' })
       runRef.current = run
+      runEndedRef.current = false
       setResult(null)
       setSaveInfo(null)
       setRunVersion((value) => value + 1)
@@ -81,17 +102,33 @@ export default function ParkourPage() {
   }, [])
 
   const handleEnd = useCallback((end: ParkourEndResult): void => {
-    const saved = saveParkourRun({
+    if (runEndedRef.current) return
+    runEndedRef.current = true
+    const save: ParkourSaveView = {
+      best: {
+        distanceM: Math.max(best.distanceM, end.distanceM),
+        coins: Math.max(best.coins, end.coins),
+        score: Math.max(best.score, end.score),
+        maxCombo: Math.max(best.maxCombo, end.maxCombo),
+        runs: best.runs + 1,
+      },
+      newDistance: end.distanceM > best.distanceM,
+      newScore: end.score > best.score,
+      newCoins: end.coins > best.coins,
+      newCombo: end.maxCombo > best.maxCombo,
+    }
+    setSaveInfo(save)
+    recordResult({
+      game: 'parkour',
+      variant: 'solo',
+      score: end.score,
       distanceM: end.distanceM,
       coins: end.coins,
-      score: end.score,
       maxCombo: end.maxCombo,
     })
-    setBest(saved.best)
-    setSaveInfo(saved)
     setResult(end)
     setPhase('ended')
-  }, [])
+  }, [best, recordResult])
 
   const togglePause = useCallback((): void => {
     setPhase((current) => {
@@ -283,14 +320,14 @@ export default function ParkourPage() {
 
       <div className="gh-pk-intro-grid">
         <section className="gh-pk-panel">
-          <h2>本机纪录</h2>
+          <h2>账号纪录</h2>
           <div className="gh-pk-records">
             <div><span>最远距离</span><strong>{best.runs > 0 ? `${Math.floor(best.distanceM)}m` : '—'}</strong></div>
             <div><span>最高得分</span><strong>{best.runs > 0 ? formatNumber(best.score) : '—'}</strong></div>
             <div><span>最多金币</span><strong>{best.runs > 0 ? best.coins : '—'}</strong></div>
             <div><span>最高连击</span><strong>{best.runs > 0 ? `×${best.maxCombo}` : '—'}</strong></div>
           </div>
-          <p className="gh-pk-panel-note">已完成 {best.runs} 局 · 纪录只保存在本机浏览器</p>
+          <p className="gh-pk-panel-note">已完成 {best.runs} 局 · 纪录随账号保存</p>
 
           <h2>操作</h2>
           <ul className="gh-pk-list">

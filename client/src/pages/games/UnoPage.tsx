@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import UnoCardView from '../../components/games/uno/UnoCardView'
 import { GAME_UNO_ONLINE_ROUTE } from '../../lib/games/catalog'
+import { useGameStats } from '../../contexts/GameStatsContext'
 import {
   UNO_COLOR_LABELS,
   UNO_MAX_PLAYERS,
@@ -22,34 +23,6 @@ import {
 } from '../../lib/games/uno'
 
 const AI_THINK_MS = 700
-const STATS_KEY = 'lineweb.uno.stats'
-
-interface UnoStats {
-  games: number
-  wins: number
-}
-
-function loadStats(): UnoStats {
-  try {
-    const raw = localStorage.getItem(STATS_KEY)
-    if (!raw) return { games: 0, wins: 0 }
-    const parsed = JSON.parse(raw) as Partial<UnoStats>
-    return {
-      games: Number.isFinite(parsed.games) ? Number(parsed.games) : 0,
-      wins: Number.isFinite(parsed.wins) ? Number(parsed.wins) : 0,
-    }
-  } catch {
-    return { games: 0, wins: 0 }
-  }
-}
-
-function saveStats(stats: UnoStats): void {
-  try {
-    localStorage.setItem(STATS_KEY, JSON.stringify(stats))
-  } catch {
-    // 隐私模式 / 配额不足时只影响本机战绩
-  }
-}
 
 function seatName(seat: number): string {
   return seat === 0 ? '你' : `AI ${seat}`
@@ -92,7 +65,8 @@ export default function UnoPage() {
   const [table, setTable] = useState<UnoTableState>(() => createUnoTable(3))
   const [error, setError] = useState<string | null>(null)
   const [pendingWild, setPendingWild] = useState<number | null>(null)
-  const [stats, setStats] = useState<UnoStats>(loadStats)
+  const { getStat, recordResult } = useGameStats()
+  const stat = getStat('uno', 'solo')
   const [rulesOpen, setRulesOpen] = useState(false)
   const recordedRef = useRef(false)
   const tableRef = useRef(table)
@@ -140,15 +114,12 @@ export default function UnoPage() {
   useEffect(() => {
     if (table.status !== 'finished' || recordedRef.current) return
     recordedRef.current = true
-    setStats((prev) => {
-      const next: UnoStats = {
-        games: prev.games + 1,
-        wins: prev.wins + (table.winnerSeat === 0 ? 1 : 0),
-      }
-      saveStats(next)
-      return next
+    recordResult({
+      game: 'uno',
+      variant: 'solo',
+      outcome: table.winnerSeat === 0 ? 'win' : 'loss',
     })
-  }, [table.status, table.winnerSeat])
+  }, [table.status, table.winnerSeat, recordResult])
 
   const newGame = useCallback((count?: number) => {
     const nextCount = count ?? playerCount
@@ -267,7 +238,7 @@ export default function UnoPage() {
           ))}
           <span className="gh-uno-toolbar-label" title="联机支持 2–10 人">联机最多 {UNO_MAX_PLAYERS} 人</span>
         </div>
-        <span className="gh-uno-toolbar-hint">本机战绩：{stats.games} 局 · {stats.wins} 胜</span>
+        <span className="gh-uno-toolbar-hint">账号战绩：{stat?.games ?? 0} 局 · {stat?.wins ?? 0} 胜</span>
       </div>
 
       {error && <div className="gh-alert gh-alert--danger gh-game-alert" role="alert">{error}</div>}

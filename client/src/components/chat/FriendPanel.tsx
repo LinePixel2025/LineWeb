@@ -28,6 +28,8 @@ interface Props {
   onAddNativeFriend: (nekoId: number) => void | Promise<void>
   /** 邀请好友进行联机对战（仅 LineWeb 好友可用；未传则不渲染按钮） */
   onInviteGame?: (linewebId: number) => void
+  /** 设置联系人备注（未传则不渲染按钮） */
+  onSetRemark?: (contact: NekoContact) => void
 }
 
 const SEARCH_DELAY = 300
@@ -64,6 +66,7 @@ export default function FriendPanel({
   onAddFriend,
   onAddNativeFriend,
   onInviteGame,
+  onSetRemark,
 }: Props) {
   const [query, setQuery] = useState('')
   const [users, setUsers] = useState<ChatUser[]>([])
@@ -313,7 +316,7 @@ export default function FriendPanel({
                     nekoId={friend.nekoId}
                     avatarVersion={friend.avatarVersion}
                     fallbackId={avatarIdOf(friend.linewebId, friend.nekoId)}
-                    name={friend.displayName || friend.username}
+                    name={contactLabel(friend)}
                     size="sm"
                   />
                   <span className="gh-chat-friend-name">{contactLabel(friend)}</span>
@@ -331,6 +334,15 @@ export default function FriendPanel({
                         </svg>
                       </button>
                     )}
+                    {onSetRemark && (
+                      <button
+                        type="button"
+                        className="gh-btn gh-btn--ghost gh-btn--sm"
+                        onClick={() => onSetRemark(friend)}
+                      >
+                        备注
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="gh-btn gh-btn--primary gh-btn--sm"
@@ -344,7 +356,7 @@ export default function FriendPanel({
                       className="gh-btn gh-btn--danger gh-btn--sm"
                       disabled={busyKey === `remove-${friend.key}`}
                       onClick={() => {
-                        if (!window.confirm(`确定删除好友 ${friend.displayName || friend.username} 吗？`)) return
+                        if (!window.confirm(`确定删除好友 ${contactLabel(friend)} 吗？`)) return
                         void run(`remove-${friend.key}`, () => onRemoveFriend(friend))
                       }}
                     >

@@ -25,4 +25,8 @@ export const queryKeys = {
     conversations: ['ai-chat', 'conversations'] as const,
     messages: (conversationId: number) => ['ai-chat', 'conversations', conversationId, 'messages'] as const,
   },
+  games: {
+    leaderboard: (game: string, variant: string, page = 1) =>
+      ['games', 'leaderboard', game, variant, page] as const,
+  },
 }

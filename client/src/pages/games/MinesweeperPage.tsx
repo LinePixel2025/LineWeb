@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { GAME_MINESWEEPER_ONLINE_ROUTE } from '../../lib/games/catalog'
+import { useGameStats } from '../../contexts/GameStatsContext'
 import {
   MS_LEVELS,
   MS_LEVEL_ORDER,
   createMsSession,
   formatMsTenths,
   formatMsTime,
-  loadMsBest,
-  loadMsStats,
   msAdjacent,
   msChordCell,
   msOpenCell,
@@ -16,11 +15,8 @@ import {
   msSessionElapsedMs,
   msToggleFlag,
   randomMsSeed,
-  saveMsBest,
-  saveMsResult,
   type MsLevel,
   type MsSession,
-  type MsStats,
   type MsStatus,
 } from '../../lib/games/minesweeper'
 
@@ -91,9 +87,11 @@ function SoloBoard({ level }: { level: MsLevel }) {
   const [tick, setTick] = useState(0)
   const [status, setStatus] = useState<MsStatus>('ready')
   const [elapsed, setElapsed] = useState(0)
-  const [best, setBest] = useState(() => loadMsBest(level))
+  const { getStat, recordResult } = useGameStats()
+  const stat = getStat('minesweeper', level)
+  const best = stat?.bestTimeMs ?? 0
   const [isRecord, setIsRecord] = useState(false)
-  const [stats, setStats] = useState<MsStats>(() => loadMsStats())
+  const reportedRef = useRef(false)
   const [focusIndex, setFocusIndex] = useState<number>(Math.floor(spec.height / 2) * spec.width + Math.floor(spec.width / 2))
 
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -109,21 +107,22 @@ function SoloBoard({ level }: { level: MsLevel }) {
     setTick((value) => value + 1)
   }, [])
 
-  /** 终局结算：写最佳时间与本机战绩 */
+  /** 终局结算：上报一次胜负与最佳用时 */
   const finalize = useCallback(
     (next: MsSession) => {
+      if (reportedRef.current) return
       if (next.status === 'won') {
+        reportedRef.current = true
         const ms = msSessionElapsedMs(next)
-        const previous = loadMsBest(next.level)
-        setBest(saveMsBest(next.level, ms))
-        setIsRecord(previous === 0 || ms < previous)
-        setStats(saveMsResult(next.level, true))
+        setIsRecord(best === 0 || ms < best)
+        recordResult({ game: 'minesweeper', variant: next.level, outcome: 'win', timeMs: ms })
       } else if (next.status === 'lost') {
+        reportedRef.current = true
         setIsRecord(false)
-        setStats(saveMsResult(next.level, false))
+        recordResult({ game: 'minesweeper', variant: next.level, outcome: 'loss' })
       }
     },
-    []
+    [best, recordResult]
   )
 
   const openCell = useCallback(
@@ -163,10 +162,10 @@ function SoloBoard({ level }: { level: MsLevel }) {
   const restart = useCallback(() => {
     const fresh = createMsSession(level, randomMsSeed())
     sessionRef.current = fresh
+    reportedRef.current = false
     setIsRecord(false)
     setStatus('ready')
     setElapsed(0)
-    setBest(loadMsBest(level))
     setFocusIndex(Math.floor(spec.height / 2) * spec.width + Math.floor(spec.width / 2))
     setTick((value) => value + 1)
   }, [level, spec.height, spec.width])
@@ -180,10 +179,6 @@ function SoloBoard({ level }: { level: MsLevel }) {
     return () => clearInterval(timer)
   }, [status])
 
-  // 切换难度时（key 变化会重挂载，这里兜住直接改 level 的情况）
-  useEffect(() => {
-    setBest(loadMsBest(level))
-  }, [level])
 
   // === 长按插旗（触屏） ===
 
@@ -307,9 +302,9 @@ function SoloBoard({ level }: { level: MsLevel }) {
           <strong className="gh-ms-hud-value">{best > 0 ? formatMsTime(best) : '—'}</strong>
         </span>
         <span className="gh-ms-hud-card gh-ms-hud-card--subtle">
-          <span className="gh-ms-hud-label">本机战绩</span>
+          <span className="gh-ms-hud-label">账号战绩</span>
           <strong className="gh-ms-hud-value">
-            {stats.wins[level]} 胜 · {stats.losses[level]} 败
+            {stat?.wins ?? 0} 胜 · {stat?.losses ?? 0} 败
           </strong>
         </span>
       </div>
@@ -493,7 +488,7 @@ export default function MinesweeperPage() {
           </p>
           <h1 className="gh-games-title">扫雷</h1>
           <p className="gh-games-subtitle">
-            数字告诉你周围 8 格里埋了几颗雷：靠推理翻开所有安全格就赢。单机三档难度冲本机最佳，
+            数字告诉你周围 8 格里埋了几颗雷：靠推理翻开所有安全格就赢。单机三档难度冲账号最佳，
             或者去联机模式和朋友一人只点一下、轮流扫。
           </p>
         </div>
@@ -580,7 +575,7 @@ export default function MinesweeperPage() {
             <li>第一次翻开的位置连同它的 3×3 邻域保证无雷，点开就行，不用赌。</li>
             <li>计时从第一次翻开开始，踩雷或全清立即停表。</li>
             <li>当前难度：{spec.label} {spec.width}×{spec.height}，{spec.mines} 颗雷。</li>
-            <li>最佳时间与胜败场只保存在本机浏览器，换档互不影响。</li>
+            <li>最佳时间与胜败场随账号保存，换档互不影响。</li>
           </ul>
 
           <Link to="/games" className="gh-ms-help-link">

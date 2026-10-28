@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useGameStats } from '../../contexts/GameStatsContext'
 import { Link, useNavigate } from 'react-router-dom'
 import DoudizhuActionBar from '../../components/games/doudizhu/DoudizhuActionBar'
 import DoudizhuGamebar from '../../components/games/doudizhu/DoudizhuGamebar'
@@ -20,42 +21,12 @@ import { GAME_DOUDIZHU_ONLINE_ROUTE } from '../../lib/games/catalog'
 /**
  * 斗地主单机：我（座位 0）+ 两个 AI（座位 1 下家 / 座位 2 上家）。
  * 规则引擎与联机共用（lib/games/doudizhu.ts），AI 为启发式（doudizhuAi.ts）。
- * 战绩（局数 / 胜场 / 累计积分）保存在 localStorage。
+ * 战绩（局数 / 胜场 / 累计积分）随账号保存在服务端。
  */
 
-const RECORD_KEY = 'lineweb_ddz_record'
 const BASE_SCORE = 100
 const SEAT_NAMES = ['我', '下家 AI', '上家 AI']
 const AI_THINK_MS = 800
-
-interface RecordData {
-  games: number
-  wins: number
-  score: number
-}
-
-function readRecord(): RecordData {
-  try {
-    const raw = localStorage.getItem(RECORD_KEY)
-    if (!raw) return { games: 0, wins: 0, score: 0 }
-    const parsed = JSON.parse(raw) as Partial<RecordData>
-    return {
-      games: Number.isFinite(parsed.games) ? Number(parsed.games) : 0,
-      wins: Number.isFinite(parsed.wins) ? Number(parsed.wins) : 0,
-      score: Number.isFinite(parsed.score) ? Number(parsed.score) : 0,
-    }
-  } catch {
-    return { games: 0, wins: 0, score: 0 }
-  }
-}
-
-function writeRecord(record: RecordData): void {
-  try {
-    localStorage.setItem(RECORD_KEY, JSON.stringify(record))
-  } catch {
-    // localStorage 不可用时仅影响战绩持久化
-  }
-}
 
 type Phase = 'bidding' | 'playing' | 'finished'
 
@@ -259,7 +230,8 @@ export default function DoudizhuPage() {
   const navigate = useNavigate()
   const [state, setState] = useState<GameState>(() => createInitialState(true))
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
-  const [record, setRecord] = useState<RecordData>(() => readRecord())
+  const { getStat, recordResult } = useGameStats()
+  const settledRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [hintIndex, setHintIndex] = useState(0)
   const [rulesOpen, setRulesOpen] = useState(false)
@@ -284,26 +256,29 @@ export default function DoudizhuPage() {
 
   const newGame = useCallback(() => {
     clearTimers()
+    settledRef.current = false
     setSelectedIds(new Set())
     setError(null)
     setHintIndex(0)
     setState(createInitialState(true))
   }, [clearTimers])
 
-  // 结算后累计战绩
+  // 结算后上报一局（同一局只报一次）
   useEffect(() => {
-    if (state.phase !== 'finished' || state.scoreDeltas === null) return
-    setRecord((prev) => {
-      const delta = state.scoreDeltas?.[0] ?? 0
-      const next: RecordData = {
-        games: prev.games + 1,
-        wins: prev.wins + (delta > 0 ? 1 : 0),
-        score: prev.score + delta,
-      }
-      writeRecord(next)
-      return next
+    if (state.phase !== 'finished' || state.scoreDeltas === null) {
+      if (state.phase === 'bidding' || state.phase === 'playing') settledRef.current = false
+      return
+    }
+    if (settledRef.current) return
+    settledRef.current = true
+    const delta = state.scoreDeltas[0] ?? 0
+    recordResult({
+      game: 'doudizhu',
+      variant: 'solo',
+      outcome: delta > 0 ? 'win' : delta < 0 ? 'loss' : 'draw',
+      scoreDelta: delta,
     })
-  }, [state.phase, state.scoreDeltas])
+  }, [state.phase, state.scoreDeltas, recordResult])
 
   // AI 应叫
   useEffect(() => {
@@ -500,8 +475,12 @@ export default function DoudizhuPage() {
         onBack={() => navigate('/games')}
         title="斗地主 · 单机"
       >
-        <span className="gh-ddz-gamebar-chip" title="本机战绩">
-          {record.wins}胜 / {record.games}局 · 积分 {record.score >= 0 ? `+${record.score}` : record.score}
+        <span className="gh-ddz-gamebar-chip" title="账号战绩">
+          {(getStat('doudizhu', 'solo')?.wins ?? 0)}胜 / {(getStat('doudizhu', 'solo')?.games ?? 0)}局 · 积分{' '}
+          {(() => {
+            const score = getStat('doudizhu', 'solo')?.scoreTotal ?? 0
+            return score >= 0 ? `+${score}` : score
+          })()}
         </span>
         <Link className="gh-btn gh-btn--secondary gh-btn--sm" to={GAME_DOUDIZHU_ONLINE_ROUTE}>
           好友联机

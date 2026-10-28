@@ -4,39 +4,20 @@ import Game2048Board from '../../components/games/Game2048Board'
 import { useGame2048Input } from '../../hooks/useGame2048Input'
 import { createGame, moveGame, type Game2048Snapshot } from '../../lib/games/game2048'
 import { GAME_2048_ONLINE_ROUTE } from '../../lib/games/catalog'
+import { useGameStats } from '../../contexts/GameStatsContext'
 import type { Game2048Direction } from '../../types/game'
 
-const BEST_SCORE_KEY = 'lineweb_2048_best'
-
-function readBestScore(): number {
-  try {
-    const raw = localStorage.getItem(BEST_SCORE_KEY)
-    if (!raw) return 0
-    const value = Number.parseInt(raw, 10)
-    return Number.isFinite(value) && value > 0 ? value : 0
-  } catch {
-    return 0
-  }
-}
-
-function writeBestScore(value: number): void {
-  try {
-    localStorage.setItem(BEST_SCORE_KEY, String(value))
-  } catch {
-    // localStorage 不可用（隐私模式）时仅影响最高分持久化，不影响本局
-  }
-}
-
 /**
- * 2048 单机版：纯前端引擎 + 键盘/触摸/方向键操作，最高分保存在 localStorage。
+ * 2048 单机版：纯前端引擎 + 键盘/触摸/方向键操作，最高分随账号保存。
  * 联机入口跳转 `/games/2048/online`（需登录）。
  */
 export default function Game2048Page() {
   const [snapshot, setSnapshot] = useState<Game2048Snapshot>(() => createGame())
-  const [best, setBest] = useState<number>(() => readBestScore())
   const [undoSnapshot, setUndoSnapshot] = useState<Game2048Snapshot | null>(null)
   const [winDismissed, setWinDismissed] = useState(false)
   const snapshotRef = useRef(snapshot)
+  const { getStat, recordResult } = useGameStats()
+  const recordedRef = useRef(false)
 
   useEffect(() => {
     snapshotRef.current = snapshot
@@ -83,13 +64,23 @@ export default function Game2048Page() {
     touch: false,
   })
 
-  // 刷新最高分
+  const best = Math.max(getStat('2048', 'solo')?.bestScore ?? 0, score)
+
+  // 每局结束上报一次（胜利/失败；重开新局后重置）
   useEffect(() => {
-    if (score > best) {
-      setBest(score)
-      writeBestScore(score)
+    if (status === 'playing') {
+      recordedRef.current = false
+      return
     }
-  }, [score, best])
+    if (recordedRef.current) return
+    recordedRef.current = true
+    recordResult({
+      game: '2048',
+      variant: 'solo',
+      outcome: status === 'won' ? 'win' : 'loss',
+      score,
+    })
+  }, [status, score, recordResult])
 
   const bestLabel = useMemo(() => `最高分 ${best}`, [best])
 
@@ -101,7 +92,7 @@ export default function Game2048Page() {
             <Link to="/games">← 游戏大厅</Link>
           </p>
           <h1 className="gh-g2048-title">2048</h1>
-          <p className="gh-g2048-subtitle">合并相同数字，合成 2048 方块。最高分保存在本机浏览器。</p>
+          <p className="gh-g2048-subtitle">合并相同数字，合成 2048 方块。战绩随账号保存。</p>
         </div>
         <div className="gh-g2048-actions">
           <Link className="gh-btn gh-btn--secondary gh-btn--md" to={GAME_2048_ONLINE_ROUTE}>

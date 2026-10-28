@@ -5,12 +5,16 @@ import { useAuth } from '../../contexts/AuthContext'
 import { CAPABILITIES, capabilityLabel, roleLabel } from '../../lib/permissions'
 
 const ENDPOINTS = [
-  { group: '认证', items: [
-    { method: 'POST', path: '/api/auth/login', note: '账号登录，返回访问令牌（可传 rememberDays 1–90 申请长期令牌）' },
-    { method: 'GET', path: '/api/auth/me', note: '当前账号信息（含角色与 capabilities）' },
+  { group: '认证与功能开关', items: [
+    { method: 'POST', path: '/api/auth/login', note: '账号登录，返回访问令牌（可传 rememberDays 1–90 申请长期令牌）；待审核/已拒绝返回 403' },
+    { method: 'POST', path: '/api/auth/register', note: '提交注册申请（进入 pending，需管理员审核；不返回 token）' },
+    { method: 'GET', path: '/api/auth/me', note: '当前账号信息（含角色、status 与 capabilities）' },
+    { method: 'GET', path: '/api/features', note: '公开功能开关（登录页也可见）' },
+    { method: 'GET', path: '/api/admin/features', note: '功能开关管理（feature:manage）' },
+    { method: 'PUT', path: '/api/admin/features/:key', note: '开关模块 { enabled }（feature:manage；管理员始终可访问被关闭功能）' },
   ] },
   { group: '文章', items: [
-    { method: 'GET', path: '/api/posts', note: '公开文章列表（仅已发布）' },
+    { method: 'GET', path: '/api/posts', note: '文章列表（仅已发布；需登录）' },
     { method: 'GET', path: '/api/posts/admin/all', note: '全部文章（content:write；作者只返回自己的文章，content:manage 看全站含草稿）' },
     { method: 'GET', path: '/api/posts/admin/:id', note: '管理视图单篇文章（作者本人或 content:manage，否则 404）' },
     { method: 'POST', path: '/api/posts', note: '创建文章（content:write，创建者即作者）' },
@@ -35,6 +39,7 @@ const ENDPOINTS = [
     { method: 'GET', path: '/api/chat/xmpp/bootstrap', note: '一次性票据 + 过滤后的聊天状态（好友 / 有往来的原生联系人 / 群）' },
     { method: 'GET', path: '/api/chat/xmpp/state', note: '刷新聊天状态（轮询降级时使用）' },
     { method: 'GET', path: '/api/chat/xmpp/directory', note: '搜索 neko 用户（?q=，lw_* 只回好友）' },
+    { method: 'PUT', path: '/api/chat/friends/remark', note: '设置联系人备注 { nekoId, remark }（≤30 字，空串清除，仅自己可见）' },
     { method: 'POST', path: '/api/chat/xmpp/rooms', note: '建群 { name, memberIds }（groupchat 走 neko rooms）' },
     { method: 'POST', path: '/api/chat/xmpp/messages/recall', note: '撤回消息（5 分钟内，仅本人）' },
     { method: 'POST', path: '/api/chat/xmpp/uploads', note: '图片消息上传（raw 二进制，Content-Type 图片类型）→ /chat/uploads/<id>?token=' },
@@ -51,6 +56,13 @@ const ENDPOINTS = [
     { method: 'PUT', path: '/api/users/:id', note: '修改用户角色（user / author / admin）或密码（user:manage）' },
     { method: 'PUT', path: '/api/users/:id/quota', note: '设置空间配额，body { "storageQuotaBytes": "2147483648" }（纯数字字符串；0 = 不限；user:manage）' },
     { method: 'PUT', path: '/api/users/:id/drive-access', note: '开关用户网盘权限（user:manage）' },
+    { method: 'GET', path: '/api/users/pending-count', note: '待审核数量（user:manage）' },
+    { method: 'PUT', path: '/api/users/:id/status', note: '审核用户 { status: active | rejected }（user:manage）' },
+    { method: 'PUT', path: '/api/users/:id/rate-limit', note: '设置全局 API 限额 { apiRateLimit: 0–100000 }（0 = 不限；管理员恒不受限）' },
+    { method: 'GET', path: '/api/game-stats', note: '当前账号全部游戏战绩（单机 + 联机聚合）' },
+    { method: 'POST', path: '/api/game-stats/result', note: '单机一局上报（服务端白名单合并，120 次/5min）' },
+    { method: 'POST', path: '/api/game-stats/import', note: '旧 localStorage 战绩一次性导入（幂等）' },
+    { method: 'GET', path: '/api/game-stats/leaderboard', note: '站内排行榜 ?game=&variant=&limit=&page=' },
     { method: 'GET', path: '/api/stats', note: '站点统计（stats:view）' },
     { method: 'GET', path: '/api/devices', note: '设备监控（device:view）' },
     { method: 'GET', path: '/api/ai/config', note: 'AI 配置（ai:configure）' },

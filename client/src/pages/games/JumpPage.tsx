@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTheme } from '../../contexts/ThemeContext'
+import { useGameStats } from '../../contexts/GameStatsContext'
 import { GAME_JUMP_ONLINE_ROUTE } from '../../lib/games/catalog'
 import {
   JUMP_ISO_RATIO,
@@ -18,14 +19,9 @@ import {
   jumpLandingAxis,
   jumpPowerRatio,
   jumpSquash,
-  loadJumpBest,
-  loadJumpStats,
   randomJumpSeed,
-  saveJumpBest,
-  saveJumpRun,
   type JumpBox,
   type JumpLanding,
-  type JumpRunStats,
   type JumpSession,
   type JumpSessionStatus,
   type JumpSoloResult,
@@ -373,8 +369,16 @@ function JumpBoard({ dark }: { dark: boolean }) {
   const [hud, setHud] = useState<JumpHud>(() => emptyHud(sessionRef.current))
   const [charging, setCharging] = useState(false)
   const [chargeMs, setChargeMs] = useState(0)
-  const [best, setBest] = useState(() => loadJumpBest())
-  const [stats, setStats] = useState<JumpRunStats>(() => loadJumpStats())
+  const { getStat, recordResult } = useGameStats()
+  const jumpStat = getStat('jump', 'solo')
+  const best = jumpStat?.bestScore ?? 0
+  const stats = {
+    runs: jumpStat?.games ?? 0,
+    totalScore: jumpStat?.scoreTotal ?? 0,
+    bestCombo: jumpStat?.bestCombo ?? 0,
+    offsetSum: jumpStat?.offsetSum ?? 0,
+    offsetCount: jumpStat?.offsetCount ?? 0,
+  }
   const [isRecord, setIsRecord] = useState(false)
 
   const syncHud = useCallback(() => {
@@ -501,19 +505,19 @@ function JumpBoard({ dark }: { dark: boolean }) {
 
   const finishRun = useCallback(() => {
     const session = sessionRef.current
+    if (session.status === 'over') return
     session.status = 'over'
-    const prevBest = loadJumpBest()
-    const nextBest = saveJumpBest(session.score)
-    const nextStats = saveJumpRun(session.score, {
+    setIsRecord(session.score > 0 && session.score > best)
+    recordResult({
+      game: 'jump',
+      variant: 'solo',
+      score: session.score,
       jumps: session.jumps,
-      bestCombo: session.combo,
-      bestOffset: Number.isFinite(session.bestOffset) ? session.bestOffset : undefined,
+      maxCombo: session.combo,
+      offset: Number.isFinite(session.bestOffset) ? session.bestOffset : undefined,
     })
-    setBest(nextBest)
-    setStats(nextStats)
-    setIsRecord(session.score > 0 && session.score > prevBest)
     syncHud()
-  }, [syncHud])
+  }, [best, recordResult, syncHud])
 
   const restart = useCallback(() => {
     sessionRef.current = createJumpSession(randomJumpSeed())
@@ -860,7 +864,7 @@ function JumpBoard({ dark }: { dark: boolean }) {
               </h2>
               <p className="gh-jump-overlay-detail">
                 {isRecord
-                  ? `恭喜刷新本机最高分：${best} 分。`
+                  ? `恭喜刷新账号最高分：${best} 分。`
                   : '蓄力不足会跳短、蓄过头会跳过 —— 记一下「间距 ↔ 时长」的手感再来一次。'}
               </p>
               <div className="gh-jump-overlay-scores">
@@ -915,7 +919,7 @@ function JumpBoard({ dark }: { dark: boolean }) {
       </div>
 
       <div className="gh-jump-record" role="status">
-        本机战绩 —— {stats.runs} 局 · 平均 {stats.runs > 0 ? (stats.totalScore / stats.runs).toFixed(1) : '0.0'} 分 ·
+        账号战绩 —— {stats.runs} 局 · 平均 {stats.runs > 0 ? (stats.totalScore / stats.runs).toFixed(1) : '0.0'} 分 ·
         历史最高连击 x{stats.bestCombo} · 平均最准落点偏差{' '}
         {formatJumpOffset(
           stats.offsetCount > 0 ? Math.round((stats.offsetSum / stats.offsetCount) * 10) / 10 : null
@@ -928,7 +932,7 @@ function JumpBoard({ dark }: { dark: boolean }) {
 // ==================== 页面 ====================
 
 /**
- * 跳一跳单机页：长按蓄力、松手起跳，冲击本机最高分。
+ * 跳一跳单机页：长按蓄力、松手起跳，冲击账号最高分。
  * 判定与关卡序列在 lib/games/jump.ts（纯函数、可单测），本页只做输入与等距 canvas 渲染。
  * 好友轮流对战在 `/games/jump/online`。
  */
@@ -974,7 +978,7 @@ export default function JumpPage() {
             <li>盒子中心间距在 60–150 之间随机，盒面上表面半宽 26–36，所以每一跳都要重新估时长。</li>
             <li>落点与盒面中心偏差在「半宽 × 0.3」以内算正中靶心，连击翻倍；在盒面内 +1 分并清零连击。</li>
             <li>偏差超过盒面半宽就掉出盒子：跳短（short）或跳过（long）都立即结束。</li>
-            <li>最高分与战绩只保存在本机浏览器。</li>
+            <li>最高分与战绩随账号保存。</li>
           </ul>
           <p className="gh-jump-help-note">
             画面全部程序化绘制（等距 2.5D：棱柱 / 圆柱盒子 + 带眼睛的小方块人），没有引入任何图片素材。

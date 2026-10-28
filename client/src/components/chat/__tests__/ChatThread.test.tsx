@@ -151,14 +151,16 @@ describe('ChatThread', () => {
       />
     )
 
-    const button = screen.getByRole('button', { name: '撤回' })
+    await user.click(screen.getByRole('button', { name: '消息操作' }))
+    const button = screen.getByRole('menuitem', { name: '撤回' })
     await user.click(button)
 
     expect(confirmSpy).toHaveBeenCalledWith('确定撤回这条消息吗？')
-    expect(onRecall).toHaveBeenCalledWith(9)
+    expect(onRecall).toHaveBeenCalledWith(9, false)
   })
 
-  it('超过 5 分钟或他人的消息不显示撤回按钮', () => {
+  it('超过 5 分钟或他人的消息不显示撤回按钮', async () => {
+    const user = userEvent.setup()
     const messages: NekoMessage[] = [
       createMessage({ id: 10, mine: true, ts: Date.now() - 6 * 60 * 1000 }),
       createMessage({ id: 11 }),
@@ -173,7 +175,12 @@ describe('ChatThread', () => {
       />
     )
 
-    expect(screen.queryByRole('button', { name: '撤回' })).not.toBeInTheDocument()
+    const moreButtons = screen.getAllByRole('button', { name: '消息操作' })
+    await user.click(moreButtons[0])
+    expect(screen.queryByRole('menuitem', { name: '撤回' })).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await user.click(moreButtons[1])
+    expect(screen.queryByRole('menuitem', { name: '撤回' })).not.toBeInTheDocument()
   })
 
   it('群成员中标记原生 neko 账号，群主可移出其他成员', async () => {

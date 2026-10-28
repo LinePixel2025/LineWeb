@@ -4,9 +4,14 @@ import { describe, expect, it, vi } from 'vitest'
 import GamesPage from '../GamesPage'
 import { COMING_SOON_GAMES, PLAYABLE_GAMES } from '../../lib/games/catalog'
 
-// 大厅页是公开页面，只读取 user 决定是否显示「需登录」，这里模拟未登录访客
-vi.mock('../../contexts/AuthContext', () => ({
-  useAuth: () => ({ user: null }),
+// 功能开关在测试中全开
+vi.mock('../../contexts/FeatureContext', () => ({
+  useFeature: () => ({
+    isEnabled: () => true,
+    features: {},
+    ready: true,
+    refresh: async () => {},
+  }),
 }))
 
 function renderGamesPage() {
@@ -52,12 +57,15 @@ describe('GamesPage', () => {
     expect(screen.getByText(/经典三人扑克/)).toBeInTheDocument()
   })
 
-  it('marks the online entry as login-required for guests', () => {
+  it('renders online entries and leaderboard links for logged-in users', () => {
     renderGamesPage()
 
-    // 每个带联机模式的可玩游戏都应有「需登录」提示
+    expect(screen.queryAllByText('需登录')).toHaveLength(0)
     const onlineCount = PLAYABLE_GAMES.filter((game) => game.onlineRoute).length
-    expect(screen.getAllByText('需登录')).toHaveLength(onlineCount)
+    expect(screen.getAllByRole('link', { name: /好友对战/ })).toHaveLength(onlineCount)
+    // 我的世界没有排行榜
+    const leaderboardCount = PLAYABLE_GAMES.filter((game) => game.id !== 'minecraft').length
+    expect(screen.getAllByRole('link', { name: '查看排行' })).toHaveLength(leaderboardCount)
   })
 
   it('renders coming-soon placeholder cards from the catalog', () => {

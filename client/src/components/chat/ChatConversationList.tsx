@@ -84,6 +84,9 @@ export default memo(function ChatConversationList({
                 </span>
                 <span className="gh-chat-conv-bottom">
                   <span className="gh-chat-conv-preview">{conversationPreview(conversation)}</span>
+                  {(conversation.mentionUnread ?? 0) > 0 && (
+                    <span className="gh-chat-at-badge" aria-label="有人@我" title="有人@我">@</span>
+                  )}
                   {unread && (
                     <span className="gh-chat-unread" aria-label={`${conversation.unread} 条未读`}>
                       {unread}

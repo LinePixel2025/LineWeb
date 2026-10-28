@@ -2,10 +2,14 @@ import { memo, useEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import GitHubHeader from './GitHubHeader'
 import GitHubSidebar from './GitHubSidebar'
+import { useFeature } from '../contexts/FeatureContext'
+import { useAuth } from '../contexts/AuthContext'
 
 export default memo(function Layout() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { isEnabled } = useFeature()
+  const { user } = useAuth()
   const location = useLocation()
   // 聊天页需要「整页固定高度 + 内部滚动」的外壳：用显式类名而不是 :has()，
   // 避免旧内核（不支持 :has）下页脚把整页撑高
@@ -55,9 +59,9 @@ export default memo(function Layout() {
         <Outlet />
         <footer className="gh-footer">
           <div className="gh-footer-links">
-            <a href="/features">About</a>
-            <a href="/posts">Posts</a>
-            <a href="/drive">Drive</a>
+            {user && isEnabled('pages') && <a href="/features">About</a>}
+            {user && isEnabled('posts') && <a href="/posts">Posts</a>}
+            {user && isEnabled('drive') && <a href="/drive">Drive</a>}
           </div>
           <p className="gh-footer-copy">© {new Date().getFullYear()} LineWeb</p>
         </footer>

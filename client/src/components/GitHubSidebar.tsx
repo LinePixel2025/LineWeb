@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useFeature } from '../contexts/FeatureContext'
 import { useXmppChat } from '../contexts/XmppChatContext'
 import { formatUnread } from '../lib/chat'
 import { canAccessAdminPath } from '../lib/permissions'
@@ -64,6 +65,7 @@ const sections = [
 
 export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onToggleCollapse }: Props) {
   const { user } = useAuth()
+  const { isEnabled } = useFeature()
   const { unreadTotal } = useXmppChat()
   const location = useLocation()
   const chatUnreadLabel = formatUnread(unreadTotal)
@@ -81,11 +83,17 @@ export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onT
           {sections.map(section => {
             if (section.requireAuth && !user) return null
             const visibleItems = section.items.filter(item => {
+              // 全站需登录：未登录时除首页外不展示任何业务入口
+              if (!user && item.path !== '/') return false
               if (item.path.startsWith('/admin') && !canAccessAdminPath(user, item.path)) return false
               if (item.path.startsWith('/profile') && !user) return false
-              if (item.path.startsWith('/chat') && !user) return false
-              if (item.path.startsWith('/deepseek') && !user) return false
-              if (item.path.startsWith('/webproxy') && !user) return false
+              if (item.path.startsWith('/chat') && (!user || !isEnabled('chat'))) return false
+              if (item.path.startsWith('/deepseek') && (!user || !isEnabled('aiChat'))) return false
+              if (item.path.startsWith('/webproxy') && (!user || !isEnabled('webProxy'))) return false
+              if (item.path === '/posts' && !isEnabled('posts')) return false
+              if (item.path === '/drive' && !isEnabled('drive')) return false
+              if (item.path === '/features' && !isEnabled('pages')) return false
+              if (item.path === '/games' && !isEnabled('games')) return false
               return true
             })
             if (visibleItems.length === 0) return null

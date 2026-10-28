@@ -9,17 +9,23 @@ interface User {
   username: string
   email: string
   role: string
+  /** pending | active | rejected（注册审核状态） */
+  status?: 'pending' | 'active' | 'rejected'
   /** 角色能力清单（服务端按角色解析），权限判断唯一依据 */
   capabilities?: string[]
   settings?: string  // JSON: 用户个性化设置
   canAccessDrive?: boolean
 }
 
+interface RegisterResult {
+  message: string
+}
+
 interface AuthContextType {
   user: User | null
   loading: boolean
   login: (identifier: string, password: string) => Promise<void>
-  register: (username: string, email: string, password: string) => Promise<void>
+  register: (username: string, email: string, password: string) => Promise<RegisterResult>
   logout: () => Promise<void>
   isAdmin: boolean
   hasAdminAccess: boolean
@@ -60,9 +66,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const register = useCallback(async (username: string, email: string, password: string) => {
-    const data = await api.post<{ token: string; user: User }>('/auth/register', { username, email, password })
-    setToken(data.token)
-    setUser(data.user)
+    // 注册只提交审核申请，不签发 token；管理员通过后才能登录
+    const data = await api.post<{ user: User; message?: string }>('/auth/register', { username, email, password })
+    return { message: data.message || '注册成功，等待管理员审核' }
   }, [])
 
   const logout = useCallback(async () => {
