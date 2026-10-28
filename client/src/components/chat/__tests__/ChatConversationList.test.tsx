@@ -27,6 +27,7 @@ const ALICE: NekoRoomMember = {
   role: 'member',
   online: false,
   kind: 'lineweb',
+  avatarVersion: 0,
 }
 
 function createMessage(
@@ -48,6 +49,8 @@ function createMessage(
     recalled: false,
     byAdmin: false,
     image: null,
+    quote: null,
+    bundle: null,
     ...extra,
   }
 }
@@ -58,6 +61,8 @@ function createConversation(overrides: Partial<NekoConversation> & { key: string
     title: 'alice',
     avatarId: 2,
     avatarName: 'alice',
+    avatarNekoId: 1000000000002,
+    avatarVersion: 0,
     contact: null,
     room: null,
     lastMessage: createMessage(Number.parseInt(overrides.key.replace(/\D/g, ''), 10) * 10, '你好呀'),

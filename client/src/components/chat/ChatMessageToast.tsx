@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
-import UserAvatar from '../UserAvatar'
+import NekoAvatar from './NekoAvatar'
 import { useXmppChat } from '../../contexts/XmppChatContext'
 
 const PORTAL_ROOT = document.body
@@ -55,7 +55,13 @@ export default function ChatMessageToast() {
       aria-label="新消息提示"
     >
       <button type="button" className="gh-msg-toast-main" onClick={openConversation}>
-        <UserAvatar userId={messageNotice.avatarId} username={messageNotice.title} size="md" />
+        <NekoAvatar
+          nekoId={messageNotice.avatarNekoId}
+          avatarVersion={messageNotice.avatarVersion}
+          fallbackId={messageNotice.avatarId}
+          name={messageNotice.title}
+          size="md"
+        />
         <span className="gh-msg-toast-copy">
           <span className="gh-msg-toast-head">
             <span className="gh-msg-toast-title">{messageNotice.title}</span>

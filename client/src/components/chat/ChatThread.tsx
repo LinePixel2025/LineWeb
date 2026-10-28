@@ -1,10 +1,21 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import UserAvatar from '../UserAvatar'
-import ChatComposer from './ChatComposer'
+import NekoAvatar from './NekoAvatar'
+import ChatComposer, { type ComposerReply } from './ChatComposer'
 import ChatImageLightbox from './ChatImageLightbox'
 import ChatStickerPanel from './ChatStickerPanel'
+import ChatBundleDialog from './ChatBundleDialog'
+import ChatForwardDialog from './ChatForwardDialog'
 import { canRecall, chatImageUrl, senderLabel } from '../../lib/chat'
-import type { NekoConversation, NekoMessage, NekoSticker } from '../../types/chat'
+import { extractImageSrc } from '../../lib/xmpp/protocol'
+import type {
+  NekoBundleItem,
+  NekoConversation,
+  NekoMessage,
+  NekoSticker,
+} from '../../types/chat'
+
+/** 一次最多选择的消息条数（与 neko 合并转发上限一致） */
+const SELECT_MAX = 30
 
 interface Props {
   conversation: NekoConversation | null
@@ -16,8 +27,17 @@ interface Props {
   hasMore?: boolean
   error?: string | null
   emptyMessage?: string
+  /** 可选的转发目标会话 */
+  forwardTargets?: NekoConversation[]
   onBack: () => void
-  onSend: (content: string) => Promise<void> | void
+  /** replyTo 为被引用消息 id */
+  onSend: (content: string, replyTo?: number) => Promise<void> | void
+  /** 转发聊天记录（merge = 合并转发，separate = 逐条转发） */
+  onForward: (
+    messageIds: number[],
+    targetKeys: string[],
+    mode: 'merge' | 'separate',
+  ) => Promise<void> | void
   /** 发送图片（页面负责上传与错误提示） */
   onSendImage?: (file: File) => Promise<void> | void
   /** 表情包（三项都传入才渲染表情入口） */
@@ -41,14 +61,26 @@ function formatMessageTime(value: number): string {
   return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
-function avatarOf(conversation: NekoConversation, message: NekoMessage): { id: number; name: string } {
+function avatarOf(
+  conversation: NekoConversation,
+  message: NekoMessage,
+): { id: number; nekoId: number | null; avatarVersion: number; name: string } {
   if (conversation.kind === 'direct') {
-    return { id: conversation.avatarId, name: conversation.avatarName }
+    return {
+      id: conversation.avatarId,
+      nekoId: conversation.avatarNekoId,
+      avatarVersion: conversation.avatarVersion,
+      name: conversation.avatarName,
+    }
   }
   const member = conversation.members.find((item) => item.username === message.fromUsername)
-  if (!member) return { id: -1, name: message.fromUsername || '未知用户' }
+  if (!member) {
+    return { id: -1, nekoId: null, avatarVersion: 0, name: message.fromUsername || '未知用户' }
+  }
   return {
     id: member.linewebId ?? -member.nekoId,
+    nekoId: member.nekoId,
+    avatarVersion: member.avatarVersion,
     name: member.displayName || member.username,
   }
 }
@@ -62,8 +94,10 @@ export default function ChatThread({
   hasMore = false,
   error = null,
   emptyMessage = '选择一个会话，开始聊天',
+  forwardTargets = [],
   onBack,
   onSend,
+  onForward,
   onSendImage,
   stickers = [],
   onSendSticker,
@@ -90,6 +124,15 @@ export default function ChatThread({
   const [renameValue, setRenameValue] = useState('')
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [stickersOpen, setStickersOpen] = useState(false)
+  const [replyTo, setReplyTo] = useState<ComposerReply | null>(null)
+  const [selecting, setSelecting] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set())
+  const [forwardOpen, setForwardOpen] = useState(false)
+  const [forwarding, setForwarding] = useState(false)
+  const [forwardError, setForwardError] = useState<string | null>(null)
+  const [bundlePreview, setBundlePreview] = useState<NekoBundleItem[] | null>(null)
+  const [flashId, setFlashId] = useState<number | null>(null)
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // 「撤回」按钮的 5 分钟窗口需要自动消失：低频 tick 触发重渲染
   const [now, setNow] = useState(() => Date.now())
   const menuRef = useRef<HTMLDivElement | null>(null)
@@ -109,9 +152,23 @@ export default function ChatThread({
     setRenaming(false)
     setPreviewImage(null)
     setStickersOpen(false)
+    setReplyTo(null)
+    setSelecting(false)
+    setSelectedIds(new Set())
+    setForwardOpen(false)
+    setForwardError(null)
+    setBundlePreview(null)
+    setFlashId(null)
     const element = listRef.current
     if (element) element.scrollTop = element.scrollHeight
   }, [conversationKey])
+
+  // 引用高亮定时器在卸载时清理
+  useEffect(() => {
+    return () => {
+      if (flashTimerRef.current !== null) clearTimeout(flashTimerRef.current)
+    }
+  }, [])
 
   // 群聊操作菜单：点击外部关闭
   useEffect(() => {
@@ -175,7 +232,113 @@ export default function ChatThread({
 
   const handleSend = async (content: string) => {
     stickToBottomRef.current = true
-    await onSend(content)
+    const replyId = replyTo?.id
+    await onSend(content, replyId)
+    setReplyTo(null)
+  }
+
+  /** 用户名 → 当前会话里的显示名（引用 / 聊天记录的发送者都只有用户名） */
+  const displayNameOf = (username: string): string => {
+    if (!conversation) return username
+    const member = conversation.members.find((item) => item.username === username)
+    if (member) {
+      if (selfNekoId !== null && member.nekoId === selfNekoId) return '你'
+      return member.displayName || member.username
+    }
+    if (conversation.kind === 'direct') {
+      if (conversation.contact && username === conversation.contact.username) {
+        return conversation.contact.displayName || conversation.contact.username
+      }
+      return '你'
+    }
+    return username || '未知用户'
+  }
+
+  /** 消息的引用预览文本 */
+  const previewOf = (message: NekoMessage): string => {
+    if (message.recalled) return '消息已撤回'
+    if (message.image) return message.body === '[表情]' ? '[表情]' : '[图片]'
+    if (message.bundle) return '[聊天记录]'
+    return message.body
+  }
+
+  const startReply = (message: NekoMessage) => {
+    if (message.recalled) return
+    setReplyTo({
+      id: message.id,
+      name: senderLabel(message, conversation),
+      text: previewOf(message),
+    })
+  }
+
+  /** 跳到被引用的消息；不在已加载范围内时给出提示 */
+  const jumpToMessage = (messageId: number) => {
+    const element = listRef.current?.querySelector<HTMLElement>(
+      `[data-message-id="${messageId}"]`,
+    )
+    if (!element) {
+      window.alert('被引用的消息不在当前已加载的记录里，可向上滚动加载更早消息后再试。')
+      return
+    }
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setFlashId(messageId)
+    if (flashTimerRef.current !== null) clearTimeout(flashTimerRef.current)
+    flashTimerRef.current = setTimeout(() => {
+      flashTimerRef.current = null
+      setFlashId((current) => (current === messageId ? null : current))
+    }, 1_600)
+  }
+
+  const enterSelectMode = () => {
+    setSelecting(true)
+    setSelectedIds(new Set())
+    setReplyTo(null)
+  }
+
+  /** 单条消息快捷转发：进入多选并直接打开转发目标弹窗 */
+  const startForward = (message: NekoMessage) => {
+    if (message.recalled) return
+    setSelecting(true)
+    setSelectedIds(new Set([message.id]))
+    setReplyTo(null)
+    setForwardError(null)
+    setForwardOpen(true)
+  }
+
+  const exitSelectMode = () => {
+    setSelecting(false)
+    setSelectedIds(new Set())
+    setForwardOpen(false)
+    setForwardError(null)
+  }
+
+  const toggleSelect = (messageId: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(messageId)) {
+        next.delete(messageId)
+      } else if (next.size < SELECT_MAX) {
+        next.add(messageId)
+      }
+      return next
+    })
+  }
+
+  const submitForward = async (
+    targetKeys: string[],
+    mode: 'merge' | 'separate',
+  ) => {
+    setForwarding(true)
+    setForwardError(null)
+    try {
+      await onForward([...selectedIds], targetKeys, mode)
+      setForwardOpen(false)
+      exitSelectMode()
+    } catch (err) {
+      setForwardError(err instanceof Error && err.message ? err.message : '转发失败')
+    } finally {
+      setForwarding(false)
+    }
   }
 
   const handleRecall = async (message: NekoMessage) => {
@@ -237,7 +400,13 @@ export default function ChatThread({
             <path d="m9.5 3.5-4.5 4.5 4.5 4.5" />
           </svg>
         </button>
-        <UserAvatar userId={conversation.avatarId} username={conversation.avatarName} size="md" />
+        <NekoAvatar
+          nekoId={conversation.avatarNekoId}
+          avatarVersion={conversation.avatarVersion}
+          fallbackId={conversation.avatarId}
+          name={conversation.avatarName}
+          size="md"
+        />
         <div className="gh-chat-thread-title">
           {renaming ? (
             <form
@@ -265,7 +434,18 @@ export default function ChatThread({
           )}
         </div>
         <div className="gh-chat-thread-actions">
-          {isGroup && (
+          {!selecting && (
+            <button
+              type="button"
+              className="gh-chat-thread-text-btn"
+              title="多选转发聊天记录"
+              disabled={messages.length === 0}
+              onClick={enterSelectMode}
+            >
+              多选
+            </button>
+          )}
+          {isGroup && !selecting && (
             <div className="gh-chat-thread-more" ref={menuRef}>
               <button
                 type="button"
@@ -345,9 +525,11 @@ export default function ChatThread({
                 const isMe = selfNekoId !== null && member.nekoId === selfNekoId
                 return (
                   <li key={member.nekoId} className="gh-chat-member-row">
-                    <UserAvatar
-                      userId={member.linewebId ?? -member.nekoId}
-                      username={member.displayName || member.username}
+                    <NekoAvatar
+                      nekoId={member.nekoId}
+                      avatarVersion={member.avatarVersion}
+                      fallbackId={member.linewebId ?? -member.nekoId}
+                      name={member.displayName || member.username}
                       size="sm"
                     />
                     <span className="gh-chat-member-name">
@@ -383,6 +565,27 @@ export default function ChatThread({
           </div>
         )}
       </header>
+
+      {selecting && (
+        <div className="gh-chat-select-bar" role="toolbar" aria-label="转发聊天记录">
+          <span className="gh-chat-select-count">已选 {selectedIds.size} 条</span>
+          <span className="gh-chat-select-hint">最多 {SELECT_MAX} 条</span>
+          <button
+            type="button"
+            className="gh-btn gh-btn--primary gh-btn--sm"
+            disabled={selectedIds.size === 0}
+            onClick={() => {
+              setForwardError(null)
+              setForwardOpen(true)
+            }}
+          >
+            转发
+          </button>
+          <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm" onClick={exitSelectMode}>
+            取消
+          </button>
+        </div>
+      )}
 
       <div className="gh-chat-messages" ref={listRef} onScroll={handleScroll} role="log" aria-label="消息列表">
         {loading && (
@@ -432,20 +635,65 @@ export default function ChatThread({
             const isSticker = Boolean(message.image) && message.body === '[表情]'
             const isImage = Boolean(message.image) && !isSticker
             const sender = avatarOf(conversation, message)
+            const selected = selectedIds.has(message.id)
 
             return (
               <div
                 key={message.id}
-                className={`gh-chat-message ${own ? 'gh-chat-message--own' : ''}`}
+                data-message-id={message.id}
+                className={`gh-chat-message ${own ? 'gh-chat-message--own' : ''} ${
+                  selecting ? 'gh-chat-message--selectable' : ''
+                } ${selected ? 'gh-chat-message--selected' : ''} ${
+                  flashId === message.id ? 'gh-chat-message--flash' : ''
+                }`}
               >
-                {!own && <UserAvatar userId={sender.id} username={sender.name} size="sm" />}
+                {selecting && (
+                  <button
+                    type="button"
+                    className={`gh-chat-select-toggle ${selected ? 'gh-chat-select-toggle--on' : ''}`}
+                    aria-label={selected ? '取消选择该消息' : '选择该消息'}
+                    aria-pressed={selected}
+                    onClick={() => toggleSelect(message.id)}
+                  >
+                    {selected ? '✓' : ''}
+                  </button>
+                )}
+                {!own && (
+                  <NekoAvatar
+                    nekoId={sender.nekoId}
+                    avatarVersion={sender.avatarVersion}
+                    fallbackId={sender.id}
+                    name={sender.name}
+                    size="sm"
+                  />
+                )}
                 <div className="gh-chat-message-body">
                   <div className="gh-chat-message-meta">
                     {!own && <span className="gh-chat-message-sender">{sender.name}</span>}
                     <time className="gh-chat-message-time" dateTime={new Date(message.ts).toISOString()}>
                       {formatMessageTime(message.ts)}
                     </time>
-                    {recallable && (
+                    {!selecting && (
+                      <button
+                        type="button"
+                        className="gh-chat-recall-btn"
+                        title="引用这条消息"
+                        onClick={() => startReply(message)}
+                      >
+                        引用
+                      </button>
+                    )}
+                    {!selecting && (
+                      <button
+                        type="button"
+                        className="gh-chat-recall-btn"
+                        title="转发这条消息"
+                        onClick={() => startForward(message)}
+                      >
+                        转发
+                      </button>
+                    )}
+                    {recallable && !selecting && (
                       <button
                         type="button"
                         className="gh-chat-recall-btn"
@@ -456,7 +704,37 @@ export default function ChatThread({
                       </button>
                     )}
                   </div>
-                  {isSticker ? (
+                  {message.quote && (
+                    <button
+                      type="button"
+                      className="gh-chat-quote"
+                      title="跳到被引用的消息"
+                      onClick={() => jumpToMessage(message.quote!.id)}
+                    >
+                      <span className="gh-chat-quote-name">{displayNameOf(message.quote.from)}</span>
+                      <span className="gh-chat-quote-text">{message.quote.text}</span>
+                    </button>
+                  )}
+                  {message.bundle ? (
+                    <button
+                      type="button"
+                      className="gh-chat-bundle"
+                      aria-label="查看聊天记录"
+                      onClick={() => setBundlePreview(message.bundle)}
+                    >
+                      <span className="gh-chat-bundle-title">聊天记录</span>
+                      <span className="gh-chat-bundle-lines">
+                        {message.bundle.slice(0, 3).map((item, index) => (
+                          <span key={`${item.t}-${index}`} className="gh-chat-bundle-line">
+                            {`${displayNameOf(item.n)}：${item.r ? '消息已撤回' : item.b || '[图片]'}`}
+                          </span>
+                        ))}
+                      </span>
+                      <span className="gh-chat-bundle-more">
+                        共 {message.bundle.length} 条 · 点击查看
+                      </span>
+                    </button>
+                  ) : isSticker ? (
                     <img
                       className="gh-chat-message-sticker"
                       src={chatImageUrl(message.image)}
@@ -508,9 +786,35 @@ export default function ChatThread({
         />
       )}
 
+      <ChatBundleDialog
+        open={bundlePreview !== null}
+        items={bundlePreview ?? []}
+        conversation={conversation}
+        selfNekoId={selfNekoId}
+        onClose={() => setBundlePreview(null)}
+      />
+
+      <ChatForwardDialog
+        open={forwardOpen}
+        sourceKey={conversation.key}
+        sourceTitle={conversation.title}
+        count={selectedIds.size}
+        conversations={forwardTargets}
+        loading={forwarding}
+        error={forwardError}
+        onClose={() => {
+          if (forwarding) return
+          setForwardOpen(false)
+          setForwardError(null)
+        }}
+        onSubmit={(targets, mode) => void submitForward(targets, mode)}
+      />
+
       <ChatComposer
         onSend={handleSend}
         onSendImage={onSendImage}
+        replyTo={replyTo}
+        onCancelReply={() => setReplyTo(null)}
         onToggleStickers={
           onSendSticker ? () => setStickersOpen((open) => !open) : undefined
         }

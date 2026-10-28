@@ -19,6 +19,7 @@ const ALICE: NekoRoomMember = {
   role: 'member',
   online: false,
   kind: 'lineweb',
+  avatarVersion: 0,
 }
 
 function createMessage(overrides: Partial<NekoMessage> & { id: number }): NekoMessage {
@@ -35,6 +36,8 @@ function createMessage(overrides: Partial<NekoMessage> & { id: number }): NekoMe
     recalled: false,
     byAdmin: false,
     image: null,
+    quote: null,
+    bundle: null,
     ...overrides,
   }
 }
@@ -46,6 +49,8 @@ function createConversation(overrides: Partial<NekoConversation> = {}): NekoConv
     title: 'alice',
     avatarId: 2,
     avatarName: 'alice',
+    avatarNekoId: 1000000000002,
+    avatarVersion: 0,
     contact: {
       key: 'u1000000000002',
       nekoId: 1000000000002,
@@ -57,6 +62,7 @@ function createConversation(overrides: Partial<NekoConversation> = {}): NekoConv
       lastMessageAt: 0,
       isFriend: true,
       remark: '',
+      avatarVersion: 0,
     },
     room: null,
     lastMessage: null,
@@ -76,6 +82,7 @@ function baseProps() {
     selfNekoId: 1000000000001,
     onBack: vi.fn(),
     onSend: vi.fn(),
+    onForward: vi.fn(),
     onLoadMore: vi.fn(),
     onAddMembers: vi.fn(),
     onRemoveMember: vi.fn(),
@@ -248,6 +255,44 @@ describe('ChatThread', () => {
 
     expect(screen.getByText('全员禁言中，只有群主和管理员可以发言')).toBeInTheDocument()
     expect(screen.queryByLabelText('消息输入框')).not.toBeInTheDocument()
+  })
+
+  it('引用消息在气泡上方显示被引用快照', () => {
+    const messages: NekoMessage[] = [
+      createMessage({
+        id: 21,
+        body: '回复你',
+        quote: { id: 20, from: 'alice', text: '原话' },
+      }),
+    ]
+
+    render(<ChatThread conversation={createConversation()} messages={messages} {...baseProps()} />)
+
+    const quote = screen.getByTitle('跳到被引用的消息')
+    expect(quote).toHaveTextContent('alice')
+    expect(quote).toHaveTextContent('原话')
+  })
+
+  it('合并转发渲染聊天记录卡片，点击打开只读记录', async () => {
+    const user = userEvent.setup()
+    const bundle = [
+      { u: 1000000000002, n: 'alice', t: Date.now(), b: '第一行', h: '', r: 0 as const },
+      { u: 1000000000002, n: 'alice', t: Date.now() + 1, b: '第二行', h: '', r: 0 as const },
+      { u: 1000000000002, n: 'alice', t: Date.now() + 2, b: '第三行', h: '', r: 1 as const },
+    ]
+    const messages: NekoMessage[] = [
+      createMessage({ id: 31, body: '[聊天记录]', bundle }),
+    ]
+
+    render(<ChatThread conversation={createConversation()} messages={messages} {...baseProps()} />)
+
+    expect(screen.getByText('共 3 条 · 点击查看')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '查看聊天记录' }))
+
+    const dialog = screen.getByRole('dialog', { name: '聊天记录' })
+    expect(dialog).toHaveTextContent('第一行')
+    expect(dialog).toHaveTextContent('消息已撤回')
+    expect(screen.getByText('聊天记录（3 条）')).toBeInTheDocument()
   })
 
   it('正在输入中的中文输入法组合不会触发发送', async () => {

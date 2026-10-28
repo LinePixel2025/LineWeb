@@ -8,7 +8,7 @@
  *   - 会话键：单聊 `u<nekoId>`、群聊 `r<roomId>`（原生联系人与 LineWeb 好友共用同一键空间）
  */
 
-import type { NekoMessage } from '../../types/chat'
+import type { NekoBundleItem, NekoMessage, NekoQuote } from '../../types/chat'
 
 /** LineWeb 用户在 neko 侧的用户名前缀（与服务端 NEKO_CHAT_USERNAME_PREFIX 保持一致） */
 export const NEKO_USERNAME_PREFIX = 'lw_'
@@ -228,6 +228,73 @@ function delayStamp(el: XmppElement): number {
   return Number.isNaN(stamp) ? 0 : stamp
 }
 
+// === 引用 / 合并转发 ===
+
+const BUNDLE_MAX_ITEMS = 30
+
+/** `<quote id from text>` → 引用快照；无效返回 null */
+function quoteOf(el: XmppElement): NekoQuote | null {
+  const quote = el.children.find((child) => child.name === 'quote')
+  if (!quote) return null
+  const id = Number.parseInt(quote.attrs.id || '0', 10) || 0
+  if (!id) return null
+  // neko 用 ltx.c('quote', { id, from, text }) 生成元素：三个字段都是属性
+  return {
+    id,
+    from: String(quote.attrs.from || ''),
+    text: String(quote.attrs.text || quote.text || ''),
+  }
+}
+
+/** 单条聊天记录的时间：兼容毫秒数与 ISO 字符串 */
+function bundleStamp(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value
+  if (typeof value === 'string' && value) {
+    const numeric = Number(value)
+    if (Number.isFinite(numeric) && numeric > 0) return numeric
+    const parsed = Date.parse(value)
+    if (!Number.isNaN(parsed)) return parsed
+  }
+  return 0
+}
+
+/**
+ * 解析合并转发 bundle（neko 把 JSON 数组当文本塞进 `<bundle>`）。
+ * 无效 / 空数组一律返回 null，避免坏数据破坏气泡渲染。
+ */
+export function parseBundleText(text: string): NekoBundleItem[] | null {
+  const raw = String(text || '').trim()
+  if (!raw || raw[0] !== '[') return null
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return null
+    const items: NekoBundleItem[] = []
+    for (const entry of parsed.slice(0, BUNDLE_MAX_ITEMS)) {
+      if (!entry || typeof entry !== 'object') continue
+      const row = entry as Record<string, unknown>
+      const name = String(row.n || '')
+      const body = String(row.b || '')
+      if (!name && !body && !row.h) continue
+      items.push({
+        u: Number(row.u) || 0,
+        n: name,
+        t: bundleStamp(row.t),
+        b: body,
+        h: String(row.h || ''),
+        r: row.r === 1 || row.r === '1' ? 1 : 0,
+      })
+    }
+    return items.length > 0 ? items : null
+  } catch {
+    return null
+  }
+}
+
+function bundleOf(el: XmppElement): NekoBundleItem[] | null {
+  const bundle = el.children.find((child) => child.name === 'bundle')
+  return bundle ? parseBundleText(bundle.text) : null
+}
+
 /** 实时投递的 `<message>` → NekoMessage；无正文（已读标记等）返回 null */
 export function parseLiveMessage(
   el: XmppElement,
@@ -262,6 +329,8 @@ export function parseLiveMessage(
     recalled,
     byAdmin: el.attrs.byAdmin === '1',
     image: recalled ? null : extractImageSrc(el.xml),
+    quote: recalled ? null : quoteOf(el),
+    bundle: recalled ? null : bundleOf(el),
   }
 }
 
@@ -296,6 +365,8 @@ export function parseHistoryMessages(
       byAdmin: row.attrs.byAdmin === '1',
       // 历史行里的 XHTML 是转义文本（见 xhtmlTextOf），必须两条路径都试
       image: recalled ? null : extractImageSrc(row.xml) || extractImageSrc(xhtmlTextOf(row)),
+      quote: recalled ? null : quoteOf(row),
+      bundle: recalled ? null : bundleOf(row),
     })
   }
   return {

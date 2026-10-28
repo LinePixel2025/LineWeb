@@ -30,6 +30,7 @@ import {
 } from '../services/nekoChatView.js'
 import { ensureNekoAccounts } from '../services/nekoAccountSync.js'
 import { isAllowedOutboundStanza } from '../services/nekoChatGuard.js'
+import { ensureAvatarSyncedToNeko } from '../services/avatarService.js'
 
 /**
  * 聊天 XMPP 网关（挂载于 /api/chat/xmpp）
@@ -126,6 +127,8 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const user = await currentUser(req)
     const [ticket, view] = await Promise.all([issueTicket(user), loadChatView(req)])
+    // 老用户头像只存在 LineWeb 存储节点：neko 侧缺失时补一次（不阻塞 bootstrap）
+    void ensureAvatarSyncedToNeko(user).catch(() => {})
     res.json({
       ticket,
       ...view,

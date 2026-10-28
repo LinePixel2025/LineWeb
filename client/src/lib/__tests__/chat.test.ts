@@ -36,6 +36,8 @@ function createMessage(id: number, ts: number, extra: Partial<NekoMessage> = {})
     recalled: false,
     byAdmin: false,
     image: null,
+    quote: null,
+    bundle: null,
     ...extra,
   }
 }
@@ -47,6 +49,8 @@ function createConversation(extra: Partial<NekoConversation> = {}): NekoConversa
     title: 'alice',
     avatarId: 2,
     avatarName: 'alice',
+    avatarNekoId: 1000000000002,
+    avatarVersion: 0,
     contact: {
       key: 'u1000000000002',
       nekoId: 1000000000002,
@@ -58,6 +62,7 @@ function createConversation(extra: Partial<NekoConversation> = {}): NekoConversa
       lastMessageAt: 0,
       isFriend: true,
       remark: '',
+      avatarVersion: 0,
     },
     room: null,
     lastMessage: null,
@@ -346,6 +351,7 @@ describe('senderLabel', () => {
           role: 'member',
           online: true,
           kind: 'lineweb',
+          avatarVersion: 0,
         },
       ],
     })

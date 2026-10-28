@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import UserAvatar from '../UserAvatar'
+import NekoAvatar from './NekoAvatar'
 import { contactLabel } from '../../lib/chat'
 import type {
   ChatUser,
@@ -208,9 +209,11 @@ export default function FriendPanel({
                 requestedNatives.includes(user.nekoId) || outgoingNekoIds.has(user.nekoId)
               return (
                 <li key={rowKey} className="gh-chat-friend-row">
-                  <UserAvatar
-                    userId={avatarIdOf(user.linewebId, user.nekoId)}
-                    username={user.displayName || user.username}
+                  <NekoAvatar
+                    nekoId={user.nekoId}
+                    avatarVersion={user.avatarVersion}
+                    fallbackId={avatarIdOf(user.linewebId, user.nekoId)}
+                    name={user.displayName || user.username}
                     size="sm"
                   />
                   <span className="gh-chat-friend-name">
@@ -261,9 +264,11 @@ export default function FriendPanel({
           <ul className="gh-chat-friend-list">
             {incoming.map((request) => (
               <li key={request.id} className="gh-chat-friend-row">
-                <UserAvatar
-                  userId={avatarIdOf(request.linewebId, request.nekoId)}
-                  username={request.displayName || request.username}
+                <NekoAvatar
+                  nekoId={request.nekoId}
+                  avatarVersion={request.avatarVersion ?? 0}
+                  fallbackId={avatarIdOf(request.linewebId, request.nekoId)}
+                  name={request.displayName || request.username}
                   size="sm"
                 />
                 <span className="gh-chat-friend-name">
@@ -304,9 +309,11 @@ export default function FriendPanel({
               const linewebId = friend.linewebId
               return (
                 <li key={friend.key} className="gh-chat-friend-row">
-                  <UserAvatar
-                    userId={avatarIdOf(friend.linewebId, friend.nekoId)}
-                    username={friend.displayName || friend.username}
+                  <NekoAvatar
+                    nekoId={friend.nekoId}
+                    avatarVersion={friend.avatarVersion}
+                    fallbackId={avatarIdOf(friend.linewebId, friend.nekoId)}
+                    name={friend.displayName || friend.username}
                     size="sm"
                   />
                   <span className="gh-chat-friend-name">{contactLabel(friend)}</span>
@@ -357,9 +364,11 @@ export default function FriendPanel({
           <ul className="gh-chat-friend-list">
             {outgoing.map((request) => (
               <li key={request.id} className="gh-chat-friend-row">
-                <UserAvatar
-                  userId={avatarIdOf(request.linewebId, request.nekoId)}
-                  username={request.displayName || request.username}
+                <NekoAvatar
+                  nekoId={request.nekoId}
+                  avatarVersion={request.avatarVersion ?? 0}
+                  fallbackId={avatarIdOf(request.linewebId, request.nekoId)}
+                  name={request.displayName || request.username}
                   size="sm"
                 />
                 <span className="gh-chat-friend-name">{contactLabel(request)}</span>

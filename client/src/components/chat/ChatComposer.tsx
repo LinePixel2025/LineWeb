@@ -3,10 +3,22 @@ import ChatCameraDialog from './ChatCameraDialog'
 
 const DEFAULT_MAX_LENGTH = 2000
 
+export interface ComposerReply {
+  /** 被引用消息 id */
+  id: number
+  /** 被引用消息的发送者显示名 */
+  name: string
+  /** 预览文本 */
+  text: string
+}
+
 interface Props {
   onSend: (content: string) => Promise<void> | void
   /** 发送图片：页面负责上传并在失败时展示错误 */
   onSendImage?: (file: File) => Promise<void> | void
+  /** 当前引用（显示在输入框上方） */
+  replyTo?: ComposerReply | null
+  onCancelReply?: () => void
   /** 打开/收起表情包面板（传入才渲染「表情」按钮） */
   onToggleStickers?: () => void
   stickersOpen?: boolean
@@ -20,6 +32,8 @@ interface Props {
 export default function ChatComposer({
   onSend,
   onSendImage,
+  replyTo = null,
+  onCancelReply,
   onToggleStickers,
   stickersOpen = false,
   disabled = false,
@@ -102,6 +116,22 @@ export default function ChatComposer({
 
   return (
     <div className="gh-chat-composer">
+      {replyTo && (
+        <div className="gh-chat-reply-bar">
+          <span className="gh-chat-reply-copy">
+            <span className="gh-chat-reply-label">引用 {replyTo.name}</span>
+            <span className="gh-chat-reply-text">{replyTo.text || '[消息]'}</span>
+          </span>
+          <button
+            type="button"
+            className="gh-chat-reply-close"
+            aria-label="取消引用"
+            onClick={onCancelReply}
+          >
+            ×
+          </button>
+        </div>
+      )}
       <textarea
         className="gh-chat-composer-input"
         value={value}

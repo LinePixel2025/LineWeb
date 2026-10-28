@@ -96,6 +96,7 @@ app.use(compression({
     && !req.originalUrl.includes('/ai/write/draft')
     && !req.originalUrl.includes('/ai-chat/messages')
     && !req.originalUrl.includes('/chat/uploads')
+    && !req.originalUrl.includes('/chat/avatars')
     && !req.originalUrl.includes('/chat/xmpp/http-poll')
     && !/\/chat\/messages\/\d+\/image(\?|$)/.test(req.originalUrl)
     && !/\/ai-chat\/images\/\d+\/image(\?|$)/.test(req.originalUrl),
@@ -341,6 +342,7 @@ app.get('/api', (_req, res) => {
       rooms: { method: 'POST', path: '/api/chat/xmpp/rooms', auth: true, description: '建群 { name, memberIds }；群管理 POST /api/chat/xmpp/rooms/:id/name|members|leave|disband|role|transfer|mute|mute-all|announcement' },
       messages: { method: 'POST', path: '/api/chat/xmpp/messages/recall', auth: true, description: '撤回消息（5 分钟内，仅本人）；群主/管理员用 /messages/admin-recall' },
       uploads: { method: 'POST', path: '/api/chat/xmpp/uploads', auth: true, description: '图片上传（multipart/form-data，字段名 file）→ {ok,url:"/chat/uploads/<24hex>",id,mime}；读取 GET /chat/uploads/:id?token=<登录令牌>' },
+      avatars: { method: 'GET', path: '/chat/avatars/:nekoId?v=&token=', auth: true, description: '聊天头像中继（头像存在 neko accounts.avatar；LineWeb 上传/删除头像时自动同步；?v=avatarVersion 用于缓存击穿）' },
       legacy: { method: 'GET', path: '/api/chat/conversations', auth: true, description: '已废弃：会话/消息相关旧端点全部返回 410 CHAT_MIGRATED；旧 Prisma 聊天表与存储节点 _chat/ 图片仅作只读存档' },
       ws: '实时连接：ws(s)://<host>/ws/xmpp?token=<登录令牌>（Express 字节级中继到 neko /xmpp-websocket，SASL/bind 由浏览器侧完成）。/ws/chat 保留给游戏与好友事件：连接后 5 秒内发送 {"type":"auth","token":"<登录令牌>"}，推送 game:* / friend:*，客户端 {type:"ping"} ↔ 服务端 {type:"pong"}，认证失败以 close code 4001 断开。',
     },

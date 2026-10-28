@@ -182,6 +182,32 @@ export type ChatEventListener = (event: ChatEvent) => void
 
 // === neko XMPP 聊天（数据层已迁移；旧类型保留供游戏与历史代码引用） ===
 
+/** 被引用的消息（服务端生成的快照，原文超长已截断） */
+export interface NekoQuote {
+  /** 被引用消息 id */
+  id: number
+  /** 被引用消息的发送者用户名 */
+  from: string
+  /** 预览文本（neko 截断到 120 字，撤回显示占位） */
+  text: string
+}
+
+/** 合并转发快照里的一条聊天记录 */
+export interface NekoBundleItem {
+  /** 发送者 neko id */
+  u: number
+  /** 发送者用户名 */
+  n: string
+  /** 发送时间（毫秒） */
+  t: number
+  /** 纯文本正文（neko 已截断到 2000 字） */
+  b: string
+  /** 富文本片段（可能含聊天图片，渲染时只取上传图片） */
+  h: string
+  /** 0 正常 / 1 已撤回 */
+  r: 0 | 1
+}
+
 /** 单条消息（neko 存证 id 全局唯一） */
 export interface NekoMessage {
   /** neko 消息 id（用于历史分页、去重、撤回） */
@@ -207,6 +233,10 @@ export interface NekoMessage {
   byAdmin: boolean
   /** 图片地址（已归一化为 /chat/uploads/<id>，渲染时再追加 token） */
   image: string | null
+  /** 引用回复的快照（非引用消息为 null） */
+  quote: NekoQuote | null
+  /** 合并转发的聊天记录（非转发消息为 null） */
+  bundle: NekoBundleItem[] | null
 }
 
 /** 联系人（LineWeb 好友 / 有往来的 neko 原生账号） */
@@ -223,6 +253,8 @@ export interface NekoContact {
   lastMessageAt: number
   isFriend: boolean
   remark: string
+  /** neko 头像版本号（0 = 没有头像，不要发请求） */
+  avatarVersion: number
 }
 
 export interface NekoRoomMember {
@@ -233,6 +265,8 @@ export interface NekoRoomMember {
   role: 'owner' | 'admin' | 'member' | string
   online: boolean
   kind: 'lineweb' | 'native'
+  /** neko 头像版本号（0 = 没有头像） */
+  avatarVersion: number
 }
 
 export interface NekoRoom {
@@ -265,6 +299,8 @@ export interface NekoFriendRequest {
   username: string
   displayName: string
   createdAt: string
+  /** neko 头像版本号（Prisma 来源的申请恒 0） */
+  avatarVersion?: number
 }
 
 /** 表情包（neko 收藏的聊天图片） */
@@ -304,6 +340,8 @@ export interface NekoDirectoryUser {
   isLineWeb: boolean
   online: boolean
   lastMessageAt: number
+  /** neko 头像版本号（0 = 没有头像） */
+  avatarVersion: number
 }
 
 /**
@@ -320,6 +358,10 @@ export interface NekoMessageNotice {
   fromName: string
   /** 发送者头像用 id（原生 neko 账号取 nekoId，群聊取负数避免与用户撞色） */
   avatarId: number
+  /** neko 头像的账号 id（群聊为 null） */
+  avatarNekoId: number | null
+  /** neko 头像版本号（0 = 没有头像） */
+  avatarVersion: number
   /** 会话标题（群名 / 对方显示名） */
   title: string
   /** 正文预览：图片与表情已归一为占位文字 */
@@ -342,6 +384,10 @@ export interface NekoConversation {
   /** 头像用的用户 id（LineWeb 用户取 id，原生账号取 nekoId 负数域不会命中头像 → 首字母兜底） */
   avatarId: number
   avatarName: string
+  /** neko 头像的账号 id（群聊为 null） */
+  avatarNekoId: number | null
+  /** neko 头像版本号（0 = 没有头像） */
+  avatarVersion: number
   contact: NekoContact | null
   room: NekoRoom | null
   lastMessage: NekoMessage | null

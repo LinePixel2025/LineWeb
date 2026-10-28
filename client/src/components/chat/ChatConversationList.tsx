@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import UserAvatar from '../UserAvatar'
+import NekoAvatar from './NekoAvatar'
 import { conversationPreview, formatUnread } from '../../lib/chat'
 import type { NekoConversation } from '../../types/chat'
 
@@ -64,9 +64,11 @@ export default memo(function ChatConversationList({
               aria-current={active ? 'true' : undefined}
               onClick={() => onSelect(conversation)}
             >
-              <UserAvatar
-                userId={conversation.avatarId}
-                username={conversation.avatarName}
+              <NekoAvatar
+                nekoId={conversation.avatarNekoId}
+                avatarVersion={conversation.avatarVersion}
+                fallbackId={conversation.avatarId}
+                name={conversation.avatarName}
                 size="md"
               />
               <span className="gh-chat-conv-main">

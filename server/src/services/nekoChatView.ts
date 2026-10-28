@@ -33,6 +33,8 @@ export interface ChatRequestView {
   username: string
   displayName: string
   createdAt: string
+  /** neko 头像版本号（Prisma 来源的申请恒 0） */
+  avatarVersion: number
 }
 
 export interface ChatContactView {
@@ -46,6 +48,8 @@ export interface ChatContactView {
   lastMessageAt: number
   isFriend: boolean
   remark: string
+  /** neko 头像版本号（0 = 没有头像） */
+  avatarVersion: number
 }
 
 export interface ChatRoomMemberView {
@@ -56,6 +60,8 @@ export interface ChatRoomMemberView {
   role: string
   online: boolean
   kind: 'lineweb' | 'native'
+  /** neko 头像版本号（0 = 没有头像） */
+  avatarVersion: number
 }
 
 export interface ChatRoomView {
@@ -130,7 +136,10 @@ function nativeAllowed(user: NekoStateUser, state: NekoState, allowNative: boole
 }
 
 function toContact(
-  user: Pick<NekoStateUser, 'id' | 'username' | 'displayName' | 'lastMessageAt' | 'online'>,
+  user: Pick<
+    NekoStateUser,
+    'id' | 'username' | 'displayName' | 'lastMessageAt' | 'online' | 'avatarVersion'
+  >,
   isFriend: boolean,
   remark = '',
 ): ChatContactView {
@@ -146,6 +155,7 @@ function toContact(
     lastMessageAt: Number(user.lastMessageAt) || 0,
     isFriend,
     remark,
+    avatarVersion: Number(user.avatarVersion) || 0,
   }
 }
 
@@ -160,6 +170,7 @@ function toRoomMember(
     role: member.role,
     online: !!member.online,
     kind: kindOfUsername(member.username),
+    avatarVersion: Number(member.avatarVersion) || 0,
   }
 }
 
@@ -188,6 +199,7 @@ function prismaRequest(item: LineWebFriendRequestItem): ChatRequestView {
     username: toNekoUsername(item.user.id),
     displayName: item.user.username,
     createdAt: isoStamp(item.createdAt),
+    avatarVersion: 0,
   }
 }
 
@@ -200,6 +212,7 @@ function nekoRequest(item: NekoStateFriendRequest): ChatRequestView {
     username: item.username,
     displayName: item.displayName || item.username,
     createdAt: isoStamp(item.createdAt),
+    avatarVersion: Number(item.avatarVersion) || 0,
   }
 }
 
@@ -245,6 +258,7 @@ export function buildChatView(input: BuildChatViewInput): ChatBootstrapView {
         displayName: friend.username,
         lastMessageAt: 0,
         online: false,
+        avatarVersion: state.friends.find((row) => row.id === nekoId)?.avatarVersion || 0,
       },
       true,
       state.friends.find((row) => row.id === nekoId)?.remark || '',
@@ -269,6 +283,7 @@ export function buildChatView(input: BuildChatViewInput): ChatBootstrapView {
             displayName: friend.displayName,
             lastMessageAt: friend.lastMessageAt,
             online: friend.online,
+            avatarVersion: friend.avatarVersion,
           },
           true,
           friend.remark || '',
@@ -371,6 +386,8 @@ export interface DirectoryUserView {
   isLineWeb: boolean
   online: boolean
   lastMessageAt: number
+  /** neko 头像版本号（0 = 没有头像） */
+  avatarVersion: number
 }
 
 /** 搜索可发起会话的联系人（原生用户为主，`lw_*` 只回好友） */
@@ -404,6 +421,7 @@ export function searchDirectory(
       isLineWeb: linewebId !== null,
       online: !!user.online,
       lastMessageAt: Number(user.lastMessageAt) || 0,
+      avatarVersion: Number(user.avatarVersion) || 0,
     })
     if (result.length >= limit) break
   }
@@ -437,6 +455,7 @@ export function resolveUsers(
       isLineWeb: linewebId !== null,
       online: !!user.online,
       lastMessageAt: Number(user.lastMessageAt) || 0,
+      avatarVersion: Number(user.avatarVersion) || 0,
     })
   }
   return result

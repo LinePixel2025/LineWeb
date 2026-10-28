@@ -43,6 +43,7 @@ export interface NekoStateRoomMember {
   role: string
   mutedUntil: number
   online: boolean
+  avatarVersion: number
 }
 
 export interface NekoStateRoom {
@@ -68,6 +69,8 @@ export interface NekoStateFriendRequest {
   isAdmin: boolean
   /** neko 侧时间戳（毫秒）或 ISO 字符串，读取时两种都兼容 */
   createdAt: number | string
+  /** neko 头像版本号（老响应可能没有） */
+  avatarVersion?: number
 }
 
 /** 个人表情包（收藏的聊天图片） */
@@ -400,6 +403,56 @@ export async function fetchUpload(
   const mime = res.headers.get('content-type') || 'application/octet-stream'
   const data = Buffer.from(await res.arrayBuffer())
   return { data, mime }
+}
+
+/** 读取 neko 头像字节（同源头像中继用）；账号没有头像返回 null */
+export async function fetchAvatar(
+  nekoId: number,
+  user: LineWebUserLike,
+  sessionHash?: string,
+): Promise<{ data: Buffer; mime: string } | null> {
+  const res = await request(`/chat/avatars/${encodeURIComponent(String(nekoId))}`, {
+    headers: {
+      'x-proxy-user-id': String(toNekoId(user.id)),
+      'x-proxy-username': toNekoUsername(user.id),
+      'x-proxy-admin': '0',
+      'x-session-hash': sessionHash || '',
+    },
+  })
+  if (res.status === 404) return null
+  if (!res.ok) throw new AppError('头像读取失败', res.status >= 500 ? 503 : res.status)
+  const mime = res.headers.get('content-type') || 'application/octet-stream'
+  const data = Buffer.from(await res.arrayBuffer())
+  return { data, mime }
+}
+
+/**
+ * 把 LineWeb 头像同步到 neko（best-effort）。
+ *
+ * neko 头像存的是 `<200KB` 的 png/jpeg/webp dataURL；LineWeb 上传链路已经用 sharp
+ * 压成 256×256 WebP，这里只做 base64 包装。同步失败不影响 LineWeb 头像本身，
+ * 聊天页会回退到 LineWeb 头像（`lw_*` 账号）。
+ */
+export async function syncAvatarToNeko(
+  linewebUserId: number,
+  avatar: Buffer | null,
+): Promise<void> {
+  if (!isNekoChatEnabled()) return
+  try {
+    await requestJson('/internal/avatar', {
+      method: 'POST',
+      body: {
+        id: toNekoId(linewebUserId),
+        avatar: avatar && avatar.length > 0
+          ? `data:image/webp;base64,${avatar.toString('base64')}`
+          : null,
+      },
+      timeoutMs: 8000,
+    })
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    console.warn(`[nekoChat] 同步聊天头像失败（user=${linewebUserId}）：${detail}`)
+  }
 }
 
 /**

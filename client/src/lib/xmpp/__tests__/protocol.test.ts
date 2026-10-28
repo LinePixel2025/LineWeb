@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   extractImageSrc,
   linewebIdOfUsername,
+  parseBundleText,
   parseHistoryMessages,
   parseLiveMessage,
   parseStanza,
@@ -89,6 +90,42 @@ describe('parseLiveMessage', () => {
     const xml = `<message type="chat" from="alice@${DOMAIN}" to="lw_2@${DOMAIN}" id="11"><body>[图片]</body><html xmlns="http://jabber.org/protocol/xhtml-im"><body xmlns="http://www.w3.org/1999/xhtml"><img src="/chat/uploads/${ID_A}" alt="图片"/></body></html></message>`
     const parsed = parseLiveMessage(first(xml), CONTEXT)
     expect(parsed?.image).toBe(`/chat/uploads/${ID_A}`)
+  })
+
+  it('实时引用解析出被引用消息快照', () => {
+    const xml = `<message type="chat" from="alice@${DOMAIN}" to="lw_2@${DOMAIN}" id="12"><body>回复你</body><quote id="7" from="lw_2" text="原话"/></message>`
+    const parsed = parseLiveMessage(first(xml), CONTEXT)
+    expect(parsed?.quote).toEqual({ id: 7, from: 'lw_2', text: '原话' })
+    expect(parsed?.bundle).toBeNull()
+  })
+
+  it('合并转发的 bundle JSON 被解析成条目', () => {
+    const bundle = JSON.stringify([
+      { u: 1000000000002, n: 'alice', t: 1700000000000, b: '第一条', h: '', r: 0 },
+      { u: 1000000000002, n: 'alice', t: 1700000000001, b: '撤回的', h: '', r: 1 },
+    ])
+    const xml = `<message type="chat" from="alice@${DOMAIN}" to="lw_2@${DOMAIN}" id="13"><body>[聊天记录]</body><bundle>${bundle}</bundle></message>`
+    const parsed = parseLiveMessage(first(xml), CONTEXT)
+    expect(parsed?.bundle).toHaveLength(2)
+    expect(parsed?.bundle?.[0]).toMatchObject({ n: 'alice', b: '第一条', r: 0 })
+    expect(parsed?.bundle?.[1].r).toBe(1)
+  })
+
+  it('坏 bundle / 空数组返回 null', () => {
+    expect(parseBundleText('not-json')).toBeNull()
+    expect(parseBundleText('[]')).toBeNull()
+    expect(parseBundleText('{"a":1}')).toBeNull()
+    expect(parseBundleText('[{"n":"a","b":"x","t":"1700000000000"}]')?.[0].t).toBe(1700000000000)
+  })
+
+  it('历史行的引用与聊天记录同样解析，撤回后清空', () => {
+    const bundle = JSON.stringify([{ u: 1, n: 'alice', t: 1, b: '记录', h: '', r: 0 }])
+    const xml = `<query complete="1"><msg id="14" mine="0" from="alice@${DOMAIN}" ts="1700000000002"><body>回复</body><quote id="9" from="alice" text="原话"/><bundle>${bundle}</bundle></msg><msg id="15" mine="0" recalled="1" from="alice@${DOMAIN}" ts="1700000000003"><body>引用后又撤回</body><quote id="9" from="alice" text="原话"/></msg></query>`
+    const parsed = parseHistoryMessages(first(xml), CONTEXT)
+    expect(parsed.messages[0].quote).toEqual({ id: 9, from: 'alice', text: '原话' })
+    expect(parsed.messages[0].bundle?.[0].b).toBe('记录')
+    expect(parsed.messages[1].recalled).toBe(true)
+    expect(parsed.messages[1].quote).toBeNull()
   })
 })
 

@@ -3,13 +3,14 @@ import { AppError } from '../middleware/errorHandler.js'
 import { asyncHandler } from '../lib/asyncHandler.js'
 import { authenticate } from '../middleware/auth.js'
 import { getUserBrief } from '../services/chatService.js'
-import { fetchUpload, sessionHashOf } from '../services/nekoChat.js'
+import { fetchAvatar, fetchUpload, sessionHashOf } from '../services/nekoChat.js'
 
 /**
- * 聊天图片字节中继（挂载于 /chat，不在 /api 下）
+ * 聊天图片 / 头像字节中继（挂载于 /chat，不在 /api 下）
  *
- * 图片真实存放在 neko 的聊天库里；浏览器只认识 LineWeb 同源地址：
+ * 图片与头像真实存放在 neko 的聊天库里；浏览器只认识 LineWeb 同源地址：
  *   /chat/uploads/<24位hex>?token=<LineWeb 登录令牌>
+ *   /chat/avatars/<nekoId>?v=<avatarVersion>&token=<LineWeb 登录令牌>
  * 这里带内部令牌 + 可信代理身份头向 neko 取字节后原样返回。
  *
  * ⚠️ 必须注册在 express.static 与 SPA fallback 之前，否则会命中 index.html。
@@ -51,6 +52,36 @@ router.get(
     res.setHeader('Content-Type', upload.mime)
     res.setHeader('Cache-Control', 'private, max-age=31536000, immutable')
     res.send(upload.data)
+  }),
+)
+
+/**
+ * 聊天头像中继：`/chat/avatars/<nekoId>?v=<avatarVersion>&token=<LineWeb 登录令牌>`
+ *
+ * 头像本体存在 neko 的 accounts.avatar（dataURL），这里带可信代理身份头取字节。
+ * 版本号只用于浏览器缓存击穿（`?v=`），服务端按 neko 的 5 分钟私有缓存下发。
+ */
+router.get(
+  '/avatars/:id',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = Number.parseInt(String(req.params.id || ''), 10)
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(404).type('text').send('no avatar')
+      return
+    }
+    const userId = req.user?.userId
+    if (!userId) throw new AppError('未登录', 401)
+    const user = await getUserBrief(userId)
+    const token = rawToken(req)
+    const avatar = await fetchAvatar(id, user, token ? sessionHashOf(token) : '')
+    if (!avatar) {
+      res.status(404).type('text').send('no avatar')
+      return
+    }
+    res.setHeader('Content-Type', avatar.mime)
+    res.setHeader('Cache-Control', 'private, max-age=300')
+    res.send(avatar.data)
   }),
 )
 

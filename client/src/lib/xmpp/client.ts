@@ -307,17 +307,54 @@ export class XmppClient extends EventTarget {
   private username = ''
   private password = ''
 
-  /** 发送消息；xhtml 为已净化的 HTML 片段（可空） */
+  /**
+   * 发送消息；xhtml 为已净化的 HTML 片段（可空）。
+   *
+   * urn:wlxx:chat 扩展（三者可同时出现，由 neko 统一解析）：
+   *   - reply：引用消息 id（0 表示不引用）
+   *   - forward：合并转发的源会话消息 id（1–30 条，服务端生成快照）
+   *   - mentions：被 @ 的 neko 用户 id（0 = @所有人，仅群聊且管理员生效）
+   */
   sendMessage(options: {
     to: string
     type?: 'chat' | 'groupchat'
     body: string
     xhtml?: string
+    reply?: number
+    mentions?: number[]
+    forward?: number[]
   }): void {
     const type = options.type || 'chat'
+    const reply = Math.max(0, Math.trunc(options.reply || 0))
+    const mentions = Array.from(
+      new Set(
+        (options.mentions ?? [])
+          .map((id) => Math.trunc(id))
+          .filter((id) => Number.isInteger(id) && id >= 0),
+      ),
+    ).slice(0, 20)
+    const forward = Array.from(
+      new Set(
+        (options.forward ?? [])
+          .map((id) => Math.trunc(id))
+          .filter((id) => Number.isInteger(id) && id > 0),
+      ),
+    ).slice(0, 30)
+
     let xml = `<message type="${type}" to="${escXml(options.to)}"><body>${escXml(options.body)}</body>`
     if (options.xhtml) {
       xml += `<html xmlns="http://jabber.org/protocol/xhtml-im"><body xmlns="http://www.w3.org/1999/xhtml">${options.xhtml}</body></html>`
+    }
+    if (reply > 0 || mentions.length > 0 || forward.length > 0) {
+      let ext = `<x xmlns="urn:wlxx:chat"`
+      if (reply > 0) ext += ` reply="${reply}"`
+      if (forward.length > 0) ext += ` forward="${forward.join(',')}"`
+      if (mentions.length === 0) {
+        ext += '/>'
+      } else {
+        ext += `>${mentions.map((id) => `<mention user="${id}"/>`).join('')}</x>`
+      }
+      xml += ext
     }
     this.send(`${xml}</message>`)
   }

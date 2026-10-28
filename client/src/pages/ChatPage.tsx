@@ -52,6 +52,7 @@ export default function ChatPage() {
     messagesError,
     loadMore,
     sendText,
+    forwardMessages,
     sendImage,
     sendSticker,
     addSticker,
@@ -131,17 +132,35 @@ export default function ChatPage() {
   )
 
   const handleSend = useCallback(
-    async (content: string) => {
+    async (content: string, replyTo?: number) => {
       if (!activeKey) return
       setActionError(null)
       try {
-        await sendText(activeKey, content)
+        await sendText(activeKey, content, replyTo)
       } catch (error) {
         setActionError(errorMessage(error, '发送消息失败'))
         throw error
       }
     },
     [activeKey, sendText],
+  )
+
+  const handleForward = useCallback(
+    async (
+      messageIds: number[],
+      targetKeys: string[],
+      mode: 'merge' | 'separate',
+    ) => {
+      if (!activeKey) throw new Error('请先打开一个会话')
+      setActionError(null)
+      try {
+        await forwardMessages(activeKey, messageIds, targetKeys, mode)
+      } catch (error) {
+        setActionError(errorMessage(error, '转发失败'))
+        throw error
+      }
+    },
+    [activeKey, forwardMessages],
   )
 
   const handleSendImage = useCallback(
@@ -454,8 +473,10 @@ export default function ChatPage() {
           hasMore={messagesHasMore}
           error={messagesError}
           emptyMessage={emptyMessage}
+          forwardTargets={conversations}
           onBack={() => navigate('/chat')}
           onSend={handleSend}
+          onForward={handleForward}
           onSendImage={handleSendImage}
           onSendSticker={(sticker) => {
             if (activeKey) void sendSticker(activeKey, sticker)

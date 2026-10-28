@@ -140,8 +140,21 @@ export interface XmppChatValue {
   messagesHasMore: boolean
   messagesError: string | null
   loadMore: (key: string) => void
-  sendText: (key: string, text: string) => Promise<void>
+  /** 发送文本；replyTo 为被引用消息 id（neko 会快照原文并校验同会话） */
+  sendText: (key: string, text: string, replyTo?: number) => Promise<void>
   sendImage: (key: string, file: File) => Promise<void>
+  /**
+   * 转发聊天记录：
+   *   - merge：合并转发（服务端生成快照卡片）；neko 按「目标会话」校验快照来源，
+   *     因此只能转发回原会话，跨会话请用 separate
+   *   - separate：逐条转发（按原消息内容重新发送，可发往任意会话）
+   */
+  forwardMessages: (
+    sourceKey: string,
+    messageIds: number[],
+    targetKeys: string[],
+    mode: 'merge' | 'separate',
+  ) => Promise<void>
   /** 发送表情包（与图片消息同构，body 固定 [表情]） */
   sendSticker: (key: string, sticker: NekoSticker) => void
   /** 收藏图片为表情（自动压到 360px PNG） */
@@ -184,6 +197,7 @@ function toContact(user: NekoDirectoryUser): NekoContact {
     lastMessageAt: user.lastMessageAt,
     isFriend: false,
     remark: '',
+    avatarVersion: user.avatarVersion ?? 0,
   }
 }
 
@@ -197,6 +211,8 @@ function makeDirectConversation(
     title: contact.displayName || contact.username,
     avatarId: contact.linewebId ?? -contact.nekoId,
     avatarName: contact.displayName || contact.username,
+    avatarNekoId: contact.nekoId,
+    avatarVersion: contact.avatarVersion || 0,
     contact,
     room: null,
     lastMessage: null,
@@ -218,6 +234,8 @@ function makeRoomConversation(room: NekoRoom, pinned: Set<string>): NekoConversa
     title: room.name || '群聊',
     avatarId: -room.id,
     avatarName: room.name || '群聊',
+    avatarNekoId: null,
+    avatarVersion: 0,
     contact: null,
     room,
     lastMessage: null,
@@ -425,6 +443,8 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       kind: room ? 'room' : 'direct',
       fromName: contact?.displayName || contact?.username || message.fromUsername || '对方',
       avatarId: room ? -room.id : contact?.linewebId ?? contact?.nekoId ?? 0,
+      avatarNekoId: room ? null : contact?.nekoId ?? null,
+      avatarVersion: room ? 0 : contact?.avatarVersion ?? 0,
       title: room ? room.name : contact?.displayName || contact?.username || message.fromUsername || '聊天',
       preview,
       image: message.image ? chatImageUrl(message.image) : null,
@@ -738,7 +758,15 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       commitMessages(key, (prev) =>
         prev.map((message) =>
           message.id === messageId
-            ? { ...message, recalled: true, body: '消息已撤回', image: null, byAdmin: message.byAdmin || byAdmin }
+            ? {
+                ...message,
+                recalled: true,
+                body: '消息已撤回',
+                image: null,
+                quote: null,
+                bundle: null,
+                byAdmin: message.byAdmin || byAdmin,
+              }
             : message,
         ),
       )
@@ -752,6 +780,8 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
                   recalled: true,
                   body: '消息已撤回',
                   image: null,
+                  quote: null,
+                  bundle: null,
                 },
               }
             : conversation,
@@ -1247,12 +1277,76 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const sendText = useCallback(
-    async (key: string, text: string) => {
+    async (key: string, text: string, replyTo?: number) => {
       const body = text.trim()
       if (!body) return
       const client = requireClient()
       const target = requireTarget(key)
-      client.sendMessage({ to: target.to, type: target.type, body })
+      const reply = Math.max(0, Math.trunc(replyTo || 0))
+      client.sendMessage({ to: target.to, type: target.type, body, ...(reply ? { reply } : {}) })
+    },
+    [requireClient, requireTarget],
+  )
+
+  /**
+   * 转发聊天记录。
+   *
+   * 合并转发依赖 neko 按「目标会话」生成快照（单聊双方匹配 / 同群），因此跨会话
+   * 只能逐条转发；这条限制来自上游协议，不是前端取舍。
+   */
+  const forwardMessages = useCallback(
+    async (
+      sourceKey: string,
+      messageIds: number[],
+      targetKeys: string[],
+      mode: 'merge' | 'separate',
+    ) => {
+      const client = requireClient()
+      const ids = Array.from(
+        new Set(messageIds.filter((id) => Number.isInteger(id) && id > 0)),
+      ).slice(0, 30)
+      if (ids.length === 0) throw new Error('没有可转发的消息')
+      const targets = Array.from(new Set(targetKeys.filter((key) => isConversationKey(key))))
+      if (targets.length === 0) throw new Error('请选择转发对象')
+      if (mode === 'merge' && targets.some((key) => key !== sourceKey)) {
+        throw new Error('合并转发只能发回原会话，跨会话请使用逐条转发')
+      }
+      if (mode === 'separate' && ids.length * targets.length > 100) {
+        throw new Error('一次最多逐条转发 100 条（消息数 × 会话数），请减少选择')
+      }
+
+      if (mode === 'merge') {
+        const target = requireTarget(sourceKey)
+        for (const key of targets) {
+          if (key !== sourceKey) continue
+          client.sendMessage({
+            to: target.to,
+            type: target.type,
+            body: '[聊天记录]',
+            forward: ids,
+          })
+        }
+        return
+      }
+
+      const source = messagesRef.current[sourceKey] ?? []
+      const payloads = ids
+        .map((id) => source.find((message) => message.id === id))
+        .filter((message): message is NekoMessage => !!message && !message.recalled)
+        .map((message) => ({
+          body: message.body || (message.image ? '[图片]' : '[消息]'),
+          ...(message.image
+            ? { xhtml: `<img src="${escXml(message.image)}" alt="${message.body === '[表情]' ? '表情' : '图片'}"/>` }
+            : {}),
+        }))
+      if (payloads.length === 0) throw new Error('所选消息已失效，请重新选择')
+
+      for (const key of targets) {
+        const target = requireTarget(key)
+        for (const payload of payloads) {
+          client.sendMessage({ to: target.to, type: target.type, ...payload })
+        }
+      }
     },
     [requireClient, requireTarget],
   )
@@ -1509,6 +1603,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       messagesError: activeMeta.error,
       loadMore: loadMoreFor,
       sendText,
+      forwardMessages,
       sendImage,
       sendSticker,
       addSticker,
@@ -1551,6 +1646,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       activeMeta,
       loadMoreFor,
       sendText,
+      forwardMessages,
       sendImage,
       sendSticker,
       addSticker,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import UserAvatar from '../UserAvatar'
+import NekoAvatar from './NekoAvatar'
 import { contactLabel } from '../../lib/chat'
 import type { NekoContact } from '../../types/chat'
 
@@ -117,9 +117,11 @@ export default function GroupDialog({
                         checked={selected.has(contact.nekoId)}
                         onChange={() => toggle(contact.nekoId)}
                       />
-                      <UserAvatar
-                        userId={contact.linewebId ?? -contact.nekoId}
-                        username={contact.displayName || contact.username}
+                      <NekoAvatar
+                        nekoId={contact.nekoId}
+                        avatarVersion={contact.avatarVersion}
+                        fallbackId={contact.linewebId ?? -contact.nekoId}
+                        name={contact.displayName || contact.username}
                         size="sm"
                       />
                       <span className="gh-chat-friend-name">
