@@ -377,3 +377,17 @@ cd storage-node && python main.py     # 本地 Windows 存储节点，config.jso
 - **聊天传输默认长轮询**：`lib/realtime.ts` 新增 `lineweb_chat_realtime`（默认关闭），聊天设置开关持久化并立即重连；聊天 XMPP 默认走 `http-*` 长轮询，开启后才尝试 `/ws/xmpp`，失败自动降级。站内 `/ws/chat`（好友/游戏事件）不受该开关影响。
 - **聊天界面增强**：日期分隔（今天/昨天/日期）、同发送者 5 分钟消息聚合、会话本地搜索、置顶标记、官方/大厅标签、回到最新、群成员搜索、公告横幅/待确认、设置浮层。
 - **数据库**：`SiteAnnouncement` / `SiteSetting` 为 additive，`prisma db push` 即可；生产仍走本地构建 + `Dockerfile.prebuilt`，不要在 ECS 上 `docker compose up --build`。
+
+---
+
+## 2026-10 统一积分与开心农场（实现口径）
+
+- **统一积分**：`PointsLedger` 是唯一台账，`User.points/pointsEarned` 为汇总余额与累计；`PointsConfig` 单行存 10 款游戏的胜/负/平/参与/表现加成/日上限，以及农场偷菜比例、每日偷菜次数、开荒礼包积分；日上限只压正向收益，自然日按 Asia/Shanghai 0 点切换（`lib/pointsRules.ts` 双端同拷贝）。
+- **结算路径**：单机由 `POST /api/game-stats/result` 在写 `GameStat` 的同一事务里发分并返回 `{ stat, points }`；联机由 `gameStatsHooks` 的 `recordOnlineMatchResult` 逐人结算。前端 `GameStatsContext`（单机）与 `GameContext`（联机结束 1.5s 后）刷新积分。
+- **商店 / 称号**：`PointsShopItem`（`title` / `emoji` 两类，payload 存颜色、图标、表情包 key）→ 购买写 `UserPointsItem`，佩戴写 `User.equippedTitleId`；称号只在 LineWeb 站内展示（顶部导航、个人资料、积分榜、战绩榜），不写入 neko。`emoji_<pack>` key 解锁聊天表情商店的奶龙 / 呆猫 / Twemoji 包（团子 / 橘猫 / 符号免费）。
+- **权限**：新增 `points:manage`（admin 全权），管理页 `/admin/points` 覆盖游戏规则、商品增改、用户调分与统计；前端 `ADMIN_ROUTE_CAPABILITIES` + 跨端能力清单测试同步。
+- **开心农场**：`Farm / FarmPlot / FarmItem / FarmSteal` 四表；作物目录与纯函数在 `server/src/lib/farmCrops.ts`（客户端只用 `/api/farm` 下发的 catalog，不复制数值）；生长按 `readyAt` 判定，服务端不跑定时器；施肥把剩余时间减半（至少 10 秒，每茬最多 2 次）；扩建 6→9→12→15→18（500/1500/3000/6000 积分）；偷菜受每日上限（默认 10）限制，同一茬每人只能偷一次，每块地至少留 1 单位给地主，小偷得 `floor(value × 0.6)`（≥1）。
+- **farm 功能开关**：新增 `farm` 键（依赖 `games` 总开关），`/api/farm` 与 `/games/farm` 都受控，大厅卡片随开关隐藏。
+- **新路由**：`/api/points/*`（全部需登录）、`/api/farm/*`（`requireFeature('farm')` + 路由级限流 180/5min，偷菜 40/5min）、`/api/admin/points/*`（`points:manage`）。
+- **自检**：`cd server && npm run verify:points`（165 断言：游戏规则、上海日界、配置归一化、商品载荷清洗、作物目录不变量、施肥/偷菜/扩建）。
+- **数据库**：`PointsLedger / PointsConfig / PointsShopItem / UserPointsItem / Farm / FarmPlot / FarmItem / FarmSteal` 与 `User.points/pointsEarned/equippedTitleId` 均为 additive，`prisma db push` 即可；生产仍走本地构建 + `Dockerfile.prebuilt`，不要在 ECS 上 `docker compose up --build`。

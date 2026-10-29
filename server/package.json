@@ -24,7 +24,8 @@
     "verify:gamestats": "tsx scripts/verify-gamestats.ts",
     "verify:aichat": "tsx scripts/verify-aichat.ts",
     "verify:neko": "tsx scripts/verify-neko-chat.ts",
-    "verify:webproxy": "tsx scripts/verify-webproxy.ts"
+    "verify:webproxy": "tsx scripts/verify-webproxy.ts",
+    "verify:points": "tsx scripts/verify-points.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
