@@ -499,9 +499,9 @@ export default function ChatPage() {
                     <p className="gh-chat-settings-title">聊天设置</p>
                     <label className="gh-chat-settings-row">
                       <span className="gh-chat-settings-copy">
-                        <span className="gh-chat-settings-label">实时连接（WebSocket）</span>
+                        <span className="gh-chat-settings-label">聊天消息实时连接（WebSocket）</span>
                         <span className="gh-chat-settings-hint">
-                          默认关闭：聊天走长轮询，兼容性最好、更省资源。开启后优先使用 WebSocket，失败自动降级。
+                          默认关闭：聊天消息走长轮询，兼容性最好、更省资源。开启后优先使用 WebSocket，失败自动降级；好友申请与游戏事件仍走站内实时通道。
                         </span>
                       </span>
                       <button
