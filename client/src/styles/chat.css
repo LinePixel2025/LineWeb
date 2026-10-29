@@ -2253,7 +2253,8 @@
   bottom: calc(var(--gh-safe-bottom) + 20px);
   z-index: 1300;
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: stretch;
   gap: var(--gh-space-1);
   width: min(340px, calc(100vw - 40px));
   padding: var(--gh-space-2);
@@ -2273,6 +2274,81 @@
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.gh-msg-toast-body {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gh-space-1);
+  width: 100%;
+}
+
+.gh-msg-toast--reply {
+  width: min(380px, calc(100vw - 40px));
+}
+
+/* 快速回复：常用短语 + 输入框，直接发送到该会话（不跳页） */
+.gh-msg-toast-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 var(--gh-space-2) var(--gh-space-1);
+}
+
+.gh-msg-toast-reply {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-1);
+  padding: var(--gh-space-1) var(--gh-space-2) var(--gh-space-2);
+  border-top: 1px solid var(--gh-border-muted);
+}
+
+.gh-msg-toast-phrases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gh-space-1);
+}
+
+.gh-msg-toast-phrase {
+  padding: 2px 8px;
+  background: var(--gh-canvas-inset);
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 999px;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.gh-msg-toast-phrase:hover:not(:disabled) {
+  background: var(--gh-btn-hover);
+  color: var(--gh-text);
+}
+
+.gh-msg-toast-phrase:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.gh-msg-toast-reply-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--gh-space-1);
+}
+
+.gh-msg-toast-input {
+  flex: 1;
+  min-width: 0;
+  max-height: 96px;
+  padding: 6px 8px;
+  font-size: var(--gh-text-sm);
+  line-height: 1.4;
+  resize: none;
+}
+
+.gh-msg-toast-error {
+  margin: 0;
+  color: var(--gh-danger);
+  font-size: var(--gh-text-xs);
 }
 
 .gh-msg-toast-main {

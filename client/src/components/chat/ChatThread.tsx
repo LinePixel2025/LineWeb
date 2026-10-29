@@ -119,6 +119,8 @@ interface Props {
   onSaveAnnouncement?: (text: string, ackRequired: boolean) => Promise<void> | void
   /** 确认当前群公告（需要确认的公告） */
   onAckAnnouncement?: () => Promise<void> | void
+  /** 免打扰开启中：会话头部显示「免打扰中」提示 */
+  dndEnabled?: boolean
 }
 
 function formatMessageTime(value: number): string {
@@ -211,6 +213,7 @@ export default function ChatThread({
   onLeave,
   onSaveAnnouncement,
   onAckAnnouncement,
+  dndEnabled = false,
 }: Props) {
   const listRef = useRef<HTMLDivElement | null>(null)
   const lastAvatarTapRef = useRef<{ id: number; at: number } | null>(null)
@@ -730,6 +733,11 @@ export default function ChatThread({
                 {!isGroup && <UserTitleBadge title={conversation.contact?.title} />}
                 {isLobby && <span className="gh-chat-official-tag gh-chat-official-tag--lobby">大厅</span>}
                 {isBigGroup && <span className="gh-chat-official-tag">官方</span>}
+                {dndEnabled && (
+                  <span className="gh-chat-dnd-tag" title="免打扰开启：新消息不会弹出提示，未读角标照常">
+                    免打扰中
+                  </span>
+                )}
               </p>
               <p className="gh-chat-thread-subtitle">{subtitle}</p>
             </>

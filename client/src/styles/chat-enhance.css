@@ -584,3 +584,16 @@
     width: auto;
   }
 }
+
+/* 免打扰提示（聊天会话头部；由聊天设置里的「免打扰」开关控制） */
+.gh-chat-dnd-tag {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--gh-warning) 45%, transparent);
+  border-radius: 999px;
+  background: var(--gh-warning-soft);
+  color: var(--gh-warning);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 15px;
+}

@@ -44,6 +44,8 @@ export default function ChatPage() {
     transport,
     realtimeEnabled,
     setRealtimeEnabled,
+    dndEnabled,
+    setDndEnabled,
     loading,
     error: connectionError,
     banned,
@@ -538,9 +540,28 @@ export default function ChatPage() {
                         <span className="gh-feature-switch-knob" />
                       </button>
                     </label>
+                    <label className="gh-chat-settings-row">
+                      <span className="gh-chat-settings-copy">
+                        <span className="gh-chat-settings-label">免打扰</span>
+                        <span className="gh-chat-settings-hint">
+                          开启后新消息不再弹出全局提示；消息照常接收、未读与 @ 角标照常累加，聊天页内不受影响。
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={dndEnabled}
+                        aria-label={`免打扰：${dndEnabled ? '已开启' : '已关闭'}`}
+                        className={`gh-feature-switch ${dndEnabled ? 'gh-feature-switch--on' : ''}`}
+                        onClick={() => setDndEnabled(!dndEnabled)}
+                      >
+                        <span className="gh-feature-switch-knob" />
+                      </button>
+                    </label>
                     <p className="gh-chat-settings-foot">
                       当前传输：{transport === 'ws' ? 'WebSocket' : 'HTTP 长轮询'}
                       {realtimeEnabled && transport === 'polling' ? '（正在尝试实时连接）' : ''}
+                      {dndEnabled ? ' · 免打扰已开启' : ''}
                     </p>
                   </div>
                 </>
@@ -590,6 +611,7 @@ export default function ChatPage() {
         <ChatThread
           conversation={activeConversation}
           selfNekoId={self?.nekoId ?? null}
+          dndEnabled={dndEnabled}
           messages={messages}
           peerRead={activeKey ? peerRead[activeKey] ?? 0 : 0}
           loading={messagesLoading && messages.length === 0}

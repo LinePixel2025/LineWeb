@@ -36,6 +36,7 @@ import {
   sortNekoConversations,
   totalUnread,
 } from '../lib/chat'
+import { readChatDnd, writeChatDnd } from '../lib/chatDnd'
 import { XmppClient } from '../lib/xmpp/client'
 import { prepareChatImage, prepareStickerImage } from '../lib/xmpp/image'
 import {
@@ -132,6 +133,9 @@ export interface XmppChatValue {
   realtimeEnabled: boolean
   /** 切换实时连接（持久化，并立即重连生效） */
   setRealtimeEnabled: (enabled: boolean) => void
+  /** 免打扰：开启后不弹全局新消息提示（未读与 @ 角标照常） */
+  dndEnabled: boolean
+  setDndEnabled: (enabled: boolean) => void
   /** 首次 bootstrap 尚未返回 */
   loading: boolean
   error: string | null
@@ -297,6 +301,15 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   const setRealtimeEnabled = useCallback((enabled: boolean) => {
     writeChatRealtimePreference(enabled)
     setRealtimeEnabledState(enabled)
+  }, [])
+  // 免打扰（纯前端偏好）：只抑制全局新消息 Toast，不影响消息落库与未读
+  const [dndEnabled, setDndEnabledState] = useState<boolean>(() => readChatDnd())
+  const dndRef = useRef(dndEnabled)
+  const setDndEnabled = useCallback((enabled: boolean) => {
+    writeChatDnd(enabled)
+    dndRef.current = enabled
+    setDndEnabledState(enabled)
+    if (enabled) setMessageNotice(null)
   }, [])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -485,6 +498,8 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
    * 同一会话 10 秒内多条只累加 count，避免连发消息刷屏。
    */
   const pushMessageNotice = useCallback((key: string, roomId: number | null, message: NekoMessage) => {
+    // 免打扰：不弹全局提示（消息照常落库、未读/@ 角标照常）
+    if (dndRef.current) return
     const room = roomId ? roomsRef.current.find((item) => item.id === roomId) ?? null : null
     // 免打扰群：@我 与拍一拍仍然提醒（与微信一致）
     if (room?.notifyMuted && !message.mentionedMe && !message.poke) return
@@ -1779,6 +1794,8 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       transport,
       realtimeEnabled,
       setRealtimeEnabled,
+      dndEnabled,
+      setDndEnabled,
       loading,
       error,
       banned,
@@ -1834,6 +1851,8 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       transport,
       realtimeEnabled,
       setRealtimeEnabled,
+      dndEnabled,
+      setDndEnabled,
       loading,
       error,
       banned,
