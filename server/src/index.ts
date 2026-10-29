@@ -273,9 +273,10 @@ app.get('/api', (_req, res) => {
     },
     apiKeys: '已废弃 —— LineWeb 只使用账号登录令牌访问全部端点，不再提供 API Key。',
     announcements: {
-      list: { method: 'GET', path: '/api/announcements', auth: true, description: '站点公告（LineWeb 自有，仅返回生效公告；与 neko 群公告无关）' },
+      list: { method: 'GET', path: '/api/announcements', auth: true, description: '站点公告（LineWeb 自有，仅返回生效公告；含 requireAck 与本人 acknowledgedAt）' },
+      ack: { method: 'POST', path: '/api/announcements/:id/ack', auth: true, description: '确认已知晓公告（只写自己的确认记录，幂等）' },
       adminList: { method: 'GET', path: '/api/admin/announcements', auth: 'admin', description: '管理：全部站点公告' },
-      create: { method: 'POST', path: '/api/admin/announcements', auth: 'admin', description: '管理：发布公告 { title, content, level, isActive, isPinned }' },
+      create: { method: 'POST', path: '/api/admin/announcements', auth: 'admin', description: '管理：发布公告 { title, content, level, isActive, isPinned, requireAck }' },
       update: { method: 'PUT', path: '/api/admin/announcements/:id', auth: 'admin', description: '管理：修改公告' },
       delete: { method: 'DELETE', path: '/api/admin/announcements/:id', auth: 'admin', description: '管理：删除公告' },
     },

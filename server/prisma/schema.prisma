@@ -42,6 +42,7 @@ model User {
   proxySites             ProxySite[] // 网页反代站点（含账号级的登录 Cookie）
   gameStats              GameStat[] // 游戏战绩（单机 + 联机）
   siteAnnouncements      SiteAnnouncement[]   @relation("SiteAnnouncementAuthor") // 站点公告（LineWeb 自有，非 neko 群公告）
+  siteAnnouncementAcks   SiteAnnouncementAck[] // 站点公告确认记录
   points                 Int                  @default(0) // 游戏积分余额（全游戏统一）
   pointsEarned           Int                  @default(0) @map("points_earned") // 累计获得积分（排行榜 / 成就展示）
   equippedTitleId        Int?                 @map("equipped_title_id") // 当前佩戴的称号（LineWeb 站内展示）
@@ -494,13 +495,30 @@ model SiteAnnouncement {
   level     String   @default("info") // info | success | warning | danger
   isActive  Boolean  @default(true) @map("is_active")
   isPinned  Boolean  @default(false) @map("is_pinned")
+  // 首次发布要求用户点「我已知晓」：按公告 id 记一次确认，后续编辑不再重复要求
+  requireAck Boolean @default(false) @map("require_ack")
   authorId  Int?     @map("author_id")
   author    User?    @relation("SiteAnnouncementAuthor", fields: [authorId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  acknowledgements SiteAnnouncementAck[]
 
   @@index([isActive, isPinned, createdAt])
   @@map("site_announcements")
+}
+
+/** 站点公告确认记录（每个用户对每条公告最多一条） */
+model SiteAnnouncementAck {
+  id             Int      @id @default(autoincrement())
+  announcementId Int      @map("announcement_id")
+  userId         Int      @map("user_id")
+  acknowledgedAt DateTime @default(now()) @map("acknowledged_at")
+  announcement   SiteAnnouncement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@index([userId])
+  @@map("site_announcement_acks")
 }
 
 /**

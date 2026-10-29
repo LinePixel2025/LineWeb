@@ -21,6 +21,8 @@ const announcementSchema = z.object({
   level: z.enum(LEVELS).default('info'),
   isActive: z.boolean().default(true),
   isPinned: z.boolean().default(false),
+  // 新公告默认要求用户点「我已知晓」；存量公告保持不打扰（DB 默认 false）
+  requireAck: z.boolean().default(true),
 })
 
 /**
@@ -33,6 +35,7 @@ const announcementUpdateSchema = z.object({
   level: z.enum(LEVELS).optional(),
   isActive: z.boolean().optional(),
   isPinned: z.boolean().optional(),
+  requireAck: z.boolean().optional(),
 })
 
 const selectFields = {
@@ -42,6 +45,7 @@ const selectFields = {
   level: true,
   isActive: true,
   isPinned: true,
+  requireAck: true,
   authorId: true,
   createdAt: true,
   updatedAt: true,
@@ -54,19 +58,58 @@ function parseId(value: string): number {
   return id
 }
 
-/** 登录用户读取：只返回已发布（isActive）的公告 */
+function currentUserId(req: Request): number {
+  const userId = req.user?.userId
+  if (!userId) throw new AppError('未登录', 401)
+  return userId
+}
+
+/** 登录用户读取：只返回已发布（isActive）的公告，并附带本人确认时间 */
 export const announcementsRouter = Router()
 announcementsRouter.use(authenticate)
 announcementsRouter.get(
   '/',
-  asyncHandler(async (_req: Request, res: Response) => {
-    const announcements = await prisma.siteAnnouncement.findMany({
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = currentUserId(req)
+    const rows = await prisma.siteAnnouncement.findMany({
       where: { isActive: true },
       orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
       take: 50,
-      select: selectFields,
+      select: {
+        ...selectFields,
+        acknowledgements: {
+          where: { userId },
+          select: { acknowledgedAt: true },
+          take: 1,
+        },
+      },
     })
+    const announcements = rows.map(({ acknowledgements, ...row }) => ({
+      ...row,
+      acknowledgedAt: acknowledgements[0]?.acknowledgedAt?.toISOString() ?? null,
+    }))
     res.json({ announcements })
+  }),
+)
+
+// POST /api/announcements/:id/ack — 确认已知晓（只写自己的确认记录，幂等）
+announcementsRouter.post(
+  '/:id/ack',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = currentUserId(req)
+    const id = parseId(req.params.id)
+    const exists = await prisma.siteAnnouncement.findFirst({
+      where: { id, isActive: true },
+      select: { id: true },
+    })
+    if (!exists) throw new AppError('公告不存在或已下线', 404)
+    const ack = await prisma.siteAnnouncementAck.upsert({
+      where: { announcementId_userId: { announcementId: id, userId } },
+      create: { announcementId: id, userId },
+      update: {},
+      select: { acknowledgedAt: true },
+    })
+    res.json({ acknowledgedAt: ack.acknowledgedAt.toISOString() })
   }),
 )
 

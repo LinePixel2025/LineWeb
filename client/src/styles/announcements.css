@@ -88,6 +88,55 @@
   line-height: 22px;
 }
 
+/* 需要用户确认：横幅加一圈轻描边，确认按钮替代关闭按钮 */
+.gh-announce-bar--ack {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent);
+}
+.gh-announce-bar-ack {
+  flex-shrink: 0;
+  padding: 3px 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--gh-success);
+  color: #fff;
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: background var(--gh-transition);
+}
+.gh-announce-bar-ack:hover:not(:disabled) { background: var(--gh-success-emphasis); }
+.gh-announce-bar-ack:disabled { opacity: 0.6; cursor: progress; }
+
+/* ===== 确认门卫 / 确认状态 ===== */
+.gh-announce-ack-overlay { z-index: 1250; }
+.gh-announce-ack-dialog { width: min(560px, calc(100vw - 32px)); }
+.gh-announce-ack-hint {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.6;
+}
+.gh-announce-ack-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+  margin-top: var(--gh-space-2);
+}
+.gh-announce-ack-foot .gh-announce-item-meta { margin: 0; }
+.gh-announce-acked { color: var(--gh-success-emphasis); font-size: var(--gh-text-xs); }
+.gh-announce-ack-tag {
+  padding: 0 6px;
+  border: 1px solid var(--gh-warning);
+  border-radius: 999px;
+  color: var(--gh-warning);
+  font-size: 10px;
+  line-height: 16px;
+}
+
 /* ===== 公告阅读弹窗 ===== */
 .gh-announce-dialog {
   display: flex;

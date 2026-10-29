@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useSiteAnnouncements } from '../contexts/SiteAnnouncementContext'
 import {
   ANNOUNCEMENT_LEVEL_LABELS,
@@ -26,8 +26,13 @@ function formatTime(value: string): string {
 
 /** 站点公告阅读弹窗（LineWeb 自有；与群公告弹窗互不影响） */
 export default function SiteAnnouncementDialog({ open, onClose, only = null }: Props) {
-  const { announcements, loading, error, refresh } = useSiteAnnouncements()
-  const list = only ? [only] : announcements
+  const { announcements, loading, error, refresh, acknowledge } = useSiteAnnouncements()
+  const [ackBusyId, setAckBusyId] = useState<number | null>(null)
+  const [ackError, setAckError] = useState('')
+  // only 模式也优先取上下文里的最新副本，确认后能立刻显示「已确认」
+  const list = only
+    ? [announcements.find((row) => row.id === only.id) ?? only]
+    : announcements
 
   useEffect(() => {
     if (!open) return
@@ -37,6 +42,18 @@ export default function SiteAnnouncementDialog({ open, onClose, only = null }: P
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
+
+  const handleAck = async (announcement: SiteAnnouncement) => {
+    setAckBusyId(announcement.id)
+    setAckError('')
+    try {
+      await acknowledge(announcement)
+    } catch (err) {
+      setAckError(err instanceof Error ? err.message : '确认失败，请稍后再试')
+    } finally {
+      setAckBusyId(null)
+    }
+  }
 
   if (!open) return null
 
@@ -60,6 +77,7 @@ export default function SiteAnnouncementDialog({ open, onClose, only = null }: P
         </div>
 
         {error && <div className="gh-alert gh-alert--danger" role="alert">{error}</div>}
+        {ackError && <div className="gh-alert gh-alert--danger" role="alert">{ackError}</div>}
 
         {loading && list.length === 0 ? (
           <div className="gh-announce-state">
@@ -89,6 +107,22 @@ export default function SiteAnnouncementDialog({ open, onClose, only = null }: P
                   {announcement.author?.username ? `${announcement.author.username} · ` : ''}
                   {formatTime(announcement.updatedAt || announcement.createdAt)}
                 </p>
+                {announcement.requireAck && (
+                  <div className="gh-announce-ack-foot">
+                    {announcement.acknowledgedAt ? (
+                      <span className="gh-announce-acked">已确认 · {formatTime(announcement.acknowledgedAt)}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="gh-btn gh-btn--primary gh-btn--sm"
+                        disabled={ackBusyId === announcement.id}
+                        onClick={() => void handleAck(announcement)}
+                      >
+                        {ackBusyId === announcement.id ? '确认中…' : '我已知晓'}
+                      </button>
+                    )}
+                  </div>
+                )}
               </li>
             ))}
           </ul>

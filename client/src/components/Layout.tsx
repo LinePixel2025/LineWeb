@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import GitHubHeader from './GitHubHeader'
 import GitHubSidebar from './GitHubSidebar'
 import SiteAnnouncementBar from './SiteAnnouncementBar'
+import SiteAnnouncementAckGate from './SiteAnnouncementAckGate'
 import { SiteAnnouncementProvider } from '../contexts/SiteAnnouncementContext'
 import { useFeature } from '../contexts/FeatureContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -60,6 +61,7 @@ export default memo(function Layout() {
         />
         <main className={`gh-content ${collapsed ? 'gh-content--collapsed' : ''} ${isChatRoute ? 'gh-content--chat' : ''} ${isProxyViewRoute ? 'gh-content--proxy' : ''}`}>
           <SiteAnnouncementBar />
+          <SiteAnnouncementAckGate />
           <Outlet />
           <footer className="gh-footer">
             <div className="gh-footer-links">

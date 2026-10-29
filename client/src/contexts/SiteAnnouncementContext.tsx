@@ -25,8 +25,12 @@ interface SiteAnnouncementValue {
   refresh: () => Promise<void>
   /** 未关闭的生效公告（按置顶 + 时间排序，和接口一致） */
   visible: SiteAnnouncement[]
+  /** 需要本人确认且尚未确认的公告（会强制展示，直到点「我已知晓」） */
+  pendingAck: SiteAnnouncement[]
   isDismissed: (announcement: SiteAnnouncement) => boolean
   dismiss: (announcement: SiteAnnouncement) => void
+  /** 确认已知晓（写服务端记录，成功后本地立即标记） */
+  acknowledge: (announcement: SiteAnnouncement) => Promise<void>
 }
 
 const DISMISS_STORAGE_KEY = 'lineweb_site_announcements_dismissed'
@@ -94,6 +98,8 @@ export function SiteAnnouncementProvider({ children }: { children: ReactNode }) 
   )
 
   const dismiss = useCallback((announcement: SiteAnnouncement) => {
+    // 需要确认但没确认的公告不允许关掉，必须先点「我已知晓」
+    if (announcement.requireAck && !announcement.acknowledgedAt) return
     setDismissed((prev) => {
       const next = new Set(prev)
       next.add(dismissalKey(announcement))
@@ -102,14 +108,41 @@ export function SiteAnnouncementProvider({ children }: { children: ReactNode }) 
     })
   }, [])
 
+  const acknowledge = useCallback(async (announcement: SiteAnnouncement) => {
+    const data = await api.post<{ acknowledgedAt: string }>(`/announcements/${announcement.id}/ack`)
+    setAnnouncements((prev) => prev.map((row) => (
+      row.id === announcement.id
+        ? { ...row, acknowledgedAt: data?.acknowledgedAt ?? new Date().toISOString() }
+        : row
+    )))
+  }, [])
+
+  const pendingAck = useMemo(
+    () => announcements.filter((announcement) => announcement.requireAck && !announcement.acknowledgedAt),
+    [announcements],
+  )
+
   const visible = useMemo(
-    () => announcements.filter((announcement) => !dismissed.has(dismissalKey(announcement))),
+    () => announcements.filter((announcement) => (
+      (announcement.requireAck && !announcement.acknowledgedAt)
+      || !dismissed.has(dismissalKey(announcement))
+    )),
     [announcements, dismissed],
   )
 
   const value = useMemo<SiteAnnouncementValue>(
-    () => ({ announcements, loading, error, refresh, visible, isDismissed, dismiss }),
-    [announcements, loading, error, refresh, visible, isDismissed, dismiss],
+    () => ({
+      announcements,
+      loading,
+      error,
+      refresh,
+      visible,
+      pendingAck,
+      isDismissed,
+      dismiss,
+      acknowledge,
+    }),
+    [announcements, loading, error, refresh, visible, pendingAck, isDismissed, dismiss, acknowledge],
   )
 
   return (

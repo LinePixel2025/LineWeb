@@ -10,6 +10,10 @@ export interface SiteAnnouncement {
   level: AnnouncementLevel
   isActive: boolean
   isPinned: boolean
+  /** 首次发布要求用户点「我已知晓」；存量公告为 false */
+  requireAck: boolean
+  /** 本人确认时间（ISO）；null = 未确认。仅登录用户读取接口下发 */
+  acknowledgedAt?: string | null
   authorId: number | null
   author?: { id: number; username: string } | null
   createdAt: string

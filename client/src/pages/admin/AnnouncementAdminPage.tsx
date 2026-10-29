@@ -13,6 +13,7 @@ interface FormState {
   level: AnnouncementLevel
   isActive: boolean
   isPinned: boolean
+  requireAck: boolean
 }
 
 const EMPTY_FORM: FormState = {
@@ -21,6 +22,8 @@ const EMPTY_FORM: FormState = {
   level: 'info',
   isActive: true,
   isPinned: false,
+  // 新公告默认要求用户点「我已知晓」；编辑存量公告时按实际值回填
+  requireAck: true,
 }
 
 function formatTime(value: string): string {
@@ -78,6 +81,7 @@ export default function AnnouncementAdminPage() {
       level: announcement.level,
       isActive: announcement.isActive,
       isPinned: announcement.isPinned,
+      requireAck: !!announcement.requireAck,
     })
     setFormOpen(true)
     setError('')
@@ -232,6 +236,15 @@ export default function AnnouncementAdminPage() {
               />
               置顶
             </label>
+            <label className="gh-check">
+              <input
+                type="checkbox"
+                checked={form.requireAck}
+                onChange={(event) => setForm((prev) => ({ ...prev, requireAck: event.target.checked }))}
+                disabled={saving}
+              />
+              需要用户确认
+            </label>
           </div>
           <div className="gh-dialog-actions">
             <GitHubButton variant="secondary" size="md" disabled={saving} onClick={() => setFormOpen(false)}>
@@ -263,6 +276,7 @@ export default function AnnouncementAdminPage() {
                   {ANNOUNCEMENT_LEVEL_LABELS[announcement.level]}
                 </span>
                 {announcement.isPinned && <span className="gh-announce-pin">置顶</span>}
+                {announcement.requireAck && <span className="gh-announce-ack-tag">需确认</span>}
                 <strong className="gh-announce-admin-title">{announcement.title}</strong>
                 {!announcement.isActive && <span className="gh-announce-off">未生效</span>}
                 <span className="gh-announce-admin-time">{formatTime(announcement.updatedAt)}</span>
