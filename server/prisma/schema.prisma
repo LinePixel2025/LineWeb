@@ -51,6 +51,7 @@ model User {
   equippedAvatarFrame    PointsShopItem?      @relation("UserEquippedAvatarFrame", fields: [equippedAvatarFrameId], references: [id], onDelete: SetNull)
   equippedLeaderTitleId  Int?                 @map("equipped_leader_title_id") // 当前佩戴的单机榜一传说称号（与商店称号互斥）
   equippedLeaderTitle    GameLeaderTitle?     @relation("UserEquippedLeaderTitle", fields: [equippedLeaderTitleId], references: [id], onDelete: SetNull)
+  stockHoldings          StockHolding[]       // 模拟股市持仓
   pointsLedger           PointsLedger[]
   pointsItems            UserPointsItem[]
   checkins               DailyCheckin[]
@@ -803,6 +804,24 @@ model GameLeaderTitle {
 
   @@index([userId])
   @@map("game_leader_titles")
+}
+
+/**
+ * 模拟股市持仓（积分投资；行情由日期确定性生成，不设真实标的）
+ */
+model StockHolding {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code       String // 股票代码（STOCK_DEFINITIONS）
+  shares     Float // 持有份额（按买入价折算，允许小数）
+  costPoints Int      @map("cost_points") // 累计投入积分（含买入手续费）
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, code])
+  @@index([code])
+  @@map("stock_holdings")
 }
 
 /**

@@ -194,6 +194,98 @@
   color: var(--gh-text-secondary);
 }
 
+/* ===== 我的持仓 ===== */
+.gh-stocks-portfolio { margin-bottom: 16px; padding: 14px 16px; }
+.gh-stocks-portfolio-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.gh-stocks-portfolio-head h2 { margin: 0 0 2px; font-size: var(--gh-text-base); }
+.gh-stocks-portfolio-head p { margin: 0; font-size: var(--gh-text-xs); }
+.gh-stocks-portfolio-summary { display: flex; gap: 20px; flex-wrap: wrap; }
+.gh-stocks-portfolio-summary > div { display: flex; flex-direction: column; gap: 1px; }
+.gh-stocks-portfolio-summary span { font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
+.gh-stocks-portfolio-summary strong {
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+}
+.gh-stocks-holdings { display: flex; flex-direction: column; gap: 6px; }
+.gh-stocks-holding {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-subtle);
+  font-family: var(--gh-font);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--gh-transition), background var(--gh-transition);
+}
+.gh-stocks-holding:hover { border-color: var(--gh-accent); background: var(--gh-accent-soft); }
+.gh-stocks-holding-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.gh-stocks-holding-main small,
+.gh-stocks-holding-num small { display: block; font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
+.gh-stocks-holding-main strong { font-size: var(--gh-text-sm); }
+.gh-stocks-holding-num { display: flex; flex-direction: column; gap: 1px; text-align: right; flex: 0 0 auto; }
+.gh-stocks-holding-num strong { font-family: var(--gh-font-mono); font-size: var(--gh-text-xs); }
+.gh-stocks-owned { margin-left: 2px; }
+
+/* ===== 交易面板 ===== */
+.gh-stocks-trade {
+  margin: 6px 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-subtle);
+}
+.gh-stocks-trade-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.gh-stocks-trade-head strong { font-size: var(--gh-text-sm); }
+.gh-stocks-trade-head p { margin: 2px 0 0; font-size: var(--gh-text-xs); }
+.gh-stocks-trade-position {
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-secondary);
+}
+.gh-stocks-trade-holding {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-secondary);
+}
+.gh-stocks-trade-holding strong { font-family: var(--gh-font-mono); color: var(--gh-text); }
+.gh-stocks-buy-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gh-stocks-amount { width: 120px; }
+.gh-stocks-amount-presets { display: flex; gap: 4px; flex-wrap: wrap; }
+.gh-stocks-preview { margin: 8px 0 0; font-size: var(--gh-text-xs); }
+
 /* ===== 首屏提示弹窗 ===== */
 .gh-stocks-notice { max-width: 460px; }
 .gh-stocks-notice p { margin: 10px 0 16px; line-height: 1.6; }

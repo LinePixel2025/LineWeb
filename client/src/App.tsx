@@ -168,7 +168,7 @@ export default function App() {
                       <Route element={<RequireFeature feature="calculator" />}>
                         <Route path="/calculator" element={<CalculatorPage />} />
                       </Route>
-                      {/* 模拟股市（初版）：只读行情，进入前弹窗提示不可交易 / 无收益 */}
+                      {/* 模拟股市：虚构行情 + 积分投资，进入前弹窗提示 */}
                       <Route element={<RequireFeature feature="stock" />}>
                         <Route path="/stocks" element={
                           <ProtectedRoute><StocksPage /></ProtectedRoute>

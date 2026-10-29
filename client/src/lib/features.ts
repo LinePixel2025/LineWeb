@@ -44,7 +44,7 @@ export const FEATURE_DEFINITIONS: readonly FeatureDefinition[] = [
   { key: 'aiChat', label: 'AI 对话（DeepSeek）', description: '多会话 AI 对话与联网搜索', group: 'AI' },
   { key: 'webProxy', label: '网页反代', description: '网页代理浏览与站点管理', group: '系统' },
   { key: 'calculator', label: '科学计算器', description: '纯前端科学计算器页面', group: '系统' },
-  { key: 'stock', label: '模拟股市', description: '只读模拟行情：不可交易、无收益（进入前会提示）', group: '工具' },
+  { key: 'stock', label: '模拟股市', description: '虚构行情 + 积分投资：买入虚构股票，次日行情刷新后卖出获取收益', group: '工具' },
   { key: 'oauthApps', label: '第三方应用授权', description: '授权第三方应用访问账号（已签发令牌不受影响）', group: '系统' },
   { key: 'registration', label: '新用户注册', description: '允许提交新注册申请（登录不受影响）', group: '系统' },
 ]

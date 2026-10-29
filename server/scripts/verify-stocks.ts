@@ -11,10 +11,21 @@ import {
   STOCK_HISTORY_DAYS,
   buildStockMarket,
   dayIndexSinceEpoch,
+  findStockQuote,
   getStockMarket,
   mulberry32,
   seedFromString,
 } from '../src/lib/stockMarket.js'
+import {
+  STOCK_FEE_RATE,
+  STOCK_MAX_INVEST,
+  STOCK_MIN_INVEST,
+  positionMarketValue,
+  positionProfit,
+  positionProfitPct,
+  quoteStockBuy,
+  quoteStockSell,
+} from '../src/lib/stockTrading.js'
 
 let passed = 0
 
@@ -51,7 +62,10 @@ assertEqual(dayIndexSinceEpoch('2023-01-01'), 0, '早于纪元按 0 处理')
 const day1 = buildStockMarket('2026-10-29')
 assertEqual(day1.stocks.length, STOCK_DEFINITIONS.length, '股票数量等于定义数量')
 assertEqual(day1.stocks.length, 8, '默认 8 只虚构股票')
-assert(day1.disclaimer.includes('不可交易'), '免责声明包含不可交易')
+assert(day1.disclaimer.includes('模拟行情'), '免责声明标注模拟行情')
+assertEqual(day1.trade, { feeRate: STOCK_FEE_RATE, minInvest: STOCK_MIN_INVEST, maxInvest: STOCK_MAX_INVEST }, '交易规则下发')
+assertEqual(findStockQuote(day1, 'LWST')?.code, 'LWST', '按代码取报价')
+assertEqual(findStockQuote(day1, 'NOPE'), null, '未知代码返回 null')
 assertEqual(day1.currency, '模拟币', '计价单位')
 for (const stock of day1.stocks) {
   assertEqual(stock.history.length, STOCK_HISTORY_DAYS, `${stock.code} 有 30 日走势`)
@@ -84,5 +98,34 @@ assertEqual(cachedNext.dateKey, '2026-10-30', '缓存跨日自动失效')
 // === 不改外部状态 ===
 const again = getStockMarket('2026-10-29')
 assertEqual(again, day1, '回到旧日期时重新生成仍与原始结果一致')
+
+
+// === 交易纯函数 ===
+const buyQuote = quoteStockBuy(500, 50)
+assertEqual(buyQuote.points, 500, '买入预算按整数积分')
+assertEqual(buyQuote.fee, 5, '买入手续费 = 1% 向上取整')
+assertEqual(buyQuote.netPoints, 495, '买入净投入扣手续费')
+assertEqual(buyQuote.shares, 9.9, '买入份额 = 净投入 / 现价')
+assertEqual(quoteStockBuy(100, 18.6).fee, 1, '最低手续费 1 积分')
+assertEqual(quoteStockBuy(0, 10).shares, 0, '零预算不能买入')
+assertEqual(quoteStockBuy(-100, 10).fee, 0, '负预算归零')
+assertEqual(quoteStockBuy(10_000, 0).shares, 0, '零价格不产生份额')
+
+const sellQuote = quoteStockSell(9.9, 50)
+assertEqual(sellQuote.gross, 495, '卖出毛收入 = 份额 × 现价')
+assertEqual(sellQuote.fee, 5, '卖出手续费 = 1% 向上取整')
+assertEqual(sellQuote.proceeds, 490, '卖出到账扣手续费取整')
+assertEqual(quoteStockSell(0, 50).proceeds, 0, '零份额无到账')
+assertEqual(quoteStockSell(1, 0).fee, 0, '零收入无手续费')
+
+assertEqual(positionMarketValue(9.9, 52), 515, '持仓市值按现价取整')
+assertEqual(positionMarketValue(9.9, 0), 0, '零价格市值为 0')
+assertEqual(positionProfit(515, 500), 15, '浮动盈亏 = 市值 - 成本')
+assertEqual(positionProfitPct(515, 500), 3, '盈亏百分比两位小数')
+assertEqual(positionProfitPct(500, 0), 0, '零成本盈亏百分比为 0')
+
+// 同日买卖必然亏手续费（行情不变）
+const roundTrip = quoteStockSell(quoteStockBuy(500, day1.stocks[0].price).shares, day1.stocks[0].price)
+assert(roundTrip.proceeds < 500, '同日一买一卖净亏手续费')
 
 console.log(`✅ 模拟股市自检通过：${passed} 个断言`)

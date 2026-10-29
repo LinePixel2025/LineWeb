@@ -49,6 +49,8 @@ const REASON_LABELS: Record<string, string> = {
   shop_purchase: '积分商店',
   checkin: '每日签到',
   leader_bonus: '榜首奖励',
+  stock_buy: '股市买入',
+  stock_sell: '股市卖出',
   admin_adjust: '管理员调整',
 }
 

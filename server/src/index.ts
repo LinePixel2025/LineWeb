@@ -193,7 +193,7 @@ app.use('/api/games', requireFeature('gamesOnline'), gameRoutes)
 app.use('/api/points', pointsRoutes)
 // 开心农场（种菜 / 偷菜 / 扩建），受 farm 功能开关控制
 app.use('/api/farm', requireFeature('farm'), farmRoutes)
-// 模拟股市（初版：只读行情，不可交易、无收益），受 stock 功能开关控制
+// 模拟股市（行情只读 + 积分交易），受 stock 功能开关控制
 app.use('/api/stocks', requireFeature('stock'), stockRoutes)
 // 积分体系管理（规则 / 商店 / 用户调分，需 points:manage 能力）
 app.use('/api/admin/points', adminPointsRoutes)
@@ -355,8 +355,11 @@ app.get('/api', (_req, res) => {
       steal: { method: 'POST', path: '/api/farm/users/:id/steal/:index', auth: true, description: '偷菜（每日次数上限；同一茬每人一次；地主至少保留 1 单位）' },
     },
     stocks: {
-      note: '模拟股市（初版）：仅只读行情，不可交易、无收益；需 stock 功能开关。数据由日期确定性生成，同一天重复请求一致。',
-      market: { method: 'GET', path: '/api/stocks/market', auth: true, description: '8 只虚构股票的最新价 / 涨跌幅 / 30 日走势' },
+      note: '模拟股市：行情由日期确定性生成（同一天重复请求一致），可用统一积分买入、次日行情刷新后卖出；买卖各收 1% 手续费。需 stock 功能开关。',
+      market: { method: 'GET', path: '/api/stocks/market', auth: true, description: '8 只虚构股票的最新价 / 涨跌幅 / 30 日走势 + 交易规则' },
+      portfolio: { method: 'GET', path: '/api/stocks/portfolio', auth: true, description: '我的持仓、市值与浮动盈亏' },
+      buy: { method: 'POST', path: '/api/stocks/buy', auth: true, description: '用积分买入 { code, points }（单笔 100–100000 积分，含 1% 手续费）' },
+      sell: { method: 'POST', path: '/api/stocks/sell', auth: true, description: '卖出全部持仓 { code }，到账积分写入台账' },
     },
     chat: {
       note: '私信 / 群聊已迁移到独立 XMPP 服务（internet_neko）：消息与会话走 /api/chat/xmpp/*，浏览器经 /ws/xmpp 中继（不可用时降级 /api/chat/xmpp/http-* 长轮询）。好友关系仍以 LineWeb Prisma 为唯一真相源。',

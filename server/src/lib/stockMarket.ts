@@ -1,11 +1,15 @@
 /**
- * 股市「模拟行情」（初版：只读、不可交易、无收益）。
+ * 股市「模拟行情」。
  *
  * 全部数据由确定性随机数生成：
  * - 每只股票用固定种子（取股票代码）从固定纪元开始做带均值回归的随机游走，
  *   因此相邻两天的 30 日走势天然衔接，同一天重复请求结果完全一致；
  * - 不使用数据库、不写任何文件，也不消耗外部接口。
+ *
+ * 交易（积分买入 / 卖出）的纯函数规则见 `stockTrading.ts`。
  */
+
+import { STOCK_FEE_RATE, STOCK_MAX_INVEST, STOCK_MIN_INVEST } from './stockTrading.js'
 
 /** 模拟行情的历史长度（自然日） */
 export const STOCK_HISTORY_DAYS = 30
@@ -73,6 +77,12 @@ export interface StockMarketDto {
   /** 交易日固定为请求日，行情「当天不变、次日刷新」 */
   currency: string
   disclaimer: string
+  /** 交易规则（手续费率 / 单笔投入上下限） */
+  trade: {
+    feeRate: number
+    minInvest: number
+    maxInvest: number
+  }
   /** 全部股票今日涨跌幅的算术平均 */
   marketChangePct: number
   stocks: StockQuoteDto[]
@@ -218,10 +228,20 @@ export function buildStockMarket(dateKey: string): StockMarketDto {
   return {
     dateKey,
     currency: '模拟币',
-    disclaimer: '模拟行情，不可交易、无收益，仅用于展示。',
+    disclaimer: '模拟行情，全部数据虚构；可用积分投资，行情每天 0 点刷新（买卖各收 1% 手续费）。',
+    trade: {
+      feeRate: STOCK_FEE_RATE,
+      minInvest: STOCK_MIN_INVEST,
+      maxInvest: STOCK_MAX_INVEST,
+    },
     marketChangePct,
     stocks,
   }
+}
+
+/** 按股票代码取单只报价（未知代码返回 null） */
+export function findStockQuote(market: StockMarketDto, code: string): StockQuoteDto | null {
+  return market.stocks.find((stock) => stock.code === code) ?? null
 }
 
 let cached: StockMarketDto | null = null
