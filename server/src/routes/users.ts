@@ -8,6 +8,7 @@ import { sendCommand, isNodeConnected } from '../services/storageTunnel.js'
 import { updateUserSchema, updateUserQuotaSchema, updateUserStatusSchema, updateUserRateLimitSchema } from '../config/index.js'
 import { authenticate, requireCapability } from '../middleware/auth.js'
 import { deactivateNekoAccount, ensureNekoAccount } from '../services/nekoAccountSync.js'
+import { syncLineWebBigGroupMember } from '../services/nekoBigGroup.js'
 import { invalidateUserTokens } from '../services/authService.js'
 
 const router = Router()
@@ -222,9 +223,10 @@ router.put('/:id/status', async (req: Request, res: Response) => {
   if (target === 'rejected') {
     await invalidateUserTokens(id)
     void deactivateNekoAccount(id)
+    void syncLineWebBigGroupMember(id, false)
   } else {
-    // 审核通过：补建聊天账号（失败不阻塞审批，首次使用聊天时会再尝试）
-    void ensureNekoAccount(id)
+    // 审核通过：补建聊天账号并加入 LineWeb 大群（失败不阻塞审批，周期对账会自愈）
+    void ensureNekoAccount(id).then(() => syncLineWebBigGroupMember(id, true))
   }
 
   res.json({ id, status: target })
@@ -450,8 +452,9 @@ router.delete('/:id', async (req: Request, res: Response) => {
     }
   }
 
-  // 停用 neko 聊天账号并踢线（聊天记录保留，账号不可再登录）
+  // 停用 neko 聊天账号并踢线（聊天记录保留，账号不可再登录），并移出 LineWeb 大群
   await deactivateNekoAccount(id)
+  void syncLineWebBigGroupMember(id, false)
 
   res.json({ message: '已删除' })
 })

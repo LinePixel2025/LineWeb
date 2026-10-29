@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import NekoAvatar from './NekoAvatar'
 import ChatComposer, { type ComposerReply } from './ChatComposer'
 import ChatImageLightbox from './ChatImageLightbox'
@@ -19,6 +19,55 @@ import type {
 
 /** 一次最多选择的消息条数（与 neko 合并转发上限一致） */
 const SELECT_MAX = 30
+/** 群公告横幅「不再显示」记忆：{ [roomId]: announcementUpdatedAt } */
+const ANNOUNCEMENT_DISMISS_KEY = 'lineweb_chat_announcement_dismissed'
+/** 同一发送者在此窗口内的连续消息合并为一组（隐藏重复头像与昵称） */
+const MESSAGE_GROUP_WINDOW_MS = 5 * 60 * 1000
+
+function readAnnouncementDismissed(): Record<string, number> {
+  try {
+    const raw = window.localStorage.getItem(ANNOUNCEMENT_DISMISS_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const result: Record<string, number> = {}
+    for (const [key, value] of Object.entries(parsed)) {
+      const stamp = Number(value)
+      if (Number.isFinite(stamp)) result[key] = stamp
+    }
+    return result
+  } catch {
+    return {}
+  }
+}
+
+function writeAnnouncementDismissed(value: Record<string, number>): void {
+  try {
+    window.localStorage.setItem(ANNOUNCEMENT_DISMISS_KEY, JSON.stringify(value))
+  } catch {
+    // 隐私模式忽略
+  }
+}
+
+function dayKey(ts: number): string {
+  const date = new Date(ts)
+  if (Number.isNaN(date.getTime())) return ''
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
+}
+
+function formatDaySeparator(ts: number): string {
+  const date = new Date(ts)
+  if (Number.isNaN(date.getTime())) return ''
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  const diffDays = Math.round((startOfToday - startOfDate) / 86_400_000)
+  if (diffDays === 0) return '今天'
+  if (diffDays === 1) return '昨天'
+  if (date.getFullYear() === now.getFullYear()) {
+    return date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
+  }
+  return date.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })
+}
 
 interface Props {
   conversation: NekoConversation | null
@@ -64,6 +113,10 @@ interface Props {
   onRename: (name: string) => Promise<void> | void
   onDissolve: () => void
   onLeave: () => void
+  /** 保存 neko 群公告（群主/管理员；留空清除） */
+  onSaveAnnouncement?: (text: string, ackRequired: boolean) => Promise<void> | void
+  /** 确认当前群公告（需要确认的公告） */
+  onAckAnnouncement?: () => Promise<void> | void
 }
 
 function formatMessageTime(value: number): string {
@@ -146,6 +199,8 @@ export default function ChatThread({
   onRename,
   onDissolve,
   onLeave,
+  onSaveAnnouncement,
+  onAckAnnouncement,
 }: Props) {
   const listRef = useRef<HTMLDivElement | null>(null)
   const lastAvatarTapRef = useRef<{ id: number; at: number } | null>(null)
@@ -163,9 +218,23 @@ export default function ChatThread({
   const previousCountRef = useRef(0)
 
   const [membersOpen, setMembersOpen] = useState(false)
+  const [memberQuery, setMemberQuery] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState('')
+  const [announcementOpen, setAnnouncementOpen] = useState(false)
+  const [announcementEditing, setAnnouncementEditing] = useState(false)
+  const [announcementText, setAnnouncementText] = useState('')
+  const [announcementAck, setAnnouncementAck] = useState(false)
+  const [announcementSaving, setAnnouncementSaving] = useState(false)
+  const [announcementError, setAnnouncementError] = useState('')
+  const [ackOpen, setAckOpen] = useState(false)
+  const [ackSaving, setAckSaving] = useState(false)
+  const [ackError, setAckError] = useState('')
+  const [dismissedAnnouncements, setDismissedAnnouncements] = useState<Record<string, number>>(
+    () => readAnnouncementDismissed(),
+  )
+  const [atBottom, setAtBottom] = useState(true)
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [stickersOpen, setStickersOpen] = useState(false)
   const [replyTo, setReplyTo] = useState<ComposerReply | null>(null)
@@ -182,9 +251,13 @@ export default function ChatThread({
   const menuRef = useRef<HTMLDivElement | null>(null)
 
   const conversationKey = conversation?.key ?? null
-  const myRole = conversation?.room?.myRole ?? ''
+  const roomInfo = conversation?.kind === 'room' ? conversation.room ?? null : null
+  const myRole = roomInfo?.myRole ?? ''
   const isOwner = conversation?.kind === 'room' && (myRole === 'owner' || myRole === 'admin')
   const isGroup = conversation?.kind === 'room'
+  const isLobby = !!roomInfo?.isLobby
+  const isBigGroup = !!roomInfo?.isBigGroup
+  const canEditAnnouncement = isGroup && isOwner
 
   // 切换会话时回到最新消息
   useEffect(() => {
@@ -192,6 +265,7 @@ export default function ChatThread({
     pendingPrependRef.current = false
     previousLastIdRef.current = null
     setMembersOpen(false)
+    setMemberQuery('')
     setMenuOpen(false)
     setRenaming(false)
     setPreviewImage(null)
@@ -203,9 +277,31 @@ export default function ChatThread({
     setForwardError(null)
     setBundlePreview(null)
     setFlashId(null)
+    setAnnouncementOpen(false)
+    setAnnouncementEditing(false)
+    setAnnouncementError('')
+    setAckOpen(false)
+    setAckError('')
+    setAtBottom(true)
     const element = listRef.current
     if (element) element.scrollTop = element.scrollHeight
   }, [conversationKey])
+
+  // 需要确认的群公告：进入/切换群时，未确认则弹窗（与 neko 一致）
+  useEffect(() => {
+    if (!roomInfo || !roomInfo.announcement || !roomInfo.announcementAckRequired) return
+    if (!onAckAnnouncement) return
+    if ((roomInfo.announcementConfirmedAt || 0) >= (roomInfo.announcementUpdatedAt || 0)) return
+    setAckOpen(true)
+    // 只在房间/公告版本变化时触发；确认后 announcementConfirmedAt 变大，自然不会重开
+  }, [
+    roomInfo?.id,
+    roomInfo?.announcement,
+    roomInfo?.announcementUpdatedAt,
+    roomInfo?.announcementAckRequired,
+    roomInfo?.announcementConfirmedAt,
+    onAckAnnouncement,
+  ])
 
   // 引用高亮定时器在卸载时清理
   useEffect(() => {
@@ -267,11 +363,20 @@ export default function ChatThread({
     if (!element) return
     const distance = element.scrollHeight - element.scrollTop - element.clientHeight
     stickToBottomRef.current = distance < 80
+    setAtBottom(distance < 120)
     if (element.scrollTop < 48 && hasMore && !loadingMore && !loading && messages.length > 0) {
       pendingPrependRef.current = true
       previousScrollHeightRef.current = element.scrollHeight
       onLoadMore()
     }
+  }
+
+  const scrollToLatest = () => {
+    const element = listRef.current
+    if (!element) return
+    stickToBottomRef.current = true
+    element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' })
+    setAtBottom(true)
   }
 
   const handleSend = async (content: string, mentions?: number[]) => {
@@ -470,6 +575,57 @@ export default function ChatThread({
     return !!onRecall && canRecall(message, Date.now())
   }
 
+  const openAnnouncement = (editing = false) => {
+    if (!roomInfo) return
+    setAnnouncementText(roomInfo.announcement ?? '')
+    setAnnouncementAck(!!roomInfo.announcementAckRequired)
+    setAnnouncementError('')
+    setAnnouncementEditing(editing && canEditAnnouncement)
+    setAnnouncementOpen(true)
+  }
+
+  const saveAnnouncement = async () => {
+    if (!onSaveAnnouncement) return
+    setAnnouncementSaving(true)
+    setAnnouncementError('')
+    try {
+      await onSaveAnnouncement(announcementText, announcementAck)
+      setAnnouncementEditing(false)
+    } catch (err) {
+      setAnnouncementError(err instanceof Error && err.message ? err.message : '保存群公告失败')
+    } finally {
+      setAnnouncementSaving(false)
+    }
+  }
+
+  const confirmAnnouncement = async () => {
+    if (!onAckAnnouncement) return
+    setAckSaving(true)
+    setAckError('')
+    try {
+      await onAckAnnouncement()
+      setAckOpen(false)
+    } catch (err) {
+      setAckError(err instanceof Error && err.message ? err.message : '确认公告失败')
+    } finally {
+      setAckSaving(false)
+    }
+  }
+
+  const dismissAnnouncementBanner = () => {
+    if (!roomInfo) return
+    setDismissedAnnouncements((prev) => {
+      const next = { ...prev, [String(roomInfo.id)]: roomInfo.announcementUpdatedAt || 0 }
+      writeAnnouncementDismissed(next)
+      return next
+    })
+  }
+
+  const announcementDismissed = roomInfo
+    ? dismissedAnnouncements[String(roomInfo.id)] === (roomInfo.announcementUpdatedAt || 0)
+    : false
+  const showAnnouncementBanner = !!roomInfo?.announcement && !announcementDismissed
+
   if (!conversation) {
     return (
       <section className="gh-chat-thread gh-chat-thread--empty" aria-label="聊天窗口">
@@ -487,8 +643,13 @@ export default function ChatThread({
   }
 
   const title = conversation.title
+  const onlineMembers = isGroup ? conversation.members.filter((member) => member.online).length : 0
   const subtitle = isGroup
-    ? `${conversation.members.length} 位成员`
+    ? [
+        `${conversation.members.length} 位成员`,
+        onlineMembers > 0 ? `${onlineMembers} 在线` : '',
+        isLobby ? '全员大厅' : isBigGroup ? 'LineWeb 官方大群' : '',
+      ].filter(Boolean).join(' · ')
     : conversation.contact
       ? conversation.contact.kind === 'native'
         ? `@${conversation.contact.username} · neko 用户`
@@ -496,6 +657,13 @@ export default function ChatThread({
           ? '在线'
           : '私聊'
       : '私聊'
+  const memberKeyword = memberQuery.trim().toLowerCase()
+  const visibleMemberList = memberKeyword
+    ? conversation.members.filter((member) =>
+        (member.displayName || member.username).toLowerCase().includes(memberKeyword)
+        || member.username.toLowerCase().includes(memberKeyword),
+      )
+    : conversation.members
 
   const submitRename = async () => {
     const next = renameValue.trim()
@@ -547,12 +715,30 @@ export default function ChatThread({
             </form>
           ) : (
             <>
-              <p className="gh-chat-thread-name">{title}</p>
+              <p className="gh-chat-thread-name">
+                <span className="gh-chat-thread-name-text">{title}</span>
+                {isLobby && <span className="gh-chat-official-tag gh-chat-official-tag--lobby">大厅</span>}
+                {isBigGroup && <span className="gh-chat-official-tag">官方</span>}
+              </p>
               <p className="gh-chat-thread-subtitle">{subtitle}</p>
             </>
           )}
         </div>
         <div className="gh-chat-thread-actions">
+          {isGroup && !selecting && (
+            <button
+              type="button"
+              className={`gh-chat-thread-icon-btn ${showAnnouncementBanner ? 'gh-chat-thread-icon-btn--active' : ''}`}
+              title={roomInfo?.announcement ? '查看群公告' : canEditAnnouncement ? '发布群公告' : '暂无群公告'}
+              aria-label="群公告"
+              onClick={() => openAnnouncement(false)}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M2.5 6.5v3l1.5.5 8 3.5V3L4 6.5z" />
+                <path d="M4.5 10v2.5a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1V10M14 7v2" />
+              </svg>
+            </button>
+          )}
           {!selecting && (
             <button
               type="button"
@@ -621,12 +807,24 @@ export default function ChatThread({
                     className="gh-chat-thread-menu-item"
                     onClick={() => {
                       setMenuOpen(false)
+                      openAnnouncement(false)
+                    }}
+                  >
+                    {roomInfo?.announcement ? '查看群公告' : '群公告'}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="gh-chat-thread-menu-item"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      setMemberQuery('')
                       setMembersOpen(true)
                     }}
                   >
                     群成员（{conversation.members.length}）
                   </button>
-                  {isOwner && (
+                  {isOwner && !isLobby && !isBigGroup && (
                     <button
                       type="button"
                       role="menuitem"
@@ -639,7 +837,7 @@ export default function ChatThread({
                       添加成员
                     </button>
                   )}
-                  {isOwner && (
+                  {isOwner && !isLobby && (
                     <button
                       type="button"
                       role="menuitem"
@@ -652,6 +850,11 @@ export default function ChatThread({
                     >
                       修改群名
                     </button>
+                  )}
+                  {(isLobby || isBigGroup) && (
+                    <p className="gh-chat-thread-menu-note">
+                      {isLobby ? '全员大厅由聊天服务维护，成员自动同步' : '官方大群由 LineWeb 自动维护成员'}
+                    </p>
                   )}
                 </div>
               )}
@@ -672,8 +875,18 @@ export default function ChatThread({
                 ×
               </button>
             </div>
+            {conversation.members.length > 12 && (
+              <input
+                className="gh-input gh-chat-members-search"
+                type="search"
+                value={memberQuery}
+                placeholder={`搜索 ${conversation.members.length} 位成员`}
+                aria-label="搜索群成员"
+                onChange={(event) => setMemberQuery(event.target.value)}
+              />
+            )}
             <ul className="gh-chat-members-list">
-              {conversation.members.map((member) => {
+              {visibleMemberList.map((member) => {
                 const isMe = selfNekoId !== null && member.nekoId === selfNekoId
                 return (
                   <li key={member.nekoId} className="gh-chat-member-row">
@@ -687,10 +900,11 @@ export default function ChatThread({
                     <span className="gh-chat-member-name">
                       {member.displayName || member.username}
                       {member.kind === 'native' && <span className="gh-chat-member-tag">neko</span>}
+                      {member.online && <span className="gh-chat-member-online" title="在线" />}
                     </span>
                     {member.role === 'owner' && <span className="gh-chat-member-role">群主</span>}
                     {member.role === 'admin' && <span className="gh-chat-member-role">管理员</span>}
-                    {isOwner && !isMe && member.role !== 'owner' && (
+                    {isOwner && !isLobby && !isBigGroup && !isMe && member.role !== 'owner' && (
                       <button
                         type="button"
                         className="gh-btn gh-btn--danger gh-btn--sm"
@@ -702,9 +916,16 @@ export default function ChatThread({
                   </li>
                 )
               })}
+              {visibleMemberList.length === 0 && (
+                <li className="gh-chat-member-empty">没有匹配的成员</li>
+              )}
             </ul>
             <div className="gh-chat-members-footer">
-              {myRole === 'owner' ? (
+              {isLobby || isBigGroup ? (
+                <span className="gh-chat-members-note">
+                  {isLobby ? '全员大厅成员自动同步，不可退出或解散' : '官方大群成员由 LineWeb 自动维护'}
+                </span>
+              ) : myRole === 'owner' ? (
                 <button type="button" className="gh-btn gh-btn--danger gh-btn--sm" onClick={onDissolve}>
                   解散群聊
                 </button>
@@ -717,6 +938,35 @@ export default function ChatThread({
           </div>
         )}
       </header>
+
+      {isGroup && showAnnouncementBanner && (
+        <div className={`gh-chat-announce-banner ${roomInfo?.announcementAckRequired ? 'gh-chat-announce-banner--ack' : ''}`}>
+          <span className="gh-chat-announce-icon" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2.5 6.5v3l1.5.5 8 3.5V3L4 6.5z" />
+              <path d="M4.5 10v2.5a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1V10M14 7v2" />
+            </svg>
+          </span>
+          <button type="button" className="gh-chat-announce-body" onClick={() => openAnnouncement(false)}>
+            <span className="gh-chat-announce-label">
+              群公告
+              {roomInfo?.announcementAckRequired
+                && (roomInfo.announcementConfirmedAt || 0) < (roomInfo.announcementUpdatedAt || 0)
+                && <span className="gh-chat-announce-pending">待确认</span>}
+            </span>
+            <span className="gh-chat-announce-text">{roomInfo?.announcement}</span>
+          </button>
+          <button
+            type="button"
+            className="gh-chat-announce-close"
+            aria-label="不再显示这条群公告"
+            title="不再显示这条公告（公告更新后会重新出现）"
+            onClick={dismissAnnouncementBanner}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {selecting && (
         <div className="gh-chat-select-bar" role="toolbar" aria-label="转发聊天记录">
@@ -768,17 +1018,30 @@ export default function ChatThread({
         )}
 
         {!loading &&
-          messages.map((message) => {
+          messages.map((message, index) => {
             const own = message.mine
+            const prev = index > 0 ? messages[index - 1] : null
+            const showDay = !prev || dayKey(prev.ts) !== dayKey(message.ts)
+            const grouped = !!prev
+              && !prev.recalled
+              && !message.recalled
+              && !prev.poke
+              && !message.poke
+              && prev.fromUsername === message.fromUsername
+              && message.ts - prev.ts >= 0
+              && message.ts - prev.ts < MESSAGE_GROUP_WINDOW_MS
 
             // 已撤回：不渲染气泡，改为居中系统行
             if (message.recalled) {
               const who = own ? '你' : senderLabel(message, conversation)
               return (
-                <div key={message.id} className="gh-chat-recall-line" role="status">
-                  {`${who}撤回了一条消息`}
-                  {message.byAdmin && !own ? '（管理员）' : ''}
-                </div>
+                <Fragment key={message.id}>
+                  {showDay && <div className="gh-chat-day-sep">{formatDaySeparator(message.ts)}</div>}
+                  <div className="gh-chat-recall-line" role="status">
+                    {`${who}撤回了一条消息`}
+                    {message.byAdmin && !own ? '（管理员）' : ''}
+                  </div>
+                </Fragment>
               )
             }
 
@@ -790,10 +1053,13 @@ export default function ChatThread({
             const selected = selectedIds.has(message.id)
 
             return (
+              <Fragment key={message.id}>
+              {showDay && <div className="gh-chat-day-sep">{formatDaySeparator(message.ts)}</div>}
               <div
-                key={message.id}
                 data-message-id={message.id}
                 className={`gh-chat-message ${own ? 'gh-chat-message--own' : ''} ${
+                  grouped ? 'gh-chat-message--grouped' : ''
+                } ${
                   selecting ? 'gh-chat-message--selectable' : ''
                 } ${selected ? 'gh-chat-message--selected' : ''} ${
                   flashId === message.id ? 'gh-chat-message--flash' : ''
@@ -823,7 +1089,8 @@ export default function ChatThread({
                     {selected ? '✓' : ''}
                   </button>
                 )}
-                {!own && (
+                {!own && grouped && <span className="gh-chat-avatar-spacer" aria-hidden="true" />}
+                {!own && !grouped && (
                   <span
                     className="gh-chat-avatar-poke"
                     title="双击拍一拍"
@@ -848,8 +1115,8 @@ export default function ChatThread({
                   </span>
                 )}
                 <div className="gh-chat-message-body">
-                  <div className="gh-chat-message-meta">
-                    {!own && <span className="gh-chat-message-sender">{sender.name}</span>}
+                  <div className={`gh-chat-message-meta ${grouped ? 'gh-chat-message-meta--grouped' : ''}`}>
+                    {!own && !grouped && <span className="gh-chat-message-sender">{sender.name}</span>}
                     <time className="gh-chat-message-time" dateTime={new Date(message.ts).toISOString()}>
                       {formatMessageTime(message.ts)}
                     </time>
@@ -945,9 +1212,156 @@ export default function ChatThread({
                   )}
                 </div>
               </div>
+              </Fragment>
             )
           })}
       </div>
+
+      {!atBottom && !loading && messages.length > 0 && (
+        <button type="button" className="gh-chat-jump-latest" onClick={scrollToLatest}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M8 3v10M3.5 8.5 8 13l4.5-4.5" />
+          </svg>
+          回到最新
+        </button>
+      )}
+
+      {announcementOpen && roomInfo && (
+        <div
+          className="gh-dialog-overlay"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !announcementSaving) setAnnouncementOpen(false)
+          }}
+        >
+          <div className="gh-dialog gh-chat-announce-dialog" role="dialog" aria-modal="true" aria-label="群公告">
+            <div className="gh-chat-announce-dialog-head">
+              <div>
+                <p className="gh-announce-eyebrow">neko · 群公告</p>
+                <h3 className="gh-dialog-title">{isLobby ? '全员大厅公告' : roomInfo.name}</h3>
+              </div>
+              <button
+                type="button"
+                className="gh-announce-close"
+                aria-label="关闭群公告"
+                onClick={() => setAnnouncementOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            {announcementError && <div className="gh-alert gh-alert--danger" role="alert">{announcementError}</div>}
+            {announcementEditing ? (
+              <>
+                <textarea
+                  className="gh-input gh-chat-announce-input"
+                  rows={6}
+                  maxLength={500}
+                  value={announcementText}
+                  placeholder="输入群公告（留空则清除）"
+                  onChange={(event) => setAnnouncementText(event.target.value)}
+                  disabled={announcementSaving}
+                />
+                <label className="gh-chat-announce-ack">
+                  <input
+                    type="checkbox"
+                    checked={announcementAck}
+                    onChange={(event) => setAnnouncementAck(event.target.checked)}
+                    disabled={announcementSaving}
+                  />
+                  需要群员确认（未确认的成员进群时弹窗展示公告）
+                </label>
+                <div className="gh-dialog-actions">
+                  <span className="gh-chat-announce-count">{announcementText.length}/500</span>
+                  <button
+                    type="button"
+                    className="gh-btn gh-btn--secondary gh-btn--md"
+                    disabled={announcementSaving}
+                    onClick={() => setAnnouncementEditing(false)}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    className="gh-btn gh-btn--primary gh-btn--md"
+                    disabled={announcementSaving}
+                    onClick={() => void saveAnnouncement()}
+                  >
+                    {announcementSaving ? '保存中…' : '保存公告'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="gh-chat-announce-view">
+                  {roomInfo.announcement
+                    ? roomInfo.announcement
+                    : <span className="gh-text-tertiary">本群暂无公告。</span>}
+                </div>
+                <div className="gh-chat-announce-meta">
+                  {roomInfo.announcementUpdatedAt
+                    ? `更新于 ${new Date(roomInfo.announcementUpdatedAt).toLocaleString('zh-CN')}`
+                    : ''}
+                  {roomInfo.announcementAckRequired ? ' · 需要群员确认' : ''}
+                </div>
+                <div className="gh-dialog-actions">
+                  <button
+                    type="button"
+                    className="gh-btn gh-btn--secondary gh-btn--md"
+                    onClick={() => setAnnouncementOpen(false)}
+                  >
+                    关闭
+                  </button>
+                  {canEditAnnouncement && (
+                    <button
+                      type="button"
+                      className="gh-btn gh-btn--primary gh-btn--md"
+                      onClick={() => setAnnouncementEditing(true)}
+                    >
+                      编辑公告
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {ackOpen && roomInfo && (
+        <div className="gh-dialog-overlay gh-dialog-overlay--ack" role="presentation">
+          <div className="gh-dialog gh-chat-announce-dialog" role="dialog" aria-modal="true" aria-label="群公告确认">
+            <div className="gh-chat-announce-dialog-head">
+              <div>
+                <p className="gh-announce-eyebrow">需要确认的群公告</p>
+                <h3 className="gh-dialog-title">{isLobby ? '全员大厅公告' : roomInfo.name}</h3>
+              </div>
+              <button
+                type="button"
+                className="gh-announce-close"
+                aria-label="关闭"
+                onClick={() => setAckOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="gh-chat-announce-view">{roomInfo.announcement}</div>
+            {ackError && <div className="gh-alert gh-alert--danger" role="alert">{ackError}</div>}
+            <div className="gh-dialog-actions">
+              <button type="button" className="gh-btn gh-btn--secondary gh-btn--md" onClick={() => setAckOpen(false)}>
+                稍后确认
+              </button>
+              <button
+                type="button"
+                className="gh-btn gh-btn--primary gh-btn--md"
+                disabled={ackSaving}
+                onClick={() => void confirmAnnouncement()}
+              >
+                {ackSaving ? '确认中…' : '我知道了'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {previewImage && (
         <ChatImageLightbox

@@ -56,7 +56,11 @@ import {
   type ParseContext,
   type XmppElement,
 } from '../lib/xmpp/protocol'
-import { isWebSocketAvailable, readForcedPolling } from '../lib/realtime'
+import {
+  isWebSocketAvailable,
+  readChatRealtimePreference,
+  writeChatRealtimePreference,
+} from '../lib/realtime'
 import { useAuth } from './AuthContext'
 import { useFeature } from './FeatureContext'
 import { useChat } from './ChatContext'
@@ -124,6 +128,10 @@ interface HistoryTarget {
 export interface XmppChatValue {
   connectionState: ChatConnectionState
   transport: ChatTransport
+  /** 聊天「实时连接（WebSocket）」偏好；默认关闭 = HTTP 长轮询 */
+  realtimeEnabled: boolean
+  /** 切换实时连接（持久化，并立即重连生效） */
+  setRealtimeEnabled: (enabled: boolean) => void
   /** 首次 bootstrap 尚未返回 */
   loading: boolean
   error: string | null
@@ -175,6 +183,10 @@ export interface XmppChatValue {
   addMembers: (roomId: number, memberNekoIds: number[]) => Promise<void>
   removeMember: (roomId: number, nekoId: number) => Promise<void>
   renameRoom: (roomId: number, name: string) => Promise<void>
+  /** 保存 neko 群公告（群主/管理员；留空清除；ackRequired 要求群员确认） */
+  saveRoomAnnouncement: (roomId: number, text: string, ackRequired: boolean) => Promise<void>
+  /** 确认当前群公告（需要确认的公告） */
+  acknowledgeRoomAnnouncement: (roomId: number) => Promise<void>
   leaveRoom: (roomId: number) => Promise<void>
   disbandRoom: (roomId: number) => Promise<void>
   acceptRequest: (request: NekoFriendRequest) => Promise<void>
@@ -277,6 +289,12 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
 
   const [connectionState, setConnectionState] = useState<ChatConnectionState>('closed')
   const [transport, setTransport] = useState<ChatTransport>('polling')
+  // 聊天默认走 HTTP 长轮询；用户在聊天设置里开启后才尝试 WebSocket（见 lib/realtime.ts）
+  const [realtimeEnabled, setRealtimeEnabledState] = useState<boolean>(() => readChatRealtimePreference())
+  const setRealtimeEnabled = useCallback((enabled: boolean) => {
+    writeChatRealtimePreference(enabled)
+    setRealtimeEnabledState(enabled)
+  }, [])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [self, setSelf] = useState<NekoSelf | null>(null)
@@ -1040,8 +1058,9 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
     let pollStateTimer: ReturnType<typeof setInterval> | null = null
     let pollActiveTimer: ReturnType<typeof setInterval> | null = null
 
-    const forcedPolling = readForcedPolling()
-    let preferHttp = forcedPolling || !isWebSocketAvailable()
+    // 默认不尝试 WebSocket：只有用户在聊天设置里开启、且浏览器支持时才连 WS。
+    // 站内的「强制轮询」标记只控制 /ws/chat（好友/游戏事件），不影响聊天传输。
+    let preferHttp = !realtimeEnabled || !isWebSocketAvailable()
 
     const clearReconnectTimer = () => {
       if (reconnectTimer !== null) {
@@ -1208,9 +1227,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    if (forcedPolling) {
-      setTransport('polling')
-    }
+    if (!realtimeEnabled) setTransport('polling')
     void start(true)
 
     const handleVisibility = () => {
@@ -1247,6 +1264,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   }, [
     userId,
     chatEnabled,
+    realtimeEnabled,
     applyView,
     ensureLoaded,
     ensurePreviews,
@@ -1558,6 +1576,36 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
     [refreshView],
   )
 
+  const saveRoomAnnouncement = useCallback(
+    async (roomId: number, text: string, ackRequired: boolean) => {
+      await api.post(`/chat/xmpp/rooms/${roomId}/announcement`, {
+        text: text.trim(),
+        ackRequired,
+      })
+      await refreshView()
+    },
+    [refreshView],
+  )
+
+  const acknowledgeRoomAnnouncement = useCallback(
+    async (roomId: number) => {
+      const data = await api.post<{ ok: boolean; announcementConfirmedAt: number }>(
+        `/chat/xmpp/rooms/${roomId}/announcement-ack`,
+        {},
+      )
+      const stamp = Number(data?.announcementConfirmedAt) || Date.now()
+      commitRooms(roomsRef.current.map((room) =>
+        room.id === roomId ? { ...room, announcementConfirmedAt: stamp } : room,
+      ))
+      commitConversations((prev) => prev.map((conversation) =>
+        conversation.kind === 'room' && conversation.room?.id === roomId
+          ? { ...conversation, room: { ...conversation.room, announcementConfirmedAt: stamp } }
+          : conversation,
+      ))
+    },
+    [commitConversations, commitRooms],
+  )
+
   const leaveRoom = useCallback(
     async (roomId: number) => {
       await api.post(`/chat/xmpp/rooms/${roomId}/leave`)
@@ -1707,6 +1755,8 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
     () => ({
       connectionState,
       transport,
+      realtimeEnabled,
+      setRealtimeEnabled,
       loading,
       error,
       self,
@@ -1740,6 +1790,8 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       addMembers,
       removeMember,
       renameRoom,
+      saveRoomAnnouncement,
+      acknowledgeRoomAnnouncement,
       leaveRoom,
       disbandRoom,
       acceptRequest,
@@ -1757,6 +1809,8 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
     [
       connectionState,
       transport,
+      realtimeEnabled,
+      setRealtimeEnabled,
       loading,
       error,
       self,
@@ -1787,6 +1841,8 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       addMembers,
       removeMember,
       renameRoom,
+      saveRoomAnnouncement,
+      acknowledgeRoomAnnouncement,
       leaveRoom,
       disbandRoom,
       acceptRequest,

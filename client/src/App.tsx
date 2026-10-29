@@ -68,6 +68,7 @@ const AiChatAdminPage = lazy(() => import('./pages/admin/AiChatAdminPage'))
 const AppAdminPage = lazy(() => import('./pages/admin/AppAdminPage'))
 const ProxyAdminPage = lazy(() => import('./pages/admin/ProxyAdminPage'))
 const FeatureAdminPage = lazy(() => import('./pages/admin/FeatureAdminPage'))
+const AnnouncementAdminPage = lazy(() => import('./pages/admin/AnnouncementAdminPage'))
 const AuthorizePage = lazy(() => import('./pages/AuthorizePage'))
 
 const queryClient = new QueryClient({
@@ -296,6 +297,7 @@ export default function App() {
                     <Route path="/admin/pages/:id/edit" element={<PageEditor />} />
                     <Route path="/admin/users" element={<UserAdminPage />} />
                     <Route path="/admin/features" element={<FeatureAdminPage />} />
+                    <Route path="/admin/announcements" element={<AnnouncementAdminPage />} />
                     <Route path="/admin/api" element={<ApiDocsPage />} />
                     <Route path="/admin/devices" element={<DeviceMonitorPage />} />
                     <Route path="/admin/ai" element={<AiAdminPage />} />

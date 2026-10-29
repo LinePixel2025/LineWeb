@@ -72,8 +72,18 @@ export interface ChatRoomView {
   myRole: string
   allMuted: boolean
   announcement: string
+  /** 公告最近更新时间（前端横幅关闭记忆与「未确认」判断用） */
+  announcementUpdatedAt: number
+  /** 公告是否要求群员确认（旧版 neko 恒 false） */
+  announcementAckRequired: boolean
+  /** 自己确认当前公告的时间；小于 updatedAt 即未确认 */
+  announcementConfirmedAt: number
   notifyMuted: boolean
   lastMessageAt: number
+  /** neko 全员大厅（所有 neko 账号都在里面，名称/成员/退群均不可管理） */
+  isLobby: boolean
+  /** LineWeb 用户大群（服务端自动维护成员，仅 lw_* 账号） */
+  isBigGroup: boolean
   members: ChatRoomMemberView[]
 }
 
@@ -110,13 +120,15 @@ export interface LineWebFriendRequestItem {
 }
 
 export interface BuildChatViewInput {
-  me: { id: number; username: string }
+  me: { id: number; username: string; isAdmin?: boolean }
   state: NekoState
   /** Prisma 好友（LineWeb id + 用户名） */
   friends: LineWebFriendBrief[]
   requestsIn: LineWebFriendRequestItem[]
   requestsOut: LineWebFriendRequestItem[]
   allowNative: boolean
+  /** 服务端维护的 LineWeb 用户大群房间 id（用于前端标记「官方」） */
+  bigGroupRoomId?: number | null
 }
 
 function kindOfUsername(username: string): 'lineweb' | 'native' {
@@ -335,19 +347,38 @@ export function buildChatView(input: BuildChatViewInput): ChatBootstrapView {
   const requestsIn = mergeRequests(input.requestsIn, state.friendRequestsIn || [], prismaInIds)
   const requestsOut = mergeRequests(input.requestsOut, state.friendRequestsOut || [], prismaOutIds)
 
+  // 系统账号（系统助理 / 文件传输助手）不算群成员；停用 / 已合并的账号
+  // 不在 state.users 里，也一并从成员列表隐藏，避免大群人数字虚高。
+  const systemNames = new Set(
+    [state.systemUsername, state.fileHelperUsername].filter((name): name is string => !!name),
+  )
+  const activeNames = new Set(state.users.map((user) => user.username))
+  const visibleMembers = (room: NekoStateRoom): ChatRoomMemberView[] =>
+    room.members
+      .filter((member) => !systemNames.has(member.username))
+      .filter((member) => activeNames.has(member.username) || member.id === selfNekoId)
+      .map(toRoomMember)
+
   const rooms: ChatRoomView[] = state.rooms
-    .filter((room) => !room.isLobby && !!room.myRole)
+    .filter((room) => !!room.myRole)
     .map((room) => ({
       key: `r${room.id}`,
       id: room.id,
       name: room.name,
       ownerId: room.ownerId,
-      myRole: String(room.myRole),
+      // 大厅角色跟随「平台管理员」：LineWeb 管理员在代理请求里也是 neko 管理员，
+      // 因此出口口径同步为 admin（只在大厅生效，普通群仍以成员行角色为准）。
+      myRole: room.isLobby && input.me.isAdmin ? 'admin' : String(room.myRole),
       allMuted: !!room.allMuted,
       announcement: room.announcement || '',
+      announcementUpdatedAt: Number(room.announcementUpdatedAt) || 0,
+      announcementAckRequired: !!room.announcementAckRequired,
+      announcementConfirmedAt: Number(room.announcementConfirmedAt) || 0,
       notifyMuted: !!room.notifyMuted,
       lastMessageAt: Number(room.lastMessageAt) || 0,
-      members: room.members.map(toRoomMember),
+      isLobby: !!room.isLobby,
+      isBigGroup: Number(input.bigGroupRoomId) > 0 && room.id === Number(input.bigGroupRoomId),
+      members: visibleMembers(room),
     }))
 
   const validKeys = new Set<string>([

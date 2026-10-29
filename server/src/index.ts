@@ -26,6 +26,7 @@ import chatUploadsRoutes from './routes/chatUploads.js'
 import gameRoutes from './routes/games.js'
 import gameStatsRoutes from './routes/gameStats.js'
 import { featuresRouter, adminFeaturesRouter } from './routes/features.js'
+import { announcementsRouter, adminAnnouncementsRouter } from './routes/announcements.js'
 import { proxyApiRouter, proxyHttpRouter } from './routes/webProxy.js'
 import { proxyAdminRouter } from './routes/proxyAdmin.js'
 import { startProxyStatsFlusher } from './services/proxyStats.js'
@@ -39,6 +40,7 @@ import { initChatHub } from './services/chatHub.js'
 import { initNekoXmppProxy } from './services/nekoWsProxy.js'
 import { initWebProxyWs } from './services/webProxyWs.js'
 import { startNekoAccountSync, stopNekoAccountSync } from './services/nekoAccountSync.js'
+import { startLineWebBigGroupSync, stopLineWebBigGroupSync } from './services/nekoBigGroup.js'
 import { startGameSweeper } from './services/gameService.js'
 import { syncDriveFiles } from './services/storageSync.js'
 import { deduplicateDriveFiles } from './services/dedupDriveFiles.js'
@@ -155,6 +157,9 @@ app.use('/api', userApiLimiter)
 // Routes / 功能开关
 app.use('/api/features', featuresRouter)
 app.use('/api/admin/features', adminFeaturesRouter)
+// 站点公告（LineWeb 自有，与 neko 群公告无关）：登录用户只读，管理员在 /api/admin/announcements 维护
+app.use('/api/announcements', announcementsRouter)
+app.use('/api/admin/announcements', adminAnnouncementsRouter)
 app.use('/api/posts', requireFeature('posts'), postRoutes)
 app.use('/api/pages', requireFeature('pages'), pageRoutes)
 app.use('/api/comments', requireFeature('comments'), commentRoutes)
@@ -258,6 +263,13 @@ app.get('/api', (_req, res) => {
       public: { method: 'GET', path: '/api/stats/public', auth: true, description: '站点统计（文章/用户/评论/页面数量；需登录）' },
     },
     apiKeys: '已废弃 —— LineWeb 只使用账号登录令牌访问全部端点，不再提供 API Key。',
+    announcements: {
+      list: { method: 'GET', path: '/api/announcements', auth: true, description: '站点公告（LineWeb 自有，仅返回生效公告；与 neko 群公告无关）' },
+      adminList: { method: 'GET', path: '/api/admin/announcements', auth: 'admin', description: '管理：全部站点公告' },
+      create: { method: 'POST', path: '/api/admin/announcements', auth: 'admin', description: '管理：发布公告 { title, content, level, isActive, isPinned }' },
+      update: { method: 'PUT', path: '/api/admin/announcements/:id', auth: 'admin', description: '管理：修改公告' },
+      delete: { method: 'DELETE', path: '/api/admin/announcements/:id', auth: 'admin', description: '管理：删除公告' },
+    },
 
     health: {
       screenTime: { method: 'GET', path: '/api/health/screen-time', auth: true, description: '获取今日屏幕时间' },
@@ -602,6 +614,8 @@ refreshProxyBlacklist().catch((err) => console.warn('[proxy] 黑名单预热失�
 
 // 聊天账号全量同步（延迟 10 秒，失败只告警，不影响站点启动）
 startNekoAccountSync()
+// LineWeb 用户大群（延迟 20 秒等账号同步完成；每 10 分钟对账一次）
+startLineWebBigGroupSync()
 
 // 网盘文件定期同步
 const syncInterval = setInterval(() => {
@@ -650,6 +664,7 @@ const shutdown = (signal: string) => {
   clearInterval(syncInterval)
   clearTimeout(startupTimer)
   stopNekoAccountSync()
+  stopLineWebBigGroupSync()
 
   server.close((err) => {
     if (err) {

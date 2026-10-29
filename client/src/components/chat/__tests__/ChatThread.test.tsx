@@ -210,8 +210,13 @@ describe('ChatThread', () => {
         myRole: 'owner',
         allMuted: false,
         announcement: '',
+        announcementUpdatedAt: 0,
+        announcementAckRequired: false,
+        announcementConfirmedAt: 0,
         notifyMuted: false,
         lastMessageAt: 0,
+        isLobby: false,
+        isBigGroup: false,
         members: [owner, nativeBob],
       },
       members: [owner, nativeBob],
@@ -252,8 +257,13 @@ describe('ChatThread', () => {
         myRole: 'member',
         allMuted: true,
         announcement: '',
+        announcementUpdatedAt: 0,
+        announcementAckRequired: false,
+        announcementConfirmedAt: 0,
         notifyMuted: false,
         lastMessageAt: 0,
+        isLobby: false,
+        isBigGroup: false,
         members: [ALICE],
       },
     })
@@ -262,6 +272,132 @@ describe('ChatThread', () => {
 
     expect(screen.getByText('全员禁言中，只有群主和管理员可以发言')).toBeInTheDocument()
     expect(screen.queryByLabelText('消息输入框')).not.toBeInTheDocument()
+  })
+
+  it('群公告横幅展示内容，关闭后写入本地记忆', async () => {
+    const user = userEvent.setup()
+    const conversation = createConversation({
+      key: 'r7',
+      kind: 'room',
+      title: '前端小组',
+      avatarId: -7,
+      contact: null,
+      members: [ALICE],
+      room: {
+        key: 'r7',
+        id: 7,
+        name: '前端小组',
+        ownerId: 1000000000002,
+        myRole: 'member',
+        allMuted: false,
+        announcement: '周五发布 v2',
+        announcementUpdatedAt: 123,
+        announcementAckRequired: false,
+        announcementConfirmedAt: 0,
+        notifyMuted: false,
+        lastMessageAt: 0,
+        isLobby: false,
+        isBigGroup: false,
+        members: [ALICE],
+      },
+    })
+
+    render(<ChatThread conversation={conversation} messages={[]} {...baseProps()} />)
+
+    expect(screen.getByText('周五发布 v2')).toBeInTheDocument()
+    await user.click(screen.getByLabelText('不再显示这条群公告'))
+    expect(screen.queryByText('周五发布 v2')).not.toBeInTheDocument()
+    expect(window.localStorage.getItem('lineweb_chat_announcement_dismissed')).toContain('123')
+  })
+
+  it('群主可编辑群公告并选择需要群员确认', async () => {
+    const user = userEvent.setup()
+    const onSaveAnnouncement = vi.fn().mockResolvedValue(undefined)
+    const conversation = createConversation({
+      key: 'r7',
+      kind: 'room',
+      title: '前端小组',
+      avatarId: -7,
+      contact: null,
+      members: [ALICE],
+      room: {
+        key: 'r7',
+        id: 7,
+        name: '前端小组',
+        ownerId: 1000000000001,
+        myRole: 'owner',
+        allMuted: false,
+        announcement: '',
+        announcementUpdatedAt: 0,
+        announcementAckRequired: false,
+        announcementConfirmedAt: 0,
+        notifyMuted: false,
+        lastMessageAt: 0,
+        isLobby: false,
+        isBigGroup: false,
+        members: [ALICE],
+      },
+    })
+
+    render(
+      <ChatThread
+        conversation={conversation}
+        messages={[]}
+        {...baseProps()}
+        onSaveAnnouncement={onSaveAnnouncement}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '群公告' }))
+    await user.click(screen.getByRole('button', { name: '编辑公告' }))
+    await user.type(screen.getByPlaceholderText('输入群公告（留空则清除）'), '新公告')
+    await user.click(screen.getByLabelText(/需要群员确认/))
+    await user.click(screen.getByRole('button', { name: '保存公告' }))
+
+    expect(onSaveAnnouncement).toHaveBeenCalledWith('新公告', true)
+  })
+
+  it('需要确认的群公告进入会话时弹窗，确认后回调', async () => {
+    const user = userEvent.setup()
+    const onAckAnnouncement = vi.fn().mockResolvedValue(undefined)
+    const conversation = createConversation({
+      key: 'r7',
+      kind: 'room',
+      title: '前端小组',
+      avatarId: -7,
+      contact: null,
+      members: [ALICE],
+      room: {
+        key: 'r7',
+        id: 7,
+        name: '前端小组',
+        ownerId: 1000000000002,
+        myRole: 'member',
+        allMuted: false,
+        announcement: '请阅读群规',
+        announcementUpdatedAt: 500,
+        announcementAckRequired: true,
+        announcementConfirmedAt: 0,
+        notifyMuted: false,
+        lastMessageAt: 0,
+        isLobby: false,
+        isBigGroup: false,
+        members: [ALICE],
+      },
+    })
+
+    render(
+      <ChatThread
+        conversation={conversation}
+        messages={[]}
+        {...baseProps()}
+        onAckAnnouncement={onAckAnnouncement}
+      />
+    )
+
+    expect(screen.getByRole('dialog', { name: '群公告确认' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '我知道了' }))
+    expect(onAckAnnouncement).toHaveBeenCalledTimes(1)
   })
 
   it('引用消息在气泡上方显示被引用快照', () => {

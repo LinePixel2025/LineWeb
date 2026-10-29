@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   CHAT_POLL_INTERVALS,
+  CHAT_REALTIME_STORAGE_KEY,
   FORCE_POLLING_STORAGE_KEY,
   GAME_POLL_INTERVALS,
   isWebSocketAvailable,
+  readChatRealtimePreference,
   readForcedPolling,
   resolveChatTransport,
+  writeChatRealtimePreference,
   WS_CONNECT_TIMEOUT_MS,
 } from '../realtime'
 
@@ -131,5 +134,55 @@ describe('isWebSocketAvailable', () => {
     vi.stubGlobal('WebSocket', undefined)
 
     expect(isWebSocketAvailable()).toBe(false)
+  })
+})
+
+
+describe('聊天实时连接偏好（默认长轮询）', () => {
+  it('默认关闭：没有持久化标记时返回 false', () => {
+    setUrl('/chat')
+
+    expect(readChatRealtimePreference()).toBe(false)
+  })
+
+  it('聊天设置开启后持久化，重新读取为 true', () => {
+    writeChatRealtimePreference(true)
+    setUrl('/chat')
+
+    expect(window.localStorage.getItem(CHAT_REALTIME_STORAGE_KEY)).toBe('1')
+    expect(readChatRealtimePreference()).toBe(true)
+  })
+
+  it('关闭开关会清除持久化标记', () => {
+    window.localStorage.setItem(CHAT_REALTIME_STORAGE_KEY, '1')
+    writeChatRealtimePreference(false)
+
+    expect(window.localStorage.getItem(CHAT_REALTIME_STORAGE_KEY)).toBeNull()
+    expect(readChatRealtimePreference()).toBe(false)
+  })
+
+  it('?transport=ws 临时开启并持久化', () => {
+    setUrl('/chat?transport=ws')
+
+    expect(readChatRealtimePreference()).toBe(true)
+    expect(window.localStorage.getItem(CHAT_REALTIME_STORAGE_KEY)).toBe('1')
+  })
+
+  it('?transport=polling 关闭并清除持久化', () => {
+    window.localStorage.setItem(CHAT_REALTIME_STORAGE_KEY, '1')
+    setUrl('/chat?transport=polling')
+
+    expect(readChatRealtimePreference()).toBe(false)
+    expect(window.localStorage.getItem(CHAT_REALTIME_STORAGE_KEY)).toBeNull()
+  })
+
+  it('localStorage 不可用时安全回退 false', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('localStorage 不可用')
+    })
+    setUrl('/chat')
+
+    expect(() => readChatRealtimePreference()).not.toThrow()
+    expect(readChatRealtimePreference()).toBe(false)
   })
 })

@@ -1,0 +1,405 @@
+/* =============================================================
+   LineWeb — 站点公告（自有公告，非 neko 群公告）
+   命名空间：.gh-announce-*
+   ============================================================= */
+
+/* ===== 全站顶部公告条 ===== */
+.gh-announce-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  margin-bottom: var(--gh-space-2);
+  padding: 8px var(--gh-space-3);
+  border: 1px solid var(--gh-border);
+  border-left-width: 3px;
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  line-height: 1.5;
+}
+
+.gh-announce-bar--info { border-left-color: var(--gh-accent); background: var(--gh-accent-soft); }
+.gh-announce-bar--success { border-left-color: var(--gh-success-emphasis); background: var(--gh-success-soft); }
+.gh-announce-bar--warning { border-left-color: var(--gh-warning); background: var(--gh-warning-soft); }
+.gh-announce-bar--danger { border-left-color: var(--gh-danger); background: var(--gh-danger-soft); }
+
+.gh-announce-bar-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--gh-text-secondary);
+}
+
+.gh-announce-bar-tag {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.14);
+  color: var(--gh-text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+  letter-spacing: 0.02em;
+}
+
+.gh-announce-bar-title {
+  flex-shrink: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-announce-bar-text {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--gh-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-announce-bar-more,
+.gh-announce-bar-close {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-bg);
+  color: var(--gh-text-secondary);
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-xs);
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.gh-announce-bar-more:hover,
+.gh-announce-bar-close:hover {
+  border-color: var(--gh-accent);
+  color: var(--gh-accent);
+}
+
+.gh-announce-bar-close {
+  width: 24px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  font-size: 16px;
+  line-height: 22px;
+}
+
+/* ===== 公告阅读弹窗 ===== */
+.gh-announce-dialog {
+  display: flex;
+  width: min(620px, calc(100vw - 32px));
+  max-height: min(80vh, 680px);
+  flex-direction: column;
+  gap: var(--gh-space-3);
+  overflow: hidden;
+}
+
+.gh-announce-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+}
+
+.gh-announce-eyebrow {
+  margin: 0 0 2px;
+  color: var(--gh-text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.gh-announce-close {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--gh-radius);
+  background: transparent;
+  color: var(--gh-text-tertiary);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gh-announce-close:hover {
+  background: var(--gh-btn-hover);
+  color: var(--gh-text);
+}
+
+.gh-announce-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-6) var(--gh-space-4);
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-sm);
+  text-align: center;
+}
+
+.gh-announce-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  margin: 0;
+  padding: 0 var(--gh-space-1) 0 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.gh-announce-item {
+  padding: var(--gh-space-3);
+  border: 1px solid var(--gh-border-muted);
+  border-left-width: 3px;
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+}
+
+.gh-announce-item--info { border-left-color: var(--gh-accent); }
+.gh-announce-item--success { border-left-color: var(--gh-success-emphasis); }
+.gh-announce-item--warning { border-left-color: var(--gh-warning); }
+.gh-announce-item--danger { border-left-color: var(--gh-danger); }
+
+.gh-announce-item-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+.gh-announce-item-title {
+  color: var(--gh-text);
+  font-size: var(--gh-text-base);
+}
+
+.gh-announce-item-content {
+  margin: var(--gh-space-2) 0 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.gh-announce-item-meta {
+  margin: var(--gh-space-2) 0 0;
+  color: var(--gh-text-tertiary);
+  font-size: 11px;
+}
+
+.gh-announce-tag {
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.gh-announce-tag--info { background: var(--gh-accent-soft); color: var(--gh-accent); }
+.gh-announce-tag--success { background: var(--gh-success-soft); color: var(--gh-success); }
+.gh-announce-tag--warning { background: var(--gh-warning-soft); color: var(--gh-warning); }
+.gh-announce-tag--danger { background: var(--gh-danger-soft); color: var(--gh-danger); }
+
+.gh-announce-pin {
+  padding: 0 6px;
+  border: 1px solid var(--gh-border);
+  border-radius: 999px;
+  color: var(--gh-text-secondary);
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.gh-announce-off {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--gh-canvas-inset);
+  color: var(--gh-text-tertiary);
+  font-size: 10px;
+  line-height: 18px;
+}
+
+/* ===== 管理页 ===== */
+.gh-announce-admin-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+.gh-announce-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+  margin-bottom: var(--gh-space-4);
+}
+
+.gh-announce-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-2);
+}
+
+.gh-announce-editor-title {
+  margin: 0;
+  color: var(--gh-text);
+  font-size: var(--gh-text-lg);
+  font-weight: 600;
+}
+
+.gh-announce-editor-content {
+  min-height: 120px;
+  resize: vertical;
+  font-family: var(--gh-font);
+  line-height: 1.6;
+}
+
+.gh-announce-editor-count {
+  align-self: flex-end;
+  font-size: 11px;
+}
+
+.gh-announce-editor-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+}
+
+.gh-announce-level-field {
+  min-width: 160px;
+}
+
+.gh-announce-editor .gh-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 8px;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  cursor: pointer;
+}
+
+.gh-announce-admin-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gh-announce-admin-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  border-left-width: 3px;
+}
+
+.gh-announce-admin-item--info { border-left-color: var(--gh-accent); }
+.gh-announce-admin-item--success { border-left-color: var(--gh-success-emphasis); }
+.gh-announce-admin-item--warning { border-left-color: var(--gh-warning); }
+.gh-announce-admin-item--danger { border-left-color: var(--gh-danger); }
+
+.gh-announce-admin-item-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+.gh-announce-admin-title {
+  color: var(--gh-text);
+  font-size: var(--gh-text-base);
+}
+
+.gh-announce-admin-time {
+  margin-left: auto;
+  color: var(--gh-text-tertiary);
+  font-size: 11px;
+}
+
+.gh-announce-admin-content {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.gh-announce-admin-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+.gh-announce-admin-author {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-announce-admin-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-1);
+  flex-wrap: wrap;
+}
+
+.gh-announce-empty {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: var(--gh-space-1);
+  padding: var(--gh-space-6);
+  text-align: center;
+}
+
+.gh-announce-empty-title {
+  margin: 0;
+  color: var(--gh-text);
+  font-weight: 600;
+}
+
+/* 站点公告条在聊天页不挤压消息区：聊天页里隐藏正文，只保留标题与入口 */
+.gh-content--chat .gh-announce-bar {
+  margin-bottom: var(--gh-space-1);
+  padding: 6px var(--gh-space-3);
+}
+
+.gh-content--chat .gh-announce-bar-text {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .gh-announce-bar {
+    flex-wrap: wrap;
+  }
+  .gh-announce-bar-title {
+    max-width: 100%;
+    flex: 1 1 100%;
+    order: 3;
+  }
+  .gh-announce-bar-text {
+    display: none;
+  }
+  .gh-announce-dialog {
+    max-height: 86vh;
+  }
+}

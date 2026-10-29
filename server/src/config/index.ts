@@ -73,6 +73,10 @@ export const config = {
   // 消息与未读口径（与 neko 服务端一致）
   nekoChatRecallWindowMs: 5 * 60 * 1000,
   nekoChatHistoryLimit: 30,
+  // LineWeb 用户大群（只含 lw_* 账号）：由服务端在 neko 上自动创建并维护成员
+  nekoLinewebGroupEnabled: process.env.NEKO_LINEWEB_GROUP_ENABLED !== 'false',
+  nekoLinewebGroupName: (process.env.NEKO_LINEWEB_GROUP_NAME || 'LineWeb 用户群').trim() || 'LineWeb 用户群',
+  nekoLinewebGroupSyncIntervalMs: Math.max(60_000, parseInt(process.env.NEKO_LINEWEB_GROUP_SYNC_INTERVAL || '600000', 10)),
 }
 
 export const registerSchema = z.object({

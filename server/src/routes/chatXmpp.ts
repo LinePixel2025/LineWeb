@@ -30,6 +30,7 @@ import {
 import { ensureNekoAccounts } from '../services/nekoAccountSync.js'
 import { isAllowedOutboundStanza } from '../services/nekoChatGuard.js'
 import { ensureAvatarSyncedToNeko } from '../services/avatarService.js'
+import { getLineWebBigGroupId } from '../services/nekoBigGroup.js'
 
 /**
  * 聊天 XMPP 网关（挂载于 /api/chat/xmpp）
@@ -71,7 +72,10 @@ function rawToken(req: Request): string {
 }
 
 async function currentUser(req: Request): Promise<LineWebUserLike> {
-  return getUserBrief(currentUserId(req))
+  const user = await getUserBrief(currentUserId(req))
+  // 代理身份头按 LineWeb 角色标注管理员（只影响 neko 侧「全员大厅」的角色派生，
+  // 不会写入 neko 账号本身；见 nekoChat.callBrowserApi）
+  return { ...user, isAdmin: req.user?.role === 'admin' }
 }
 
 async function currentSessionHash(req: Request): Promise<string> {
@@ -93,18 +97,20 @@ function sniffImageMime(buf: Buffer): string {
 /** 当前用户的完整聊天状态（Prisma 好友 + neko 状态 → 过滤后的出口口径） */
 async function loadChatView(req: Request): Promise<ChatBootstrapView> {
   const user = await currentUser(req)
-  const [state, friends, requests] = await Promise.all([
+  const [state, friends, requests, bigGroupRoomId] = await Promise.all([
     fetchState(user),
     listFriends(user.id),
     listFriendRequests(user.id),
+    getLineWebBigGroupId(),
   ])
   return buildChatView({
-    me: { id: user.id, username: user.username },
+    me: { id: user.id, username: user.username, isAdmin: user.isAdmin },
     state,
     friends: friends.friends,
     requestsIn: requests.incoming,
     requestsOut: requests.outgoing,
     allowNative: config.nekoChatAllowNative,
+    bigGroupRoomId,
   })
 }
 
@@ -481,7 +487,48 @@ router.post('/rooms/:id/transfer', chatWriteLimiter, roomAction('transfer'))
 router.post('/rooms/:id/mute', chatWriteLimiter, roomAction('mute'))
 router.post('/rooms/:id/mute-all', chatWriteLimiter, roomAction('mute-all'))
 router.post('/rooms/:id/mute-notify', chatWriteLimiter, roomAction('mute-notify'))
-router.post('/rooms/:id/announcement', chatWriteLimiter, roomAction('announcement'))
+
+const announcementSchema = z.object({
+  text: z.string().max(500, '公告最长 500 个字符'),
+  ackRequired: z.boolean().optional(),
+})
+
+// 群公告（neko 群公告）：群主/管理员可编辑；文本上限与 neko 一致（500 字）
+router.post(
+  '/rooms/:id/announcement',
+  chatWriteLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const parsed = announcementSchema.safeParse(req.body || {})
+    if (!parsed.success) throw new AppError(parsed.error.issues[0]?.message || '输入数据无效', 400)
+    const roomId = parseRoomId(req)
+    const user = await currentUser(req)
+    const sessionHash = await currentSessionHash(req)
+    const result = await callBrowserApi('POST', `/chat/rooms/${roomId}/announcement`, {
+      user,
+      sessionHash,
+      body: { text: parsed.data.text.trim(), ackRequired: !!parsed.data.ackRequired },
+    })
+    res.json(result ?? { ok: true })
+  }),
+)
+
+// 群成员确认当前公告（需要确认时）；只写自己的确认时间
+router.post(
+  '/rooms/:id/announcement-ack',
+  chatWriteLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const roomId = parseRoomId(req)
+    const user = await currentUser(req)
+    const sessionHash = await currentSessionHash(req)
+    const result = await callBrowserApi('POST', `/chat/rooms/${roomId}/announcement-ack`, {
+      user,
+      sessionHash,
+      body: {},
+    })
+    res.json(result ?? { ok: true })
+  }),
+)
+
 router.post('/rooms/:id/disband', chatWriteLimiter, roomAction('disband'))
 
 // === 置顶 / 撤回 ===

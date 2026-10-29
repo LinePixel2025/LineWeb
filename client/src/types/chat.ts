@@ -281,8 +281,18 @@ export interface NekoRoom {
   myRole: string
   allMuted: boolean
   announcement: string
+  /** 公告最近更新时间（前端用 房间 id + 更新时间 记忆「已关闭横幅」） */
+  announcementUpdatedAt: number
+  /** 公告要求群员确认（旧版 neko 没有该字段） */
+  announcementAckRequired: boolean
+  /** 自己确认当前公告的时间；小于 updatedAt 表示未确认 */
+  announcementConfirmedAt: number
   notifyMuted: boolean
   lastMessageAt: number
+  /** neko 全员大厅：所有 neko 账号都在里面，名称 / 成员 / 退群不可管理 */
+  isLobby: boolean
+  /** LineWeb 用户大群：服务端自动维护成员，仅 lw_* 账号 */
+  isBigGroup: boolean
   members: NekoRoomMember[]
 }
 

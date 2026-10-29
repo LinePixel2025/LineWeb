@@ -10,7 +10,7 @@
  *     账号同步载荷（isAdmin 恒 false、enabled 继承）；
  *   - JID：拼装 / 解析（含 resource）、`room-<id>@muc` 反解、非法 JID；
  *   - 会话哈希：长度 32、稳定、不同令牌不同值；
- *   - 状态出口口径（nekoChatView）：大厅过滤、系统/文件助手剔除、非好友 `lw_*` 剔除、
+ *   - 状态出口口径（nekoChatView）：全员大厅透出、系统/文件助手剔除、非好友 `lw_*` 剔除、
  *     无往来原生账号剔除、好友缺失时按 Prisma 兜底、置顶过滤、群成员换算；
  *   - 目录搜索与陌生来消息反查的可见性规则；
  *   - `--live`：health → ensureAccount → ticket → 自建 RFC 7395 连接（SASL PLAIN）→
@@ -314,16 +314,24 @@ function checkView(): void {
   assertEqual(built.stickers.length, 1, '表情：只保留合法上传地址')
   assertEqual(built.stickers[0].url, '/chat/uploads/0123456789abcdef01234567', '表情：地址透传')
 
-  assertEqual(built.rooms.map((r) => r.key), ['r7'], '群：剔除大厅与非成员群')
-  assertEqual(built.rooms[0].name, '项目组', '群：名称')
-  assertEqual(built.rooms[0].announcement, '本周目标', '群：公告')
+  assertEqual(built.rooms.map((r) => r.key), ['r1', 'r7'], '群：包含全员大厅、剔除 non-member 群')
+  assertEqual(built.rooms[0].isLobby, true, '群：全员大厅标记 isLobby')
+  assertEqual(built.rooms[0].name, '聊天大厅', '群：大厅名称')
+  assertEqual(built.rooms[1].name, '项目组', '群：名称')
+  assertEqual(built.rooms[1].announcement, '本周目标', '群：公告')
+  assertEqual(built.rooms[1].announcementAckRequired, false, '群：旧版 neko 公告不需要确认')
   assertEqual(
-    built.rooms[0].members.map((m) => `${m.nekoId}:${m.role}:${m.kind}`),
+    built.rooms[1].members.map((m) => `${m.nekoId}:${m.role}:${m.kind}`),
     [`${BASE + 2}:owner:lineweb`, '27:member:native'],
     '群：成员换算（LineWeb / 原生）',
   )
+  assertEqual(built.rooms[1].isBigGroup, false, '群：未配置大群时不标记官方')
 
-  assertEqual(built.pinnedChats, [`u${BASE + 2}`, 'r7'], '置顶：只保留可见会话键')
+  const withBigGroup = buildView(true, { bigGroupRoomId: 7 })
+  assertEqual(withBigGroup.rooms.find((room) => room.id === 7)?.isBigGroup, true, '群：大群 id 命中标记官方')
+  assertEqual(withBigGroup.rooms.find((room) => room.id === 1)?.isBigGroup, false, '群：大厅不会被当成大群')
+
+  assertEqual(built.pinnedChats, [`u${BASE + 2}`, 'r7', 'r1'], '置顶：只保留可见会话键（含全员大厅）')
 
   const noNative = buildView(false)
   assertEqual(noNative.contacts.map((c) => c.username), ['lw_2'], '开关：allowNative=false 时剔除原生账号')
@@ -337,7 +345,7 @@ function checkView(): void {
   assertEqual(fallback?.username, 'lw_5', '兜底：按 LineWeb id 生成用户名')
   assertEqual(fallback?.displayName, '新朋友', '兜底：显示名取 LineWeb 用户名')
   assertEqual(fallback?.online, false, '兜底：缺失账号视为离线')
-  assertEqual(missingFriend.rooms.length, 1, '兜底：好友缺失不影响群列表')
+  assertEqual(missingFriend.rooms.length, 2, '兜底：好友缺失不影响群列表')
 }
 
 function checkDirectory(): void {

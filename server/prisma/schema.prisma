@@ -41,6 +41,7 @@ model User {
   aiChatImages           AiChatImage[] // AI 对话上传的图片附件
   proxySites             ProxySite[] // 网页反代站点（含账号级的登录 Cookie）
   gameStats              GameStat[] // 游戏战绩（单机 + 联机）
+  siteAnnouncements      SiteAnnouncement[] @relation("SiteAnnouncementAuthor") // 站点公告（LineWeb 自有，非 neko 群公告）
   /**
    * 网页反代排队赦免：不受并发闸门限制（管理员另有 role 兜底）
    */
@@ -469,6 +470,40 @@ model ProxyDailyStat {
   @@index([day])
   @@index([userId, day])
   @@map("proxy_daily_stats")
+}
+
+// === 站点公告（LineWeb 自有） ===
+
+/**
+ * 站点公告：管理员在管理后台发布，全站顶部公告条与聊天页「站点公告」入口展示。
+ * 与 neko XMPP 的群公告完全独立（后者的数据在聊天服务里，不落本库）。
+ */
+model SiteAnnouncement {
+  id        Int      @id @default(autoincrement())
+  title     String
+  content   String
+  level     String   @default("info") // info | success | warning | danger
+  isActive  Boolean  @default(true) @map("is_active")
+  isPinned  Boolean  @default(false) @map("is_pinned")
+  authorId  Int?     @map("author_id")
+  author    User?    @relation("SiteAnnouncementAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([isActive, isPinned, createdAt])
+  @@map("site_announcements")
+}
+
+/**
+ * 站点级键值配置（目前用于绑定 neko 上的 LineWeb 用户大群房间 id）
+ * 用独立表而不是写死在环境变量：房间 id 由 neko 自增分配，无法预知。
+ */
+model SiteSetting {
+  key       String   @id
+  value     String   @default("")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("site_settings")
 }
 
 // === 站点功能开关 ===

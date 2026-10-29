@@ -54,6 +54,10 @@ export interface NekoStateRoom {
   allMuted: boolean
   announcement: string
   announcementUpdatedAt: number
+  /** 最新版 neko：公告需要群员确认（0/缺省 = 旧版本，不需要确认） */
+  announcementAckRequired?: boolean
+  /** 自己成员行的确认时间；早于 announcementUpdatedAt 即未确认 */
+  announcementConfirmedAt?: number
   myRole: string | null
   mutedUntil: number
   notifyMuted: boolean
@@ -112,6 +116,13 @@ export interface LineWebUserLike {
   username: string
   enabled?: boolean
   avatarVersion?: number
+  /**
+   * 仅用于代理请求身份头（x-proxy-admin）：LineWeb 管理员按 neko 平台管理员
+   * 参与「全员大厅」的角色派生（大厅管理员跟随平台管理员），
+   * 不写入 neko 账号本身（accountPayload 恒为 false，避免 LineWeb 管理员
+   * 在 neko 原生客户端获得额外权限）。
+   */
+  isAdmin?: boolean
 }
 
 export interface NekoJid {
@@ -356,7 +367,7 @@ export async function callBrowserApi<T = unknown>(
   const headers: Record<string, string> = {
     'x-proxy-user-id': String(toNekoId(options.user.id)),
     'x-proxy-username': toNekoUsername(options.user.id),
-    'x-proxy-admin': '0',
+    'x-proxy-admin': options.user.isAdmin ? '1' : '0',
     'x-session-hash': options.sessionHash || '',
   }
   let body: unknown = options.body

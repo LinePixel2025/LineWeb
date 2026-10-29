@@ -38,6 +38,7 @@
 | POST | `/rooms/:id/leave` | 退群 |
 | POST | `/rooms/:id/disband` | 解散（群主） |
 | POST | `/rooms/:id/role` `/transfer` `/mute` `/mute-all` `/announcement` | 群权限、转让、禁言、公告 |
+| POST | `/rooms/:id/announcement-ack` | 确认需要确认的群公告（只写自己的成员行） |
 | POST | `/messages/recall` | 撤回 `{id}`（**窗口 5 分钟**，仅本人的消息） |
 | POST | `/messages/admin-recall` | 群主 / 管理员撤回群消息 |
 | POST | `/uploads` | 图片上传（**raw 二进制 body**，`Content-Type` 为图片类型；服务端按魔数复核）→ `{ok, url, id, mime}` |
@@ -51,7 +52,7 @@
 | GET | `/http-poll` | 轮询降级：长轮询取帧（最长 25 秒） |
 | POST | `/http-close` | 轮询降级：关闭会话 |
 
-**实时连接**：`wss://<站点>/ws/xmpp?token=<登录令牌>` —— Express 字节级中继到 neko `/xmpp-websocket`（剥 Origin、注入内部令牌、空闲 120 秒关闭、单聊好友校验）。WebSocket 不可用或 `?transport=polling` 时自动降级为上面的 `http-*` 长轮询。
+**实时连接**：**默认不建 WebSocket**，聊天走上面的 `http-*` 长轮询（服务端挂起推送，消息无需等轮询间隔）。用户在聊天设置里开启实时连接后才尝试 `wss://<站点>/ws/xmpp?token=<登录令牌>` —— Express 字节级中继到 neko `/xmpp-websocket`（剥 Origin、注入内部令牌、空闲 120 秒关闭、单聊好友校验）；开启后握手失败仍自动降级长轮询。
 
 **图片读取**：`GET /chat/uploads/<24 位 hex id>?token=<登录令牌>`（挂在 `/api` 之外的同源路径，未带令牌 401；字节透传 neko）。
 
@@ -76,6 +77,27 @@ GET /chat/avatars/<nekoId>?v=<avatarVersion>&token=<LineWeb 登录令牌>
 返回头像字节（`Cache-Control: private, max-age=300`），无头像返回 404；前端 `NekoAvatar` 在缺失时回退到 LineWeb 头像（`lw_*`）或首字母。
 
 **表情商店**：纯前端素材（`client/public/stickers/shop/`），保存时 SVG 栅格化为 360px PNG、图片/GIF 原样，再走 `/uploads` + `/stickers` 上传。`dango` / `cat` / `misc` 为站内原创 SVG；`twemoji` 为 Twemoji 子集（72 个，图形 CC-BY 4.0）；`nailong`（奶龙 36 个，静态 JPG + 动态 GIF）与 `felyne`（呆猫 19 个）由 `server/scripts/fetch-sticker-packs.mjs` 从公开表情图库抓取并统一压到 360px，来源/许可见各包目录 `LICENSE.txt`（仅供个人使用）。
+
+### 0.2.2 群公告、全员大厅与 LineWeb 大群（2026-10）
+
+**群公告（neko 数据）**：与 neko 最新版对齐，公告存在 `chat_rooms.announcement`，群主 / 管理员可通过 `POST /rooms/:id/announcement` 保存：
+
+```json
+{ "text": "公告正文（≤500 字，空串清除）", "ackRequired": true }
+```
+
+- 前端在群聊头部展示可关闭的公告横幅（`localStorage` 按 `房间 id + announcementUpdatedAt` 记忆，公告更新后重新出现）；
+- `ackRequired=true` 的公告：成员进群时若 `announcementConfirmedAt < announcementUpdatedAt` 会弹窗阅读，点「我知道了」调用 `POST /rooms/:id/announcement-ack`；只写自己的确认时间、不广播；
+- 权限：群主 / 管理员（LineWeb 管理员在 neko 侧按平台管理员参与「全员大厅」角色派生）。
+
+**neko 全员大厅**：`isLobby` 房间现在会同步到 LineWeb 聊天列表与侧栏（此前被过滤），可正常收发、看群公告与成员（系统助理 / 文件传输助手 / 停用账号从成员列表剔除）。大厅名称、成员、退群与解散不可管理，前端隐藏对应入口。
+
+**LineWeb 用户大群**：服务端以第一个 LineWeb 管理员身份在 neko 上自动创建 `LineWeb 用户群`（`NEKO_LINEWEB_GROUP_NAME` 可配），只包含 `lw_*` 账号；`SiteSetting.neko.linewebGroupRoomId` 记录房间 id（neko 自增分配），启动 20 秒后对账、之后每 10 分钟对账一次，审核通过 / 拒绝 / 删除用户时增量入群 / 移出。群主是创建时的 LineWeb 管理员；前端标记「官方」，成员由系统维护，不提供退群入口。关闭 `NEKO_LINEWEB_GROUP_ENABLED=false` 可停用。
+
+**站点公告（LineWeb 自有，不是群公告）**：`SiteAnnouncement` 表 + `GET /api/announcements`（登录用户读生效公告）+ `/api/admin/announcements`（`content:manage` 管理员 CRUD，字段 `title/content/level/isActive/isPinned`）。前端全站顶部公告条与聊天页侧栏「站点公告」入口共用这套数据，与 neko 群公告互不影响。
+
+**传输默认值**：聊天 XMPP **默认走 HTTP 长轮询**；聊天侧栏「设置」里可开启实时 WebSocket（`localStorage.lineweb_chat_realtime=1` 持久化，切换后立即重连生效），WS 失败仍自动降级轮询。站内好友 / 游戏事件通道 `/ws/chat` 不受该开关影响。
+
 
 ### 0.3 旧端点去向
 

@@ -28,8 +28,16 @@ export const GAME_POLL_INTERVALS = {
   presence: 20_000,
 } as const
 
-/** localStorage 中「强制轮询」标记的键名 */
+/** localStorage 中「强制轮询」标记的键名（站内事件 / 游戏通道沿用） */
 export const FORCE_POLLING_STORAGE_KEY = 'lineweb_force_polling'
+
+/**
+ * 聊天 XMPP 实时连接的开关（默认关闭 = HTTP 长轮询）。
+ *
+ * 与上面的「强制轮询」分开：那个是站内 WS（好友/游戏事件）的降级标记，
+ * 这个只控制聊天页的 XMPP 传输，可在聊天界面随时切换。
+ */
+export const CHAT_REALTIME_STORAGE_KEY = 'lineweb_chat_realtime'
 
 /** 安全读取 localStorage（隐私模式/SSR 下访问会抛异常） */
 function getStorage(): Storage | null {
@@ -84,6 +92,57 @@ export function readForcedPolling(): boolean {
     return storage?.getItem(FORCE_POLLING_STORAGE_KEY) === '1'
   } catch {
     return false
+  }
+}
+
+/**
+ * 读取聊天实时连接偏好。
+ *
+ * 默认关闭（走 HTTP 长轮询）；用户在聊天设置里开启后写入 localStorage。
+ * URL 参数 `?transport=ws` / `?transport=polling` 可临时覆盖并持久化。
+ */
+export function readChatRealtimePreference(): boolean {
+  let transport: string | null = null
+  try {
+    if (typeof window !== 'undefined' && window.location) {
+      transport = new URLSearchParams(window.location.search).get('transport')
+    }
+  } catch {
+    transport = null
+  }
+  const storage = getStorage()
+  if (transport === 'ws') {
+    try {
+      storage?.setItem(CHAT_REALTIME_STORAGE_KEY, '1')
+    } catch {
+      // 隐私模式忽略
+    }
+    return true
+  }
+  if (transport === 'polling') {
+    try {
+      storage?.removeItem(CHAT_REALTIME_STORAGE_KEY)
+    } catch {
+      // ignore
+    }
+    return false
+  }
+  try {
+    return storage?.getItem(CHAT_REALTIME_STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** 写入聊天实时连接偏好（聊天设置开关） */
+export function writeChatRealtimePreference(enabled: boolean): void {
+  const storage = getStorage()
+  try {
+    if (!storage) return
+    if (enabled) storage.setItem(CHAT_REALTIME_STORAGE_KEY, '1')
+    else storage.removeItem(CHAT_REALTIME_STORAGE_KEY)
+  } catch {
+    // localStorage 不可用时只在本次会话生效（状态仍在 Context 里）
   }
 }
 

@@ -1,0 +1,586 @@
+/* =============================================================
+   聊天视觉增强（2026-10）：公告横幅、日期分隔、消息聚合、
+   会话搜索、传输设置、官方大群标记、回到最新
+   ============================================================= */
+
+/* ===== 整体质感 ===== */
+.gh-chat-layout {
+  background: var(--gh-canvas);
+  box-shadow: 0 1px 2px rgba(31, 35, 40, 0.04);
+}
+
+.gh-chat-sidebar {
+  background: color-mix(in srgb, var(--gh-bg) 88%, var(--gh-canvas));
+}
+
+.gh-chat-sidebar-head {
+  background: var(--gh-bg);
+}
+
+.gh-chat-thread {
+  background:
+    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--gh-border-muted) 55%, transparent) 1px, transparent 0)
+    0 0 / 22px 22px,
+    var(--gh-bg);
+  background-attachment: local;
+}
+
+.gh-chat-thread-header {
+  background: color-mix(in srgb, var(--gh-bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 1px 0 var(--gh-border-muted);
+  z-index: 12;
+}
+
+.gh-chat-conv-item {
+  border-radius: 10px;
+}
+
+.gh-chat-conv-item--active {
+  background: var(--gh-accent-soft);
+  box-shadow: inset 2px 0 0 var(--gh-accent);
+}
+
+.gh-chat-conv-item--unread .gh-chat-conv-name {
+  color: var(--gh-text);
+}
+
+.gh-chat-conv-item--unread .gh-chat-conv-preview {
+  color: var(--gh-text-secondary);
+  font-weight: 500;
+}
+
+.gh-chat-conv-wrap {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.gh-chat-conv-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: var(--gh-space-2) var(--gh-space-3) 0;
+  padding: 4px 8px;
+  border: 1px solid var(--gh-border);
+  border-radius: 999px;
+  background: var(--gh-canvas);
+  color: var(--gh-text-tertiary);
+}
+
+.gh-chat-conv-search:focus-within {
+  border-color: var(--gh-accent);
+  box-shadow: var(--gh-focus-ring);
+}
+
+.gh-chat-conv-search input {
+  min-width: 0;
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--gh-text);
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-xs);
+  outline: none;
+}
+
+.gh-chat-conv-search button {
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--gh-text-tertiary);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gh-chat-conv-li--pinned {
+  position: relative;
+}
+
+.gh-chat-pin-dot {
+  flex-shrink: 0;
+  padding: 0 4px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 999px;
+  color: var(--gh-text-tertiary);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 13px;
+}
+
+.gh-chat-group-tag--official {
+  border-color: color-mix(in srgb, var(--gh-accent) 45%, transparent);
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+}
+
+/* 侧栏头部固定不换行：两个页签 + 新建/公告/设置 + 状态点 */
+.gh-chat-sidebar-head {
+  gap: 6px;
+  padding-right: var(--gh-space-2);
+}
+
+.gh-chat-tabs {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.gh-chat-tab {
+  white-space: nowrap;
+}
+
+.gh-chat-new-group,
+.gh-chat-head-icon {
+  flex-shrink: 0;
+}
+
+/* ===== 聊天设置 / 站点公告入口 ===== */
+.gh-chat-head-settings {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.gh-chat-head-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--gh-radius);
+  background: transparent;
+  color: var(--gh-text-secondary);
+  cursor: pointer;
+  transition: background var(--gh-transition), color var(--gh-transition), border-color var(--gh-transition);
+}
+
+.gh-chat-head-icon:hover,
+.gh-chat-head-icon--active {
+  border-color: var(--gh-border);
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+}
+
+.gh-chat-head-icon--dot::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--gh-bg);
+  border-radius: 50%;
+  background: var(--gh-accent);
+}
+
+.gh-chat-settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+.gh-chat-settings {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: auto;
+  z-index: 61;
+  width: min(320px, calc(100vw - 32px));
+  padding: var(--gh-space-3);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-bg);
+  box-shadow: var(--gh-shadow-lg);
+}
+
+.gh-chat-settings-title {
+  margin: 0 0 var(--gh-space-2);
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+}
+
+.gh-chat-settings-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+}
+
+.gh-chat-settings-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gh-chat-settings-label {
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  font-weight: 500;
+}
+
+.gh-chat-settings-hint {
+  color: var(--gh-text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.gh-chat-settings-foot {
+  margin: var(--gh-space-2) 0 0;
+  padding-top: var(--gh-space-2);
+  border-top: 1px solid var(--gh-border-muted);
+  color: var(--gh-text-tertiary);
+  font-size: 11px;
+}
+
+.gh-chat-status--idle {
+  background: var(--gh-text-tertiary);
+}
+
+/* ===== 群公告横幅 ===== */
+.gh-chat-announce-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  margin: var(--gh-space-2) var(--gh-space-4) 0;
+  padding: 6px var(--gh-space-2) 6px var(--gh-space-3);
+  border: 1px solid color-mix(in srgb, var(--gh-accent) 26%, var(--gh-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--gh-accent-soft) 55%, var(--gh-bg));
+  color: var(--gh-text);
+}
+
+.gh-chat-announce-banner--ack {
+  border-color: color-mix(in srgb, var(--gh-warning) 40%, var(--gh-border));
+  background: color-mix(in srgb, var(--gh-warning-soft) 50%, var(--gh-bg));
+}
+
+.gh-chat-announce-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--gh-accent);
+}
+
+.gh-chat-announce-banner--ack .gh-chat-announce-icon {
+  color: var(--gh-warning);
+}
+
+.gh-chat-announce-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: var(--gh-space-2);
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font-family: var(--gh-font);
+  text-align: left;
+  cursor: pointer;
+}
+
+.gh-chat-announce-label {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  color: var(--gh-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.gh-chat-announce-pending {
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--gh-warning-soft);
+  color: var(--gh-warning);
+  font-size: 9px;
+  line-height: 15px;
+}
+
+.gh-chat-announce-text {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-chat-announce-close {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--gh-radius);
+  background: transparent;
+  color: var(--gh-text-tertiary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gh-chat-announce-close:hover {
+  background: var(--gh-btn-hover);
+  color: var(--gh-text);
+}
+
+/* ===== 群公告弹窗 ===== */
+.gh-chat-announce-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+}
+
+.gh-chat-announce-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+}
+
+.gh-chat-announce-input {
+  min-height: 140px;
+  resize: vertical;
+  font-family: var(--gh-font);
+  line-height: 1.6;
+}
+
+.gh-chat-announce-ack {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  cursor: pointer;
+}
+
+.gh-chat-announce-count {
+  margin-right: auto;
+  color: var(--gh-text-tertiary);
+  font-size: 11px;
+}
+
+.gh-chat-announce-view {
+  max-height: 42vh;
+  padding: var(--gh-space-3);
+  overflow-y: auto;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 10px;
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.gh-chat-announce-meta {
+  color: var(--gh-text-tertiary);
+  font-size: 11px;
+}
+
+.gh-dialog-overlay--ack {
+  z-index: 1250;
+}
+
+/* ===== 消息日期分隔与聚合 ===== */
+.gh-chat-day-sep {
+  align-self: center;
+  margin: var(--gh-space-2) 0 2px;
+  padding: 2px 10px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--gh-bg) 82%, transparent);
+  color: var(--gh-text-tertiary);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.gh-chat-avatar-spacer {
+  width: 24px;
+  flex-shrink: 0;
+}
+
+.gh-chat-message--grouped {
+  margin-top: -8px;
+}
+
+.gh-chat-message-meta--grouped .gh-chat-message-time {
+  opacity: 0;
+  transition: opacity var(--gh-transition);
+}
+
+.gh-chat-message:hover .gh-chat-message-meta--grouped .gh-chat-message-time,
+.gh-chat-message--active .gh-chat-message-meta--grouped .gh-chat-message-time {
+  opacity: 1;
+}
+
+.gh-chat-message--grouped .gh-chat-message-bubble {
+  border-top-left-radius: 12px;
+}
+
+.gh-chat-message--own.gh-chat-message--grouped .gh-chat-message-bubble {
+  border-top-right-radius: 12px;
+}
+
+.gh-chat-message-bubble {
+  box-shadow: 0 1px 1px rgba(31, 35, 40, 0.04);
+}
+
+/* ===== 回到最新 ===== */
+.gh-chat-jump-latest {
+  position: absolute;
+  right: var(--gh-space-4);
+  bottom: 84px;
+  z-index: 15;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: 1px solid var(--gh-border);
+  border-radius: 999px;
+  background: var(--gh-bg);
+  color: var(--gh-text-secondary);
+  font-family: var(--gh-font);
+  font-size: 11px;
+  line-height: 1.5;
+  box-shadow: var(--gh-shadow-lg);
+  cursor: pointer;
+  animation: gh-chat-fade-up 0.16s ease-out;
+}
+
+.gh-chat-jump-latest:hover {
+  border-color: var(--gh-accent);
+  color: var(--gh-accent);
+}
+
+@keyframes gh-chat-fade-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== 群标题标记 ===== */
+.gh-chat-thread-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gh-chat-thread-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-chat-official-tag {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--gh-accent) 45%, transparent);
+  border-radius: 999px;
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 15px;
+}
+
+.gh-chat-official-tag--lobby {
+  border-color: var(--gh-border);
+  background: var(--gh-canvas-inset);
+  color: var(--gh-text-secondary);
+}
+
+.gh-chat-thread-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--gh-radius);
+  background: transparent;
+  color: var(--gh-text-secondary);
+  cursor: pointer;
+}
+
+.gh-chat-thread-icon-btn:hover,
+.gh-chat-thread-icon-btn--active {
+  border-color: var(--gh-border);
+  background: var(--gh-canvas);
+  color: var(--gh-accent);
+}
+
+.gh-chat-thread-menu-note {
+  margin: 0;
+  padding: 6px 8px 2px;
+  border-top: 1px solid var(--gh-border-muted);
+  color: var(--gh-text-tertiary);
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+/* ===== 群成员搜索 ===== */
+.gh-chat-members-search {
+  flex-shrink: 0;
+  margin-bottom: var(--gh-space-2);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-chat-member-online {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: var(--gh-success-emphasis);
+  vertical-align: middle;
+}
+
+.gh-chat-member-empty {
+  padding: var(--gh-space-3) 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  text-align: center;
+}
+
+.gh-chat-members-note {
+  color: var(--gh-text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* ===== 窄屏细调 ===== */
+@media (max-width: 767px) {
+  .gh-chat-thread {
+    background-size: 18px 18px;
+  }
+  .gh-chat-announce-banner {
+    margin: var(--gh-space-1) var(--gh-space-2) 0;
+  }
+  .gh-chat-announce-label {
+    display: none;
+  }
+  .gh-chat-jump-latest {
+    right: var(--gh-space-3);
+    bottom: 76px;
+  }
+  .gh-chat-settings {
+    position: fixed;
+    top: 64px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
+}

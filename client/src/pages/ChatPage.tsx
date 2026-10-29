@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import api from '../lib/api'
 import { isConversationKey } from '../lib/chat'
 import { useXmppChat } from '../contexts/XmppChatContext'
+import { useSiteAnnouncements } from '../contexts/SiteAnnouncementContext'
+import SiteAnnouncementDialog from '../components/SiteAnnouncementDialog'
 import ChatConversationList from '../components/chat/ChatConversationList'
 import ChatThread from '../components/chat/ChatThread'
 import FriendPanel from '../components/chat/FriendPanel'
@@ -40,6 +42,8 @@ export default function ChatPage() {
   const {
     connectionState,
     transport,
+    realtimeEnabled,
+    setRealtimeEnabled,
     loading,
     error: connectionError,
     self,
@@ -72,6 +76,8 @@ export default function ChatPage() {
     addMembers,
     removeMember,
     renameRoom,
+    saveRoomAnnouncement,
+    acknowledgeRoomAnnouncement,
     leaveRoom,
     disbandRoom,
     acceptRequest,
@@ -83,10 +89,14 @@ export default function ChatPage() {
     searchDirectory,
   } = useXmppChat()
 
+  const { visible: visibleAnnouncements } = useSiteAnnouncements()
+
   const [panelTab, setPanelTab] = useState<PanelTab>('conversations')
   const [dialog, setDialog] = useState<DialogState>(null)
   const [dialogLoading, setDialogLoading] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [announcementDialogOpen, setAnnouncementDialogOpen] = useState(false)
 
   /** 记录「曾经存在」的会话：之后从列表消失说明被移出/被解散，需要退回列表 */
   const seenKeyRef = useRef<string | null>(null)
@@ -395,13 +405,13 @@ export default function ChatPage() {
     return '正在加载消息…'
   }, [activeKey, activeConversation, loading])
 
-  // 传输模式文案：轮询时提示延迟；仍在尝试 WS 时补充说明
+  // 传输模式文案：默认长轮询（实时性由服务端挂起推送保证）；可在聊天设置里开启 WebSocket
   const connectionLabel =
     transport === 'ws'
-      ? '实时连接正常'
-      : connectionState === 'connecting'
-        ? '轮询模式（约 15 秒延迟）· 正在连接实时消息…'
-        : '轮询模式（约 15 秒延迟）'
+      ? '实时连接（WebSocket）正常'
+      : realtimeEnabled && connectionState === 'connecting'
+        ? '正在连接实时消息…（当前为长轮询）'
+        : '长轮询模式（消息由服务端即时推送，无需 WebSocket）'
 
   return (
     <div className="gh-chat-page">
@@ -455,14 +465,69 @@ export default function ChatPage() {
             >
               +
             </button>
-            {transport === 'polling' && (
-              <span className="gh-chat-mode-chip" title={connectionLabel}>
-                轮询模式
-              </span>
-            )}
+            <button
+              type="button"
+              className={`gh-chat-head-icon ${visibleAnnouncements.length > 0 ? 'gh-chat-head-icon--dot' : ''}`}
+              title="站点公告（LineWeb）"
+              aria-label="站点公告"
+              onClick={() => setAnnouncementDialogOpen(true)}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M2.5 6.5v3l1.5.5 8 3.5V3L4 6.5z" />
+                <path d="M4.5 10v2.5a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1V10M14 7v2" />
+              </svg>
+            </button>
+            <div className="gh-chat-head-settings">
+              <button
+                type="button"
+                className={`gh-chat-head-icon ${settingsOpen ? 'gh-chat-head-icon--active' : ''}`}
+                title="聊天设置"
+                aria-label="聊天设置"
+                aria-haspopup="dialog"
+                aria-expanded={settingsOpen}
+                onClick={() => setSettingsOpen((open) => !open)}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="8" cy="8" r="2.2" />
+                  <path d="M8 1.8v1.4M8 12.8v1.4M1.8 8h1.4M12.8 8h1.4M3.6 3.6l1 1M11.4 11.4l1 1M12.4 3.6l-1 1M4.6 11.4l-1 1" />
+                </svg>
+              </button>
+              {settingsOpen && (
+                <>
+                  <div className="gh-chat-settings-backdrop" onClick={() => setSettingsOpen(false)} />
+                  <div className="gh-chat-settings" role="dialog" aria-label="聊天设置">
+                    <p className="gh-chat-settings-title">聊天设置</p>
+                    <label className="gh-chat-settings-row">
+                      <span className="gh-chat-settings-copy">
+                        <span className="gh-chat-settings-label">实时连接（WebSocket）</span>
+                        <span className="gh-chat-settings-hint">
+                          默认关闭：聊天走长轮询，兼容性最好、更省资源。开启后优先使用 WebSocket，失败自动降级。
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={realtimeEnabled}
+                        aria-label={`实时连接：${realtimeEnabled ? '已开启' : '已关闭'}`}
+                        className={`gh-feature-switch ${realtimeEnabled ? 'gh-feature-switch--on' : ''}`}
+                        onClick={() => setRealtimeEnabled(!realtimeEnabled)}
+                      >
+                        <span className="gh-feature-switch-knob" />
+                      </button>
+                    </label>
+                    <p className="gh-chat-settings-foot">
+                      当前传输：{transport === 'ws' ? 'WebSocket' : 'HTTP 长轮询'}
+                      {realtimeEnabled && transport === 'polling' ? '（正在尝试实时连接）' : ''}
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
             <span
               className={`gh-chat-status ${
-                transport === 'polling' ? 'gh-chat-status--polling' : `gh-chat-status--${connectionState}`
+                transport === 'polling'
+                  ? realtimeEnabled ? 'gh-chat-status--polling' : 'gh-chat-status--idle'
+                  : `gh-chat-status--${connectionState}`
               }`}
               title={connectionLabel}
               aria-label={connectionLabel}
@@ -532,8 +597,23 @@ export default function ChatPage() {
           onRename={handleRename}
           onDissolve={() => void handleDissolve()}
           onLeave={() => void handleLeave()}
+          onSaveAnnouncement={
+            activeConversation?.room
+              ? (text, ackRequired) => saveRoomAnnouncement(activeConversation.room!.id, text, ackRequired)
+              : undefined
+          }
+          onAckAnnouncement={
+            activeConversation?.room
+              ? () => acknowledgeRoomAnnouncement(activeConversation.room!.id)
+              : undefined
+          }
         />
       </div>
+
+      <SiteAnnouncementDialog
+        open={announcementDialogOpen}
+        onClose={() => setAnnouncementDialogOpen(false)}
+      />
 
       <GroupDialog
         open={dialog?.mode === 'create-group' || dialog?.mode === 'add-members'}

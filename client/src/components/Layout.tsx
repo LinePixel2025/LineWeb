@@ -2,6 +2,8 @@ import { memo, useEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import GitHubHeader from './GitHubHeader'
 import GitHubSidebar from './GitHubSidebar'
+import SiteAnnouncementBar from './SiteAnnouncementBar'
+import { SiteAnnouncementProvider } from '../contexts/SiteAnnouncementContext'
 import { useFeature } from '../contexts/FeatureContext'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -47,25 +49,28 @@ export default memo(function Layout() {
   }
 
   return (
-    <div className="gh-layout-root">
-      <GitHubHeader onMenuToggle={() => setMobileOpen(prev => !prev)} />
-      <GitHubSidebar
-        collapsed={collapsed}
-        mobileOpen={mobileOpen}
-        onClose={() => setMobileOpen(false)}
-        onToggleCollapse={() => setCollapsed(prev => !prev)}
-      />
-      <main className={`gh-content ${collapsed ? 'gh-content--collapsed' : ''} ${isChatRoute ? 'gh-content--chat' : ''} ${isProxyViewRoute ? 'gh-content--proxy' : ''}`}>
-        <Outlet />
-        <footer className="gh-footer">
-          <div className="gh-footer-links">
-            {user && isEnabled('pages') && <a href="/features">About</a>}
-            {user && isEnabled('posts') && <a href="/posts">Posts</a>}
-            {user && isEnabled('drive') && <a href="/drive">Drive</a>}
-          </div>
-          <p className="gh-footer-copy">© {new Date().getFullYear()} LineWeb</p>
-        </footer>
-      </main>
-    </div>
+    <SiteAnnouncementProvider>
+      <div className="gh-layout-root">
+        <GitHubHeader onMenuToggle={() => setMobileOpen(prev => !prev)} />
+        <GitHubSidebar
+          collapsed={collapsed}
+          mobileOpen={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          onToggleCollapse={() => setCollapsed(prev => !prev)}
+        />
+        <main className={`gh-content ${collapsed ? 'gh-content--collapsed' : ''} ${isChatRoute ? 'gh-content--chat' : ''} ${isProxyViewRoute ? 'gh-content--proxy' : ''}`}>
+          <SiteAnnouncementBar />
+          <Outlet />
+          <footer className="gh-footer">
+            <div className="gh-footer-links">
+              {user && isEnabled('pages') && <a href="/features">About</a>}
+              {user && isEnabled('posts') && <a href="/posts">Posts</a>}
+              {user && isEnabled('drive') && <a href="/drive">Drive</a>}
+            </div>
+            <p className="gh-footer-copy">© {new Date().getFullYear()} LineWeb</p>
+          </footer>
+        </main>
+      </div>
+    </SiteAnnouncementProvider>
   )
 })

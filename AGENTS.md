@@ -365,3 +365,15 @@ cd storage-node && python main.py     # 本地 Windows 存储节点，config.jso
 - **聊天增强**：群聊 @、单聊已读、拍一拍（普通消息 + XHTML 标记，不改 neko）、收藏他人表情、长按/右键气泡菜单。
 - **科学计算器**：纯函数解析，无 eval；DEG/RAD、记忆、历史。
 - **数据库**：`User.status/apiRateLimit/gameStatsImportedAt` + `FeatureFlag` + `GameStat` 均为 additive；`prisma db push` 后启动 `ensureFTSTable` 重建 FTS。生产仍走本地构建 + `Dockerfile.prebuilt`，不要在 ECS 上 `docker compose up --build`。
+
+---
+
+## 2026-10 聊天群公告 / 全员大厅 / 大群 / 站点公告（实现口径）
+
+- **neko 群公告已对齐最新版**：`ChatRoomView` 带 `announcementUpdatedAt/announcementAckRequired/announcementConfirmedAt`；聊天页头部横幅可关闭（localStorage 按 `roomId + updatedAt` 记忆），群主/管理员可编辑并勾选「需要群员确认」，成员进群未确认时弹窗，`POST /api/chat/xmpp/rooms/:id/announcement-ack` 只写自己的成员行。
+- **neko 全员大厅已同步**：`nekoChatView` 不再过滤 `isLobby`，大厅出现在会话列表/群聊页（可收发、看公告与成员；系统助理/文件助手/停用账号从成员列表剔除）。名称/成员/退群/解散不可管理，前端隐藏入口。LineWeb 管理员在代理请求中带 `x-proxy-admin:1`（只影响大厅角色派生，不写入 neko 账号），可在 neko 权限允许时维护大厅公告。
+- **LineWeb 用户大群**：`server/src/services/nekoBigGroup.ts` 以第一个 LineWeb 管理员身份在 neko 创建 `LineWeb 用户群`（`NEKO_LINEWEB_GROUP_NAME`），只允许 `lw_*` 账号（原生/其他平台账号会被移出），房间 id 存 `SiteSetting('neko.linewebGroupRoomId')`；启动 20s 后对账 + 每 10 分钟周期对账，审核通过/拒绝/删除用户时增量同步。前端以 `isBigGroup` 标记「官方」，不提供退群入口。关闭 `NEKO_LINEWEB_GROUP_ENABLED=false` 可停用。
+- **站点公告（LineWeb 自有，非群公告）**：`SiteAnnouncement` 表 + `GET /api/announcements`（登录读生效）+ `/api/admin/announcements`（`content:manage` CRUD）；全站顶部公告条（`SiteAnnouncementBar`，Provider 在 `Layout`）+ 聊天页侧栏入口（`SiteAnnouncementDialog`）共用；管理页 `/admin/announcements`。
+- **聊天传输默认长轮询**：`lib/realtime.ts` 新增 `lineweb_chat_realtime`（默认关闭），聊天设置开关持久化并立即重连；聊天 XMPP 默认走 `http-*` 长轮询，开启后才尝试 `/ws/xmpp`，失败自动降级。站内 `/ws/chat`（好友/游戏事件）不受该开关影响。
+- **聊天界面增强**：日期分隔（今天/昨天/日期）、同发送者 5 分钟消息聚合、会话本地搜索、置顶标记、官方/大厅标签、回到最新、群成员搜索、公告横幅/待确认、设置浮层。
+- **数据库**：`SiteAnnouncement` / `SiteSetting` 为 additive，`prisma db push` 即可；生产仍走本地构建 + `Dockerfile.prebuilt`，不要在 ECS 上 `docker compose up --build`。
