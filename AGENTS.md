@@ -408,3 +408,14 @@ cd storage-node && python main.py     # 本地 Windows 存储节点，config.jso
 - **新路由/管理页**：`/api/farm/merchant/:offerId/buy`、`POST /api/points/checkin`、`POST /api/points/shop/:id/equip-frame`、`DELETE /api/points/equipped-frame`、`/api/stocks/market`、`/api/admin/chat/*`；管理页 `/admin/chat`，积分/农场/签到/榜一参数集中在 `/admin/points`。
 - **自检**：`cd server && npm run verify:points`（337）、`verify:gamestats`（81）、`verify:stocks`（569）；`cd client && npm run test`（48 文件 / 538 用例）。
 - **部署**：2026-10-29 已按本地产物链路上线（`781bb62`）：本地 `cd client && npm run build` → dist 覆盖 `/opt/lineweb/client-dist` → `docker build -f Dockerfile.prebuilt` + `docker compose up -d`；容器启动日志显示 PostgreSQL schema 同步完成。
+
+---
+
+## 2026-10 称号特效 / 榜一佩戴 / 股市积分投资（实现口径）
+
+- **称号特效由 `rarity` 驱动**：`UserTitleDto` 统一带 `rarity`（shop 商品继承配置；榜一传说恒为 `legendary`）；`UserTitleBadge` 在 `rarity==='legendary'` 时渲染光环 + 4 颗粒子火花 + 旋转锥形光线（`points.css`，`prefers-reduced-motion` 降级为静态）。凡是走统一 DTO 的位置（顶部导航、个人资料、积分榜、战绩榜、农场邻居/地主、聊天 titleMap）自动带特效。
+- **统一“有效称号”口径**：`effectiveTitleDto()` 依次取 已佩戴商店称号 → 已佩戴榜一称号（必须仍属于本人）→ 无；`setEquippedTitle` 与 `setEquippedLeaderTitle` 互斥，`DELETE /api/points/equipped-title` 两者一起清空；榜一称号易主时 `gameLeaderTitleService` 在重算事务内清空旧主的 `equippedLeaderTitleId`。
+- **榜一称号佩戴**：`User.equippedLeaderTitleId` + `GameLeaderTitle.id` 关系（additive）；`POST /api/points/leader-titles/:id/equip`，`GET /api/points/me` 下发 `equippedLeaderTitle`，`/api/points/shop` 下发 `equippedLeaderTitleId`。
+- **股市积分投资**：`StockHolding`（`userId+code` 唯一，`shares Float`、`costPoints Int`）；买卖各收 1% 手续费（最低 1 积分），单笔 100–100,000 积分，`quoteStockBuy` / `quoteStockSell` 纯函数在 `server/src/lib/stockTrading.ts`；`POST /api/stocks/buy`（`stock_buy` 流水）、`POST /api/stocks/sell`（`stock_sell` 流水）、`GET /api/stocks/portfolio`；行情仍按 `dateKey + code` 确定性生成，当日往返必亏手续费，跨日才有涨跌收益。
+- **自检**：`cd server && npm run verify:stocks`（591）、`verify:points`（337）、`verify:gamestats`（81）；`cd client && npm run test`（48 文件 / 538 用例）+ `npm run build`。
+- **数据库**：`StockHolding`、`User.equippedLeaderTitleId`、`GameLeaderTitle.id` 均为 additive，`prisma db push` 即可；部署仍走本地产物链（不要在 ECS 上 `docker compose up --build`）。
