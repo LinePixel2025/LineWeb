@@ -10,7 +10,7 @@ import {
 } from 'react'
 import api from '../lib/api'
 import { useAuth } from './AuthContext'
-import type { PointsProfile, UserTitleDto } from '../types/points'
+import type { LeaderTitleDto, PointsProfile, UserTitleDto } from '../types/points'
 
 interface PointsContextValue {
   profile: PointsProfile | null
@@ -19,6 +19,8 @@ interface PointsContextValue {
   enabled: boolean
   balance: number
   title: UserTitleDto | null
+  /** 当前持有的单机榜一传说称号 */
+  leaderTitles: LeaderTitleDto[]
   /** 已购表情包 / 称号 key，用于表情商店解锁判断 */
   ownedKeys: string[]
   refresh: () => Promise<PointsProfile | null>
@@ -81,6 +83,7 @@ export function PointsProvider({ children }: { children: ReactNode }) {
     enabled,
     balance: profile?.balance ?? 0,
     title: profile?.title ?? null,
+    leaderTitles: profile?.leaderTitles ?? [],
     ownedKeys: profile?.ownedKeys ?? [],
     refresh,
     applyLocalDelta,

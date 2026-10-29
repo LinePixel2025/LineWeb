@@ -15,6 +15,77 @@
 .gh-title-badge--md { padding: 3px 10px; font-size: var(--gh-text-sm); }
 .gh-title-badge-icon { display: inline-flex; }
 
+/* ===== 传说称号（单机榜一自动授予）：金色渐变 + 流光 ===== */
+.gh-title-badge--legendary {
+  position: relative;
+  overflow: hidden;
+  border-color: transparent;
+  background:
+    linear-gradient(
+      100deg,
+      #fff4cc 0%,
+      #f2c94c 18%,
+      #ffe9a8 32%,
+      #d4a72c 48%,
+      #fff4cc 64%,
+      #f2c94c 80%,
+      #ffe9a8 100%
+    );
+  background-size: 260% 100%;
+  background-position: 0% 50%;
+  color: #4b3600 !important;
+  font-weight: 600;
+  box-shadow: 0 0 0 1px rgba(212, 167, 44, .55), 0 0 10px rgba(242, 201, 76, .45);
+  animation: gh-title-badge-shine 3.6s linear infinite;
+}
+.gh-title-badge--legendary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, .85) 46%, transparent 62%);
+  background-size: 220% 100%;
+  animation: gh-title-badge-sweep 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+.gh-title-badge--legendary .gh-title-badge-name,
+.gh-title-badge--legendary .gh-title-badge-icon {
+  position: relative;
+  z-index: 1;
+}
+@keyframes gh-title-badge-shine {
+  from { background-position: 0% 50%; }
+  to { background-position: 260% 50%; }
+}
+@keyframes gh-title-badge-sweep {
+  0% { background-position: 180% 50%; opacity: 0; }
+  25% { opacity: 1; }
+  60% { background-position: -80% 50%; opacity: 1; }
+  100% { background-position: -80% 50%; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-title-badge--legendary,
+  .gh-title-badge--legendary::before {
+    animation: none;
+  }
+  .gh-title-badge--legendary::before { display: none; }
+}
+
+/* 资料页的传说称号列表 */
+.gh-profile-legend-titles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* 用户菜单里的传说称号列表（未佩戴称号时展示） */
+.gh-popover-titles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 12px 8px;
+}
+
 /* ===== 顶栏积分 ===== */
 .gh-header-points {
   display: inline-flex;

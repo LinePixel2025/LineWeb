@@ -20,6 +20,7 @@ import {
   type PointsConfigDto,
 } from '../lib/pointsRules.js'
 import type { GameKey } from '../lib/gameStatsRules.js'
+import { leaderTitleDto, type LeaderTitleDto } from '../lib/gameLeaderTitles.js'
 
 type Db = Prisma.TransactionClient
 
@@ -74,6 +75,8 @@ export interface PointsProfileDto {
   /** 已购商品 key（客户端用于解锁表情包） */
   ownedKeys: string[]
   checkin: CheckinStatusDto
+  /** 当前持有的单机榜一传说称号（可能多个，随时可能因被超越而消失） */
+  leaderTitles: LeaderTitleDto[]
 }
 
 const DEFAULT_SHOP_SEED_FLAG = 'points.shop.seeded'
@@ -404,7 +407,7 @@ export async function checkin(userId: number, now: number = Date.now()): Promise
    ============================================================ */
 
 export async function getPointsProfile(userId: number): Promise<PointsProfileDto> {
-  const [user, owned, checkinStatus] = await Promise.all([
+  const [user, owned, checkinStatus, leaderRows] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: { points: true, pointsEarned: true, equippedTitle: true, equippedAvatarFrame: true },
@@ -414,6 +417,11 @@ export async function getPointsProfile(userId: number): Promise<PointsProfileDto
       select: { item: { select: { key: true } } },
     }),
     getCheckinStatus(userId),
+    prisma.gameLeaderTitle.findMany({
+      where: { userId },
+      orderBy: { game: 'asc' },
+      select: { id: true, game: true, awardedAt: true },
+    }),
   ])
   if (!user) throw new AppError('用户不存在', 404)
   const rank = await prisma.user.count({
@@ -428,6 +436,7 @@ export async function getPointsProfile(userId: number): Promise<PointsProfileDto
     avatarFrame: toUserAvatarFrameDto(user.equippedAvatarFrame),
     ownedKeys: owned.map((row) => row.item.key),
     checkin: checkinStatus,
+    leaderTitles: leaderRows.map(leaderTitleDto),
   }
 }
 

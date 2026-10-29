@@ -13,7 +13,9 @@ interface Props {
 export default memo(function GitHubHeader({ onMenuToggle }: Props) {
   const { user, hasAdminAccess, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
-  const { balance: pointsBalance, title: pointsTitle } = usePoints()
+  const { balance: pointsBalance, title: pointsTitle, leaderTitles } = usePoints()
+  // 没有佩戴称号时，用首个传说称号（单机榜一）兜底展示
+  const headerTitle = pointsTitle ?? leaderTitles[0] ?? null
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -81,7 +83,7 @@ export default memo(function GitHubHeader({ onMenuToggle }: Props) {
                 <button className="gh-header-user-btn" onClick={() => setUserMenuOpen(prev => !prev)} aria-expanded={userMenuOpen} aria-label="打开用户菜单">
                   <UserAvatar userId={user.id} username={user.username} size="sm" />
                   <span className="gh-hidden-mobile gh-header-username">{user.username}</span>
-                  <UserTitleBadge title={pointsTitle} className="gh-hidden-mobile" />
+                  <UserTitleBadge title={headerTitle} className="gh-hidden-mobile" />
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true" className="gh-hidden-mobile">
                     <path d="M6 8.825a.75.75 0 0 1-.53-.22l-4-4a.75.75 0 0 1 1.06-1.06L6 6.939l3.47-3.47a.75.75 0 1 1 1.06 1.06l-4 4a.75.75 0 0 1-.53.22Z"/>
                   </svg>
@@ -92,6 +94,13 @@ export default memo(function GitHubHeader({ onMenuToggle }: Props) {
                     <Link to="/points" className="gh-popover-item" onClick={() => setUserMenuOpen(false)}>积分中心</Link>
                     {hasAdminAccess && <Link to="/admin" className="gh-popover-item" onClick={() => setUserMenuOpen(false)}>Admin</Link>}
                     <div className="gh-popover-divider" />
+                    {!pointsTitle && leaderTitles.length > 0 && (
+                      <div className="gh-popover-titles">
+                        {leaderTitles.map((item) => (
+                          <UserTitleBadge key={item.game} title={item} />
+                        ))}
+                      </div>
+                    )}
                     <button className="gh-popover-item" onClick={() => { setUserMenuOpen(false); logout() }}>Sign out</button>
                   </div>
                 )}

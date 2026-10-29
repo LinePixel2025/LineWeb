@@ -47,6 +47,7 @@ const REASON_LABELS: Record<string, string> = {
   farm_expand: '农田扩建',
   shop_purchase: '积分商店',
   checkin: '每日签到',
+  leader_bonus: '榜首奖励',
   admin_adjust: '管理员调整',
 }
 

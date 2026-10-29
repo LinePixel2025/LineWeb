@@ -45,6 +45,7 @@ import { initWebProxyWs } from './services/webProxyWs.js'
 import { startNekoAccountSync, stopNekoAccountSync } from './services/nekoAccountSync.js'
 import { startLineWebBigGroupSync, stopLineWebBigGroupSync } from './services/nekoBigGroup.js'
 import { startGameSweeper } from './services/gameService.js'
+import { recomputeAllLeaderTitles } from './services/gameLeaderTitleService.js'
 import { syncDriveFiles } from './services/storageSync.js'
 import { deduplicateDriveFiles } from './services/dedupDriveFiles.js'
 import { ensureFTSTable } from './services/ftsSearch.js'
@@ -672,6 +673,14 @@ const startupTimer = setTimeout(async () => {
   syncDriveFiles().catch(err => console.error('[Sync] 首次同步失败:', err))
 }, 10000)
 startupTimer.unref()
+
+// 单机榜一传说称号：延迟 30 秒全量重算一次（兜底历史数据 / 线上库直改），失败只告警
+const leaderTitleTimer = setTimeout(() => {
+  recomputeAllLeaderTitles().catch(err => {
+    console.warn('[leaderTitle] 启动重算失败:', err instanceof Error ? err.message : err)
+  })
+}, 30000)
+leaderTitleTimer.unref()
 
 // === 进程级错误处理 ===
 process.on('unhandledRejection', (reason) => {

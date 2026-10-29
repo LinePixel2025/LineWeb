@@ -66,3 +66,46 @@ export function getLeaderboardMetric(game: string, variant: string): Leaderboard
 }
 
 export const LEADERBOARD_METRICS: readonly LeaderboardMetric[] = METRICS
+
+/**
+ * 单机榜一称号以哪个变体为代表：扫雷三档难度合并，取「困难」档作为代表。
+ * 只有这个变体的榜一会自动获得传说称号。
+ */
+export const SOLO_LEADER_VARIANTS: Record<GameKey, string> = {
+  '2048': 'solo',
+  doudizhu: 'solo',
+  snake: 'solo',
+  minesweeper: 'expert',
+  jump: 'solo',
+  gomoku: 'solo',
+  liar: 'solo',
+  uno: 'solo',
+  xiangqi: 'solo',
+  parkour: 'solo',
+}
+
+/** 单机榜一对应的排序指标（无效游戏返回 null） */
+export function soloLeaderMetric(game: string): LeaderboardMetric | null {
+  if (!(GAME_KEYS as readonly string[]).includes(game)) return null
+  return getLeaderboardMetric(game, SOLO_LEADER_VARIANTS[game as GameKey])
+}
+
+/**
+ * 排行榜的基础过滤条件（供 getLeaderboard 与榜一重算共用，避免两处口径漂移）。
+ * 返回普通对象，调用方按 Prisma.GameStatWhereInput 使用。
+ */
+export function leaderboardWhere(metric: LeaderboardMetric): Record<string, unknown> {
+  const where: Record<string, unknown> = {
+    game: metric.game,
+    variant: metric.variant,
+    games: { gt: 0 },
+  }
+  if (metric.positiveOnly) {
+    if (metric.metric === 'bestTimeMs') where.bestTimeMs = { not: null }
+    else if (metric.metric === 'wins') where.wins = { gt: 0 }
+    else if (metric.metric === 'bestDistance') where.bestDistance = { gt: 0 }
+    else where.bestScore = { gt: 0 }
+  }
+  return where
+}
+

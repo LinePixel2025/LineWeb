@@ -12,7 +12,14 @@ import {
   validateSoloResult,
   type GameStatCounters,
 } from '../src/lib/gameStatsRules.js'
-import { getLeaderboardMetric, LEADERBOARD_METRICS } from '../src/lib/gameLeaderboard.js'
+import {
+  getLeaderboardMetric,
+  LEADERBOARD_METRICS,
+  SOLO_LEADER_VARIANTS,
+  leaderboardWhere,
+  soloLeaderMetric,
+} from '../src/lib/gameLeaderboard.js'
+import { leaderBonusNote, leaderTitleDto, leaderTitleName } from '../src/lib/gameLeaderTitles.js'
 import {
   publishGameEnd,
   resetGameStatsDedupForTest,
@@ -114,6 +121,52 @@ assertEqual(getLeaderboardMetric('parkour', 'solo')?.metric, 'bestDistance', '�
 assertEqual(getLeaderboardMetric('minecraft', 'solo'), null, '我的世界无榜')
 assertEqual(getLeaderboardMetric('2048', 'nope'), null, '未知变体无榜')
 assert(LEADERBOARD_METRICS.length >= 10, '排行榜指标覆盖多款游戏')
+
+// === 榜一传说称号（指标抽取必须与排行榜口径一致） ===
+assertEqual(SOLO_LEADER_VARIANTS.minesweeper, 'expert', '扫雷榜一取困难档')
+assertEqual(soloLeaderMetric('2048')?.metric, 'bestScore', '2048 榜一按最高分')
+assertEqual(soloLeaderMetric('2048')?.variant, 'solo', '2048 榜一取单机')
+assertEqual(soloLeaderMetric('minesweeper')?.metric, 'bestTimeMs', '扫雷榜一按最短用时')
+assertEqual(soloLeaderMetric('minesweeper')?.order, 'asc', '扫雷榜一升序')
+assertEqual(soloLeaderMetric('parkour')?.metric, 'bestDistance', '跑酷榜一按最远距离')
+assertEqual(soloLeaderMetric('gomoku')?.metric, 'wins', '五子棋榜一按胜场')
+assertEqual(soloLeaderMetric('doudizhu')?.metric, 'scoreTotal', '斗地主榜一按累计积分')
+assertEqual(soloLeaderMetric('minecraft'), null, '我的世界没有榜一称号')
+assertEqual(soloLeaderMetric('nope'), null, '未知游戏没有榜一称号')
+for (const game of Object.keys(SOLO_LEADER_VARIANTS)) {
+  const metric = soloLeaderMetric(game)
+  assert(metric !== null && getLeaderboardMetric(game, metric.variant) === metric, `${game} 榜一指标与排行榜同源`)
+}
+
+assertEqual(
+  leaderboardWhere(getLeaderboardMetric('2048', 'solo')!),
+  { game: '2048', variant: 'solo', games: { gt: 0 }, bestScore: { gt: 0 } },
+  '分数榜过滤条件',
+)
+assertEqual(
+  leaderboardWhere(getLeaderboardMetric('minesweeper', 'expert')!),
+  { game: 'minesweeper', variant: 'expert', games: { gt: 0 }, bestTimeMs: { not: null } },
+  '用时榜过滤条件',
+)
+assertEqual(
+  leaderboardWhere(getLeaderboardMetric('gomoku', 'solo')!),
+  { game: 'gomoku', variant: 'solo', games: { gt: 0 }, wins: { gt: 0 } },
+  '胜场榜过滤条件',
+)
+assertEqual(
+  leaderboardWhere(getLeaderboardMetric('doudizhu', 'solo')!),
+  { game: 'doudizhu', variant: 'solo', games: { gt: 0 } },
+  '累计积分榜允许负分',
+)
+
+assertEqual(leaderTitleName('2048'), '2048传说', '称号名称')
+assertEqual(leaderTitleName('minesweeper'), '扫雷传说', '称号名称（扫雷）')
+assertEqual(leaderBonusNote('parkour'), '霓虹跑酷单机榜首奖励', '榜一奖励说明')
+const titleDto = leaderTitleDto({ id: 7, game: 'gomoku', awardedAt: new Date('2026-10-01T00:00:00.000Z') })
+assertEqual(titleDto.rarity, 'legendary', '榜一称号为传说品质')
+assertEqual(titleDto.gameName, '五子棋', '榜一称号游戏名')
+assertEqual(titleDto.icon, '👑', '榜一称号图标')
+assertEqual(titleDto.awardedAt, '2026-10-01T00:00:00.000Z', '榜一称号时间序列化')
 
 // === 联机回调 ===
 const received: GameEndResult[] = []

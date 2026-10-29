@@ -1,4 +1,4 @@
-import type { UserTitleDto } from './points'
+import type { LeaderTitleDto, UserTitleDto } from './points'
 
 export type GameKey =
   | '2048'
@@ -87,6 +87,8 @@ export interface LeaderboardEntry {
   }
   /** 佩戴中的站内称号（无则 null） */
   title: UserTitleDto | null
+  /** 单机榜一传说称号（仅单机代表榜的榜一携带） */
+  leaderTitle?: LeaderTitleDto | null
   isMe: boolean
 }
 

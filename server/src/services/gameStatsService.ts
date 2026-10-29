@@ -12,9 +12,16 @@ import {
   type GameStatCounters,
   type SoloResultInput,
 } from '../lib/gameStatsRules.js'
-import { getLeaderboardMetric, type LeaderboardMetric } from '../lib/gameLeaderboard.js'
+import {
+  getLeaderboardMetric,
+  leaderboardWhere,
+  SOLO_LEADER_VARIANTS,
+  type LeaderboardMetric,
+} from '../lib/gameLeaderboard.js'
 import type { GameEndResult } from './gameStatsHooks.js'
 import { awardGamePointsTx, getPointsConfig, toUserTitleDto } from './pointsService.js'
+import { leaderTitleDto } from '../lib/gameLeaderTitles.js'
+import { scheduleLeaderRecompute } from './gameLeaderTitleService.js'
 
 type StatRow = {
   id: number
@@ -83,7 +90,7 @@ export async function recordSoloResult(
   if (error) throw new AppError(error, 400)
   const delta = buildSoloDelta(input)
   const pointsConfig = await getPointsConfig()
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const existing = await tx.gameStat.findUnique({
       where: { userId_game_variant: { userId, game: input.game, variant: input.variant } },
     })
@@ -103,6 +110,9 @@ export async function recordSoloResult(
     )
     return { stat, points }
   })
+  // 榜一称号在事务提交后再算（2 秒防抖），失败不影响战绩与积分
+  scheduleLeaderRecompute(input.game)
+  return result
 }
 
 export async function importStats(
@@ -250,14 +260,7 @@ export async function getLeaderboard(params: {
   const metric = getLeaderboardMetric(params.game, params.variant)
   if (!metric) throw new AppError('无效的排行榜参数', 400)
 
-  const base: Prisma.GameStatWhereInput = { game: params.game, variant: params.variant, games: { gt: 0 } }
-  if (metric.positiveOnly) {
-    if (metric.metric === 'bestTimeMs') base.bestTimeMs = { not: null }
-    else if (metric.metric === 'wins') base.wins = { gt: 0 }
-    else if (metric.metric === 'bestDistance') base.bestDistance = { gt: 0 }
-    else base.bestScore = { gt: 0 }
-  }
-
+  const base = leaderboardWhere(metric) as Prisma.GameStatWhereInput
   const orderBy: Prisma.GameStatOrderByWithRelationInput[] = [
     { [metric.metric]: metric.order },
     { updatedAt: 'asc' },
@@ -325,9 +328,19 @@ export async function getLeaderboard(params: {
     }
   }
 
+  // 只有单机代表变体的榜一携带传说称号（扫雷取「困难」档）
+  const soloVariant = SOLO_LEADER_VARIANTS[params.game as GameKey]
+  const titleRow = soloVariant === params.variant
+    ? await prisma.gameLeaderTitle.findUnique({ where: { game: params.game } })
+    : null
+  const attachTitle = <T extends { userId: number }>(entry: T) => ({
+    ...entry,
+    leaderTitle: titleRow && entry.userId === titleRow.userId ? leaderTitleDto(titleRow) : null,
+  })
+
   return {
-    entries,
-    me,
+    entries: entries.map(attachTitle),
+    me: me ? attachTitle(me) : null,
     total,
     game: params.game,
     variant: params.variant,

@@ -193,6 +193,20 @@ export default function ProfilePage() {
               <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/games">赚积分</Link>
             </div>
           </div>
+
+          {pointsProfile && pointsProfile.leaderTitles.length > 0 && (
+            <div className="gh-box" style={{ marginTop: '16px' }}>
+              <h3 style={{ fontSize: '1rem', margin: '0 0 4px' }}>传说称号</h3>
+              <p className="gh-text-tertiary" style={{ fontSize: '0.78rem', margin: '0 0 10px' }}>
+                单机排行榜第一名自动获得，被超越后自动消失。
+              </p>
+              <div className="gh-profile-legend-titles">
+                {pointsProfile.leaderTitles.map((item) => (
+                  <UserTitleBadge key={item.game} title={item} size="md" />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <div style={{ flex: '1 1 400px', minWidth: 0 }}>
           <GitHubTabNav
