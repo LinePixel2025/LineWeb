@@ -6,6 +6,7 @@
   /* ===== Color Tokens: Light (default) ===== */
   --gh-bg:                #ffffff;
   --gh-canvas:            #f6f8fa;
+  --gh-canvas-subtle:     #f6f8fa;
   --gh-canvas-inset:      #f3f6f8;
   --gh-border:            #d1d9e0;
   --gh-border-muted:      #d8dee4;
@@ -52,6 +53,7 @@
 
   /* Radius — all G2 (8px) */
   --gh-radius: 8px;
+  --gh-radius-lg: 12px;
 
   /* Typography scale */
   --gh-text-xs:  0.75rem;
@@ -85,6 +87,7 @@
 [data-theme="dark"] {
   --gh-bg:                #0d1117;
   --gh-canvas:            #161b22;
+  --gh-canvas-subtle:     #161b22;
   --gh-canvas-inset:      #010409;
   --gh-border:            #30363d;
   --gh-border-muted:      #21262d;

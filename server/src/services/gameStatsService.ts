@@ -8,11 +8,13 @@ import {
   isKnownVariant,
   mergeCounters,
   validateSoloResult,
+  type GameKey,
   type GameStatCounters,
   type SoloResultInput,
 } from '../lib/gameStatsRules.js'
 import { getLeaderboardMetric, type LeaderboardMetric } from '../lib/gameLeaderboard.js'
 import type { GameEndResult } from './gameStatsHooks.js'
+import { awardGamePointsTx, getPointsConfig, toUserTitleDto } from './pointsService.js'
 
 type StatRow = {
   id: number
@@ -73,20 +75,33 @@ export async function listStats(userId: number): Promise<StatRow[]> {
   })
 }
 
-export async function recordSoloResult(userId: number, input: SoloResultInput): Promise<StatRow> {
+export async function recordSoloResult(
+  userId: number,
+  input: SoloResultInput,
+): Promise<{ stat: StatRow; points: { delta: number; balance: number; gross: number; capped: boolean } }> {
   const error = validateSoloResult(input)
   if (error) throw new AppError(error, 400)
   const delta = buildSoloDelta(input)
+  const pointsConfig = await getPointsConfig()
   return prisma.$transaction(async (tx) => {
     const existing = await tx.gameStat.findUnique({
       where: { userId_game_variant: { userId, game: input.game, variant: input.variant } },
     })
     const merged = mergeCounters(countersOf(existing), delta)
-    return tx.gameStat.upsert({
+    const stat = await tx.gameStat.upsert({
       where: { userId_game_variant: { userId, game: input.game, variant: input.variant } },
       create: upsertPayload(userId, input.game, input.variant, merged),
       update: merged,
     })
+    // 统一积分：所有游戏共用一套余额，按管理员配置的胜负/参与/表现加成结算
+    const points = await awardGamePointsTx(
+      tx,
+      userId,
+      input.game as GameKey,
+      { outcome: input.outcome, score: input.score },
+      { config: pointsConfig },
+    )
+    return { stat, points }
   })
 }
 
@@ -131,6 +146,7 @@ export async function importStats(
 export async function recordOnlineMatchResult(payload: GameEndResult): Promise<void> {
   if (!isGameKey(payload.game) || !isKnownVariant(payload.game, 'online')) return
   try {
+    const pointsConfig = await getPointsConfig()
     await prisma.$transaction(async (tx) => {
       for (const result of payload.results) {
         const delta: Parameters<typeof mergeCounters>[1] = { games: 1 }
@@ -166,6 +182,14 @@ export async function recordOnlineMatchResult(payload: GameEndResult): Promise<v
           create: upsertPayload(result.userId, payload.game, 'online', merged),
           update: merged,
         })
+
+        await awardGamePointsTx(
+          tx,
+          result.userId,
+          payload.game as GameKey,
+          { outcome: result.outcome, score: result.score },
+          { config: pointsConfig },
+        )
       }
     })
   } catch (err) {
@@ -173,7 +197,12 @@ export async function recordOnlineMatchResult(payload: GameEndResult): Promise<v
   }
 }
 
-type LeaderboardRow = StatRow & { user: { username: string } }
+type LeaderboardRow = StatRow & {
+  user: {
+    username: string
+    equippedTitle: { id: number; type: string; name: string; payload: string | null } | null
+  }
+}
 
 function metricValue(row: StatRow, metric: LeaderboardMetric): number {
   switch (metric.metric) {
@@ -206,6 +235,7 @@ function entryOf(row: LeaderboardRow, metric: LeaderboardMetric, rank: number, m
     username: row.user.username,
     value: metricValue(row, metric),
     secondary: secondaryOf(row),
+    title: toUserTitleDto(row.user.equippedTitle),
     isMe: row.userId === meId,
   }
 }
@@ -238,7 +268,14 @@ export async function getLeaderboard(params: {
     prisma.gameStat.count({ where: base }),
     prisma.gameStat.findMany({
       where: base,
-      include: { user: { select: { username: true } } },
+      include: {
+        user: {
+          select: {
+            username: true,
+            equippedTitle: { select: { id: true, type: true, name: true, payload: true } },
+          },
+        },
+      },
       orderBy,
       skip,
       take: params.limit,
@@ -251,7 +288,14 @@ export async function getLeaderboard(params: {
           variant: params.variant,
         },
       },
-      include: { user: { select: { username: true } } },
+      include: {
+        user: {
+          select: {
+            username: true,
+            equippedTitle: { select: { id: true, type: true, name: true, payload: true } },
+          },
+        },
+      },
     }),
   ])
 

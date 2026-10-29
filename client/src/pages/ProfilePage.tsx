@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { usePoints } from '../contexts/PointsContext'
 import UserAvatar from '../components/UserAvatar'
+import UserTitleBadge from '../components/UserTitleBadge'
 import AvatarCropDialog from '../components/AvatarCropDialog'
 import DigitalHealthSection from '../components/DigitalHealthSection'
 import { GitHubButton, GitHubBadge, GitHubAlert, GitHubTabNav, GitHubInput } from '../components/ui'
@@ -23,6 +25,7 @@ interface UserGrant {
 
 export default function ProfilePage() {
   const { user, logout, updateProfile } = useAuth()
+  const { profile: pointsProfile } = usePoints()
   const navigate = useNavigate()
   const location = useLocation()
   const [activeTab, setActiveTab] = useState(() => location.hash === '#digital-health' ? 'digital-health' : 'overview')
@@ -143,6 +146,11 @@ export default function ProfilePage() {
               <GitHubBadge variant={user?.role === 'admin' ? 'accent' : user?.role === 'author' ? 'success' : 'default'}>
                 {roleLabel(user?.role)}
               </GitHubBadge>
+              {pointsProfile?.title && (
+                <div style={{ marginTop: '8px' }}>
+                  <UserTitleBadge title={pointsProfile.title} size="md" />
+                </div>
+              )}
             </div>
             <div style={{ marginTop: '20px', display: 'flex', gap: '8px', flexDirection: 'column', alignItems: 'center' }}>
               <label style={{ cursor: 'pointer', display: 'inline-flex' }}>
@@ -163,9 +171,29 @@ export default function ProfilePage() {
               </GitHubButton>
             </div>
           </div>
-        </div>
 
-        {/* Right: Content Tabs */}
+          <div className="gh-box" style={{ marginTop: '16px' }}>
+            <h3 style={{ fontSize: '1rem', margin: '0 0 12px' }}>积分</h3>
+            <div className="gh-profile-points">
+              <div>
+                <span className="gh-text-secondary" style={{ fontSize: '0.78rem' }}>当前积分</span>
+                <div className="gh-profile-points-value">{pointsProfile?.balance ?? 0}</div>
+              </div>
+              <div>
+                <span className="gh-text-secondary" style={{ fontSize: '0.78rem' }}>累计获得</span>
+                <div style={{ fontSize: '0.95rem' }}>{pointsProfile?.earned ?? 0}</div>
+              </div>
+              <div>
+                <span className="gh-text-secondary" style={{ fontSize: '0.78rem' }}>全站排名</span>
+                <div style={{ fontSize: '0.95rem' }}>#{pointsProfile?.rank ?? '—'}</div>
+              </div>
+            </div>
+            <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <Link className="gh-btn gh-btn--secondary gh-btn--sm" to="/points">积分中心</Link>
+              <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/games">赚积分</Link>
+            </div>
+          </div>
+        </div>
         <div style={{ flex: '1 1 400px', minWidth: 0 }}>
           <GitHubTabNav
             tabs={[

@@ -25,6 +25,9 @@ import chatXmppRoutes from './routes/chatXmpp.js'
 import chatUploadsRoutes from './routes/chatUploads.js'
 import gameRoutes from './routes/games.js'
 import gameStatsRoutes from './routes/gameStats.js'
+import pointsRoutes from './routes/points.js'
+import farmRoutes from './routes/farm.js'
+import adminPointsRoutes from './routes/adminPoints.js'
 import { featuresRouter, adminFeaturesRouter } from './routes/features.js'
 import { announcementsRouter, adminAnnouncementsRouter } from './routes/announcements.js'
 import { proxyApiRouter, proxyHttpRouter } from './routes/webProxy.js'
@@ -179,6 +182,12 @@ app.use('/api/chat/xmpp', requireFeature('chat'), chatXmppRoutes)
 app.use('/api/chat', requireFeature('chat'), chatRoutes)
 app.use('/api/game-stats', requireFeature('games'), gameStatsRoutes)
 app.use('/api/games', requireFeature('gamesOnline'), gameRoutes)
+// 统一积分体系（全游戏共用余额 / 排行榜 / 称号与表情包商店）
+app.use('/api/points', pointsRoutes)
+// 开心农场（种菜 / 偷菜 / 扩建），受 farm 功能开关控制
+app.use('/api/farm', requireFeature('farm'), farmRoutes)
+// 积分体系管理（规则 / 商店 / 用户调分，需 points:manage 能力）
+app.use('/api/admin/points', adminPointsRoutes)
 // 网页反代：站点管理（需登录令牌）
 app.use('/api/proxy', requireFeature('webProxy'), proxyApiRouter)
 // 网页反代管理（黑名单 / 统计排名 / 排队赦免，需 proxy:manage 能力）
@@ -313,7 +322,27 @@ app.get('/api', (_req, res) => {
       list: { method: 'GET', path: '/api/game-stats', auth: true, description: '当前账号全部游戏战绩（导入标记 + 聚合行）' },
       result: { method: 'POST', path: '/api/game-stats/result', auth: true, description: '单机一局上报（120 次/5min；服务端白名单合并；需 gamesSingle）' },
       import: { method: 'POST', path: '/api/game-stats/import', auth: true, description: '旧 localStorage 战绩一次性合并（幂等；空数组也会置位）' },
-      leaderboard: { method: 'GET', path: '/api/game-stats/leaderboard?game=&variant=&limit=&page=', auth: true, description: '站内排行榜（单机/联机分开；扫雷按最短用时，胜负型按胜场）' },
+      leaderboard: { method: 'GET', path: '/api/game-stats/leaderboard?game=&variant=&limit=&page=', auth: true, description: '站内排行榜（单机/联机分开；扫雷按最短用时，胜负型按胜场；附带玩家称号）' },
+    },
+    points: {
+      note: '统一积分：所有游戏共用同一余额；单机上报与联机结算都会按管理员配置发放/扣除积分，每日正收益有上限。',
+      me: { method: 'GET', path: '/api/points/me', auth: true, description: '余额 / 累计获得 / 排名 / 佩戴称号 / 已购商品 key' },
+      ledger: { method: 'GET', path: '/api/points/ledger?limit=&page=', auth: true, description: '积分流水（倒序）' },
+      leaderboard: { method: 'GET', path: '/api/points/leaderboard?metric=balance|earned', auth: true, description: '积分排行榜（余额 / 累计获得），带称号' },
+      shop: { method: 'GET', path: '/api/points/shop', auth: true, description: '积分商店（称号 / 表情包）与已购状态' },
+      buy: { method: 'POST', path: '/api/points/shop/:id/buy', auth: true, description: '花积分购买（称号首次购买自动佩戴）' },
+      equip: { method: 'POST', path: '/api/points/shop/:id/equip', auth: true, description: '佩戴称号；DELETE /api/points/equipped-title 取消佩戴' },
+    },
+    farm: {
+      note: '开心农场：需 games 总开关与 farm 子开关；初始 6 块地，用积分扩建至最多 18 块。',
+      view: { method: 'GET', path: '/api/farm', auth: true, description: '我的农场（地块 / 库存 / 作物目录 / 积分 / 偷菜额度）' },
+      create: { method: 'POST', path: '/api/farm/create', auth: true, description: '开荒并领取新手种子、肥料与开荒积分' },
+      buy: { method: 'POST', path: '/api/farm/shop', auth: true, description: '购买种子/肥料 { type:"seed"|"fertilizer", key, count }' },
+      plot: { method: 'POST', path: '/api/farm/plots/:index/plant|fertilize|harvest|clear', auth: true, description: '种植 / 施肥 / 收获 / 铲除' },
+      expand: { method: 'POST', path: '/api/farm/expand', auth: true, description: '花积分扩建农田（500 / 1500 / 3000 / 6000）' },
+      neighbors: { method: 'GET', path: '/api/farm/neighbors?q=', auth: true, description: '邻居农场（有可偷作物优先）' },
+      visit: { method: 'GET', path: '/api/farm/users/:id', auth: true, description: '访问他人农场' },
+      steal: { method: 'POST', path: '/api/farm/users/:id/steal/:index', auth: true, description: '偷菜（每日次数上限；同一茬每人一次；地主至少保留 1 单位）' },
     },
     chat: {
       note: '私信 / 群聊已迁移到独立 XMPP 服务（internet_neko）：消息与会话走 /api/chat/xmpp/*，浏览器经 /ws/xmpp 中继（不可用时降级 /api/chat/xmpp/http-* 长轮询）。好友关系仍以 LineWeb Prisma 为唯一真相源。',

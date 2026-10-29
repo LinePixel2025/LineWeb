@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { FeatureProvider } from './contexts/FeatureContext'
+import { PointsProvider } from './contexts/PointsContext'
 import { GameStatsProvider } from './contexts/GameStatsContext'
 import { ChatProvider } from './contexts/ChatContext'
 import { XmppChatProvider } from './contexts/XmppChatContext'
@@ -48,6 +49,8 @@ const XiangqiPage = lazy(() => import('./pages/games/XiangqiPage'))
 const XiangqiOnlinePage = lazy(() => import('./pages/games/XiangqiOnlinePage'))
 const ParkourPage = lazy(() => import('./pages/games/ParkourPage'))
 const ParkourOnlinePage = lazy(() => import('./pages/games/ParkourOnlinePage'))
+const FarmPage = lazy(() => import('./pages/games/FarmPage'))
+const PointsPage = lazy(() => import('./pages/PointsPage'))
 const DeepSeekChatPage = lazy(() => import('./pages/DeepSeekChatPage'))
 const WebProxyPage = lazy(() => import('./pages/WebProxyPage'))
 const WebProxyViewPage = lazy(() => import('./pages/WebProxyViewPage'))
@@ -69,6 +72,7 @@ const AppAdminPage = lazy(() => import('./pages/admin/AppAdminPage'))
 const ProxyAdminPage = lazy(() => import('./pages/admin/ProxyAdminPage'))
 const FeatureAdminPage = lazy(() => import('./pages/admin/FeatureAdminPage'))
 const AnnouncementAdminPage = lazy(() => import('./pages/admin/AnnouncementAdminPage'))
+const PointsAdminPage = lazy(() => import('./pages/admin/PointsAdminPage'))
 const AuthorizePage = lazy(() => import('./pages/AuthorizePage'))
 
 const queryClient = new QueryClient({
@@ -135,6 +139,7 @@ export default function App() {
       <AuthProvider>
         <AuthCacheReset />
         <FeatureProvider>
+        <PointsProvider>
         <GameStatsProvider>
         <ChatProvider>
         <XmppChatProvider>
@@ -164,6 +169,9 @@ export default function App() {
                       <Route element={<RequireFeature feature="games" />}>
                         <Route path="/games" element={<GamesPage />} />
                         <Route path="/games/leaderboard" element={<GameLeaderboardPage />} />
+                        <Route element={<RequireFeature feature="farm" />}>
+                          <Route path="/games/farm" element={<FarmPage />} />
+                        </Route>
                         <Route element={<RequireFeature feature="gamesSingle" />}>
                           <Route path="/games/2048" element={<Game2048Page />} />
                           <Route path="/games/doudizhu" element={<DoudizhuPage />} />
@@ -249,6 +257,9 @@ export default function App() {
                       <Route path="/profile" element={
                         <ProtectedRoute><ProfilePage /></ProtectedRoute>
                       } />
+                      <Route path="/points" element={
+                        <ProtectedRoute><PointsPage /></ProtectedRoute>
+                      } />
                       <Route element={<RequireFeature feature="drive" />}>
                         <Route path="/drive" element={
                           <ProtectedRoute><DrivePage /></ProtectedRoute>
@@ -298,6 +309,7 @@ export default function App() {
                     <Route path="/admin/users" element={<UserAdminPage />} />
                     <Route path="/admin/features" element={<FeatureAdminPage />} />
                     <Route path="/admin/announcements" element={<AnnouncementAdminPage />} />
+                    <Route path="/admin/points" element={<PointsAdminPage />} />
                     <Route path="/admin/api" element={<ApiDocsPage />} />
                     <Route path="/admin/devices" element={<DeviceMonitorPage />} />
                     <Route path="/admin/ai" element={<AiAdminPage />} />
@@ -321,6 +333,7 @@ export default function App() {
         </XmppChatProvider>
         </ChatProvider>
         </GameStatsProvider>
+        </PointsProvider>
         </FeatureProvider>
       </AuthProvider>
       </QueryClientProvider>

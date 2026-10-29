@@ -1,5 +1,7 @@
 import { useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { chatImageUrl } from '../../lib/chat'
+import { usePoints } from '../../contexts/PointsContext'
 import {
   STICKER_SHOP,
   STICKER_SHOP_PACKS,
@@ -22,6 +24,9 @@ interface Props {
 
 type Tab = 'mine' | 'shop'
 
+/** 需要积分商店解锁的表情包（与服务端 emoji_* 商品 key 对应） */
+const LOCKED_PACKS = ['nailong', 'felyne', 'twemoji'] as const
+
 /**
  * 表情包面板：两页签
  *   - 我的表情：neko 的个人表情包（收藏的聊天图片）
@@ -38,6 +43,7 @@ export default function ChatStickerPanel({
   onClose,
 }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const { ownedKeys } = usePoints()
   const [tab, setTab] = useState<Tab>('mine')
   const [uploading, setUploading] = useState(false)
   const [busyId, setBusyId] = useState<number | null>(null)
@@ -50,6 +56,9 @@ export default function ChatStickerPanel({
     () => (shopPack === 'all' ? STICKER_SHOP : STICKER_SHOP.filter((item) => item.pack === shopPack)),
     [shopPack],
   )
+
+  const isPackUnlocked = (pack: string) =>
+    !(LOCKED_PACKS as readonly string[]).includes(pack) || ownedKeys.includes(`emoji_${pack}`)
 
   if (!open) return null
 
@@ -82,6 +91,10 @@ export default function ChatStickerPanel({
 
   const handleSaveShopSticker = async (sticker: ShopSticker) => {
     if (savingShopId !== null) return
+    if (!isPackUnlocked(sticker.pack)) {
+      setShopNote('这套表情需要在积分商店解锁后使用。')
+      return
+    }
     setSavingShopId(sticker.id)
     setShopNote(null)
     try {
@@ -195,6 +208,7 @@ export default function ChatStickerPanel({
                 onClick={() => setShopPack(pack.id)}
               >
                 {pack.name}
+                {!isPackUnlocked(pack.id) && <span aria-label="需要积分解锁"> 🔒</span>}
               </button>
             ))}
           </div>
@@ -203,25 +217,32 @@ export default function ChatStickerPanel({
             {shopItems.map((sticker) => {
               const saved = savedIds.includes(sticker.id)
               const saving = savingShopId === sticker.id
+              const locked = !isPackUnlocked(sticker.pack)
               return (
-                <div key={sticker.id} className="gh-chat-sticker-shop-item">
+                <div key={sticker.id} className={`gh-chat-sticker-shop-item ${locked ? 'gh-chat-sticker-shop-item--locked' : ''}`}>
                   <img src={sticker.src} alt={sticker.name} loading="lazy" />
                   <span className="gh-chat-sticker-shop-name">{sticker.name}</span>
-                  <button
-                    type="button"
-                    className={`gh-chat-sticker-shop-save${saved ? ' gh-chat-sticker-shop-save--saved' : ''}`}
-                    disabled={saving || saved}
-                    onClick={() => void handleSaveShopSticker(sticker)}
-                  >
-                    {saving ? '保存中…' : saved ? '已保存' : '保存'}
-                  </button>
+                  {locked ? (
+                    <Link className="gh-chat-sticker-shop-save gh-chat-sticker-shop-save--lock" to="/points">
+                      积分解锁
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`gh-chat-sticker-shop-save${saved ? ' gh-chat-sticker-shop-save--saved' : ''}`}
+                      disabled={saving || saved}
+                      onClick={() => void handleSaveShopSticker(sticker)}
+                    >
+                      {saving ? '保存中…' : saved ? '已保存' : '保存'}
+                    </button>
+                  )}
                 </div>
               )
             })}
           </div>
           <p className="gh-chat-sticker-shop-note" role="status">
             {shopNote ??
-              '团子 / 橘猫 / 符号为站内原创；经典表情来自 Twemoji（CC-BY 4.0）；奶龙 / 呆猫抓取自公开表情图库（来源见各包目录 LICENSE.txt，仅供个人使用）。保存后即可在聊天中发送。'}
+              '团子 / 橘猫 / 符号为站内原创、免费使用；Twemoji（CC-BY 4.0）、奶龙、呆猫需在积分商店解锁（带 🔒）。保存后即可在聊天中发送。'}
           </p>
         </div>
       )}

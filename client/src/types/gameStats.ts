@@ -1,3 +1,5 @@
+import type { UserTitleDto } from './points'
+
 export type GameKey =
   | '2048'
   | 'doudizhu'
@@ -83,6 +85,8 @@ export interface LeaderboardEntry {
     bestTimeMs: number | null
     bestDistance: number
   }
+  /** 佩戴中的站内称号（无则 null） */
+  title: UserTitleDto | null
   isMe: boolean
 }
 

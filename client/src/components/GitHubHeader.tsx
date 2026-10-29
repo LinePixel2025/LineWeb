@@ -2,7 +2,9 @@ import { memo, useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
+import { usePoints } from '../contexts/PointsContext'
 import UserAvatar from './UserAvatar'
+import UserTitleBadge from './UserTitleBadge'
 
 interface Props {
   onMenuToggle: () => void
@@ -11,6 +13,7 @@ interface Props {
 export default memo(function GitHubHeader({ onMenuToggle }: Props) {
   const { user, hasAdminAccess, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
+  const { balance: pointsBalance, title: pointsTitle } = usePoints()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -69,23 +72,31 @@ export default memo(function GitHubHeader({ onMenuToggle }: Props) {
             {themeIcon}
           </button>
           {user ? (
-            <div ref={menuRef} style={{ position: 'relative' }}>
-              <button className="gh-header-user-btn" onClick={() => setUserMenuOpen(prev => !prev)} aria-expanded={userMenuOpen} aria-label="打开用户菜单">
-                <UserAvatar userId={user.id} username={user.username} size="sm" />
-                <span className="gh-hidden-mobile gh-header-username">{user.username}</span>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true" className="gh-hidden-mobile">
-                  <path d="M6 8.825a.75.75 0 0 1-.53-.22l-4-4a.75.75 0 0 1 1.06-1.06L6 6.939l3.47-3.47a.75.75 0 1 1 1.06 1.06l-4 4a.75.75 0 0 1-.53.22Z"/>
-                </svg>
-              </button>
-              {userMenuOpen && (
-                <div className="gh-popover" style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4 }}>
-                  <Link to="/profile" className="gh-popover-item" onClick={() => setUserMenuOpen(false)}>Profile</Link>
-                  {hasAdminAccess && <Link to="/admin" className="gh-popover-item" onClick={() => setUserMenuOpen(false)}>Admin</Link>}
-                  <div className="gh-popover-divider" />
-                  <button className="gh-popover-item" onClick={() => { setUserMenuOpen(false); logout() }}>Sign out</button>
-                </div>
-              )}
-            </div>
+            <>
+              <Link to="/points" className="gh-header-points" title="积分中心：游戏赚积分，兑换称号与表情包">
+                <span className="gh-header-points-icon" aria-hidden>🪙</span>
+                <span className="gh-header-points-value">{pointsBalance}</span>
+              </Link>
+              <div ref={menuRef} style={{ position: 'relative' }}>
+                <button className="gh-header-user-btn" onClick={() => setUserMenuOpen(prev => !prev)} aria-expanded={userMenuOpen} aria-label="打开用户菜单">
+                  <UserAvatar userId={user.id} username={user.username} size="sm" />
+                  <span className="gh-hidden-mobile gh-header-username">{user.username}</span>
+                  <UserTitleBadge title={pointsTitle} className="gh-hidden-mobile" />
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true" className="gh-hidden-mobile">
+                    <path d="M6 8.825a.75.75 0 0 1-.53-.22l-4-4a.75.75 0 0 1 1.06-1.06L6 6.939l3.47-3.47a.75.75 0 1 1 1.06 1.06l-4 4a.75.75 0 0 1-.53.22Z"/>
+                  </svg>
+                </button>
+                {userMenuOpen && (
+                  <div className="gh-popover" style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4 }}>
+                    <Link to="/profile" className="gh-popover-item" onClick={() => setUserMenuOpen(false)}>Profile</Link>
+                    <Link to="/points" className="gh-popover-item" onClick={() => setUserMenuOpen(false)}>积分中心</Link>
+                    {hasAdminAccess && <Link to="/admin" className="gh-popover-item" onClick={() => setUserMenuOpen(false)}>Admin</Link>}
+                    <div className="gh-popover-divider" />
+                    <button className="gh-popover-item" onClick={() => { setUserMenuOpen(false); logout() }}>Sign out</button>
+                  </div>
+                )}
+              </div>
+            </>
           ) : (
             <Link to="/login" className="gh-btn gh-btn--secondary gh-btn--sm">Sign in</Link>
           )}

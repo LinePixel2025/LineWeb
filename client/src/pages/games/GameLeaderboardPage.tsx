@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import UserAvatar from '../../components/UserAvatar'
+import UserTitleBadge from '../../components/UserTitleBadge'
 import { useFeature } from '../../contexts/FeatureContext'
 import { useLeaderboard } from '../../hooks/useLeaderboard'
 import {
@@ -18,6 +19,7 @@ function PodiumCard({ entry, data }: { entry: LeaderboardEntry; data: ReturnType
       <span className="gh-games-leaderboard-podium-rank">{entry.rank === 1 ? '👑' : entry.rank}</span>
       <UserAvatar userId={entry.userId} username={entry.username} size="lg" />
       <strong className="gh-games-leaderboard-podium-name">{entry.username}</strong>
+      <UserTitleBadge title={entry.title} />
       <span className="gh-games-leaderboard-podium-value">
         {formatLeaderboardValue(entry.value, data.unit)}
       </span>
@@ -154,6 +156,7 @@ export default function GameLeaderboardPage() {
                     <UserAvatar userId={entry.userId} username={entry.username} size="sm" />
                     <span className="gh-games-leaderboard-name">
                       {entry.username}
+                      <UserTitleBadge title={entry.title} />
                       {entry.isMe && <span className="gh-badge gh-badge--success">我</span>}
                     </span>
                     <span className="gh-games-leaderboard-secondary">{entrySecondaryText(data!, entry)}</span>

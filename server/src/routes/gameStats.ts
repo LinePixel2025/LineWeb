@@ -91,8 +91,8 @@ router.post(
   requireFeature('gamesSingle'),
   asyncHandler(async (req: Request, res: Response) => {
     const input = parseInput(soloResultSchema, req.body)
-    const stat = await recordSoloResult(currentUserId(req), input)
-    res.json({ stat })
+    // 返回 { stat, points }，前端据此刷新积分与战绩
+    res.json(await recordSoloResult(currentUserId(req), input))
   }),
 )
 

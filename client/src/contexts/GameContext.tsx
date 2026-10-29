@@ -13,6 +13,7 @@ import api from '../lib/api'
 import { GAME_POLL_INTERVALS } from '../lib/realtime'
 import { useAuth } from './AuthContext'
 import { useFeature } from './FeatureContext'
+import { usePoints } from './PointsContext'
 import { useChat } from './ChatContext'
 import type {
   AnyGameMatch,
@@ -132,6 +133,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const userId = user?.id ?? null
   const { connectionState, transport, subscribe } = useChat()
+  const pointsRefresh = usePoints().refresh
   const navigate = useNavigate()
   const location = useLocation()
   const pathnameRef = useRef(location.pathname)
@@ -264,13 +266,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
             startedMatchRef.current = null
             return null
           })
+          // 联机积分由服务端结算，稍等片刻再刷新，避免与结算写入竞态
+          window.setTimeout(() => { void pointsRefresh() }, 1500)
           break
         default:
           break
       }
     })
     return unsubscribe
-  }, [userId, gamesOnline, subscribe, acceptStartedMatch, goToMatch])
+  }, [userId, gamesOnline, subscribe, acceptStartedMatch, goToMatch, pointsRefresh])
 
   // 无 WebSocket（transport === 'polling'）时：presence 心跳 + 两个游戏的全量 sync
   useEffect(() => {

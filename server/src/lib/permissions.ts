@@ -23,6 +23,7 @@ export const CAPABILITIES = [
   'app:manage',       // 第三方应用授权管理（注册 / 停用 / 删除应用）
   'proxy:manage',     // 网页反代管理（黑名单 / 访问统计 / 排队赦免）
   'feature:manage',   // 站点功能开关管理（模块级全局开关）
+  'points:manage',    // 统一积分体系管理（规则、商店、用户调分）
 ] as const
 
 export type Capability = typeof CAPABILITIES[number]
