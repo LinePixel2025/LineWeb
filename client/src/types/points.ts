@@ -6,6 +6,24 @@ export interface UserTitleDto {
   icon: string
 }
 
+/** 每日签到状态 */
+export interface CheckinStatus {
+  checkedInToday: boolean
+  /** 当前连签天数（今日未签时为截至昨日仍有效的连签） */
+  streak: number
+  /** 今日已获得的签到积分（未签为 0） */
+  todayPoints: number
+  /** 下一次签到能拿多少 */
+  nextPoints: number
+}
+
+/** POST /api/points/checkin */
+export interface CheckinResult extends CheckinStatus {
+  awarded: number
+  balance: number
+  note: string
+}
+
 /** GET /api/points/me */
 export interface PointsProfile {
   balance: number
@@ -15,12 +33,7 @@ export interface PointsProfile {
   /** 已购商品 key（含表情包，客户端据此解锁表情商店） */
   ownedKeys: string[]
   avatarFrame: AvatarFrameDto | null
-  checkin: {
-    checkedInToday: boolean
-    streak: number
-    todayPoints: number
-    nextPoints: number
-  }
+  checkin: CheckinStatus
   leaderTitles: LeaderTitleDto[]
 }
 

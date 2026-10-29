@@ -5,6 +5,7 @@ import { usePoints } from '../contexts/PointsContext'
 import { useFeature } from '../contexts/FeatureContext'
 import api from '../lib/api'
 import type {
+  CheckinResult,
   PointsLeaderboardEntry,
   PointsLeaderboardMetric,
   PointsLeaderboardResponse,
@@ -31,6 +32,7 @@ const REASON_LABELS: Record<string, string> = {
   farm_merchant: '商人特价',
   farm_expand: '农田扩建',
   shop_purchase: '积分商店',
+  checkin: '每日签到',
   admin_adjust: '管理员调整',
 }
 
@@ -104,6 +106,11 @@ export default function PointsPage() {
       {error && <div className="gh-alert gh-alert--danger" role="alert">{error}</div>}
       {notice && <div className="gh-alert gh-alert--success" role="status">{notice}</div>}
 
+      <CheckinCard
+        onNotice={(message) => { setNotice(message); setError('') }}
+        onError={(message) => { setError(message); setNotice('') }}
+      />
+
       <div className="gh-tabnav">
         {([
           ['shop', '积分商店'],
@@ -131,6 +138,82 @@ export default function PointsPage() {
       {tab === 'leaderboard' && <LeaderboardTab />}
       {tab === 'ledger' && <LedgerTab />}
     </div>
+  )
+}
+
+/* ============================================================
+   每日签到
+   ============================================================ */
+
+/**
+ * 签到卡：显示连签天数与今日 / 明日奖励，点击签到后刷新全站积分。
+ * 已签到时按钮置灰，连签进度不受影响。
+ */
+function CheckinCard({
+  onNotice,
+  onError,
+}: {
+  onNotice: (message: string) => void
+  onError: (message: string) => void
+}) {
+  const { profile, refresh } = usePoints()
+  const [busy, setBusy] = useState(false)
+  const status = profile?.checkin
+
+  if (!status) return null
+
+  const claim = async () => {
+    if (busy || status.checkedInToday) return
+    setBusy(true)
+    try {
+      const result = await api.post<CheckinResult>('/points/checkin')
+      onNotice(`签到成功：${result.note}，获得 ${result.awarded} 积分`)
+      await refresh()
+    } catch (err) {
+      onError(err instanceof Error ? err.message : '签到失败，请稍后再试')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className={`gh-points-checkin ${status.checkedInToday ? 'gh-points-checkin--done' : ''}`}>
+      <div className="gh-points-checkin-main">
+        <span className="gh-points-checkin-icon" aria-hidden>📅</span>
+        <div className="gh-points-checkin-text">
+          <h2>每日签到</h2>
+          <p>
+            {status.checkedInToday
+              ? `今天已签到，连续签到 ${status.streak} 天`
+              : status.streak > 0
+                ? `已连续签到 ${status.streak} 天，今天签到可继续累积`
+                : '连续签到越久，每天拿到的积分越多'}
+          </p>
+        </div>
+      </div>
+      <div className="gh-points-checkin-stats">
+        <div className="gh-points-checkin-stat">
+          <span>连签</span>
+          <strong>{status.streak} 天</strong>
+        </div>
+        <div className="gh-points-checkin-stat">
+          <span>{status.checkedInToday ? '今日已得' : '今日可得'}</span>
+          <strong>{status.checkedInToday ? status.todayPoints : status.nextPoints}</strong>
+        </div>
+        <div className="gh-points-checkin-stat">
+          <span>明天可得</span>
+          <strong>{status.nextPoints}</strong>
+        </div>
+      </div>
+      <button
+        type="button"
+        className={`gh-btn gh-btn--md ${status.checkedInToday ? 'gh-btn--secondary' : 'gh-btn--primary'}`}
+        disabled={busy || status.checkedInToday}
+        onClick={() => void claim()}
+      >
+        {status.checkedInToday ? '今日已签到' : busy ? '签到中…' : `签到 +${status.nextPoints}`}
+      </button>
+    </section>
   )
 }
 

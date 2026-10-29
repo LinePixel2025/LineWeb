@@ -5,12 +5,16 @@ import {
   DEFAULT_POINTS_CONFIG,
   applyDailyCap,
   applyDailyLossCap,
+  checkinReward,
   computeGamePoints,
+  getTodayDateKey,
   getTodayDayStart,
+  getYesterdayDateKey,
   normalizePointsConfig,
   parseShopPayload,
   sanitizeTitleColor,
   sanitizeTitleIcon,
+  type CheckinRule,
   type PointsConfigDto,
 } from '../lib/pointsRules.js'
 import type { GameKey } from '../lib/gameStatsRules.js'
@@ -31,6 +35,24 @@ export interface UserTitleDto {
   icon: string
 }
 
+export interface CheckinStatusDto {
+  /** 今天是否已签到 */
+  checkedInToday: boolean
+  /** 当前连签天数（今日未签时为截至昨日仍有效的连签） */
+  streak: number
+  /** 今日签到获得的积分（未签为 0） */
+  todayPoints: number
+  /** 今天签到（或明天签到）能拿多少 */
+  nextPoints: number
+}
+
+export interface CheckinResultDto extends CheckinStatusDto {
+  /** 本次实际到账积分 */
+  awarded: number
+  balance: number
+  note: string
+}
+
 export interface PointsProfileDto {
   balance: number
   earned: number
@@ -38,6 +60,7 @@ export interface PointsProfileDto {
   title: UserTitleDto | null
   /** 已购商品 key（客户端用于解锁表情包） */
   ownedKeys: string[]
+  checkin: CheckinStatusDto
 }
 
 const DEFAULT_SHOP_SEED_FLAG = 'points.shop.seeded'
@@ -233,11 +256,99 @@ export async function listShop(userId: number) {
 }
 
 /* ============================================================
+   每日签到
+   ============================================================ */
+
+/**
+ * 计算签到状态（纯查询，不写库）。
+ *
+ * 连签口径：昨日有记录时，今日签到后的天数是「昨日连签 + 1」；
+ * 今日未签且昨日也断签时，本次签到从 1 重新开始。
+ */
+function buildCheckinStatus(
+  rule: CheckinRule,
+  todayRow: { streak: number; points: number } | null,
+  yesterdayRow: { streak: number } | null,
+): CheckinStatusDto {
+  if (todayRow) {
+    return {
+      checkedInToday: true,
+      streak: todayRow.streak,
+      todayPoints: todayRow.points,
+      nextPoints: checkinReward(todayRow.streak + 1, rule),
+    }
+  }
+  const streak = yesterdayRow?.streak ?? 0
+  return {
+    checkedInToday: false,
+    streak,
+    todayPoints: 0,
+    nextPoints: checkinReward(streak + 1, rule),
+  }
+}
+
+async function getCheckinStatus(
+  userId: number,
+  config?: PointsConfigDto,
+  now: number = Date.now(),
+): Promise<CheckinStatusDto> {
+  const rule = (config ?? await getPointsConfig()).checkin
+  const rows = await prisma.dailyCheckin.findMany({
+    where: { userId, dateKey: { in: [getTodayDateKey(now), getYesterdayDateKey(now)] } },
+    select: { dateKey: true, streak: true, points: true },
+  })
+  const today = getTodayDateKey(now)
+  const yesterday = getYesterdayDateKey(now)
+  return buildCheckinStatus(
+    rule,
+    rows.find((row) => row.dateKey === today) ?? null,
+    rows.find((row) => row.dateKey === yesterday) ?? null,
+  )
+}
+
+/** 每日签到：连签天数决定奖励，重复签到 409 */
+export async function checkin(userId: number, now: number = Date.now()): Promise<CheckinResultDto> {
+  const config = await getPointsConfig()
+  const rule = config.checkin
+  const today = getTodayDateKey(now)
+  const yesterday = getYesterdayDateKey(now)
+
+  return prisma.$transaction(async (tx) => {
+    const prev = await tx.dailyCheckin.findFirst({
+      where: { userId, dateKey: yesterday },
+      select: { streak: true },
+    })
+    const streak = (prev?.streak ?? 0) + 1
+    const amount = checkinReward(streak, rule)
+    const note = `连续签到 ${streak} 天`
+    try {
+      await tx.dailyCheckin.create({ data: { userId, dateKey: today, streak, points: amount } })
+    } catch (error) {
+      // 唯一键兜底：并发 / 重复提交时只允许一条当日记录
+      if ((error as { code?: string }).code === 'P2002') {
+        throw new AppError('今天已经签到过了', 409, 'CHECKIN_DONE')
+      }
+      throw error
+    }
+    const result = await awardPointsTx(tx, userId, { amount, reason: 'checkin', note })
+    return {
+      checkedInToday: true,
+      streak,
+      todayPoints: amount,
+      nextPoints: checkinReward(streak + 1, rule),
+      awarded: result.delta,
+      balance: result.balance,
+      note,
+    }
+  })
+}
+
+/* ============================================================
    余额 / 流水 / 排行榜
    ============================================================ */
 
 export async function getPointsProfile(userId: number): Promise<PointsProfileDto> {
-  const [user, owned] = await Promise.all([
+  const [user, owned, checkinStatus] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: { points: true, pointsEarned: true, equippedTitle: true },
@@ -246,6 +357,7 @@ export async function getPointsProfile(userId: number): Promise<PointsProfileDto
       where: { userId },
       select: { item: { select: { key: true } } },
     }),
+    getCheckinStatus(userId),
   ])
   if (!user) throw new AppError('用户不存在', 404)
   const rank = await prisma.user.count({
@@ -257,6 +369,7 @@ export async function getPointsProfile(userId: number): Promise<PointsProfileDto
     rank,
     title: toUserTitleDto(user.equippedTitle),
     ownedKeys: owned.map((row) => row.item.key),
+    checkin: checkinStatus,
   }
 }
 

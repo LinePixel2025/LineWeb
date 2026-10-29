@@ -7,15 +7,18 @@
 
 import { GAME_KEYS } from '../src/lib/gameStatsRules.js'
 import {
+  DEFAULT_CHECKIN_RULE,
   DEFAULT_FARM_RULE,
   DEFAULT_GAME_RULES,
   DEFAULT_POINTS_CONFIG,
   EMOJI_PACK_KEYS,
   applyDailyCap,
   applyDailyLossCap,
+  checkinReward,
   computeGamePoints,
   getTodayDateKey,
   getTodayDayStart,
+  getYesterdayDateKey,
   normalizePointsConfig,
   parseShopPayload,
   sanitizeTitleColor,
@@ -140,12 +143,48 @@ assertEqual(normalized.farm.merchantCount, DEFAULT_FARM_RULE.merchantCount, '缺
 const zeroed = normalizePointsConfig({
   games: { '2048': { dailyLossCap: 0 } },
   farm: { stealSuccessRate: 0, victimDailyStealLimit: 0, seedDropMax: 0, merchantCount: 0 },
+  checkin: { basePoints: 0, streakStep: 0, streakMaxBonus: 0 },
 })
 assertEqual(zeroed.games['2048'].dailyLossCap, 0, 'dailyLossCap 0 表示不限，保留 0')
 assertEqual(zeroed.farm.stealSuccessRate, 0, 'stealSuccessRate 0 保留（必失败）')
 assertEqual(zeroed.farm.victimDailyStealLimit, 0, 'victimDailyStealLimit 0 保留（不可被偷）')
 assertEqual(zeroed.farm.seedDropMax, 0, 'seedDropMax 0 保留（关闭掉落）')
 assertEqual(zeroed.farm.merchantCount, 0, 'merchantCount 0 保留（无商人）')
+assertEqual(zeroed.checkin, { basePoints: 0, streakStep: 0, streakMaxBonus: 0 }, '签到规则 0 全部保留')
+assertEqual(normalized.checkin, DEFAULT_CHECKIN_RULE, '缺失 checkin 回退默认规则')
+assertEqual(normalized.leaderTitle.rewardPoints, 50, '缺失 leaderTitle 回退默认奖励')
+
+/* ============================================================
+   每日签到
+   ============================================================ */
+
+assertEqual(
+  getYesterdayDateKey(Date.parse('2026-10-29T03:00:00Z')),
+  '2026-10-28',
+  '上海 10-29 的昨日是 10-28',
+)
+assertEqual(
+  getYesterdayDateKey(Date.parse('2026-10-28T16:30:00Z')),
+  '2026-10-28',
+  'UTC 16:30 = 上海 00:30，昨日仍是当天前一天',
+)
+assertEqual(checkinReward(1, DEFAULT_CHECKIN_RULE), 10, '首日签到 = 基础分')
+assertEqual(checkinReward(2, DEFAULT_CHECKIN_RULE), 15, '连签第 2 天 +5')
+assertEqual(checkinReward(5, DEFAULT_CHECKIN_RULE), 30, '连签第 5 天 +20')
+assertEqual(checkinReward(21, DEFAULT_CHECKIN_RULE), 110, '连签加成封顶 100')
+assertEqual(checkinReward(999, DEFAULT_CHECKIN_RULE), 110, '超长连签仍按封顶计算')
+assertEqual(checkinReward(0, DEFAULT_CHECKIN_RULE), 10, '非法连签按第 1 天计算')
+assertEqual(checkinReward(1.9, DEFAULT_CHECKIN_RULE), 10, '连签天数向下取整')
+assertEqual(
+  checkinReward(3, { basePoints: 10, streakStep: 5, streakMaxBonus: 0 }),
+  10,
+  'streakMaxBonus 0 表示没有连签加成',
+)
+assertEqual(
+  checkinReward(4, { basePoints: 0, streakStep: 0, streakMaxBonus: 100 }),
+  0,
+  '全 0 签到规则不会发分',
+)
 
 const discountOrder = normalizePointsConfig({ farm: { merchantDiscountMin: 0.9, merchantDiscountMax: 0.5 } })
 assert(discountOrder.farm.merchantDiscountMin <= discountOrder.farm.merchantDiscountMax, '商人折扣下限不大于上限')

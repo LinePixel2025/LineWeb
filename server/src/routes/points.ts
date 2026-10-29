@@ -6,6 +6,7 @@ import { AppError } from '../middleware/errorHandler.js'
 import { authenticate } from '../middleware/auth.js'
 import {
   buyShopItem,
+  checkin,
   getPointsLeaderboard,
   getPointsProfile,
   listPointsLedger,
@@ -24,6 +25,16 @@ const writeLimiter = rateLimit({
   keyGenerator: (req) => String(req.user?.userId ?? ipKeyGenerator(req.ip ?? '')),
   message: { error: '操作过于频繁，请稍后再试' },
   skip: (req) => req.user?.role === 'admin',
+})
+
+/** 签到一天只有一次，单独收紧限流（管理员同样不豁免，避免脚本空转） */
+const checkinLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => String(req.user?.userId ?? ipKeyGenerator(req.ip ?? '')),
+  message: { error: '签到过于频繁，请稍后再试' },
 })
 
 function currentUserId(req: Request): number {
@@ -57,6 +68,11 @@ const buySchema = z.object({}).passthrough().optional()
 // GET /api/points/me — 余额 / 排名 / 佩戴称号 / 已购商品 key
 router.get('/me', asyncHandler(async (req: Request, res: Response) => {
   res.json(await getPointsProfile(currentUserId(req)))
+}))
+
+// POST /api/points/checkin — 每日签到（重复签到 409 CHECKIN_DONE）
+router.post('/checkin', checkinLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await checkin(currentUserId(req)))
 }))
 
 // GET /api/points/ledger?limit=&page=

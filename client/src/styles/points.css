@@ -98,6 +98,34 @@
 .gh-points-loading { display: flex; justify-content: center; padding: 48px; }
 .gh-points-empty { padding: 32px; text-align: center; color: var(--gh-text-tertiary); }
 
+/* 每日签到 */
+.gh-points-checkin {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-4);
+  flex-wrap: wrap;
+  padding: var(--gh-space-4) var(--gh-space-5);
+  margin-bottom: var(--gh-space-4);
+  border: 1px solid color-mix(in srgb, var(--gh-success) 32%, var(--gh-border));
+  border-radius: var(--gh-radius-lg);
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--gh-success) 10%, transparent), transparent 62%),
+    var(--gh-canvas-subtle);
+}
+.gh-points-checkin--done {
+  border-color: var(--gh-border);
+  background: var(--gh-canvas-subtle);
+}
+.gh-points-checkin-main { display: flex; align-items: center; gap: var(--gh-space-3); flex: 1 1 240px; min-width: 0; }
+.gh-points-checkin-icon { font-size: 1.6rem; line-height: 1; }
+.gh-points-checkin-text h2 { margin: 0; font-size: var(--gh-text-base); }
+.gh-points-checkin-text p { margin: 4px 0 0; font-size: var(--gh-text-xs); color: var(--gh-text-secondary); }
+.gh-points-checkin-stats { display: flex; gap: var(--gh-space-4); flex-wrap: wrap; }
+.gh-points-checkin-stat { display: flex; flex-direction: column; gap: 2px; min-width: 64px; }
+.gh-points-checkin-stat span { font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
+.gh-points-checkin-stat strong { font-size: var(--gh-text-base); font-variant-numeric: tabular-nums; }
+.gh-points-checkin--done .gh-points-checkin-stat strong { color: var(--gh-text-secondary); }
+
 /* 商店 */
 .gh-points-shop-head {
   display: flex;
