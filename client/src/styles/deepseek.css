@@ -302,6 +302,19 @@
   color: var(--gh-accent);
 }
 
+/* 只有思考、没有正文时的提示（长思考耗尽输出预算） */
+.gh-ds-partial-note {
+  align-self: flex-start;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px dashed var(--gh-warning);
+  border-radius: var(--gh-radius);
+  background: var(--gh-warning-soft, rgba(154, 103, 0, 0.08));
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.6;
+}
+
 .gh-ds-reasoning-body {
   max-height: 260px;
   overflow-y: auto;

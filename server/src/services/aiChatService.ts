@@ -350,10 +350,12 @@ export async function streamAiChatReply(
     ]
 
     // === 调用上游（流式） ===
+    // 思考模式下思维链与正文共用输出预算：DeepSeek 推理模型的长思考很容易吃掉
+    // 4000 token 而正文为空；超时同理，120s 常在长思考中途把连接掐断。
     const client = new OpenAI({
       apiKey: config.apiKey,
       baseURL: config.baseUrl || undefined,
-      timeout: 120_000,
+      timeout: 600_000,
       maxRetries: 1,
     })
 
@@ -362,7 +364,7 @@ export async function streamAiChatReply(
     const upstreamBody = {
       model: config.model,
       messages,
-      max_tokens: 4000,
+      max_tokens: 8192,
       temperature: 0.7,
       stream: true,
       thinking: buildThinkingParam(thinking),
@@ -395,17 +397,20 @@ export async function streamAiChatReply(
 
     // === 落库 assistant 消息（无任何输出时不落） ===
     const text = fullText.trim()
-    if (!text) {
+    const reasoning = fullReasoning.trim()
+    if (!text && !reasoning) {
       handlers.onDone({ assistantMessageId: null, model: config.model, partial: aborted })
       return
     }
 
+    // 只有思考没有正文（多为输出预算被思维链耗尽）：照常落库，
+    // 前端展示思考过程并提示「未生成正文」，避免整段思考被静默丢弃。
     const assistant = await prisma.aiMessage.create({
       data: {
         conversationId,
         role: 'assistant',
         content: text,
-        reasoningContent: fullReasoning.trim() || null,
+        reasoningContent: reasoning || null,
         model: config.model,
       },
     })

@@ -142,6 +142,8 @@ export default function DeepSeekChatPage() {
   const abortRef = useRef<AbortController | null>(null)
   const streamTextRef = useRef('')
   const streamReasoningRef = useRef('')
+  /** 增量渲染节流：长思考逐 token setState 会让页面卡死，这里合并为 ~80ms 一次 */
+  const streamFlushTimerRef = useRef<number | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
@@ -189,6 +191,22 @@ export default function DeepSeekChatPage() {
         setHasMore(page.hasMore)
       })
       .catch(() => {})
+  }, [])
+
+  const scheduleStreamFlush = useCallback(() => {
+    if (streamFlushTimerRef.current !== null) return
+    streamFlushTimerRef.current = window.setTimeout(() => {
+      streamFlushTimerRef.current = null
+      setStreamReasoning(streamReasoningRef.current)
+      setStreamText(streamTextRef.current)
+    }, 80)
+  }, [])
+
+  useEffect(() => () => {
+    if (streamFlushTimerRef.current !== null) {
+      window.clearTimeout(streamFlushTimerRef.current)
+      streamFlushTimerRef.current = null
+    }
   }, [])
 
   /** 更新额度缓存（流式 meta / 429 响应都会携带最新剩余） */
@@ -267,22 +285,25 @@ export default function DeepSeekChatPage() {
             // 思考内容开始即视为有输出，替换"正在思考"点点点
             setStreamWaiting(false)
             streamReasoningRef.current += delta
-            setStreamReasoning(streamReasoningRef.current)
+            scheduleStreamFlush()
           },
           onDelta: (delta) => {
             setStreamWaiting(false)
             streamTextRef.current += delta
-            setStreamText(streamTextRef.current)
+            scheduleStreamFlush()
           },
           onDone: (done) => {
             completed = true
             const text = streamTextRef.current.trim()
-            if (text) {
+            const reasoning = streamReasoningRef.current.trim()
+            if (text || (reasoning && done.assistantMessageId !== null)) {
+              // 只有思考没有正文时服务端也会落库（长思考耗尽输出预算），
+              // 这里一并收进消息列表，由气泡内提示「未生成正文」。
               setMessages(prev => [...prev, {
                 id: done.assistantMessageId ?? -Date.now(),
                 role: 'assistant',
                 content: text,
-                reasoningContent: streamReasoningRef.current.trim() || null,
+                reasoningContent: reasoning || null,
                 model: done.model,
                 createdAt: new Date().toISOString(),
                 images: [],
@@ -300,6 +321,7 @@ export default function DeepSeekChatPage() {
           onError: (message) => {
             setError(message)
             setStreamText('')
+            setStreamReasoning('')
             setStreamWaiting(false)
           },
         },
@@ -324,6 +346,10 @@ export default function DeepSeekChatPage() {
       setMessages(prev => prev.filter(m => m.id !== optimisticId))
     } finally {
       abortRef.current = null
+      if (streamFlushTimerRef.current !== null) {
+        window.clearTimeout(streamFlushTimerRef.current)
+        streamFlushTimerRef.current = null
+      }
       setStreaming(false)
       setStreamText('')
       setStreamReasoning('')
@@ -468,13 +494,17 @@ export default function DeepSeekChatPage() {
         {message.role === 'assistant' && message.reasoningContent && (
           <ReasoningBlock text={message.reasoningContent} />
         )}
-        {(message.content || message.images.length === 0) && (
+        {message.content ? (
           <div className="gh-ai-bubble">
             {message.role === 'assistant'
               ? <div dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }} />
               : message.content}
           </div>
-        )}
+        ) : message.role === 'assistant' && message.reasoningContent ? (
+          <p className="gh-ds-partial-note">
+            本轮只生成了思考过程，正文未能输出（长思考会占用输出预算）。可以重试，或关闭「深度思考」后再问一次。
+          </p>
+        ) : null}
       </div>
     </div>
   )

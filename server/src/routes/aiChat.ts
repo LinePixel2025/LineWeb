@@ -372,6 +372,14 @@ router.post('/messages', aiChatWriteLimiter, asyncHandler(async (req: Request, r
   let clientGone = false
   res.on('close', () => { clientGone = true })
 
+  // 长思考期间上游可能几十秒没有增量：定期发 SSE 注释帧，避免 Cloudflare / nginx
+  // 把空闲连接当成超时断开（前端解析器会忽略不以 data: 开头的帧）。
+  const keepAlive = setInterval(() => {
+    if (!clientGone && !res.writableEnded) res.write(': ping\n\n')
+  }, 15_000)
+  const stopKeepAlive = () => clearInterval(keepAlive)
+  res.on('close', stopKeepAlive)
+
   // 本条消息此刻已计入配额：剩余 = 发送前剩余 - 1（不限次为 null）
   const remainingAfter = usage.unlimited ? null : Math.max((usage.remaining ?? 0) - 1, 0)
 
@@ -406,6 +414,7 @@ router.post('/messages', aiChatWriteLimiter, asyncHandler(async (req: Request, r
         if (!clientGone) send({ search: event })
       },
       onDone: (result) => {
+        stopKeepAlive()
         if (clientGone) return
         send({
           done: true,
@@ -419,6 +428,7 @@ router.post('/messages', aiChatWriteLimiter, asyncHandler(async (req: Request, r
         res.end()
       },
       onError: (message) => {
+        stopKeepAlive()
         if (clientGone) return
         // 上游失败已由服务层退还配额（counted=false），剩余次数与发送前一致
         send({ error: message })
