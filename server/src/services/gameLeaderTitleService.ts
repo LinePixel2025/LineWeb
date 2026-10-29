@@ -74,6 +74,13 @@ export async function recomputeLeaderTitle(
   const dayStart = getTodayDayStart(options?.now)
 
   await prisma.$transaction(async (tx) => {
+    // 称号转给新榜一：原佩戴者的佩戴关系必须清掉，避免继续显示别人的称号
+    if (current) {
+      await tx.user.updateMany({
+        where: { equippedLeaderTitleId: current.id },
+        data: { equippedLeaderTitleId: null },
+      })
+    }
     await tx.gameLeaderTitle.upsert({
       where: { game },
       create: { game, userId: top.userId },

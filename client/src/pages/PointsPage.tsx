@@ -7,6 +7,7 @@ import { useFeature } from '../contexts/FeatureContext'
 import api from '../lib/api'
 import type {
   CheckinResult,
+  LeaderTitleDto,
   PointsLeaderboardEntry,
   PointsLeaderboardMetric,
   PointsLeaderboardResponse,
@@ -109,10 +110,10 @@ export default function PointsPage() {
             <span>累计获得 {profile?.earned ?? 0}</span>
             <span>全站第 {profile?.rank ?? '—'} 名</span>
           </div>
-          {profile?.title && (
+          {(profile?.title || profile?.equippedLeaderTitle) && (
             <div className="gh-points-hero-title-badge">
               <span className="gh-text-tertiary">当前称号</span>
-              <UserTitleBadge title={profile.title} size="md" />
+              <UserTitleBadge title={profile.title ?? profile.equippedLeaderTitle} size="md" />
             </div>
           )}
           {profile?.avatarFrame && (
@@ -158,6 +159,8 @@ export default function PointsPage() {
       {tab === 'shop' && (
         <ShopTab
           profileTitleId={profile?.title?.id ?? null}
+          leaderTitles={profile?.leaderTitles ?? []}
+          equippedLeaderTitleId={profile?.equippedLeaderTitle?.id ?? null}
           onNotice={(message) => { setNotice(message); setError(''); void refresh() }}
           onError={(message) => { setError(message); setNotice('') }}
         />
@@ -250,10 +253,14 @@ function CheckinCard({
 
 function ShopTab({
   profileTitleId,
+  leaderTitles,
+  equippedLeaderTitleId,
   onNotice,
   onError,
 }: {
   profileTitleId: number | null
+  leaderTitles: LeaderTitleDto[]
+  equippedLeaderTitleId: number | null
   onNotice: (message: string) => void
   onError: (message: string) => void
 }) {
@@ -335,6 +342,20 @@ function ShopTab({
     }
   }
 
+  const equipLeader = async (item: LeaderTitleDto) => {
+    if (busyId !== null) return
+    setBusyId(item.id)
+    try {
+      await api.post(`/points/leader-titles/${item.id}/equip`)
+      onNotice(`已佩戴传说称号「${item.name}」`)
+      await load()
+    } catch (err) {
+      onError(err instanceof Error ? err.message : '佩戴失败')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   const unequipFrame = async () => {
     if (busyId !== null) return
     setBusyId(-1)
@@ -402,7 +423,7 @@ function ShopTab({
                     {RARITY_LABELS[item.rarity] ?? item.rarity}
                   </span>
                 </div>
-                <h3 className="gh-points-shop-card-name">
+                <h3 className={`gh-points-shop-card-name ${item.type === 'title' && item.rarity === 'legendary' ? 'gh-points-shop-name--legendary' : ''}`}>
                   {item.type === 'title' ? (
                     <span style={{ color: typeof item.payload.color === 'string' ? item.payload.color : undefined }}>
                       {item.name}
@@ -451,7 +472,7 @@ function ShopTab({
         <section className="gh-box gh-points-titles">
           <div className="gh-points-titles-head">
             <h2>我的称号</h2>
-            {profileTitleId !== null && (
+            {(profileTitleId !== null || equippedLeaderTitleId !== null) && (
               <button
                 type="button"
                 className="gh-btn gh-btn--ghost gh-btn--sm"
@@ -471,6 +492,7 @@ function ShopTab({
                     name: item.name,
                     color: typeof item.payload.color === 'string' ? item.payload.color : '#57606a',
                     icon: typeof item.payload.icon === 'string' ? item.payload.icon : '',
+                    rarity: item.rarity,
                   }}
                   size="md"
                 />
@@ -482,6 +504,46 @@ function ShopTab({
                     className="gh-btn gh-btn--secondary gh-btn--sm"
                     disabled={busyId !== null}
                     onClick={() => void equip(item)}
+                  >
+                    佩戴
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {leaderTitles.length > 0 && (
+        <section className="gh-box gh-points-titles">
+          <div className="gh-points-titles-head">
+            <h2>榜一传说称号</h2>
+            {equippedLeaderTitleId !== null && (
+              <button
+                type="button"
+                className="gh-btn gh-btn--ghost gh-btn--sm"
+                disabled={busyId !== null}
+                onClick={() => void unequipTitle()}
+              >
+                取消佩戴
+              </button>
+            )}
+          </div>
+          <p className="gh-text-tertiary" style={{ fontSize: '0.78rem', margin: '0 0 10px' }}>
+            单机排行榜第一名自动获得，被超越后自动消失；佩戴后会显示在顶栏、聊天与排行榜。
+          </p>
+          <div className="gh-points-titles-list">
+            {leaderTitles.map((item) => (
+              <div key={item.id} className={`gh-points-title-row ${equippedLeaderTitleId === item.id ? 'gh-points-title-row--active' : ''}`}>
+                <UserTitleBadge title={item} size="md" />
+                {equippedLeaderTitleId === item.id ? (
+                  <span className="gh-badge gh-badge--success">佩戴中</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="gh-btn gh-btn--secondary gh-btn--sm"
+                    disabled={busyId !== null}
+                    onClick={() => void equipLeader(item)}
                   >
                     佩戴
                   </button>

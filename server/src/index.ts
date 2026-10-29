@@ -341,7 +341,7 @@ app.get('/api', (_req, res) => {
       leaderboard: { method: 'GET', path: '/api/points/leaderboard?metric=balance|earned', auth: true, description: '积分排行榜（余额 / 累计获得），带称号' },
       shop: { method: 'GET', path: '/api/points/shop', auth: true, description: '积分商店（称号 / 表情包）与已购状态' },
       buy: { method: 'POST', path: '/api/points/shop/:id/buy', auth: true, description: '花积分购买（称号首次购买自动佩戴）' },
-      equip: { method: 'POST', path: '/api/points/shop/:id/equip', auth: true, description: '佩戴称号；DELETE /api/points/equipped-title 取消佩戴' },
+      equip: { method: 'POST', path: '/api/points/shop/:id/equip', auth: true, description: '佩戴商店称号；POST /api/points/leader-titles/:id/equip 佩戴单机榜一传说称号；DELETE /api/points/equipped-title 取消佩戴（清空两者）' },
     },
     farm: {
       note: '开心农场：需 games 总开关与 farm 子开关；初始 6 块地，用积分扩建至最多 18 块。',

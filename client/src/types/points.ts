@@ -4,6 +4,8 @@ export interface UserTitleDto {
   name: string
   color: string
   icon: string
+  /** 商品稀有度：legendary 会触发炸裂特效 */
+  rarity: string
 }
 
 /** 每日签到状态 */
@@ -32,6 +34,8 @@ export interface PointsProfile {
   earned: number
   rank: number
   title: UserTitleDto | null
+  /** 当前佩戴的单机榜一传说称号（与商店称号互斥） */
+  equippedLeaderTitle: LeaderTitleDto | null
   /** 已购商品 key（含表情包，客户端据此解锁表情商店） */
   ownedKeys: string[]
   avatarFrame: AvatarFrameDto | null
@@ -41,6 +45,8 @@ export interface PointsProfile {
 
 /** 单机榜一传说称号（自动授予，被超过即消失） */
 export interface LeaderTitleDto {
+  /** game_leader_titles 行 id（佩戴接口使用） */
+  id: number
   game: string
   gameName: string
   name: string
@@ -83,6 +89,8 @@ export interface ShopResponse {
   earned: number
   equippedTitleId: number | null
   equippedAvatarFrameId: number | null
+  /** 当前佩戴的榜一传说称号 ID（与商店称号互斥） */
+  equippedLeaderTitleId: number | null
   items: ShopItem[]
 }
 

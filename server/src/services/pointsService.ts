@@ -20,7 +20,11 @@ import {
   type PointsConfigDto,
 } from '../lib/pointsRules.js'
 import type { GameKey } from '../lib/gameStatsRules.js'
-import { leaderTitleDto, type LeaderTitleDto } from '../lib/gameLeaderTitles.js'
+import {
+  leaderTitleAsTitleDto,
+  leaderTitleDto,
+  type LeaderTitleDto,
+} from '../lib/gameLeaderTitles.js'
 
 type Db = Prisma.TransactionClient
 
@@ -36,6 +40,8 @@ export interface UserTitleDto {
   name: string
   color: string
   icon: string
+  /** 商品稀有度：legendary 在客户端触发炸裂特效 */
+  rarity: string
 }
 
 /** 头像框（只在 LineWeb 站内展示，不同步 neko） */
@@ -71,6 +77,8 @@ export interface PointsProfileDto {
   earned: number
   rank: number
   title: UserTitleDto | null
+  /** 当前佩戴的单机榜一传说称号（与商店称号互斥） */
+  equippedLeaderTitle: LeaderTitleDto | null
   avatarFrame: UserAvatarFrameDto | null
   /** 已购商品 key（客户端用于解锁表情包） */
   ownedKeys: string[]
@@ -211,7 +219,7 @@ async function seedShopItems(flag: string, items: readonly DefaultShopItem[]): P
   })
 }
 
-export function toUserTitleDto(item: { id: number; type: string; name: string; payload: string | null } | null): UserTitleDto | null {
+export function toUserTitleDto(item: { id: number; type: string; name: string; payload: string | null; rarity: string } | null): UserTitleDto | null {
   if (!item || item.type !== 'title') return null
   const payload = parseShopPayload(item.payload)
   return {
@@ -219,7 +227,26 @@ export function toUserTitleDto(item: { id: number; type: string; name: string; p
     name: item.name,
     color: sanitizeTitleColor(payload.color),
     icon: sanitizeTitleIcon(payload.icon),
+    rarity: item.rarity,
   }
+}
+
+interface TitleOwnerRow {
+  id: number
+  equippedTitle: { id: number; type: string; name: string; payload: string | null; rarity: string } | null
+  equippedLeaderTitle: { id: number; game: string; userId: number } | null
+}
+
+/**
+ * 用户「当前生效的站内称号」：商店佩戴称号优先，其次佩戴的榜一传说称号。
+ * 榜一称号被系统转给他人后（equippedLeaderTitle.userId 不再是本人）自动忽略。
+ */
+export function effectiveTitleDto(row: TitleOwnerRow): UserTitleDto | null {
+  const shop = toUserTitleDto(row.equippedTitle)
+  if (shop) return shop
+  const leader = row.equippedLeaderTitle
+  if (leader && leader.userId === row.id) return leaderTitleAsTitleDto(leader)
+  return null
 }
 
 /** 商品的 payload.frame 必须命中白名单，否则当作「不是头像框」 */
@@ -250,15 +277,19 @@ export async function getTitleMapForLineWebIds(
   const unique = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))]
   if (unique.length === 0) return new Map()
   const rows = await prisma.user.findMany({
-    where: { id: { in: unique }, equippedTitleId: { not: null } },
+    where: {
+      id: { in: unique },
+      OR: [{ equippedTitleId: { not: null } }, { equippedLeaderTitleId: { not: null } }],
+    },
     select: {
       id: true,
-      equippedTitle: { select: { id: true, type: true, name: true, payload: true } },
+      equippedTitle: { select: { id: true, type: true, name: true, payload: true, rarity: true } },
+      equippedLeaderTitle: { select: { id: true, game: true, userId: true } },
     },
   })
   const map = new Map<number, UserTitleDto>()
   for (const row of rows) {
-    const title = toUserTitleDto(row.equippedTitle)
+    const title = effectiveTitleDto(row)
     if (title) map.set(row.id, title)
   }
   return map
@@ -297,7 +328,13 @@ export async function listShop(userId: number) {
     prisma.userPointsItem.findMany({ where: { userId }, select: { itemId: true } }),
     prisma.user.findUnique({
       where: { id: userId },
-      select: { points: true, pointsEarned: true, equippedTitleId: true, equippedAvatarFrameId: true },
+      select: {
+        points: true,
+        pointsEarned: true,
+        equippedTitleId: true,
+        equippedAvatarFrameId: true,
+        equippedLeaderTitleId: true,
+      },
     }),
   ])
   const ownedIds = new Set(owned.map((row) => row.itemId))
@@ -310,6 +347,7 @@ export async function listShop(userId: number) {
     earned: user?.pointsEarned ?? 0,
     equippedTitleId: equipped.titleId,
     equippedAvatarFrameId: equipped.frameId,
+    equippedLeaderTitleId: user?.equippedLeaderTitleId ?? null,
     items: items.map((item) => itemDto(item, ownedIds, equipped)),
   }
 }
@@ -410,7 +448,13 @@ export async function getPointsProfile(userId: number): Promise<PointsProfileDto
   const [user, owned, checkinStatus, leaderRows] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { points: true, pointsEarned: true, equippedTitle: true, equippedAvatarFrame: true },
+      select: {
+        points: true,
+        pointsEarned: true,
+        equippedTitle: true,
+        equippedAvatarFrame: true,
+        equippedLeaderTitle: { select: { id: true, game: true, userId: true, awardedAt: true } },
+      },
     }),
     prisma.userPointsItem.findMany({
       where: { userId },
@@ -433,6 +477,9 @@ export async function getPointsProfile(userId: number): Promise<PointsProfileDto
     earned: user.pointsEarned,
     rank,
     title: toUserTitleDto(user.equippedTitle),
+    equippedLeaderTitle: user.equippedLeaderTitle && user.equippedLeaderTitle.userId === userId
+      ? leaderTitleDto(user.equippedLeaderTitle)
+      : null,
     avatarFrame: toUserAvatarFrameDto(user.equippedAvatarFrame),
     ownedKeys: owned.map((row) => row.item.key),
     checkin: checkinStatus,
@@ -485,6 +532,7 @@ export async function getPointsLeaderboard(params: {
         pointsEarned: true,
         equippedTitle: true,
         equippedAvatarFrame: true,
+        equippedLeaderTitle: { select: { id: true, game: true, userId: true } },
       },
     }),
     prisma.user.findUnique({
@@ -496,6 +544,7 @@ export async function getPointsLeaderboard(params: {
         pointsEarned: true,
         equippedTitle: true,
         equippedAvatarFrame: true,
+        equippedLeaderTitle: { select: { id: true, game: true, userId: true } },
       },
     }),
   ])
@@ -507,7 +556,7 @@ export async function getPointsLeaderboard(params: {
     value: metric === 'pointsEarned' ? row.pointsEarned : row.points,
     balance: row.points,
     earned: row.pointsEarned,
-    title: toUserTitleDto(row.equippedTitle),
+    title: effectiveTitleDto({ id: row.id, equippedTitle: row.equippedTitle, equippedLeaderTitle: row.equippedLeaderTitle }),
     avatarFrame: toUserAvatarFrameDto(row.equippedAvatarFrame),
     isMe: row.id === params.userId,
   })
@@ -682,11 +731,17 @@ export async function buyShopItem(userId: number, itemId: number) {
     let equippedTitleId: number | null = null
     let avatarFrame: UserAvatarFrameDto | null = null
     if (item.type === 'title') {
-      const user = await tx.user.findUnique({ where: { id: userId }, select: { equippedTitleId: true } })
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { equippedTitleId: true, equippedLeaderTitleId: true },
+      })
       equippedTitleId = user?.equippedTitleId ?? null
-      // 还没有称号时自动佩戴第一个，避免买完看不到效果
+      // 还没有商店称号时自动佩戴第一个，避免买完看不到效果（同时让传说称号让位）
       if (!equippedTitleId) {
-        await tx.user.update({ where: { id: userId }, data: { equippedTitleId: item.id } })
+        await tx.user.update({
+          where: { id: userId },
+          data: { equippedTitleId: item.id, equippedLeaderTitleId: null },
+        })
         equippedTitleId = item.id
       }
     } else if (item.type === 'avatar_frame') {
@@ -711,7 +766,11 @@ export async function buyShopItem(userId: number, itemId: number) {
 export async function setEquippedTitle(userId: number, itemId: number | null) {
   return prisma.$transaction(async (tx) => {
     if (itemId === null) {
-      await tx.user.update({ where: { id: userId }, data: { equippedTitleId: null } })
+      // 「取消佩戴」同时清掉商店称号与榜一传说称号，保证同一时间只有一个生效称号
+      await tx.user.update({
+        where: { id: userId },
+        data: { equippedTitleId: null, equippedLeaderTitleId: null },
+      })
       return { title: null }
     }
     const owned = await tx.userPointsItem.findUnique({
@@ -720,8 +779,32 @@ export async function setEquippedTitle(userId: number, itemId: number | null) {
     })
     if (!owned) throw new AppError('尚未拥有该称号', 400)
     if (owned.item.type !== 'title') throw new AppError('该商品不是称号', 400)
-    await tx.user.update({ where: { id: userId }, data: { equippedTitleId: itemId } })
+    await tx.user.update({
+      where: { id: userId },
+      data: { equippedTitleId: itemId, equippedLeaderTitleId: null },
+    })
     return { title: toUserTitleDto(owned.item) }
+  })
+}
+
+/**
+ * 佩戴 / 卸下当前持有的单机榜一传说称号。
+ * 与商店称号互斥：佩戴传说称号会清掉商店称号，反之亦然。
+ * 称号被其他玩家抢走后（GameLeaderTitle.userId 变更）佩戴关系会被清空。
+ */
+export async function setEquippedLeaderTitle(userId: number, leaderTitleId: number | null) {
+  return prisma.$transaction(async (tx) => {
+    if (leaderTitleId === null) {
+      await tx.user.update({ where: { id: userId }, data: { equippedLeaderTitleId: null } })
+      return { equippedLeaderTitle: null }
+    }
+    const row = await tx.gameLeaderTitle.findUnique({ where: { id: leaderTitleId } })
+    if (!row || row.userId !== userId) throw new AppError('你当前没有该传说称号', 400)
+    await tx.user.update({
+      where: { id: userId },
+      data: { equippedLeaderTitleId: row.id, equippedTitleId: null },
+    })
+    return { equippedLeaderTitle: leaderTitleDto(row) }
   })
 }
 

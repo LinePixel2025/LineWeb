@@ -13,9 +13,9 @@ interface Props {
 export default memo(function GitHubHeader({ onMenuToggle }: Props) {
   const { user, hasAdminAccess, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
-  const { balance: pointsBalance, title: pointsTitle, leaderTitles } = usePoints()
-  // 没有佩戴称号时，用首个传说称号（单机榜一）兜底展示
-  const headerTitle = pointsTitle ?? leaderTitles[0] ?? null
+  const { balance: pointsBalance, title: pointsTitle, equippedLeaderTitle, leaderTitles } = usePoints()
+  // 佩戴的称号优先；都没有时用首个传说称号（单机榜一）兜底展示
+  const headerTitle = pointsTitle ?? equippedLeaderTitle ?? leaderTitles[0] ?? null
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 

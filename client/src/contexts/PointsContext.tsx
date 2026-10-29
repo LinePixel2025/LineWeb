@@ -19,6 +19,8 @@ interface PointsContextValue {
   enabled: boolean
   balance: number
   title: UserTitleDto | null
+  /** 当前佩戴的榜一传说称号 */
+  equippedLeaderTitle: LeaderTitleDto | null
   /** 当前持有的单机榜一传说称号 */
   leaderTitles: LeaderTitleDto[]
   /** 已购表情包 / 称号 key，用于表情商店解锁判断 */
@@ -83,6 +85,7 @@ export function PointsProvider({ children }: { children: ReactNode }) {
     enabled,
     balance: profile?.balance ?? 0,
     title: profile?.title ?? null,
+    equippedLeaderTitle: profile?.equippedLeaderTitle ?? null,
     leaderTitles: profile?.leaderTitles ?? [],
     ownedKeys: profile?.ownedKeys ?? [],
     refresh,

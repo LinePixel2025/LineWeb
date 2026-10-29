@@ -12,6 +12,7 @@ import {
   listPointsLedger,
   listShop,
   setEquippedAvatarFrame,
+  setEquippedLeaderTitle,
   setEquippedTitle,
 } from '../services/pointsService.js'
 
@@ -108,9 +109,18 @@ router.post('/shop/:id/equip', writeLimiter, asyncHandler(async (req: Request, r
   res.json(await setEquippedTitle(currentUserId(req), itemId))
 }))
 
-// DELETE /api/points/equipped-title — 取消佩戴
+// DELETE /api/points/equipped-title — 取消佩戴（商店称号 + 榜一传说称号一起清空）
 router.delete('/equipped-title', writeLimiter, asyncHandler(async (req: Request, res: Response) => {
-  res.json(await setEquippedTitle(currentUserId(req), null))
+  const result = await setEquippedTitle(currentUserId(req), null)
+  await setEquippedLeaderTitle(currentUserId(req), null)
+  res.json(result)
+}))
+
+// POST /api/points/leader-titles/:id/equip — 佩戴当前持有的单机榜一传说称号
+router.post('/leader-titles/:id/equip', writeLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const leaderTitleId = Number(req.params.id)
+  if (!Number.isInteger(leaderTitleId) || leaderTitleId <= 0) throw new AppError('无效的称号 ID', 400)
+  res.json(await setEquippedLeaderTitle(currentUserId(req), leaderTitleId))
 }))
 
 // POST /api/points/shop/:id/equip-frame — 佩戴头像框

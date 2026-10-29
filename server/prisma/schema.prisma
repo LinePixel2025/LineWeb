@@ -49,6 +49,8 @@ model User {
   equippedTitle          PointsShopItem?      @relation("UserEquippedTitle", fields: [equippedTitleId], references: [id], onDelete: SetNull)
   equippedAvatarFrameId  Int?                 @map("equipped_avatar_frame_id") // 当前佩戴的头像框（仅 LineWeb 站内展示，不同步 neko）
   equippedAvatarFrame    PointsShopItem?      @relation("UserEquippedAvatarFrame", fields: [equippedAvatarFrameId], references: [id], onDelete: SetNull)
+  equippedLeaderTitleId  Int?                 @map("equipped_leader_title_id") // 当前佩戴的单机榜一传说称号（与商店称号互斥）
+  equippedLeaderTitle    GameLeaderTitle?     @relation("UserEquippedLeaderTitle", fields: [equippedLeaderTitleId], references: [id], onDelete: SetNull)
   pointsLedger           PointsLedger[]
   pointsItems            UserPointsItem[]
   checkins               DailyCheckin[]
@@ -791,12 +793,13 @@ model DailyCheckin {
  * 单机排行榜第一位（每个游戏至多一行）；被超过时整行改挂新用户或删除
  */
 model GameLeaderTitle {
-  id        Int      @id @default(autoincrement())
-  game      String   @unique
-  userId    Int      @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  awardedAt DateTime @default(now()) @map("awarded_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id                Int      @id @default(autoincrement())
+  game              String   @unique
+  userId            Int      @map("user_id")
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  awardedAt         DateTime @default(now()) @map("awarded_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  equippedByUsers   User[]   @relation("UserEquippedLeaderTitle")
 
   @@index([userId])
   @@map("game_leader_titles")

@@ -19,7 +19,7 @@ import {
   type LeaderboardMetric,
 } from '../lib/gameLeaderboard.js'
 import type { GameEndResult } from './gameStatsHooks.js'
-import { awardGamePointsTx, getPointsConfig, toUserTitleDto } from './pointsService.js'
+import { awardGamePointsTx, effectiveTitleDto, getPointsConfig } from './pointsService.js'
 import { leaderTitleDto } from '../lib/gameLeaderTitles.js'
 import { scheduleLeaderRecompute } from './gameLeaderTitleService.js'
 
@@ -210,7 +210,8 @@ export async function recordOnlineMatchResult(payload: GameEndResult): Promise<v
 type LeaderboardRow = StatRow & {
   user: {
     username: string
-    equippedTitle: { id: number; type: string; name: string; payload: string | null } | null
+    equippedTitle: { id: number; type: string; name: string; payload: string | null; rarity: string } | null
+    equippedLeaderTitle: { id: number; game: string; userId: number } | null
   }
 }
 
@@ -245,7 +246,7 @@ function entryOf(row: LeaderboardRow, metric: LeaderboardMetric, rank: number, m
     username: row.user.username,
     value: metricValue(row, metric),
     secondary: secondaryOf(row),
-    title: toUserTitleDto(row.user.equippedTitle),
+    title: effectiveTitleDto({ id: row.userId, equippedTitle: row.user.equippedTitle, equippedLeaderTitle: row.user.equippedLeaderTitle }),
     isMe: row.userId === meId,
   }
 }
@@ -275,7 +276,8 @@ export async function getLeaderboard(params: {
         user: {
           select: {
             username: true,
-            equippedTitle: { select: { id: true, type: true, name: true, payload: true } },
+            equippedTitle: { select: { id: true, type: true, name: true, payload: true, rarity: true } },
+            equippedLeaderTitle: { select: { id: true, game: true, userId: true } },
           },
         },
       },
@@ -295,7 +297,8 @@ export async function getLeaderboard(params: {
         user: {
           select: {
             username: true,
-            equippedTitle: { select: { id: true, type: true, name: true, payload: true } },
+            equippedTitle: { select: { id: true, type: true, name: true, payload: true, rarity: true } },
+            equippedLeaderTitle: { select: { id: true, game: true, userId: true } },
           },
         },
       },

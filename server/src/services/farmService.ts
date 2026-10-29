@@ -27,7 +27,7 @@ import {
   getPointsConfig,
   getPointsProfile,
   spendPointsTx,
-  toUserTitleDto,
+  effectiveTitleDto,
   type UserTitleDto,
 } from './pointsService.js'
 
@@ -745,7 +745,8 @@ export async function listNeighbors(userId: number, query?: string): Promise<Far
         select: {
           id: true,
           username: true,
-          equippedTitle: { select: { id: true, type: true, name: true, payload: true } },
+          equippedTitle: { select: { id: true, type: true, name: true, payload: true, rarity: true } },
+          equippedLeaderTitle: { select: { id: true, game: true, userId: true } },
         },
       },
       plots: true,
@@ -796,7 +797,7 @@ export async function listNeighbors(userId: number, query?: string): Promise<Far
       readyCount,
       stealableCount,
       victimQuota,
-      title: toUserTitleDto(farm.user.equippedTitle),
+      title: effectiveTitleDto(farm.user),
       updatedAt: farm.updatedAt.toISOString(),
     }
   })
@@ -835,7 +836,8 @@ export async function getNeighborFarm(userId: number, targetUserId: number): Pro
           select: {
             id: true,
             username: true,
-            equippedTitle: { select: { id: true, type: true, name: true, payload: true } },
+            equippedTitle: { select: { id: true, type: true, name: true, payload: true, rarity: true } },
+            equippedLeaderTitle: { select: { id: true, game: true, userId: true } },
           },
         },
         plots: true,
@@ -873,7 +875,7 @@ export async function getNeighborFarm(userId: number, targetUserId: number): Pro
     owner: {
       userId: farm.user.id,
       username: farm.user.username,
-      title: toUserTitleDto(farm.user.equippedTitle),
+      title: effectiveTitleDto(farm.user),
     },
     farm: { name: farm.name, plotCount: farm.plotCount, createdAt: farm.createdAt.toISOString() },
     plots,

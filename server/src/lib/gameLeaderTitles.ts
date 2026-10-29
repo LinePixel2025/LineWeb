@@ -54,3 +54,25 @@ export function leaderTitleDto(row: { id: number; game: string; awardedAt: Date 
 export function leaderBonusNote(game: string): string {
   return `${GAME_DISPLAY_NAMES[game as GameKey] ?? game}单机榜首奖励`
 }
+
+/**
+ * 把榜一传说称号转成通用站内称号形态（与积分商店的 UserTitleDto 结构兼容），
+ * 用于聊天 / 农场 / 战绩榜等只关心「名字 + 颜色 + 图标 + 稀有度」的出口。
+ */
+export interface LeaderTitleAsTitleDto {
+  id: number
+  name: string
+  color: string
+  icon: string
+  rarity: 'legendary'
+}
+
+export function leaderTitleAsTitleDto(row: { id: number; game: string }): LeaderTitleAsTitleDto {
+  return {
+    id: row.id,
+    name: leaderTitleName(row.game),
+    color: LEADER_TITLE_COLOR,
+    icon: LEADER_TITLE_ICON,
+    rarity: 'legendary',
+  }
+}

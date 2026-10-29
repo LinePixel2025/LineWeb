@@ -25,7 +25,7 @@ interface UserGrant {
 
 export default function ProfilePage() {
   const { user, logout, updateProfile } = useAuth()
-  const { profile: pointsProfile } = usePoints()
+  const { profile: pointsProfile, refresh: refreshPoints } = usePoints()
   const navigate = useNavigate()
   const location = useLocation()
   const [activeTab, setActiveTab] = useState(() => location.hash === '#digital-health' ? 'digital-health' : 'overview')
@@ -46,6 +46,7 @@ export default function ProfilePage() {
   const [grantsLoading, setGrantsLoading] = useState(true)
   const [grantsError, setGrantsError] = useState('')
   const [revokingId, setRevokingId] = useState<number | null>(null)
+  const [equippingTitleId, setEquippingTitleId] = useState<number | null>(null)
 
   const fetchGrants = () => {
     setGrantsLoading(true)
@@ -129,6 +130,19 @@ export default function ProfilePage() {
     }
   }
 
+  const equipLeaderTitle = async (id: number) => {
+    if (equippingTitleId !== null) return
+    setEquippingTitleId(id)
+    try {
+      await api.post(`/points/leader-titles/${id}/equip`)
+      await refreshPoints()
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : '佩戴失败')
+    } finally {
+      setEquippingTitleId(null)
+    }
+  }
+
   return (
     <div className="gh-page-container" style={{ maxWidth: '900px' }}>
       <div className="gh-page-header">
@@ -146,9 +160,9 @@ export default function ProfilePage() {
               <GitHubBadge variant={user?.role === 'admin' ? 'accent' : user?.role === 'author' ? 'success' : 'default'}>
                 {roleLabel(user?.role)}
               </GitHubBadge>
-              {pointsProfile?.title && (
+              {(pointsProfile?.title || pointsProfile?.equippedLeaderTitle) && (
                 <div style={{ marginTop: '8px' }}>
-                  <UserTitleBadge title={pointsProfile.title} size="md" />
+                  <UserTitleBadge title={pointsProfile.title ?? pointsProfile.equippedLeaderTitle} size="md" />
                 </div>
               )}
             </div>
@@ -198,12 +212,29 @@ export default function ProfilePage() {
             <div className="gh-box" style={{ marginTop: '16px' }}>
               <h3 style={{ fontSize: '1rem', margin: '0 0 4px' }}>传说称号</h3>
               <p className="gh-text-tertiary" style={{ fontSize: '0.78rem', margin: '0 0 10px' }}>
-                单机排行榜第一名自动获得，被超越后自动消失。
+                单机排行榜第一名自动获得，被超越后自动消失；点击「佩戴」显示在顶栏、聊天与排行榜。
               </p>
               <div className="gh-profile-legend-titles">
-                {pointsProfile.leaderTitles.map((item) => (
-                  <UserTitleBadge key={item.game} title={item} size="md" />
-                ))}
+                {pointsProfile.leaderTitles.map((item) => {
+                  const equipped = pointsProfile.equippedLeaderTitle?.id === item.id
+                  return (
+                    <span key={item.id} className="gh-profile-legend-row">
+                      <UserTitleBadge title={item} size="md" />
+                      {equipped ? (
+                        <span className="gh-badge gh-badge--success">佩戴中</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="gh-btn gh-btn--ghost gh-btn--sm"
+                          disabled={equippingTitleId !== null}
+                          onClick={() => { void equipLeaderTitle(item.id) }}
+                        >
+                          {equippingTitleId === item.id ? '佩戴中…' : '佩戴'}
+                        </button>
+                      )}
+                    </span>
+                  )
+                })}
               </div>
             </div>
           )}
