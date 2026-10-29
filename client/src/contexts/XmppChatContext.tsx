@@ -24,7 +24,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import api, { getToken } from '../lib/api'
+import api, { ApiError, getToken } from '../lib/api'
 import {
   NEKO_PAGE_SIZE,
   chatImageUrl,
@@ -135,6 +135,8 @@ export interface XmppChatValue {
   /** 首次 bootstrap 尚未返回 */
   loading: boolean
   error: string | null
+  /** 当前账号被管理员封禁聊天（此时不会自动重连；解封后刷新页面恢复） */
+  banned: { reason: string; bannedAt: string } | null
   self: NekoSelf | null
   conversations: NekoConversation[]
   contacts: NekoContact[]
@@ -298,6 +300,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   }, [])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [banned, setBanned] = useState<{ reason: string; bannedAt: string } | null>(null)
   const [self, setSelf] = useState<NekoSelf | null>(null)
   const [conversations, setConversations] = useState<NekoConversation[]>([])
   const [contacts, setContacts] = useState<NekoContact[]>([])
@@ -1045,6 +1048,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       resetState()
       setError(null)
       setLoading(false)
+      setBanned(null)
       return
     }
 
@@ -1084,6 +1088,20 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
         clearInterval(pollActiveTimer)
         pollActiveTimer = null
       }
+    }
+
+    /** 被封禁聊天：停止重连并切换为封禁提示（解封后刷新页面即可恢复） */
+    const isBannedError = (err: unknown) =>
+      err instanceof ApiError && err.code === 'CHAT_BANNED'
+
+    const handleBanned = (err: unknown): boolean => {
+      if (!isBannedError(err)) return false
+      clearReconnectTimer()
+      setLoading(false)
+      setError(null)
+      setBanned({ reason: err instanceof Error ? err.message : '聊天已被封禁', bannedAt: '' })
+      setConnectionState('closed')
+      return true
     }
 
     const scheduleReconnect = () => {
@@ -1148,6 +1166,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
         }
       } catch (err) {
         if (disposed) return
+        if (handleBanned(err)) return
         setLoading(false)
         setError(errorText(err, '聊天服务暂时不可用'))
         setConnectionState('closed')
@@ -1205,6 +1224,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
         wsFailures = 0
         setLoading(false)
         setError(null)
+        setBanned(null)
         setConnectionState('open')
         setTransport(client.mode === 'http' ? 'polling' : 'ws')
         client.sendPresence()
@@ -1221,6 +1241,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
         connecting = false
         if (disposed) return
         client.close()
+        if (handleBanned(err)) return
         setLoading(false)
         setConnectionState('closed')
         setError(errorText(err, '聊天连接失败，正在重试…'))
@@ -1760,6 +1781,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       setRealtimeEnabled,
       loading,
       error,
+      banned,
       self,
       conversations,
       contacts,
@@ -1814,6 +1836,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       setRealtimeEnabled,
       loading,
       error,
+      banned,
       self,
       conversations,
       contacts,

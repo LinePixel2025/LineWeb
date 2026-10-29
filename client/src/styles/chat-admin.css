@@ -1,0 +1,93 @@
+/* 聊天治理（/admin/chat）：封禁账号搜索 + 封禁列表 */
+
+.gh-chatadmin-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+  margin-bottom: var(--gh-space-4);
+}
+
+.gh-chatadmin-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+}
+
+.gh-chatadmin-title {
+  margin: 0;
+  font-size: var(--gh-text-base);
+  font-weight: 600;
+}
+
+.gh-chatadmin-search {
+  display: flex;
+  gap: var(--gh-space-2);
+}
+
+.gh-chatadmin-search .gh-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.gh-chatadmin-hint {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-chatadmin-muted {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-sm);
+  font-family: var(--gh-font-mono);
+}
+
+.gh-chatadmin-users {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gh-chatadmin-user {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-2) var(--gh-space-3);
+  padding: var(--gh-space-2) var(--gh-space-3);
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+}
+
+.gh-chatadmin-user-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gh-space-2);
+  min-width: 0;
+}
+
+.gh-chatadmin-user-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+}
+
+.gh-chatadmin-ban-form {
+  display: flex;
+  flex: 1 1 100%;
+  gap: var(--gh-space-2);
+  align-items: center;
+  flex-wrap: wrap;
+  padding-top: var(--gh-space-2);
+  border-top: 1px dashed var(--gh-border-muted);
+}
+
+.gh-chatadmin-ban-form .gh-input {
+  flex: 1 1 260px;
+  min-width: 0;
+}

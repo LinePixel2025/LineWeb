@@ -22,6 +22,7 @@ import aiChatRoutes from './routes/aiChat.js'
 import oauthRoutes from './routes/oauth.js'
 import chatRoutes from './routes/chat.js'
 import chatXmppRoutes from './routes/chatXmpp.js'
+import adminChatRoutes from './routes/adminChat.js'
 import chatUploadsRoutes from './routes/chatUploads.js'
 import gameRoutes from './routes/games.js'
 import gameStatsRoutes from './routes/gameStats.js'
@@ -38,6 +39,7 @@ import { refreshProxyBlacklist } from './services/proxyBlacklist.js'
 import { authenticate } from './middleware/auth.js'
 import { ipHardLimiter, userApiLimiter } from './middleware/rateLimits.js'
 import { requireFeature } from './middleware/featureGuard.js'
+import { requireChatNotBanned } from './middleware/chatBanGuard.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel, isNodeConnected } from './services/storageTunnel.js'
 import { initChatHub } from './services/chatHub.js'
@@ -180,8 +182,11 @@ app.use('/api/ai', requireFeature('aiAssistant'), aiRoutes)
 app.use('/api/ai-chat', requireFeature('aiChat'), aiChatRoutes)
 app.use('/api/oauth', oauthRoutes)
 // 聊天已迁移到 neko XMPP：/api/chat/xmpp/* 必须在 /api/chat 之前挂载（前缀更长）
-app.use('/api/chat/xmpp', requireFeature('chat'), chatXmppRoutes)
-app.use('/api/chat', requireFeature('chat'), chatRoutes)
+// 聊天封禁（chat:manage 维护）在功能开关之后拦截，管理员不受影响
+app.use('/api/chat/xmpp', requireFeature('chat'), requireChatNotBanned(), chatXmppRoutes)
+app.use('/api/chat', requireFeature('chat'), requireChatNotBanned(), chatRoutes)
+// 聊天治理（封禁 / 解封，需 chat:manage）
+app.use('/api/admin/chat', adminChatRoutes)
 app.use('/api/game-stats', requireFeature('games'), gameStatsRoutes)
 app.use('/api/games', requireFeature('gamesOnline'), gameRoutes)
 // 统一积分体系（全游戏共用余额 / 排行榜 / 称号与表情包商店）

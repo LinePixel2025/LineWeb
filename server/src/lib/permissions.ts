@@ -24,6 +24,7 @@ export const CAPABILITIES = [
   'proxy:manage',     // 网页反代管理（黑名单 / 访问统计 / 排队赦免）
   'feature:manage',   // 站点功能开关管理（模块级全局开关）
   'points:manage',    // 统一积分体系管理（规则、商店、用户调分）
+  'chat:manage',      // 聊天治理（封禁 / 解封聊天入口）
 ] as const
 
 export type Capability = typeof CAPABILITIES[number]

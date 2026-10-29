@@ -6,6 +6,7 @@ import { config } from '../config/index.js'
 import { resolveAuthContext } from '../middleware/auth.js'
 import { isFeatureEnabled } from './featureService.js'
 import { isAllowedOutboundStanza } from './nekoChatGuard.js'
+import { getActiveChatBan } from './chatBanService.js'
 
 /**
  * /ws/xmpp —— 浏览器 ↔ neko XMPP 服务的字节级 WebSocket 中继
@@ -36,6 +37,44 @@ function normalizeCloseCode(code: number): number {
 
 /** 已完成 101 升级的 socket —— 不能再往里写原始 HTTP 响应，否则会污染 WS 帧流 */
 const upgradedSockets = new WeakSet<Duplex>()
+
+/**
+ * 账号 → 正在使用聊天的浏览器连接（每个账号可能多标签 / 多设备）。
+ * 聊天封禁时要主动断开，否则已建立的长连接仍可继续收发。
+ */
+const userSockets = new Map<number, Set<WebSocket>>()
+
+function trackUserSocket(userId: number, socket: WebSocket): void {
+  let set = userSockets.get(userId)
+  if (!set) {
+    set = new Set()
+    userSockets.set(userId, set)
+  }
+  set.add(socket)
+}
+
+function untrackUserSocket(userId: number, socket: WebSocket): void {
+  const set = userSockets.get(userId)
+  if (!set) return
+  set.delete(socket)
+  if (set.size === 0) userSockets.delete(userId)
+}
+
+/** 断开某账号当前所有聊天 WS 连接，返回断开数量（封禁时调用） */
+export function closeUserChatSockets(userId: number): number {
+  const set = userSockets.get(userId)
+  if (!set || set.size === 0) return 0
+  userSockets.delete(userId)
+  let closed = 0
+  for (const socket of set) {
+    try {
+      // 自定义 close code：客户端可据此提示「聊天已被管理员限制」
+      socket.close(4003, 'chat banned')
+      closed += 1
+    } catch { /* ignore */ }
+  }
+  return closed
+}
 
 function rejectUpgrade(socket: Duplex, status = '502 Bad Gateway'): void {
   if (socket.destroyed || upgradedSockets.has(socket)) return
@@ -94,6 +133,14 @@ export function initNekoXmppProxy(server: HttpServer): NekoXmppProxy | null {
       return
     }
     const userId = auth.user.userId
+    // 聊天封禁：握手阶段直接拒绝（响应是原始 HTTP，浏览器只会看到连接失败）
+    if (auth.user.role !== 'admin') {
+      const ban = await getActiveChatBan(userId)
+      if (ban) {
+        rejectUpgrade(socket, '403 Forbidden')
+        return
+      }
+    }
 
     // 先拨上游：失败直接 502，避免浏览器拿一个必然断开的本地 WS。
     // 配置写错（如 WS_PATH 被拼成 Windows 路径）时构造函数会同步抛错，必须兜住，
@@ -132,6 +179,7 @@ export function initNekoXmppProxy(server: HttpServer): NekoXmppProxy | null {
 
       wss.handleUpgrade(req, socket, head, (browser) => {
         upgradedSockets.add(socket)
+        trackUserSocket(userId, browser)
         const state: SocketState = { userId, lastActivity: Date.now() }
 
         const closeBoth = (code?: number, reason?: Buffer) => {
@@ -180,6 +228,7 @@ export function initNekoXmppProxy(server: HttpServer): NekoXmppProxy | null {
         })
 
         browser.on('close', (code) => {
+          untrackUserSocket(userId, browser)
           console.log(`[xmpp] 浏览器连接关闭：user=${userId} code=${code}`)
           closeBoth(code)
         })
@@ -209,6 +258,7 @@ export function initNekoXmppProxy(server: HttpServer): NekoXmppProxy | null {
       wss.clients.forEach((client) => {
         try { client.close(1001) } catch { /* ignore */ }
       })
+      userSockets.clear()
       wss.close()
     },
   }

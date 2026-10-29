@@ -18,6 +18,7 @@ export const CAPABILITIES = [
   'proxy:manage',
   'feature:manage',
   'points:manage',
+  'chat:manage',
 ] as const
 
 export type Capability = typeof CAPABILITIES[number]
@@ -35,6 +36,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   'proxy:manage': '网页反代管理',
   'feature:manage': '功能开关管理',
   'points:manage': '积分体系管理',
+  'chat:manage': '聊天治理（封禁 / 解封）',
 }
 
 export const ROLE_LABELS: Record<string, string> = {
@@ -92,6 +94,7 @@ export const ADMIN_ROUTE_CAPABILITIES: { prefix: string; capability: Capability 
   { prefix: '/admin/proxy', capability: 'proxy:manage' },
   { prefix: '/admin/features', capability: 'feature:manage' },
   { prefix: '/admin/points', capability: 'points:manage' },
+  { prefix: '/admin/chat', capability: 'chat:manage' },
   { prefix: '/admin/announcements', capability: 'content:manage' },
   { prefix: '/admin/api', capability: null },        // API 接入指南：任何管理区账号可见
   { prefix: '/admin', capability: 'content:write' }, // 文章管理（含 /admin 首页）

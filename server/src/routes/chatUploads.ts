@@ -3,6 +3,7 @@ import { AppError } from '../middleware/errorHandler.js'
 import { asyncHandler } from '../lib/asyncHandler.js'
 import { authenticate } from '../middleware/auth.js'
 import { requireFeature } from '../middleware/featureGuard.js'
+import { requireChatNotBanned } from '../middleware/chatBanGuard.js'
 import { getUserBrief } from '../services/chatService.js'
 import { fetchAvatar, fetchUpload, sessionHashOf } from '../services/nekoChat.js'
 
@@ -36,6 +37,7 @@ router.get(
   '/uploads/:id',
   authenticate,
   requireFeature('chat'),
+  requireChatNotBanned(),
   asyncHandler(async (req: Request, res: Response) => {
     const id = String(req.params.id || '')
     if (!UPLOAD_ID_RE.test(id)) {
@@ -67,6 +69,7 @@ router.get(
   '/avatars/:id',
   authenticate,
   requireFeature('chat'),
+  requireChatNotBanned(),
   asyncHandler(async (req: Request, res: Response) => {
     const id = Number.parseInt(String(req.params.id || ''), 10)
     if (!Number.isInteger(id) || id <= 0) {

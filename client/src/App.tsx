@@ -74,6 +74,7 @@ const ProxyAdminPage = lazy(() => import('./pages/admin/ProxyAdminPage'))
 const FeatureAdminPage = lazy(() => import('./pages/admin/FeatureAdminPage'))
 const AnnouncementAdminPage = lazy(() => import('./pages/admin/AnnouncementAdminPage'))
 const PointsAdminPage = lazy(() => import('./pages/admin/PointsAdminPage'))
+const ChatAdminPage = lazy(() => import('./pages/admin/ChatAdminPage'))
 const AuthorizePage = lazy(() => import('./pages/AuthorizePage'))
 
 const queryClient = new QueryClient({
@@ -317,6 +318,7 @@ export default function App() {
                     <Route path="/admin/features" element={<FeatureAdminPage />} />
                     <Route path="/admin/announcements" element={<AnnouncementAdminPage />} />
                     <Route path="/admin/points" element={<PointsAdminPage />} />
+                    <Route path="/admin/chat" element={<ChatAdminPage />} />
                     <Route path="/admin/api" element={<ApiDocsPage />} />
                     <Route path="/admin/devices" element={<DeviceMonitorPage />} />
                     <Route path="/admin/ai" element={<AiAdminPage />} />

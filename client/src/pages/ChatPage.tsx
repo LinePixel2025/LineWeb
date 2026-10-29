@@ -46,6 +46,7 @@ export default function ChatPage() {
     setRealtimeEnabled,
     loading,
     error: connectionError,
+    banned,
     self,
     conversations,
     contacts,
@@ -412,6 +413,28 @@ export default function ChatPage() {
       : realtimeEnabled && connectionState === 'connecting'
         ? '正在连接实时消息…（当前为长轮询）'
         : '长轮询模式（消息由服务端即时推送，无需 WebSocket）'
+
+  if (banned) {
+    return (
+      <div className="gh-chat-page">
+        <div className="gh-box gh-chat-banned" role="alert">
+          <h1 className="gh-chat-banned-title">聊天已被封禁</h1>
+          <p className="gh-chat-banned-reason">{banned.reason || '聊天已被管理员封禁'}</p>
+          <p className="gh-chat-banned-hint">
+            封禁只影响 LineWeb 的聊天入口，不影响文章、农场、游戏等其它功能。如需申诉请联系站点管理员；
+            解封后刷新本页即可恢复。
+          </p>
+          <button
+            type="button"
+            className="gh-btn gh-btn--secondary gh-btn--md"
+            onClick={() => window.location.reload()}
+          >
+            重新检查
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="gh-chat-page">
