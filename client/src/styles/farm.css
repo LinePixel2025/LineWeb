@@ -177,6 +177,28 @@
 .gh-farm-quota span { font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
 .gh-farm-toolbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* 农田概览 */
+.gh-farm-summary { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.gh-farm-summary-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 999px;
+  background: var(--gh-canvas);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.gh-farm-summary-chip--ready {
+  border-color: var(--gh-success);
+  background: var(--gh-success-soft);
+  color: var(--gh-success-emphasis);
+  font-weight: 600;
+}
+
 /* ===== 标签 ===== */
 .gh-farm-tabs {
   display: flex;
@@ -237,6 +259,24 @@
 }
 .gh-farm-tile:hover { transform: translateY(-2px); box-shadow: var(--gh-shadow-md); }
 .gh-farm-tile--ready { border-color: var(--gh-success); box-shadow: 0 0 0 1px var(--gh-success-soft), 0 6px 16px rgba(45, 164, 78, 0.12); }
+
+/* 档位标记：卡片顶部的细彩条，帮助一眼区分作物等级 */
+.gh-farm-tile--tier1 { --farm-tier: #2da44e; }
+.gh-farm-tile--tier2 { --farm-tier: #2f81f7; }
+.gh-farm-tile--tier3 { --farm-tier: #a371f7; }
+.gh-farm-tile--tier4 { --farm-tier: #f0883e; }
+.gh-farm-tile--tier5 { --farm-tier: #e3b341; }
+.gh-farm-tile--planted::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 3px;
+  border-radius: var(--gh-radius-lg) var(--gh-radius-lg) 0 0;
+  background: linear-gradient(90deg, var(--farm-tier, transparent), transparent 85%);
+  pointer-events: none;
+}
+.gh-farm-tile--planted { padding-top: 10px; }
 .gh-farm-tile-top { display: flex; align-items: center; gap: 6px; font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
 .gh-farm-tile-index { font-family: var(--gh-font-mono); }
 .gh-farm-tile-fertilized { margin-left: auto; color: #2f81f7; }
@@ -422,6 +462,30 @@
 .gh-farm-shop-head h2 { margin: 0; font-size: var(--gh-text-lg); }
 .gh-farm-shop-balance { font-size: var(--gh-text-sm); color: var(--gh-text-secondary); }
 .gh-farm-shop-balance strong { margin-left: 4px; color: var(--gh-text); font-size: var(--gh-text-lg); font-variant-numeric: tabular-nums; }
+.gh-farm-shop-filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: var(--gh-space-3); }
+.gh-farm-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid var(--gh-border);
+  border-radius: 999px;
+  background: var(--gh-canvas);
+  color: var(--gh-text-secondary);
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-xs);
+  cursor: pointer;
+  transition: border-color var(--gh-transition), background var(--gh-transition), color var(--gh-transition);
+}
+.gh-farm-filter span { color: var(--gh-text-tertiary); font-variant-numeric: tabular-nums; }
+.gh-farm-filter:hover { border-color: var(--gh-accent); color: var(--gh-text); }
+.gh-farm-filter--active {
+  border-color: var(--gh-accent);
+  background: var(--gh-accent-subtle, var(--gh-canvas-subtle));
+  color: var(--gh-text);
+  font-weight: 600;
+}
+.gh-farm-filter--active span { color: var(--gh-text-secondary); }
 .gh-farm-shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--gh-space-3); }
 .gh-farm-shop-card {
   display: flex;
@@ -435,6 +499,28 @@
 }
 .gh-farm-shop-card:hover { transform: translateY(-2px); box-shadow: var(--gh-shadow-md); }
 .gh-farm-shop-card--fertilizer { border-style: dashed; }
+/* 作物档位：左上角渐变与顶部细条，保持 Primer 风格不抢眼 */
+.gh-farm-shop-card--tier1 { --farm-tier: #2da44e; }
+.gh-farm-shop-card--tier2 { --farm-tier: #2f81f7; }
+.gh-farm-shop-card--tier3 { --farm-tier: #a371f7; }
+.gh-farm-shop-card--tier4 { --farm-tier: #f0883e; }
+.gh-farm-shop-card--tier5 { --farm-tier: #e3b341; }
+.gh-farm-shop-card[class*='gh-farm-shop-card--tier'] {
+  border-top: 2px solid var(--farm-tier, var(--gh-border));
+}
+.gh-farm-shop-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gh-farm-shop-owned {
+  margin-left: auto;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--gh-canvas-subtle);
+  border: 1px solid var(--gh-border-muted);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.gh-farm-profit { color: var(--gh-success-emphasis); }
 .gh-farm-shop-card-top { display: flex; align-items: center; justify-content: space-between; }
 .gh-farm-shop-emoji { font-size: 1.8rem; line-height: 1; }
 .gh-farm-shop-tier { font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); font-family: var(--gh-font-mono); }
@@ -449,6 +535,30 @@
 .gh-farm-shop-note { margin-top: var(--gh-space-3); font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
 
 /* ===== 邻居 ===== */
+.gh-farm-neighbors { position: relative; }
+.gh-farm-neighbor-view { position: relative; animation: gh-farm-fade 0.2s ease-out; }
+.gh-farm-toast {
+  position: sticky;
+  top: 12px;
+  z-index: 5;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 var(--gh-space-3);
+  padding: 8px 14px;
+  border: 1px solid var(--gh-success);
+  border-radius: 999px;
+  background: var(--gh-success-soft);
+  color: var(--gh-success-emphasis);
+  font-size: var(--gh-text-sm);
+  box-shadow: var(--gh-shadow-sm);
+  animation: gh-farm-toast-in 0.22s ease-out;
+  pointer-events: none;
+}
+.gh-farm-toast--error {
+  border-color: var(--gh-danger);
+  background: var(--gh-danger-soft, rgba(248, 81, 73, 0.12));
+  color: var(--gh-danger);
+}
 .gh-farm-neighbors-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: var(--gh-space-3); flex-wrap: wrap; }
 .gh-farm-neighbors-search { display: flex; gap: 6px; flex: 1 1 240px; }
 .gh-farm-neighbors-search .gh-input { max-width: 220px; }
@@ -502,6 +612,19 @@
   text-align: center;
 }
 .gh-farm-neighbor-tile--ready { border-color: var(--gh-success); }
+.gh-farm-neighbor-tile--stolen {
+  border-color: var(--gh-success);
+  animation: gh-farm-tile-pop 0.42s ease-out;
+}
+.gh-farm-neighbor-gain {
+  display: inline-block;
+  color: var(--gh-success-emphasis);
+  font-size: var(--gh-text-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  animation: gh-farm-gain-rise 1.1s ease-out forwards;
+  pointer-events: none;
+}
 .gh-farm-neighbor-index { align-self: flex-start; font-size: 0.68rem; color: var(--gh-text-tertiary); font-family: var(--gh-font-mono); }
 .gh-farm-neighbor-crop { font-size: 2rem; line-height: 1.1; }
 .gh-farm-neighbor-name { font-size: var(--gh-text-sm); font-weight: 600; }
@@ -587,6 +710,7 @@
 .gh-farm-seed-card:hover { border-color: var(--gh-success); transform: translateY(-2px); }
 .gh-farm-seed-card-emoji { font-size: 1.9rem; }
 .gh-farm-seed-card-name { font-size: var(--gh-text-sm); font-weight: 600; }
+.gh-farm-seed-card-meta { font-size: 0.68rem; color: var(--gh-text-tertiary); text-align: center; line-height: 1.4; }
 .gh-farm-seed-card-count { font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
 
 /* 新手引导 */
@@ -669,6 +793,20 @@
   75% { opacity: 1; }
   100% { opacity: 0; transform: translate(-50%, -26px); }
 }
+@keyframes gh-farm-toast-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes gh-farm-tile-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+@keyframes gh-farm-gain-rise {
+  0% { opacity: 0; transform: translateY(6px) scale(0.9); }
+  25% { opacity: 1; transform: translateY(0) scale(1.06); }
+  100% { opacity: 0; transform: translateY(-16px) scale(1); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .gh-farm-loading-emoji,
@@ -678,6 +816,9 @@
   .gh-farm-cloud,
   .gh-farm-create-art span,
   .gh-farm-tutorial-art,
+  .gh-farm-neighbor-tile--stolen,
+  .gh-farm-toast,
+  .gh-farm-neighbor-gain,
   .gh-farm-tile--ready .gh-farm-crop {
     animation: none !important;
   }

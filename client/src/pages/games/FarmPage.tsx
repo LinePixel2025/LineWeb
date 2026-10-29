@@ -39,6 +39,14 @@ function formatTime(value: string): string {
   return date.toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
+/** 作物经济性：满收毛收益、净赚、每小时净收益（用于商店筛选与展示） */
+function cropEconomics(crop: FarmCrop): { gross: number; net: number; perHour: number } {
+  const gross = crop.yieldUnits * crop.value
+  const net = gross - crop.seedCost
+  const perHour = crop.growMinutes > 0 ? Math.round((net / crop.growMinutes) * 60) : 0
+  return { gross, net, perHour }
+}
+
 /** 生长阶段（0–3），决定作物的大小与形态 */
 function growStage(progress: number, ready: boolean): number {
   if (ready) return 3
@@ -146,6 +154,9 @@ export default function FarmPage() {
 
   const farm = view?.farm ?? null
   const plots = view?.plots ?? []
+  const readyPlots = plots.filter((plot) => plot.ready)
+  const emptyPlots = plots.filter((plot) => !plot.crop).length
+  const growingPlots = plots.length - readyPlots.length - emptyPlots
 
   const handleCreate = async (name: string) => {
     await run('create', () => api.post<FarmView>('/farm/create', { name }), '开荒成功！赠送的种子与肥料已放进仓库')
@@ -189,6 +200,33 @@ export default function FarmPage() {
       await refreshPoints()
     } catch (err) {
       setError(err instanceof Error ? err.message : '收获失败')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** 一键收获所有已成熟地块：逐块请求，服务端逐次结算并返回最新视图 */
+  const handleHarvestAll = async () => {
+    if (busy || readyPlots.length === 0) return
+    setBusy('harvest-all')
+    setError('')
+    setNotice('')
+    let totalPoints = 0
+    let harvested = 0
+    try {
+      for (const plot of readyPlots) {
+        const result = await api.post<HarvestResult>(`/farm/plots/${plot.index}/harvest`)
+        setView(result.view)
+        applyLocalDelta(result.points)
+        totalPoints += result.points
+        harvested += 1
+      }
+      setNotice(`一键收获 ${harvested} 块地，共获得 ${totalPoints} 积分`)
+      setStealFlash(`+${totalPoints}`)
+      window.setTimeout(() => setStealFlash(null), 1800)
+      await refreshPoints()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '一键收获失败，请稍后再试')
     } finally {
       setBusy(null)
     }
@@ -281,7 +319,20 @@ export default function FarmPage() {
                     <span>每日 0 点重置（Asia/Shanghai）</span>
                   </div>
                 </div>
+                <div className="gh-farm-summary" aria-label="农田概览">
+                  <span className="gh-farm-summary-chip gh-farm-summary-chip--ready">成熟 {readyPlots.length}</span>
+                  <span className="gh-farm-summary-chip">生长中 {growingPlots}</span>
+                  <span className="gh-farm-summary-chip">空地 {emptyPlots}</span>
+                </div>
                 <div className="gh-farm-toolbar-actions">
+                  <button
+                    type="button"
+                    className="gh-btn gh-btn--primary gh-btn--sm"
+                    disabled={!!busy || readyPlots.length === 0}
+                    onClick={() => void handleHarvestAll()}
+                  >
+                    {busy === 'harvest-all' ? '收获中…' : readyPlots.length > 0 ? `一键收获 ${readyPlots.length} 块` : '暂无成熟作物'}
+                  </button>
                   <button
                     type="button"
                     className="gh-btn gh-btn--secondary gh-btn--sm"
@@ -290,7 +341,7 @@ export default function FarmPage() {
                   >
                     {nextExpansion ? `扩建到 ${nextExpansion.plotCount} 块 · ${nextExpansion.cost} 积分` : '已是最大面积'}
                   </button>
-                  <Link className="gh-btn gh-btn--primary gh-btn--sm" to="/points">积分商店</Link>
+                  <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/points">积分商店</Link>
                 </div>
               </div>
 
@@ -327,11 +378,12 @@ export default function FarmPage() {
                   onNotice={(message) => { setNotice(message); setError('') }}
                   onError={(message) => { setError(message); setNotice('') }}
                   onStealDone={async (result: StealResult) => {
+                    // 先本地记分，静默延后重新拉取，避免偷菜后整块界面瞬间刷新
                     applyLocalDelta(result.points)
                     setStealFlash(`+${result.points}`)
                     window.setTimeout(() => setStealFlash(null), 1800)
-                    await load(true)
                     await refreshPoints()
+                    window.setTimeout(() => { void load(true) }, 1500)
                   }}
                 />
               )}
@@ -418,6 +470,7 @@ export default function FarmPage() {
         <SeedPicker
           plotIndex={seedPickerPlot}
           seeds={view.inventory.seeds}
+          catalog={view.catalog}
           busy={busy}
           onClose={() => setSeedPickerPlot(null)}
           onPlant={(cropKey) => void handlePlant(seedPickerPlot, cropKey)}
@@ -577,7 +630,7 @@ function FarmPlotTile({
 
   return (
     <div
-      className={`gh-farm-tile ${ready ? 'gh-farm-tile--ready' : ''} ${planted ? 'gh-farm-tile--planted' : ''}`}
+      className={`gh-farm-tile ${ready ? 'gh-farm-tile--ready' : ''} ${planted ? 'gh-farm-tile--planted' : ''} ${crop ? `gh-farm-tile--tier${crop.tier}` : ''}`}
       style={{ ['--farm-progress' as string]: `${Math.round(progress * 100)}%` }}
     >
       <div className="gh-farm-tile-top">
@@ -615,10 +668,10 @@ function FarmPlotTile({
           <>
             <strong className="gh-farm-tile-name">
               {crop.name}
-              <span className="gh-farm-tile-units">×{plot.yieldUnits}</span>
+              <span className="gh-farm-tile-units">×{plot.yieldUnits} · 约 {plot.yieldUnits * crop.value} 积分</span>
             </strong>
             <span className={`gh-farm-tile-time ${ready ? 'gh-farm-tile-time--ready' : ''}`}>
-              {ready ? '可以收获啦' : `${STAGE_LABELS[stage]} · ${formatDuration(remaining)}`}
+              {ready ? `可以收获啦 · +${plot.yieldUnits * crop.value}` : `${STAGE_LABELS[stage]} · ${formatDuration(remaining)}`}
             </span>
             <span className="gh-farm-tile-progress" aria-hidden>
               <span className="gh-farm-tile-progress-bar" />
@@ -662,6 +715,7 @@ function FarmPlotTile({
 function SeedPicker({
   plotIndex,
   seeds,
+  catalog,
   busy,
   onClose,
   onPlant,
@@ -669,11 +723,13 @@ function SeedPicker({
 }: {
   plotIndex: number
   seeds: Array<{ key: string; name: string; emoji: string; count: number }>
+  catalog: FarmCrop[]
   busy: string | null
   onClose: () => void
   onPlant: (cropKey: string) => void
   onGoShop: () => void
 }) {
+  const cropByKey = new Map(catalog.map((crop) => [crop.key, crop]))
   return (
     <div className="gh-farm-modal-mask" role="dialog" aria-modal="true" aria-label="选择种子">
       <div className="gh-farm-modal">
@@ -688,19 +744,27 @@ function SeedPicker({
           </div>
         ) : (
           <div className="gh-farm-seed-grid">
-            {seeds.map((seed) => (
-              <button
-                key={seed.key}
-                type="button"
-                className="gh-farm-seed-card"
-                disabled={busy === `plant-${plotIndex}`}
-                onClick={() => onPlant(seed.key)}
-              >
-                <span className="gh-farm-seed-card-emoji" aria-hidden>{seed.emoji}</span>
-                <span className="gh-farm-seed-card-name">{seed.name}</span>
-                <span className="gh-farm-seed-card-count">×{seed.count}</span>
-              </button>
-            ))}
+            {seeds.map((seed) => {
+              const crop = cropByKey.get(seed.key)
+              return (
+                <button
+                  key={seed.key}
+                  type="button"
+                  className="gh-farm-seed-card"
+                  disabled={busy === `plant-${plotIndex}`}
+                  onClick={() => onPlant(seed.key)}
+                >
+                  <span className="gh-farm-seed-card-emoji" aria-hidden>{seed.emoji}</span>
+                  <span className="gh-farm-seed-card-name">{seed.name}</span>
+                  {crop && (
+                    <span className="gh-farm-seed-card-meta">
+                      {formatDuration(crop.growMs)} · 约 +{crop.yieldUnits * crop.value}
+                    </span>
+                  )}
+                  <span className="gh-farm-seed-card-count">×{seed.count}</span>
+                </button>
+              )
+            })}
           </div>
         )}
       </div>
@@ -723,48 +787,86 @@ function ShopTab({
 }) {
   const catalog = view?.catalog ?? []
   const points = view?.points ?? 0
+  const [tier, setTier] = useState<'all' | number>('all')
+  const ownedSeeds = new Map((view?.inventory.seeds ?? []).map((seed) => [seed.key, seed.count]))
+  const tiers = [...new Set(catalog.map((crop) => crop.tier))].sort((a, b) => a - b)
+  const visibleCatalog = tier === 'all' ? catalog : catalog.filter((crop) => crop.tier === tier)
   return (
     <div className="gh-farm-shop">
       <div className="gh-farm-shop-head">
         <h2>种子与肥料</h2>
         <span className="gh-farm-shop-balance">可用积分 <strong>{points}</strong></span>
       </div>
-      <div className="gh-farm-shop-grid">
-        {catalog.map((crop: FarmCrop) => (
-          <div key={crop.key} className="gh-farm-shop-card">
-            <div className="gh-farm-shop-card-top">
-              <span className="gh-farm-shop-emoji" aria-hidden>{crop.emoji}</span>
-              <span className="gh-farm-shop-tier">T{crop.tier}</span>
-            </div>
-            <strong className="gh-farm-shop-name">{crop.name}</strong>
-            <p className="gh-farm-shop-desc">{crop.description}</p>
-            <dl className="gh-farm-shop-stats">
-              <div><dt>成熟</dt><dd>{formatDuration(crop.growMs)}</dd></div>
-              <div><dt>产量</dt><dd>×{crop.yieldUnits}</dd></div>
-              <div><dt>单价</dt><dd>{crop.value}</dd></div>
-            </dl>
-            <div className="gh-farm-shop-buy">
-              <span className="gh-farm-shop-cost">🪙 {crop.seedCost}</span>
-              <button
-                type="button"
-                className="gh-btn gh-btn--secondary gh-btn--sm"
-                disabled={!!busy || points < crop.seedCost}
-                onClick={() => void onBuy('seed', crop.key, 1, `${crop.name}种子`)}
-              >
-                买 1
-              </button>
-              <button
-                type="button"
-                className="gh-btn gh-btn--primary gh-btn--sm"
-                disabled={!!busy || points < crop.seedCost * 5}
-                onClick={() => void onBuy('seed', crop.key, 5, `${crop.name}种子`)}
-              >
-                买 5
-              </button>
-            </div>
-          </div>
+      <div className="gh-farm-shop-filters" role="tablist" aria-label="按档位筛选作物">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tier === 'all'}
+          className={`gh-farm-filter ${tier === 'all' ? 'gh-farm-filter--active' : ''}`}
+          onClick={() => setTier('all')}
+        >
+          全部 <span>{catalog.length}</span>
+        </button>
+        {tiers.map((value) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={tier === value}
+            className={`gh-farm-filter ${tier === value ? 'gh-farm-filter--active' : ''}`}
+            onClick={() => setTier(value)}
+          >
+            T{value} <span>{catalog.filter((crop) => crop.tier === value).length}</span>
+          </button>
         ))}
+      </div>
+      <div className="gh-farm-shop-grid">
+        {visibleCatalog.map((crop: FarmCrop) => {
+          const economics = cropEconomics(crop)
+          const owned = ownedSeeds.get(crop.key) ?? 0
+          return (
+            <div key={crop.key} className={`gh-farm-shop-card gh-farm-shop-card--tier${crop.tier}`}>
+              <div className="gh-farm-shop-card-top">
+                <span className="gh-farm-shop-emoji" aria-hidden>{crop.emoji}</span>
+                <span className="gh-farm-shop-tier">T{crop.tier}</span>
+              </div>
+              <div className="gh-farm-shop-name-row">
+                <strong className="gh-farm-shop-name">{crop.name}</strong>
+                {owned > 0 && <span className="gh-farm-shop-owned">库存 ×{owned}</span>}
+              </div>
+              <p className="gh-farm-shop-desc">{crop.description}</p>
+              <dl className="gh-farm-shop-stats">
+                <div><dt>成熟</dt><dd>{formatDuration(crop.growMs)}</dd></div>
+                <div><dt>产量</dt><dd>×{crop.yieldUnits}</dd></div>
+                <div><dt>满收</dt><dd>{economics.gross}</dd></div>
+                <div><dt>净赚</dt><dd className={economics.net > 0 ? 'gh-farm-profit' : ''}>+{economics.net}</dd></div>
+                <div><dt>时收益</dt><dd>≈{economics.perHour}</dd></div>
+              </dl>
+              <div className="gh-farm-shop-buy">
+                <span className="gh-farm-shop-cost">🪙 {crop.seedCost}</span>
+                <button
+                  type="button"
+                  className="gh-btn gh-btn--secondary gh-btn--sm"
+                  disabled={!!busy || points < crop.seedCost}
+                  onClick={() => void onBuy('seed', crop.key, 1, `${crop.name}种子`)}
+                >
+                  买 1
+                </button>
+                <button
+                  type="button"
+                  className="gh-btn gh-btn--primary gh-btn--sm"
+                  disabled={!!busy || points < crop.seedCost * 5}
+                  onClick={() => void onBuy('seed', crop.key, 5, `${crop.name}种子`)}
+                >
+                  买 5
+                </button>
+              </div>
+            </div>
+          )
+        })}
+        {visibleCatalog.length === 0 && <p className="gh-farm-empty-line">这个档位还没有作物</p>}
 
+        {tier === 'all' && (
         <div className="gh-farm-shop-card gh-farm-shop-card--fertilizer">
           <div className="gh-farm-shop-card-top">
             <span className="gh-farm-shop-emoji" aria-hidden>💧</span>
@@ -797,6 +899,7 @@ function ShopTab({
             </button>
           </div>
         </div>
+        )}
       </div>
       <p className="gh-farm-shop-note">提示：种子与肥料消耗积分，积分来自游戏与农场收成，可在积分中心查看流水。</p>
     </div>
@@ -826,6 +929,28 @@ function NeighborsTab({
   const [active, setActive] = useState<NeighborFarmView | null>(null)
   const [activeLoading, setActiveLoading] = useState(false)
   const [stealing, setStealing] = useState<string | null>(null)
+  const [localQuota, setLocalQuota] = useState(quota)
+  /** 偷菜成功后的地块动画与轻提示（避免整页刷新造成的跳动） */
+  const [lastGain, setLastGain] = useState<{ key: string; points: number; name: string } | null>(null)
+  const [toast, setToast] = useState<{ text: string; tone: 'success' | 'error' } | null>(null)
+  const gainTimerRef = useRef<number | null>(null)
+  const toastTimerRef = useRef<number | null>(null)
+
+  useEffect(() => { setLocalQuota(quota) }, [quota])
+
+  useEffect(() => () => {
+    if (gainTimerRef.current !== null) window.clearTimeout(gainTimerRef.current)
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current)
+  }, [])
+
+  const showToast = useCallback((text: string, tone: 'success' | 'error' = 'success') => {
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current)
+    setToast({ text, tone })
+    toastTimerRef.current = window.setTimeout(() => {
+      toastTimerRef.current = null
+      setToast(null)
+    }, 2600)
+  }, [])
 
   const loadNeighbors = useCallback(async (q?: string) => {
     setLoading(true)
@@ -855,10 +980,12 @@ function NeighborsTab({
 
   const steal = async (plotIndex: number) => {
     if (!active || stealing) return
-    const key = `${active.owner.userId}-${plotIndex}`
+    const ownerId = active.owner.userId
+    const key = `${ownerId}-${plotIndex}`
     setStealing(key)
     try {
-      const result = await api.post<StealResult>(`/farm/users/${active.owner.userId}/steal/${plotIndex}`)
+      const result = await api.post<StealResult>(`/farm/users/${ownerId}/steal/${plotIndex}`)
+      // 本地增量更新：只替换这一块地并扣邻居的可偷数，不再整页重新拉取
       setActive((prev) => {
         if (!prev) return prev
         return {
@@ -867,10 +994,24 @@ function NeighborsTab({
           plots: prev.plots.map((plot) => (plot.index === plotIndex ? result.plot : plot)),
         }
       })
-      onNotice(`偷到 ${result.crop.name} 一份，获得 ${result.points} 积分（今日还剩 ${result.quota.remaining} 次）`)
+      setLocalQuota(result.quota)
+      setNeighbors((prev) => prev.map((neighbor) => (
+        neighbor.userId === ownerId
+          ? { ...neighbor, stealableCount: Math.max(0, neighbor.stealableCount - 1) }
+          : neighbor
+      )))
+      setLastGain({ key, points: result.points, name: result.crop.name })
+      if (gainTimerRef.current !== null) window.clearTimeout(gainTimerRef.current)
+      gainTimerRef.current = window.setTimeout(() => {
+        gainTimerRef.current = null
+        setLastGain(null)
+      }, 1200)
+      showToast(`偷到 ${result.crop.name} ×1，+${result.points} 积分 · 今日还剩 ${result.quota.remaining} 次`)
       await onStealDone(result)
     } catch (err) {
-      onError(err instanceof Error ? err.message : '偷菜失败')
+      const message = err instanceof Error ? err.message : '偷菜失败'
+      onError(message)
+      showToast(message, 'error')
     } finally {
       setStealing(null)
     }
@@ -879,6 +1020,9 @@ function NeighborsTab({
   if (active) {
     return (
       <div className="gh-farm-neighbor-view">
+        {toast && (
+          <div className={`gh-farm-toast gh-farm-toast--${toast.tone}`} role="status">{toast.text}</div>
+        )}
         <div className="gh-farm-neighbor-head">
           <button type="button" className="gh-btn gh-btn--ghost gh-btn--sm" onClick={() => setActive(null)}>
             ← 返回邻居列表
@@ -888,39 +1032,49 @@ function NeighborsTab({
             <span>地主：{active.owner.username}</span>
             <UserTitleBadge title={active.owner.title} />
           </div>
-          <span className="gh-farm-neighbor-quota">今日剩余 {active.quota.remaining} / {active.quota.limit} 次</span>
+          <span className="gh-farm-neighbor-quota">今日剩余 {localQuota.remaining} / {localQuota.limit} 次</span>
         </div>
         <div className="gh-farm-neighbor-board">
-          {active.plots.map((plot) => (
-            <div key={plot.index} className={`gh-farm-neighbor-tile ${plot.ready ? 'gh-farm-neighbor-tile--ready' : ''}`}>
-              <span className="gh-farm-neighbor-index">#{plot.index + 1}</span>
-              <span className="gh-farm-neighbor-crop" aria-hidden>{plot.crop?.emoji ?? '🟫'}</span>
-              <span className="gh-farm-neighbor-name">{plot.crop?.name ?? '空地'}</span>
-              {plot.crop && (
-                <span className="gh-farm-neighbor-meta">
-                  {plot.ready ? `剩 ${plot.yieldUnits} 份` : `${Math.round(plot.progress * 100)}%`}
-                  {plot.stolenCount > 0 && <em>被偷 {plot.stolenCount}</em>}
-                </span>
-              )}
-              {plot.stealable ? (
-                <button
-                  type="button"
-                  className="gh-btn gh-btn--primary gh-btn--sm"
-                  disabled={stealing !== null || busy !== null}
-                  onClick={() => void steal(plot.index)}
-                >
-                  {stealing === `${active.owner.userId}-${plot.index}` ? '偷菜中…' : '偷一份'}
-                </button>
-              ) : (
-                <span className="gh-farm-neighbor-locked">
-                  {plot.ready ? (plot.yieldUnits <= 1 ? '只剩最后一份' : '这茬偷过了') : '未成熟'}
-                </span>
-              )}
-            </div>
-          ))}
+          {active.plots.map((plot) => {
+            const gainKey = `${active.owner.userId}-${plot.index}`
+            const justStolen = lastGain?.key === gainKey
+            return (
+              <div
+                key={plot.index}
+                className={`gh-farm-neighbor-tile ${plot.ready ? 'gh-farm-neighbor-tile--ready' : ''} ${justStolen ? 'gh-farm-neighbor-tile--stolen' : ''}`}
+              >
+                <span className="gh-farm-neighbor-index">#{plot.index + 1}</span>
+                <span className="gh-farm-neighbor-crop" aria-hidden>{plot.crop?.emoji ?? '🟫'}</span>
+                <span className="gh-farm-neighbor-name">{plot.crop?.name ?? '空地'}</span>
+                {plot.crop && (
+                  <span className="gh-farm-neighbor-meta">
+                    {plot.ready ? `剩 ${plot.yieldUnits} 份` : `${Math.round(plot.progress * 100)}%`}
+                    {plot.stolenCount > 0 && <em>被偷 {plot.stolenCount}</em>}
+                  </span>
+                )}
+                {justStolen && (
+                  <span className="gh-farm-neighbor-gain" aria-hidden>+{lastGain.points}</span>
+                )}
+                {plot.stealable ? (
+                  <button
+                    type="button"
+                    className="gh-btn gh-btn--primary gh-btn--sm"
+                    disabled={stealing !== null || busy !== null}
+                    onClick={() => void steal(plot.index)}
+                  >
+                    {stealing === gainKey ? '偷菜中…' : '偷一份'}
+                  </button>
+                ) : (
+                  <span className="gh-farm-neighbor-locked">
+                    {plot.ready ? (plot.yieldUnits <= 1 ? '只剩最后一份' : '这茬偷过了') : '未成熟'}
+                  </span>
+                )}
+              </div>
+            )
+          })}
         </div>
         <p className="gh-farm-neighbor-note">
-          偷菜规则：只有成熟的作物能偷；每茬作物每人限偷一次；地主至少保留 1 份收成；每天共 {active.quota.limit} 次。
+          偷菜规则：只有成熟的作物能偷；每茬作物每人限偷一次；地主至少保留 1 份收成；每天共 {localQuota.limit} 次。
         </p>
       </div>
     )
@@ -928,6 +1082,9 @@ function NeighborsTab({
 
   return (
     <div className="gh-farm-neighbors">
+      {toast && (
+        <div className={`gh-farm-toast gh-farm-toast--${toast.tone}`} role="status">{toast.text}</div>
+      )}
       <div className="gh-farm-neighbors-head">
         <div className="gh-farm-neighbors-search">
           <input
@@ -941,7 +1098,7 @@ function NeighborsTab({
             搜索
           </button>
         </div>
-        <span className="gh-farm-neighbors-quota">今日剩余 {quota.remaining} / {quota.limit} 次</span>
+        <span className="gh-farm-neighbors-quota">今日剩余 {localQuota.remaining} / {localQuota.limit} 次</span>
       </div>
 
       {loading ? (
