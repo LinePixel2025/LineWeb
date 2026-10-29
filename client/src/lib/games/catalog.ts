@@ -78,6 +78,8 @@ export const GAME_XIANGQI_ONLINE_ROUTE = '/games/xiangqi/online'
 export const GAME_PARKOUR_ROUTE = '/games/parkour'
 /** 霓虹跑酷联机（2–6 人）大厅路由 */
 export const GAME_PARKOUR_ONLINE_ROUTE = '/games/parkour/online'
+/** 开心农场路由（单机经营 + 站内偷菜，无实时对局） */
+export const GAME_FARM_ROUTE = '/games/farm'
 
 /** 大厅完整目录：可玩游戏在前，即将上线占位在后 */
 export const GAME_CATALOG: readonly GameCatalogEntry[] = [
@@ -201,6 +203,17 @@ export const GAME_CATALOG: readonly GameCatalogEntry[] = [
     playable: true,
     route: GAME_PARKOUR_ROUTE,
     onlineRoute: GAME_PARKOUR_ONLINE_ROUTE,
+  },
+  {
+    id: 'farm',
+    name: '开心农场',
+    description: '开一块自己的小农田：种菜、施肥、等收成换积分；扩建农田，还能去站内好友的农场偷菜（每日限量）。',
+    icon: '🌱',
+    modes: ['single'],
+    status: 'available',
+    playable: true,
+    route: GAME_FARM_ROUTE,
+    onlineRoute: null,
   },
 ]
 

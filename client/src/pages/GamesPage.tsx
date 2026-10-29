@@ -16,9 +16,12 @@ export default function GamesPage() {
   const { isEnabled } = useFeature()
   const showSingle = isEnabled('gamesSingle')
   const showOnline = isEnabled('gamesOnline')
-  const playableGames = PLAYABLE_GAMES.filter((game) =>
-    (showSingle && !!game.route) || (showOnline && !!game.onlineRoute)
-  )
+  const showFarm = isEnabled('farm')
+  const playableGames = PLAYABLE_GAMES.filter((game) => {
+    // 开心农场为独立子开关，关闭时不出现在大厅
+    if (game.id === 'farm' && !showFarm) return false
+    return (showSingle && !!game.route) || (showOnline && !!game.onlineRoute)
+  })
   const [resetting, setResetting] = useState(false)
   const [resetNote, setResetNote] = useState<string | null>(null)
 

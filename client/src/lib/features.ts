@@ -11,6 +11,7 @@ export const FEATURE_KEYS = [
   'games',
   'gamesSingle',
   'gamesOnline',
+  'farm',
   'aiAssistant',
   'aiChat',
   'webProxy',
@@ -37,6 +38,7 @@ export const FEATURE_DEFINITIONS: readonly FeatureDefinition[] = [
   { key: 'games', label: '游戏（总开关）', description: '游戏大厅、单机与联机游戏', group: '游戏' },
   { key: 'gamesSingle', label: '单机游戏', description: '单机小游戏（依赖游戏总开关）', group: '游戏' },
   { key: 'gamesOnline', label: '联机游戏', description: '好友联机与联机战绩（依赖游戏总开关）', group: '游戏' },
+  { key: 'farm', label: '开心农场', description: '种菜、偷菜与农场扩建（依赖游戏总开关）', group: '游戏' },
   { key: 'aiAssistant', label: '首页 AI 助手', description: '首页站点问答助手与 AI 写作', group: 'AI' },
   { key: 'aiChat', label: 'AI 对话（DeepSeek）', description: '多会话 AI 对话与联网搜索', group: 'AI' },
   { key: 'webProxy', label: '网页反代', description: '网页代理浏览与站点管理', group: '系统' },
@@ -57,7 +59,7 @@ export function effectiveFeatureEnabled(
   map: Readonly<Record<FeatureKey, boolean>>,
   key: FeatureKey,
 ): boolean {
-  if (key === 'gamesSingle' || key === 'gamesOnline') {
+  if (key === 'gamesSingle' || key === 'gamesOnline' || key === 'farm') {
     return map.games !== false && map[key] !== false
   }
   return map[key] !== false
