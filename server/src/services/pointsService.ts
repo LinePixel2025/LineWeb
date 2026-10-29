@@ -4,6 +4,7 @@ import { AppError } from '../middleware/errorHandler.js'
 import {
   DEFAULT_POINTS_CONFIG,
   applyDailyCap,
+  applyDailyLossCap,
   computeGamePoints,
   getTodayDayStart,
   normalizePointsConfig,
@@ -448,11 +449,21 @@ export async function awardGamePointsTx(
 
   const gross = computeGamePoints(game, rule, input)
   const dayStart = getTodayDayStart(options?.now)
-  const agg = await tx.pointsLedger.aggregate({
-    where: { userId, game, amount: { gt: 0 }, createdAt: { gte: dayStart } },
-    _sum: { amount: true },
-  })
-  const amount = applyDailyCap(gross, agg._sum.amount ?? 0, rule.dailyCap)
+  let amount = gross
+  if (gross > 0) {
+    const agg = await tx.pointsLedger.aggregate({
+      where: { userId, game, amount: { gt: 0 }, createdAt: { gte: dayStart } },
+      _sum: { amount: true },
+    })
+    amount = applyDailyCap(gross, agg._sum.amount ?? 0, rule.dailyCap)
+  } else if (gross < 0) {
+    // 输分上限按「今日该游戏已扣的绝对值」截断；达到上限后不再扣分，但仍可继续游戏
+    const agg = await tx.pointsLedger.aggregate({
+      where: { userId, game, amount: { lt: 0 }, createdAt: { gte: dayStart } },
+      _sum: { amount: true },
+    })
+    amount = applyDailyLossCap(gross, Math.abs(agg._sum.amount ?? 0), rule.dailyLossCap)
+  }
   const capped = amount !== gross
 
   if (amount === 0) {

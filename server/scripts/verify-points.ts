@@ -12,6 +12,7 @@ import {
   DEFAULT_POINTS_CONFIG,
   EMOJI_PACK_KEYS,
   applyDailyCap,
+  applyDailyLossCap,
   computeGamePoints,
   getTodayDateKey,
   getTodayDayStart,
@@ -92,6 +93,21 @@ assertEqual(applyDailyCap(25, 110, 120), 10, '每日上限截断正收益')
 assertEqual(applyDailyCap(25, 120, 120), 0, '达到上限后不再加分')
 assertEqual(applyDailyCap(-6, 120, 120), -6, '扣分不受每日上限影响')
 assertEqual(applyDailyCap(25, 0, 0), 25, '上限 0 表示不限')
+
+// 双向日限：输分上限按今日已扣绝对值截断，0 表示不限
+assertEqual(applyDailyLossCap(-6, 0, 20), -6, '输分上限内全额扣除')
+assertEqual(applyDailyLossCap(-6, 16, 20), -4, '输分上限截断扣分')
+assertEqual(applyDailyLossCap(-6, 20, 20), 0, '达到输分上限后不再扣分')
+assertEqual(applyDailyLossCap(-6, 25, 20), 0, '已超额时不再扣分')
+assertEqual(applyDailyLossCap(-6, 0, 0), -6, '输分上限 0 表示不限')
+assertEqual(applyDailyLossCap(25, 20, 20), 25, '正收益不受输分上限影响')
+assertEqual(DEFAULT_GAME_RULES['2048'].dailyLossCap, 20, '2048 默认输分上限 20')
+assertEqual(DEFAULT_GAME_RULES.doudizhu.dailyLossCap, 40, '斗地主默认输分上限 40')
+assertEqual(DEFAULT_GAME_RULES.minesweeper.dailyLossCap, 30, '扫雷默认输分上限 30')
+assert(
+  GAME_KEYS.every((key) => DEFAULT_GAME_RULES[key].dailyLossCap >= 0),
+  '所有游戏都有非负的输分上限',
+)
 
 // Asia/Shanghai 日界线：UTC 15:59 仍是当天，UTC 16:00 进入次日
 assertEqual(getTodayDateKey(Date.parse('2026-10-28T15:59:59Z')), '2026-10-28', 'UTC 15:59 → 上海 23:59')
