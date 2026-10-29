@@ -23,6 +23,18 @@ const announcementSchema = z.object({
   isPinned: z.boolean().default(false),
 })
 
+/**
+ * 局部更新：不能复用 announcementSchema.partial()——字段上的 .default()
+ * 会在部分更新（如只切 isActive）时把 level/isPinned 重置为默认值。
+ */
+const announcementUpdateSchema = z.object({
+  title: z.string().trim().min(1, '标题不能为空').max(80, '标题最长 80 个字符').optional(),
+  content: z.string().trim().min(1, '内容不能为空').max(5000, '内容最长 5000 个字符').optional(),
+  level: z.enum(LEVELS).optional(),
+  isActive: z.boolean().optional(),
+  isPinned: z.boolean().optional(),
+})
+
 const selectFields = {
   id: true,
   title: true,
@@ -91,7 +103,7 @@ adminAnnouncementsRouter.put(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseId(req.params.id)
-    const parsed = announcementSchema.partial().safeParse(req.body || {})
+    const parsed = announcementUpdateSchema.safeParse(req.body || {})
     if (!parsed.success) throw new AppError(parsed.error.issues[0]?.message || '输入数据无效', 400)
     const exists = await prisma.siteAnnouncement.findUnique({ where: { id }, select: { id: true } })
     if (!exists) throw new AppError('公告不存在', 404)
