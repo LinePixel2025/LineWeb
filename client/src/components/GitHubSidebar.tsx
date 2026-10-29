@@ -26,6 +26,7 @@ function SidebarIcon({ path }: { path: string }) {
     : path === '/webproxy' ? <><circle cx="8" cy="8" r="5.5" /><path d="M2.5 8h11M8 2.5c1.7 1.8 2.5 3.6 2.5 5.5S9.7 11.7 8 13.5C6.3 11.7 5.5 9.9 5.5 8s.8-3.7 2.5-5.5Z" /></>
     : path === '/games' ? <><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h5A2.5 2.5 0 0 1 13 7.5v1A2.5 2.5 0 0 1 10.5 11h-5A2.5 2.5 0 0 1 3 8.5z" /><path d="M5 8h2M6 7v2" /><circle cx="10.5" cy="7.5" r=".45" fill="currentColor" stroke="none" /><circle cx="11.5" cy="9" r=".45" fill="currentColor" stroke="none" /></>
     : path === '/points' ? <><circle cx="8" cy="8" r="5.5" /><path d="M8 4.75v6.5M10.25 6.25H7.5a1.25 1.25 0 0 0 0 2.5h1a1.25 1.25 0 0 1 0 2.5H5.75" /></>
+    : path === '/stocks' ? <><path d="M2 13.5h12" /><path d="M2.75 10.75 6 7.5l2.5 2 4.25-5" /><path d="M10.5 4.5h2.5V7" /></>
     : <><circle cx="8" cy="5.5" r="2.5" /><path d="M3.5 13a4.5 4.5 0 0 1 9 0" /></>
 
   return <svg className="gh-sidebar-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{icon}</svg>
@@ -51,6 +52,7 @@ const sections = [
       { path: '/drive', label: 'Files', icon: 'M0 2.75C0 1.784.784 1 1.75 1H5c.55 0 1.07.26 1.4.7l.9 1.2a.25.25 0 0 0 .2.1h6.75c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25Zm1.75-.25a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25H7.5c-.55 0-1.07-.26-1.4-.7l-.9-1.2a.25.25 0 0 0-.2-.1Z' },
       { path: '/features', label: 'About', icon: 'M6.354.646a.5.5 0 0 1 .708 0l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L10.043 5 6.354 1.354a.5.5 0 0 1 0-.708Z' },
       { path: '/games', label: '游戏', icon: 'M3 7.5A2.5 2.5 0 0 1 5.5 5h5A2.5 2.5 0 0 1 13 7.5v1A2.5 2.5 0 0 1 10.5 11h-5A2.5 2.5 0 0 1 3 8.5z' },
+      { path: '/stocks', label: '模拟股市', icon: 'M2 13.5h12M2.75 10.75 6 7.5l2.5 2 4.25-5' },
     ]
   },
   {
@@ -96,6 +98,7 @@ export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onT
               if (item.path === '/drive' && !isEnabled('drive')) return false
               if (item.path === '/features' && !isEnabled('pages')) return false
               if (item.path === '/games' && !isEnabled('games')) return false
+              if (item.path === '/stocks' && (!user || !isEnabled('stock'))) return false
               return true
             })
             if (visibleItems.length === 0) return null

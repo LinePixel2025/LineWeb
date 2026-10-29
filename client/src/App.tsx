@@ -24,6 +24,7 @@ const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 const PostsPage = lazy(() => import('./pages/PostsPage'))
 const PostPage = lazy(() => import('./pages/PostPage'))
 const CalculatorPage = lazy(() => import('./pages/CalculatorPage'))
+const StocksPage = lazy(() => import('./pages/StocksPage'))
 const FeaturesPage = lazy(() => import('./pages/FeaturesPage'))
 const GamesPage = lazy(() => import('./pages/GamesPage'))
 const GameLeaderboardPage = lazy(() => import('./pages/games/GameLeaderboardPage'))
@@ -165,6 +166,12 @@ export default function App() {
                       </Route>
                       <Route element={<RequireFeature feature="calculator" />}>
                         <Route path="/calculator" element={<CalculatorPage />} />
+                      </Route>
+                      {/* 模拟股市（初版）：只读行情，进入前弹窗提示不可交易 / 无收益 */}
+                      <Route element={<RequireFeature feature="stock" />}>
+                        <Route path="/stocks" element={
+                          <ProtectedRoute><StocksPage /></ProtectedRoute>
+                        } />
                       </Route>
                       <Route element={<RequireFeature feature="games" />}>
                         <Route path="/games" element={<GamesPage />} />

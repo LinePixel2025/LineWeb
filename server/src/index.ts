@@ -27,6 +27,7 @@ import gameRoutes from './routes/games.js'
 import gameStatsRoutes from './routes/gameStats.js'
 import pointsRoutes from './routes/points.js'
 import farmRoutes from './routes/farm.js'
+import stockRoutes from './routes/stocks.js'
 import adminPointsRoutes from './routes/adminPoints.js'
 import { featuresRouter, adminFeaturesRouter } from './routes/features.js'
 import { announcementsRouter, adminAnnouncementsRouter } from './routes/announcements.js'
@@ -187,6 +188,8 @@ app.use('/api/games', requireFeature('gamesOnline'), gameRoutes)
 app.use('/api/points', pointsRoutes)
 // 开心农场（种菜 / 偷菜 / 扩建），受 farm 功能开关控制
 app.use('/api/farm', requireFeature('farm'), farmRoutes)
+// 模拟股市（初版：只读行情，不可交易、无收益），受 stock 功能开关控制
+app.use('/api/stocks', requireFeature('stock'), stockRoutes)
 // 积分体系管理（规则 / 商店 / 用户调分，需 points:manage 能力）
 app.use('/api/admin/points', adminPointsRoutes)
 // 网页反代：站点管理（需登录令牌）
@@ -345,6 +348,10 @@ app.get('/api', (_req, res) => {
       neighbors: { method: 'GET', path: '/api/farm/neighbors?q=', auth: true, description: '邻居农场（有可偷作物优先）' },
       visit: { method: 'GET', path: '/api/farm/users/:id', auth: true, description: '访问他人农场' },
       steal: { method: 'POST', path: '/api/farm/users/:id/steal/:index', auth: true, description: '偷菜（每日次数上限；同一茬每人一次；地主至少保留 1 单位）' },
+    },
+    stocks: {
+      note: '模拟股市（初版）：仅只读行情，不可交易、无收益；需 stock 功能开关。数据由日期确定性生成，同一天重复请求一致。',
+      market: { method: 'GET', path: '/api/stocks/market', auth: true, description: '8 只虚构股票的最新价 / 涨跌幅 / 30 日走势' },
     },
     chat: {
       note: '私信 / 群聊已迁移到独立 XMPP 服务（internet_neko）：消息与会话走 /api/chat/xmpp/*，浏览器经 /ws/xmpp 中继（不可用时降级 /api/chat/xmpp/http-* 长轮询）。好友关系仍以 LineWeb Prisma 为唯一真相源。',
