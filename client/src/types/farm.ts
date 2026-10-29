@@ -40,6 +40,20 @@ export interface StealQuota {
   remaining: number
 }
 
+/** 每日随机掉落的种子 */
+export interface SeedDropItem {
+  key: string
+  name: string
+  emoji: string
+  count: number
+}
+
+export interface SeedDrop {
+  /** 本次拉取是否触发了当日掉落（同日只有一次） */
+  dropped: boolean
+  seeds: SeedDropItem[]
+}
+
 export interface FarmStealRecord {
   id: number
   crop: FarmCrop | null
@@ -79,6 +93,8 @@ export interface FarmView {
   stealQuota: StealQuota
   /** 自己今天已被偷的次数（达到上限后别人偷不到） */
   victimQuota: StealQuota
+  /** 每日随机掉落种子（同一天只有一次 dropped=true） */
+  seedDrop: SeedDrop
   recentSteals: { made: FarmStealRecord[]; received: FarmStealRecord[] }
 }
 

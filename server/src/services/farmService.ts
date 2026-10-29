@@ -16,10 +16,11 @@ import {
   fertilizeReadyAt,
   getCrop,
   nextExpansion,
+  pickDailySeed,
   rollStealSuccess,
   type CropDef,
 } from '../lib/farmCrops.js'
-import { getTodayDayStart, type PointsConfigDto } from '../lib/pointsRules.js'
+import { getTodayDateKey, getTodayDayStart, type PointsConfigDto } from '../lib/pointsRules.js'
 import {
   awardPointsTx,
   getPointsConfig,
@@ -156,6 +157,68 @@ function quotaDto(used: number, limit: number): StealQuotaDto {
   return { used, limit, remaining: Math.max(0, limit - used) }
 }
 
+export interface SeedDropItemDto {
+  key: string
+  name: string
+  emoji: string
+  count: number
+}
+
+export interface SeedDropDto {
+  /** 本次请求是否触发了当日掉落（同一天只有第一次为 true） */
+  dropped: boolean
+  seeds: SeedDropItemDto[]
+}
+
+const EMPTY_SEED_DROP: SeedDropDto = { dropped: false, seeds: [] }
+
+/**
+ * 每日随机掉落种子。
+ *
+ * 用 `lastSeedDropDate` 做条件更新（CAS）抢占当天的掉落资格：并发或重复请求
+ * 只有第一次 `count === 1`，其余直接返回未掉落，因此同一天不会重复发放。
+ */
+async function ensureSeedDrop(
+  farm: { id: number },
+  config: PointsConfigDto,
+  rng: () => number = Math.random,
+): Promise<SeedDropDto> {
+  const max = config.farm.seedDropMax
+  if (max <= 0) return EMPTY_SEED_DROP
+  const today = getTodayDateKey()
+  const claimed = await prisma.farm.updateMany({
+    where: {
+      id: farm.id,
+      OR: [{ lastSeedDropDate: null }, { lastSeedDropDate: { not: today } }],
+    },
+    data: { lastSeedDropDate: today },
+  })
+  if (claimed.count !== 1) return EMPTY_SEED_DROP
+
+  const total = 1 + Math.floor(rng() * max)
+  const stacks = new Map<string, SeedDropItemDto>()
+  for (let i = 0; i < total; i += 1) {
+    const crop = pickDailySeed(rng)
+    if (!crop) continue
+    const existing = stacks.get(crop.key)
+    if (existing) {
+      existing.count += 1
+    } else {
+      stacks.set(crop.key, { key: crop.key, name: crop.name, emoji: crop.emoji, count: 1 })
+    }
+  }
+
+  for (const seed of stacks.values()) {
+    await prisma.farmItem.upsert({
+      where: { farmId_kind_itemKey: { farmId: farm.id, kind: 'seed', itemKey: seed.key } },
+      create: { farmId: farm.id, kind: 'seed', itemKey: seed.key, count: seed.count },
+      update: { count: { increment: seed.count } },
+    })
+  }
+
+  return { dropped: true, seeds: [...stacks.values()] }
+}
+
 export interface FarmView {
   farm: {
     id: number
@@ -175,6 +238,8 @@ export interface FarmView {
   stealQuota: StealQuotaDto
   /** 自己今天已被偷的次数（达到上限后别人偷不到） */
   victimQuota: StealQuotaDto
+  /** 每日随机掉落种子（同一天只有一次 dropped=true） */
+  seedDrop: SeedDropDto
   recentSteals: Awaited<ReturnType<typeof recentSteals>>
 }
 
@@ -210,8 +275,15 @@ export async function getFarmView(userId: number): Promise<FarmView> {
       farm: null,
       plots: [],
       inventory: { seeds: [], fertilizer: 0 },
+      seedDrop: EMPTY_SEED_DROP,
     }
   }
+
+  const seedDrop = await ensureSeedDrop(farm, config)
+  // 掉落会写入新的 FarmItem，需要重新取一次仓库
+  const items = seedDrop.dropped
+    ? await prisma.farmItem.findMany({ where: { farmId: farm.id } })
+    : farm.items
 
   return {
     ...base,
@@ -229,7 +301,8 @@ export async function getFarmView(userId: number): Promise<FarmView> {
       .slice()
       .sort((a, b) => a.index - b.index)
       .map((plot) => plotDto(plot, now)),
-    inventory: { seeds: seedsOf(farm.items), fertilizer: fertilizerOf(farm.items) },
+    inventory: { seeds: seedsOf(items), fertilizer: fertilizerOf(items) },
+    seedDrop,
   }
 }
 

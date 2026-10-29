@@ -560,6 +560,11 @@
   background: var(--gh-danger-soft, rgba(248, 81, 73, 0.12));
   color: var(--gh-danger);
 }
+.gh-farm-toast--seed {
+  border-color: var(--gh-warning);
+  background: var(--gh-warning-soft);
+  color: var(--gh-warning);
+}
 .gh-farm-neighbors-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: var(--gh-space-3); flex-wrap: wrap; }
 .gh-farm-neighbors-search { display: flex; gap: 6px; flex: 1 1 240px; }
 .gh-farm-neighbors-search .gh-input { max-width: 220px; }

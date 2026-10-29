@@ -88,12 +88,17 @@ export default function FarmPage() {
   const [renameValue, setRenameValue] = useState('')
   const [tutorialOpen, setTutorialOpen] = useState(false)
   const [stealFlash, setStealFlash] = useState<string | null>(null)
+  const [seedToast, setSeedToast] = useState<string | null>(null)
+  const seedToastTimerRef = useRef<number | null>(null)
 
   const mountedRef = useRef(true)
   useEffect(() => {
     // StrictMode 下 effect 会挂载 → 卸载 → 再挂载，必须在挂载时复位
     mountedRef.current = true
-    return () => { mountedRef.current = false }
+    return () => {
+      mountedRef.current = false
+      if (seedToastTimerRef.current !== null) window.clearTimeout(seedToastTimerRef.current)
+    }
   }, [])
 
   const now = useNow(!!view?.farm)
@@ -102,7 +107,19 @@ export default function FarmPage() {
     if (!silent) setLoading(true)
     try {
       const data = await api.get<FarmView>('/farm')
-      if (mountedRef.current) setView(data)
+      if (mountedRef.current) {
+        setView(data)
+        // 服务端只会在当天第一次拉取时返回 dropped=true
+        if (data.seedDrop?.dropped && data.seedDrop.seeds.length > 0) {
+          const detail = data.seedDrop.seeds.map((seed) => `${seed.name} ×${seed.count}`).join('、')
+          setSeedToast(`🎁 今日掉落种子：${detail}`)
+          if (seedToastTimerRef.current !== null) window.clearTimeout(seedToastTimerRef.current)
+          seedToastTimerRef.current = window.setTimeout(() => {
+            seedToastTimerRef.current = null
+            setSeedToast(null)
+          }, 5000)
+        }
+      }
       return data
     } catch (err) {
       if (!silent) setError(err instanceof Error ? err.message : '加载农场失败')
@@ -307,6 +324,7 @@ export default function FarmPage() {
 
           {error && <div className="gh-alert gh-alert--danger" role="alert">{error}</div>}
           {notice && <div className="gh-alert gh-alert--success" role="status">{notice}</div>}
+          {seedToast && <div className="gh-farm-toast gh-farm-toast--seed" role="status">{seedToast}</div>}
 
           {!farm ? (
             <CreateFarmCard busy={busy === 'create'} onCreate={handleCreate} />
@@ -470,6 +488,7 @@ export default function FarmPage() {
             <h2 className="gh-farm-card-title">小贴士</h2>
             <ul className="gh-farm-tips">
               <li>作物成熟后记得及时收获，收成 = 产量 × 单价。</li>
+              <li>每天第一次打开农场，会随机掉落一些种子。</li>
               <li>偷菜按概率成功，被地主家的狗发现不扣次数；每茬作物每人只能偷一次。</li>
               <li>地主至少保留 1 份收成；每人每天被偷的次数也有上限。</li>
             </ul>

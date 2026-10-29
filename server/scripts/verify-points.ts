@@ -37,8 +37,10 @@ import {
   getCrop,
   growthProgress,
   nextExpansion,
+  pickDailySeed,
   pickWeighted,
   rollStealSuccess,
+  seedDropWeight,
 } from '../src/lib/farmCrops.js'
 
 let passed = 0
@@ -238,5 +240,13 @@ assertEqual(pickWeighted(['a', 'b'], (item) => (item === 'a' ? 1 : 3), () => 0),
 assertEqual(pickWeighted(['a', 'b'], (item) => (item === 'a' ? 1 : 3), () => 0.3), 'b', '权重 1/4 时 rng 0.3 落到第二项')
 assertEqual(pickWeighted(['a', 'b'], (item) => (item === 'a' ? 1 : 3), () => 0.999), 'b', 'rng 接近 1 时取最后一项')
 assertEqual(pickWeighted(['a', 'b'], (item) => (item === 'a' ? 1 : 0), () => 0.999), 'a', '末项权重为 0 时回退到有权限的项')
+
+// 每日掉落种子：按 tier 加权，低阶更常见、金苹果最稀罕
+assertEqual(pickDailySeed(() => 0)?.key, 'carrot', 'rng 0 时掉落最低阶作物')
+assertEqual(pickDailySeed(() => 0.999999)?.key, 'goldenapple', 'rng 接近 1 时掉落金苹果')
+assert(seedDropWeight(carrot) > seedDropWeight(getCrop('goldenapple')!), '低阶作物掉落权重高于金苹果')
+for (const crop of FARM_CROPS) {
+  assert(seedDropWeight(crop) > 0, `${crop.key} 掉落权重为正`)
+}
 
 console.log(`✅ 积分与农场规则自检通过：${passed} 个断言`)

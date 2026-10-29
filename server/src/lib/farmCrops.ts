@@ -145,3 +145,21 @@ export function rollStealSuccess(rate: number, rng: () => number = Math.random):
   return rng() < value
 }
 
+/** 每日掉落种子的单作物权重：低阶常见、高阶稀罕 */
+const SEED_DROP_TIER_WEIGHT: Readonly<Record<number, number>> = {
+  1: 40,
+  2: 24,
+  3: 12,
+  4: 6,
+  5: 2,
+}
+
+export function seedDropWeight(crop: CropDef): number {
+  return SEED_DROP_TIER_WEIGHT[crop.tier] ?? 1
+}
+
+/** 每日随机掉落的作物（按 tier 加权，rng 可注入） */
+export function pickDailySeed(rng: () => number = Math.random): CropDef | null {
+  return pickWeighted(FARM_CROPS, seedDropWeight, rng)
+}
+
