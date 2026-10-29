@@ -47,8 +47,13 @@ model User {
   pointsEarned           Int                  @default(0) @map("points_earned") // 累计获得积分（排行榜 / 成就展示）
   equippedTitleId        Int?                 @map("equipped_title_id") // 当前佩戴的称号（LineWeb 站内展示）
   equippedTitle          PointsShopItem?      @relation("UserEquippedTitle", fields: [equippedTitleId], references: [id], onDelete: SetNull)
+  equippedAvatarFrameId  Int?                 @map("equipped_avatar_frame_id") // 当前佩戴的头像框（仅 LineWeb 站内展示，不同步 neko）
+  equippedAvatarFrame    PointsShopItem?      @relation("UserEquippedAvatarFrame", fields: [equippedAvatarFrameId], references: [id], onDelete: SetNull)
   pointsLedger           PointsLedger[]
   pointsItems            UserPointsItem[]
+  checkins               DailyCheckin[]
+  leaderTitles           GameLeaderTitle[]
+  chatBan                ChatBan?
   farm                   Farm?
   farmStealsMade         FarmSteal[]          @relation("FarmStealThief")
   farmStealsReceived     FarmSteal[]          @relation("FarmStealVictim")
@@ -598,7 +603,7 @@ model PointsLedger {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   amount    Int // 正数=获得，负数=扣除
   balance   Int // 变动后余额
-  reason    String // game_result | farm_harvest | farm_steal | shop_purchase | farm_expand | farm_shop | admin_adjust
+  reason    String // game_result | farm_harvest | farm_steal | farm_welcome | farm_shop | farm_expand | farm_merchant | shop_purchase | checkin | leader_bonus | stock | admin_adjust
   game      String? // 来源游戏 id（2048 / doudizhu / ... / farm）
   note      String?
   createdAt DateTime @default(now()) @map("created_at")
@@ -610,7 +615,7 @@ model PointsLedger {
 
 /**
  * 积分规则（单行 JSON）
- * config: { games: Record<gameKey, { win, loss, draw, participation, scoreBonusPer, scoreBonusMax, dailyCap }>, farm: {...} }
+ * config: { games: Record<gameKey, { win, loss, draw, participation, scoreDivisor, scoreBonusMax, dailyCap, dailyLossCap }>, farm: {...}, checkin: {...}, leaderTitle: {...} }
  * 缺失字段一律回退到代码默认值，管理员只覆盖想改的项。
  */
 model PointsConfig {
@@ -623,8 +628,8 @@ model PointsConfig {
 }
 
 /**
- * 积分商店商品：称号（type=title）与专属表情包（type=emoji）
- * payload 为 JSON：称号 { color, icon }；表情包 { pack }（对应聊天表情商店的包 id）
+ * 积分商店商品：称号（type=title）、专属表情包（type=emoji）与头像框（type=avatar_frame）
+ * payload 为 JSON：称号 { color, icon }；表情包 { pack }；头像框 { frame, color }
  */
 model PointsShopItem {
   id          Int              @id @default(autoincrement())
@@ -641,6 +646,7 @@ model PointsShopItem {
   updatedAt   DateTime         @updatedAt @map("updated_at")
   owners      UserPointsItem[]
   equippedBy  User[]           @relation("UserEquippedTitle")
+  avatarFrameEquippedBy User[] @relation("UserEquippedAvatarFrame")
 
   @@index([type, isActive, sortOrder])
   @@map("points_shop_items")
@@ -677,10 +683,12 @@ model Farm {
   harvested     Int        @default(0) // 累计收获次数
   harvestPoints Int        @default(0) @map("harvest_points") // 累计收获积分
   stolenPoints  Int        @default(0) @map("stolen_points") // 累计偷菜所得
+  lastSeedDropDate String? @map("last_seed_drop_date") // 最近一次每日掉落种子日期（Asia/Shanghai YYYY-MM-DD）
   createdAt     DateTime   @default(now()) @map("created_at")
   updatedAt     DateTime   @updatedAt @map("updated_at")
   plots         FarmPlot[]
   items         FarmItem[]
+  merchantOffers FarmMerchantOffer[]
 
   @@map("farms")
 }
@@ -738,4 +746,75 @@ model FarmSteal {
   @@index([victimId, createdAt])
   @@index([plotId, thiefId, createdAt])
   @@map("farm_steals")
+}
+
+/**
+ * 随机商人每日报价：每个农场每天一批限购低价商品，跨日重新生成
+ */
+model FarmMerchantOffer {
+  id            Int      @id @default(autoincrement())
+  farmId        Int      @map("farm_id")
+  farm          Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  dateKey       String   @map("date_key") // Asia/Shanghai YYYY-MM-DD
+  itemKind      String   @map("item_kind") // seed | fertilizer
+  itemKey       String   @map("item_key")
+  count         Int
+  price         Int // 折后总价（积分）
+  originalPrice Int      @map("original_price")
+  discountPct   Int      @map("discount_pct") // 折扣百分比（60 = 6 折）
+  purchased     Boolean  @default(false)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@unique([farmId, dateKey, itemKind, itemKey])
+  @@index([farmId, dateKey])
+  @@map("farm_merchant_offers")
+}
+
+/**
+ * 每日签到记录（dateKey 唯一保证幂等）
+ */
+model DailyCheckin {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateKey   String   @map("date_key") // Asia/Shanghai YYYY-MM-DD
+  streak    Int      @default(1)
+  points    Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, dateKey])
+  @@index([userId, createdAt])
+  @@map("daily_checkins")
+}
+
+/**
+ * 单机排行榜第一位（每个游戏至多一行）；被超过时整行改挂新用户或删除
+ */
+model GameLeaderTitle {
+  id        Int      @id @default(autoincrement())
+  game      String   @unique
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  awardedAt DateTime @default(now()) @map("awarded_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("game_leader_titles")
+}
+
+/**
+ * 聊天封禁（LineWeb 侧拦截聊天入口，不修改 neko 账号）
+ */
+model ChatBan {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @unique @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reason    String    @default("")
+  bannedBy  Int?      @map("banned_by")
+  active    Boolean   @default(true)
+  liftedAt  DateTime? @map("lifted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([active, createdAt])
+  @@map("chat_bans")
 }

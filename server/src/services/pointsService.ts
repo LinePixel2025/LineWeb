@@ -83,8 +83,38 @@ export async function getPointsConfig(): Promise<PointsConfigDto> {
   }
 }
 
+/**
+ * 深合并管理员提交的规则：只覆盖传入的字段，其余保留当前值。
+ * 这样旧版前端整包提交（缺少新字段）也不会把新配置重置成默认值。
+ */
+function mergePointsConfig(base: PointsConfigDto, input: unknown): Record<string, unknown> {
+  const patch = input && typeof input === 'object' ? input as Record<string, unknown> : {}
+  const patchGames = patch.games && typeof patch.games === 'object'
+    ? patch.games as Record<string, unknown>
+    : {}
+  const games: Record<string, unknown> = { ...base.games }
+  for (const key of Object.keys(games)) {
+    const row = patchGames[key]
+    if (row && typeof row === 'object') {
+      games[key] = { ...(games[key] as Record<string, unknown>), ...(row as Record<string, unknown>) }
+    }
+  }
+  const take = (key: keyof PointsConfigDto) => (
+    patch[key] && typeof patch[key] === 'object'
+      ? { ...(base[key] as Record<string, unknown>), ...(patch[key] as Record<string, unknown>) }
+      : base[key]
+  )
+  return {
+    games,
+    farm: take('farm'),
+    checkin: take('checkin'),
+    leaderTitle: take('leaderTitle'),
+  }
+}
+
 export async function savePointsConfig(input: unknown, adminId: number): Promise<PointsConfigDto> {
-  const config = normalizePointsConfig(input)
+  const current = await getPointsConfig()
+  const config = normalizePointsConfig(mergePointsConfig(current, input))
   await prisma.pointsConfig.upsert({
     where: { id: 1 },
     create: { id: 1, config: JSON.stringify(config), updatedBy: adminId },

@@ -14,10 +14,38 @@ export interface PointsProfile {
   title: UserTitleDto | null
   /** 已购商品 key（含表情包，客户端据此解锁表情商店） */
   ownedKeys: string[]
+  avatarFrame: AvatarFrameDto | null
+  checkin: {
+    checkedInToday: boolean
+    streak: number
+    todayPoints: number
+    nextPoints: number
+  }
+  leaderTitles: LeaderTitleDto[]
 }
 
-export type ShopItemType = 'title' | 'emoji'
+/** 单机榜一传说称号（自动授予，被超过即消失） */
+export interface LeaderTitleDto {
+  game: string
+  gameName: string
+  name: string
+  color: string
+  icon: string
+  rarity: 'legendary'
+  awardedAt: string
+}
+
+export type ShopItemType = 'title' | 'emoji' | 'avatar_frame'
 export type ShopRarity = 'common' | 'rare' | 'epic' | 'legendary'
+export type AvatarFrameStyle = 'gold' | 'neon' | 'sakura' | 'galaxy'
+
+/** 头像框（LineWeb 站内展示，不同步 neko） */
+export interface AvatarFrameDto {
+  id: number
+  name: string
+  frame: AvatarFrameStyle
+  color: string
+}
 
 export interface ShopItem {
   id: number
@@ -99,17 +127,36 @@ export interface GamePointRule {
   scoreDivisor: number
   scoreBonusMax: number
   dailyCap: number
+  dailyLossCap: number
 }
 
 export interface FarmPointRule {
   stealRatio: number
   stealDailyLimit: number
+  stealSuccessRate: number
+  victimDailyStealLimit: number
+  seedDropMax: number
+  merchantCount: number
+  merchantDiscountMin: number
+  merchantDiscountMax: number
   welcomePoints: number
+}
+
+export interface CheckinRule {
+  basePoints: number
+  streakStep: number
+  streakMaxBonus: number
+}
+
+export interface LeaderTitleRule {
+  rewardPoints: number
 }
 
 export interface PointsConfig {
   games: Record<string, GamePointRule>
   farm: FarmPointRule
+  checkin: CheckinRule
+  leaderTitle: LeaderTitleRule
 }
 
 /** 管理端商品（含拥有者数量与时间戳） */
