@@ -28,6 +28,7 @@ const REASON_LABELS: Record<string, string> = {
   farm_steal: '偷菜所得',
   farm_welcome: '开荒礼包',
   farm_shop: '购买种子 / 肥料',
+  farm_merchant: '商人特价',
   farm_expand: '农田扩建',
   shop_purchase: '积分商店',
   admin_adjust: '管理员调整',

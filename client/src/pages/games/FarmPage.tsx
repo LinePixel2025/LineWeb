@@ -9,15 +9,18 @@ import type {
   FarmPlot,
   FarmView,
   HarvestResult,
+  MerchantOffer,
+  MerchantPurchaseResult,
   NeighborFarmView,
   StealResult,
   StealSuccess,
 } from '../../types/farm'
 
-type Tab = 'farm' | 'neighbors' | 'shop' | 'records'
+type Tab = 'farm' | 'merchant' | 'neighbors' | 'shop' | 'records'
 
 const TAB_LABELS: Array<[Tab, string]> = [
   ['farm', '我的农场'],
+  ['merchant', '流浪商人'],
   ['neighbors', '邻居农场'],
   ['shop', '种子商店'],
   ['records', '偷菜记录'],
@@ -172,6 +175,7 @@ export default function FarmPage() {
 
   const farm = view?.farm ?? null
   const plots = view?.plots ?? []
+  const merchantPending = view?.merchant.offers.filter((offer) => !offer.purchased).length ?? 0
   const readyPlots = plots.filter((plot) => plot.ready)
   const emptyPlots = plots.filter((plot) => !plot.crop).length
   const growingPlots = plots.length - readyPlots.length - emptyPlots
@@ -192,6 +196,23 @@ export default function FarmPage() {
     if (!next) return
     if (!window.confirm(`花 ${next.cost} 积分把农田扩建到 ${next.plotCount} 块？`)) return
     await run('expand', () => api.post<FarmView>('/farm/expand'), `农田扩建到 ${next.plotCount} 块`)
+  }
+
+  const handleBuyMerchant = async (offer: MerchantOffer) => {
+    if (busy) return
+    setBusy(`merchant-${offer.id}`)
+    setError('')
+    setNotice('')
+    try {
+      const result = await api.post<MerchantPurchaseResult>(`/farm/merchant/${offer.id}/buy`)
+      setView(result.view)
+      setNotice(`商人特价：${result.offer.name} ×${result.offer.count}，花费 ${result.offer.price} 积分`)
+      await refreshPoints()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '购买失败，请稍后再试')
+    } finally {
+      setBusy(null)
+    }
   }
 
   const handlePlant = async (plotIndex: number, cropKey: string) => {
@@ -383,6 +404,9 @@ export default function FarmPage() {
                   >
                     {label}
                     {value === 'neighbors' && <span className="gh-farm-tab-dot" aria-hidden />}
+                    {value === 'merchant' && merchantPending > 0 && (
+                      <span className="gh-farm-tab-count">{merchantPending}</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -396,6 +420,14 @@ export default function FarmPage() {
                   onFertilize={(index) => void handleFertilize(index)}
                   onHarvest={(index) => void handleHarvest(index)}
                   onClear={(index) => void handleClear(index)}
+                />
+              )}
+
+              {tab === 'merchant' && (
+                <MerchantTab
+                  view={view}
+                  busy={busy}
+                  onBuy={handleBuyMerchant}
                 />
               )}
 
@@ -798,6 +830,76 @@ function SeedPicker({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+/* ============================================================
+   流浪商人
+   ============================================================ */
+
+function MerchantTab({
+  view,
+  busy,
+  onBuy,
+}: {
+  view: FarmView | null
+  busy: string | null
+  onBuy: (offer: MerchantOffer) => Promise<void>
+}) {
+  const merchant = view?.merchant
+  const offers = merchant?.offers ?? []
+  const points = view?.points ?? 0
+  return (
+    <div className="gh-farm-merchant">
+      <div className="gh-farm-merchant-head">
+        <div>
+          <h2>流浪商人</h2>
+          <p className="gh-text-tertiary">每天 0 点换一批货，每件限购一次；折扣越低越值得下手。</p>
+        </div>
+        <span className="gh-farm-merchant-balance">可用积分 <strong>{points}</strong></span>
+      </div>
+      {offers.length === 0 ? (
+        <p className="gh-farm-empty-line">
+          {merchant ? '今天商人没带货来，明天再来看看。' : '开荒后商人就会来摆摊。'}
+        </p>
+      ) : (
+        <div className="gh-farm-merchant-grid">
+          {offers.map((offer) => {
+            const buying = busy === `merchant-${offer.id}`
+            const affordable = points >= offer.price
+            const discountText = (offer.discountPct / 10).toFixed(offer.discountPct % 10 === 0 ? 0 : 1)
+            return (
+              <div
+                key={offer.id}
+                className={`gh-farm-merchant-card ${offer.purchased ? 'gh-farm-merchant-card--sold' : ''}`}
+              >
+                <div className="gh-farm-merchant-card-top">
+                  <span className="gh-farm-merchant-emoji" aria-hidden>{offer.emoji}</span>
+                  <div className="gh-farm-merchant-title">
+                    <strong>{offer.name} ×{offer.count}</strong>
+                    <span>{offer.itemKind === 'fertilizer' ? '肥料' : '种子'}</span>
+                  </div>
+                  <span className="gh-farm-merchant-discount">{discountText} 折</span>
+                </div>
+                <div className="gh-farm-merchant-price">
+                  <strong>🪙 {offer.price}</strong>
+                  <s>{offer.originalPrice}</s>
+                  <span>省 {offer.originalPrice - offer.price}</span>
+                </div>
+                <button
+                  type="button"
+                  className="gh-btn gh-btn--primary gh-btn--sm"
+                  disabled={offer.purchased || !!busy || !affordable}
+                  onClick={() => void onBuy(offer)}
+                >
+                  {offer.purchased ? '已购买' : buying ? '购买中…' : affordable ? '买下' : '积分不足'}
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

@@ -6,6 +6,7 @@ import { AppError } from '../middleware/errorHandler.js'
 import { authenticate } from '../middleware/auth.js'
 import {
   buyFarmItem,
+  buyMerchantOffer,
   clearPlot,
   createFarm,
   expandFarm,
@@ -95,6 +96,13 @@ router.post('/expand', actionLimiter, asyncHandler(async (req: Request, res: Res
 router.post('/shop', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
   const input = parseInput(buySchema, req.body)
   res.json(await buyFarmItem(currentUserId(req), input))
+}))
+
+// POST /api/farm/merchant/:offerId/buy — 购买随机商人特价商品（仅当天、限购一次）
+router.post('/merchant/:offerId/buy', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const offerId = Number(req.params.offerId)
+  if (!Number.isInteger(offerId) || offerId <= 0) throw new AppError('无效的商品编号', 400)
+  res.json(await buyMerchantOffer(currentUserId(req), offerId))
 }))
 
 // POST /api/farm/tutorial-done

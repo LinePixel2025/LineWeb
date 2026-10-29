@@ -38,6 +38,7 @@ import {
   growthProgress,
   nextExpansion,
   pickDailySeed,
+  pickMerchantOffers,
   pickWeighted,
   rollStealSuccess,
   seedDropWeight,
@@ -248,5 +249,55 @@ assert(seedDropWeight(carrot) > seedDropWeight(getCrop('goldenapple')!), '低阶
 for (const crop of FARM_CROPS) {
   assert(seedDropWeight(crop) > 0, `${crop.key} 掉落权重为正`)
 }
+
+// 随机商人：数量 / 唯一性 / 折扣区间 / 价格公式
+function makeLcg(seed: number): () => number {
+  let state = seed >>> 0
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0
+    return state / 2 ** 32
+  }
+}
+
+const merchantOptions = { count: 6, minDiscount: 0.4, maxDiscount: 0.7 }
+const merchantOffers = pickMerchantOffers(merchantOptions, makeLcg(42))
+assert(merchantOffers.length > 0 && merchantOffers.length <= 6, '商人商品数量在 1..6 之间')
+const merchantKeys = new Set<string>()
+for (const offer of merchantOffers) {
+  const key = `${offer.itemKind}:${offer.itemKey}`
+  assert(!merchantKeys.has(key), `商人商品不重复：${key}`)
+  merchantKeys.add(key)
+  assert(offer.count >= 1 && offer.count <= 3, `商人商品数量 1..3：${key}`)
+  assert(offer.discountPct >= 40 && offer.discountPct <= 70, `折扣落在 40%–70%：${key}`)
+  assert(offer.price >= 1 && offer.price <= offer.originalPrice, `折后价在 1..原价：${key}`)
+  assertEqual(
+    offer.price,
+    Math.max(1, Math.floor((offer.originalPrice * offer.discountPct) / 100)),
+    `折后价按折扣计算：${key}`,
+  )
+  if (offer.itemKind === 'seed') {
+    const crop = getCrop(offer.itemKey)
+    assert(!!crop, `商人种子 key 合法：${offer.itemKey}`)
+    assertEqual(offer.originalPrice, (crop?.seedCost ?? 0) * offer.count, `种子原价 = 单价 × 数量：${key}`)
+  } else {
+    assertEqual(offer.itemKey, 'fertilizer', '商人肥料 key 固定')
+    assertEqual(offer.originalPrice, FERTILIZER_COST * offer.count, '肥料原价 = 单价 × 数量')
+  }
+}
+assertEqual(
+  pickMerchantOffers({ count: 0, minDiscount: 0.4, maxDiscount: 0.7 }, () => 0).length,
+  0,
+  '商人数量 0 时不上架',
+)
+assertEqual(
+  JSON.stringify(pickMerchantOffers(merchantOptions, makeLcg(7))),
+  JSON.stringify(pickMerchantOffers(merchantOptions, makeLcg(7))),
+  '同一随机种子生成相同商品',
+)
+const swappedDiscount = pickMerchantOffers({ count: 4, minDiscount: 0.7, maxDiscount: 0.4 }, makeLcg(9))
+assert(
+  swappedDiscount.every((offer) => offer.discountPct >= 40 && offer.discountPct <= 70),
+  '折扣上下限颠倒时仍落在区间内',
+)
 
 console.log(`✅ 积分与农场规则自检通过：${passed} 个断言`)

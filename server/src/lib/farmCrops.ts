@@ -163,3 +163,81 @@ export function pickDailySeed(rng: () => number = Math.random): CropDef | null {
   return pickWeighted(FARM_CROPS, seedDropWeight, rng)
 }
 
+/* ============================================================
+   随机商人
+   ============================================================ */
+
+export interface MerchantOfferDraft {
+  itemKind: 'seed' | 'fertilizer'
+  itemKey: string
+  count: number
+  price: number
+  originalPrice: number
+  discountPct: number
+}
+
+/** 商人每天最多上架多少件（与配置 merchantCount 上限一致） */
+export const MERCHANT_MAX_OFFERS = 6
+/** 商品里出现肥料的概率 */
+export const MERCHANT_FERTILIZER_CHANCE = 0.25
+/** 单件商品数量上限 */
+const MERCHANT_PACK_MAX = 3
+
+/**
+ * 生成当日商人商品：种子与肥料混合，按折扣区间随机打折。
+ *
+ * 同一 `(kind, key)` 只会出现一次（与数据库唯一键一致），重复抽取会重试，
+ * 因此结果可能少于 `count`（作物种类抽空时）。
+ */
+export function pickMerchantOffers(
+  options: { count: number; minDiscount: number; maxDiscount: number },
+  rng: () => number = Math.random,
+): MerchantOfferDraft[] {
+  const count = Math.max(0, Math.min(MERCHANT_MAX_OFFERS, Math.trunc(options.count) || 0))
+  if (count === 0) return []
+  const lower = Math.max(0.1, Math.min(options.minDiscount, options.maxDiscount))
+  const upper = Math.min(0.9, Math.max(options.minDiscount, options.maxDiscount))
+
+  const offers: MerchantOfferDraft[] = []
+  const seen = new Set<string>()
+
+  for (let slot = 0; slot < count; slot += 1) {
+    let picked: MerchantOfferDraft | null = null
+    for (let attempt = 0; attempt < 8 && !picked; attempt += 1) {
+      let itemKind: 'seed' | 'fertilizer'
+      let itemKey: string
+      let unitCost: number
+      if (rng() < MERCHANT_FERTILIZER_CHANCE) {
+        itemKind = 'fertilizer'
+        itemKey = 'fertilizer'
+        unitCost = FERTILIZER_COST
+      } else {
+        const crop = pickDailySeed(rng)
+        if (!crop) continue
+        itemKind = 'seed'
+        itemKey = crop.key
+        unitCost = crop.seedCost
+      }
+      const key = `${itemKind}:${itemKey}`
+      if (seen.has(key)) continue
+      seen.add(key)
+
+      const pack = 1 + Math.floor(rng() * MERCHANT_PACK_MAX)
+      const originalPrice = unitCost * pack
+      const rawPct = Math.round((lower + rng() * (upper - lower)) * 100)
+      const discountPct = Math.max(10, Math.min(90, rawPct))
+      picked = {
+        itemKind,
+        itemKey,
+        count: pack,
+        originalPrice,
+        discountPct,
+        price: Math.max(1, Math.floor((originalPrice * discountPct) / 100)),
+      }
+    }
+    if (picked) offers.push(picked)
+  }
+
+  return offers
+}
+

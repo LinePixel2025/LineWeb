@@ -240,6 +240,67 @@
   background: var(--gh-success);
   vertical-align: middle;
 }
+.gh-farm-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--gh-warning);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+/* 流浪商人 */
+.gh-farm-merchant-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: var(--gh-space-3);
+  flex-wrap: wrap;
+}
+.gh-farm-merchant-head h2 { margin: 0 0 4px; font-size: var(--gh-text-lg); }
+.gh-farm-merchant-head p { margin: 0; font-size: var(--gh-text-sm); }
+.gh-farm-merchant-balance { font-size: var(--gh-text-sm); color: var(--gh-text-secondary); }
+.gh-farm-merchant-balance strong { margin-left: 4px; color: var(--gh-text); font-size: var(--gh-text-lg); font-variant-numeric: tabular-nums; }
+.gh-farm-merchant-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--gh-space-3); }
+.gh-farm-merchant-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--gh-space-4);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-sm);
+}
+.gh-farm-merchant-card--sold { opacity: 0.62; }
+.gh-farm-merchant-card-top { display: flex; align-items: center; gap: 10px; }
+.gh-farm-merchant-emoji { font-size: 1.8rem; line-height: 1; }
+.gh-farm-merchant-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.gh-farm-merchant-title strong { font-size: var(--gh-text-sm); }
+.gh-farm-merchant-title span { font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
+.gh-farm-merchant-discount {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--gh-warning-soft);
+  color: var(--gh-warning);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+}
+.gh-farm-merchant-price { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.gh-farm-merchant-price strong { font-size: var(--gh-text-lg); color: var(--gh-attention-fg, var(--gh-warning)); font-variant-numeric: tabular-nums; }
+.gh-farm-merchant-price s { font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
+.gh-farm-merchant-price span { font-size: var(--gh-text-xs); color: var(--gh-success); }
+.gh-farm-merchant-card .gh-btn { align-self: flex-start; }
 
 /* ===== 农田网格 ===== */
 .gh-farm-board {

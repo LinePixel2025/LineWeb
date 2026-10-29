@@ -1,5 +1,5 @@
 import prisma from '../lib/prisma.js'
-import type { Farm, FarmItem, FarmPlot, Prisma } from '@prisma/client'
+import type { Farm, FarmItem, FarmMerchantOffer, FarmPlot, Prisma } from '@prisma/client'
 import { AppError } from '../middleware/errorHandler.js'
 import {
   CROP_MAP,
@@ -17,6 +17,7 @@ import {
   getCrop,
   nextExpansion,
   pickDailySeed,
+  pickMerchantOffers,
   rollStealSuccess,
   type CropDef,
 } from '../lib/farmCrops.js'
@@ -219,6 +220,93 @@ async function ensureSeedDrop(
   return { dropped: true, seeds: [...stacks.values()] }
 }
 
+/* ============================================================
+   随机商人
+   ============================================================ */
+
+export interface MerchantOfferDto {
+  id: number
+  itemKind: 'seed' | 'fertilizer'
+  itemKey: string
+  name: string
+  emoji: string
+  count: number
+  price: number
+  originalPrice: number
+  discountPct: number
+  purchased: boolean
+}
+
+export interface MerchantBundleDto {
+  dateKey: string
+  offers: MerchantOfferDto[]
+}
+
+function merchantOfferDto(row: FarmMerchantOffer): MerchantOfferDto {
+  const isFertilizer = row.itemKind === 'fertilizer'
+  const crop = isFertilizer ? null : getCrop(row.itemKey)
+  return {
+    id: row.id,
+    itemKind: isFertilizer ? 'fertilizer' : 'seed',
+    itemKey: row.itemKey,
+    name: isFertilizer ? '肥料' : crop?.name ?? row.itemKey,
+    emoji: isFertilizer ? '💧' : crop?.emoji ?? '🌱',
+    count: row.count,
+    price: row.price,
+    originalPrice: row.originalPrice,
+    discountPct: row.discountPct,
+    purchased: row.purchased,
+  }
+}
+
+/**
+ * 取当天商人商品；当天第一次访问时生成。
+ *
+ * 唯一键 `(farmId, dateKey, itemKind, itemKey)` + upsert 兜住并发
+ * （SQLite 不支持 createMany + skipDuplicates），因此即使两个请求同时生成，
+ * 也只会留下同一批商品，先写入的价格不会被覆盖。
+ */
+async function ensureMerchantOffers(
+  farm: { id: number },
+  config: PointsConfigDto,
+  now: number,
+): Promise<MerchantBundleDto> {
+  const dateKey = getTodayDateKey(now)
+  const load = () => prisma.farmMerchantOffer.findMany({
+    where: { farmId: farm.id, dateKey },
+    orderBy: { id: 'asc' },
+  })
+  let rows = await load()
+  if (rows.length === 0 && config.farm.merchantCount > 0) {
+    const drafts = pickMerchantOffers({
+      count: config.farm.merchantCount,
+      minDiscount: config.farm.merchantDiscountMin,
+      maxDiscount: config.farm.merchantDiscountMax,
+    })
+    for (const draft of drafts) {
+      try {
+        await prisma.farmMerchantOffer.upsert({
+          where: {
+            farmId_dateKey_itemKind_itemKey: {
+              farmId: farm.id,
+              dateKey,
+              itemKind: draft.itemKind,
+              itemKey: draft.itemKey,
+            },
+          },
+          create: { farmId: farm.id, dateKey, ...draft },
+          update: {},
+        })
+      } catch (error) {
+        // 并发下另一个请求已写入同一件商品，直接跳过
+        if ((error as { code?: string }).code !== 'P2002') throw error
+      }
+    }
+    rows = await load()
+  }
+  return { dateKey, offers: rows.map(merchantOfferDto) }
+}
+
 export interface FarmView {
   farm: {
     id: number
@@ -240,6 +328,8 @@ export interface FarmView {
   victimQuota: StealQuotaDto
   /** 每日随机掉落种子（同一天只有一次 dropped=true） */
   seedDrop: SeedDropDto
+  /** 今日随机商人（每日 0 点刷新） */
+  merchant: MerchantBundleDto
   recentSteals: Awaited<ReturnType<typeof recentSteals>>
 }
 
@@ -276,10 +366,12 @@ export async function getFarmView(userId: number): Promise<FarmView> {
       plots: [],
       inventory: { seeds: [], fertilizer: 0 },
       seedDrop: EMPTY_SEED_DROP,
+      merchant: { dateKey: getTodayDateKey(now), offers: [] },
     }
   }
 
   const seedDrop = await ensureSeedDrop(farm, config)
+  const merchant = await ensureMerchantOffers(farm, config, now)
   // 掉落会写入新的 FarmItem，需要重新取一次仓库
   const items = seedDrop.dropped
     ? await prisma.farmItem.findMany({ where: { farmId: farm.id } })
@@ -303,6 +395,7 @@ export async function getFarmView(userId: number): Promise<FarmView> {
       .map((plot) => plotDto(plot, now)),
     inventory: { seeds: seedsOf(items), fertilizer: fertilizerOf(items) },
     seedDrop,
+    merchant,
   }
 }
 
@@ -411,6 +504,52 @@ export async function buyFarmItem(
     })
   })
   return getFarmView(userId)
+}
+
+export interface MerchantPurchaseResult {
+  view: FarmView
+  offer: MerchantOfferDto
+  balance: number
+}
+
+/** 购买商人特价商品：只能买当天、只能买一次 */
+export async function buyMerchantOffer(userId: number, offerId: number): Promise<MerchantPurchaseResult> {
+  const today = getTodayDateKey()
+  const result = await prisma.$transaction(async (tx) => {
+    const offer = await tx.farmMerchantOffer.findUnique({
+      where: { id: offerId },
+      include: { farm: { select: { id: true, userId: true } } },
+    })
+    if (!offer || offer.farm.userId !== userId) throw new AppError('这件商品不存在', 404)
+    if (offer.dateKey !== today) {
+      throw new AppError('这件商品已经过期了，明天再来看看吧', 410, 'MERCHANT_EXPIRED')
+    }
+    const claimed = await tx.farmMerchantOffer.updateMany({
+      where: { id: offer.id, purchased: false },
+      data: { purchased: true },
+    })
+    if (claimed.count !== 1) {
+      throw new AppError('这件商品已经买过了', 409, 'MERCHANT_SOLD_OUT')
+    }
+    const dto = merchantOfferDto(offer)
+    const spend = await spendPointsTx(tx, userId, offer.price, {
+      reason: 'farm_merchant',
+      game: 'farm',
+      note: `商人特价：${dto.name} ×${offer.count}`,
+    })
+    await tx.farmItem.upsert({
+      where: { farmId_kind_itemKey: { farmId: offer.farm.id, kind: offer.itemKind, itemKey: offer.itemKey } },
+      create: {
+        farmId: offer.farm.id,
+        kind: offer.itemKind,
+        itemKey: offer.itemKey,
+        count: offer.count,
+      },
+      update: { count: { increment: offer.count } },
+    })
+    return { offer: { ...dto, purchased: true }, balance: spend.balance }
+  })
+  return { view: await getFarmView(userId), ...result }
 }
 
 /* ============================================================

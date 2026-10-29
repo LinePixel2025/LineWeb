@@ -54,6 +54,25 @@ export interface SeedDrop {
   seeds: SeedDropItem[]
 }
 
+/** 随机商人的当日报价 */
+export interface MerchantOffer {
+  id: number
+  itemKind: 'seed' | 'fertilizer'
+  itemKey: string
+  name: string
+  emoji: string
+  count: number
+  price: number
+  originalPrice: number
+  discountPct: number
+  purchased: boolean
+}
+
+export interface MerchantBundle {
+  dateKey: string
+  offers: MerchantOffer[]
+}
+
 export interface FarmStealRecord {
   id: number
   crop: FarmCrop | null
@@ -95,7 +114,16 @@ export interface FarmView {
   victimQuota: StealQuota
   /** 每日随机掉落种子（同一天只有一次 dropped=true） */
   seedDrop: SeedDrop
+  /** 今日随机商人（每日 0 点刷新） */
+  merchant: MerchantBundle
   recentSteals: { made: FarmStealRecord[]; received: FarmStealRecord[] }
+}
+
+/** POST /api/farm/merchant/:offerId/buy */
+export interface MerchantPurchaseResult {
+  view: FarmView
+  offer: MerchantOffer
+  balance: number
 }
 
 /** POST /api/farm/plots/:index/harvest */
