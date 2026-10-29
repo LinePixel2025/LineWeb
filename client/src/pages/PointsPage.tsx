@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import UserTitleBadge from '../components/UserTitleBadge'
+import UserAvatar from '../components/UserAvatar'
 import { usePoints } from '../contexts/PointsContext'
 import { useFeature } from '../contexts/FeatureContext'
 import api from '../lib/api'
@@ -11,10 +12,23 @@ import type {
   PointsLeaderboardResponse,
   PointsLedgerResponse,
   ShopItem,
+  ShopItemType,
   ShopResponse,
 } from '../types/points'
 
 type Tab = 'shop' | 'leaderboard' | 'ledger'
+
+const SHOP_TYPES: ReadonlyArray<readonly [ShopItemType, string]> = [
+  ['title', '称号'],
+  ['avatar_frame', '头像框'],
+  ['emoji', '表情包'],
+]
+
+const SHOP_TYPE_LABELS: Record<ShopItemType, string> = {
+  title: '称号',
+  avatar_frame: '头像框',
+  emoji: '表情包',
+}
 
 const RARITY_LABELS: Record<string, string> = {
   common: '普通',
@@ -98,6 +112,18 @@ export default function PointsPage() {
             <div className="gh-points-hero-title-badge">
               <span className="gh-text-tertiary">当前称号</span>
               <UserTitleBadge title={profile.title} size="md" />
+            </div>
+          )}
+          {profile?.avatarFrame && (
+            <div className="gh-points-hero-title-badge">
+              <span className="gh-text-tertiary">当前头像框</span>
+              <span
+                className={`gh-avatar-frame gh-avatar-frame--${profile.avatarFrame.frame}`}
+                style={{ '--avatar-size': '24px' } as CSSProperties}
+              >
+                <span className="gh-points-frame-preview">🧑</span>
+              </span>
+              <span>{profile.avatarFrame.name}</span>
             </div>
           )}
         </div>
@@ -232,7 +258,7 @@ function ShopTab({
 }) {
   const [data, setData] = useState<ShopResponse | null>(null)
   const [loading, setLoading] = useState(true)
-  const [type, setType] = useState<'title' | 'emoji'>('title')
+  const [type, setType] = useState<ShopItemType>('title')
   const [busyId, setBusyId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
@@ -253,6 +279,10 @@ function ShopTab({
     () => (data?.items ?? []).filter((item) => item.type === 'title' && item.owned),
     [data],
   )
+  const ownedFrames = useMemo(
+    () => (data?.items ?? []).filter((item) => item.type === 'avatar_frame' && item.owned),
+    [data],
+  )
 
   const buy = async (item: ShopItem) => {
     if (busyId !== null) return
@@ -260,7 +290,12 @@ function ShopTab({
     setBusyId(item.id)
     try {
       await api.post(`/points/shop/${item.id}/buy`)
-      onNotice(`已购买「${item.name}」${item.type === 'title' ? '，可在下方佩戴' : '，聊天表情商店已解锁'}`)
+      const hint = item.type === 'title'
+        ? '，可在下方佩戴'
+        : item.type === 'avatar_frame'
+          ? '，已自动佩戴到你的头像上'
+          : '，聊天表情商店已解锁'
+      onNotice(`已购买「${item.name}」${hint}`)
       await load()
     } catch (err) {
       onError(err instanceof Error ? err.message : '购买失败')
@@ -273,7 +308,9 @@ function ShopTab({
     if (busyId !== null) return
     setBusyId(item.id)
     try {
-      await api.post(`/points/shop/${item.id}/equip`)
+      await api.post(item.type === 'avatar_frame'
+        ? `/points/shop/${item.id}/equip-frame`
+        : `/points/shop/${item.id}/equip`)
       onNotice(`已佩戴「${item.name}」`)
       await load()
     } catch (err) {
@@ -283,12 +320,26 @@ function ShopTab({
     }
   }
 
-  const unequip = async () => {
+  const unequipTitle = async () => {
     if (busyId !== null) return
     setBusyId(-1)
     try {
       await api.delete('/points/equipped-title')
       onNotice('已取消佩戴称号')
+      await load()
+    } catch (err) {
+      onError(err instanceof Error ? err.message : '取消佩戴失败')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const unequipFrame = async () => {
+    if (busyId !== null) return
+    setBusyId(-1)
+    try {
+      await api.delete('/points/equipped-frame')
+      onNotice('已卸下头像框')
       await load()
     } catch (err) {
       onError(err instanceof Error ? err.message : '取消佩戴失败')
@@ -305,32 +356,29 @@ function ShopTab({
           <strong>{data?.balance ?? 0}</strong>
         </div>
         <div className="gh-points-shop-type">
-          <button
-            type="button"
-            className={`gh-points-shop-type-btn ${type === 'title' ? 'gh-points-shop-type-btn--active' : ''}`}
-            onClick={() => setType('title')}
-          >
-            称号
-          </button>
-          <button
-            type="button"
-            className={`gh-points-shop-type-btn ${type === 'emoji' ? 'gh-points-shop-type-btn--active' : ''}`}
-            onClick={() => setType('emoji')}
-          >
-            表情包
-          </button>
+          {SHOP_TYPES.map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={`gh-points-shop-type-btn ${type === value ? 'gh-points-shop-type-btn--active' : ''}`}
+              onClick={() => setType(value)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
       {loading && !data ? (
         <div className="gh-points-loading"><div className="gh-spinner" /></div>
       ) : items.length === 0 ? (
-        <div className="gh-box gh-points-empty">商店暂时没有上架的{type === 'title' ? '称号' : '表情包'}。</div>
+        <div className="gh-box gh-points-empty">商店暂时没有上架的{SHOP_TYPE_LABELS[type]}。</div>
       ) : (
         <div className="gh-points-shop-grid">
           {items.map((item) => {
             const affordable = (data?.balance ?? 0) >= item.cost
             const icon = typeof item.payload.icon === 'string' ? item.payload.icon : ''
+            const frame = typeof item.payload.frame === 'string' ? item.payload.frame : ''
             return (
               <article
                 key={item.id}
@@ -338,7 +386,16 @@ function ShopTab({
               >
                 <div className="gh-points-shop-card-top">
                   <span className="gh-points-shop-card-icon" aria-hidden>
-                    {item.type === 'title' ? (icon || '🏷️') : '🙂'}
+                    {item.type === 'title' && (icon || '🏷️')}
+                    {item.type === 'emoji' && '🙂'}
+                    {item.type === 'avatar_frame' && (
+                      <span
+                        className={`gh-avatar-frame gh-avatar-frame--${frame}`}
+                        style={{ '--avatar-size': '40px' } as CSSProperties}
+                      >
+                        <span className="gh-points-frame-preview">🧑</span>
+                      </span>
+                    )}
                   </span>
                   <span className={`gh-points-rarity gh-points-rarity--${item.rarity}`}>
                     {RARITY_LABELS[item.rarity] ?? item.rarity}
@@ -359,7 +416,9 @@ function ShopTab({
                       <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm" disabled>
                         佩戴中
                       </button>
-                    ) : item.type === 'title' ? (
+                    ) : item.type === 'emoji' ? (
+                      <span className="gh-badge gh-badge--success">已解锁</span>
+                    ) : (
                       <button
                         type="button"
                         className="gh-btn gh-btn--primary gh-btn--sm"
@@ -368,8 +427,6 @@ function ShopTab({
                       >
                         {busyId === item.id ? '佩戴中…' : '佩戴'}
                       </button>
-                    ) : (
-                      <span className="gh-badge gh-badge--success">已解锁</span>
                     )
                   ) : (
                     <button
@@ -398,7 +455,7 @@ function ShopTab({
                 type="button"
                 className="gh-btn gh-btn--ghost gh-btn--sm"
                 disabled={busyId !== null}
-                onClick={() => void unequip()}
+                onClick={() => void unequipTitle()}
               >
                 取消佩戴
               </button>
@@ -430,6 +487,49 @@ function ShopTab({
                 )}
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {ownedFrames.length > 0 && (
+        <section className="gh-box gh-points-titles">
+          <div className="gh-points-titles-head">
+            <h2>我的头像框</h2>
+            {data?.equippedAvatarFrameId != null && (
+              <button
+                type="button"
+                className="gh-btn gh-btn--ghost gh-btn--sm"
+                disabled={busyId !== null}
+                onClick={() => void unequipFrame()}
+              >
+                卸下
+              </button>
+            )}
+          </div>
+          <div className="gh-points-titles-list">
+            {ownedFrames.map((item) => {
+              const frame = typeof item.payload.frame === 'string' ? item.payload.frame : ''
+              return (
+                <div key={item.id} className={`gh-points-title-row ${item.equipped ? 'gh-points-title-row--active' : ''}`}>
+                  <span className={`gh-avatar-frame gh-avatar-frame--${frame}`} style={{ '--avatar-size': '32px' } as CSSProperties}>
+                    <span className="gh-points-frame-preview">🧑</span>
+                  </span>
+                  <span>{item.name}</span>
+                  {item.equipped ? (
+                    <span className="gh-badge gh-badge--success">佩戴中</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="gh-btn gh-btn--secondary gh-btn--sm"
+                      disabled={busyId !== null}
+                      onClick={() => void equip(item)}
+                    >
+                      佩戴
+                    </button>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </section>
       )}
@@ -508,6 +608,12 @@ function LeaderboardTab() {
                   </td>
                   <td>
                     <span className="gh-points-player">
+                      <UserAvatar
+                        userId={entry.userId}
+                        username={entry.username}
+                        size="sm"
+                        frame={entry.avatarFrame?.frame ?? null}
+                      />
                       {entry.username}
                       {entry.isMe && <span className="gh-badge gh-badge--accent">我</span>}
                     </span>

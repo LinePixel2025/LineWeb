@@ -11,6 +11,7 @@ import {
   getPointsProfile,
   listPointsLedger,
   listShop,
+  setEquippedAvatarFrame,
   setEquippedTitle,
 } from '../services/pointsService.js'
 
@@ -110,6 +111,18 @@ router.post('/shop/:id/equip', writeLimiter, asyncHandler(async (req: Request, r
 // DELETE /api/points/equipped-title — 取消佩戴
 router.delete('/equipped-title', writeLimiter, asyncHandler(async (req: Request, res: Response) => {
   res.json(await setEquippedTitle(currentUserId(req), null))
+}))
+
+// POST /api/points/shop/:id/equip-frame — 佩戴头像框
+router.post('/shop/:id/equip-frame', writeLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const itemId = Number(req.params.id)
+  if (!Number.isInteger(itemId) || itemId <= 0) throw new AppError('无效的商品 ID', 400)
+  res.json(await setEquippedAvatarFrame(currentUserId(req), itemId))
+}))
+
+// DELETE /api/points/equipped-frame — 卸下头像框
+router.delete('/equipped-frame', writeLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await setEquippedAvatarFrame(currentUserId(req), null))
 }))
 
 export default router

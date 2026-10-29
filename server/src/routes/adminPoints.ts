@@ -5,9 +5,11 @@ import { AppError } from '../middleware/errorHandler.js'
 import { authenticate, requireCapability } from '../middleware/auth.js'
 import prisma from '../lib/prisma.js'
 import {
+  AVATAR_FRAME_STYLES,
   EMOJI_PACK_KEYS,
   getTodayDayStart,
   parseShopPayload,
+  sanitizeAvatarFrame,
   sanitizeTitleColor,
   sanitizeTitleIcon,
 } from '../lib/pointsRules.js'
@@ -42,11 +44,12 @@ const payloadSchema = z.object({
   icon: z.string().max(8).optional(),
   color: z.string().max(20).optional(),
   pack: z.string().max(30).optional(),
+  frame: z.string().max(20).optional(),
 }).optional()
 
 const shopCreateSchema = z.object({
   key: z.string().regex(/^[a-z0-9_]{3,40}$/, 'key 只能是小写字母、数字、下划线（3–40 位）'),
-  type: z.enum(['title', 'emoji']),
+  type: z.enum(['title', 'emoji', 'avatar_frame']),
   name: z.string().trim().min(1).max(30),
   description: z.string().trim().max(200).optional(),
   cost: z.number().int().min(0).max(100_000),
@@ -71,15 +74,27 @@ const adjustSchema = z.object({
   note: z.string().trim().max(100).optional(),
 })
 
-/** 把管理员提交的 payload 规范成存库 JSON（称号颜色/图标消毒，表情包只收白名单） */
-function normalizePayload(type: string, payload: { icon?: string; color?: string; pack?: string } | undefined): string | null {
-  if (!payload) return type === 'title' ? JSON.stringify({ icon: '', color: '#57606a' }) : null
+/** 把管理员提交的 payload 规范成存库 JSON（称号颜色/图标消毒，表情包与头像框只收白名单） */
+function normalizePayload(
+  type: string,
+  payload: { icon?: string; color?: string; pack?: string; frame?: string } | undefined,
+): string | null {
+  if (!payload) {
+    if (type === 'title') return JSON.stringify({ icon: '', color: '#57606a' })
+    if (type === 'avatar_frame') throw new AppError(`头像框样式必须是：${AVATAR_FRAME_STYLES.join(' / ')}`, 400)
+    return null
+  }
   if (type === 'emoji') {
     const pack = payload.pack?.trim()
     if (!pack || !(EMOJI_PACK_KEYS as readonly string[]).includes(pack)) {
       throw new AppError(`表情包必须是：${EMOJI_PACK_KEYS.join(' / ')}`, 400)
     }
     return JSON.stringify({ pack })
+  }
+  if (type === 'avatar_frame') {
+    const frame = sanitizeAvatarFrame(payload.frame)
+    if (!frame) throw new AppError(`头像框样式必须是：${AVATAR_FRAME_STYLES.join(' / ')}`, 400)
+    return JSON.stringify({ frame, color: sanitizeTitleColor(payload.color, '#57606a') })
   }
   return JSON.stringify({
     icon: sanitizeTitleIcon(payload.icon),

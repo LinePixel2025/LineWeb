@@ -26,6 +26,8 @@ export interface CheckinResult extends CheckinStatus {
 
 /** GET /api/points/me */
 export interface PointsProfile {
+  /** 客户端据此判断头像是否属于自己（本人头像套用已佩戴头像框） */
+  userId: number
   balance: number
   earned: number
   rank: number
@@ -80,6 +82,7 @@ export interface ShopResponse {
   balance: number
   earned: number
   equippedTitleId: number | null
+  equippedAvatarFrameId: number | null
   items: ShopItem[]
 }
 
@@ -91,6 +94,7 @@ export interface PointsLeaderboardEntry {
   balance: number
   earned: number
   title: UserTitleDto | null
+  avatarFrame: AvatarFrameDto | null
   isMe: boolean
 }
 

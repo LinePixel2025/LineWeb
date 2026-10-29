@@ -12,8 +12,10 @@ import {
   getYesterdayDateKey,
   normalizePointsConfig,
   parseShopPayload,
+  sanitizeAvatarFrame,
   sanitizeTitleColor,
   sanitizeTitleIcon,
+  type AvatarFrameStyle,
   type CheckinRule,
   type PointsConfigDto,
 } from '../lib/pointsRules.js'
@@ -35,6 +37,14 @@ export interface UserTitleDto {
   icon: string
 }
 
+/** 头像框（只在 LineWeb 站内展示，不同步 neko） */
+export interface UserAvatarFrameDto {
+  id: number
+  name: string
+  frame: AvatarFrameStyle
+  color: string
+}
+
 export interface CheckinStatusDto {
   /** 今天是否已签到 */
   checkedInToday: boolean
@@ -54,20 +64,25 @@ export interface CheckinResultDto extends CheckinStatusDto {
 }
 
 export interface PointsProfileDto {
+  /** 便于客户端判断「这个头像是不是我自己」以套用本人头像框 */
+  userId: number
   balance: number
   earned: number
   rank: number
   title: UserTitleDto | null
+  avatarFrame: UserAvatarFrameDto | null
   /** 已购商品 key（客户端用于解锁表情包） */
   ownedKeys: string[]
   checkin: CheckinStatusDto
 }
 
 const DEFAULT_SHOP_SEED_FLAG = 'points.shop.seeded'
+/** 头像框是后加的默认商品，单独打标记：只补框，不复活管理员已删除的其它商品 */
+const DEFAULT_FRAME_SEED_FLAG = 'points.shop.frames.seeded'
 
 interface DefaultShopItem {
   key: string
-  type: 'title' | 'emoji'
+  type: 'title' | 'emoji' | 'avatar_frame'
   name: string
   description: string
   cost: number
@@ -90,6 +105,14 @@ const DEFAULT_SHOP_ITEMS: readonly DefaultShopItem[] = [
   { key: 'emoji_nailong', type: 'emoji', name: '奶龙表情包', description: '解锁聊天表情商店的「奶龙」整套表情。', cost: 400, rarity: 'rare', payload: { pack: 'nailong' }, sortOrder: 100 },
   { key: 'emoji_felyne', type: 'emoji', name: '呆猫表情包', description: '解锁聊天表情商店的「呆猫」整套表情。', cost: 400, rarity: 'rare', payload: { pack: 'felyne' }, sortOrder: 110 },
   { key: 'emoji_twemoji', type: 'emoji', name: '经典 Twemoji', description: '解锁聊天表情商店的「经典表情」整套表情。', cost: 200, rarity: 'common', payload: { pack: 'twemoji' }, sortOrder: 120 },
+]
+
+/** 头像框：LineWeb 站内展示（头像外圈），不同步到 neko */
+const DEFAULT_FRAME_ITEMS: readonly DefaultShopItem[] = [
+  { key: 'frame_gold', type: 'avatar_frame', name: '鎏金边框', description: '低调的金色描边，适合在排行榜里安静发光。', cost: 800, rarity: 'rare', payload: { frame: 'gold', color: '#d4a72c' }, sortOrder: 200 },
+  { key: 'frame_neon', type: 'avatar_frame', name: '霓虹边框', description: '赛博感的冷色流光，跑酷与 2048 玩家的最爱。', cost: 1500, rarity: 'epic', payload: { frame: 'neon', color: '#1f6feb' }, sortOrder: 210 },
+  { key: 'frame_sakura', type: 'avatar_frame', name: '樱花边框', description: '春日限定的粉樱花瓣，绕着头像缓缓飘落。', cost: 2500, rarity: 'epic', payload: { frame: 'sakura', color: '#bf3989' }, sortOrder: 220 },
+  { key: 'frame_galaxy', type: 'avatar_frame', name: '星河边框', description: '旋转的星云与细碎星尘，农场大亨的专属光环。', cost: 4000, rarity: 'legendary', payload: { frame: 'galaxy', color: '#6639ba' }, sortOrder: 230 },
 ]
 
 /* ============================================================
@@ -152,10 +175,16 @@ export async function savePointsConfig(input: unknown, adminId: number): Promise
    ============================================================ */
 
 async function ensureDefaultShop(): Promise<void> {
-  const seeded = await prisma.siteSetting.findUnique({ where: { key: DEFAULT_SHOP_SEED_FLAG } })
+  await seedShopItems(DEFAULT_SHOP_SEED_FLAG, DEFAULT_SHOP_ITEMS)
+  await seedShopItems(DEFAULT_FRAME_SEED_FLAG, DEFAULT_FRAME_ITEMS)
+}
+
+/** 幂等播种：同一批商品只补一次，已存在（或被管理员删掉）的 key 不受影响 */
+async function seedShopItems(flag: string, items: readonly DefaultShopItem[]): Promise<void> {
+  const seeded = await prisma.siteSetting.findUnique({ where: { key: flag } })
   if (seeded) return
   await prisma.$transaction(async (tx) => {
-    for (const item of DEFAULT_SHOP_ITEMS) {
+    for (const item of items) {
       await tx.pointsShopItem.upsert({
         where: { key: item.key },
         create: {
@@ -172,8 +201,8 @@ async function ensureDefaultShop(): Promise<void> {
       })
     }
     await tx.siteSetting.upsert({
-      where: { key: DEFAULT_SHOP_SEED_FLAG },
-      create: { key: DEFAULT_SHOP_SEED_FLAG, value: '1' },
+      where: { key: flag },
+      create: { key: flag, value: '1' },
       update: { value: '1' },
     })
   })
@@ -187,6 +216,22 @@ export function toUserTitleDto(item: { id: number; type: string; name: string; p
     name: item.name,
     color: sanitizeTitleColor(payload.color),
     icon: sanitizeTitleIcon(payload.icon),
+  }
+}
+
+/** 商品的 payload.frame 必须命中白名单，否则当作「不是头像框」 */
+export function toUserAvatarFrameDto(
+  item: { id: number; type: string; name: string; payload: string | null } | null,
+): UserAvatarFrameDto | null {
+  if (!item || item.type !== 'avatar_frame') return null
+  const payload = parseShopPayload(item.payload)
+  const frame = sanitizeAvatarFrame(payload.frame)
+  if (!frame) return null
+  return {
+    id: item.id,
+    name: item.name,
+    frame,
+    color: sanitizeTitleColor(payload.color, '#57606a'),
   }
 }
 
@@ -216,7 +261,11 @@ export async function getTitleMapForLineWebIds(
   return map
 }
 
-function itemDto(item: PointsShopItem, ownedIds: Set<number>, equippedTitleId: number | null) {
+function itemDto(
+  item: PointsShopItem,
+  ownedIds: Set<number>,
+  equipped: { titleId: number | null; frameId: number | null },
+) {
   return {
     id: item.id,
     key: item.key,
@@ -229,7 +278,9 @@ function itemDto(item: PointsShopItem, ownedIds: Set<number>, equippedTitleId: n
     isActive: item.isActive,
     sortOrder: item.sortOrder,
     owned: ownedIds.has(item.id),
-    equipped: item.type === 'title' && equippedTitleId === item.id,
+    equipped:
+      (item.type === 'title' && equipped.titleId === item.id)
+      || (item.type === 'avatar_frame' && equipped.frameId === item.id),
   }
 }
 
@@ -243,15 +294,20 @@ export async function listShop(userId: number) {
     prisma.userPointsItem.findMany({ where: { userId }, select: { itemId: true } }),
     prisma.user.findUnique({
       where: { id: userId },
-      select: { points: true, pointsEarned: true, equippedTitleId: true },
+      select: { points: true, pointsEarned: true, equippedTitleId: true, equippedAvatarFrameId: true },
     }),
   ])
   const ownedIds = new Set(owned.map((row) => row.itemId))
+  const equipped = {
+    titleId: user?.equippedTitleId ?? null,
+    frameId: user?.equippedAvatarFrameId ?? null,
+  }
   return {
     balance: user?.points ?? 0,
     earned: user?.pointsEarned ?? 0,
-    equippedTitleId: user?.equippedTitleId ?? null,
-    items: items.map((item) => itemDto(item, ownedIds, user?.equippedTitleId ?? null)),
+    equippedTitleId: equipped.titleId,
+    equippedAvatarFrameId: equipped.frameId,
+    items: items.map((item) => itemDto(item, ownedIds, equipped)),
   }
 }
 
@@ -351,7 +407,7 @@ export async function getPointsProfile(userId: number): Promise<PointsProfileDto
   const [user, owned, checkinStatus] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { points: true, pointsEarned: true, equippedTitle: true },
+      select: { points: true, pointsEarned: true, equippedTitle: true, equippedAvatarFrame: true },
     }),
     prisma.userPointsItem.findMany({
       where: { userId },
@@ -364,10 +420,12 @@ export async function getPointsProfile(userId: number): Promise<PointsProfileDto
     where: { points: { gt: user.points } },
   }) + 1
   return {
+    userId,
     balance: user.points,
     earned: user.pointsEarned,
     rank,
     title: toUserTitleDto(user.equippedTitle),
+    avatarFrame: toUserAvatarFrameDto(user.equippedAvatarFrame),
     ownedKeys: owned.map((row) => row.item.key),
     checkin: checkinStatus,
   }
@@ -417,6 +475,7 @@ export async function getPointsLeaderboard(params: {
         points: true,
         pointsEarned: true,
         equippedTitle: true,
+        equippedAvatarFrame: true,
       },
     }),
     prisma.user.findUnique({
@@ -427,6 +486,7 @@ export async function getPointsLeaderboard(params: {
         points: true,
         pointsEarned: true,
         equippedTitle: true,
+        equippedAvatarFrame: true,
       },
     }),
   ])
@@ -439,6 +499,7 @@ export async function getPointsLeaderboard(params: {
     balance: row.points,
     earned: row.pointsEarned,
     title: toUserTitleDto(row.equippedTitle),
+    avatarFrame: toUserAvatarFrameDto(row.equippedAvatarFrame),
     isMe: row.id === params.userId,
   })
 
@@ -610,6 +671,7 @@ export async function buyShopItem(userId: number, itemId: number) {
     await tx.userPointsItem.create({ data: { userId, itemId } })
 
     let equippedTitleId: number | null = null
+    let avatarFrame: UserAvatarFrameDto | null = null
     if (item.type === 'title') {
       const user = await tx.user.findUnique({ where: { id: userId }, select: { equippedTitleId: true } })
       equippedTitleId = user?.equippedTitleId ?? null
@@ -618,6 +680,13 @@ export async function buyShopItem(userId: number, itemId: number) {
         await tx.user.update({ where: { id: userId }, data: { equippedTitleId: item.id } })
         equippedTitleId = item.id
       }
+    } else if (item.type === 'avatar_frame') {
+      const user = await tx.user.findUnique({ where: { id: userId }, select: { equippedAvatarFrameId: true } })
+      // 头一个头像框同样自动佩戴
+      if (!user?.equippedAvatarFrameId) {
+        await tx.user.update({ where: { id: userId }, data: { equippedAvatarFrameId: item.id } })
+        avatarFrame = toUserAvatarFrameDto(item)
+      }
     }
 
     return {
@@ -625,6 +694,7 @@ export async function buyShopItem(userId: number, itemId: number) {
       item: { id: item.id, key: item.key, type: item.type, name: item.name },
       equippedTitleId,
       title: item.type === 'title' && equippedTitleId === item.id ? toUserTitleDto(item) : null,
+      avatarFrame,
     }
   })
 }
@@ -643,5 +713,24 @@ export async function setEquippedTitle(userId: number, itemId: number | null) {
     if (owned.item.type !== 'title') throw new AppError('该商品不是称号', 400)
     await tx.user.update({ where: { id: userId }, data: { equippedTitleId: itemId } })
     return { title: toUserTitleDto(owned.item) }
+  })
+}
+
+/** 佩戴 / 卸下头像框（只影响 LineWeb 站内展示） */
+export async function setEquippedAvatarFrame(userId: number, itemId: number | null) {
+  return prisma.$transaction(async (tx) => {
+    if (itemId === null) {
+      await tx.user.update({ where: { id: userId }, data: { equippedAvatarFrameId: null } })
+      return { avatarFrame: null }
+    }
+    const owned = await tx.userPointsItem.findUnique({
+      where: { userId_itemId: { userId, itemId } },
+      include: { item: true },
+    })
+    if (!owned) throw new AppError('尚未拥有该头像框', 400)
+    const frame = toUserAvatarFrameDto(owned.item)
+    if (!frame) throw new AppError('该商品不是头像框', 400)
+    await tx.user.update({ where: { id: userId }, data: { equippedAvatarFrameId: itemId } })
+    return { avatarFrame: frame }
   })
 }

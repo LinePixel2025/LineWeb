@@ -1,9 +1,13 @@
-import { memo, useState, useEffect } from 'react'
+import { memo, useState, useEffect, type CSSProperties } from 'react'
+import { useOptionalPoints } from '../contexts/PointsContext'
+import type { AvatarFrameStyle } from '../types/points'
 
 interface UserAvatarProps {
   userId: number
   username: string
   size?: 'sm' | 'md' | 'lg' | 'xl'
+  /** 头像框样式；不传时，若是当前登录用户则自动套用已佩戴的头像框 */
+  frame?: AvatarFrameStyle | null
 }
 
 const SIZE_MAP = { sm: 24, md: 32, lg: 48, xl: 80 } as const
@@ -24,10 +28,17 @@ function getColor(userId: number): string {
   return `hsl(${hue}, 50%, 50%)`
 }
 
-export default memo(function UserAvatar({ userId, username, size = 'md' }: UserAvatarProps) {
+export default memo(function UserAvatar({ userId, username, size = 'md', frame }: UserAvatarProps) {
   const px = SIZE_MAP[size]
   const [imgSrc, setImgSrc] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
+  // 未显式传入时，本人头像自动套用积分中心里佩戴的头像框（他人头像由调用方传 frame）
+  const points = useOptionalPoints()
+  const ownProfile = points?.profile ?? null
+  const selfFrame = ownProfile && ownProfile.userId === userId
+    ? ownProfile.avatarFrame?.frame ?? null
+    : null
+  const frameStyle = frame ?? selfFrame
 
   useEffect(() => {
     setImgSrc(null)
@@ -69,8 +80,9 @@ export default memo(function UserAvatar({ userId, username, size = 'md' }: UserA
     }
   }, [imgSrc])
 
+  let content
   if (imgSrc && !failed) {
-    return (
+    content = (
       <img
         src={imgSrc}
         alt={username}
@@ -84,26 +96,39 @@ export default memo(function UserAvatar({ userId, username, size = 'md' }: UserA
         }}
       />
     )
+  } else {
+    content = (
+      <div
+        style={{
+          width: px,
+          height: px,
+          borderRadius: '50%',
+          background: getColor(userId),
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#fff',
+          fontSize: px * 0.4,
+          fontWeight: 600,
+          flexShrink: 0,
+          userSelect: 'none',
+        }}
+      >
+        {getInitials(username)}
+      </div>
+    )
   }
 
+  if (!frameStyle) return content
+
+  // 包裹层不改变原有占位尺寸：外圈用绝对定位的伪元素绘制，不占布局
   return (
-    <div
-      style={{
-        width: px,
-        height: px,
-        borderRadius: '50%',
-        background: getColor(userId),
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#fff',
-        fontSize: px * 0.4,
-        fontWeight: 600,
-        flexShrink: 0,
-        userSelect: 'none',
-      }}
+    <span
+      className={`gh-avatar-frame gh-avatar-frame--${frameStyle}`}
+      style={{ '--avatar-size': `${px}px` } as CSSProperties}
+      data-frame={frameStyle}
     >
-      {getInitials(username)}
-    </div>
+      {content}
+    </span>
   )
 })

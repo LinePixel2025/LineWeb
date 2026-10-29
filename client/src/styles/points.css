@@ -126,6 +126,65 @@
 .gh-points-checkin-stat strong { font-size: var(--gh-text-base); font-variant-numeric: tabular-nums; }
 .gh-points-checkin--done .gh-points-checkin-stat strong { color: var(--gh-text-secondary); }
 
+/* ===== 头像框（LineWeb 站内展示，不同步 neko） =====
+   包裹层只负责画外圈：尺寸沿用头像本身，外圈绝对定位不占布局。
+   z-index 用 0/-1 分层，避免影响周围元素的层叠。 */
+.gh-avatar-frame {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--avatar-size, 32px);
+  height: var(--avatar-size, 32px);
+  flex-shrink: 0;
+  isolation: isolate;
+}
+.gh-avatar-frame::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  z-index: -1;
+  pointer-events: none;
+}
+.gh-avatar-frame--gold::after {
+  background: conic-gradient(from 0deg, #f7e7a1, #d4a72c, #8f6b0f, #f7e7a1);
+  animation: gh-avatar-frame-spin 6s linear infinite;
+}
+.gh-avatar-frame--neon::after {
+  background: conic-gradient(from 90deg, #1f6feb, #2dd4bf, #a855f7, #1f6feb);
+  box-shadow: 0 0 8px color-mix(in srgb, #1f6feb 55%, transparent);
+  animation: gh-avatar-frame-spin 3.2s linear infinite;
+}
+.gh-avatar-frame--sakura::after {
+  background: conic-gradient(from 0deg, #ffd7e6, #f9a8c7, #bf3989, #ffd7e6);
+  animation: gh-avatar-frame-spin 9s linear infinite reverse;
+}
+.gh-avatar-frame--galaxy::after {
+  background: conic-gradient(from 45deg, #2b1055, #6639ba, #22d3ee, #bf3989, #2b1055);
+  box-shadow: 0 0 10px color-mix(in srgb, #6639ba 60%, transparent);
+  animation: gh-avatar-frame-spin 7s linear infinite;
+}
+@keyframes gh-avatar-frame-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-avatar-frame::after { animation: none; }
+}
+
+/* 头像框商品卡片的预览圆 */
+.gh-points-frame-preview {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--avatar-size, 40px);
+  height: var(--avatar-size, 40px);
+  border-radius: 50%;
+  font-size: calc(var(--avatar-size, 40px) * 0.42);
+  background: var(--gh-canvas-subtle);
+  color: var(--gh-text-secondary);
+}
+
 /* 商店 */
 .gh-points-shop-head {
   display: flex;

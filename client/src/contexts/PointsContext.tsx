@@ -94,3 +94,11 @@ export function usePoints() {
   if (!ctx) throw new Error('usePoints must be used within PointsProvider')
   return ctx
 }
+
+/**
+ * 允许在没有 PointsProvider 的极少数场景（孤立组件 / 测试）里安全取用，
+ * 供 UserAvatar 这类被大量复用的基础组件读取「本人头像框」。
+ */
+export function useOptionalPoints(): PointsContextValue | null {
+  return useContext(PointsContext)
+}

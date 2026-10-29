@@ -3,6 +3,7 @@ import api from '../../lib/api'
 import { usePoints } from '../../contexts/PointsContext'
 import type {
   AdminPointsResponse,
+  AvatarFrameStyle,
   AdminPointsUser,
   AdminShopItem,
   CheckinRule,
@@ -35,6 +36,20 @@ const RARITY_LABELS: Record<ShopRarity, string> = {
   legendary: '传说',
 }
 
+const SHOP_TYPE_LABELS: Record<ShopItemType, string> = {
+  title: '称号',
+  avatar_frame: '头像框',
+  emoji: '表情包',
+}
+
+/** 头像框样式白名单（与服务端 AVATAR_FRAME_STYLES 一致） */
+const AVATAR_FRAME_OPTIONS: ReadonlyArray<readonly [AvatarFrameStyle, string]> = [
+  ['gold', '鎏金'],
+  ['neon', '霓虹'],
+  ['sakura', '樱花'],
+  ['galaxy', '星河'],
+]
+
 const RULE_FIELDS: Array<{ key: keyof GamePointRule; label: string; hint?: string }> = [
   { key: 'win', label: '胜利' },
   { key: 'loss', label: '失败', hint: '负数扣分' },
@@ -56,6 +71,7 @@ interface ShopForm {
   icon: string
   color: string
   pack: string
+  frame: AvatarFrameStyle
   isActive: boolean
   sortOrder: number
 }
@@ -70,6 +86,7 @@ const EMPTY_SHOP_FORM: ShopForm = {
   icon: '🏷️',
   color: '#57606a',
   pack: 'nailong',
+  frame: 'gold',
   isActive: true,
   sortOrder: 100,
 }
@@ -520,6 +537,9 @@ function ShopPanel({
       icon: typeof item.payload.icon === 'string' ? item.payload.icon : '',
       color: typeof item.payload.color === 'string' ? item.payload.color : '#57606a',
       pack: typeof item.payload.pack === 'string' ? item.payload.pack : emojiPacks[0] ?? 'nailong',
+      frame: (AVATAR_FRAME_OPTIONS.some(([value]) => value === item.payload.frame)
+        ? item.payload.frame
+        : 'gold') as AvatarFrameStyle,
       isActive: item.isActive,
       sortOrder: item.sortOrder,
     })
@@ -530,7 +550,11 @@ function ShopPanel({
     if (saving) return
     setSaving(true)
     try {
-      const payload = form.type === 'emoji' ? { pack: form.pack } : { icon: form.icon, color: form.color }
+      const payload = form.type === 'emoji'
+        ? { pack: form.pack }
+        : form.type === 'avatar_frame'
+          ? { frame: form.frame, color: form.color }
+          : { icon: form.icon, color: form.color }
       if (editing) {
         await api.patch(`/admin/points/shop/${editing.id}`, {
           name: form.name,
@@ -611,14 +635,18 @@ function ShopPanel({
               <tr key={item.id}>
                 <td>
                   <div className="gh-points-shop-name">
-                    <span>{item.type === 'title' ? (typeof item.payload.icon === 'string' ? item.payload.icon : '🏷️') : '🙂'}</span>
+                    <span>
+                      {item.type === 'title'
+                        ? (typeof item.payload.icon === 'string' ? item.payload.icon : '🏷️')
+                        : item.type === 'avatar_frame' ? '🖼️' : '🙂'}
+                    </span>
                     <div>
                       <strong>{item.name}</strong>
                       <div className="gh-text-tertiary gh-points-shop-key">{item.key}</div>
                     </div>
                   </div>
                 </td>
-                <td>{item.type === 'title' ? '称号' : '表情包'}</td>
+                <td>{SHOP_TYPE_LABELS[item.type] ?? item.type}</td>
                 <td>{item.cost}</td>
                 <td>{RARITY_LABELS[item.rarity] ?? item.rarity}</td>
                 <td>
@@ -670,6 +698,7 @@ function ShopPanel({
                       onChange={(event) => setForm({ ...form, type: event.target.value as ShopItemType })}
                     >
                       <option value="title">称号</option>
+                      <option value="avatar_frame">头像框</option>
                       <option value="emoji">表情包</option>
                     </select>
                   </label>
@@ -743,6 +772,30 @@ function ShopPanel({
                   </label>
                   <label className="gh-form-field">
                     颜色
+                    <input
+                      className="gh-input gh-points-color-input"
+                      type="color"
+                      value={form.color}
+                      onChange={(event) => setForm({ ...form, color: event.target.value })}
+                    />
+                  </label>
+                </div>
+              ) : form.type === 'avatar_frame' ? (
+                <div className="gh-points-shop-form-row">
+                  <label className="gh-form-field">
+                    头像框样式
+                    <select
+                      className="gh-input"
+                      value={form.frame}
+                      onChange={(event) => setForm({ ...form, frame: event.target.value as AvatarFrameStyle })}
+                    >
+                      {AVATAR_FRAME_OPTIONS.map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="gh-form-field">
+                    预览色
                     <input
                       className="gh-input gh-points-color-input"
                       type="color"

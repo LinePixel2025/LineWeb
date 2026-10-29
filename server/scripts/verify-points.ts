@@ -7,6 +7,7 @@
 
 import { GAME_KEYS } from '../src/lib/gameStatsRules.js'
 import {
+  AVATAR_FRAME_STYLES,
   DEFAULT_CHECKIN_RULE,
   DEFAULT_FARM_RULE,
   DEFAULT_GAME_RULES,
@@ -21,6 +22,7 @@ import {
   getYesterdayDateKey,
   normalizePointsConfig,
   parseShopPayload,
+  sanitizeAvatarFrame,
   sanitizeTitleColor,
   sanitizeTitleIcon,
 } from '../src/lib/pointsRules.js'
@@ -201,6 +203,13 @@ assertEqual(sanitizeTitleColor('red;background:url(x)'), '#57606a', '非法颜�
 assertEqual(sanitizeTitleIcon('🐣'), '🐣', '单个 emoji 称号图标保留')
 assertEqual(sanitizeTitleIcon('🐣🐣🐣'), '🐣🐣', '图标最多两个字符')
 assertEqual(sanitizeTitleIcon(123), '', '非字符串图标回退空')
+
+assertEqual(AVATAR_FRAME_STYLES.length, 4, '头像框共 4 种样式')
+assertEqual(sanitizeAvatarFrame('gold'), 'gold', 'gold 头像框合法')
+assertEqual(sanitizeAvatarFrame('galaxy'), 'galaxy', 'galaxy 头像框合法')
+assertEqual(sanitizeAvatarFrame('rainbow'), null, '未知头像框样式回退 null')
+assertEqual(sanitizeAvatarFrame(''), null, '空头像框样式回退 null')
+assertEqual(sanitizeAvatarFrame(123), null, '非字符串头像框回退 null')
 
 assertEqual(EMOJI_PACK_KEYS, ['nailong', 'felyne', 'twemoji'], '付费表情包 key 与客户端商店一致')
 
