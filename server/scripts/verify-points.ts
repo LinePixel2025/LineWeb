@@ -37,6 +37,8 @@ import {
   getCrop,
   growthProgress,
   nextExpansion,
+  pickWeighted,
+  rollStealSuccess,
 } from '../src/lib/farmCrops.js'
 
 let passed = 0
@@ -110,6 +112,24 @@ assertEqual(normalized.games.snake.win, DEFAULT_GAME_RULES.snake.win, '缺失游
 assertEqual(normalized.farm.stealRatio, 1, 'stealRatio 夹到 1')
 assertEqual(normalized.farm.stealDailyLimit, 0, '负数 stealDailyLimit 夹到 0')
 assertEqual(normalized.farm.welcomePoints, DEFAULT_FARM_RULE.welcomePoints, '非法 welcomePoints 回退默认')
+assertEqual(normalized.farm.stealSuccessRate, DEFAULT_FARM_RULE.stealSuccessRate, '非法 stealSuccessRate 回退默认')
+assertEqual(normalized.farm.victimDailyStealLimit, DEFAULT_FARM_RULE.victimDailyStealLimit, '缺失 victimDailyStealLimit 回退默认')
+assertEqual(normalized.farm.seedDropMax, DEFAULT_FARM_RULE.seedDropMax, '缺失 seedDropMax 回退默认')
+assertEqual(normalized.farm.merchantCount, DEFAULT_FARM_RULE.merchantCount, '缺失 merchantCount 回退默认')
+
+// 0 是合法值，不能被默认值吞掉
+const zeroed = normalizePointsConfig({
+  games: { '2048': { dailyLossCap: 0 } },
+  farm: { stealSuccessRate: 0, victimDailyStealLimit: 0, seedDropMax: 0, merchantCount: 0 },
+})
+assertEqual(zeroed.games['2048'].dailyLossCap, 0, 'dailyLossCap 0 表示不限，保留 0')
+assertEqual(zeroed.farm.stealSuccessRate, 0, 'stealSuccessRate 0 保留（必失败）')
+assertEqual(zeroed.farm.victimDailyStealLimit, 0, 'victimDailyStealLimit 0 保留（不可被偷）')
+assertEqual(zeroed.farm.seedDropMax, 0, 'seedDropMax 0 保留（关闭掉落）')
+assertEqual(zeroed.farm.merchantCount, 0, 'merchantCount 0 保留（无商人）')
+
+const discountOrder = normalizePointsConfig({ farm: { merchantDiscountMin: 0.9, merchantDiscountMax: 0.5 } })
+assert(discountOrder.farm.merchantDiscountMin <= discountOrder.farm.merchantDiscountMax, '商人折扣下限不大于上限')
 assertEqual(Object.keys(normalizePointsConfig(null).games).length, GAME_KEYS.length, '空配置补全全部游戏')
 assertEqual(normalizePointsConfig(DEFAULT_POINTS_CONFIG).games.uno.win, 22, '默认配置往返不变')
 
@@ -187,15 +207,36 @@ assertEqual(growthProgress(plantedAt, readyAt, now + 50_000), 0.5, '一半时间
 assertEqual(growthProgress(plantedAt, readyAt, now + 200_000), 1, '超过成熟时间进度封顶 1')
 assertEqual(growthProgress(null, readyAt, now), 0, '未种植进度 0')
 
-// 偷菜与收获
+// 偷菜与收获（收益翻倍后：胡萝卜 14，星之果 160）
 const carrot = getCrop('carrot')!
 const starfruit = getCrop('starfruit')!
-assertEqual(computeStealPoints(carrot, DEFAULT_FARM_RULE.stealRatio), 4, '偷胡萝卜得 floor(7×0.6) = 4')
-assertEqual(computeStealPoints(starfruit, DEFAULT_FARM_RULE.stealRatio), 48, '偷星之果得 floor(80×0.6) = 48')
+assertEqual(carrot.value, 14, '胡萝卜单位价值已翻倍为 14')
+assertEqual(starfruit.value, 160, '星之果单位价值已翻倍为 160')
+assertEqual(FARM_CROPS.every((crop) => crop.value % 2 === 0), true, '翻倍后所有作物单位价值为偶数')
+assertEqual(computeStealPoints(carrot, DEFAULT_FARM_RULE.stealRatio), 8, '偷胡萝卜得 floor(14×0.6) = 8')
+assertEqual(computeStealPoints(starfruit, DEFAULT_FARM_RULE.stealRatio), 96, '偷星之果得 floor(160×0.6) = 96')
 assertEqual(computeStealPoints(carrot, 0), 1, '偷菜收益至少 1 分')
-assertEqual(computeStealPoints(carrot, 1), 7, '比例 1 时按单位价值')
-assertEqual(cropUnitsValue(carrot, 2), 14, '胡萝卜 2 单位 = 14 分')
-assertEqual(cropUnitsValue(starfruit, 5), 400, '星之果 5 单位 = 400 分')
+assertEqual(computeStealPoints(carrot, 1), 14, '比例 1 时按单位价值')
+assertEqual(cropUnitsValue(carrot, 2), 28, '胡萝卜 2 单位 = 28 分')
+assertEqual(cropUnitsValue(starfruit, 5), 800, '星之果 5 单位 = 800 分')
 assertEqual(cropUnitsValue(carrot, -1), 0, '负数单位按 0 处理')
+
+// 偷菜概率：0 必失败、1 必成功，中间按 rng 判定
+assertEqual(rollStealSuccess(0, () => 0), false, '概率 0 必失败')
+assertEqual(rollStealSuccess(0, () => 0.999), false, '概率 0 即使 rng 接近 1 也失败')
+assertEqual(rollStealSuccess(1, () => 0.999), true, '概率 1 必成功')
+assertEqual(rollStealSuccess(0.65, () => 0.64), true, 'rng 小于概率时成功')
+assertEqual(rollStealSuccess(0.65, () => 0.65), false, 'rng 等于概率时失败（严格小于）')
+assertEqual(rollStealSuccess(0.65, () => 0.99), false, 'rng 大于概率时失败')
+assertEqual(rollStealSuccess(Number.NaN, () => 0), false, '非法概率按 0 处理')
+assertEqual(rollStealSuccess(0.3, () => -1), true, '概率落在边界外也能正常判定')
+
+// 权重随机（注入 rng 保证确定性）
+assertEqual(pickWeighted([], () => 1, () => 0), null, '空列表返回 null')
+assertEqual(pickWeighted(['a', 'b'], () => 0, () => 0), null, '全零权重返回 null')
+assertEqual(pickWeighted(['a', 'b'], (item) => (item === 'a' ? 1 : 3), () => 0), 'a', '权重 1/4 时取第一项')
+assertEqual(pickWeighted(['a', 'b'], (item) => (item === 'a' ? 1 : 3), () => 0.3), 'b', '权重 1/4 时 rng 0.3 落到第二项')
+assertEqual(pickWeighted(['a', 'b'], (item) => (item === 'a' ? 1 : 3), () => 0.999), 'b', 'rng 接近 1 时取最后一项')
+assertEqual(pickWeighted(['a', 'b'], (item) => (item === 'a' ? 1 : 0), () => 0.999), 'a', '末项权重为 0 时回退到有权限的项')
 
 console.log(`✅ 积分与农场规则自检通过：${passed} 个断言`)

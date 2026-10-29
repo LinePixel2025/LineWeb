@@ -77,6 +77,8 @@ export interface FarmView {
   }
   points: number
   stealQuota: StealQuota
+  /** 自己今天已被偷的次数（达到上限后别人偷不到） */
+  victimQuota: StealQuota
   recentSteals: { made: FarmStealRecord[]; received: FarmStealRecord[] }
 }
 
@@ -97,6 +99,8 @@ export interface FarmNeighbor {
   plotCount: number
   readyCount: number
   stealableCount: number
+  /** 该邻居今天已被偷的次数 */
+  victimQuota: StealQuota
   title: UserTitleDto | null
   updatedAt: string
 }
@@ -117,14 +121,31 @@ export interface NeighborFarmView {
   owner: { userId: number; username: string; title: UserTitleDto | null }
   farm: { name: string; plotCount: number; createdAt: string }
   plots: PublicFarmPlot[]
+  /** 我的偷菜额度 */
   quota: StealQuota
+  /** 地主今天已被偷的次数（达到上限后不可再偷） */
+  victimQuota: StealQuota
 }
 
 /** POST /api/farm/users/:id/steal/:index */
-export interface StealResult {
+export interface StealSuccess {
+  success: true
   points: number
   balance: number
   quota: StealQuota
+  victimQuota: StealQuota
   plot: PublicFarmPlot
   crop: FarmCrop
 }
+
+/** 偷菜失败：不消耗额度、不减少产量 */
+export interface StealFailure {
+  success: false
+  message: string
+  quota: StealQuota
+  victimQuota: StealQuota
+  plot: PublicFarmPlot
+  crop: FarmCrop
+}
+
+export type StealResult = StealSuccess | StealFailure

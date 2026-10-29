@@ -137,7 +137,8 @@ router.get('/users/:id', asyncHandler(async (req: Request, res: Response) => {
   res.json(await getNeighborFarm(currentUserId(req), targetId))
 }))
 
-// POST /api/farm/users/:id/steal/:index — 偷菜（每日次数 + 每茬每人一次）
+// POST /api/farm/users/:id/steal/:index — 偷菜（概率成功 + 每日次数 + 每茬每人一次 + 地主被偷上限）
+// 概率失败返回 200 { success: false }，不扣次数、不写偷菜记录
 router.post('/users/:id/steal/:index', stealLimiter, asyncHandler(async (req: Request, res: Response) => {
   const targetId = Number(req.params.id)
   if (!Number.isInteger(targetId) || targetId <= 0) throw new AppError('无效的用户 ID', 400)

@@ -11,6 +11,7 @@ import type {
   HarvestResult,
   NeighborFarmView,
   StealResult,
+  StealSuccess,
 } from '../../types/farm'
 
 type Tab = 'farm' | 'neighbors' | 'shop' | 'records'
@@ -312,11 +313,20 @@ export default function FarmPage() {
           ) : (
             <>
               <div className="gh-farm-toolbar">
-                <div className="gh-farm-quota">
-                  <span className="gh-farm-quota-icon" aria-hidden>🧺</span>
-                  <div>
-                    <strong>今日可偷 {view?.stealQuota.remaining ?? 0} / {view?.stealQuota.limit ?? 0} 次</strong>
-                    <span>每日 0 点重置（Asia/Shanghai）</span>
+                <div className="gh-farm-quota-group">
+                  <div className="gh-farm-quota">
+                    <span className="gh-farm-quota-icon" aria-hidden>🧺</span>
+                    <div>
+                      <strong>今日可偷 {view?.stealQuota.remaining ?? 0} / {view?.stealQuota.limit ?? 0} 次</strong>
+                      <span>偷菜有成功率，失败不扣次数（每日 0 点重置）</span>
+                    </div>
+                  </div>
+                  <div className="gh-farm-quota">
+                    <span className="gh-farm-quota-icon" aria-hidden>🛡️</span>
+                    <div>
+                      <strong>今日已被偷 {view?.victimQuota.used ?? 0} / {view?.victimQuota.limit ?? 0} 次</strong>
+                      <span>达到上限后今天没人能再偷你的菜</span>
+                    </div>
                   </div>
                 </div>
                 <div className="gh-farm-summary" aria-label="农田概览">
@@ -377,7 +387,7 @@ export default function FarmPage() {
                   busy={busy}
                   onNotice={(message) => { setNotice(message); setError('') }}
                   onError={(message) => { setError(message); setNotice('') }}
-                  onStealDone={async (result: StealResult) => {
+                  onStealDone={async (result: StealSuccess) => {
                     // 先本地记分，静默延后重新拉取，避免偷菜后整块界面瞬间刷新
                     applyLocalDelta(result.points)
                     setStealFlash(`+${result.points}`)
@@ -435,6 +445,7 @@ export default function FarmPage() {
               <>
                 <div className="gh-farm-digest">
                   <div><span>偷菜次数</span><strong>{view.stealQuota.used} / {view.stealQuota.limit}</strong></div>
+                  <div><span>被偷次数</span><strong>{view.victimQuota.used} / {view.victimQuota.limit}</strong></div>
                   <div><span>被偷记录</span><strong>{view.recentSteals.received.length}</strong></div>
                 </div>
                 <ul className="gh-farm-recent">
@@ -459,8 +470,8 @@ export default function FarmPage() {
             <h2 className="gh-farm-card-title">小贴士</h2>
             <ul className="gh-farm-tips">
               <li>作物成熟后记得及时收获，收成 = 产量 × 单价。</li>
-              <li>偷菜每天有限量，每茬作物每人只能偷一次。</li>
-              <li>地主至少保留 1 份收成，所以快空的菜别惦记了。</li>
+              <li>偷菜按概率成功，被地主家的狗发现不扣次数；每茬作物每人只能偷一次。</li>
+              <li>地主至少保留 1 份收成；每人每天被偷的次数也有上限。</li>
             </ul>
           </div>
         </aside>
@@ -921,7 +932,7 @@ function NeighborsTab({
   busy: string | null
   onNotice: (message: string) => void
   onError: (message: string) => void
-  onStealDone: (result: StealResult) => Promise<void>
+  onStealDone: (result: StealSuccess) => Promise<void>
 }) {
   const [neighbors, setNeighbors] = useState<FarmNeighbor[]>([])
   const [loading, setLoading] = useState(true)
@@ -985,19 +996,38 @@ function NeighborsTab({
     setStealing(key)
     try {
       const result = await api.post<StealResult>(`/farm/users/${ownerId}/steal/${plotIndex}`)
+      // 概率失败：只同步地块与额度（额度不变），不弹积分动画
+      if (!result.success) {
+        setActive((prev) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            quota: result.quota,
+            victimQuota: result.victimQuota,
+            plots: prev.plots.map((plot) => (plot.index === plotIndex ? result.plot : plot)),
+          }
+        })
+        showToast(result.message, 'error')
+        return
+      }
       // 本地增量更新：只替换这一块地并扣邻居的可偷数，不再整页重新拉取
       setActive((prev) => {
         if (!prev) return prev
         return {
           ...prev,
           quota: result.quota,
+          victimQuota: result.victimQuota,
           plots: prev.plots.map((plot) => (plot.index === plotIndex ? result.plot : plot)),
         }
       })
       setLocalQuota(result.quota)
       setNeighbors((prev) => prev.map((neighbor) => (
         neighbor.userId === ownerId
-          ? { ...neighbor, stealableCount: Math.max(0, neighbor.stealableCount - 1) }
+          ? {
+              ...neighbor,
+              victimQuota: result.victimQuota,
+              stealableCount: Math.max(0, neighbor.stealableCount - 1),
+            }
           : neighbor
       )))
       setLastGain({ key, points: result.points, name: result.crop.name })
@@ -1032,6 +1062,7 @@ function NeighborsTab({
             <span>地主：{active.owner.username}</span>
             <UserTitleBadge title={active.owner.title} />
           </div>
+          <span className="gh-farm-neighbor-quota">地主已被偷 {active.victimQuota.used} / {active.victimQuota.limit}</span>
           <span className="gh-farm-neighbor-quota">今日剩余 {localQuota.remaining} / {localQuota.limit} 次</span>
         </div>
         <div className="gh-farm-neighbor-board">
@@ -1066,7 +1097,13 @@ function NeighborsTab({
                   </button>
                 ) : (
                   <span className="gh-farm-neighbor-locked">
-                    {plot.ready ? (plot.yieldUnits <= 1 ? '只剩最后一份' : '这茬偷过了') : '未成熟'}
+                    {plot.ready
+                      ? (plot.yieldUnits <= 1
+                        ? '只剩最后一份'
+                        : active.victimQuota.used >= active.victimQuota.limit
+                          ? '今日已被偷够'
+                          : '这茬偷过了')
+                      : '未成熟'}
                   </span>
                 )}
               </div>
@@ -1074,7 +1111,7 @@ function NeighborsTab({
           })}
         </div>
         <p className="gh-farm-neighbor-note">
-          偷菜规则：只有成熟的作物能偷；每茬作物每人限偷一次；地主至少保留 1 份收成；每天共 {localQuota.limit} 次。
+          偷菜规则：只有成熟的作物能偷；偷菜有成功率，成功才扣次数；每茬作物每人限偷一次；地主至少保留 1 份收成；每人每天被偷上限 {active.victimQuota.limit} 次，自己每天最多偷 {localQuota.limit} 次。
         </p>
       </div>
     )
@@ -1128,6 +1165,7 @@ function NeighborsTab({
               <div className="gh-farm-neighbor-card-meta">
                 <span>{neighbor.plotCount} 块地</span>
                 <span>成熟 {neighbor.readyCount}</span>
+                <span>已被偷 {neighbor.victimQuota.used}/{neighbor.victimQuota.limit}</span>
               </div>
             </button>
           ))}

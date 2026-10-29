@@ -16,6 +16,7 @@ import {
   fertilizeReadyAt,
   getCrop,
   nextExpansion,
+  rollStealSuccess,
   type CropDef,
 } from '../lib/farmCrops.js'
 import { getTodayDayStart, type PointsConfigDto } from '../lib/pointsRules.js'
@@ -105,6 +106,13 @@ async function stealUsedToday(userId: number, now: number): Promise<number> {
   })
 }
 
+/** 某位地主今天已经被偷走的次数（含所有小偷） */
+async function victimStealUsedToday(userId: number, now: number): Promise<number> {
+  return prisma.farmSteal.count({
+    where: { victimId: userId, createdAt: { gte: getTodayDayStart(now) } },
+  })
+}
+
 async function recentSteals(userId: number) {
   const [made, received] = await Promise.all([
     prisma.farmSteal.findMany({
@@ -138,6 +146,16 @@ async function recentSteals(userId: number) {
   }
 }
 
+export interface StealQuotaDto {
+  used: number
+  limit: number
+  remaining: number
+}
+
+function quotaDto(used: number, limit: number): StealQuotaDto {
+  return { used, limit, remaining: Math.max(0, limit - used) }
+}
+
 export interface FarmView {
   farm: {
     id: number
@@ -154,7 +172,9 @@ export interface FarmView {
   catalog: readonly CropDef[]
   economy: ReturnType<typeof economyDto>
   points: number
-  stealQuota: { used: number; limit: number; remaining: number }
+  stealQuota: StealQuotaDto
+  /** 自己今天已被偷的次数（达到上限后别人偷不到） */
+  victimQuota: StealQuotaDto
   recentSteals: Awaited<ReturnType<typeof recentSteals>>
 }
 
@@ -164,7 +184,7 @@ export interface FarmView {
 
 export async function getFarmView(userId: number): Promise<FarmView> {
   const now = Date.now()
-  const [farm, profile, config, used] = await Promise.all([
+  const [farm, profile, config, used, victimUsed] = await Promise.all([
     prisma.farm.findUnique({
       where: { userId },
       include: { plots: true, items: true },
@@ -172,17 +192,15 @@ export async function getFarmView(userId: number): Promise<FarmView> {
     getPointsProfile(userId),
     getPointsConfig(),
     stealUsedToday(userId, now),
+    victimStealUsedToday(userId, now),
   ])
 
   const base = {
     catalog: FARM_CROPS,
     economy: economyDto(),
     points: profile.balance,
-    stealQuota: {
-      used,
-      limit: config.farm.stealDailyLimit,
-      remaining: Math.max(0, config.farm.stealDailyLimit - used),
-    },
+    stealQuota: quotaDto(used, config.farm.stealDailyLimit),
+    victimQuota: quotaDto(victimUsed, config.farm.victimDailyStealLimit),
     recentSteals: await recentSteals(userId),
   }
 
@@ -491,12 +509,16 @@ export interface FarmNeighborDto {
   plotCount: number
   readyCount: number
   stealableCount: number
+  /** 该邻居今天已被偷的次数 */
+  victimQuota: StealQuotaDto
   title: UserTitleDto | null
   updatedAt: string
 }
 
 export async function listNeighbors(userId: number, query?: string): Promise<FarmNeighborDto[]> {
   const now = Date.now()
+  const dayStart = getTodayDayStart(now)
+  const config = await getPointsConfig()
   const q = query?.trim().slice(0, 30)
   const farms = await prisma.farm.findMany({
     where: {
@@ -528,14 +550,28 @@ export async function listNeighbors(userId: number, query?: string): Promise<Far
     take: 500,
   })
 
+  // 各邻居今天的被偷次数（一次聚合，避免逐个 count）
+  const victimIdList = farms.map((farm) => farm.userId)
+  const victimCounts = victimIdList.length > 0
+    ? await prisma.farmSteal.groupBy({
+        by: ['victimId'],
+        where: { victimId: { in: victimIdList }, createdAt: { gte: dayStart } },
+        _count: { _all: true },
+      })
+    : []
+  const victimUsedMap = new Map(victimCounts.map((row) => [row.victimId, row._count._all]))
+
   const neighbors = farms.map((farm) => {
+    const victimUsed = victimUsedMap.get(farm.userId) ?? 0
+    const victimQuota = quotaDto(victimUsed, config.farm.victimDailyStealLimit)
+    const victimCapped = victimUsed >= config.farm.victimDailyStealLimit
     let readyCount = 0
     let stealableCount = 0
     for (const plot of farm.plots) {
       if (!plot.crop || !plot.readyAt || plot.readyAt.getTime() > now) continue
       if (plot.yieldUnits <= 0) continue
       readyCount += 1
-      if (plot.yieldUnits > 1 && !stolenByMe.some((row) =>
+      if (!victimCapped && plot.yieldUnits > 1 && !stolenByMe.some((row) =>
         row.plotId === plot.id && (!plot.plantedAt || row.createdAt >= plot.plantedAt))) {
         stealableCount += 1
       }
@@ -547,6 +583,7 @@ export async function listNeighbors(userId: number, query?: string): Promise<Far
       plotCount: farm.plotCount,
       readyCount,
       stealableCount,
+      victimQuota,
       title: toUserTitleDto(farm.user.equippedTitle),
       updatedAt: farm.updatedAt.toISOString(),
     }
@@ -568,14 +605,17 @@ export interface NeighborFarmView {
   }
   farm: { name: string; plotCount: number; createdAt: string }
   plots: ReturnType<typeof publicPlotDto>[]
-  quota: { used: number; limit: number; remaining: number }
+  /** 我的偷菜额度 */
+  quota: StealQuotaDto
+  /** 地主今天已被偷的次数（达到上限后不可再偷） */
+  victimQuota: StealQuotaDto
 }
 
 export async function getNeighborFarm(userId: number, targetUserId: number): Promise<NeighborFarmView> {
   if (userId === targetUserId) throw new AppError('这是你自己的农场', 400)
   const config = await getPointsConfig()
   const now = Date.now()
-  const [farm, used, stolenByMe] = await Promise.all([
+  const [farm, used, victimUsed, stolenByMe] = await Promise.all([
     prisma.farm.findUnique({
       where: { userId: targetUserId },
       include: {
@@ -590,6 +630,7 @@ export async function getNeighborFarm(userId: number, targetUserId: number): Pro
       },
     }),
     stealUsedToday(userId, now),
+    victimStealUsedToday(targetUserId, now),
     prisma.farmSteal.findMany({
       where: { thiefId: userId },
       select: { plotId: true, createdAt: true },
@@ -598,6 +639,10 @@ export async function getNeighborFarm(userId: number, targetUserId: number): Pro
     }),
   ])
   if (!farm) throw new AppError('对方还没有开农场', 404)
+
+  const quota = quotaDto(used, config.farm.stealDailyLimit)
+  const victimQuota = quotaDto(victimUsed, config.farm.victimDailyStealLimit)
+  const victimCapped = victimUsed >= config.farm.victimDailyStealLimit
 
   const plots = farm.plots
     .slice()
@@ -608,7 +653,7 @@ export async function getNeighborFarm(userId: number, targetUserId: number): Pro
         row.plotId === plot.id && (!plot.plantedAt || row.createdAt >= plot.plantedAt))
       return {
         ...dto,
-        stealable: dto.stealable && !already && used < config.farm.stealDailyLimit,
+        stealable: dto.stealable && !already && used < config.farm.stealDailyLimit && !victimCapped,
       }
     })
 
@@ -620,28 +665,40 @@ export async function getNeighborFarm(userId: number, targetUserId: number): Pro
     },
     farm: { name: farm.name, plotCount: farm.plotCount, createdAt: farm.createdAt.toISOString() },
     plots,
-    quota: {
-      used,
-      limit: config.farm.stealDailyLimit,
-      remaining: Math.max(0, config.farm.stealDailyLimit - used),
-    },
+    quota,
+    victimQuota,
   }
 }
 
-export interface StealResult {
+export interface StealSuccess {
+  success: true
   points: number
   balance: number
-  quota: { used: number; limit: number; remaining: number }
+  quota: StealQuotaDto
+  victimQuota: StealQuotaDto
   plot: ReturnType<typeof publicPlotDto>
   crop: CropDef
 }
+
+/** 偷菜失败：HTTP 200 返回，不消耗额度、不写偷菜记录 */
+export interface StealFailure {
+  success: false
+  message: string
+  quota: StealQuotaDto
+  victimQuota: StealQuotaDto
+  plot: ReturnType<typeof publicPlotDto>
+  crop: CropDef
+}
+
+export type StealResult = StealSuccess | StealFailure
 
 export async function stealCrop(userId: number, targetUserId: number, index: number): Promise<StealResult> {
   if (userId === targetUserId) throw new AppError('不能偷自己的菜', 400)
   const config = await getPointsConfig()
   const now = Date.now()
+  const dayStart = getTodayDayStart(now)
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx): Promise<StealResult> => {
     const farm = await tx.farm.findUnique({
       where: { userId: targetUserId },
       include: { plots: true, user: { select: { username: true } } },
@@ -654,11 +711,12 @@ export async function stealCrop(userId: number, targetUserId: number, index: num
     if (!plot.readyAt || plot.readyAt.getTime() > now) throw new AppError('作物还没成熟，偷不到', 400)
     if (plot.yieldUnits <= 1) throw new AppError('地主只剩最后一点收成了，手下留情吧', 400)
 
-    const used = await tx.farmSteal.count({
-      where: { thiefId: userId, createdAt: { gte: getTodayDayStart(now) } },
-    })
+    const [used, victimUsed] = await Promise.all([
+      tx.farmSteal.count({ where: { thiefId: userId, createdAt: { gte: dayStart } } }),
+      tx.farmSteal.count({ where: { victimId: targetUserId, createdAt: { gte: dayStart } } }),
+    ])
     if (used >= config.farm.stealDailyLimit) {
-      throw new AppError('今天的偷菜次数用完啦，明天再来', 429)
+      throw new AppError('今天的偷菜次数用完啦，明天再来', 429, 'STEAL_LIMIT')
     }
 
     const already = await tx.farmSteal.findFirst({
@@ -670,6 +728,26 @@ export async function stealCrop(userId: number, targetUserId: number, index: num
       select: { id: true },
     })
     if (already) throw new AppError('这一茬你已经偷过了', 400)
+
+    const quota = quotaDto(used, config.farm.stealDailyLimit)
+    const victimQuota = quotaDto(victimUsed, config.farm.victimDailyStealLimit)
+
+    // 概率判定：失败直接返回（不写库、不扣额度、不减少产量）
+    if (!rollStealSuccess(config.farm.stealSuccessRate)) {
+      return {
+        success: false,
+        message: '被地主家的狗发现了，这次没偷到',
+        quota,
+        victimQuota,
+        plot: publicPlotDto(plot, now),
+        crop,
+      }
+    }
+
+    // 地主今日被偷次数上限（0 = 全天不可被偷）
+    if (victimUsed >= config.farm.victimDailyStealLimit) {
+      throw new AppError('对方今天的菜已经被偷够啦，明天早点来', 429, 'VICTIM_STEAL_LIMIT')
+    }
 
     const points = computeStealPoints(crop, config.farm.stealRatio)
     const award = await awardPointsTx(tx, userId, {
@@ -692,13 +770,11 @@ export async function stealCrop(userId: number, targetUserId: number, index: num
 
     const updatedPlot = await tx.farmPlot.findUnique({ where: { id: plot.id } })
     return {
+      success: true,
       points,
       balance: award.balance,
-      quota: {
-        used: used + 1,
-        limit: config.farm.stealDailyLimit,
-        remaining: Math.max(0, config.farm.stealDailyLimit - used - 1),
-      },
+      quota: quotaDto(used + 1, config.farm.stealDailyLimit),
+      victimQuota: quotaDto(victimUsed + 1, config.farm.victimDailyStealLimit),
       plot: publicPlotDto(updatedPlot ?? plot, now),
       crop,
     }
