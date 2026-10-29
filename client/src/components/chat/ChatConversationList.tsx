@@ -1,5 +1,6 @@
 import { memo, useState } from 'react'
 import NekoAvatar from './NekoAvatar'
+import UserTitleBadge from '../UserTitleBadge'
 import { conversationPreview, formatUnread } from '../../lib/chat'
 import type { NekoConversation } from '../../types/chat'
 
@@ -117,7 +118,8 @@ export default memo(function ChatConversationList({
                             {isLobby ? '大厅' : isBigGroup ? '官方' : '群'}
                           </span>
                         )}
-                        {conversation.title}
+                        <span className="gh-chat-name-text">{conversation.title}</span>
+                        {conversation.kind === 'direct' && <UserTitleBadge title={conversation.contact?.title} />}
                         {conversation.kind === 'direct' && conversation.online && (
                           <span className="gh-chat-online-dot" aria-label="在线" title="在线" />
                         )}

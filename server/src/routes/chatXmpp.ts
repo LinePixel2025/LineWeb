@@ -31,6 +31,7 @@ import { ensureNekoAccounts } from '../services/nekoAccountSync.js'
 import { isAllowedOutboundStanza } from '../services/nekoChatGuard.js'
 import { ensureAvatarSyncedToNeko } from '../services/avatarService.js'
 import { getLineWebBigGroupId } from '../services/nekoBigGroup.js'
+import { getTitleMapForLineWebIds } from '../services/pointsService.js'
 
 /**
  * 聊天 XMPP 网关（挂载于 /api/chat/xmpp）
@@ -103,6 +104,21 @@ async function loadChatView(req: Request): Promise<ChatBootstrapView> {
     listFriendRequests(user.id),
     getLineWebBigGroupId(),
   ])
+  // 称号只贴到 LineWeb 账号上（纯展示）：收集本次出口会出现的 LineWeb id，
+  // 一次性取「已佩戴称号」，避免逐人查询，也不把任何数据写回 neko。
+  const titleIds = new Set<number>([
+    user.id,
+    ...friends.friends.map((friend) => friend.id),
+    ...requests.incoming.map((item) => item.user.id),
+    ...requests.outgoing.map((item) => item.user.id),
+  ])
+  for (const room of state.rooms) {
+    for (const member of room.members) {
+      const linewebId = linewebIdOf(member.id)
+      if (linewebId !== null) titleIds.add(linewebId)
+    }
+  }
+  const titles = await getTitleMapForLineWebIds([...titleIds])
   return buildChatView({
     me: { id: user.id, username: user.username, isAdmin: user.isAdmin },
     state,
@@ -111,6 +127,7 @@ async function loadChatView(req: Request): Promise<ChatBootstrapView> {
     requestsOut: requests.outgoing,
     allowNative: config.nekoChatAllowNative,
     bigGroupRoomId,
+    titles,
   })
 }
 
@@ -175,14 +192,21 @@ router.get(
     if (!parsed.success) throw new AppError('请输入 1-50 个字符的搜索词', 400)
     const user = await currentUser(req)
     const [state, friendIds] = await Promise.all([fetchState(user), friendIdSet(user.id)])
+    const rows = searchDirectory(
+      state,
+      toNekoId(user.id),
+      friendIds,
+      parsed.data.q,
+      config.nekoChatAllowNative,
+    )
+    const titles = await getTitleMapForLineWebIds(
+      rows.map((row) => row.linewebId).filter((id): id is number => id !== null),
+    )
     res.json({
-      users: searchDirectory(
-        state,
-        toNekoId(user.id),
-        friendIds,
-        parsed.data.q,
-        config.nekoChatAllowNative,
-      ),
+      users: rows.map((row) => ({
+        ...row,
+        title: row.linewebId === null ? null : titles.get(row.linewebId) ?? null,
+      })),
     })
   }),
 )
@@ -204,8 +228,15 @@ router.get(
     }
     const user = await currentUser(req)
     const [state, friendIds] = await Promise.all([fetchState(user), friendIdSet(user.id)])
+    const rows = resolveUsers(state, toNekoId(user.id), friendIds, usernames, config.nekoChatAllowNative)
+    const titles = await getTitleMapForLineWebIds(
+      rows.map((row) => row.linewebId).filter((id): id is number => id !== null),
+    )
     res.json({
-      users: resolveUsers(state, toNekoId(user.id), friendIds, usernames, config.nekoChatAllowNative),
+      users: rows.map((row) => ({
+        ...row,
+        title: row.linewebId === null ? null : titles.get(row.linewebId) ?? null,
+      })),
     })
   }),
 )

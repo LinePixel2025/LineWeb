@@ -136,6 +136,32 @@ export function toUserTitleDto(item: { id: number; type: string; name: string; p
   }
 }
 
+/**
+ * 批量取「LineWeb 用户 id → 已佩戴称号」。
+ *
+ * 聊天等出口场景只关心少量用户，按 id 精确查询避免扫全表；
+ * 没有佩戴称号的用户不会出现在 Map 里（调用方按 null 处理）。
+ */
+export async function getTitleMapForLineWebIds(
+  ids: readonly number[],
+): Promise<Map<number, UserTitleDto>> {
+  const unique = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))]
+  if (unique.length === 0) return new Map()
+  const rows = await prisma.user.findMany({
+    where: { id: { in: unique }, equippedTitleId: { not: null } },
+    select: {
+      id: true,
+      equippedTitle: { select: { id: true, type: true, name: true, payload: true } },
+    },
+  })
+  const map = new Map<number, UserTitleDto>()
+  for (const row of rows) {
+    const title = toUserTitleDto(row.equippedTitle)
+    if (title) map.set(row.id, title)
+  }
+  return map
+}
+
 function itemDto(item: PointsShopItem, ownedIds: Set<number>, equippedTitleId: number | null) {
   return {
     id: item.id,

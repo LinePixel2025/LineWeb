@@ -778,10 +778,34 @@
 }
 
 .gh-chat-message-sender {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--gh-text-secondary);
   font-size: var(--gh-text-xs);
   font-weight: 600;
 }
+
+/* 名称 + 站内称号：名称自己截断，称号徽章不压缩 */
+.gh-chat-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gh-chat-friend-name,
+.gh-chat-member-name,
+.gh-chat-conv-name,
+.gh-chat-thread-name { align-items: center; }
+.gh-chat-friend-name { display: inline-flex; gap: 6px; }
+.gh-chat-member-name { display: inline-flex; gap: 6px; }
+.gh-chat-thread-name { display: flex; gap: 6px; }
+.gh-chat-thread-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gh-chat-friend-name .gh-title-badge,
+.gh-chat-member-name .gh-title-badge,
+.gh-chat-conv-name .gh-title-badge,
+.gh-chat-thread-name .gh-title-badge,
+.gh-chat-message-sender .gh-title-badge { flex: 0 0 auto; }
 
 .gh-chat-message-time {
   color: var(--gh-text-tertiary);

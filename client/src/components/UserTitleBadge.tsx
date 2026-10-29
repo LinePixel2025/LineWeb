@@ -8,8 +8,9 @@ interface Props {
 }
 
 /**
- * 站内称号徽章：颜色取自商品 payload（服务端已消毒），只在 LineWeb 页面内展示，
- * 不会写入 neko 聊天账号，因此聊天里看不到。
+ * 站内称号徽章：颜色取自商品 payload（服务端已消毒），只在 LineWeb 页面内展示。
+ * 聊天里通过 LineWeb 自己的接口（bootstrap / directory）附带的 title 字段渲染，
+ * 不写入 neko 聊天账号，因此不会出现在 neko 原生客户端。
  */
 export default function UserTitleBadge({ title, size = 'sm', className = '' }: Props) {
   if (!title) return null

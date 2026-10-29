@@ -13,6 +13,7 @@ import type {
   MinecraftEditEvent,
   MinecraftStateEvent,
 } from './game'
+import type { UserTitleDto } from './points'
 
 /** 实时传输模式：WebSocket 优先，失败/不支持时降级为 HTTP 轮询 */
 export type ChatTransport = 'ws' | 'polling'
@@ -259,6 +260,8 @@ export interface NekoContact {
   remark: string
   /** neko 头像版本号（0 = 没有头像，不要发请求） */
   avatarVersion: number
+  /** LineWeb 已佩戴称号（纯站内展示，不来自 neko） */
+  title?: UserTitleDto | null
 }
 
 export interface NekoRoomMember {
@@ -271,6 +274,8 @@ export interface NekoRoomMember {
   kind: 'lineweb' | 'native'
   /** neko 头像版本号（0 = 没有头像） */
   avatarVersion: number
+  /** LineWeb 已佩戴称号（纯站内展示，不来自 neko） */
+  title?: UserTitleDto | null
 }
 
 export interface NekoRoom {
@@ -301,6 +306,8 @@ export interface NekoSelf {
   linewebId: number
   username: string
   displayName: string
+  /** 自己佩戴的站内称号（纯站内展示，不来自 neko） */
+  title?: UserTitleDto | null
 }
 
 /** 好友申请（LineWeb Prisma 或 neko 好友系统；source 决定接受/拒绝走哪套接口） */
@@ -356,6 +363,8 @@ export interface NekoDirectoryUser {
   lastMessageAt: number
   /** neko 头像版本号（0 = 没有头像） */
   avatarVersion: number
+  /** LineWeb 已佩戴称号（纯站内展示，不来自 neko） */
+  title?: UserTitleDto | null
 }
 
 /**

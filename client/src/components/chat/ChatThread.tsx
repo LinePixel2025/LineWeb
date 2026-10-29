@@ -6,6 +6,7 @@ import ChatStickerPanel from './ChatStickerPanel'
 import ChatBundleDialog from './ChatBundleDialog'
 import ChatForwardDialog from './ChatForwardDialog'
 import MessageActionMenu, { type MessageActionItem } from './MessageActionMenu'
+import UserTitleBadge from '../UserTitleBadge'
 import { canRecall, chatImageUrl, contactLabel, senderLabel } from '../../lib/chat'
 import { useLongPress } from '../../hooks/useLongPress'
 import { extractImageSrc } from '../../lib/xmpp/protocol'
@@ -16,6 +17,7 @@ import type {
   NekoMessage,
   NekoSticker,
 } from '../../types/chat'
+import type { UserTitleDto } from '../../types/points'
 
 /** 一次最多选择的消息条数（与 neko 合并转发上限一致） */
 const SELECT_MAX = 30
@@ -149,24 +151,32 @@ function renderMentionText(body: string, members: NekoConversation['members']): 
 function avatarOf(
   conversation: NekoConversation,
   message: NekoMessage,
-): { id: number; nekoId: number | null; avatarVersion: number; name: string } {
+): {
+  id: number
+  nekoId: number | null
+  avatarVersion: number
+  name: string
+  title: UserTitleDto | null
+} {
   if (conversation.kind === 'direct') {
     return {
       id: conversation.avatarId,
       nekoId: conversation.avatarNekoId,
       avatarVersion: conversation.avatarVersion,
       name: conversation.avatarName,
+      title: conversation.contact?.title ?? null,
     }
   }
   const member = conversation.members.find((item) => item.username === message.fromUsername)
   if (!member) {
-    return { id: -1, nekoId: null, avatarVersion: 0, name: message.fromUsername || '未知用户' }
+    return { id: -1, nekoId: null, avatarVersion: 0, name: message.fromUsername || '未知用户', title: null }
   }
   return {
     id: member.linewebId ?? -member.nekoId,
     nekoId: member.nekoId,
     avatarVersion: member.avatarVersion,
     name: member.displayName || member.username,
+    title: member.title ?? null,
   }
 }
 
@@ -717,6 +727,7 @@ export default function ChatThread({
             <>
               <p className="gh-chat-thread-name">
                 <span className="gh-chat-thread-name-text">{title}</span>
+                {!isGroup && <UserTitleBadge title={conversation.contact?.title} />}
                 {isLobby && <span className="gh-chat-official-tag gh-chat-official-tag--lobby">大厅</span>}
                 {isBigGroup && <span className="gh-chat-official-tag">官方</span>}
               </p>
@@ -898,7 +909,8 @@ export default function ChatThread({
                       size="sm"
                     />
                     <span className="gh-chat-member-name">
-                      {member.displayName || member.username}
+                      <span className="gh-chat-name-text">{member.displayName || member.username}</span>
+                      <UserTitleBadge title={member.title} />
                       {member.kind === 'native' && <span className="gh-chat-member-tag">neko</span>}
                       {member.online && <span className="gh-chat-member-online" title="在线" />}
                     </span>
@@ -1116,7 +1128,12 @@ export default function ChatThread({
                 )}
                 <div className="gh-chat-message-body">
                   <div className={`gh-chat-message-meta ${grouped ? 'gh-chat-message-meta--grouped' : ''}`}>
-                    {!own && !grouped && <span className="gh-chat-message-sender">{sender.name}</span>}
+                    {!own && !grouped && (
+                      <span className="gh-chat-message-sender">
+                        {sender.name}
+                        <UserTitleBadge title={sender.title} />
+                      </span>
+                    )}
                     <time className="gh-chat-message-time" dateTime={new Date(message.ts).toISOString()}>
                       {formatMessageTime(message.ts)}
                     </time>

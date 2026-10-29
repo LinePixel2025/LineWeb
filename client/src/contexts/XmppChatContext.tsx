@@ -220,6 +220,7 @@ function toContact(user: NekoDirectoryUser): NekoContact {
     isFriend: false,
     remark: '',
     avatarVersion: user.avatarVersion ?? 0,
+    title: user.title ?? null,
   }
 }
 

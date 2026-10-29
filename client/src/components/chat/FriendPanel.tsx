@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import UserAvatar from '../UserAvatar'
 import NekoAvatar from './NekoAvatar'
+import UserTitleBadge from '../UserTitleBadge'
 import { contactLabel } from '../../lib/chat'
 import type {
   ChatUser,
@@ -220,7 +221,8 @@ export default function FriendPanel({
                     size="sm"
                   />
                   <span className="gh-chat-friend-name">
-                    {contactLabel(user)}
+                    <span className="gh-chat-name-text">{contactLabel(user)}</span>
+                    <UserTitleBadge title={user.title} />
                     <span className="gh-chat-member-tag">neko</span>
                   </span>
                   <span className="gh-chat-friend-actions">
@@ -319,7 +321,10 @@ export default function FriendPanel({
                     name={contactLabel(friend)}
                     size="sm"
                   />
-                  <span className="gh-chat-friend-name">{contactLabel(friend)}</span>
+                  <span className="gh-chat-friend-name">
+                    <span className="gh-chat-name-text">{contactLabel(friend)}</span>
+                    <UserTitleBadge title={friend.title} />
+                  </span>
                   <span className="gh-chat-friend-actions">
                     {onInviteGame && linewebId !== null && (
                       <button

@@ -279,7 +279,11 @@ function checkView(): void {
   assertEqual(built.domain, 'wlxx', '状态：透出 domain')
   assertEqual(built.mucDomain, 'muc.wlxx', '状态：透出 mucDomain')
   assertEqual(built.historyLimit, 50, '状态：透出历史上限')
-  assertEqual(built.self, { nekoId: BASE + 1, linewebId: 1, username: 'lw_1', displayName: '我' }, '状态：自己')
+  assertEqual(
+    built.self,
+    { nekoId: BASE + 1, linewebId: 1, username: 'lw_1', displayName: '我', title: null },
+    '状态：自己（未佩戴称号时 title 为 null）',
+  )
 
   assertEqual(built.friends.length, 2, '联系人：好友数量（LineWeb + neko 原生）')
   assertEqual(built.friends[0].key, `u${BASE + 2}`, '联系人：会话键 u<nekoId>')
@@ -299,6 +303,17 @@ function checkView(): void {
   assertEqual(built.contacts[1].kind, 'native', '联系人：原生好友归类 native')
   assertEqual(built.contacts[2].isFriend, false, '联系人：有往来的原生账号不是好友')
   assertEqual(built.contacts[2].linewebId, null, '联系人：原生账号无 LineWeb id')
+
+  // 称号：只在 LineWeb 账号上透出（原生账号恒为 null），未传 titles 时全部为 null
+  const noTitle = buildView(true)
+  assertEqual(noTitle.friends.every((f) => f.title === null), true, '称号：未传 titles 时全部为 null')
+  const goldTitle = { id: 9, name: '黄金矿工', color: '#f5c518', icon: '👑' }
+  const withTitles = buildView(true, { titles: new Map([[1, goldTitle], [2, goldTitle]]) })
+  assertEqual(withTitles.self.title, goldTitle, '称号：自己佩戴的称号')
+  assertEqual(withTitles.contacts[0].title, goldTitle, '称号：LineWeb 好友按要求映射')
+  assertEqual(withTitles.contacts[1].title, null, '称号：原生账号不带称号')
+  assertEqual(withTitles.rooms[1].members[0].title, goldTitle, '称号：群成员带称号')
+  assertEqual(withTitles.rooms[1].members[1].title, null, '称号：原生群成员不带称号')
 
   assertEqual(
     built.requestsIn.map((r) => `${r.source}:${r.username}`),

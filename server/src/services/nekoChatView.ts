@@ -37,6 +37,19 @@ export interface ChatRequestView {
   avatarVersion: number
 }
 
+/**
+ * 站内称号（只读快照）。
+ *
+ * 称号是 LineWeb 自己的数据，只在这里「贴」到聊天出口上，绝不写入 neko：
+ * 消息体、账号资料、好友关系都不携带它。
+ */
+export interface ChatTitleView {
+  id: number
+  name: string
+  color: string
+  icon: string
+}
+
 export interface ChatContactView {
   key: string
   nekoId: number
@@ -50,6 +63,8 @@ export interface ChatContactView {
   remark: string
   /** neko 头像版本号（0 = 没有头像） */
   avatarVersion: number
+  /** LineWeb 已佩戴称号（原生账号 / 未佩戴为 null） */
+  title: ChatTitleView | null
 }
 
 export interface ChatRoomMemberView {
@@ -62,6 +77,8 @@ export interface ChatRoomMemberView {
   kind: 'lineweb' | 'native'
   /** neko 头像版本号（0 = 没有头像） */
   avatarVersion: number
+  /** LineWeb 已佩戴称号（原生账号 / 未佩戴为 null） */
+  title: ChatTitleView | null
 }
 
 export interface ChatRoomView {
@@ -92,6 +109,8 @@ export interface ChatSelfView {
   linewebId: number
   username: string
   displayName: string
+  /** 自己佩戴的称号（LineWeb 内部展示，不下发到 neko） */
+  title: ChatTitleView | null
 }
 
 export interface ChatBootstrapView {
@@ -129,6 +148,8 @@ export interface BuildChatViewInput {
   allowNative: boolean
   /** 服务端维护的 LineWeb 用户大群房间 id（用于前端标记「官方」） */
   bigGroupRoomId?: number | null
+  /** LineWeb id → 已佩戴称号（可选；纯展示，不写入 neko） */
+  titles?: ReadonlyMap<number, ChatTitleView>
 }
 
 function kindOfUsername(username: string): 'lineweb' | 'native' {
@@ -154,6 +175,7 @@ function toContact(
   >,
   isFriend: boolean,
   remark = '',
+  title: ChatTitleView | null = null,
 ): ChatContactView {
   const linewebId = linewebIdOfUsername(user.username)
   return {
@@ -168,11 +190,13 @@ function toContact(
     isFriend,
     remark,
     avatarVersion: Number(user.avatarVersion) || 0,
+    title,
   }
 }
 
 function toRoomMember(
   member: NekoStateRoom['members'][number],
+  title: ChatTitleView | null = null,
 ): ChatRoomMemberView {
   return {
     nekoId: member.id,
@@ -183,6 +207,7 @@ function toRoomMember(
     online: !!member.online,
     kind: kindOfUsername(member.username),
     avatarVersion: Number(member.avatarVersion) || 0,
+    title,
   }
 }
 
@@ -250,6 +275,10 @@ function toStickers(state: NekoState): NekoSticker[] {
 export function buildChatView(input: BuildChatViewInput): ChatBootstrapView {
   const { me, state, allowNative } = input
   const selfNekoId = toNekoId(me.id)
+  const titles = input.titles ?? new Map<number, ChatTitleView>()
+  /** 称号只认 LineWeb id：原生账号没有对应记录，恒为 null */
+  const titleOf = (linewebId: number | null): ChatTitleView | null =>
+    linewebId === null ? null : titles.get(linewebId) ?? null
   const usersById = new Map<number, NekoStateUser>()
   const usersByName = new Map<string, NekoStateUser>()
   for (const user of state.users) {
@@ -274,6 +303,7 @@ export function buildChatView(input: BuildChatViewInput): ChatBootstrapView {
       },
       true,
       state.friends.find((row) => row.id === nekoId)?.remark || '',
+      titleOf(friend.id),
     )
     contactByNekoId.set(contact.nekoId, contact)
   }
@@ -357,7 +387,7 @@ export function buildChatView(input: BuildChatViewInput): ChatBootstrapView {
     room.members
       .filter((member) => !systemNames.has(member.username))
       .filter((member) => activeNames.has(member.username) || member.id === selfNekoId)
-      .map(toRoomMember)
+      .map((member) => toRoomMember(member, titleOf(linewebIdOf(member.id))))
 
   const rooms: ChatRoomView[] = state.rooms
     .filter((room) => !!room.myRole)
@@ -398,6 +428,7 @@ export function buildChatView(input: BuildChatViewInput): ChatBootstrapView {
       linewebId: me.id,
       username: toNekoUsername(me.id),
       displayName: me.username,
+      title: titleOf(me.id),
     },
     friends,
     contacts,
@@ -419,6 +450,8 @@ export interface DirectoryUserView {
   lastMessageAt: number
   /** neko 头像版本号（0 = 没有头像） */
   avatarVersion: number
+  /** LineWeb 已佩戴称号（原生账号 / 未佩戴为 null） */
+  title: ChatTitleView | null
 }
 
 /** 搜索可发起会话的联系人（原生用户为主，`lw_*` 只回好友） */
@@ -429,6 +462,7 @@ export function searchDirectory(
   query: string,
   allowNative: boolean,
   limit = 30,
+  titles?: ReadonlyMap<number, ChatTitleView>,
 ): DirectoryUserView[] {
   const q = query.trim().toLowerCase()
   if (!q) return []
@@ -453,6 +487,7 @@ export function searchDirectory(
       online: !!user.online,
       lastMessageAt: Number(user.lastMessageAt) || 0,
       avatarVersion: Number(user.avatarVersion) || 0,
+      title: linewebId === null ? null : titles?.get(linewebId) ?? null,
     })
     if (result.length >= limit) break
   }
@@ -466,6 +501,7 @@ export function resolveUsers(
   friendIds: Set<number>,
   usernames: string[],
   allowNative: boolean,
+  titles?: ReadonlyMap<number, ChatTitleView>,
 ): DirectoryUserView[] {
   const wanted = new Set(usernames.filter(Boolean))
   const result: DirectoryUserView[] = []
@@ -487,6 +523,7 @@ export function resolveUsers(
       online: !!user.online,
       lastMessageAt: Number(user.lastMessageAt) || 0,
       avatarVersion: Number(user.avatarVersion) || 0,
+      title: linewebId === null ? null : titles?.get(linewebId) ?? null,
     })
   }
   return result
