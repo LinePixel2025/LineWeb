@@ -391,3 +391,20 @@ cd storage-node && python main.py     # 本地 Windows 存储节点，config.jso
 - **新路由**：`/api/points/*`（全部需登录）、`/api/farm/*`（`requireFeature('farm')` + 路由级限流 180/5min，偷菜 40/5min）、`/api/admin/points/*`（`points:manage`）。
 - **自检**：`cd server && npm run verify:points`（165 断言：游戏规则、上海日界、配置归一化、商品载荷清洗、作物目录不变量、施肥/偷菜/扩建）。
 - **数据库**：`PointsLedger / PointsConfig / PointsShopItem / UserPointsItem / Farm / FarmPlot / FarmItem / FarmSteal` 与 `User.points/pointsEarned/equippedTitleId` 均为 additive，`prisma db push` 即可；生产仍走本地构建 + `Dockerfile.prebuilt`，不要在 ECS 上 `docker compose up --build`。
+
+---
+
+## 2026-10 农场 / 积分 / 机制调优（实现口径）
+
+- **农场收益与随机化**：18 种作物 `value` 全部 ×2（种子价不变）；偷菜改为概率成功（`FarmPointRule.stealSuccessRate` 默认 0.65），失败返回 `success:false` 且**不扣每日次数、不写 `FarmSteal`、不减地块产量**；新增地主每日被偷上限 `victimDailyStealLimit`（默认 10，0 = 当天不可被偷，按 `FarmSteal.victimId + 当日` 统计，邻居/地块与本人都下发 `victimQuota`）；每日首次进农场按 tier 加权随机掉 1..`seedDropMax` 颗种子（`Farm.lastSeedDropDate` CAS 抢占，并发只发一次）；`FarmMerchantOffer` 每日随机 3 件（种子/肥料、折扣 40%–70%），积分购买后不可重复，跨日刷新返回 410 `MERCHANT_EXPIRED`。
+- **积分双向日上限**：`GamePointRule.dailyLossCap`（0 = 不限）与 `dailyCap` 对称；负数结算按当日该游戏负流水绝对值截断，达到上限仍可继续游戏，战绩照常写入、积分 delta 为 0。`savePointsConfig` 改为「读旧配置 → 深合并 → normalize → 保存」，`clampFloat` 用 `Number.isFinite` 判断（0 不被默认值吞掉）。
+- **每日签到**：`DailyCheckin`（`userId + dateKey` 唯一，Asia/Shanghai 日界），奖励 `base + min(streakMaxBonus, (streak-1) × streakStep)`，重复签到 409 `CHECKIN_DONE`；`GET /api/points/me` 的 `checkin` 下发今日/连签/明日可得。
+- **头像框**：`PointsShopItem.type = avatar_frame`，payload `frame` 白名单 `gold|neon|sakura|galaxy`；佩戴写 `User.equippedAvatarFrameId`，只在 LineWeb 站内展示（`UserAvatar` 外框包裹层），**不同步 neko**；头像框种子标记独立（`points.shop.frames.seeded`），不会复活已删商品。
+- **单机榜一传说称号**：`GameLeaderTitle`（每个 game 一行）；扫雷以 `expert` 为代表项（`SOLO_LEADER_VARIANTS`），其余为 `solo`；`recordSoloResult` 提交后按游戏 2s debounce 重算 + 启动 30s 全量重算；仅换人时发 `leader_bonus`（同日同游戏 `PointsLedger` 去重，`game:null` 不占游戏日上限）。前端 `UserTitleBadge` 支持 `rarity=legendary` 金色流光（`prefers-reduced-motion` 关闭）。
+- **模拟股市**：`server/src/lib/stockMarket.ts` 用 mulberry32 按 `dateKey + code` 生成 8 只虚构股票的 30 日 OHLC（同日稳定、相邻日连续），`GET /api/stocks/market` 只读、不可交易、零收益；功能键 `stock`（分组「工具」），前端 `/stocks` 进入前弹窗声明「模拟行情」。
+- **聊天治理（`chat:manage`）**：`/admin/chat` 搜索账号并封禁/解封；`ChatBan` 表 + 30s 内存缓存，`/api/chat*`、聊天图片/头像中继与 `/ws/xmpp` 握手返回 `403 CHAT_BANNED`（含原因），封禁时通过自定义关闭码 4003 断开已建立的聊天 WS；只禁止 LineWeb 入口、不改 neko 账号，管理员不可被封禁。聊天页对封禁显示整页说明并停止重连。
+- **免打扰 / 快速回复（纯前端）**：`localStorage lineweb_chat_dnd` 控制全局新消息 Toast（`pushMessageNotice` 首行短路），未读与 @ 角标照常；会话头部显示「免打扰中」。新消息提示内新增「快速回复」：4 个常用短语 + 输入框直接 `sendText` 到该会话、不跳页，展开时暂停自动消失。
+- **新增表**：`FarmMerchantOffer`、`DailyCheckin`、`GameLeaderTitle`、`ChatBan` 与 `Farm.lastSeedDropDate`、`User.equippedAvatarFrameId` 均为 additive；`prisma db push` 即可。
+- **新路由/管理页**：`/api/farm/merchant/:offerId/buy`、`POST /api/points/checkin`、`POST /api/points/shop/:id/equip-frame`、`DELETE /api/points/equipped-frame`、`/api/stocks/market`、`/api/admin/chat/*`；管理页 `/admin/chat`，积分/农场/签到/榜一参数集中在 `/admin/points`。
+- **自检**：`cd server && npm run verify:points`（337）、`verify:gamestats`（81）、`verify:stocks`（569）；`cd client && npm run test`（48 文件 / 538 用例）。
+- **部署**：2026-10-29 已按本地产物链路上线（`781bb62`）：本地 `cd client && npm run build` → dist 覆盖 `/opt/lineweb/client-dist` → `docker build -f Dockerfile.prebuilt` + `docker compose up -d`；容器启动日志显示 PostgreSQL schema 同步完成。
