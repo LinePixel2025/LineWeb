@@ -2,7 +2,8 @@ import type { Server as HttpServer, IncomingMessage } from 'http'
 import type { Duplex } from 'stream'
 import { WebSocket, WebSocketServer } from 'ws'
 import prisma from '../lib/prisma.js'
-import { assertPublicHost } from './webProxyService.js'
+import { assertPublicHost, siteFamilyOf } from './webProxyService.js'
+import { hostMatchesSuffix } from './webProxyHosts.js'
 import { cookieHeaderForUrl, readCookieJar } from './proxyCookies.js'
 import { acquireProxyWsSlot } from './proxyQueue.js'
 import { resolveProxySessionInfo } from './proxySession.js'
@@ -102,9 +103,21 @@ export function initWebProxyWs(server: HttpServer): WebProxyWsHandle {
 
     const rest = match[2] || '/'
     const search = (req.url ?? '').includes('?') ? `?${(req.url ?? '').split('?').slice(1).join('?')}` : ''
+    // 同族子域内嵌主机形态：/proxy-ws/<id>/<https|http>/<host>/<path>（与 HTTP 反代一致）
+    let baseOrigin = site.origin
+    let restPath = rest
+    const embedded = /^\/(https?)\/([^/?#]+)(\/.*)?$/i.exec(rest)
+    if (embedded) {
+      const host = embedded[2].toLowerCase()
+      const family = siteFamilyOf(site.origin)
+      if (family && hostMatchesSuffix(host, family)) {
+        baseOrigin = `${embedded[1].toLowerCase()}://${host}`
+        restPath = embedded[3] || '/'
+      }
+    }
     let upstreamUrl: URL
     try {
-      upstreamUrl = new URL(`${site.origin}${rest}${search}`)
+      upstreamUrl = new URL(`${baseOrigin}${restPath}${search}`)
       upstreamUrl.protocol = upstreamUrl.protocol === 'https:' ? 'wss:' : 'ws:'
       await assertPublicHost(upstreamUrl.hostname)
     } catch {
@@ -113,7 +126,7 @@ export function initWebProxyWs(server: HttpServer): WebProxyWsHandle {
     }
 
     const jar = readCookieJar(site.cookies)
-    const cookie = cookieHeaderForUrl(jar, new URL(site.origin))
+    const cookie = cookieHeaderForUrl(jar, upstreamUrl)
     const protocols = parseSubProtocols(req)
 
     let upstream: WebSocket
@@ -122,7 +135,7 @@ export function initWebProxyWs(server: HttpServer): WebProxyWsHandle {
         ? new WebSocket(upstreamUrl, protocols, {
           headers: {
             ...(cookie ? { cookie } : {}),
-            origin: site.origin,
+            origin: baseOrigin,
             ...(typeof req.headers['user-agent'] === 'string' ? { 'user-agent': req.headers['user-agent'] } : {}),
           },
           handshakeTimeout: DIAL_TIMEOUT_MS,
@@ -132,7 +145,7 @@ export function initWebProxyWs(server: HttpServer): WebProxyWsHandle {
         : new WebSocket(upstreamUrl, {
           headers: {
             ...(cookie ? { cookie } : {}),
-            origin: site.origin,
+            origin: baseOrigin,
             ...(typeof req.headers['user-agent'] === 'string' ? { 'user-agent': req.headers['user-agent'] } : {}),
           },
           handshakeTimeout: DIAL_TIMEOUT_MS,

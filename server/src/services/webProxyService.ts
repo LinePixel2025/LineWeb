@@ -5,16 +5,127 @@ import { buildBootstrapScript } from './webProxyBootstrap.js'
 import { publicCookiesForUrl, type ProxyCookie } from './proxyCookies.js'
 import { buildMediaProxyPath, isMediaProxyPath } from './webProxyMedia.js'
 import { buildResProxyPath, isResProxyPath } from './webProxyRes.js'
-import { RESOURCE_CDN_SUFFIXES, isResourceCdnHost } from './webProxyHosts.js'
+import { RESOURCE_CDN_SUFFIXES, hostMatchesSuffix, isResourceCdnHost } from './webProxyHosts.js'
 import { isProxyHostBlacklisted } from './proxyBlacklist.js'
 
 /**
  * 网页反代核心（纯函数 + 少量网络探测）
  *
- * 反代形态：`/proxy/<siteId>/<上游路径>`。
- *  - 所有子资源、根路径请求都由 HTML/CSS 重写 + 注入脚本落回这个前缀
- *  - 登录态由服务端 Cookie 罐持有（见 proxyCookies.ts），浏览器不接触上游 Cookie
+ * 反代形态：
+ *  - `/proxy/<siteId>/<上游路径>`：站点 origin 的页面与接口；
+ *  - `/proxy/<siteId>/<scheme>/<host>/<path>`：同注册域兄弟子域（站点族），
+ *    例如站点是 www.bilibili.com 时，passport.bilibili.com / api.bilibili.com
+ *    的登录与数据接口会改写成这种「内嵌主机」形态；
+ *  - 所有子资源、根路径请求都由 HTML/CSS 重写 + 注入脚本落回这个前缀；
+ *  - 登录态由服务端 Cookie 罐持有（见 proxyCookies.ts），浏览器不接触上游 Cookie。
  */
+
+// ============================================================
+// 站点族（同注册域子域）
+// ============================================================
+
+/**
+ * 常见多段公共后缀（轻量 PSL）：命中时注册域取倒数第三段。
+ * 只收确定的三段式后缀；表外的多段后缀一律视为「无法可靠判断」→ 不启用同族改写。
+ */
+const MULTIPART_PUBLIC_SUFFIXES = new Set([
+  // 中国大陆 / 港澳台
+  'com.cn', 'net.cn', 'org.cn', 'gov.cn', 'edu.cn', 'ac.cn', 'mil.cn',
+  'com.hk', 'org.hk', 'edu.hk', 'gov.hk', 'idv.hk',
+  'com.tw', 'org.tw', 'edu.tw', 'gov.tw', 'idv.tw', 'net.tw',
+  'com.mo', 'org.mo', 'edu.mo', 'gov.mo',
+  // 日韩
+  'co.jp', 'ne.jp', 'or.jp', 'ac.jp', 'go.jp', 'ad.jp', 'ed.jp', 'gr.jp', 'lg.jp',
+  'co.kr', 'or.kr', 'ne.kr', 're.kr', 'pe.kr', 'go.kr', 'mil.kr', 'ac.kr',
+  // 东南亚 / 南亚
+  'com.sg', 'net.sg', 'org.sg', 'edu.sg', 'gov.sg', 'per.sg',
+  'com.my', 'net.my', 'org.my', 'edu.my', 'gov.my',
+  'com.th', 'net.th', 'org.th', 'ac.th', 'go.th', 'in.th',
+  'com.vn', 'net.vn', 'org.vn', 'edu.vn', 'gov.vn',
+  'com.ph', 'net.ph', 'org.ph', 'edu.ph', 'gov.ph',
+  'com.id', 'net.id', 'or.id', 'web.id', 'ac.id', 'go.id', 'sch.id',
+  'co.in', 'net.in', 'org.in', 'firm.in', 'gen.in', 'ind.in', 'ac.in', 'edu.in', 'res.in', 'gov.in', 'mil.in',
+  // 大洋洲 / 英国
+  'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au', 'id.au',
+  'co.nz', 'net.nz', 'org.nz', 'govt.nz', 'ac.nz', 'gen.nz', 'geek.nz', 'maori.nz',
+  'co.uk', 'org.uk', 'me.uk', 'ltd.uk', 'plc.uk', 'net.uk', 'ac.uk', 'gov.uk',
+  // 美洲
+  'com.br', 'net.br', 'org.br', 'gov.br', 'edu.br',
+  'com.mx', 'net.mx', 'org.mx', 'edu.mx', 'gob.mx',
+  'com.ar', 'net.ar', 'org.ar', 'edu.ar', 'gob.ar',
+  'com.co', 'net.co', 'org.co', 'edu.co', 'gov.co',
+  'com.pe', 'com.ve', 'com.ec', 'com.uy', 'com.py', 'com.bo',
+  // 其他常见
+  'co.za', 'org.za', 'net.za', 'web.za', 'gov.za', 'ac.za',
+  'com.tr', 'net.tr', 'org.tr', 'edu.tr', 'gov.tr',
+  'com.sa', 'net.sa', 'org.sa', 'edu.sa', 'gov.sa',
+  'com.eg', 'com.pk', 'com.bd', 'com.ng', 'com.gh',
+  'com.ua', 'net.ua', 'org.ua', 'edu.ua', 'gov.ua', 'in.ua',
+  'co.il', 'org.il', 'net.il', 'ac.il', 'gov.il',
+  'co.ae', 'net.ae', 'org.ae', 'ac.ae', 'gov.ae',
+  'com.pl', 'net.pl', 'org.pl', 'edu.pl', 'gov.pl', 'prv.pl',
+  'co.ke',
+])
+
+/**
+ * 放心启用「同族」扩展的单段 TLD：注册域取倒数第二段。
+ * 表外 TLD（含冷门多段后缀体系）返回 null → 不启用同族改写，行为回退旧版，宁可错过不误判。
+ */
+const FAMILY_TLDS = new Set([
+  // 通用 gTLD
+  'com', 'net', 'org', 'info', 'biz', 'name', 'pro', 'xyz', 'top', 'vip', 'club', 'shop', 'site',
+  'online', 'tech', 'store', 'fun', 'space', 'website', 'live', 'cloud', 'icu', 'app', 'dev', 'page',
+  'art', 'design', 'studio', 'media', 'news', 'blog', 'wiki', 'games', 'game', 'video', 'social',
+  'network', 'world', 'today', 'life', 'link', 'work', 'zone', 'cool', 'run', 'gold', 'pink', 'love',
+  'city', 'plus', 'team', 'group', 'ltd', 'pub', 'tips', 'tools', 'systems', 'solutions', 'email',
+  'care', 'fund', 'press', 'mobi', 'tel', 'cat', 'asia', 'fans', 'mom', 'luxe', 'cash', 'auto',
+  'cars', 'pet', 'yoga', 'cafe', 'bar', 'rest', 'menu', 'house', 'home', 'estate', 'farm', 'garden',
+  'rent', 'repair', 'health', 'fitness', 'careers', 'jobs', 'education', 'school', 'academy',
+  'college', 'institute', 'training', 'lawyer', 'legal', 'tax', 'finance', 'money', 'bank',
+  'capital', 'ventures', 'agency', 'company', 'digital', 'software', 'technology', 'expert',
+  'services', 'support', 'help', 'guide', 'directory', 'domains',
+  // 常见 ccTLD（注册域 = 两段；多段公共后缀已在上面列出）
+  'cn', 'hk', 'mo', 'tw', 'jp', 'kr', 'sg', 'my', 'th', 'vn', 'ph', 'id', 'in', 'au', 'nz', 'us',
+  'uk', 'de', 'fr', 'it', 'es', 'nl', 'be', 'se', 'no', 'fi', 'dk', 'pl', 'cz', 'pt', 'gr', 'ch',
+  'at', 'ie', 'ru', 'ua', 'tr', 'io', 'tv', 'cc', 'me', 'sh', 'to', 'gg', 'fm', 'am', 'gs', 'im',
+  'is', 'ai', 'co', 'mx', 'br', 'ar', 'cl', 'pe', 've', 'ec', 'uy', 'py', 'bo', 'za', 'eu', 'il',
+  'sa', 'ae', 'eg', 'ng', 'ke', 'gh',
+])
+
+const familyCache = new Map<string, string | null>()
+
+/**
+ * 计算注册域（eTLD+1，轻量表）。
+ * IP 直连 / 单标签 / 表外 TLD 一律返回 null（不启用同族改写）。
+ */
+export function registrableDomainOf(hostname: string): string | null {
+  const host = String(hostname || '').toLowerCase().replace(/\.$/, '')
+  if (!host || net.isIP(host)) return null
+  const cached = familyCache.get(host)
+  if (cached !== undefined) return cached
+  let result: string | null = null
+  const labels = host.split('.').filter(Boolean)
+  if (labels.length >= 2) {
+    const lastTwo = labels.slice(-2).join('.')
+    if (MULTIPART_PUBLIC_SUFFIXES.has(lastTwo)) {
+      result = labels.length >= 3 ? labels.slice(-3).join('.') : null
+    } else if (FAMILY_TLDS.has(labels[labels.length - 1])) {
+      result = lastTwo
+    }
+  }
+  if (familyCache.size > 2000) familyCache.clear()
+  familyCache.set(host, result)
+  return result
+}
+
+/** 站点 origin 的注册域；无法解析时 null */
+export function siteFamilyOf(origin: string): string | null {
+  try {
+    return registrableDomainOf(new URL(origin).hostname)
+  } catch {
+    return null
+  }
+}
 
 const HOST_CHECK_TTL_MS = 5 * 60 * 1000
 
@@ -145,11 +256,62 @@ function isProxyableHost(host: string, ctx: RewriteContext): boolean {
   return false
 }
 
+/** 站点 origin 的主机（与站点 origin 一致的地址走普通反代前缀） */
+function siteHostOf(ctx: RewriteContext): string | null {
+  try {
+    return new URL(ctx.siteOrigin).host
+  } catch {
+    return null
+  }
+}
+
+/** 本次文档实际来源主机；与站点 origin 同主机时返回 null（保持旧映射语义） */
+function activeHostOf(ctx: RewriteContext): string | null {
+  try {
+    const host = new URL(ctx.activeOrigin).host
+    return host === siteHostOf(ctx) ? null : host
+  } catch {
+    return null
+  }
+}
+
+/** 主机是否与站点 origin 同注册域（站点族） */
+function isFamilyHost(host: string, ctx: RewriteContext): boolean {
+  const family = siteFamilyOf(ctx.siteOrigin)
+  if (!family) return false
+  return hostMatchesSuffix(String(host || '').toLowerCase(), family)
+}
+
+/**
+ * 内嵌主机反代路径：`/proxy/<siteId>/<scheme>/<host><path><search><hash>`。
+ * 兄弟子域（passport.bilibili.com 等）的页面与接口都落回这个形态，
+ * 服务端解析后按内嵌主机作为上游。
+ */
+function embeddedProxyPath(url: URL, siteId: number): string {
+  const scheme = url.protocol === 'http:' ? 'http' : 'https'
+  return `/proxy/${siteId}/${scheme}/${url.host}${url.pathname || '/'}${url.search}${url.hash}`
+}
+
+/** 根相对 URL 所属主机：文档来自兄弟子域时根相对属于活动主机 */
+function activeEmbeddedPrefix(ctx: RewriteContext): string | null {
+  const activeHost = activeHostOf(ctx)
+  if (!activeHost) return null
+  let scheme = 'https'
+  try {
+    scheme = new URL(ctx.activeOrigin).protocol === 'http:' ? 'http' : 'https'
+  } catch {
+    /* ignore */
+  }
+  return `/proxy/${ctx.siteId}/${scheme}/${activeHost}`
+}
+
 /**
  * 把 HTML/CSS 中的一个 URL 映射到反代路径。
  *
- * 只改写三类：根路径、与站点同源的绝对 URL、协议相对且同源的 URL。
- * 外部域名原样保留（脚本、字体、CDN 直连，避免代理一切流量）。
+ * 改写四类：根路径、与站点 origin 同主机的绝对 URL、同注册域的兄弟子域（内嵌主机形态）、
+ * 协议相对且同源的 URL。文档来自兄弟子域时，根相对 URL 与活动主机绝对 URL 也映射到
+ * 内嵌主机形态（根相对属于活动主机，而不是站点 origin）。
+ * 族外域名原样保留（脚本、字体、CDN 直连，避免代理一切流量）。
  */
 export function mapUrlToProxy(value: string, ctx: RewriteContext): string {
   const prefix = `/proxy/${ctx.siteId}`
@@ -173,12 +335,15 @@ export function mapUrlToProxy(value: string, ctx: RewriteContext): string {
   if (trimmed === '/') return `${prefix}/`
   if (trimmed.startsWith('/') && !trimmed.startsWith('//')) {
     if (trimmed === prefix || trimmed.startsWith(`${prefix}/`)) return raw
-    return `${prefix}${trimmed}`
+    // 文档来自兄弟子域（如登录页在 passport.bilibili.com）时，根相对地址属于活动主机
+    const activePrefix = activeEmbeddedPrefix(ctx)
+    return activePrefix ? `${activePrefix}${trimmed}` : `${prefix}${trimmed}`
   }
   if (trimmed.startsWith('//')) {
     try {
       const url = new URL(`https:${trimmed}`)
-      if (isProxyableHost(url.host, ctx)) return `${prefix}${url.pathname}${url.search}${url.hash}`
+      if (url.host === siteHostOf(ctx)) return `${prefix}${url.pathname}${url.search}${url.hash}`
+      if (isFamilyHost(url.host, ctx)) return embeddedProxyPath(url, ctx.siteId)
       // 懒加载属性（data-src / data-original 等）里的已知 CDN 资源同样走同源资源代理，
       // 否则脚本把原地址写回 src 后，浏览器仍会带 LineWeb 的 Referer 直连 CDN
       if (isResourceCdnHost(url.host)) return buildResProxyPath(url, ctx.siteId)
@@ -190,7 +355,8 @@ export function mapUrlToProxy(value: string, ctx: RewriteContext): string {
   if (/^https?:\/\//i.test(trimmed)) {
     try {
       const url = new URL(trimmed)
-      if (isProxyableHost(url.host, ctx)) return `${prefix}${url.pathname}${url.search}${url.hash}`
+      if (url.host === siteHostOf(ctx)) return `${prefix}${url.pathname}${url.search}${url.hash}`
+      if (isFamilyHost(url.host, ctx)) return embeddedProxyPath(url, ctx.siteId)
       if (isResourceCdnHost(url.host)) return buildResProxyPath(url, ctx.siteId)
     } catch {
       /* ignore */
@@ -245,9 +411,9 @@ export function mapMediaUrl(value: string, ctx: RewriteContext): string {
 /**
  * 静态资源 URL 重写（用于 <link>/<script>/<img> 与 CSS 里的 url()）。
  *
- * 与 mapUrlToProxy 的区别：**跨站资源也改写到同源资源代理**
+ * 与 mapUrlToProxy 的区别：**族外跨站资源也改写到同源资源代理**
  * （CDN 上的 CSS / JS / 字体 / 图片常常校验 Referer 或限制 CORS，浏览器直连会失败）。
- * 同源地址仍复用 mapUrlToProxy 的普通改写，保持原有语义。
+ * 站点主机与族内兄弟子域仍走普通反代 / 内嵌主机形态（带 Cookie、可改写）。
  */
 export function mapResourceUrl(value: string, ctx: RewriteContext): string {
   if (typeof value !== 'string') return value
@@ -282,8 +448,10 @@ export function mapResourceUrl(value: string, ctx: RewriteContext): string {
     return raw
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return raw
-  if (isProxyableHost(url.host, ctx)) return mapUrlToProxy(trimmed, ctx)
-  // 跨站静态资源：交给同源资源代理
+  if (url.host === siteHostOf(ctx)) return mapUrlToProxy(trimmed, ctx)
+  // 族内兄弟子域（含文档所在的活动主机）：走内嵌主机反代（与页面同一条链路）
+  if (isFamilyHost(url.host, ctx)) return embeddedProxyPath(url, ctx.siteId)
+  // 族外静态资源：交给同源资源代理
   return buildResProxyPath(url, ctx.siteId)
 }
 
@@ -295,12 +463,30 @@ export function mapWsUrlToProxy(value: string, ctx: RewriteContext, pageHost: st
   const trimmed = value.trim()
   if (!trimmed) return value
   if (trimmed.startsWith(prefix)) return value
-  if (trimmed.startsWith('/')) return `${scheme}${pageHost}${prefix}${trimmed}`
+  if (trimmed.startsWith('/')) {
+    // 文档来自兄弟子域时，根相对 WS 地址属于活动主机 → 内嵌主机形态
+    const activeHost = activeHostOf(ctx)
+    if (activeHost) {
+      let activeScheme = 'https'
+      try {
+        activeScheme = new URL(ctx.activeOrigin).protocol === 'http:' ? 'http' : 'https'
+      } catch {
+        /* ignore */
+      }
+      return `${scheme}${pageHost}${prefix}/${activeScheme}/${activeHost}${trimmed}`
+    }
+    return `${scheme}${pageHost}${prefix}${trimmed}`
+  }
   if (/^wss?:\/\//i.test(trimmed)) {
     try {
       const url = new URL(trimmed)
       if (isProxyableHost(url.host, ctx)) {
         return `${scheme}${pageHost}${prefix}${url.pathname}${url.search}${url.hash}`
+      }
+      // 族内兄弟子域的 WS（如 broadcast-msg.bilibili.com）也走中继
+      if (isFamilyHost(url.host, ctx)) {
+        const marker = url.protocol === 'ws:' ? 'http' : 'https'
+        return `${scheme}${pageHost}${prefix}/${marker}/${url.host}${url.pathname}${url.search}${url.hash}`
       }
     } catch {
       /* ignore */
@@ -309,7 +495,10 @@ export function mapWsUrlToProxy(value: string, ctx: RewriteContext, pageHost: st
   return value
 }
 
-/** 把反代 URL 还原成上游 URL（用于 Referer / Origin 透传） */
+/**
+ * 把反代 URL 还原成上游 URL（用于 Referer / Origin 透传）。
+ * 两种形态都能还原：普通前缀 → 活动/站点 origin；内嵌主机形态 → 内嵌 origin。
+ */
 export function proxyUrlToUpstream(referer: string | undefined, ctx: RewriteContext): string | undefined {
   if (!referer) return referer
   try {
@@ -317,6 +506,11 @@ export function proxyUrlToUpstream(referer: string | undefined, ctx: RewriteCont
     const prefix = `/proxy/${ctx.siteId}`
     if (url.pathname === prefix || url.pathname.startsWith(`${prefix}/`)) {
       const rest = url.pathname.slice(prefix.length) || '/'
+      // 内嵌主机形态：/https/<host>/<path>
+      const embedded = /^\/(https?)\/([^/?#]+)(\/.*)?$/i.exec(rest)
+      if (embedded) {
+        return `${embedded[1].toLowerCase()}://${embedded[2].toLowerCase()}${embedded[3] || '/'}${url.search}`
+      }
       const origin = ctx.activeOrigin || ctx.siteOrigin
       return `${origin}${rest}${url.search}`
     }
@@ -451,11 +645,15 @@ function rewriteBaseTag(tag: string, ctx: RewriteContext): string {
     return ''
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return ''
-  if (isProxyableHost(url.host, ctx)) {
+  if (url.host === siteHostOf(ctx)) {
     const mapped = mapUrlToProxy(href, ctx)
     return mapped === href ? '' : `<base href="${mapped}">`
   }
-  // 跨站 base（常见于把静态资源放在 CDN 的站点）：指向资源代理目录
+  // 族内兄弟子域 base：指向内嵌主机前缀，保证相对资源落在同一链路上
+  if (isFamilyHost(url.host, ctx)) {
+    return `<base href="${embeddedProxyPath(url, ctx.siteId)}">`
+  }
+  // 族外 base（常见于把静态资源放在 CDN 的站点）：指向资源代理目录
   return `<base href="${buildResProxyPath(url, ctx.siteId)}">`
 }
 
@@ -503,6 +701,9 @@ export function rewriteHtml(
   const script = `<script data-lineweb-proxy="${ctx.siteId}">${buildBootstrapScript({
     siteId: ctx.siteId,
     origin: ctx.siteOrigin,
+    // 文档实际来自的主机（兄弟子域登录页等）：引导脚本按它解释根相对地址
+    pageOrigin: ctx.activeOrigin || ctx.siteOrigin,
+    family: siteFamilyOf(ctx.siteOrigin) || '',
     cookies: options.cookies,
     forceDesktop: !!ctx.forceDesktop,
     desktopUserAgent: DESKTOP_USER_AGENT,

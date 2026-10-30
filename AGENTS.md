@@ -419,3 +419,16 @@ cd storage-node && python main.py     # 本地 Windows 存储节点，config.jso
 - **股市积分投资**：`StockHolding`（`userId+code` 唯一，`shares Float`、`costPoints Int`）；买卖各收 1% 手续费（最低 1 积分），单笔 100–100,000 积分，`quoteStockBuy` / `quoteStockSell` 纯函数在 `server/src/lib/stockTrading.ts`；`POST /api/stocks/buy`（`stock_buy` 流水）、`POST /api/stocks/sell`（`stock_sell` 流水）、`GET /api/stocks/portfolio`；行情仍按 `dateKey + code` 确定性生成，当日往返必亏手续费，跨日才有涨跌收益。
 - **自检**：`cd server && npm run verify:stocks`（591）、`verify:points`（337）、`verify:gamestats`（81）；`cd client && npm run test`（48 文件 / 538 用例）+ `npm run build`。
 - **数据库**：`StockHolding`、`User.equippedLeaderTitleId`、`GameLeaderTitle.id` 均为 additive，`prisma db push` 即可；部署仍走本地产物链（不要在 ECS 上 `docker compose up --build`）。
+
+---
+
+## 2026-10 反代同族子域（B 站登录修复，实现口径）
+
+- **根因**：B 站是多子域站点——登录在 `passport.bilibili.com`、数据接口在 `api.bilibili.com`，而反代此前只改写「站点 origin + 资源 CDN（hdslb.com/biliimg.com）」。跨主机绝对 URL（`//passport.bilibili.com/login`、`//api.bilibili.com/x/web-interface/nav`）原样保留：登录点击会跳出反代进真实站点（Cookie 进不了服务端罐），接口直连被 B 站 403（实测外来 Origin 直接拒绝）。改 Referer/CDN 规则修不好登录。
+- **站点族（同注册域子域）**：`webProxyService.ts` 新增轻量 PSL（`MULTIPART_PUBLIC_SUFFIXES` 三段式后缀表 + `FAMILY_TLDS` 单段 TLD 白名单）计算注册域 `registrableDomainOf()`；表外 TLD 返回 null 不启用族扩展（保守回退旧行为）。站点是 `www.bilibili.com` 时族 = `bilibili.com`。
+- **内嵌主机路径形态**：`/proxy/<siteId>/<scheme>/<host>/<path>`（如 `/proxy/15/https/passport.bilibili.com/login`）。`webProxy.ts` 主链路解析该形态，仅接受与站点 origin 同注册域的主机；target 用内嵌主机构建，SSRF / 黑名单仍逐跳 `assertPublicHost`。同源重定向的 `Location` 改写按「目标主机是否为站点主机」分别回普通前缀或内嵌形态。
+- **服务端 URL 改写**：`mapUrlToProxy` / `mapResourceUrl` / `rewriteBaseTag` 按优先级匹配 站点主机（普通前缀）→ 族内兄弟子域（内嵌形态）→ 资源 CDN（`__lw_res__`）→ 族外保持。文档来自兄弟子域时（`ctx.activeOrigin` ≠ `siteOrigin`），根相对 URL 与活动主机绝对 URL 也映射到内嵌形态（根相对属于活动主机）。`proxyUrlToUpstream` 还原内嵌形态的 Referer。
+- **引导脚本**：`webProxyBootstrap.ts` cfg 新增 `pageOrigin`（本文档真实上游 origin）与 `family`；`mapHttpUrl`/`mapWsUrl`/`pushState` 钩子同样按 站点主机 → 族内 → CDN → 扩展名 分流；**查询参数重映射**（如登录页 `?goUrl=https%3A%2F%2Fwww.bilibili.com%2F...` 在 bootstrap 里 replaceState 改写成反代路径，应用代码后读 location.search，登录成功后 `location.href=goUrl` 跳回反代内不跳出 iframe）；新增 `HTMLScriptElement.src` / `HTMLIFrameElement.src` 属性钩子（与 img/media 一致走 mapHttpUrl）。
+- **WS 中继**：`webProxyWs.ts` 支持 `/proxy-ws/<id>/<https|http>/<host>/<path>` 内嵌主机形态（限同族），`origin` 头与 Cookie 按内嵌 origin 取。
+- **自检**：`cd server && npm run verify:webproxy`（213 断言：注册域计算、族内/族外 URL 与 WS 映射、内嵌形态 Referer 还原、兄弟子域文档根相对地址、引导脚本 family/pageOrigin 注入）；本地端到端已实测：反代内登录页二维码渲染、`qrcode/generate`/`qrcode/poll`/`captcha` 接口全部走代理、goUrl 重映射生效、首页点「登录」弹窗二维码正常且 URL 不跳出。
+- **无数据库改动**，部署仍走本地产物链（本地 `npm run build` + `Dockerfile.prebuilt`，不要在 ECS 上 `docker compose up --build`）。

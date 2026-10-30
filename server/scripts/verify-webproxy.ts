@@ -262,17 +262,39 @@ async function main(): Promise<void> {
   assertEqual(proxy.mapUrlToProxy('https://example.com/a.js', ctx), '/proxy/7/a.js', 'URL 重写：同源绝对地址')
   assertEqual(proxy.mapUrlToProxy('//example.com/img.png', ctx), '/proxy/7/img.png', 'URL 重写：协议相对同源')
   assertEqual(proxy.mapUrlToProxy('/proxy/7/a.js', ctx), '/proxy/7/a.js', 'URL 重写：已反代地址不重复前缀')
-  assertEqual(proxy.mapUrlToProxy('https://cdn.example.com/a.js', ctx), 'https://cdn.example.com/a.js', 'URL 重写：外链保持')
-  assertEqual(proxy.mapUrlToProxy('https://other.com/a', ctx), 'https://other.com/a', 'URL 重写：第三方保持')
+  assertEqual(
+    proxy.mapUrlToProxy('https://cdn.example.com/a.js', ctx),
+    '/proxy/7/https/cdn.example.com/a.js',
+    'URL 重写：同注册域兄弟子域走内嵌主机',
+  )
+  assertEqual(proxy.mapUrlToProxy('https://other.com/a', ctx), 'https://other.com/a', 'URL 重写：族外第三方保持')
   assertEqual(proxy.mapUrlToProxy('#top', ctx), '#top', 'URL 重写：锚点保持')
   assertEqual(proxy.mapUrlToProxy('mailto:a@b.com', ctx), 'mailto:a@b.com', 'URL 重写：mailto 保持')
   assertEqual(proxy.mapUrlToProxy('javascript:void(0)', ctx), 'javascript:void(0)', 'URL 重写：javascript 保持')
   assertEqual(proxy.mapUrlToProxy('data:image/png;base64,AAAA', ctx), 'data:image/png;base64,AAAA', 'URL 重写：data URI 保持')
   assertEqual(
     proxy.mapUrlToProxy('https://login.example.com/oauth', { ...ctx, activeOrigin: 'https://login.example.com' }),
-    '/proxy/7/oauth',
-    'URL 重写：跨域跳转后的活动源站',
+    '/proxy/7/https/login.example.com/oauth',
+    'URL 重写：活动主机绝对地址走内嵌主机',
   )
+  assertEqual(
+    proxy.mapUrlToProxy('/oauth?x=1', { ...ctx, activeOrigin: 'https://login.example.com' }),
+    '/proxy/7/https/login.example.com/oauth?x=1',
+    'URL 重写：兄弟子域文档的根相对地址属于活动主机',
+  )
+  assertEqual(
+    proxy.mapUrlToProxy('/oauth', ctx),
+    '/proxy/7/oauth',
+    'URL 重写：站点文档根相对地址仍走普通前缀',
+  )
+
+  // 站点族注册域计算
+  assertEqual(proxy.registrableDomainOf('www.bilibili.com'), 'bilibili.com', '站点族：常规两段 TLD')
+  assertEqual(proxy.registrableDomainOf('a.b.example.com'), 'example.com', '站点族：多级子域取注册域')
+  assertEqual(proxy.registrableDomainOf('www.example.com.cn'), 'example.com.cn', '站点族：多段公共后缀取三段')
+  assertEqual(proxy.registrableDomainOf('bilibili.com'), 'bilibili.com', '站点族：裸注册域')
+  assertEqual(proxy.registrableDomainOf('192.168.1.1'), null, '站点族：IP 不启用')
+  assertEqual(proxy.registrableDomainOf('foo.bar.moe'), null, '站点族：表外 TLD 回退不启用')
 
   const wsCtx = { ...ctx, siteId: 7 }
   assertEqual(
@@ -284,6 +306,16 @@ async function main(): Promise<void> {
     proxy.mapWsUrlToProxy('wss://example.com/live?x=1', wsCtx, 'lineweb.test', true),
     'wss://lineweb.test/proxy-ws/7/live?x=1',
     'WS 重写：同源绝对地址',
+  )
+  assertEqual(
+    proxy.mapWsUrlToProxy('wss://api.example.com/live', wsCtx, 'lineweb.test', true),
+    'wss://lineweb.test/proxy-ws/7/https/api.example.com/live',
+    'WS 重写：族内子域走内嵌主机',
+  )
+  assertEqual(
+    proxy.mapWsUrlToProxy('/socket', { ...wsCtx, activeOrigin: 'https://login.example.com' }, 'lineweb.test', true),
+    'wss://lineweb.test/proxy-ws/7/https/login.example.com/socket',
+    'WS 重写：兄弟子域文档的根相对地址',
   )
   assertEqual(
     proxy.mapWsUrlToProxy('wss://other.com/live', wsCtx, 'lineweb.test', true),
@@ -300,6 +332,11 @@ async function main(): Promise<void> {
     proxy.proxyUrlToUpstream('http://lineweb.test/proxy/7/a?b=1', ctx),
     'https://example.com/a?b=1',
     'Referer 还原：反代路径 → 上游',
+  )
+  assertEqual(
+    proxy.proxyUrlToUpstream('http://lineweb.test/proxy/7/https/passport.example.com/login?go=1', ctx),
+    'https://passport.example.com/login?go=1',
+    'Referer 还原：内嵌主机形态 → 上游',
   )
   assertEqual(
     proxy.proxyUrlToUpstream('https://other.com/page', ctx),
@@ -459,8 +496,12 @@ async function main(): Promise<void> {
   assert(mediaHtml.includes('<video src="/proxy/7/__lw_media__/https/example.com/local.mp4"'), 'HTML 媒体：同站 video 也走媒体代理')
   assert(mediaHtml.includes('<audio src="/proxy/7/__lw_media__/https/cdn.example.com/b.mp3"'), 'HTML 媒体：audio 跨域 src')
   assert(
-    mediaHtml.includes('<img src="/proxy/7/__lw_res__/https/cdn.example.com/p.png"'),
-    'HTML 媒体：图片跨域 src 走资源代理',
+    mediaHtml.includes('<img src="/proxy/7/https/cdn.example.com/p.png"'),
+    'HTML 媒体：同族子域图片走内嵌主机反代',
+  )
+  assert(
+    mediaHtml.includes('<video src="/proxy/7/__lw_media__/https/cdn.example.com/movie.mp4"'),
+    'HTML 媒体：媒体地址仍走媒体代理',
   )
 
   // ============================================================
@@ -530,9 +571,25 @@ async function main(): Promise<void> {
   assert(boot.includes('if(isMediaFile(p))return toMediaPath(p)'), '引导脚本：fetch/XHR 媒体后缀走媒体代理')
   assert(boot.includes("defineProperty(HTMLMediaElement.prototype,'src'"), '引导脚本：media.src 改写')
   assert(boot.includes("defineProperty(sourceProto,'src'"), '引导脚本：source.src 改写')
+  assert(boot.includes("defineProperty(HTMLScriptElement.prototype,'src'"), '引导脚本：script.src 改写')
+  assert(boot.includes("defineProperty(HTMLIFrameElement.prototype,'src'"), '引导脚本：iframe.src 改写')
   assert(boot.includes('Element.prototype.setAttribute=function'), '引导脚本：setAttribute 媒体补写')
   assert(boot.includes('mediaPrefix:MEDIA_PREFIX'), '引导脚本：全局标记暴露媒体前缀')
   assert(boot.includes('"desktop":false'), '引导脚本：默认跟随设备 UA')
+  assert(boot.includes('toEmbeddedPath'), '引导脚本：内嵌主机映射函数')
+  assert(boot.includes('URLSearchParams'), '引导脚本：查询参数重映射')
+  assert(boot.includes('"family":""'), '引导脚本：默认无站点族')
+  assert(boot.includes('"pageOrigin":"https://example.com"'), '引导脚本：默认页面来源为站点源')
+
+  const familyBoot = bootstrap.buildBootstrapScript({
+    siteId: 7,
+    origin: 'https://www.example.com',
+    pageOrigin: 'https://passport.example.com',
+    family: 'example.com',
+    cookies: [],
+  })
+  assert(familyBoot.includes('"family":"example.com"'), '引导脚本：站点族注册域注入')
+  assert(familyBoot.includes('"pageOrigin":"https://passport.example.com"'), '引导脚本：兄弟子域页面来源注入')
 
   const desktopBoot = bootstrap.buildBootstrapScript({
     siteId: 7,
@@ -544,11 +601,21 @@ async function main(): Promise<void> {
   assert(desktopBoot.includes('"desktop":true'), '引导脚本：桌面模式标记')
   assert(desktopBoot.includes('"ua":"UA-TEST"'), '引导脚本：桌面 UA 注入')
   assert(desktopBoot.includes("defineProperty(navigator,'userAgent'"), '引导脚本：navigator.userAgent 伪装')
-  assert(desktopBoot.includes("defineProperty(navigator,'userAgentData'"), '引导脚本：userAgentData 伪装')
+  assert(desktopBoot.includes("defineProperty(navigator,'userAgentData'"), '引导脚本：navigator.userAgentData 伪装')
   assert(desktopBoot.includes('forceDesktop:!!cfg.desktop'), '引导脚本：全局标记暴露桌面模式')
 
   const desktopHtml = proxy.rewriteHtml('<html><head></head><body></body></html>', { ...ctx, forceDesktop: true }, { cookies: [] })
   assert(desktopHtml.includes('"desktop":true'), 'HTML 重写：桌面模式传入引导脚本')
+
+  // 兄弟子域文档：注入脚本携带页面真实来源与站点族
+  const siblingHtml = proxy.rewriteHtml(
+    '<html><head></head><body><a href="/oauth">登录</a></body></html>',
+    { ...ctx, activeOrigin: 'https://passport.example.com' },
+    { cookies: [] },
+  )
+  assert(siblingHtml.includes('"pageOrigin":"https://passport.example.com"'), 'HTML 重写：兄弟子域文档注入页面来源')
+  assert(siblingHtml.includes('"family":"example.com"'), 'HTML 重写：注入站点族注册域')
+  assert(siblingHtml.includes('href="/proxy/7/https/passport.example.com/oauth"'), 'HTML 重写：兄弟子域根相对链接走内嵌主机')
 
   // ============================================================
   // 7. 错误页 / 登录页

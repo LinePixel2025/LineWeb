@@ -31,8 +31,10 @@ import {
   proxyUrlToUpstream,
   rewriteCss,
   rewriteHtml,
+  siteFamilyOf,
   type RewriteContext,
 } from '../services/webProxyService.js'
+import { hostMatchesSuffix } from '../services/webProxyHosts.js'
 
 /**
  * 网页反代路由
@@ -934,7 +936,21 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
   res.once('close', releaseSlot)
 
   const upstreamPath = parsed.pathname.slice(`/${siteId}`.length) || '/'
-  const target = new URL(`${site.origin}${upstreamPath}${parsed.search}`)
+
+  // 同族子域内嵌主机形态：/proxy/<id>/<scheme>/<host>/<path>
+  // B 站这类多子域站点的登录（passport.*）与数据接口（api.*）都靠它落回反代；
+  // 仅接受与站点 origin 同注册域的主机，SSRF / 黑名单校验仍按跳逐一执行
+  const siteFamily = siteFamilyOf(site.origin)
+  const embedded = siteFamily ? /^\/(https?)\/([^/?#]+)(\/.*)?$/i.exec(upstreamPath) : null
+  let embeddedBaseOrigin: string | null = null
+  if (embedded && siteFamily) {
+    const host = embedded[2].toLowerCase()
+    if (hostMatchesSuffix(host, siteFamily)) {
+      embeddedBaseOrigin = `${embedded[1].toLowerCase()}://${host}`
+    }
+  }
+
+  const target = new URL(`${embeddedBaseOrigin ?? site.origin}${embedded ? embedded[3] || '/' : upstreamPath}${parsed.search}`)
   const ctx: RewriteContext = {
     siteId: site.id,
     siteOrigin: site.origin,
@@ -1071,9 +1087,14 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
           break
         }
         if (next.origin === currentUrl.origin) {
-          // 同源跳转：交回浏览器，让 iframe 地址栏与相对路径跟着更新
+          // 同源跳转：交回浏览器，让 iframe 地址栏与相对路径跟着更新。
+          // 兄弟子域（内嵌主机形态）的同源跳转要保持主机，不能退回站点 origin
+          const siteHost = new URL(site.origin).host
+          const locationPath = next.host === siteHost
+            ? `/proxy/${site.id}${next.pathname}${next.search}`
+            : `/proxy/${site.id}/${next.protocol.replace(':', '')}/${next.host}${next.pathname}${next.search}`
           res.status(response.status)
-          res.setHeader('location', `/proxy/${site.id}${next.pathname}${next.search}`)
+          res.setHeader('location', locationPath)
           res.setHeader('cache-control', 'no-store')
           res.setHeader('X-LineWeb-Proxy', '1')
           res.end()
