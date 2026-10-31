@@ -86,17 +86,23 @@ export async function deleteFTSIndex(fileIds: number[]): Promise<void> {
   }
 }
 
+/** 搜索范围：private=我的网盘（默认），public=公共网盘 */
+export type DriveSearchScope = 'private' | 'public'
+
 /**
  * FTS5 搜索 — 使用 MATCH 语法，回退到 LIKE 查询
+ * @param scope 过滤范围：public 只搜公共文件；private 只搜私有文件（管理员=全部私有，普通用户=仅本人）
  */
 export async function searchFTS(
   query: string,
   isAdmin: boolean,
   userId: number,
   limit = 50,
+  scope: DriveSearchScope = 'private',
 ): Promise<{ id: number; name: string; storagePath: string }[]> {
   try {
     // 先尝试 FTS5 搜索
+    // SQLite 布尔列存 0/1；scope 决定 is_public 过滤，private 再叠加所有权过滤
     const results = await prisma.$queryRawUnsafe<
       { id: number; name: string; storagePath: string }[]
     >(
@@ -104,20 +110,22 @@ export async function searchFTS(
        FROM ${FTS_TABLE} fts
        JOIN drive_files f ON f.id = fts.rowid
        WHERE ${FTS_TABLE} MATCH ?
-       ${isAdmin ? '' : 'AND f.uploaded_by_id = ?'}
+       ${scope === 'public' ? 'AND f.is_public = 1' : 'AND f.is_public = 0'}
+       ${!isAdmin && scope === 'private' ? 'AND f.uploaded_by_id = ?' : ''}
        ORDER BY rank
        LIMIT ?`,
       query,
-      ...(isAdmin ? [limit] as const : [userId, limit] as const)
+      ...(!isAdmin && scope === 'private' ? [userId, limit] as const : [limit] as const)
     )
     return results
   } catch {
     // FTS5 失败（表不存在 / 语法错误等），回退到 LIKE 查询
     console.warn('[FTS] FTS5 search failed, falling back to LIKE')
-    const where: { name: { contains: string }; uploadedById?: number } = {
+    const where: { name: { contains: string }; uploadedById?: number; isPublic: boolean } = {
       name: { contains: query },
+      isPublic: scope === 'public',
     }
-    if (!isAdmin) where.uploadedById = userId
+    if (!isAdmin && scope === 'private') where.uploadedById = userId
     const files = await prisma.driveFile.findMany({
       where,
       select: { id: true, name: true, storagePath: true },

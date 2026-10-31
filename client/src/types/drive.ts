@@ -2,6 +2,8 @@ export interface DriveItem {
   id: number
   name: string
   isFolder: boolean
+  /** true = 公共网盘文件/文件夹（管理员维护，全员只读） */
+  isPublic?: boolean
   parentId: number | null
   size: string  // BigInt 序列化为字符串，避免精度丢失；显示时用 Number() 转换
   mimeType: string | null
@@ -9,6 +11,9 @@ export interface DriveItem {
   updatedAt: string
   uploadedBy?: { id: number; username: string }
 }
+
+/** 网盘区域：private=我的网盘（默认），public=公共网盘（管理员维护，全员只读） */
+export type DriveScope = 'private' | 'public'
 
 export interface Breadcrumb {
   id: number | null
@@ -137,6 +142,8 @@ export interface DriveContextState {
   viewMode: ViewMode
   sort: SortOption
   categoryFilter: CategoryFilter
+  /** 当前网盘区域：private=我的网盘，public=公共网盘 */
+  scope: DriveScope
   searchQuery: string
   searchResults: DriveItem[] | null
   searching: boolean
@@ -160,5 +167,7 @@ export interface DriveContextType {
   setSort: (sort: SortOption) => void
   setCategoryFilter: (filter: CategoryFilter) => void
   setSearchQuery: (query: string) => void
+  /** 切换网盘区域（重置当前路径/选择/搜索到对应区域的根） */
+  setScope: (scope: DriveScope) => void
   refreshFiles: () => void
 }

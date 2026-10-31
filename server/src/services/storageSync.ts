@@ -10,8 +10,9 @@ export interface SyncReport {
   durationMs: number
 }
 
-/** 存储节点上的系统目录（不进入网盘）：头像 / 聊天图片 / AI 对话图片 */
-const SYSTEM_DIRECTORIES = ['_avatars', '_chat', '_ai']
+/** 存储节点上的系统目录（不进入网盘）：头像 / 聊天图片 / AI 对话图片 / 公共网盘（公共文件由 drive 路由直接落库，同步器跳过防止建成私有记录） */
+// 导出供 drive.ts 做根级保留名校验（防止私有盘条目占用系统目录名后被同步器误判孤儿删除）
+export const SYSTEM_DIRECTORIES = ['_avatars', '_chat', '_ai', '_public']
 
 /** 路径是否属于系统目录（目录本身或其下的任意层级） */
 function isSystemPath(path: string): boolean {
@@ -52,7 +53,7 @@ export async function syncDriveFiles(uploaderUserId?: number): Promise<SyncRepor
 
     // 2. 获取数据库全部记录
     const dbRecords = await prisma.driveFile.findMany({
-      select: { id: true, storagePath: true, name: true, isFolder: true },
+      select: { id: true, storagePath: true, name: true, isFolder: true, isPublic: true },
     })
     report.dbRecords = dbRecords.length
 
@@ -63,8 +64,17 @@ export async function syncDriveFiles(uploaderUserId?: number): Promise<SyncRepor
     const nodePathSet = new Set(filteredPaths)
 
     // 4. 清理孤立记录：DB 有但节点上已经不存在的
+    //    公共网盘（isPublic=true，storagePath 在 _public/ 下）由 DB 管理且被排除在节点扫描之外，
+    //    不参与孤儿判定——否则每次同步都会把全部公共盘记录误判为孤立并删除
     //    只有在 unique 约束下，每个 storagePath 才保证只有一条记录
-    const orphans = dbRecords.filter(f => !nodePathSet.has(f.storagePath))
+    const orphanCandidates = dbRecords.filter(f => !f.isPublic && !nodePathSet.has(f.storagePath))
+    // 双保险：位于系统目录前缀下的私有行（历史遗留的保留名条目）同样跳过清理并告警，
+    // 避免误删用户数据；保留名入口已在 drive.ts 拦截，此处只兜底存量
+    const suspicious = orphanCandidates.filter(o => isSystemPath(o.storagePath))
+    if (suspicious.length > 0) {
+      console.warn(`[Sync] 跳过 ${suspicious.length} 条位于系统目录前缀下的私有记录（保留名条目，请手动处理）: ${suspicious.map(s => s.storagePath).join(', ')}`)
+    }
+    const orphans = orphanCandidates.filter(o => !isSystemPath(o.storagePath))
     if (orphans.length > 0) {
       const orphanIds = orphans.map(o => o.id)
       try {

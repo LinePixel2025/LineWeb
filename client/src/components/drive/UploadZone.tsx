@@ -1,11 +1,13 @@
 import { useState, useRef, useCallback, memo } from 'react'
 import { formatSpeed, formatMB, formatETA } from '../../lib/format'
 import { useDragAndDrop } from '../../hooks/useDragAndDrop'
-import type { TransferProgress } from '../../types/drive'
+import type { TransferProgress, DriveScope } from '../../types/drive'
 import { CloseIcon, FileIcon, UploadIcon } from './DriveIcons'
 
 export interface UploadZoneProps {
   parentId: number | null
+  /** 上传目标区域：public 上传到公共网盘（仅 drive:all 可用，服务端同样校验） */
+  scope?: DriveScope
   onUploaded: () => void
   onClose: () => void
 }
@@ -19,6 +21,7 @@ function isLimitError(message: string): boolean {
 
 const UploadZone = memo(function UploadZone({
   parentId,
+  scope = 'private',
   onUploaded,
   onClose,
 }: UploadZoneProps) {
@@ -94,12 +97,12 @@ const UploadZone = memo(function UploadZone({
         }
 
         const token = localStorage.getItem('lineweb_token')
-        xhr.open('POST', '/api/drive/upload')
+        xhr.open('POST', `/api/drive/upload?scope=${scope}`)
         xhr.setRequestHeader('Authorization', `Bearer ${token}`)
         xhr.send(formData)
       })
     },
-    [parentId],
+    [parentId, scope],
   )
 
   const uploadFiles = useCallback(

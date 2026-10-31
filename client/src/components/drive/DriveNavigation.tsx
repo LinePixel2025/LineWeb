@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useState } from 'react'
-import { useDrive } from '../../contexts/DriveContext'
+import { useDrive, SCOPE_ROOT_NAMES } from '../../contexts/DriveContext'
 import { useResponsive } from '../../hooks/useResponsive'
+import type { DriveScope } from '../../types/drive'
 import TreeView from './TreeView'
 import TabList from './TabList'
 import { CloseIcon, FolderIcon, PanelIcon, StarIcon } from './DriveIcons'
@@ -11,11 +12,16 @@ export interface DriveNavigationProps {
   onToggleCollapse?: () => void
 }
 
+const SCOPE_TABS: { scope: DriveScope; label: string }[] = [
+  { scope: 'private', label: '我的网盘' },
+  { scope: 'public', label: '公共网盘' },
+]
+
 const DriveNavigation = memo(function DriveNavigation({
   collapsed = false,
   onToggleCollapse,
 }: DriveNavigationProps) {
-  const { state, navigateToFolder, removeFavorite } = useDrive()
+  const { state, setScope, navigateToFolder, removeFavorite } = useDrive()
   const { isMobile } = useResponsive()
   const [apiFavorites, setApiFavorites] = useState<{ id: number; folderId: number; folderName: string; order: number }[]>([])
 
@@ -63,50 +69,77 @@ const DriveNavigation = memo(function DriveNavigation({
 
       {!collapsed ? (
         <>
-          <div className="gh-drive-sidebar-section gh-drive-sidebar-section--tree">
-            <div className="gh-drive-sidebar-section-label">目录</div>
-            <div className="gh-drive-sidebar-tree">
-              <TreeView />
+          <div className="gh-drive-sidebar-section">
+            <div className="gh-drive-scope-switcher" role="tablist" aria-label="网盘区域">
+              {SCOPE_TABS.map(tab => (
+                <button
+                  key={tab.scope}
+                  role="tab"
+                  aria-selected={state.scope === tab.scope}
+                  className={`gh-drive-scope-switcher-item${state.scope === tab.scope ? ' gh-drive-scope-switcher-item--active' : ''}`}
+                  onClick={() => setScope(tab.scope)}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
           </div>
 
-          {state.tabs.length > 1 && (
+          {state.scope === 'private' ? (
+            <>
+              <div className="gh-drive-sidebar-section gh-drive-sidebar-section--tree">
+                <div className="gh-drive-sidebar-section-label">目录</div>
+                <div className="gh-drive-sidebar-tree">
+                  <TreeView />
+                </div>
+              </div>
+
+              {state.tabs.length > 1 && (
+                <div className="gh-drive-sidebar-section">
+                  <TabList />
+                </div>
+              )}
+
+              <div className="gh-drive-sidebar-section">
+                <div className="gh-drive-sidebar-section-label">
+                  <StarIcon size={13} /> 收藏夹
+                </div>
+                <div className="gh-drive-sidebar-favorites">
+                  {mergedFavorites.length === 0 ? (
+                    <p className="gh-drive-sidebar-placeholder">暂无收藏的文件夹</p>
+                  ) : (
+                    mergedFavorites.map(fav => (
+                      <div key={`${fav.folderId}:${fav.id}`} className="gh-drive-sidebar-favorite-item">
+                        <button
+                          className="gh-drive-sidebar-favorite-link"
+                          onClick={() => handleFavoriteClick(fav.folderId, fav.folderName)}
+                          title={fav.folderName}
+                        >
+                          <FolderIcon size={15} />
+                          <span className="gh-drive-sidebar-fav-name">{fav.folderName}</span>
+                        </button>
+                        <button
+                          className="gh-drive-sidebar-fav-remove"
+                          onClick={(e) => handleRemoveFavorite(e, fav.folderId)}
+                          aria-label={`取消收藏 ${fav.folderName}`}
+                          title="取消收藏"
+                        >
+                          <CloseIcon size={13} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
             <div className="gh-drive-sidebar-section">
-              <TabList />
+              <div className="gh-drive-sidebar-section-label">{SCOPE_ROOT_NAMES.public}</div>
+              <p className="gh-drive-sidebar-placeholder">
+                公共网盘由管理员维护，所有有网盘权限的用户都可查看与下载。
+              </p>
             </div>
           )}
-
-          <div className="gh-drive-sidebar-section">
-            <div className="gh-drive-sidebar-section-label">
-              <StarIcon size={13} /> 收藏夹
-            </div>
-            <div className="gh-drive-sidebar-favorites">
-              {mergedFavorites.length === 0 ? (
-                <p className="gh-drive-sidebar-placeholder">暂无收藏的文件夹</p>
-              ) : (
-                mergedFavorites.map(fav => (
-                  <div key={`${fav.folderId}:${fav.id}`} className="gh-drive-sidebar-favorite-item">
-                    <button
-                      className="gh-drive-sidebar-favorite-link"
-                      onClick={() => handleFavoriteClick(fav.folderId, fav.folderName)}
-                      title={fav.folderName}
-                    >
-                      <FolderIcon size={15} />
-                      <span className="gh-drive-sidebar-fav-name">{fav.folderName}</span>
-                    </button>
-                    <button
-                      className="gh-drive-sidebar-fav-remove"
-                      onClick={(e) => handleRemoveFavorite(e, fav.folderId)}
-                      aria-label={`取消收藏 ${fav.folderName}`}
-                      title="取消收藏"
-                    >
-                      <CloseIcon size={13} />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
         </>
       ) : (
         <div className="gh-drive-sidebar-collapsed-mark" title="文件导航">

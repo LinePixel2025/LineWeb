@@ -1,18 +1,21 @@
 import { useState, memo } from 'react'
 import { createPortal } from 'react-dom'
 import api from '../../lib/api'
-import type { DriveItem } from '../../types/drive'
+import type { DriveItem, DriveScope } from '../../types/drive'
 
 /* ---------- New Folder Dialog ---------- */
 
 export interface NewFolderDialogProps {
   parentId: number | null
+  /** 创建目标区域：public 在公共网盘创建（仅 drive:all 可用，服务端同样校验） */
+  scope?: DriveScope
   onCreated: () => void
   onClose: () => void
 }
 
 export const NewFolderDialog = memo(function NewFolderDialog({
   parentId,
+  scope = 'private',
   onCreated,
   onClose,
 }: NewFolderDialogProps) {
@@ -25,7 +28,7 @@ export const NewFolderDialog = memo(function NewFolderDialog({
     setLoading(true)
     setError('')
     try {
-      await api.post('/drive/folders', { name: name.trim(), parentId })
+      await api.post('/drive/folders', { name: name.trim(), parentId, scope })
       onCreated()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '创建失败')
@@ -36,7 +39,7 @@ export const NewFolderDialog = memo(function NewFolderDialog({
   return createPortal(
     <div className="gh-dialog-overlay" onClick={onClose}>
       <div className="gh-dialog" onClick={e => e.stopPropagation()}>
-        <h3 className="gh-dialog-title">新建文件夹</h3>
+        <h3 className="gh-dialog-title">{scope === 'public' ? '在公共网盘新建文件夹' : '新建文件夹'}</h3>
         {error && <p className="gh-alert gh-alert--danger" style={{ marginBottom: 'var(--gh-space-3)' }}>{error}</p>}
         <input
           className="gh-input gh-input--full"

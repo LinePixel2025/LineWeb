@@ -22,6 +22,10 @@ export interface DriveListViewProps {
   onUpload?: () => void
   onRefresh?: () => void
   onSelectAll?: () => void
+  /** 是否展示写操作（重命名/删除）：公共网盘下普通用户只读 */
+  canWrite?: boolean
+  /** 是否展示收藏入口：公共网盘不提供收藏（收藏指向私有盘文件夹） */
+  showFavorite?: boolean
 }
 
 const SORT_COLUMNS: { field: SortField; label: string; align?: string }[] = [
@@ -40,6 +44,7 @@ function DriveRow({
   onDownload,
   onRename,
   onDelete,
+  canWrite,
 }: {
   item: DriveItem
   selected: boolean
@@ -49,6 +54,7 @@ function DriveRow({
   onDownload: (item: DriveItem) => void
   onRename: (item: DriveItem) => void
   onDelete: (item: DriveItem) => void
+  canWrite: boolean
 }) {
   return (
     <>
@@ -93,8 +99,12 @@ function DriveRow({
               <button className="gh-drive-row-action" onClick={() => onDownload(item)} title="下载" aria-label={`下载 ${item.name}`}><DownloadIcon size={14} /></button>
             </>
           )}
-          <button className="gh-drive-row-action" onClick={() => onRename(item)} title="重命名" aria-label={`重命名 ${item.name}`}><RenameIcon size={14} /></button>
-          <button className="gh-drive-row-action gh-drive-row-action--danger" onClick={() => onDelete(item)} title="删除" aria-label={`删除 ${item.name}`}><DeleteIcon size={14} /></button>
+          {canWrite && (
+            <>
+              <button className="gh-drive-row-action" onClick={() => onRename(item)} title="重命名" aria-label={`重命名 ${item.name}`}><RenameIcon size={14} /></button>
+              <button className="gh-drive-row-action gh-drive-row-action--danger" onClick={() => onDelete(item)} title="删除" aria-label={`删除 ${item.name}`}><DeleteIcon size={14} /></button>
+            </>
+          )}
         </div>
       </td>
     </>
@@ -118,6 +128,8 @@ const DriveListView = memo(function DriveListView({
   onUpload,
   onRefresh,
   onSelectAll,
+  canWrite = true,
+  showFavorite = true,
 }: DriveListViewProps) {
   const [contextMenu, setContextMenu] = useState<{ item?: DriveItem; position: { x: number; y: number } } | null>(null)
 
@@ -215,6 +227,7 @@ const DriveListView = memo(function DriveListView({
                 onDownload={onDownload}
                 onRename={onRename}
                 onDelete={onDelete}
+                canWrite={canWrite}
               />
             )
           }}
@@ -234,6 +247,8 @@ const DriveListView = memo(function DriveListView({
           onUpload={onUpload}
           onRefresh={onRefresh}
           onSelectAll={onSelectAll}
+          canWrite={canWrite}
+          showFavorite={showFavorite}
         />
       )}
     </>

@@ -462,3 +462,28 @@ cd storage-node && python main.py     # 存储节点，config.json 指向 ws://1
 - **RustDesk 服务（配置卡片＋快捷连接）**：保存 ID 服务器 / 中继服务器 / 公钥 Key / Web 客户端地址（均可选）；页面提供配置一键复制（`navigator.clipboard` 优先、`document.execCommand('copy')` 降级——生产为 IP 直连纯 HTTP、clipboard API 不存在，该降级是复制可用的关键）、打开 Web 客户端（新窗 `noopener,noreferrer`）、被控 ID 去空白后校验纯数字再拼 `rustdesk://connection/new/<id>` 深链唤起本机客户端；改名保存不会重置 RustDesk 表单草稿；底部留「更多服务即将上线」扩展位，后续私人服务在此页加卡片。
 - **数据库**：`PersonalSpace` 为 additive，`prisma db push` 即可；生产走本地构建 + `Dockerfile.prebuilt`（docker-entrypoint.sh 自动 db push），不要在 ECS 上 `docker compose up --build`。
 - **自检**：`cd server && npx tsc --noEmit` 零错误；`cd client && npx tsc --noEmit`（须用 client 本地 tsc，根目录 npx 会解析到 TS6 对 `baseUrl` 误报）+ `npm run build` + `npm run test`（50 文件 / 542 用例，含前后端能力清单一致性）；PORT=3002 API 冒烟（admin 200 自动建行/PUT 持久化、author 403、匿名 401、`javascript:` 地址 400）；详见 `docs/personal-space-api.md`。
+
+---
+
+## 2026-10-31 侧边栏抽屉 / 管理面板融合 / 公共网盘（实现口径）
+
+### 侧边栏统一抽屉（修复平板/手机「有时无法收起」）
+
+- **根因**：768–1279px（平板/手机横屏）被 responsive.css 强制为 64px 常驻窄轨且该区间无汉堡按钮、无遮罩——iPad 永远收不起来；手机抽屉内「收起」按钮被 `--open` CSS 压制成无效按钮；跨断点旋转时 `mobileOpen` 残留；AdminLayout 遮罩内联 `display:block` 压过媒体查询。
+- **修复口径**：≤1279px 全部为「汉堡 + 遮罩抽屉」（抽屉规则从 ≤767px 上移到统一 ≤1279px 媒体块，窄轨规则删除）；≥1280px 保持常驻侧栏 + 收起按钮。`.gh-visible-mobile`（仅两处汉堡按钮使用）断点 ≤767 → ≤1279。Layout/AdminLayout 均加 `matchMedia('(max-width: 1279px)')` 监听：跨回桌面档自动复位抽屉状态。GitHubSidebar/AdminLayout 的「收起」按钮在抽屉态直接关闭抽屉（`matchMedia` 判定，不引入 re-render）。主站与管理面板两套侧边栏行为完全一致。
+
+### 管理面板融合简化（16 项导航 → 10 项分组结构）
+
+- **页面合并**（Tab 容器 + `?tab=` URL 持久化，复用现成 GitHubTabNav）：`/admin` 内容管理 = 文章+页面+公告+评论四合一（Tab 按能力过滤：文章 content:write、页面/公告 content:manage、评论 comment:moderate）；`/admin/users` 用户与设备二合一（设备 Tab 需 device:view）；`/admin/ai` AI 设置 = AI 助手+AI 对话二合一。原 8 个页面改为导出 Panel 组件 + 兼容默认导出（`AdminTabShell.tsx` 为通用 Tab 壳）。
+- **旧地址 redirect**（`<Navigate replace>`，ADMIN_ROUTE_CAPABILITIES 保留原守卫语义）：`/admin/pages→/admin?tab=pages`、`/admin/announcements→/admin?tab=announcements`、`/admin/comments→/admin?tab=comments`、`/admin/devices→/admin/users?tab=devices`、`/admin/ai-chat→/admin/ai?tab=chat`。
+- **AdminLayout**：侧边栏按 内容/用户/AI/运营/平台 分组（复用主站 `.gh-sidebar-section-title` 样式，折叠态自动隐藏标题）；顶栏 `<h1>` 从静态「管理面板」改为按路由动态显示；「写文章」不再是导航项（内容管理页内新建）。服务端端点与能力零改动。
+
+### 公共网盘（管理员维护，全员只读）
+
+- **Schema**：`DriveFile.isPublic Boolean @default(false) @map("is_public")`（additive，db push 即可）。公共根条目 storagePath 统一 `_public/<name>` 前缀，子级自然继承。
+- **权限模型**：`assertFileOwnership` → `assertFileAccess(fileId, user, mode)`——read：公共文件对所有过网盘入口守卫的用户放行；write：仅 drive:all 或 owner（公共文件普通用户永远不可写，资源级拒绝沿用 404 不暴露存在性）。`assertParentFolderAccess` 加 scope：父 isPublic 必须与目标区一致；**有 parentId 时一律以父的 isPublic 定区（防参数伪造），根级才信请求参数**。列表/搜索/FTS/resolve-path 均加 `scope` 参数（private 默认；private 非 admin 只看本人私有，admin 看全部私有）。
+- **写入路径**：建夹/上传支持 `scope=public`（非 drive:all → 403「公共网盘仅管理员可维护」）；`PUT` 移动禁止跨区（400「不能在公共网盘与我的网盘之间移动文件」，移到根保持自身区域）；同名冲突检查按区域隔离（公共根与私有根同名互不冲突）。
+- **配额与同步**：`driveQuota.getDriveUsage` 排除 isPublic（公共盘不计入任何个人配额，受节点磁盘总容量约束）；`storageSync` SYSTEM_DIRECTORIES 加 `_public` 且孤儿清理排除 isPublic 行——**否则每 5 分钟周期同步会把全部公共盘 DB 记录误删**（实测踩过：公共行被清后节点文件残留，重传同名文件撞 WinError 183）。
+- **顺带修复的上传挂起竞态（先于本功能就存在）**：busboy `close` 与异步写失败竞态——小文件时 close 先触发（fileError 还是 null 走不到响应分支），节点流错误（如目标文件名冲突/磁盘满）后到时无人发响应，请求永久挂起。修复：`respondErrorIfSettled()` 统一出口，`bbClosed/fileError/headersSent` 三条件，close 与错误路径谁后到谁补发；顺带把流中段权限错误（无权/公共网盘）映射 403（原全部 502）。
+- **前端**：DriveContext 加 `scope` 状态（切区重置路径/选择/搜索，公共根面包屑「公共网盘」）；DriveNavigation 顶部「我的网盘 / 公共网盘」分段切换（收藏区仅私有显示）；DrivePage `canWriteHere = scope==='private' || can('drive:all')` 统一门控全部写入口（头部按钮/键盘快捷键/右键菜单/批量操作/详情面板/FolderPicker/UploadZone/移动端壳）；私有显示配额条、公共显示「公共网盘 · 由管理员维护」提示条；移动端壳同步。
+- **验证**：API 冒烟 31 项（建夹/上传/列表/下载/隔离回归/写拒绝/防伪造/跨区移动/搜索 FTS scope/配额口径）；浏览器双区切换与 UI 建夹实测；`verify:webproxy` 等既有自检不受影响。生产部署走本地产物链（docker-entrypoint.sh 自动 db push），无需额外动作。

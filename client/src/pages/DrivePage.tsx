@@ -35,6 +35,7 @@ function DrivePageInner() {
     setSort,
     setViewMode,
     setCategoryFilter,
+    setScope,
     selectAll,
     selectFile,
     clearSelection,
@@ -46,6 +47,8 @@ function DrivePageInner() {
   const { can } = useAuth()
   // 同步会把节点上的全部文件写入 DB，只有具备 drive:all 能力的管理员才允许（服务端同样校验）
   const canSync = can('drive:all')
+  // 当前区域是否可写：私有盘人人可写（自己空间内），公共盘仅 drive:all 管理员可写
+  const canWriteHere = ctx.scope === 'private' || canSync
   const { isMobile } = useResponsive()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showFolderPicker, setShowFolderPicker] = useState(false)
@@ -59,8 +62,8 @@ function DrivePageInner() {
   const breadcrumbs = ctx.currentPath
   const currentParentId = breadcrumbs[breadcrumbs.length - 1]?.id ?? null
   const { items, loading, error, total, page, totalPages, fetchItems, invalidate } =
-    useDriveFiles(currentParentId, ctx.sort, ctx.categoryFilter)
-  const search = useDriveSearch()
+    useDriveFiles(currentParentId, ctx.sort, ctx.categoryFilter, ctx.scope)
+  const search = useDriveSearch(ctx.scope)
   const syncOpts = useDriveSync()
   const dialogs = useDriveDialogs()
 
@@ -122,15 +125,17 @@ function DrivePageInner() {
     selectedFileIds: ctx.selectedFiles,
     currentPathLength: breadcrumbs.length,
     onDelete: () => {
+      if (!canWriteHere) return
       const item = displayItems.find(candidate => candidate.id === ctx.selectedFiles[0])
       if (item) dialogs.openDelete(item)
     },
     onRename: () => {
+      if (!canWriteHere) return
       const item = displayItems.find(candidate => candidate.id === ctx.selectedFiles[0])
       if (item) dialogs.openRename(item)
     },
-    onNewFolder: dialogs.openNewFolder,
-    onUpload: dialogs.openUpload,
+    onNewFolder: canWriteHere ? dialogs.openNewFolder : () => {},
+    onUpload: canWriteHere ? dialogs.openUpload : () => {},
     onRefresh: refresh,
     onClearSelection: clearSelection,
     onNavigateBack: () => navigateToBreadcrumb(Math.max(0, breadcrumbs.length - 2)),
@@ -211,14 +216,22 @@ function DrivePageInner() {
           </div>
         </div>
         <div className="gh-drive-repo-actions">
-          <DriveQuotaBar quota={quota.data} loading={quota.loading} />
-          <span className="gh-drive-repo-status"><span /> 私有工作区</span>
-          <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={dialogs.openNewFolder}>
-            <NewFolderIcon size={14} /> 新建文件夹
-          </button>
-          <button className="gh-btn gh-btn--sm gh-btn--primary" onClick={dialogs.openUpload}>
-            <UploadIcon size={14} /> 上传
-          </button>
+          {ctx.scope === 'private' ? (
+            <DriveQuotaBar quota={quota.data} loading={quota.loading} />
+          ) : (
+            <span className="gh-drive-public-note">公共网盘 · 由管理员维护，所有有网盘权限的用户可查看与下载</span>
+          )}
+          <span className="gh-drive-repo-status"><span /> {ctx.scope === 'public' ? '公共网盘' : '私有工作区'}</span>
+          {canWriteHere && (
+            <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={dialogs.openNewFolder}>
+              <NewFolderIcon size={14} /> 新建文件夹
+            </button>
+          )}
+          {canWriteHere && (
+            <button className="gh-btn gh-btn--sm gh-btn--primary" onClick={dialogs.openUpload}>
+              <UploadIcon size={14} /> 上传
+            </button>
+          )}
           {canSync && (
             <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={syncOpts.sync} disabled={syncOpts.syncing}>
               <RefreshIcon size={14} /> {syncOpts.syncing ? '同步中…' : '同步'}
@@ -290,13 +303,15 @@ function DrivePageInner() {
                 onBatchDelete={handleBatchDelete}
                 onBatchFavorite={handleBatchFavorite}
                 onClearSelection={clearSelection}
+                canWrite={canWriteHere}
+                showFavorite={ctx.scope === 'private'}
               />
             )}
 
             {/* 上传区是内嵌卡片：桌面端留在文件卡片内；移动端桌面壳整体 display:none，
                 必须用 portal 渲染成弹层，否则手机点「上传」后界面毫无反应（看不见挂载在隐藏壳里的组件） */}
             {dialogs.showUpload && !isMobile && (
-              <UploadZone parentId={currentParentId} onUploaded={handleUploaded} onClose={dialogs.closeUpload} />
+              <UploadZone parentId={currentParentId} scope={ctx.scope} onUploaded={handleUploaded} onClose={dialogs.closeUpload} />
             )}
 
             {loading ? (
@@ -313,7 +328,7 @@ function DrivePageInner() {
               <div className="gh-drive-state-card">
                 <span className="gh-drive-state-icon"><FolderIcon size={34} /></span>
                 <p className="gh-drive-state-text">{search.isSearchActive ? '没有匹配的文件' : '这个目录还是空的'}</p>
-                <span className="gh-drive-state-hint">上传文件或新建文件夹开始整理</span>
+                <span className="gh-drive-state-hint">{ctx.scope === 'public' ? '公共网盘由管理员维护，暂无共享文件' : '上传文件或新建文件夹开始整理'}</span>
               </div>
             ) : ctx.viewMode === 'list' ? (
               <DriveListView
@@ -335,6 +350,8 @@ function DrivePageInner() {
                 onUpload={dialogs.openUpload}
                 onRefresh={refresh}
                 onSelectAll={handleSelectAll}
+                canWrite={canWriteHere}
+                showFavorite={ctx.scope === 'private'}
               />
             ) : (
               <DriveGridView
@@ -351,6 +368,8 @@ function DrivePageInner() {
                 onUpload={dialogs.openUpload}
                 onRefresh={refresh}
                 onSelectAll={handleSelectAll}
+                canWrite={canWriteHere}
+                showFavorite={ctx.scope === 'private'}
               />
             )}
 
@@ -371,6 +390,8 @@ function DrivePageInner() {
             onRename={dialogs.openRename}
             onDelete={dialogs.openDelete}
             onPreview={handlePreview}
+            canWrite={canWriteHere}
+            showFavorite={ctx.scope === 'private'}
           />
         )}
       </div>
@@ -378,6 +399,8 @@ function DrivePageInner() {
       </div>
 
       <MobileDriveShell
+        scope={ctx.scope}
+        onScopeChange={setScope}
         breadcrumbs={breadcrumbs}
         items={displayItems}
         loading={loading}
@@ -429,13 +452,14 @@ function DrivePageInner() {
         onBatchMove={handleBatchMove}
         onBatchDelete={handleBatchDelete}
         onBatchFavorite={handleBatchFavorite}
+        canWrite={canWriteHere}
       />
 
       {dialogs.showUpload && isMobile && createPortal(
         <div className="gh-drive-upload-sheet-overlay" onClick={dialogs.closeUpload}>
           <div className="gh-drive-upload-sheet" onClick={e => e.stopPropagation()}>
             <div className="gh-drive-upload-sheet-handle" />
-            <UploadZone parentId={currentParentId} onUploaded={handleUploaded} onClose={dialogs.closeUpload} />
+            <UploadZone parentId={currentParentId} scope={ctx.scope} onUploaded={handleUploaded} onClose={dialogs.closeUpload} />
           </div>
         </div>,
         document.body,
@@ -443,7 +467,7 @@ function DrivePageInner() {
 
       {dialogs.previewItem && <DrivePreview item={dialogs.previewItem} onClose={dialogs.closePreview} />}
       {dialogs.showNewFolder && (
-        <NewFolderDialog parentId={currentParentId} onCreated={() => { refresh(); dialogs.closeNewFolder() }} onClose={dialogs.closeNewFolder} />
+        <NewFolderDialog parentId={currentParentId} scope={ctx.scope} onCreated={() => { refresh(); dialogs.closeNewFolder() }} onClose={dialogs.closeNewFolder} />
       )}
       {dialogs.renameItem && (
         <RenameDialog item={dialogs.renameItem} onRenamed={() => { dialogs.closeRename(); refresh() }} onClose={dialogs.closeRename} />
@@ -454,6 +478,7 @@ function DrivePageInner() {
       {showFolderPicker && (
         <FolderPickerDialog
           title={`移动 ${pendingMoveIds.length} 个项目到…`}
+          scope={ctx.scope}
           onSelect={handleFolderPick}
           onClose={() => setShowFolderPicker(false)}
         />

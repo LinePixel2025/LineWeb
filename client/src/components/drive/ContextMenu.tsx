@@ -25,6 +25,10 @@ export interface ContextMenuProps {
   onUpload?: () => void
   onRefresh?: () => void
   onSelectAll?: () => void
+  /** 是否展示写操作（重命名/删除/新建/上传）：公共网盘下普通用户只读 */
+  canWrite?: boolean
+  /** 是否展示收藏：公共网盘不提供收藏（收藏指向私有盘文件夹） */
+  showFavorite?: boolean
 }
 
 const ContextMenu = memo(function ContextMenu({
@@ -39,7 +43,9 @@ const ContextMenu = memo(function ContextMenu({
   onNewFolder,
   onUpload,
   onRefresh,
-  onSelectAll
+  onSelectAll,
+  canWrite = true,
+  showFavorite = true,
 }: ContextMenuProps) {
   const { state, addFavorite, removeFavorite } = useDrive()
 
@@ -126,36 +132,42 @@ const ContextMenu = memo(function ContextMenu({
       })
     }
 
-    menuItems.push({
-      label: isFavorite(item.id) ? '取消收藏' : '收藏',
-      icon: <StarIcon size={16} filled={isFavorite(item.id)} />,
-      action: () => handleAction(() => handleToggleFavorite(item))
-    })
+    if (showFavorite) {
+      menuItems.push({
+        label: isFavorite(item.id) ? '取消收藏' : '收藏',
+        icon: <StarIcon size={16} filled={isFavorite(item.id)} />,
+        action: () => handleAction(() => handleToggleFavorite(item))
+      })
+    }
 
-    menuItems.push({
-      label: '重命名',
-      icon: <RenameIcon size={16} />,
-      action: () => handleAction(() => onRename?.(item))
-    })
+    if (canWrite) {
+      menuItems.push({
+        label: '重命名',
+        icon: <RenameIcon size={16} />,
+        action: () => handleAction(() => onRename?.(item))
+      })
 
-    menuItems.push({
-      label: '删除',
-      icon: <DeleteIcon size={16} />,
-      action: () => handleAction(() => onDelete?.(item)),
-      variant: 'danger'
-    })
+      menuItems.push({
+        label: '删除',
+        icon: <DeleteIcon size={16} />,
+        action: () => handleAction(() => onDelete?.(item)),
+        variant: 'danger'
+      })
+    }
   } else {
-    menuItems.push({
-      label: '新建文件夹',
-      icon: <NewFolderIcon size={16} />,
-      action: () => handleAction(() => onNewFolder?.())
-    })
+    if (canWrite) {
+      menuItems.push({
+        label: '新建文件夹',
+        icon: <NewFolderIcon size={16} />,
+        action: () => handleAction(() => onNewFolder?.())
+      })
 
-    menuItems.push({
-      label: '上传文件',
-      icon: <UploadIcon size={16} />,
-      action: () => handleAction(() => onUpload?.())
-    })
+      menuItems.push({
+        label: '上传文件',
+        icon: <UploadIcon size={16} />,
+        action: () => handleAction(() => onUpload?.())
+      })
+    }
 
     menuItems.push({
       label: '刷新',

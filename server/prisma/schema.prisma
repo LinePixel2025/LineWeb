@@ -135,6 +135,7 @@ model DriveFile {
   id           Int         @id @default(autoincrement())
   name         String // 文件名或文件夹名
   isFolder     Boolean     @default(false) // true = 文件夹
+  isPublic     Boolean     @default(false) @map("is_public") // true = 公共网盘文件/文件夹（管理员维护，全员只读）
   parentId     Int? // 父文件夹ID（null=根目录）
   parent       DriveFile?  @relation("DriveHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
   children     DriveFile[] @relation("DriveHierarchy")

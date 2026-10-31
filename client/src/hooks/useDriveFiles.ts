@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import api from '../lib/api'
-import type { DriveItem, DriveListResponse, SortOption, CategoryFilter } from '../types/drive'
+import type { DriveItem, DriveListResponse, DriveScope, SortOption, CategoryFilter } from '../types/drive'
 
 // === LRU 页面缓存 ===
 interface CacheEntry {
@@ -28,6 +28,7 @@ export function useDriveFiles(
   parentId: number | null,
   sort: SortOption,
   filter: CategoryFilter,
+  scope: DriveScope = 'private',
   limit = 50,
 ) {
   const [items, setItems] = useState<DriveItem[]>([])
@@ -42,7 +43,8 @@ export function useDriveFiles(
 
   const fetchItems = useCallback(async (targetPage?: number, force = false) => {
     const p = targetPage ?? 1
-    const cacheKey = `${parentId}:${sort.field}:${sort.direction}:${filter}:${p}:${limit}`
+    // 缓存键含 scope：公共盘与私有盘同目录/同分页互不串用
+    const cacheKey = `${scope}:${parentId}:${sort.field}:${sort.direction}:${filter}:${p}:${limit}`
     const fid = ++fetchIdRef.current
 
     if (!force) {
@@ -63,6 +65,7 @@ export function useDriveFiles(
 
     try {
       const params = new URLSearchParams()
+      params.set('scope', scope)
       if (parentId !== null) params.set('parentId', String(parentId))
       params.set('page', String(p))
       params.set('limit', String(limit))
@@ -97,7 +100,7 @@ export function useDriveFiles(
     } finally {
       if (fid === fetchIdRef.current) setLoading(false)
     }
-  }, [parentId, sort.field, sort.direction, filter, limit])
+  }, [scope, parentId, sort.field, sort.direction, filter, limit])
 
   /** 清除缓存并刷新（创建/删除文件后调用） */
   const invalidate = useCallback(() => {

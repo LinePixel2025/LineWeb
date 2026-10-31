@@ -3,6 +3,7 @@ import type {
   Breadcrumb,
   CategoryFilter,
   DriveItem,
+  DriveScope,
   FavoriteItem,
   SortDirection,
   SortField,
@@ -37,6 +38,9 @@ import {
 type MobileView = 'files' | 'favorites'
 
 export interface MobileDriveShellProps {
+  /** 当前网盘区域：private=我的网盘，public=公共网盘 */
+  scope: DriveScope
+  onScopeChange: (scope: DriveScope) => void
   breadcrumbs: Breadcrumb[]
   items: DriveItem[]
   loading: boolean
@@ -84,9 +88,13 @@ export interface MobileDriveShellProps {
   onBatchMove: () => void
   onBatchDelete: () => void
   onBatchFavorite: () => void
+  /** 是否展示写操作（上传/新建/重命名/删除/移动）：公共网盘下普通用户只读 */
+  canWrite?: boolean
 }
 
 const MobileDriveShell = memo(function MobileDriveShell({
+  scope,
+  onScopeChange,
   breadcrumbs,
   items,
   loading,
@@ -132,6 +140,7 @@ const MobileDriveShell = memo(function MobileDriveShell({
   onBatchMove,
   onBatchDelete,
   onBatchFavorite,
+  canWrite = true,
 }: MobileDriveShellProps) {
   const { state, addFavorite, removeFavorite } = useDrive()
   const [view, setView] = useState<MobileView>('files')
@@ -331,6 +340,27 @@ const MobileDriveShell = memo(function MobileDriveShell({
         )}
       </header>
 
+      {view === 'files' && (
+        <div className="gh-drive-scope-switcher gh-drive-scope-switcher--mobile" role="tablist" aria-label="网盘区域">
+          <button
+            role="tab"
+            aria-selected={scope === 'private'}
+            className={`gh-drive-scope-switcher-item${scope === 'private' ? ' gh-drive-scope-switcher-item--active' : ''}`}
+            onClick={() => onScopeChange('private')}
+          >
+            我的网盘
+          </button>
+          <button
+            role="tab"
+            aria-selected={scope === 'public'}
+            className={`gh-drive-scope-switcher-item${scope === 'public' ? ' gh-drive-scope-switcher-item--active' : ''}`}
+            onClick={() => onScopeChange('public')}
+          >
+            公共网盘
+          </button>
+        </div>
+      )}
+
       {selectionMode && selectedIds.length > 0 && (
         <div className="gh-drive-mobile-selection-bar" role="toolbar" aria-label="批量操作">
           <button className="gh-drive-mobile-selection-close" onClick={handleExitSelection} aria-label="取消选择" title="取消选择"><CloseIcon size={18} /></button>
@@ -338,9 +368,9 @@ const MobileDriveShell = memo(function MobileDriveShell({
           <div className="gh-drive-mobile-selection-actions">
             <button onClick={onSelectAll}>全选</button>
             <button onClick={onBatchDownload}><DownloadIcon size={15} /> 下载</button>
-            <button onClick={onBatchMove}><FolderIcon size={15} /> 移动</button>
-            <button onClick={onBatchFavorite}><StarIcon size={15} /> 收藏</button>
-            <button className="gh-drive-mobile-selection-danger" onClick={onBatchDelete}><DeleteIcon size={15} /> 删除</button>
+            {canWrite && <button onClick={onBatchMove}><FolderIcon size={15} /> 移动</button>}
+            {canWrite && scope === 'private' && <button onClick={onBatchFavorite}><StarIcon size={15} /> 收藏</button>}
+            {canWrite && <button className="gh-drive-mobile-selection-danger" onClick={onBatchDelete}><DeleteIcon size={15} /> 删除</button>}
           </div>
         </div>
       )}
@@ -359,7 +389,7 @@ const MobileDriveShell = memo(function MobileDriveShell({
             <span className="gh-drive-mobile-empty-icon"><FolderIcon size={30} /></span>
             <strong>{emptyText}</strong>
             <span>{view === 'favorites' ? '在文件夹菜单中添加常用位置' : searchOpen || searchQuery ? '换个关键词试试' : '上传文件或新建文件夹开始整理'}</span>
-            {view === 'files' && !searchOpen && !searchQuery && <button className="gh-btn gh-btn--sm gh-btn--primary" onClick={onUpload}><UploadIcon size={14} /> 上传文件</button>}
+            {view === 'files' && !searchOpen && !searchQuery && canWrite && <button className="gh-btn gh-btn--sm gh-btn--primary" onClick={onUpload}><UploadIcon size={14} /> 上传文件</button>}
           </div>
         ) : (
           <div className={`gh-drive-mobile-file-list gh-drive-mobile-file-list--${viewMode}`} role="list" aria-label={title}>
@@ -408,10 +438,10 @@ const MobileDriveShell = memo(function MobileDriveShell({
               <button onClick={() => { onPreview(actionItem); setActionItem(null) }}><SearchIcon size={18} /> 预览</button>
             ) : null}
             {!actionItem.isFolder && <button onClick={() => { onDownload(actionItem); setActionItem(null) }}><DownloadIcon size={18} /> 下载</button>}
-            {actionItem.isFolder && <button onClick={() => handleToggleFavorite(actionItem)}><StarIcon size={18} filled={isFavorite(actionItem.id)} /> {isFavorite(actionItem.id) ? '取消收藏' : '收藏文件夹'}</button>}
+            {actionItem.isFolder && canWrite && scope === 'private' && <button onClick={() => handleToggleFavorite(actionItem)}><StarIcon size={18} filled={isFavorite(actionItem.id)} /> {isFavorite(actionItem.id) ? '取消收藏' : '收藏文件夹'}</button>}
             {view === 'files' && <button onClick={() => handleStartSelection(actionItem)}><ListViewIcon size={18} /> 选择</button>}
-            <button onClick={() => { onRename(actionItem); setActionItem(null) }}><RenameIcon size={18} /> 重命名</button>
-            <button className="gh-drive-mobile-sheet-action--danger" onClick={() => { onDelete(actionItem); setActionItem(null) }}><DeleteIcon size={18} /> 删除</button>
+            {canWrite && <button onClick={() => { onRename(actionItem); setActionItem(null) }}><RenameIcon size={18} /> 重命名</button>}
+            {canWrite && <button className="gh-drive-mobile-sheet-action--danger" onClick={() => { onDelete(actionItem); setActionItem(null) }}><DeleteIcon size={18} /> 删除</button>}
           </div>
         </div>
       )}
@@ -421,17 +451,21 @@ const MobileDriveShell = memo(function MobileDriveShell({
           <div className="gh-drive-mobile-sheet-handle" />
           <div className="gh-drive-mobile-sheet-header"><h2>更多操作</h2><button onClick={() => setShowMore(false)} aria-label="关闭更多操作" title="关闭"><CloseIcon size={18} /></button></div>
           <div className="gh-drive-mobile-sheet-actions">
-            <button onClick={handleOpenFavorites}><StarIcon size={18} /> 收藏文件夹</button>
-            <button onClick={() => { onUpload(); setShowMore(false) }}><UploadIcon size={18} /> 上传文件</button>
-            <button onClick={() => { onNewFolder(); setShowMore(false) }}><NewFolderIcon size={18} /> 新建文件夹</button>
+            {scope === 'private' && <button onClick={handleOpenFavorites}><StarIcon size={18} /> 收藏文件夹</button>}
+            {canWrite && <button onClick={() => { onUpload(); setShowMore(false) }}><UploadIcon size={18} /> 上传文件</button>}
+            {canWrite && <button onClick={() => { onNewFolder(); setShowMore(false) }}><NewFolderIcon size={18} /> 新建文件夹</button>}
             <button onClick={() => { onRefresh(); setShowMore(false) }}><RefreshIcon size={18} /> 刷新文件</button>
             {showSync && (
               <button onClick={() => { onSync(); setShowMore(false) }} disabled={syncing}><RefreshIcon size={18} /> {syncing ? '同步中…' : '同步存储'}</button>
             )}
           </div>
           <div className="gh-drive-mobile-sheet-section">
-            <span>空间用量</span>
-            <DriveQuotaBar quota={quota} loading={quotaLoading} compact />
+            <span>{scope === 'public' ? '公共网盘' : '空间用量'}</span>
+            {scope === 'public' ? (
+              <span className="gh-drive-mobile-sheet-note">由管理员维护，所有有网盘权限的用户可查看与下载</span>
+            ) : (
+              <DriveQuotaBar quota={quota} loading={quotaLoading} compact />
+            )}
           </div>
           <div className="gh-drive-mobile-sheet-section"><span>文件视图</span><div className="gh-drive-mobile-view-switcher" role="group" aria-label="文件视图">
             <button className={viewMode === 'list' ? 'gh-drive-mobile-view-button--active' : ''} onClick={() => onViewModeChange('list')}><ListViewIcon size={16} /> 列表</button>

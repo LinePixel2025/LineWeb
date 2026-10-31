@@ -6,7 +6,7 @@ import { roleHasCapability } from '../lib/permissions.js'
  *
  * 口径（全站统一）：
  *   - 「已用空间」= 网盘文件大小之和 + 聊天图片占用 + 该用户上传的 AI 对话图片大小之和
- *     · 网盘文件：DriveFile.size（不含文件夹，文件夹 size 恒为 0）
+ *     · 网盘文件：DriveFile.size（不含文件夹，文件夹 size 恒为 0；公共网盘文件由管理员维护，不计入任何个人配额）
  *     · 聊天图片：ChatUpload.size（自建聊天 2026-10 起按「上传」计费，含表情收藏；
  *       撤回最后一处引用时删除文件并释放）+ 旧存档 Message.imageSize（仅统计
  *       type='image' 且未撤回的存量行，新消息不再写 imageSize 以免与 ChatUpload 重复计费）
@@ -22,7 +22,7 @@ import { roleHasCapability } from '../lib/permissions.js'
 export async function getDriveUsage(userId: number): Promise<bigint> {
   const [fileUsage, chatUploadUsage, legacyChatImageUsage, aiImageUsage] = await Promise.all([
     prisma.driveFile.aggregate({
-      where: { uploadedById: userId, isFolder: false },
+      where: { uploadedById: userId, isFolder: false, isPublic: false },
       _sum: { size: true },
     }),
     prisma.chatUpload.aggregate({

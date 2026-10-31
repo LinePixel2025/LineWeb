@@ -7,7 +7,7 @@ import { parseId, parsePagination } from '../lib/utils.js'
 import { authenticate, requireCapability } from '../middleware/auth.js'
 import { roleHasCapability } from '../lib/permissions.js'
 import { sendCommand, streamRead, streamReadBinary, streamWriteBinary, isNodeConnected } from '../services/storageTunnel.js'
-import { syncDriveFiles } from '../services/storageSync.js'
+import { syncDriveFiles, SYSTEM_DIRECTORIES } from '../services/storageSync.js'
 import { getDriveQuota, getDriveUsage, formatQuotaSize } from '../services/driveQuota.js'
 import { config } from '../config/index.js'
 import { searchFTS, syncFTSIndex, deleteFTSIndex } from '../services/ftsSearch.js'
@@ -161,15 +161,44 @@ function hasDriveAccess(user: { role: string; canAccessDrive: boolean }): boolea
   return user.canAccessDrive || roleHasCapability(user.role, 'drive:all')
 }
 
-// === 文件所有权校验 — 防止用户越权操作他人文件 ===
+// === 公共网盘 ===
+// 公共根条目的 storagePath 前缀（子级自然继承父 storagePath）；私有根保持现状（裸文件名）。
+// 存储同步器把 _public 视为系统目录跳过（见 storageSync.ts SYSTEM_DIRECTORIES），
+// 公共文件只能经本路由由 drive:all 管理员创建。
+const PUBLIC_STORAGE_PREFIX = '_public'
+
 /**
- * 校验当前用户是否拥有指定文件的操作权限。
- * 具备 drive:all 能力者豁免；普通用户仅能操作自己上传的文件。
- * 返回文件记录（含 storagePath / isFolder 等），或 null 表示无权访问/不存在。
+ * 根级条目保留名校验（大小写不敏感——存储节点可能是 Windows 文件系统，`_Public` 与 `_public` 同目录）。
+ * 根级条目占用系统目录名（_public/_avatars/_chat/_ai）后，其 storagePath 会被同步器的
+ * isSystemPath 从节点扫描中剔除，进而被孤儿清理周期性误删 DB 记录，必须从入口拦截。
  */
-async function assertFileOwnership(
+function isReservedRootName(name: string): boolean {
+  const normalized = name.trim().toLowerCase()
+  return SYSTEM_DIRECTORIES.some(dir => dir.toLowerCase() === normalized)
+}
+
+type DriveScope = 'private' | 'public'
+
+function parseScope(raw: unknown): DriveScope {
+  return raw === 'public' ? 'public' : 'private'
+}
+
+function scopeOf(isPublic: boolean): DriveScope {
+  return isPublic ? 'public' : 'private'
+}
+
+// === 文件访问校验 — 防止用户越权操作他人/公共文件 ===
+/**
+ * 校验当前用户对指定文件的访问权限。
+ * - mode='read'：drive:all 全通过；公共文件对所有已过路由守卫的用户（必然有网盘权限）开放；否则须为上传者。
+ * - mode='write'：drive:all 全通过；公共文件仅 drive:all 可写（普通用户即便非 owner 也不允许，
+ *   公共区由管理员统一维护）；私有文件仍须为上传者。
+ * 返回文件记录（含 storagePath / isFolder / isPublic 等），或 null 表示无权访问/不存在。
+ */
+async function assertFileAccess(
   fileId: number,
   user: { userId: number; role: string },
+  mode: 'read' | 'write',
 ): Promise<{
   id: number
   name: string
@@ -179,6 +208,7 @@ async function assertFileOwnership(
   size: bigint
   mimeType: string | null
   uploadedById: number | null
+  isPublic: boolean
 } | null> {
   const file = await prisma.driveFile.findUnique({
     where: { id: fileId },
@@ -191,28 +221,48 @@ async function assertFileOwnership(
       size: true,
       mimeType: true,
       uploadedById: true,
+      isPublic: true,
     },
   })
   if (!file) return null
+  const isManager = roleHasCapability(user.role, 'drive:all')
   // 具备 drive:all 能力者豁免
-  if (roleHasCapability(user.role, 'drive:all')) return file
-  // 普通用户必须为上传者
+  if (isManager) return file
+  // 公共文件对普通用户永远不可写
+  if (mode === 'write' && file.isPublic) return null
+  // 公共文件对所有有网盘权限的用户可读（能到达此处均已通过路由级守卫）
+  if (file.isPublic) return file
+  // 私有文件必须为上传者
   if (file.uploadedById !== user.userId) return null
   return file
 }
 
+/**
+ * 校验目标父文件夹的写入权限。
+ * @param scope 期望的写入区域：父文件夹的 isPublic 必须与之一致（不一致返回 null，防参数伪造跨区写入）。
+ *   根目录（parentId=null）时返回的 isPublic 标识该虚拟根的区域。
+ * public 区域仅 drive:all 可写；private 区域 drive:all 或 owner 可写。
+ */
 async function assertParentFolderAccess(
   parentId: number | null,
   user: { userId: number; role: string },
-): Promise<{ id: number; storagePath: string } | null> {
-  if (parentId === null) return { id: 0, storagePath: '' }
+  scope: DriveScope = 'private',
+): Promise<{ id: number; storagePath: string; isPublic: boolean } | null> {
+  if (parentId === null) return { id: 0, storagePath: '', isPublic: scope === 'public' }
   const parent = await prisma.driveFile.findUnique({
     where: { id: parentId },
-    select: { id: true, isFolder: true, storagePath: true, uploadedById: true },
+    select: { id: true, isFolder: true, storagePath: true, uploadedById: true, isPublic: true },
   })
   if (!parent || !parent.isFolder) return null
-  if (!roleHasCapability(user.role, 'drive:all') && parent.uploadedById !== user.userId) return null
-  return { id: parent.id, storagePath: parent.storagePath }
+  if (scopeOf(parent.isPublic) !== scope) return null
+  const isManager = roleHasCapability(user.role, 'drive:all')
+  if (scope === 'public') {
+    // 公共区只允许 drive:all 管理员写入
+    if (!isManager) return null
+    return { id: parent.id, storagePath: parent.storagePath, isPublic: true }
+  }
+  if (!isManager && parent.uploadedById !== user.userId) return null
+  return { id: parent.id, storagePath: parent.storagePath, isPublic: false }
 }
 
 // 所有路由需要登录 + 网盘访问权限（canAccessDrive 开关或 drive:all 能力）
@@ -247,7 +297,7 @@ router.post('/download-ticket/:id', async (req: Request, res: Response) => {
     res.status(400).json({ error: '无效的文件 ID' })
     return
   }
-  const file = await assertFileOwnership(id, req.user!)
+  const file = await assertFileAccess(id, req.user!, 'read')
   if (!file || file.isFolder) {
     res.status(404).json({ error: '文件不存在或无权访问' })
     return
@@ -265,17 +315,22 @@ router.post('/download-ticket/:id', async (req: Request, res: Response) => {
   res.json({ ticket, expiresIn: 300 })
 })
 
-/* ---------- 获取文件列表（支持分页） ---------- */
+/* ---------- 获取文件列表（支持分页；scope=public 查看公共网盘） ---------- */
 router.get('/files', async (req: Request, res: Response) => {
   try {
     const parentIdStr = req.query.parentId as string | undefined
     const parentId = parentIdStr ? parseId(parentIdStr) : null
     const { page, limit, skip } = parsePagination(req.query)
+    const scope = parseScope(req.query.scope)
 
-    // 所有权过滤：具备 drive:all 能力者看全部，普通用户仅看自己上传的文件
+    // 区域过滤：public 只看公共文件（人人可看）；private 只看私有文件，
+    // 其中具备 drive:all 能力者看全部私有，普通用户仅看自己上传的文件
     const isAdmin = roleHasCapability(req.user!.role, 'drive:all')
-    const where: { parentId: number | null; uploadedById?: number } = { parentId }
-    if (!isAdmin) {
+    const where: { parentId: number | null; uploadedById?: number; isPublic: boolean } = {
+      parentId,
+      isPublic: scope === 'public',
+    }
+    if (scope === 'private' && !isAdmin) {
       where.uploadedById = req.user!.userId
     }
 
@@ -286,6 +341,7 @@ router.get('/files', async (req: Request, res: Response) => {
           id: true,
           name: true,
           isFolder: true,
+          isPublic: true,
           parentId: true,
           size: true,
           mimeType: true,
@@ -316,8 +372,8 @@ router.get('/files/:id', async (req: Request, res: Response) => {
       return
     }
 
-    // 所有权校验：非上传者/非管理员返回 404（不暴露文件存在性）
-    const file = await assertFileOwnership(id, req.user!)
+    // 访问校验：无权访问（非上传者的私有文件）/不存在返回 404（不暴露文件存在性）
+    const file = await assertFileAccess(id, req.user!, 'read')
     if (!file) {
       res.status(404).json({ error: '文件不存在或无权访问' })
       return
@@ -330,7 +386,7 @@ router.get('/files/:id', async (req: Request, res: Response) => {
   }
 })
 
-/* ---------- 搜索文件 ---------- */
+/* ---------- 搜索文件（scope=public 只搜公共网盘） ---------- */
 router.get('/search', async (req: Request, res: Response) => {
   try {
     const q = (req.query.q as string || '').trim()
@@ -338,13 +394,15 @@ router.get('/search', async (req: Request, res: Response) => {
       res.json([])
       return
     }
+    const scope = parseScope(req.query.scope)
 
-    // 所有权过滤：管理员搜全部，普通用户仅搜自己的文件
+    // 所有权过滤：public 只搜公共文件；private 管理员搜全部私有，普通用户仅搜自己的文件
     const isAdmin = roleHasCapability(req.user!.role, 'drive:all')
-    const where: { name: { contains: string }; uploadedById?: number } = {
+    const where: { name: { contains: string }; uploadedById?: number; isPublic: boolean } = {
       name: { contains: q },
+      isPublic: scope === 'public',
     }
-    if (!isAdmin) {
+    if (scope === 'private' && !isAdmin) {
       where.uploadedById = req.user!.userId
     }
 
@@ -354,6 +412,7 @@ router.get('/search', async (req: Request, res: Response) => {
         id: true,
         name: true,
         isFolder: true,
+        isPublic: true,
         parentId: true,
         size: true,
         mimeType: true,
@@ -383,18 +442,19 @@ router.get('/fts-search', async (req: Request, res: Response) => {
     }
 
     const isAdmin = roleHasCapability(req.user!.role, 'drive:all')
-    const results = await searchFTS(q, isAdmin, req.user!.userId)
+    const scope = parseScope(req.query.scope)
+    const results = await searchFTS(q, isAdmin, req.user!.userId, 50, scope)
 
-    // 查询完整文件信息
+    // 查询完整文件信息（回表时再按 scope 过滤一次，兜底 FTS 索引与主表状态不一致的情况）
     if (results.length === 0) {
       res.json([])
       return
     }
     const fileIds = results.map(r => r.id)
     const files = await prisma.driveFile.findMany({
-      where: { id: { in: fileIds } },
+      where: { id: { in: fileIds }, isPublic: scope === 'public' },
       select: {
-        id: true, name: true, isFolder: true, parentId: true,
+        id: true, name: true, isFolder: true, isPublic: true, parentId: true,
         size: true, mimeType: true, createdAt: true, updatedAt: true,
         uploadedBy: { select: { id: true, username: true } },
       },
@@ -413,12 +473,14 @@ router.get('/fts-search', async (req: Request, res: Response) => {
 /**
  * 创建文件夹共用逻辑
  * 提取自 /folders 和 /files 路由，避免代码重复
+ * @param requestedScope 请求声明的区域（仅根级创建时采信；有父文件夹时以父的 isPublic 为准，防参数伪造）
  */
 async function handleCreateFolder(
   name: string | undefined,
   parentIdRaw: unknown,
   user: { userId: number; role: string },
   res: Response,
+  requestedScope: DriveScope = 'private',
 ): Promise<void> {
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     res.status(400).json({ error: '文件夹名称不能为空' })
@@ -445,20 +507,50 @@ async function handleCreateFolder(
     resolvedParentId = pid
   }
 
-  // 如果指定了 parentId，验证父文件夹存在
-  let storagePath = name.trim()
+  // 根级条目占用系统保留名会被存储同步器误判孤儿并周期性删除 DB 记录（见 storageSync.isSystemPath）
+  if (resolvedParentId === null && isReservedRootName(name)) {
+    res.status(400).json({ error: '该名称为系统保留，请更换' })
+    return
+  }
+
+  // 实际区域：有父文件夹时以父的 isPublic 为准；根级才信请求参数
+  let actualScope = requestedScope
+  if (resolvedParentId !== null) {
+    const parentRow = await prisma.driveFile.findUnique({
+      where: { id: resolvedParentId },
+      select: { isFolder: true, isPublic: true },
+    })
+    if (!parentRow || !parentRow.isFolder) {
+      res.status(403).json({ error: '无权写入目标文件夹' })
+      return
+    }
+    actualScope = scopeOf(parentRow.isPublic)
+  }
+  // 公共网盘仅 drive:all 管理员可维护
+  if (actualScope === 'public' && !roleHasCapability(user.role, 'drive:all')) {
+    res.status(403).json({ error: '公共网盘仅管理员可维护' })
+    return
+  }
+
+  // 如果指定了 parentId，验证父文件夹存在（并确保区域一致）
+  let storagePath: string
   if (resolvedParentId) {
-    const parent = await assertParentFolderAccess(resolvedParentId, user)
+    const parent = await assertParentFolderAccess(resolvedParentId, user, actualScope)
     if (!parent) {
       res.status(403).json({ error: '无权写入目标文件夹' })
       return
     }
     storagePath = `${parent.storagePath}/${name.trim()}`
+  } else {
+    // 公共根条目统一放在 _public/ 前缀下，与私有根（裸文件名）隔离
+    storagePath = actualScope === 'public'
+      ? `${PUBLIC_STORAGE_PREFIX}/${name.trim()}`
+      : name.trim()
   }
 
-  // 同级同名检查
+  // 同级同名检查（按区域隔离：公共盘与私有盘允许同名）
   const existing = await prisma.driveFile.findFirst({
-    where: { name: name.trim(), parentId: resolvedParentId },
+    where: { name: name.trim(), parentId: resolvedParentId, isPublic: actualScope === 'public' },
   })
   if (existing) {
     res.status(409).json({ error: '同级已存在同名文件或文件夹' })
@@ -486,12 +578,14 @@ async function handleCreateFolder(
       parentId: resolvedParentId,
       storagePath,
       size: 0n,
+      isPublic: actualScope === 'public',
       uploadedById: user.userId,
     },
     select: {
       id: true,
       name: true,
       isFolder: true,
+      isPublic: true,
       parentId: true,
       size: true,
       mimeType: true,
@@ -506,11 +600,12 @@ async function handleCreateFolder(
   res.status(201).json(transformSize(folder))
 }
 
-/* ---------- 创建文件夹 ---------- */
+/* ---------- 创建文件夹（scope=public 在公共网盘创建，仅 drive:all） ---------- */
 router.post('/folders', async (req: Request, res: Response) => {
   try {
     const { name, parentId } = req.body
-    await handleCreateFolder(name, parentId, req.user!, res)
+    const scope = parseScope(req.body?.scope ?? req.query.scope)
+    await handleCreateFolder(name, parentId, req.user!, res, scope)
   } catch (err) {
     console.error('创建文件夹失败:', err)
     if (!res.headersSent) {
@@ -523,7 +618,8 @@ router.post('/folders', async (req: Request, res: Response) => {
 router.post('/files', async (req: Request, res: Response) => {
   try {
     const { name, parentId } = req.body as { name?: string; parentId?: unknown }
-    await handleCreateFolder(name, parentId, req.user!, res)
+    const scope = parseScope(req.body?.scope ?? req.query.scope)
+    await handleCreateFolder(name, parentId, req.user!, res, scope)
   } catch (err) {
     console.error('创建文件夹失败:', err)
     if (!res.headersSent) {
@@ -532,11 +628,20 @@ router.post('/files', async (req: Request, res: Response) => {
   }
 })
 
-/* ---------- 上传文件 (busboy 流式解析 + 空间配额强制) ---------- */
+/* ---------- 上传文件 (busboy 流式解析 + 空间配额强制；scope=public 上传到公共网盘，仅 drive:all) ---------- */
 router.post('/upload', async (req: Request, res: Response) => {
   try {
     if (!isNodeConnected()) {
       res.status(503).json({ error: '存储节点未连接，请稍后再试' })
+      return
+    }
+
+    const requestedScope = parseScope(req.query.scope)
+    const isManager = roleHasCapability(req.user!.role, 'drive:all')
+    // 公共网盘仅 drive:all 可上传；提前拒绝，避免非管理员白白消耗上传流量
+    if (requestedScope === 'public' && !isManager) {
+      res.status(403).json({ error: '公共网盘仅管理员可维护' })
+      req.resume()
       return
     }
 
@@ -566,8 +671,27 @@ router.post('/upload', async (req: Request, res: Response) => {
     const bb = busboy({ headers: req.headers, limits: { fileSize: effectiveLimit } })
     let fileProcessed = false
     let fileError: Error | null = null
+    let bbClosed = false
     let originalName = ''
     let mimeType = ''
+    // 错误响应统一出口：busboy close 与异步写失败是竞态（小文件时 close 可能先触发，
+    // 此时 fileError 还是 null），必须允许后到的一方补发响应，否则请求永久挂起
+    const respondErrorIfSettled = () => {
+      if (!bbClosed || !fileError || res.headersSent) return
+      if (fileError instanceof UploadLimitError) {
+        sendUploadLimitError(res, fileError)
+      } else if (fileError.message.includes('限制')) {
+        res.status(413).json({ error: fileError.message })
+      } else if (fileError.message.includes('无权') || fileError.message.includes('公共网盘')) {
+        // 流中段的权限/区域校验失败（如借私有区参数伪造上传公共夹）→ 403 而非 502
+        res.status(403).json({ error: fileError.message })
+      } else if (fileError.message.includes('系统保留')) {
+        // 根级上传占用保留名 → 400
+        res.status(400).json({ error: fileError.message })
+      } else {
+        res.status(502).json({ error: fileError.message })
+      }
+    }
     // 优先从 URL 查询参数读取（可靠），回退到 multipart field（兼容旧客户端）
     let parentId: number | null = (req.query.parentId as string | undefined)
       ? parseInt(req.query.parentId as string, 10) || null
@@ -591,16 +715,32 @@ router.post('/upload', async (req: Request, res: Response) => {
       stream.on('limit', () => { sizeLimitHit = true })
 
       try {
-        // 解析父文件夹路径
+        // 解析父文件夹路径与实际区域：有父文件夹时以父的 isPublic 为准（防参数伪造），根级才信请求参数
         let parentPath = ''
+        let actualScope: DriveScope = requestedScope
         if (parentId) {
-          const parent = await assertParentFolderAccess(parentId, req.user!)
+          const parentRow = await prisma.driveFile.findUnique({
+            where: { id: parentId },
+            select: { isFolder: true, isPublic: true },
+          })
+          if (!parentRow || !parentRow.isFolder) throw new Error('无权写入目标文件夹')
+          const parentScope = scopeOf(parentRow.isPublic)
+          if (parentScope === 'public' && !isManager) throw new Error('公共网盘仅管理员可维护')
+          const parent = await assertParentFolderAccess(parentId, req.user!, parentScope)
           if (!parent) throw new Error('无权写入目标文件夹')
+          actualScope = parentScope
           parentPath = parent.storagePath + '/'
+        } else if (actualScope === 'public') {
+          // 公共根：所有根级公共文件放在 _public/ 前缀下
+          parentPath = `${PUBLIC_STORAGE_PREFIX}/`
         }
 
         // 生成存储路径 — 使用原始文件名，冲突时自动追加计数器后缀
         const safeName = originalName.replace(/[<>:"/\\|?*]/g, '_')
+        // 根级上传不可占用系统保留名（同建夹校验，防同步器误删）
+        if (parentId === null && isReservedRootName(safeName)) {
+          throw new Error('文件名「_public」「_avatars」「_chat」「_ai」为系统保留，请重命名后上传')
+        }
         let storagePath = `${parentPath}${safeName}`
         let finalName = originalName  // 显示名保留原始文件名
         // 同级同名检查 + 自动去重
@@ -644,6 +784,7 @@ router.post('/upload', async (req: Request, res: Response) => {
             size: 0n,
             mimeType,
             storagePath,
+            isPublic: actualScope === 'public',
             uploadedById: req.user!.userId,
           },
           select: {
@@ -713,6 +854,10 @@ router.post('/upload', async (req: Request, res: Response) => {
         // 若等到 close 再响应会漏掉 413
         if (fileError instanceof UploadLimitError) {
           sendUploadLimitError(res, fileError)
+        } else {
+          // 非限制类错误（节点写入失败等）：close 可能已先触发（fileError 当时还是 null），
+          // 由 respondErrorIfSettled 立即补发；close 未触发则等 close 时统一响应
+          respondErrorIfSettled()
         }
         // 耗尽流防止内存泄漏
         stream.resume()
@@ -720,16 +865,9 @@ router.post('/upload', async (req: Request, res: Response) => {
     })
 
     bb.on('close', () => {
+      bbClosed = true
       if (fileError) {
-        if (!res.headersSent) {
-          if (fileError instanceof UploadLimitError) {
-            sendUploadLimitError(res, fileError)
-          } else if (fileError.message.includes('限制')) {
-            res.status(413).json({ error: fileError.message })
-          } else {
-            res.status(502).json({ error: fileError.message })
-          }
-        }
+        respondErrorIfSettled()
       } else if (!fileProcessed) {
         res.status(400).json({ error: '请选择文件' })
       }
@@ -754,7 +892,7 @@ async function handleDownload(req: Request, res: Response): Promise<void> {
       return
     }
 
-    const file = await assertFileOwnership(id, req.user!)
+    const file = await assertFileAccess(id, req.user!, 'read')
     if (!file || file.isFolder) {
       res.status(404).json({ error: '文件不存在或无权访问' })
       return
@@ -869,7 +1007,7 @@ router.put('/files/:id', async (req: Request, res: Response) => {
       return
     }
 
-    const file = await assertFileOwnership(id, req.user!)
+    const file = await assertFileAccess(id, req.user!, 'write')
     if (!file) {
       res.status(404).json({ error: '文件不存在或无权访问' })
       return
@@ -893,6 +1031,11 @@ router.put('/files/:id', async (req: Request, res: Response) => {
       }
       if (name.length > 255 || /[<>:"/\\|?*]/.test(name)) {
         res.status(400).json({ error: '名称包含非法字符或过长' })
+        return
+      }
+      // 根级条目不可重命名为系统保留名（同建夹校验，防同步器误删）
+      if (!file.parentId && isReservedRootName(name)) {
+        res.status(400).json({ error: '该名称为系统保留，请更换' })
         return
       }
 
@@ -953,7 +1096,21 @@ router.put('/files/:id', async (req: Request, res: Response) => {
       }
 
       if (newParentId !== null) {
-        const newParent = await assertParentFolderAccess(newParentId, req.user!)
+        // 目标区域 = 目标父文件夹的 isPublic；与文件自身区域不一致即为跨区移动，直接拒绝
+        const targetRow = await prisma.driveFile.findUnique({
+          where: { id: newParentId },
+          select: { isFolder: true, isPublic: true },
+        })
+        if (!targetRow || !targetRow.isFolder) {
+          res.status(403).json({ error: '无权移动到目标文件夹' })
+          return
+        }
+        const targetScope = scopeOf(targetRow.isPublic)
+        if (targetScope !== scopeOf(file.isPublic)) {
+          res.status(400).json({ error: '不能在公共网盘与我的网盘之间移动文件' })
+          return
+        }
+        const newParent = await assertParentFolderAccess(newParentId, req.user!, targetScope)
         if (!newParent) {
           res.status(403).json({ error: '无权移动到目标文件夹' })
           return
@@ -1011,8 +1168,8 @@ router.put('/files/:id', async (req: Request, res: Response) => {
           )
         }
       } else {
-        // 移动到根目录
-        const newStoragePath = file.name
+        // 移动到根目录：保持文件自身区域（公共文件落公共根 _public/，私有文件落私有根）
+        const newStoragePath = file.isPublic ? `${PUBLIC_STORAGE_PREFIX}/${file.name}` : file.name
 
         if (isNodeConnected()) {
           try {
@@ -1126,7 +1283,7 @@ router.delete('/files/:id', async (req: Request, res: Response) => {
       return
     }
 
-    const file = await assertFileOwnership(id, req.user!)
+    const file = await assertFileAccess(id, req.user!, 'write')
     if (!file) {
       res.status(404).json({ error: '文件不存在或无权访问' })
       return
@@ -1140,30 +1297,45 @@ router.delete('/files/:id', async (req: Request, res: Response) => {
   }
 })
 
-/* ---------- 解析路径字符串为面包屑 ---------- */
+/* ---------- 解析路径字符串为面包屑（scope=public 解析公共网盘路径） ---------- */
 router.get('/resolve-path', async (req: Request, res: Response) => {
   try {
     const pathStr = (req.query.path as string || '').trim()
+    const scope = parseScope(req.query.scope)
+    const rootName = scope === 'public' ? '公共网盘' : '根目录'
     if (!pathStr) {
-      res.json([{ id: null, name: '根目录' }])
+      res.json([{ id: null, name: rootName }])
       return
     }
 
-    const segments = pathStr.split('/').filter(s => s.length > 0)
-    const breadcrumbs: { id: number | null; name: string }[] = [{ id: null, name: '根目录' }]
+    let segments = pathStr.split('/').filter(s => s.length > 0)
+    // 公共网盘的虚拟根不参与真实路径解析（前端面包屑根名为「公共网盘」，存储前缀为 _public）
+    if (scope === 'public' && segments.length > 0 &&
+      (segments[0] === '公共网盘' || segments[0] === PUBLIC_STORAGE_PREFIX)) {
+      segments = segments.slice(1)
+    }
+    const breadcrumbs: { id: number | null; name: string }[] = [{ id: null, name: rootName }]
+    if (segments.length === 0) {
+      res.json(breadcrumbs)
+      return
+    }
 
     let currentParentId: number | null = null
     for (const segment of segments) {
-      // P23: Check cache before querying DB for each path segment
-      const cacheKey = `${currentParentId ?? 'root'}:${segment}`
+      // P23: Check cache before querying DB for each path segment（缓存键含 scope，公共/私有同名文件夹互不串用）
+      const cacheKey = `${scope}:${currentParentId ?? 'root'}:${segment}`
       const cachedId = pathCache.get(cacheKey)
       let folder: { id: number; name: string } | null = null
 
       if (cachedId !== undefined) {
-        folder = await prisma.driveFile.findUnique({
+        const cached = await prisma.driveFile.findUnique({
           where: { id: cachedId },
-          select: { id: true, name: true },
+          select: { id: true, name: true, isPublic: true },
         })
+        // 缓存命中但文件的区域标记已变化（被移出/改公共状态）时按未命中处理
+        if (cached && scopeOf(cached.isPublic) === scope) {
+          folder = { id: cached.id, name: cached.name }
+        }
       }
 
       if (!folder) {
@@ -1172,6 +1344,7 @@ router.get('/resolve-path', async (req: Request, res: Response) => {
             name: segment,
             isFolder: true,
             parentId: currentParentId,
+            isPublic: scope === 'public',
           },
           select: { id: true, name: true },
         })

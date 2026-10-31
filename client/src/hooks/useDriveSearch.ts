@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../lib/api'
-import type { DriveItem } from '../types/drive'
+import type { DriveItem, DriveScope } from '../types/drive'
 
-export function useDriveSearch() {
+export function useDriveSearch(scope: DriveScope = 'private') {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<DriveItem[] | null>(null)
   const [searching, setSearching] = useState(false)
@@ -19,7 +19,9 @@ export function useDriveSearch() {
     timerRef.current = setTimeout(async () => {
       setSearching(true)
       try {
-        const data = await api.get<DriveItem[]>(`/drive/search?q=${encodeURIComponent(query)}`)
+        const data = await api.get<DriveItem[]>(
+          `/drive/search?q=${encodeURIComponent(query)}&scope=${scope}`,
+        )
         setResults(data)
       } catch {
         setResults([])
@@ -31,7 +33,7 @@ export function useDriveSearch() {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [query])
+  }, [query, scope])
 
   const clearSearch = useCallback(() => {
     setQuery('')

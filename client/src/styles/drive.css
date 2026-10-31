@@ -2990,3 +2990,71 @@
   .gh-drive-preview-code { width: 100%; max-width: 100%; max-height: calc(100dvh - 76px - var(--gh-safe-top) - var(--gh-safe-bottom)); }
   .gh-drive-preview-audio-wrap { width: 100%; min-width: 0; padding: var(--gh-space-5) var(--gh-space-3); }
 }
+
+/* ---------- 公共网盘 / 我的网盘 区域切换（分段控件） ---------- */
+.gh-drive-scope-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-inset);
+}
+
+.gh-drive-scope-switcher-item {
+  flex: 1;
+  padding: var(--gh-space-2) var(--gh-space-3);
+  border: 0;
+  border-radius: calc(var(--gh-radius) - 2px);
+  background: transparent;
+  color: var(--gh-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.gh-drive-scope-switcher-item:hover {
+  color: var(--gh-text);
+}
+
+.gh-drive-scope-switcher-item--active {
+  background: var(--gh-canvas);
+  color: var(--gh-accent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* 侧边栏（桌面端）：与侧栏区块对齐 */
+.gh-drive-sidebar .gh-drive-scope-switcher {
+  width: 100%;
+}
+
+/* 移动端壳：通栏分段控件（flex 纵向布局子项，宽度由 align-self 拉伸） */
+.gh-drive-scope-switcher--mobile {
+  display: flex;
+  margin: var(--gh-space-3) var(--gh-space-3) var(--gh-space-2);
+}
+
+.gh-drive-scope-switcher--mobile .gh-drive-scope-switcher-item {
+  padding: 8px var(--gh-space-3);
+  font-size: var(--gh-text-sm);
+}
+
+/* 公共网盘提示条（顶栏内联说明） */
+.gh-drive-public-note {
+  overflow: hidden;
+  max-width: 420px;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 移动端「更多」面板中的说明文字 */
+.gh-drive-mobile-sheet-note {
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.5;
+}

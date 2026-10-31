@@ -13,6 +13,10 @@ export interface DriveDetailPanelProps {
   onRename: (item: DriveItem) => void
   onDelete: (item: DriveItem) => void
   onPreview: (item: DriveItem) => void
+  /** 是否展示写操作（重命名/删除）：公共网盘下普通用户只读 */
+  canWrite?: boolean
+  /** 是否展示收藏入口：公共网盘不提供收藏（收藏指向私有盘文件夹） */
+  showFavorite?: boolean
 }
 
 const DriveDetailPanel = memo(function DriveDetailPanel({
@@ -22,6 +26,8 @@ const DriveDetailPanel = memo(function DriveDetailPanel({
   onRename,
   onDelete,
   onPreview,
+  canWrite = true,
+  showFavorite = true,
 }: DriveDetailPanelProps) {
   const { state, addFavorite, removeFavorite } = useDrive()
   const [copied, setCopied] = useState(false)
@@ -66,7 +72,7 @@ const DriveDetailPanel = memo(function DriveDetailPanel({
           <div className="gh-drive-detail-preview-type">{getFileTypeLabel(item)}</div>
         </div>
 
-        {item.isFolder && (
+        {item.isFolder && showFavorite && (
           <button
             className={`gh-drive-detail-fav-btn${isFav ? ' gh-drive-detail-fav-btn--active' : ''}`}
             onClick={handleToggleFavorite}
@@ -88,15 +94,19 @@ const DriveDetailPanel = memo(function DriveDetailPanel({
               <DownloadIcon size={14} /> 下载
             </button>
           )}
-          <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={() => onRename(item)}>
-            <RenameIcon size={14} /> 重命名
-          </button>
+          {canWrite && (
+            <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={() => onRename(item)}>
+              <RenameIcon size={14} /> 重命名
+            </button>
+          )}
           <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={handleCopyName}>
             <CopyIcon size={14} /> {copied ? '已复制' : '复制名称'}
           </button>
-          <button className="gh-btn gh-btn--sm gh-btn--danger" onClick={() => onDelete(item)}>
-            <DeleteIcon size={14} /> 删除
-          </button>
+          {canWrite && (
+            <button className="gh-btn gh-btn--sm gh-btn--danger" onClick={() => onDelete(item)}>
+              <DeleteIcon size={14} /> 删除
+            </button>
+          )}
         </div>
 
         <FileAttributes item={item} />

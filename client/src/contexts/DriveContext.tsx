@@ -9,9 +9,16 @@ import type {
   SortOption,
   CategoryFilter,
   DriveItem,
+  DriveScope,
 } from '../types/drive'
 
 const FAVORITES_KEY = 'lineweb_favorites'
+
+/** 各区域根面包屑：私有盘叫「根目录」，公共盘叫「公共网盘」 */
+export const SCOPE_ROOT_NAMES: Record<DriveScope, string> = {
+  private: '根目录',
+  public: '公共网盘',
+}
 
 type DriveAction =
   | { type: 'NAVIGATE_TO'; path: Breadcrumb[] }
@@ -32,6 +39,7 @@ type DriveAction =
   | { type: 'SET_SEARCH_QUERY'; query: string }
   | { type: 'SET_SEARCH_RESULTS'; results: DriveItem[] | null }
   | { type: 'SET_SEARCHING'; searching: boolean }
+  | { type: 'SET_SCOPE'; scope: DriveScope }
   | { type: 'REFRESH_FILES' }
 
 let tabCounter = 0
@@ -70,6 +78,7 @@ function createInitialState(): DriveContextState {
     viewMode: 'list',
     sort: { field: 'name', direction: 'asc' },
     categoryFilter: 'all',
+    scope: 'private',
     searchQuery: '',
     searchResults: null,
     searching: false,
@@ -221,6 +230,20 @@ function driveReducer(state: DriveContextState, action: DriveAction): DriveConte
     case 'SET_SEARCHING':
       return { ...state, searching: action.searching }
 
+    case 'SET_SCOPE': {
+      if (state.scope === action.scope) return state
+      // 切换区域：回到对应区域的根，清空选择与搜索（两个区域互不相通）
+      const rootName = SCOPE_ROOT_NAMES[action.scope]
+      return {
+        ...state,
+        scope: action.scope,
+        currentPath: [{ id: null, name: rootName }],
+        selectedFiles: [],
+        searchResults: null,
+        searchQuery: '',
+      }
+    }
+
     case 'REFRESH_FILES':
       return { ...state }
 
@@ -309,6 +332,10 @@ export function DriveProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_SEARCH_QUERY', query })
   }, [])
 
+  const setScope = useCallback((scope: DriveScope) => {
+    dispatch({ type: 'SET_SCOPE', scope })
+  }, [])
+
   const refreshFiles = useCallback(() => {
     dispatch({ type: 'REFRESH_FILES' })
   }, [])
@@ -331,6 +358,7 @@ export function DriveProvider({ children }: { children: ReactNode }) {
     setSort,
     setCategoryFilter,
     setSearchQuery,
+    setScope,
     refreshFiles,
   }), [
     state,
@@ -350,6 +378,7 @@ export function DriveProvider({ children }: { children: ReactNode }) {
     setSort,
     setCategoryFilter,
     setSearchQuery,
+    setScope,
     refreshFiles,
   ])
 

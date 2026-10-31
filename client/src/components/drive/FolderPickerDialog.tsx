@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import api from '../../lib/api'
-import type { DriveItem } from '../../types/drive'
+import type { DriveItem, DriveScope } from '../../types/drive'
 import { FolderIcon, ChevronRight, ChevronDown } from './DriveIcons'
 
 interface FolderNode {
@@ -15,20 +15,24 @@ interface FolderNode {
 
 interface FolderPickerDialogProps {
   title?: string
+  /** 选择范围：public 只列公共文件夹（默认 private） */
+  scope?: DriveScope
   onSelect: (folderId: number | null) => void
   onClose: () => void
 }
 
 export default function FolderPickerDialog({
   title = '选择目标文件夹',
+  scope = 'private',
   onSelect,
   onClose,
 }: FolderPickerDialogProps) {
   const [loading, setLoading] = useState(true)
+  const rootName = scope === 'public' ? '公共网盘' : '根目录'
 
   const [tree, setTree] = useState<FolderNode>({
     id: null,
-    name: '根目录',
+    name: scope === 'public' ? '公共网盘' : '根目录',
     children: [],
     isExpanded: true,
     isLoading: false,
@@ -52,6 +56,7 @@ export default function FolderPickerDialog({
 
     try {
       const params = new URLSearchParams()
+      params.set('scope', scope)
       if (node.id !== null) params.set('parentId', String(node.id))
       params.set('limit', '200')
       const res = await api.get<{ data: DriveItem[] }>(`/drive/files?${params}`)
@@ -88,7 +93,7 @@ export default function FolderPickerDialog({
   useEffect(() => {
     const root: FolderNode = {
       id: null,
-      name: '根目录',
+      name: rootName,
       children: [],
       isExpanded: true,
       isLoading: false,
