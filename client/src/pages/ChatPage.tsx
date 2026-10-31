@@ -5,6 +5,7 @@ import { isConversationKey } from '../lib/chat'
 import { useXmppChat } from '../contexts/XmppChatContext'
 import { useSiteAnnouncements } from '../contexts/SiteAnnouncementContext'
 import SiteAnnouncementDialog from '../components/SiteAnnouncementDialog'
+import Icon from '../components/ui/Icon'
 import ChatConversationList from '../components/chat/ChatConversationList'
 import ChatThread from '../components/chat/ChatThread'
 import FriendPanel from '../components/chat/FriendPanel'
@@ -500,10 +501,7 @@ export default function ChatPage() {
               aria-label="站点公告"
               onClick={() => setAnnouncementDialogOpen(true)}
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M2.5 6.5v3l1.5.5 8 3.5V3L4 6.5z" />
-                <path d="M4.5 10v2.5a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1V10M14 7v2" />
-              </svg>
+              <Icon name="megaphone" size={16} />
             </button>
             <div className="gh-chat-head-settings">
               <button
@@ -515,10 +513,7 @@ export default function ChatPage() {
                 aria-expanded={settingsOpen}
                 onClick={() => setSettingsOpen((open) => !open)}
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="8" cy="8" r="2.2" />
-                  <path d="M8 1.8v1.4M8 12.8v1.4M1.8 8h1.4M12.8 8h1.4M3.6 3.6l1 1M11.4 11.4l1 1M12.4 3.6l-1 1M4.6 11.4l-1 1" />
-                </svg>
+                <Icon name="settings" size={16} />
               </button>
               {settingsOpen && (
                 <>

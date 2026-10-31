@@ -7,65 +7,45 @@ import { AdminCapabilityRoute } from './Guards'
 import { canAccessAdminPath } from '../lib/permissions'
 import { FEATURE_KEYS, type FeatureKey } from '../lib/features'
 import api from '../lib/api'
+import Icon, { type IconName } from './ui/Icon'
 
 /** 导航项可见性由 lib/permissions.ts 的 ADMIN_ROUTE_CAPABILITIES 决定（与路由守卫同源）；
  * 分组仅影响侧边栏展示，能力过滤与守卫仍按 path 单项判定 */
-interface AdminNavItem { path: string; label: string; icon: React.ReactNode; showPendingBadge?: boolean }
+interface AdminNavItem { path: string; label: string; icon: IconName; showPendingBadge?: boolean }
 
 const adminNavSections: { title: string; items: AdminNavItem[] }[] = [
   {
     title: '内容',
     items: [
-      { path: '/admin', label: '内容管理', icon: (
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 1.75A.75.75 0 01.75 1h4.253c1.227 0 2.317.59 3 1.501A3.744 3.744 0 0111.006 1h4.245a.75.75 0 01.75.75v10.5a.75.75 0 01-.75.75h-4.507a2.25 2.25 0 00-1.591.659l-.622.621a.75.75 0 01-1.06 0l-.622-.621A2.25 2.25 0 005.258 13H.75a.75.75 0 01-.75-.75V1.75zm8.755 3a3 3 0 01-2.154.886H1.5V11.5h3.753a3.73 3.73 0 012.502 1.067V4.75zm1.5 0v7.817A3.73 3.73 0 0112.747 11.5h3.253V2.5H10.9a3.745 3.745 0 00-2.645 1.136z"/></svg>
-      ) },
+      { path: '/admin', label: '内容管理', icon: 'book' },
     ],
   },
   {
     title: '用户',
     items: [
-      { path: '/admin/users', label: '用户与设备', showPendingBadge: true, icon: (
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 3.5a2.75 2.75 0 115.5 0 2.75 2.75 0 01-5.5 0zm2.75-1.25a1.25 1.25 0 100 2.5 1.25 1.25 0 000-2.5zM3.5 12.477a3.854 3.854 0 015.814-3.354 3.854 3.854 0 013.186 0c.537.3.98.763 1.215 1.334.235.57.328 1.207.326 1.848a.75.75 0 01-1.5 0c.002-.515-.09-1.013-.273-1.458a2.37 2.37 0 00-.809-1.013 2.357 2.357 0 00-2.518 0A2.37 2.37 0 008.04 10.847c-.183.445-.275.943-.273 1.458a.75.75 0 01-1.5 0c.002-.641.095-1.278.326-1.848.235-.571.678-1.034 1.215-1.334a3.855 3.855 0 00-4.309-.003.75.75 0 01-.621-1.364c1.22-.558 2.644-.77 4.008-.587.335-.18.689-.326 1.057-.437 1.002-.302 2.06-.302 3.062 0l.003.001a.75.75 0 01.003.001c.367.111.72.257 1.054.436 1.365-.183 2.789.029 4.008.587a.75.75 0 01-.621 1.364 3.855 3.855 0 00-4.308.003.75.75 0 00-.604-1.374c.543-.234 1.138-.234 1.682 0a2.354 2.354 0 01.72.393v-.425a1.75 1.75 0 00-1.75-1.75H3.75A1.75 1.75 0 002 11.625v.425c.173-.175.418-.314.72-.393.544-.234 1.139-.234 1.683 0 .486.21.934.586 1.174 1.079.241.493.365 1.06.365 1.627a.75.75 0 01-1.5 0 1.88 1.88 0 00-.25-.934 1.88 1.88 0 00-.717-.674 2.355 2.355 0 00-2.204-.001.75.75 0 01-.605-1.374c.555-.24 1.164-.241 1.721-.002a.755.755 0 01.008.003z"/></svg>
-      ) },
-      { path: '/admin/chat', label: '聊天治理', icon: (
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v9.5A1.75 1.75 0 0114.25 14H8.061l-2.574 2.573A1.458 1.458 0 013 15.543V14H1.75A1.75 1.75 0 010 12.25v-9.5zM1.75 2.5a.25.25 0 00-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 01.75.75v2.19l2.72-2.72a.75.75 0 01.53-.22h6.5a.25.25 0 00.25-.25v-9.5a.25.25 0 00-.25-.25H1.75zM4.5 5.25a.75.75 0 01.75-.75h5.5a.75.75 0 010 1.5h-5.5a.75.75 0 01-.75-.75zm0 2.75a.75.75 0 01.75-.75h3.5a.75.75 0 010 1.5h-3.5a.75.75 0 01-.75-.75z"/></svg>
-      ) },
+      { path: '/admin/users', label: '用户与设备', icon: 'users', showPendingBadge: true },
+      { path: '/admin/chat', label: '聊天治理', icon: 'message' },
     ],
   },
   {
     title: 'AI',
     items: [
-      { path: '/admin/ai', label: 'AI 设置', icon: (
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 110 16A8 8 0 018 0zm0 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm0 7.75a.75.75 0 01.75.75v1.25h.5a.75.75 0 010 1.5h-2.5a.75.75 0 010-1.5h.5V10a.75.75 0 01.75-.75zM8 4a1.5 1.5 0 110 3 1.5 1.5 0 010-3z"/></svg>
-      ) },
+      { path: '/admin/ai', label: 'AI 设置', icon: 'sparkles' },
     ],
   },
   {
     title: '运营',
     items: [
-      { path: '/admin/points', label: '积分体系', icon: (
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 110 16A8 8 0 018 0zm0 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8 3.25a.75.75 0 01.75.75v.31a2.5 2.5 0 011.62 2.36.75.75 0 01-1.5 0 .9.9 0 00-.87-.9v1.61l.63.22a1.9 1.9 0 011.24 1.79 2.5 2.5 0 01-1.87 2.41V12a.75.75 0 01-1.5 0v-.18a2.55 2.55 0 01-1.87-2.46.75.75 0 011.5 0c0 .58.44 1.06 1.12 1.13V8.9l-.62-.21a1.9 1.9 0 01-1.25-1.79A2.5 2.5 0 017.25 4.5v-.5A.75.75 0 018 3.25zm-.75 2.9v1.33l.75.25V5.9a.95.95 0 00-.75.25zm1.5 3.28v1.42c.45-.11.75-.4.75-.72 0-.3-.25-.56-.75-.7z"/></svg>
-      ) },
+      { path: '/admin/points', label: '积分体系', icon: 'coin' },
     ],
   },
   {
     title: '平台',
     items: [
-      { path: '/admin/features', label: '功能开关', icon: (
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 2.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm-3.5 2a3.5 3.5 0 0 1 6.9-.8h5.35a.75.75 0 0 1 0 1.5H8.9a3.5 3.5 0 0 1-6.9.8H.75a.75.75 0 0 1 0-1.5H2Zm8.5 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm-3.5 2a3.5 3.5 0 0 1 6.9-.8h1.35a.75.75 0 0 1 0 1.5h-1.35a3.5 3.5 0 0 1-6.9.8H2.75a.75.75 0 0 1 0-1.5h4.25Z"/></svg>
-      ) },
-      { path: '/admin/apps', label: '应用授权', icon: (
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 .5 2 2.9v4.6c0 3.6 2.5 6.6 6 7.9 3.5-1.3 6-4.3 6-7.9V2.9L8 .5Zm0 1.6 4.5 1.8v3.6c0 2.8-1.9 5.2-4.5 6.2-2.6-1-4.5-3.4-4.5-6.2V3.9L8 2.1Z" />
-          <path d="M8 5.4a1.6 1.6 0 0 1 .8 2.98L8.8 10H7.2l0-1.62A1.6 1.6 0 0 1 8 5.4Z" />
-        </svg>
-      ) },
-      { path: '/admin/proxy', label: '网页反代', icon: (
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 110 16A8 8 0 018 0zm0 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM4.75 7.25h6.5a.75.75 0 010 1.5h-6.5a.75.75 0 010-1.5z"/></svg>
-      ) },
-      { path: '/admin/api', label: 'API 接入', icon: (
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v2.794l2.22 1.2a.75.75 0 010 1.345L14 10.039v2.461a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 12.5v-2.794L.28 8.706a.75.75 0 010-1.345L2 6.161V3.5zm1.5 0v3.294l-.22-.12A.75.75 0 013.5 6.5h1a.75.75 0 01.75.75v2.25a.75.75 0 01-.75.75h-1a.75.75 0 010-1.5h.25V8h-.25a.75.75 0 010-1.5h.25V6h-.25a.75.75 0 01-.22-.174L3.5 3.5zm0 0h9v2.661h.25a.75.75 0 010 1.5h-.25V8h.25a.75.75 0 010 1.5h-.25v.75h.25a.75.75 0 010 1.5h.25V3.5zm0 9a.25.25 0 00.25.25h9a.25.25 0 00.25-.25v-2.294l2.22-1.2a.75.75 0 000-1.345l-2.22-1.2V3.5a.25.25 0 00-.25-.25h-9a.25.25 0 00-.25.25v2.294L1.78 6.961a.75.75 0 000 1.345l2.22 1.2V12.5z"/></svg>
-      ) },
+      { path: '/admin/features', label: '功能开关', icon: 'toggles' },
+      { path: '/admin/apps', label: '应用授权', icon: 'shield' },
+      { path: '/admin/proxy', label: '网页反代', icon: 'globe' },
+      { path: '/admin/api', label: 'API 接入', icon: 'api' },
     ],
   },
 ]
@@ -229,16 +209,11 @@ export default memo(function AdminLayout() {
       >
         <div className="gh-sidebar-brand">
           <Link to="/admin" className="gh-sidebar-brand-link" onClick={closeMobile}>
-            <svg width="20" height="20" viewBox="0 0 22 22" fill="none">
-              <rect x="1" y="1" width="20" height="20" rx="6" stroke="currentColor" strokeWidth="1.5" />
-              <path d="M7 11h8M11 7v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
+            <Icon name="logo" size={22} />
             <span className="gh-sidebar-brand-name">LineWeb</span>
           </Link>
           <button className="gh-sidebar-close" onClick={closeMobile} aria-label="关闭导航菜单">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
-              <path d="m4 4 8 8M12 4l-8 8" />
-            </svg>
+            <Icon name="close" size={16} />
           </button>
           {canManageFeatures && featureMap && (
             <button
@@ -249,10 +224,7 @@ export default memo(function AdminLayout() {
               title={allFeaturesEnabled ? '一键关闭全部功能' : '一键开启全部功能'}
               aria-label={allFeaturesEnabled ? '一键关闭全部功能' : '一键开启全部功能'}
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="M8 1v6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                <path d="M3.24 6.25a5.5 5.5 0 1 0 9.52 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
+              <Icon name="power" size={16} />
               <span className="gh-sidebar-label">{allFeaturesEnabled ? '一键关闭' : '一键开启'}</span>
             </button>
           )}
@@ -272,7 +244,7 @@ export default memo(function AdminLayout() {
                     className={`gh-sidebar-item ${isActive(item.path) ? 'gh-sidebar-item--active' : ''}`}
                     onClick={closeMobile}
                   >
-                    <span className="gh-sidebar-icon">{item.icon}</span>
+                    <span className="gh-sidebar-icon"><Icon name={item.icon} size={18} /></span>
                     <span className="gh-sidebar-label">{item.label}</span>
                     {item.showPendingBadge && pendingUsers > 0 && (
                       <span className="gh-chat-nav-badge">{pendingUsers > 99 ? '99+' : pendingUsers}</span>
@@ -297,17 +269,13 @@ export default memo(function AdminLayout() {
             }}
           >
             <span className="gh-sidebar-icon">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M7.78 12.53a.75.75 0 01-1.06 0L2.47 8.28a.75.75 0 010-1.06l4.25-4.25a.75.75 0 011.06 1.06L4.56 7.25h7.69a.75.75 0 010 1.5H4.56l3.22 3.22a.75.75 0 010 1.06z" />
-              </svg>
+              <Icon name={collapsed ? 'chevron-right' : 'chevron-left'} size={18} />
             </span>
             <span className="gh-sidebar-label">{collapsed ? '展开' : '收起'}</span>
           </button>
           <Link to="/" className="gh-sidebar-item gh-sidebar-back" onClick={closeMobile}>
             <span className="gh-sidebar-icon">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M8 0a8 8 0 110 16A8 8 0 018 0zm0 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm3.25 7.75h-6.5a.75.75 0 000 1.5h6.5a.75.75 0 000-1.5z" />
-              </svg>
+              <Icon name="home" size={18} />
             </span>
             <span className="gh-sidebar-label">返回主站</span>
           </Link>
@@ -325,12 +293,14 @@ export default memo(function AdminLayout() {
             onClick={() => setMobileOpen(prev => !prev)}
             aria-label="切换菜单"
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M1 2.75A.75.75 0 011.75 2h12.5a.75.75 0 010 1.5H1.75A.75.75 0 011 2.75zm0 5A.75.75 0 011.75 7h12.5a.75.75 0 010 1.5H1.75A.75.75 0 011 7.75zm0 5A.75.75 0 011.75 12h12.5a.75.75 0 010 1.5H1.75a.75.75 0 01-.75-.75z" />
-            </svg>
+            <Icon name="menu" size={17} />
           </button>
 
-          <h1 className="gh-admin-topbar-title">{pageTitleForPathname(location.pathname)}</h1>
+          <div className="gh-admin-topbar-crumbs">
+            <span className="gh-admin-topbar-root">管理</span>
+            <Icon name="chevron-right" size={12} />
+            <h1 className="gh-admin-topbar-title">{pageTitleForPathname(location.pathname)}</h1>
+          </div>
 
           <div className="gh-admin-toolbar-spacer" />
 

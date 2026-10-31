@@ -143,11 +143,16 @@
   --gh-transition: 0.18s var(--gh-ease-standard);
 
   /* =========================================================
-     5. 布局
+     5. 布局（2026-11 悬浮外壳：顶栏 / 侧栏都是独立浮层）
      ========================================================= */
-  --gh-nav-height: 56px;
-  --gh-sidebar-width: 256px;
-  --gh-sidebar-collapsed: 64px;
+  --gh-nav-height: 58px;
+  --gh-sidebar-width: 236px;
+  --gh-sidebar-collapsed: 68px;
+  --gh-shell-inset: 12px;
+  --gh-shell-gap: 16px;
+  /* 侧栏浮层占用的横向空间：inset + width + gap */
+  --gh-content-offset: calc(var(--gh-sidebar-width) + var(--gh-shell-inset) + var(--gh-shell-gap));
+  --gh-content-offset-collapsed: calc(var(--gh-sidebar-collapsed) + var(--gh-shell-inset) + var(--gh-shell-gap));
   --gh-max-width: 1320px;
   --gh-content-width: 1012px;
   --gh-page-pad-x: 32px;

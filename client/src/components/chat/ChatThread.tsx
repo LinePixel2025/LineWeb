@@ -7,6 +7,7 @@ import ChatBundleDialog from './ChatBundleDialog'
 import ChatForwardDialog from './ChatForwardDialog'
 import MessageActionMenu, { type MessageActionItem } from './MessageActionMenu'
 import UserTitleBadge from '../UserTitleBadge'
+import Icon from '../ui/Icon'
 import { canRecall, chatImageUrl, contactLabel, senderLabel } from '../../lib/chat'
 import { useLongPress } from '../../hooks/useLongPress'
 import { extractImageSrc } from '../../lib/xmpp/protocol'
@@ -642,9 +643,7 @@ export default function ChatThread({
     return (
       <section className="gh-chat-thread gh-chat-thread--empty" aria-label="聊天窗口">
         <div className="gh-chat-empty">
-          <svg width="48" height="48" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M8 2.75c-3.1 0-5.5 2.1-5.5 4.7 0 1.4.72 2.62 1.87 3.44l-.57 2.11 2.35-1.1c.58.17 1.2.26 1.85.26 3.1 0 5.5-2.1 5.5-4.71S11.1 2.75 8 2.75Z" />
-          </svg>
+          <Icon name="message" size={48} strokeWidth={1.2} />
           <p className="gh-chat-empty-title">{emptyMessage}</p>
           <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm gh-chat-back-inline" onClick={onBack}>
             返回会话列表
@@ -695,9 +694,7 @@ export default function ChatThread({
     <section className="gh-chat-thread" aria-label="聊天窗口">
       <header className="gh-chat-thread-header">
         <button type="button" className="gh-chat-back" aria-label="返回会话列表" onClick={onBack}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="m9.5 3.5-4.5 4.5 4.5 4.5" />
-          </svg>
+          <Icon name="chevron-left" size={17} />
         </button>
         <NekoAvatar
           nekoId={conversation.avatarNekoId}
@@ -750,10 +747,7 @@ export default function ChatThread({
               aria-label="群公告"
               onClick={() => openAnnouncement(false)}
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M2.5 6.5v3l1.5.5 8 3.5V3L4 6.5z" />
-                <path d="M4.5 10v2.5a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1V10M14 7v2" />
-              </svg>
+              <Icon name="megaphone" size={16} />
             </button>
           )}
           {!selecting && (
@@ -777,11 +771,7 @@ export default function ChatThread({
                 aria-expanded={menuOpen}
                 onClick={() => setMenuOpen((prev) => !prev)}
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                  <circle cx="3" cy="8" r="1.4" />
-                  <circle cx="8" cy="8" r="1.4" />
-                  <circle cx="13" cy="8" r="1.4" />
-                </svg>
+                <Icon name="more" size={16} />
               </button>
               {menuOpen && (
                 <div className="gh-chat-thread-menu" role="menu" aria-label="会话操作">
@@ -810,11 +800,7 @@ export default function ChatThread({
                 aria-expanded={menuOpen}
                 onClick={() => setMenuOpen((prev) => !prev)}
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                  <circle cx="3" cy="8" r="1.4" />
-                  <circle cx="8" cy="8" r="1.4" />
-                  <circle cx="13" cy="8" r="1.4" />
-                </svg>
+                <Icon name="more" size={16} />
               </button>
               {menuOpen && (
                 <div className="gh-chat-thread-menu" role="menu" aria-label="群聊操作">
@@ -955,10 +941,7 @@ export default function ChatThread({
       {isGroup && showAnnouncementBanner && (
         <div className={`gh-chat-announce-banner ${roomInfo?.announcementAckRequired ? 'gh-chat-announce-banner--ack' : ''}`}>
           <span className="gh-chat-announce-icon" aria-hidden="true">
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2.5 6.5v3l1.5.5 8 3.5V3L4 6.5z" />
-              <path d="M4.5 10v2.5a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1V10M14 7v2" />
-            </svg>
+            <Icon name="megaphone" size={15} />
           </span>
           <button type="button" className="gh-chat-announce-body" onClick={() => openAnnouncement(false)}>
             <span className="gh-chat-announce-label">
@@ -1237,9 +1220,7 @@ export default function ChatThread({
 
       {!atBottom && !loading && messages.length > 0 && (
         <button type="button" className="gh-chat-jump-latest" onClick={scrollToLatest}>
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M8 3v10M3.5 8.5 8 13l4.5-4.5" />
-          </svg>
+          <Icon name="arrow-down" size={14} />
           回到最新
         </button>
       )}

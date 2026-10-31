@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import { useThumbnails } from '../../hooks/useThumbnails'
+import Icon from '../ui/Icon'
 import type { DriveItem } from '../../types/drive'
 
 export interface ThumbnailGridProps {
@@ -26,7 +27,7 @@ const ThumbnailGrid = memo(function ThumbnailGrid({ items, size = 'medium' }: Th
         if (item.isFolder) {
           return (
             <div key={item.id} className="gh-drive-thumbnail-item gh-drive-thumbnail-item--folder">
-              <span className="gh-drive-thumbnail-icon">📁</span>
+              <span className="gh-drive-thumbnail-icon"><Icon name="folder" size={22} /></span>
             </div>
           )
         }
@@ -58,7 +59,7 @@ const ThumbnailGrid = memo(function ThumbnailGrid({ items, size = 'medium' }: Th
             ) : (
               <div className="gh-drive-thumbnail-fallback">
                 <span className="gh-drive-thumbnail-icon">
-                  {isVideo ? '🎬' : '📄'}
+                  <Icon name={isVideo ? 'video' : 'file'} size={22} />
                 </span>
               </div>
             )}

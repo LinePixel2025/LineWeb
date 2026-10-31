@@ -19,6 +19,7 @@ import {
 import { renderMarkdown } from '../lib/markdown'
 import { queryKeys } from '../lib/queryKeys'
 import ChatCameraDialog from '../components/chat/ChatCameraDialog'
+import Icon from '../components/ui/Icon'
 
 /**
  * DeepSeek 对话页（/deepseek，需登录）
@@ -32,12 +33,7 @@ import ChatCameraDialog from '../components/chat/ChatCameraDialog'
 const MAX_ATTACHMENTS = 4
 
 function AiSparkIcon({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-      <path d="M8 .5l1.66 5.84L15.5 8l-5.84 1.66L8 15.5l-1.66-5.84L.5 8l5.84-1.66L8 .5z" />
-      <circle cx="8" cy="8" r="1.7" fill="var(--gh-canvas)" />
-    </svg>
-  )
+  return <Icon name="sparkles" size={size} strokeWidth={1.6} />
 }
 
 /** 思考开关的本地持久化键（跨会话记住用户偏好） */

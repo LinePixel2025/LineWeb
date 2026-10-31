@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useSiteAnnouncements } from '../contexts/SiteAnnouncementContext'
 import SiteAnnouncementDialog from './SiteAnnouncementDialog'
+import Icon from './ui/Icon'
 import { ANNOUNCEMENT_LEVEL_LABELS } from '../types/announcement'
 
 /** 全站顶部站点公告条（LineWeb 自有公告；管理员在 /admin/announcements 发布） */
@@ -34,10 +35,7 @@ export default function SiteAnnouncementBar() {
     <>
       <aside className={`gh-announce-bar gh-announce-bar--${latest.level} ${needAck ? 'gh-announce-bar--ack' : ''}`} role="status">
         <span className="gh-announce-bar-icon" aria-hidden="true">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M2.5 6.5v3l1.5.5 8 3.5V3L4 6.5z" />
-            <path d="M4.5 10v2.5a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1V10M14 7v2" />
-          </svg>
+          <Icon name="megaphone" size={16} />
         </span>
         <span className="gh-announce-bar-tag">{ANNOUNCEMENT_LEVEL_LABELS[latest.level]}</span>
         <strong className="gh-announce-bar-title">{latest.title}</strong>

@@ -125,25 +125,27 @@ hr {
 .gh-layout-root {
   position: relative;
   min-height: 100dvh;
-  background: var(--gh-bg);
+  background:
+    radial-gradient(1100px 520px at 52% -12%, color-mix(in srgb, var(--gh-accent) 4.5%, transparent), transparent 68%),
+    var(--gh-bg);
 }
 
 .gh-content {
-  margin-left: var(--gh-sidebar-width);
-  padding: calc(var(--gh-nav-height) + var(--gh-safe-top) + var(--gh-space-5))
+  margin-left: var(--gh-content-offset);
+  padding: calc(var(--gh-nav-height) + var(--gh-shell-inset) * 2 + var(--gh-space-5))
     calc(var(--gh-page-pad-x) + var(--gh-safe-right))
     var(--gh-space-7)
-    calc(var(--gh-page-pad-x) + var(--gh-safe-left));
+    calc(var(--gh-space-5) + var(--gh-safe-left));
   min-height: 100dvh;
   transition: margin-left var(--gh-dur-2) var(--gh-ease-standard);
 }
 
 .gh-content--collapsed {
-  margin-left: var(--gh-sidebar-collapsed);
+  margin-left: var(--gh-content-offset-collapsed);
 }
 
 .gh-layout-root--admin .gh-content {
-  padding-top: calc(var(--gh-space-4) + var(--gh-safe-top));
+  padding-top: calc(var(--gh-space-3) + var(--gh-safe-top));
 }
 
 .gh-page-container {

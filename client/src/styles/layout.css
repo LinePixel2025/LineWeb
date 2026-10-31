@@ -2,23 +2,34 @@
    LineWeb Design System — Layout（macOS 外壳 / iOS 抽屉）
    ============================================================= */
 
-/* ===== 顶栏：毛玻璃 ===== */
+/* ===== 顶栏：悬浮毛玻璃胶囊 ===== */
 .gh-header {
   position: fixed;
-  top: 0;
-  right: 0;
-  left: 0;
+  top: calc(var(--gh-shell-inset) + var(--gh-safe-top));
+  right: calc(var(--gh-shell-inset) + var(--gh-safe-right));
+  left: calc(var(--gh-shell-inset) + var(--gh-safe-left));
   z-index: var(--gh-z-header);
-  height: calc(var(--gh-nav-height) + var(--gh-safe-top));
-  padding-top: var(--gh-safe-top);
+  height: var(--gh-nav-height);
+  border: 1px solid var(--gh-border);
+  border-radius: 18px;
   background: var(--gh-material-chrome);
   -webkit-backdrop-filter: var(--gh-blur-chrome);
   backdrop-filter: var(--gh-blur-chrome);
-  box-shadow: inset 0 -1px 0 var(--gh-border);
-  transition: box-shadow var(--gh-dur-2) var(--gh-ease-standard);
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.45) inset,
+    0 10px 30px -20px rgba(0, 0, 0, 0.28);
+  transition: box-shadow var(--gh-dur-2) var(--gh-ease-standard), border-color var(--gh-dur-2) var(--gh-ease-standard);
 }
 .gh-header--scrolled {
-  box-shadow: inset 0 -1px 0 var(--gh-border), 0 8px 28px -18px rgba(0, 0, 0, 0.28);
+  border-color: var(--gh-border-strong);
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.45) inset,
+    0 18px 44px -24px rgba(0, 0, 0, 0.38);
+}
+[data-theme="dark"] .gh-header {
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.06) inset,
+    0 16px 40px -24px rgba(0, 0, 0, 0.9);
 }
 
 .gh-header-inner {
@@ -26,10 +37,10 @@
   align-items: center;
   gap: var(--gh-space-2);
   width: 100%;
-  max-width: 1680px;
+  max-width: 1760px;
   height: 100%;
   margin: 0 auto;
-  padding: 0 calc(var(--gh-space-4) + var(--gh-safe-right)) 0 calc(var(--gh-space-4) + var(--gh-safe-left));
+  padding: 0 12px 0 16px;
 }
 
 .gh-header-menu-btn {
@@ -126,41 +137,50 @@
   min-width: 220px;
 }
 
-/* ===== 侧栏：源列表材质 ===== */
+/* ===== 侧栏：独立悬浮毛玻璃面板 ===== */
 .gh-sidebar {
   position: fixed;
-  top: calc(var(--gh-nav-height) + var(--gh-safe-top));
-  bottom: 0;
-  left: 0;
+  top: calc(var(--gh-nav-height) + var(--gh-shell-inset) * 2 + var(--gh-safe-top));
+  bottom: calc(var(--gh-shell-inset) + var(--gh-safe-bottom));
+  left: calc(var(--gh-shell-inset) + var(--gh-safe-left));
   z-index: var(--gh-z-sidebar);
   display: flex;
   flex-direction: column;
   width: var(--gh-sidebar-width);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding-left: var(--gh-safe-left);
-  border-right: 1px solid var(--gh-border);
+  padding: 8px 0;
+  border: 1px solid var(--gh-border);
+  border-radius: 20px;
   background: var(--gh-material-sidebar);
   -webkit-backdrop-filter: var(--gh-blur-chrome);
   backdrop-filter: var(--gh-blur-chrome);
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.4) inset,
+    0 20px 48px -32px rgba(0, 0, 0, 0.35);
   transition: width var(--gh-dur-2) var(--gh-ease-standard), transform var(--gh-dur-3) var(--gh-ease-out);
 }
+[data-theme="dark"] .gh-sidebar {
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.05) inset,
+    0 24px 56px -30px rgba(0, 0, 0, 0.9);
+}
 .gh-layout-root--admin .gh-sidebar {
-  top: 0;
-  padding-top: var(--gh-safe-top);
+  top: calc(var(--gh-shell-inset) + var(--gh-safe-top));
+  padding-top: 0;
 }
 
 .gh-sidebar-nav {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 1px;
-  padding: var(--gh-space-2) var(--gh-space-2) var(--gh-space-4);
+  gap: 2px;
+  padding: 6px 8px var(--gh-space-4);
 }
-.gh-sidebar-section { margin-bottom: var(--gh-space-2); }
+.gh-sidebar-section { margin-bottom: 10px; }
 
 .gh-sidebar-section-title {
-  padding: 10px 10px 4px;
+  padding: 10px 10px 5px;
   color: var(--gh-text-tertiary);
   font-size: 11px;
   font-weight: 600;
@@ -172,10 +192,10 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 34px;
-  padding: 6px 10px;
+  min-height: 36px;
+  padding: 7px 10px;
   border: 0;
-  border-radius: var(--gh-radius-sm);
+  border-radius: 10px;
   background: transparent;
   color: var(--gh-text);
   font-family: var(--gh-font);
@@ -184,14 +204,14 @@
   text-align: left;
   text-decoration: none;
   cursor: pointer;
-  transition: background var(--gh-transition), color var(--gh-transition);
+  transition: background var(--gh-transition), color var(--gh-transition), transform var(--gh-transition);
 }
 .gh-sidebar-item:hover { background: var(--gh-canvas-inset); color: var(--gh-text); }
-.gh-sidebar-item:active { background: var(--gh-fill-2); }
+.gh-sidebar-item:active { background: var(--gh-fill-2); transform: scale(0.99); }
 
 .gh-sidebar-item--active {
-  background: var(--gh-fill-2);
-  color: var(--gh-text);
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
   font-weight: 600;
 }
 .gh-sidebar-item--active .gh-sidebar-icon { color: var(--gh-accent); }
@@ -201,8 +221,8 @@
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 17px;
-  height: 17px;
+  width: 18px;
+  height: 18px;
   color: var(--gh-text-secondary);
 }
 .gh-sidebar-item--active .gh-sidebar-icon,
@@ -285,8 +305,9 @@
 }
 
 .gh-sidebar-footer {
-  padding: var(--gh-space-2);
+  padding: 8px;
   border-top: 1px solid var(--gh-border);
+  background: color-mix(in srgb, var(--gh-canvas) 30%, transparent);
 }
 .gh-sidebar-back { margin-top: var(--gh-space-2); }
 
@@ -329,7 +350,7 @@
 /* ===== 管理端工具条（吸顶毛玻璃卡） ===== */
 .gh-admin-toolbar {
   position: sticky;
-  top: calc(var(--gh-space-2) + var(--gh-safe-top));
+  top: calc(var(--gh-shell-inset) + var(--gh-safe-top));
   z-index: 90;
   display: flex;
   align-items: center;
@@ -343,12 +364,27 @@
   backdrop-filter: var(--gh-blur-chrome);
   box-shadow: var(--gh-shadow-sm);
 }
+.gh-admin-topbar-crumbs {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  color: var(--gh-text-tertiary);
+}
+.gh-admin-topbar-root {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
 .gh-admin-topbar-title {
+  overflow: hidden;
   margin: 0;
   color: var(--gh-text);
-  font-size: var(--gh-text-xl);
-  font-weight: 700;
-  letter-spacing: var(--gh-tracking-tight);
+  font-size: var(--gh-text-base);
+  font-weight: 600;
+  letter-spacing: var(--gh-tracking-snug);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .gh-admin-toolbar-spacer { flex: 1; }
@@ -413,7 +449,7 @@
   justify-content: center;
   min-height: 100dvh;
   margin-left: 0;
-  padding: calc(var(--gh-nav-height) + var(--gh-safe-top) + var(--gh-space-5)) var(--gh-space-5) var(--gh-space-6);
+  padding: calc(var(--gh-nav-height) + var(--gh-shell-inset) * 2 + var(--gh-space-5)) var(--gh-space-5) var(--gh-space-6);
 }
 
 /* 认证页顶栏只保留品牌与主题，不重复展示「登录」入口 */

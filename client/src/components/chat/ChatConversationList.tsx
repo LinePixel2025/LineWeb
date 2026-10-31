@@ -2,6 +2,7 @@ import { memo, useState } from 'react'
 import NekoAvatar from './NekoAvatar'
 import UserTitleBadge from '../UserTitleBadge'
 import { conversationPreview, formatUnread } from '../../lib/chat'
+import Icon from '../ui/Icon'
 import type { NekoConversation } from '../../types/chat'
 
 interface Props {
@@ -65,10 +66,7 @@ export default memo(function ChatConversationList({
     <div className="gh-chat-conv-wrap">
       {conversations.length >= 4 && (
         <div className="gh-chat-conv-search">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
-            <circle cx="7" cy="7" r="4.2" />
-            <path d="m10.2 10.2 2.8 2.8" />
-          </svg>
+          <Icon name="search" size={14} />
           <input
             type="search"
             value={query}

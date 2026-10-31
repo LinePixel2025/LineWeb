@@ -588,6 +588,68 @@
   gap: 8px;
   margin-top: var(--gh-space-3);
 }
+/* 积分卡：改为三行右对齐数值，长数字（六位数积分 / 排名）不再横向溢出 */
+.gh-profile-points-card { display: flex; flex-direction: column; gap: 10px; }
+.gh-profile-points-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-2);
+}
+.gh-profile-points-head .gh-box-heading { margin: 0; }
+.gh-profile-points-more {
+  color: var(--gh-accent);
+  font-size: var(--gh-text-xs);
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.gh-profile-points-more:hover { color: var(--gh-accent-hover); text-decoration: underline; }
+.gh-profile-stat-list {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--gh-canvas-inset);
+}
+.gh-profile-stat-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+}
+.gh-profile-stat-row + .gh-profile-stat-row { border-top: 1px solid var(--gh-border-muted); }
+.gh-profile-stat-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--gh-canvas);
+  color: var(--gh-text-tertiary);
+}
+.gh-profile-stat-icon--coin { color: var(--gh-accent); }
+.gh-profile-stat-label {
+  min-width: 0;
+  flex: 1;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+}
+.gh-profile-stat-value {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--gh-text);
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--gh-tracking-snug);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .gh-profile-legend-titles { display: flex; flex-direction: column; gap: 8px; }
 .gh-profile-legend-row {
   display: flex;
@@ -606,11 +668,34 @@
   background: var(--gh-canvas);
   box-shadow: var(--gh-shadow-card);
 }
+.gh-settings-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.gh-settings-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+}
 .gh-settings-title {
   margin: 0;
-  font-size: var(--gh-text-lg);
+  font-size: var(--gh-text-base);
   font-weight: 600;
   letter-spacing: var(--gh-tracking-snug);
+  line-height: 1.35;
+}
+.gh-settings-desc {
+  margin: 2px 0 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.5;
 }
 .gh-settings-hint {
   margin: 0;

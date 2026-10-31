@@ -188,7 +188,7 @@ const DriveListView = memo(function DriveListView({
       <div className="gh-drive-table-wrap" onContextMenu={handleBlankAreaContextMenu}>
         <TableVirtuoso
           className="gh-drive-table"
-          style={{ height: 'calc(100dvh - 300px)', width: '100%', minHeight: '280px' }}
+          style={{ height: 'clamp(320px, calc(100dvh - 424px), 720px)', width: '100%', minHeight: '280px' }}
           totalCount={items.length}
           components={{ TableRow: CustomTableRow }}
           fixedHeaderContent={() => (

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../lib/api'
 import { usePoints } from '../contexts/PointsContext'
+import Icon from '../components/ui/Icon'
 import type {
   StockBuyResult,
   StockHolding,
@@ -654,7 +655,7 @@ export default function StocksPage() {
             </>
           )}
           <Link to="/points" className="gh-header-points" title="积分中心">
-            <span className="gh-header-points-icon" aria-hidden>🪙</span>
+            <span className="gh-header-points-icon" aria-hidden><Icon name="coin" size={15} /></span>
             <span className="gh-header-points-value">{formatPoints(balance)}</span>
           </Link>
           <button type="button" className="gh-btn gh-btn--ghost gh-btn--sm" onClick={() => setNoticeOpen(true)}>

@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import DOMPurify from 'dompurify'
 import { usePost } from '../hooks/useQueries'
 import { useFeature } from '../contexts/FeatureContext'
-import { Button } from '../components/ui'
+import { Button, Icon } from '../components/ui'
 import { formatDate } from '../components/PostListItem'
 
 const CommentSection = lazy(() => import('../components/comments/CommentSection'))
@@ -46,9 +46,7 @@ export default function PostPage() {
   return (
     <article className="gh-page-container gh-post-detail">
       <Link to="/posts" className="gh-post-back">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M10 3.5 5.5 8l4.5 4.5" />
-        </svg>
+        <Icon name="chevron-left" size={15} />
         文章列表
       </Link>
 

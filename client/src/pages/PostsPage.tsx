@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { usePostsList } from '../hooks/useQueries'
-import { Button, Input, SegmentedControl } from '../components/ui'
+import { Button, Input, SegmentedControl, Icon } from '../components/ui'
 import Pagination from '../components/Pagination'
 import PostListItem, { type PostListItemData } from '../components/PostListItem'
 
@@ -41,9 +41,7 @@ export default function PostsPage() {
             onChange={e => setSearchInput(e.target.value)}
             fullWidth
             icon={
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
-              </svg>
+              <Icon name="search" size={16} />
             }
           />
           <Button type="submit" variant="primary" size="sm">搜索</Button>

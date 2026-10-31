@@ -5,29 +5,16 @@ import { useTheme } from '../contexts/ThemeContext'
 import { usePoints } from '../contexts/PointsContext'
 import UserAvatar from './UserAvatar'
 import UserTitleBadge from './UserTitleBadge'
+import Icon from './ui/Icon'
 
 interface Props {
   onMenuToggle: () => void
 }
 
 const themeIcons = {
-  auto: (
-    <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
-      <circle cx="8" cy="8" r="6.2" />
-      <path d="M8 1.8a6.2 6.2 0 0 1 0 12.4z" fill="currentColor" stroke="none" />
-    </svg>
-  ),
-  dark: (
-    <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-      <path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278Z" />
-    </svg>
-  ),
-  light: (
-    <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
-      <circle cx="8" cy="8" r="3.4" />
-      <path d="M8 1.2v1.6M8 13.2v1.6M1.2 8h1.6M13.2 8h1.6M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1" />
-    </svg>
-  ),
+  auto: 'auto',
+  dark: 'moon',
+  light: 'sun',
 } as const
 
 export default memo(function Header({ onMenuToggle }: Props) {
@@ -65,16 +52,11 @@ export default memo(function Header({ onMenuToggle }: Props) {
           onClick={onMenuToggle}
           aria-label="打开导航菜单"
         >
-          <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
-            <path d="M2 4.5h12M2 8h12M2 11.5h12" />
-          </svg>
+          <Icon name="menu" size={20} />
         </button>
 
         <Link to="/" className="gh-header-logo" aria-label="LineWeb 首页">
-          <svg className="gh-header-logo-mark" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M5 4.5A2.5 2.5 0 0 1 7.5 2h7L19 6.5v11A2.5 2.5 0 0 1 16.5 20h-9A2.5 2.5 0 0 1 5 17.5z" />
-            <path d="M14 2v5h5M8.5 11h7M8.5 15h4" />
-          </svg>
+          <Icon name="logo" size={26} className="gh-header-logo-mark" />
           <span className="gh-header-brand-name">LineWeb</span>
         </Link>
 
@@ -87,13 +69,13 @@ export default memo(function Header({ onMenuToggle }: Props) {
             title={`主题：${theme === 'auto' ? '跟随系统' : theme === 'dark' ? '深色' : '浅色'}`}
             aria-label="切换主题"
           >
-            {themeIcons[theme]}
+            <Icon name={themeIcons[theme]} size={18} />
           </button>
 
           {user ? (
             <>
               <Link to="/points" className="gh-header-points" title="积分中心：游戏赚积分，兑换称号与表情包">
-                <span className="gh-header-points-icon" aria-hidden>🪙</span>
+                <span className="gh-header-points-icon" aria-hidden><Icon name="coin" size={15} /></span>
                 <span className="gh-header-points-value">{pointsBalance}</span>
               </Link>
               <div ref={menuRef} className="gh-header-user-wrap">
@@ -106,9 +88,7 @@ export default memo(function Header({ onMenuToggle }: Props) {
                   <UserAvatar userId={user.id} username={user.username} size="sm" />
                   <span className="gh-hidden-mobile gh-header-username">{user.username}</span>
                   <UserTitleBadge title={headerTitle} className="gh-hidden-mobile" />
-                  <svg className="gh-header-chevron gh-hidden-mobile" width="10" height="10" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-                    <path d="M6 8.825a.75.75 0 0 1-.53-.22l-4-4a.75.75 0 0 1 1.06-1.06L6 6.939l3.47-3.47a.75.75 0 1 1 1.06 1.06l-4 4a.75.75 0 0 1-.53.22Z" />
-                  </svg>
+                  <Icon name="chevron-down" size={13} className="gh-header-chevron gh-hidden-mobile" />
                 </button>
                 {userMenuOpen && (
                   <div className="gh-popover gh-header-menu">

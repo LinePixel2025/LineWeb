@@ -65,6 +65,7 @@
 .gh-ps-title-text {
   overflow-wrap: anywhere;
 }
+.gh-ps-title-icon { flex-shrink: 0; color: var(--gh-accent); }
 .gh-ps-name-edit-btn {
   display: inline-flex;
   align-items: center;

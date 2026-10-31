@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { usePostsList, usePublicStats, useFeaturedPages } from '../hooks/useQueries'
 import { useAuth } from '../contexts/AuthContext'
 import { useFeature } from '../contexts/FeatureContext'
-import { Button } from '../components/ui'
+import { Button, Icon } from '../components/ui'
 import UserAvatar from '../components/UserAvatar'
 import DigitalHealthCard from '../components/DigitalHealthCard/DigitalHealthCard'
 import AiAssistant from '../components/AiAssistant'
@@ -117,44 +117,28 @@ export default function HomePage() {
                 <div className="gh-shortcut-grid">
                   {showPosts && (
                     <Link to="/posts" className="gh-shortcut-item">
-                      <span className="gh-shortcut-icon">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
-                        </svg>
-                      </span>
+                      <span className="gh-shortcut-icon"><Icon name="book" size={19} /></span>
                       <span className="gh-shortcut-label">文章列表</span>
                       <span className="gh-shortcut-hint">阅读最新内容</span>
                     </Link>
                   )}
                   {showPages && (
                     <Link to="/features" className="gh-shortcut-item">
-                      <span className="gh-shortcut-icon">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
-                        </svg>
-                      </span>
+                      <span className="gh-shortcut-icon"><Icon name="grid" size={19} /></span>
                       <span className="gh-shortcut-label">功能页面</span>
                       <span className="gh-shortcut-hint">全部工具入口</span>
                     </Link>
                   )}
                   {user && (
                     <Link to="/profile" className="gh-shortcut-item">
-                      <span className="gh-shortcut-icon">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <circle cx="12" cy="8" r="4.2" /><path d="M20 21a8 8 0 0 0-16 0" />
-                        </svg>
-                      </span>
+                      <span className="gh-shortcut-icon"><Icon name="user" size={19} /></span>
                       <span className="gh-shortcut-label">个人中心</span>
                       <span className="gh-shortcut-hint">账号与安全</span>
                     </Link>
                   )}
                   {isEnabled('calculator') && (
                     <Link to="/calculator" className="gh-shortcut-item">
-                      <span className="gh-shortcut-icon">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <rect x="4" y="2" width="16" height="20" rx="3" /><path d="M8 6.5h8" />
-                        </svg>
-                      </span>
+                      <span className="gh-shortcut-icon"><Icon name="settings" size={19} /></span>
                       <span className="gh-shortcut-label">科学计算器</span>
                       <span className="gh-shortcut-hint">三角函数与记忆</span>
                     </Link>

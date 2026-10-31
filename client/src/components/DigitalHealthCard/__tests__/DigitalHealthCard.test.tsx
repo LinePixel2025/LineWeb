@@ -66,7 +66,7 @@ function rangeParams(): URLSearchParams | null {
 }
 
 function heatmapCells(container: HTMLElement): NodeListOf<Element> {
-  return container.querySelectorAll('.digital-health-heatmap__grid .digital-health-heatmap__cell')
+  return container.querySelectorAll('.dh-grid .dh-cell')
 }
 
 describe('DigitalHealthCard', () => {
@@ -137,14 +137,14 @@ describe('DigitalHealthCard', () => {
     const { container } = renderWithRouter(<DigitalHealthCard />)
     await waitFor(() => expect(heatmapCells(container)).toHaveLength(30))
 
-    const grid = container.querySelector('.digital-health-heatmap__grid')!
-    expect(grid.querySelectorAll('.digital-health-heatmap__cell--l4')).toHaveLength(1)
-    expect(grid.querySelectorAll('.digital-health-heatmap__cell--l3')).toHaveLength(1)
-    expect(grid.querySelectorAll('.digital-health-heatmap__cell--l2')).toHaveLength(1)
-    expect(grid.querySelectorAll('.digital-health-heatmap__cell--l1')).toHaveLength(1)
-    expect(grid.querySelectorAll('.digital-health-heatmap__cell--l0')).toHaveLength(26)
+    const grid = container.querySelector('.dh-grid')!
+    expect(grid.querySelectorAll('.dh-cell--l4')).toHaveLength(1)
+    expect(grid.querySelectorAll('.dh-cell--l3')).toHaveLength(1)
+    expect(grid.querySelectorAll('.dh-cell--l2')).toHaveLength(1)
+    expect(grid.querySelectorAll('.dh-cell--l1')).toHaveLength(1)
+    expect(grid.querySelectorAll('.dh-cell--l0')).toHaveLength(26)
     expect(screen.getByText(/累计 13 小时 30 分钟/)).toBeInTheDocument()
-    const todayCell = grid.querySelector('.digital-health-heatmap__cell--today')!
+    const todayCell = grid.querySelector('.dh-cell--today')!
     expect(todayCell).toHaveAttribute('title', expect.stringContaining('7 小时'))
   })
 

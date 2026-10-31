@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { clearProxyLocalData, webProxyApi, type ProxySite } from '../../lib/webProxy'
+import Icon from '../ui/Icon'
 
 const BADGE_OPEN_KEY = 'lineweb_proxy_badge_open'
 
@@ -17,24 +18,7 @@ function readBadgeOpen(): boolean {
 }
 
 function LineWebMark({ size = 18 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="var(--gh-accent)"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M5 4.5A2.5 2.5 0 0 1 7.5 2h7L19 6.5v11A2.5 2.5 0 0 1 16.5 20h-9A2.5 2.5 0 0 1 5 17.5z" />
-      <path d="M14 2v5h5M8.5 11h7M8.5 15h4" />
-      <circle cx="5" cy="17.5" r="1.5" fill="var(--gh-canvas)" />
-      <path d="M5 16V13.5l3.5-2.5" />
-    </svg>
-  )
+  return <Icon name="logo" size={size} />
 }
 
 interface Props {
@@ -142,9 +126,7 @@ export default function ProxyViewer({ site, embedUrl }: Props) {
                 title="收起 LineWeb 工具条"
                 aria-label="收起 LineWeb 工具条"
               >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="m4 10 4-4 4 4" />
-                </svg>
+                <Icon name="chevron-up" size={14} />
               </button>
             </div>
 
@@ -154,21 +136,15 @@ export default function ProxyViewer({ site, embedUrl }: Props) {
 
             <div className="gh-proxy-badge-actions">
               <Link to="/webproxy" className="gh-proxy-badge-action">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M6.5 3.5 2.5 8l4 4.5M2.75 8h10.75" />
-                </svg>
+                <Icon name="arrow-left" size={14} />
                 站点列表
               </Link>
               <button type="button" className="gh-proxy-badge-action" onClick={reload} disabled={busy}>
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M13 8a5 5 0 1 1-1.6-3.7M13 2v3.5H9.5" />
-                </svg>
+                <Icon name="refresh" size={14} />
                 刷新
               </button>
               <button type="button" className="gh-proxy-badge-action" onClick={openOriginal}>
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M9 3h4v4M13 3 7.5 8.5M11.5 9.5V12A1.5 1.5 0 0 1 10 13.5H4A1.5 1.5 0 0 1 2.5 12V6A1.5 1.5 0 0 1 4 4.5h2.5" />
-                </svg>
+                <Icon name="link" size={14} />
                 原站
               </button>
               <button
@@ -177,9 +153,7 @@ export default function ProxyViewer({ site, embedUrl }: Props) {
                 onClick={handleClearLogin}
                 disabled={busy}
               >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M3.5 5h9M6.5 5V3.5h3V5M5 5l.5 8h5L11 5" />
-                </svg>
+                <Icon name="trash" size={14} />
                 {busy ? '清除中…' : '清除登录'}
               </button>
             </div>

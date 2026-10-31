@@ -208,44 +208,45 @@ function DrivePageInner() {
       <div className="gh-drive-desktop-shell">
       <header className="gh-drive-repo-header">
         <div className="gh-drive-repo-heading">
-          <span className="gh-drive-repo-mark"><FolderIcon size={24} /></span>
-          <div>
-            <div className="gh-drive-repo-path">LineWeb <span>/</span> Drive</div>
+          <span className="gh-drive-repo-mark"><FolderIcon size={26} /></span>
+          <div className="gh-drive-repo-copy">
+            <div className="gh-drive-repo-path">
+              <span className={`gh-drive-repo-dot${ctx.scope === 'public' ? ' gh-drive-repo-dot--public' : ''}`} />
+              {ctx.scope === 'public' ? '公共网盘' : '我的网盘'}
+              <span className="gh-drive-repo-sep">/</span>
+              {breadcrumbs[breadcrumbs.length - 1]?.name ?? '根目录'}
+            </div>
             <h1>网盘</h1>
-            <p>你的文件工作区</p>
+            <p>{ctx.scope === 'public' ? '团队共享文件，只读浏览与下载' : '你的文件工作区，随时上传与整理'}</p>
           </div>
         </div>
         <div className="gh-drive-repo-actions">
-          {ctx.scope === 'private' ? (
-            <DriveQuotaBar quota={quota.data} loading={quota.loading} />
-          ) : (
-            <span className="gh-drive-public-note">公共网盘 · 由管理员维护，所有有网盘权限的用户可查看与下载</span>
-          )}
-          <span className="gh-drive-repo-status"><span /> {ctx.scope === 'public' ? '公共网盘' : '私有工作区'}</span>
-          {canWriteHere && (
-            <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={dialogs.openNewFolder}>
-              <NewFolderIcon size={14} /> 新建文件夹
-            </button>
-          )}
-          {canWriteHere && (
-            <button className="gh-btn gh-btn--sm gh-btn--primary" onClick={dialogs.openUpload}>
-              <UploadIcon size={14} /> 上传
-            </button>
-          )}
-          {canSync && (
-            <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={syncOpts.sync} disabled={syncOpts.syncing}>
-              <RefreshIcon size={14} /> {syncOpts.syncing ? '同步中…' : '同步'}
-            </button>
-          )}
+          <div className="gh-drive-repo-quota">
+            {ctx.scope === 'private' ? (
+              <DriveQuotaBar quota={quota.data} loading={quota.loading} />
+            ) : (
+              <span className="gh-drive-public-note">公共网盘 · 由管理员维护，所有有网盘权限的用户可查看与下载</span>
+            )}
+          </div>
+          <div className="gh-drive-repo-buttons">
+            {canWriteHere && (
+              <button className="gh-btn gh-btn--sm gh-btn--secondary" onClick={dialogs.openNewFolder}>
+                <NewFolderIcon size={15} /> 新建文件夹
+              </button>
+            )}
+            {canWriteHere && (
+              <button className="gh-btn gh-btn--sm gh-btn--primary" onClick={dialogs.openUpload}>
+                <UploadIcon size={15} /> 上传
+              </button>
+            )}
+            {canSync && (
+              <button className="gh-btn gh-btn--sm gh-btn--ghost" onClick={syncOpts.sync} disabled={syncOpts.syncing}>
+                <RefreshIcon size={15} /> {syncOpts.syncing ? '同步中…' : '同步'}
+              </button>
+            )}
+          </div>
         </div>
       </header>
-
-      <div className="gh-drive-subnav" role="tablist" aria-label="网盘视图">
-        <button className="gh-drive-subnav-item gh-drive-subnav-item--active" role="tab" aria-selected="true">
-          <FolderIcon size={15} /> 文件
-        </button>
-        <span className="gh-drive-subnav-note">{breadcrumbs.length > 1 ? `位于 ${breadcrumbs[breadcrumbs.length - 1].name}` : '根目录'}</span>
-      </div>
 
       <div className={`gh-drive-workspace${selectedItem ? ' gh-drive-workspace--with-detail' : ''}${sidebarCollapsed ? ' gh-drive-workspace--sidebar-collapsed' : ''}`}>
         <DriveNavigation

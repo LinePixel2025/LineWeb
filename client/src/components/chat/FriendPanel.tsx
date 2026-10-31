@@ -3,6 +3,7 @@ import UserAvatar from '../UserAvatar'
 import NekoAvatar from './NekoAvatar'
 import UserTitleBadge from '../UserTitleBadge'
 import { contactLabel } from '../../lib/chat'
+import Icon from '../ui/Icon'
 import type {
   ChatUser,
   NekoContact,
@@ -251,9 +252,7 @@ export default function FriendPanel({
                         title="邀请对战"
                         onClick={() => onInviteGame(linewebId)}
                       >
-                        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
-                          <path d="M6.5 4a3.5 3.5 0 0 0-3.46 2.97l-.7 4.2a1.2 1.2 0 0 0 2.05 1.07l1.2-1.2h4.82l1.2 1.2a1.2 1.2 0 0 0 2.05-1.07l-.7-4.2A3.5 3.5 0 0 0 9.5 4h-3ZM5 6h1v1h1v1H6v1H5V8H4V7h1V6Zm5.25 1.5a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5Zm-1.5 1.5a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5Z" />
-                        </svg>
+                        <Icon name="gamepad" size={14} />
                       </button>
                     )}
                     {onSetRemark && (

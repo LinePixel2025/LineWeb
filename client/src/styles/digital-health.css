@@ -1,0 +1,291 @@
+/* =============================================================
+   数字健康（首页紧凑卡，2026-11）
+   -------------------------------------------------------------
+   旧版把 30 天热力图铺成 7×5 的大方格，单卡接近 950px 高。
+   新版改为「左今日摘要 / 右 10×3 微热力图」的双栏卡，高度约 240px；
+   周视图退化为一行 7 格，信息密度保持一致。
+   ============================================================= */
+
+.dh-card {
+  margin-top: var(--gh-space-5);
+  overflow: hidden;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-xl);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+}
+
+.dh-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--gh-border);
+  background:
+    radial-gradient(100% 160% at 0% 0%, color-mix(in srgb, var(--gh-danger) 5%, transparent), transparent 58%),
+    var(--gh-canvas);
+}
+.dh-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--gh-danger) 9%, transparent);
+  color: var(--gh-danger);
+}
+.dh-heading { min-width: 0; }
+.dh-heading h2 {
+  margin: 0;
+  font-size: var(--gh-text-base);
+  font-weight: 600;
+  letter-spacing: var(--gh-tracking-snug);
+  line-height: 1.3;
+}
+.dh-heading p { margin: 1px 0 0; color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+.dh-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--gh-text-tertiary);
+  cursor: pointer;
+  transition: background var(--gh-transition), color var(--gh-transition), border-color var(--gh-transition);
+}
+.dh-refresh:hover:not(:disabled) {
+  border-color: var(--gh-border);
+  background: var(--gh-fill-2);
+  color: var(--gh-text);
+}
+.dh-refresh:disabled { cursor: wait; opacity: 0.6; }
+.dh-refresh:focus-visible { outline: none; box-shadow: var(--gh-focus-ring); }
+.dh-spin { display: inline-flex; animation: dh-spin 0.8s linear infinite; }
+@keyframes dh-spin { to { transform: rotate(360deg); } }
+
+.dh-body {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 18px;
+  padding: 16px 18px 17px;
+}
+
+/* 左：今日摘要 */
+.dh-today {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  padding-right: 16px;
+  border-right: 1px solid var(--gh-border-muted);
+}
+.dh-eyebrow {
+  color: var(--gh-text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.dh-value {
+  color: var(--gh-text);
+  font-family: var(--gh-font-display);
+  font-size: clamp(1.35rem, 2.2vw, 1.75rem);
+  font-weight: 700;
+  letter-spacing: var(--gh-tracking-tight);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.dh-value--empty { color: var(--gh-text-secondary); }
+.dh-updated { color: var(--gh-text-tertiary); font-size: 11px; }
+
+.dh-progress { width: 100%; margin-top: 10px; }
+.dh-progress-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--gh-text-tertiary);
+  font-size: 10.5px;
+}
+.dh-progress-status { font-weight: 600; }
+.dh-progress-track {
+  height: 5px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-canvas-inset);
+}
+.dh-progress-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 220ms var(--gh-ease-out);
+}
+.dh-progress-status.digital-health-progress--good,
+.dh-progress-track .digital-health-progress--good { color: var(--gh-success); background: var(--gh-success); }
+.dh-progress-status.digital-health-progress--warning,
+.dh-progress-track .digital-health-progress--warning { color: var(--gh-warning); background: var(--gh-warning); }
+.dh-progress-status.digital-health-progress--over,
+.dh-progress-track .digital-health-progress--over { color: var(--gh-danger); background: var(--gh-danger); }
+.dh-progress-status { background: transparent; }
+
+.dh-link {
+  margin-top: 9px;
+  color: var(--gh-accent);
+  font-size: var(--gh-text-xs);
+  font-weight: 500;
+  text-decoration: none;
+}
+.dh-link:hover { color: var(--gh-accent-hover); text-decoration: underline; }
+
+.dh-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+.dh-empty p {
+  margin: 3px 0 8px;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.5;
+}
+.dh-empty .gh-btn { border-radius: var(--gh-radius-pill); }
+
+.dh-skeleton { display: flex; flex-direction: column; gap: 7px; width: 100%; }
+.dh-skeleton-value { width: 150px; height: 28px; }
+.dh-skeleton-meta { width: 80px; height: 11px; }
+.dh-error,
+.dh-heat-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--gh-danger);
+  font-size: var(--gh-text-xs);
+}
+
+/* 右：微热力图 */
+.dh-heat {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+}
+.dh-heat-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.dh-heat-heading h3 { margin: 0; font-size: var(--gh-text-sm); font-weight: 600; line-height: 1.3; }
+.dh-heat-heading p { margin: 1px 0 0; color: var(--gh-text-tertiary); font-size: 10.5px; }
+.dh-toggle {
+  display: inline-flex;
+  gap: 1px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--gh-canvas-inset);
+}
+.dh-toggle-btn {
+  min-width: 27px;
+  height: 22px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gh-text-tertiary);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.dh-toggle-btn--active {
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.dh-toggle-btn:focus-visible { outline: none; box-shadow: var(--gh-focus-ring); }
+
+.dh-grid {
+  display: grid;
+  gap: 4px;
+  margin-top: 9px;
+}
+.dh-grid--month { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+.dh-grid--week { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.dh-grid--loading { opacity: 0.55; }
+
+.dh-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  min-width: 0;
+  border-radius: 5px;
+  background: var(--gh-canvas-inset);
+}
+.dh-cell--l1 { background: color-mix(in srgb, var(--gh-accent) 22%, var(--gh-canvas-inset)); }
+.dh-cell--l2 { background: color-mix(in srgb, var(--gh-accent) 42%, var(--gh-canvas-inset)); }
+.dh-cell--l3 { background: color-mix(in srgb, var(--gh-accent) 68%, var(--gh-canvas-inset)); }
+.dh-cell--l4 { background: var(--gh-accent); }
+.dh-cell--today { outline: 1.5px solid var(--gh-accent); outline-offset: 1px; }
+.dh-cell-label {
+  color: var(--gh-text-tertiary);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.dh-cell--l3 .dh-cell-label,
+.dh-cell--l4 .dh-cell-label { color: #fff; }
+.dh-cell--week .dh-cell-label { font-size: 10px; }
+
+.dh-heat-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  color: var(--gh-text-tertiary);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+.dh-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  color: var(--gh-text-tertiary);
+}
+.dh-legend-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.dh-heat-empty {
+  margin: 6px 0 0;
+  color: var(--gh-text-tertiary);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+.dh-grid--week .dh-cell-label { font-size: 10px; }
+
+@media (max-width: 639px) {
+  .dh-body { grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 14px 16px 16px; }
+  .dh-today { padding-right: 0; padding-bottom: 12px; border-right: 0; border-bottom: 1px solid var(--gh-border-muted); }
+  .dh-grid { gap: 3px; }
+  .dh-cell-label { font-size: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dh-spin { animation: none; }
+  .dh-progress-track > span { transition: none; }
+}

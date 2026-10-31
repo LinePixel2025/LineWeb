@@ -7,6 +7,7 @@ import {
   webProxyApi,
   type ProxySite,
 } from '../lib/webProxy'
+import Icon from '../components/ui/Icon'
 
 function formatWhen(value: string | null): string {
   if (!value) return '尚未访问'
@@ -366,10 +367,7 @@ export default function WebProxyPage() {
         ) : sortedSites.length === 0 ? (
           <div className="gh-proxy-empty">
             <div className="gh-proxy-empty-icon" aria-hidden="true">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M3 12h18M12 3c2.5 2.6 3.8 5.7 3.8 9S14.5 18.4 12 21c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3Z" />
-              </svg>
+              <Icon name="globe" size={28} />
             </div>
             <h3>还没有反代站点</h3>
             <p className="gh-text-secondary">

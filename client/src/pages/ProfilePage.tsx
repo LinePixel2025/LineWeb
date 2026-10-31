@@ -6,7 +6,7 @@ import UserAvatar from '../components/UserAvatar'
 import UserTitleBadge from '../components/UserTitleBadge'
 import AvatarCropDialog from '../components/AvatarCropDialog'
 import DigitalHealthSection from '../components/DigitalHealthSection'
-import { Button, Badge, Alert, SegmentedControl, Input } from '../components/ui'
+import { Button, Badge, Alert, SegmentedControl, Input, Icon } from '../components/ui'
 import api from '../lib/api'
 import { appScopeLabel, isHighRiskScope } from '../lib/appScopes'
 import { roleLabel } from '../lib/permissions'
@@ -187,20 +187,26 @@ export default function ProfilePage() {
             </Button>
           </div>
 
-          <div className="gh-box">
-            <h3 className="gh-box-heading">积分</h3>
-            <div className="gh-metric-grid gh-metric-grid--three">
-              <div className="gh-metric">
-                <span className="gh-metric-value">{pointsProfile?.balance ?? 0}</span>
-                <span className="gh-metric-label">当前积分</span>
+          <div className="gh-box gh-profile-points-card">
+            <div className="gh-profile-points-head">
+              <h3 className="gh-box-heading">积分</h3>
+              <Link className="gh-profile-points-more" to="/points">积分中心 →</Link>
+            </div>
+            <div className="gh-profile-stat-list">
+              <div className="gh-profile-stat-row">
+                <span className="gh-profile-stat-icon gh-profile-stat-icon--coin"><Icon name="coin" size={15} /></span>
+                <span className="gh-profile-stat-label">当前积分</span>
+                <strong className="gh-profile-stat-value">{pointsProfile?.balance ?? 0}</strong>
               </div>
-              <div className="gh-metric">
-                <span className="gh-metric-value">{pointsProfile?.earned ?? 0}</span>
-                <span className="gh-metric-label">累计获得</span>
+              <div className="gh-profile-stat-row">
+                <span className="gh-profile-stat-icon"><Icon name="wallet" size={15} /></span>
+                <span className="gh-profile-stat-label">累计获得</span>
+                <strong className="gh-profile-stat-value">{pointsProfile?.earned ?? 0}</strong>
               </div>
-              <div className="gh-metric">
-                <span className="gh-metric-value">#{pointsProfile?.rank ?? '—'}</span>
-                <span className="gh-metric-label">全站排名</span>
+              <div className="gh-profile-stat-row">
+                <span className="gh-profile-stat-icon"><Icon name="trophy" size={15} /></span>
+                <span className="gh-profile-stat-label">全站排名</span>
+                <strong className="gh-profile-stat-value">#{pointsProfile?.rank ?? '—'}</strong>
               </div>
             </div>
             <div className="gh-profile-actions">
@@ -255,7 +261,13 @@ export default function ProfilePage() {
           {activeTab === 'overview' && (
             <div className="gh-profile-panels">
               <section className="gh-settings-group" aria-labelledby="profile-account-title">
-                <h2 className="gh-settings-title" id="profile-account-title">账号信息</h2>
+                <div className="gh-settings-head">
+                  <span className="gh-settings-icon" aria-hidden="true"><Icon name="user" size={16} /></span>
+                  <div>
+                    <h2 className="gh-settings-title" id="profile-account-title">账号信息</h2>
+                    <p className="gh-settings-desc">当前账号的基础身份与权限。</p>
+                  </div>
+                </div>
                 <div className="gh-settings-list">
                   <div className="gh-settings-row">
                     <span className="gh-settings-label">用户名</span>
@@ -276,7 +288,13 @@ export default function ProfilePage() {
               {saveError && <Alert variant="danger">{saveError}</Alert>}
 
               <section className="gh-settings-group">
-                <h2 className="gh-settings-title">修改用户名</h2>
+                <div className="gh-settings-head">
+                  <span className="gh-settings-icon" aria-hidden="true"><Icon name="edit" size={16} /></span>
+                  <div>
+                    <h2 className="gh-settings-title">修改用户名</h2>
+                    <p className="gh-settings-desc">用于登录与站内展示，2–50 个字符。</p>
+                  </div>
+                </div>
                 <form className="gh-settings-form" onSubmit={handleUsernameSubmit}>
                   <Input
                     type="text"
@@ -299,7 +317,13 @@ export default function ProfilePage() {
               </section>
 
               <section className="gh-settings-group">
-                <h2 className="gh-settings-title">修改密码</h2>
+                <div className="gh-settings-head">
+                  <span className="gh-settings-icon" aria-hidden="true"><Icon name="lock" size={16} /></span>
+                  <div>
+                    <h2 className="gh-settings-title">修改密码</h2>
+                    <p className="gh-settings-desc">修改后其他设备上的登录令牌会立即失效。</p>
+                  </div>
+                </div>
                 <form className="gh-settings-form" onSubmit={handlePasswordSubmit}>
                   <Input
                     type="password"
@@ -341,10 +365,13 @@ export default function ProfilePage() {
               </section>
 
               <section className="gh-settings-group">
-                <h2 className="gh-settings-title">已授权的应用</h2>
-                <p className="gh-settings-hint">
-                  这些第三方应用可以使用你的账号访问 LineWeb API。撤销后该应用的访问令牌会立即失效。
-                </p>
+                <div className="gh-settings-head">
+                  <span className="gh-settings-icon" aria-hidden="true"><Icon name="shield" size={16} /></span>
+                  <div>
+                    <h2 className="gh-settings-title">已授权的应用</h2>
+                    <p className="gh-settings-desc">这些第三方应用可以使用你的账号访问 LineWeb API，撤销后令牌立即失效。</p>
+                  </div>
+                </div>
 
                 {grantsError && <Alert variant="danger">{grantsError}</Alert>}
 

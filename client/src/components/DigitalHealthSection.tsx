@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import DailyGoalSetter from '@/components/DailyGoalSetter'
+import Icon from '@/components/ui/Icon'
 
 /**
  * 数字健康设置
@@ -12,9 +13,7 @@ export default function DigitalHealthSection() {
     <div id="digital-health" className="digital-health-settings">
       <div className="digital-health-settings__intro">
         <div className="digital-health-settings__title-mark" aria-hidden="true">
-          <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M8 14.25s-5.5-3.4-5.5-8.1A2.65 2.65 0 0 1 7.1 4.32L8 5.2l.9-.88a2.65 2.65 0 0 1 4.6 1.83c0 4.7-5.5 8.1-5.5 8.1Z" />
-          </svg>
+          <Icon name="heart" size={19} />
         </div>
         <div>
           <h2>数字健康</h2>

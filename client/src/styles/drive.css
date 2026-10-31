@@ -3438,8 +3438,7 @@
   background: var(--gh-canvas-inset);
 }
 .gh-drive-download-toast-progress-fill,
-.gh-drive-upload-zone-progress-fill,
-.gh-drive-quota-bar { background: var(--gh-accent); }
+.gh-drive-upload-zone-progress-fill { background: var(--gh-accent); }
 .gh-drive-upload-sheet {
   border-radius: var(--gh-radius-xl) var(--gh-radius-xl) 0 0;
   background: var(--gh-canvas);

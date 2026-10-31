@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useFeaturedPages } from '../hooks/useQueries'
-import { Badge } from '../components/ui'
+import { Badge, Icon, type IconName } from '../components/ui'
 
 interface FeaturedPage {
   id: number
@@ -10,13 +10,13 @@ interface FeaturedPage {
   featureDesc: string | null
 }
 
-const featureIcons: Record<string, React.ReactNode> = {
-  calculator: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="3" /><line x1="8" y1="6" x2="16" y2="6" /><line x1="8" y1="10" x2="8" y2="10.01" /><line x1="12" y1="10" x2="16" y2="10" /><line x1="8" y1="14" x2="8" y2="14.01" /><line x1="12" y1="14" x2="16" y2="14" /><line x1="8" y1="18" x2="8" y2="18.01" /><line x1="12" y1="18" x2="16" y2="18" /></svg>,
-  games: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7.5 8.5h9a3 3 0 0 1 2.9 2.25l1 3.6a2.25 2.25 0 0 1-3.8 2.12l-1.3-1.22a2 2 0 0 0-1.37-.55h-5.86a2 2 0 0 0-1.37.55l-1.3 1.22a2.25 2.25 0 0 1-3.8-2.12l1-3.6A3 3 0 0 1 7.5 8.5Z" /><path d="M6.5 12.5h2M7.5 11.5v2" /><circle cx="16" cy="12" r=".75" fill="currentColor" stroke="none" /><circle cx="18" cy="14" r=".75" fill="currentColor" stroke="none" /></svg>,
-  posts: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" /></svg>,
-  profile: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 1 0-16 0" /></svg>,
-  aichat: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /><path d="M12 7.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z" /></svg>,
-  webproxy: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.6 3.8 5.7 3.8 9S14.5 18.4 12 21c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3Z" /></svg>,
+const featureIcons: Record<string, IconName> = {
+  calculator: 'settings',
+  games: 'gamepad',
+  posts: 'book',
+  profile: 'user',
+  aichat: 'sparkles',
+  webproxy: 'globe',
 }
 
 const features = [
@@ -76,7 +76,7 @@ export default function FeaturesPage() {
       <div className="gh-feature-grid">
         {features.map((item) => (
           <Link key={item.path} to={item.path} className="gh-feature-card">
-            <span className="gh-feature-card-icon">{featureIcons[item.icon]}</span>
+            <span className="gh-feature-card-icon"><Icon name={featureIcons[item.icon]} size={24} /></span>
             <h3 className="gh-feature-card-title">{item.title}</h3>
             <p className="gh-feature-card-desc">{item.desc}</p>
             {item.badge && <Badge variant="accent">{item.badge}</Badge>}
@@ -91,11 +91,7 @@ export default function FeaturesPage() {
             {customPages.map((item) => (
               <Link key={item.slug} to={`/page/${item.slug}`} className="gh-feature-card">
                 <span className="gh-feature-card-icon gh-feature-card-emoji">
-                  {item.featureEmoji || (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
-                    </svg>
-                  )}
+                  {item.featureEmoji || <Icon name="file" size={24} />}
                 </span>
                 <h3 className="gh-feature-card-title">{item.title}</h3>
                 {item.featureDesc && <p className="gh-feature-card-desc">{item.featureDesc}</p>}

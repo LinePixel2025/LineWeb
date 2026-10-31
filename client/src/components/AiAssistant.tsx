@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../lib/api'
 import { renderMarkdown } from '../lib/markdown'
+import Icon from './ui/Icon'
 
 interface ChatMessage {
   id: number
@@ -19,45 +20,23 @@ const SUGGESTED_QUESTIONS = [
 let nextId = 1
 
 function AiIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-      <path d="M8 .5l1.66 5.84L15.5 8l-5.84 1.66L8 15.5l-1.66-5.84L.5 8l5.84-1.66L8 .5z" />
-      <circle cx="8" cy="8" r="1.7" fill="var(--gh-canvas)" />
-    </svg>
-  )
+  return <Icon name="sparkles" size={size} strokeWidth={1.6} />
 }
 
 function CommentIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-      <path d="M1.75 1h12.5c.966 0 1.75.784 1.75 1.75v9.5A1.75 1.75 0 0 1 14.25 14H8.06l-2.57 2.57A1.46 1.46 0 0 1 3 15.54V14H1.75A1.75 1.75 0 0 1 0 12.25v-9.5C0 1.78.78 1 1.75 1Zm-.25 11.25c0 .14.11.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.75.75 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25h-12.5a.25.25 0 0 0-.25.25v9.5Z" />
-    </svg>
-  )
+  return <Icon name="message" size={size} />
 }
 
 function XIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-      <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 0 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
-    </svg>
-  )
+  return <Icon name="close" size={size} />
 }
 
 function SendIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M22 2 11 13" />
-      <path d="M22 2 15 22l-4-9-9-4 20-7Z" />
-    </svg>
-  )
+  return <Icon name="send" size={size} />
 }
 
 function TrashIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-      <path d="M6.5.75A1.75 1.75 0 0 0 4.75 2.5v.75H2.5a.75.75 0 0 0 0 1.5h.75v8.5c0 1.1.9 2 2 2h5.5a2 2 0 0 0 2-2v-8.5h.75a.75.75 0 0 0 0-1.5h-2.25V2.5A1.75 1.75 0 0 0 9.5.75h-3Zm0 1.5h3a.25.25 0 0 1 .25.25v.75h-3.5V2.5a.25.25 0 0 1 .25-.25Zm-1.75 2.5h6.5v8.5a.5.5 0 0 1-.5.5h-5.5a.5.5 0 0 1-.5-.5v-8.5Zm2 2a.75.75 0 0 0-.75.75v3.25a.75.75 0 0 0 1.5 0V7.5a.75.75 0 0 0-.75-.75Zm2.5 0a.75.75 0 0 0-.75.75v3.25a.75.75 0 0 0 1.5 0V7.5a.75.75 0 0 0-.75-.75Z" />
-    </svg>
-  )
+  return <Icon name="trash" size={size} />
 }
 
 // renderMarkdown 已抽取到 lib/markdown.ts 共享（DeepSeek 对话页复用同一实现）

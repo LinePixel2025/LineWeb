@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import api from '../../lib/api'
 import UserTitleBadge from '../../components/UserTitleBadge'
 import { usePoints } from '../../contexts/PointsContext'
+import Icon from '../../components/ui/Icon'
 import type {
   AdminPointsResponse,
   AvatarFrameStyle,
@@ -343,179 +344,174 @@ function RulesPanel({
       </section>
 
       <section className="gh-box gh-points-rules-card">
-        <h2>农场参数</h2>
-        <div className="gh-points-farm-fields">
-          <label className="gh-form-field">
-            偷菜所得比例（0.1–1）
-            <input
-              className="gh-input"
-              type="number"
-              step="0.05"
-              min="0.1"
-              max="1"
-              value={config.farm.stealRatio}
-              onChange={(event) => updateFarm('stealRatio', Number(event.target.value) || 0)}
-            />
-            <span className="gh-text-tertiary">小偷所得 = 作物单位价值 × 比例（至少 1 分）</span>
-          </label>
-          <label className="gh-form-field">
-            每日偷菜次数上限（小偷）
-            <input
-              className="gh-input"
-              type="number"
-              min="0"
-              max="100"
-              value={config.farm.stealDailyLimit}
-              onChange={(event) => updateFarm('stealDailyLimit', Number(event.target.value) || 0)}
-            />
-            <span className="gh-text-tertiary">0 = 禁止偷菜</span>
-          </label>
-          <label className="gh-form-field">
-            偷菜成功率（0–1）
-            <input
-              className="gh-input"
-              type="number"
-              step="0.05"
-              min="0"
-              max="1"
-              value={config.farm.stealSuccessRate}
-              onChange={(event) => updateFarm('stealSuccessRate', Number(event.target.value) || 0)}
-            />
-            <span className="gh-text-tertiary">失败不消耗次数、不减少对方收成</span>
-          </label>
-          <label className="gh-form-field">
-            每人每天被偷上限
-            <input
-              className="gh-input"
-              type="number"
-              min="0"
-              max="100"
-              value={config.farm.victimDailyStealLimit}
-              onChange={(event) => updateFarm('victimDailyStealLimit', Number(event.target.value) || 0)}
-            />
-            <span className="gh-text-tertiary">0 = 全天不可被偷</span>
-          </label>
-          <label className="gh-form-field">
-            每日掉落种子上限
-            <input
-              className="gh-input"
-              type="number"
-              min="0"
-              max="10"
-              value={config.farm.seedDropMax}
-              onChange={(event) => updateFarm('seedDropMax', Number(event.target.value) || 0)}
-            />
-            <span className="gh-text-tertiary">每天随机掉落 1–N 个随机种子；0 = 关闭</span>
-          </label>
-          <label className="gh-form-field">
-            商人每日商品数量
-            <input
-              className="gh-input"
-              type="number"
-              min="0"
-              max="6"
-              value={config.farm.merchantCount}
-              onChange={(event) => updateFarm('merchantCount', Number(event.target.value) || 0)}
-            />
-            <span className="gh-text-tertiary">0 = 关闭商人</span>
-          </label>
-          <label className="gh-form-field">
-            商人最低折扣（0.1–0.9）
-            <input
-              className="gh-input"
-              type="number"
-              step="0.05"
-              min="0.1"
-              max="0.9"
-              value={config.farm.merchantDiscountMin}
-              onChange={(event) => updateFarm('merchantDiscountMin', Number(event.target.value) || 0)}
-            />
-          </label>
-          <label className="gh-form-field">
-            商人最高折扣（0.1–0.9）
-            <input
-              className="gh-input"
-              type="number"
-              step="0.05"
-              min="0.1"
-              max="0.9"
-              value={config.farm.merchantDiscountMax}
-              onChange={(event) => updateFarm('merchantDiscountMax', Number(event.target.value) || 0)}
-            />
-            <span className="gh-text-tertiary">0.4 = 4 折；实际折扣在最低–最高之间随机</span>
-          </label>
-          <label className="gh-form-field">
-            开荒赠送积分
-            <input
-              className="gh-input"
-              type="number"
-              min="0"
-              max="10000"
-              value={config.farm.welcomePoints}
-              onChange={(event) => updateFarm('welcomePoints', Number(event.target.value) || 0)}
-            />
-          </label>
-        </div>
-        <div style={{ marginTop: 'var(--gh-space-4)' }}>
+        <div className="gh-points-card-head">
+          <div>
+            <h2>农场参数</h2>
+            <p>偷菜、种子掉落与商人折扣的全局规则。</p>
+          </div>
           <button type="button" className="gh-btn gh-btn--primary gh-btn--md" onClick={onSave} disabled={saving}>
             {saving ? '保存中…' : '保存规则'}
           </button>
+        </div>
+
+        <div className="gh-rule-groups">
+          <div className="gh-rule-group">
+            <div className="gh-rule-group-head">
+              <span className="gh-rule-group-icon"><Icon name="paw" size={15} /></span>
+              <div><h3>偷菜规则</h3><p>决定小偷能拿多少、每天能偷几次。</p></div>
+            </div>
+            <div className="gh-rule-list">
+              <label className="gh-rule-row">
+                <span className="gh-rule-copy">
+                  <strong>偷菜所得比例</strong>
+                  <small>作物单位价值 × 比例（至少 1 分）</small>
+                </span>
+                <span className="gh-rule-control">
+                  <input className="gh-input" type="number" step="0.05" min="0.1" max="1" value={config.farm.stealRatio} onChange={(event) => updateFarm('stealRatio', Number(event.target.value) || 0)} />
+                  <span className="gh-rule-unit">倍</span>
+                </span>
+              </label>
+              <label className="gh-rule-row">
+                <span className="gh-rule-copy">
+                  <strong>每日偷菜次数上限</strong>
+                  <small>小偷每天可发起的偷菜次数，0 = 禁止偷菜</small>
+                </span>
+                <span className="gh-rule-control">
+                  <input className="gh-input" type="number" min="0" max="100" value={config.farm.stealDailyLimit} onChange={(event) => updateFarm('stealDailyLimit', Number(event.target.value) || 0)} />
+                  <span className="gh-rule-unit">次</span>
+                </span>
+              </label>
+              <label className="gh-rule-row">
+                <span className="gh-rule-copy">
+                  <strong>偷菜成功率</strong>
+                  <small>失败不消耗次数、不减少对方收成</small>
+                </span>
+                <span className="gh-rule-control">
+                  <input className="gh-input" type="number" step="0.05" min="0" max="1" value={config.farm.stealSuccessRate} onChange={(event) => updateFarm('stealSuccessRate', Number(event.target.value) || 0)} />
+                  <span className="gh-rule-unit">概率</span>
+                </span>
+              </label>
+              <label className="gh-rule-row">
+                <span className="gh-rule-copy">
+                  <strong>每人每天被偷上限</strong>
+                  <small>0 = 全天不可被偷</small>
+                </span>
+                <span className="gh-rule-control">
+                  <input className="gh-input" type="number" min="0" max="100" value={config.farm.victimDailyStealLimit} onChange={(event) => updateFarm('victimDailyStealLimit', Number(event.target.value) || 0)} />
+                  <span className="gh-rule-unit">次</span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div className="gh-rule-group">
+            <div className="gh-rule-group-head">
+              <span className="gh-rule-group-icon"><Icon name="folder" size={15} /></span>
+              <div><h3>种子与商人</h3><p>每日掉落与随机折扣，影响农场经济循环。</p></div>
+            </div>
+            <div className="gh-rule-list">
+              <label className="gh-rule-row">
+                <span className="gh-rule-copy">
+                  <strong>每日掉落种子上限</strong>
+                  <small>每天随机掉落 1–N 个随机种子，0 = 关闭</small>
+                </span>
+                <span className="gh-rule-control">
+                  <input className="gh-input" type="number" min="0" max="10" value={config.farm.seedDropMax} onChange={(event) => updateFarm('seedDropMax', Number(event.target.value) || 0)} />
+                  <span className="gh-rule-unit">个</span>
+                </span>
+              </label>
+              <label className="gh-rule-row">
+                <span className="gh-rule-copy">
+                  <strong>商人每日商品数量</strong>
+                  <small>0 = 关闭商人</small>
+                </span>
+                <span className="gh-rule-control">
+                  <input className="gh-input" type="number" min="0" max="6" value={config.farm.merchantCount} onChange={(event) => updateFarm('merchantCount', Number(event.target.value) || 0)} />
+                  <span className="gh-rule-unit">件</span>
+                </span>
+              </label>
+              <label className="gh-rule-row">
+                <span className="gh-rule-copy">
+                  <strong>商人折扣区间</strong>
+                  <small>0.4 = 4 折，实际折扣在最低–最高之间随机</small>
+                </span>
+                <span className="gh-rule-control gh-rule-control--range">
+                  <input className="gh-input" type="number" step="0.05" min="0.1" max="0.9" aria-label="商人最低折扣" value={config.farm.merchantDiscountMin} onChange={(event) => updateFarm('merchantDiscountMin', Number(event.target.value) || 0)} />
+                  <span className="gh-rule-dash">–</span>
+                  <input className="gh-input" type="number" step="0.05" min="0.1" max="0.9" aria-label="商人最高折扣" value={config.farm.merchantDiscountMax} onChange={(event) => updateFarm('merchantDiscountMax', Number(event.target.value) || 0)} />
+                </span>
+              </label>
+              <label className="gh-rule-row">
+                <span className="gh-rule-copy">
+                  <strong>开荒赠送积分</strong>
+                  <small>新玩家首次进入农场时发放</small>
+                </span>
+                <span className="gh-rule-control">
+                  <input className="gh-input" type="number" min="0" max="10000" value={config.farm.welcomePoints} onChange={(event) => updateFarm('welcomePoints', Number(event.target.value) || 0)} />
+                  <span className="gh-rule-unit">分</span>
+                </span>
+              </label>
+            </div>
+          </div>
         </div>
       </section>
 
       <section className="gh-box gh-points-rules-card">
-        <h2>签到与榜一奖励</h2>
-        <div className="gh-points-farm-fields">
-          <label className="gh-form-field">
-            签到基础积分
-            <input
-              className="gh-input"
-              type="number"
-              min="0"
-              max="1000"
-              value={config.checkin.basePoints}
-              onChange={(event) => updateCheckin('basePoints', Number(event.target.value) || 0)}
-            />
-          </label>
-          <label className="gh-form-field">
-            连签每天递增
-            <input
-              className="gh-input"
-              type="number"
-              min="0"
-              max="500"
-              value={config.checkin.streakStep}
-              onChange={(event) => updateCheckin('streakStep', Number(event.target.value) || 0)}
-            />
-          </label>
-          <label className="gh-form-field">
-            连签递增上限
-            <input
-              className="gh-input"
-              type="number"
-              min="0"
-              max="10000"
-              value={config.checkin.streakMaxBonus}
-              onChange={(event) => updateCheckin('streakMaxBonus', Number(event.target.value) || 0)}
-            />
-          </label>
-          <label className="gh-form-field">
-            榜一称号奖励积分
-            <input
-              className="gh-input"
-              type="number"
-              min="0"
-              max="10000"
-              value={config.leaderTitle.rewardPoints}
-              onChange={(event) => updateLeader('rewardPoints', Number(event.target.value) || 0)}
-            />
-            <span className="gh-text-tertiary">同一用户同一游戏每天最多发一次，0 = 不发</span>
-          </label>
-        </div>
-        <div style={{ marginTop: 'var(--gh-space-4)' }}>
+        <div className="gh-points-card-head">
+          <div>
+            <h2>签到与榜一奖励</h2>
+            <p>每日签到与单机榜一称号的积分发放口径。</p>
+          </div>
           <button type="button" className="gh-btn gh-btn--primary gh-btn--md" onClick={onSave} disabled={saving}>
             {saving ? '保存中…' : '保存规则'}
           </button>
+        </div>
+        <div className="gh-rule-groups">
+          <div className="gh-rule-group">
+            <div className="gh-rule-group-head">
+              <span className="gh-rule-group-icon"><Icon name="calendar" size={15} /></span>
+              <div><h3>每日签到</h3><p>连续签到会按天递增奖励。</p></div>
+            </div>
+            <div className="gh-rule-list">
+              <label className="gh-rule-row">
+                <span className="gh-rule-copy"><strong>签到基础积分</strong><small>每次签到固定发放</small></span>
+                <span className="gh-rule-control">
+                  <input className="gh-input" type="number" min="0" max="1000" value={config.checkin.basePoints} onChange={(event) => updateCheckin('basePoints', Number(event.target.value) || 0)} />
+                  <span className="gh-rule-unit">分</span>
+                </span>
+              </label>
+              <label className="gh-rule-row">
+                <span className="gh-rule-copy"><strong>连签每天递增</strong><small>连续第 N 天额外增加的积分</small></span>
+                <span className="gh-rule-control">
+                  <input className="gh-input" type="number" min="0" max="500" value={config.checkin.streakStep} onChange={(event) => updateCheckin('streakStep', Number(event.target.value) || 0)} />
+                  <span className="gh-rule-unit">分</span>
+                </span>
+              </label>
+              <label className="gh-rule-row">
+                <span className="gh-rule-copy"><strong>连签递增上限</strong><small>递增奖励最多累计到此值</small></span>
+                <span className="gh-rule-control">
+                  <input className="gh-input" type="number" min="0" max="10000" value={config.checkin.streakMaxBonus} onChange={(event) => updateCheckin('streakMaxBonus', Number(event.target.value) || 0)} />
+                  <span className="gh-rule-unit">分</span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div className="gh-rule-group">
+            <div className="gh-rule-group-head">
+              <span className="gh-rule-group-icon"><Icon name="trophy" size={15} /></span>
+              <div><h3>榜一称号</h3><p>单机排行榜第一自动获得，被超越后转移。</p></div>
+            </div>
+            <div className="gh-rule-list">
+              <label className="gh-rule-row">
+                <span className="gh-rule-copy"><strong>榜一称号奖励积分</strong><small>同一用户同一游戏每天最多发一次，0 = 不发</small></span>
+                <span className="gh-rule-control">
+                  <input className="gh-input" type="number" min="0" max="10000" value={config.leaderTitle.rewardPoints} onChange={(event) => updateLeader('rewardPoints', Number(event.target.value) || 0)} />
+                  <span className="gh-rule-unit">分</span>
+                </span>
+              </label>
+            </div>
+          </div>
         </div>
       </section>
 

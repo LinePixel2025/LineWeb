@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import api from '../lib/api'
+import Icon from '../components/ui/Icon'
 import type { PersonalSpaceDto, PersonalSpaceUpdateInput } from '../types/personalSpace'
 
 /* ============================================================
@@ -282,7 +283,7 @@ export default function PersonalSpacePage() {
           </form>
         ) : (
           <h1 className="gh-ps-title">
-            <span aria-hidden>🏠</span>
+            <Icon name="home" size={24} className="gh-ps-title-icon" />
             <span className="gh-ps-title-text">{dto.spaceName}</span>
             <button
               type="button"
@@ -291,7 +292,7 @@ export default function PersonalSpacePage() {
               title="重命名空间"
               aria-label="重命名空间"
             >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25a1.75 1.75 0 0 1 .445-.758l8.61-8.61Zm.85 1.595-6.286 6.287a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.249.249 0 0 0 .108-.064l6.286-6.286-1.439-1.44Z"/></svg>
+              <Icon name="edit" size={15} />
             </button>
           </h1>
         )}
