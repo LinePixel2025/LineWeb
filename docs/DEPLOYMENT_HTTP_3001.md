@@ -353,3 +353,59 @@ curl -si -N --max-time 8 -H "Connection: Upgrade" -H "Upgrade: websocket" \
 - **Railway 部署**：见 [DRIVE_SETUP.md](DRIVE_SETUP.md) 第 1 章（仅存档）。
 - **systemd 直跑 tsx + ECS 上 SQLite**：一度作为候选方案写在旧版文档中，现已作废——生产使用 Docker Compose + PostgreSQL。
 - **宝塔面板路径**（`/www/wwwroot/lineweb`、`ecosystem.config.js` 的 PM2、`scripts/deploy.sh` 的 MySQL schema 生成）：历史存档，采用前需按本指南调整。
+
+---
+
+## 13. 低内存服务器更新：预构建前端 + 复用缓存镜像（2026-11-01 实测）
+
+该 ECS 只有 1.6GB 内存（2GB swap）。直接 `docker compose up -d --build` 会在容器内跑
+`npm ci` + `vite build`，实测造成内存/IO 抖动到 SSH 与 HTTP 均无响应，只能从控制台重启。
+以后更新**优先用下面的预构建流程**（前端在本地构建，服务器只做 COPY 层）：
+
+```bash
+# 1) 本地构建并打包（仓库根目录）
+cd client && npx vite build && cd ..
+tar -czf client-dist-apple.tar.gz -C client/dist .
+
+# 2) 上传
+scp -i ~/.ssh/lineweb_aliyun client-dist-apple.tar.gz root@120.24.223.65:/root/
+
+# 3) 服务器：解包（保持 /opt/lineweb 仓库干净，client-dist 为 untracked 构建输入）
+cd /opt/lineweb && rm -rf client-dist && mkdir -p client-dist
+tar -xzf /root/client-dist-apple.tar.gz -C client-dist
+
+# 4) 服务器：预构建 Dockerfile（跳过容器内前端构建；server 依赖层可命中缓存）
+cat > /root/lineweb-Dockerfile.prebuilt <<'EOF'
+FROM node:22-alpine
+WORKDIR /app/server
+RUN apk add --no-cache bash
+COPY server/package.json server/package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+COPY server/ ./
+COPY client-dist /app/client/dist
+COPY server/scripts/docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENV NODE_ENV=production
+EXPOSE 3001
+ENTRYPOINT ["docker-entrypoint.sh"]
+EOF
+
+docker tag lineweb-server:latest lineweb-server:prev-$(date +%Y%m%d) 2>/dev/null || true
+docker build -f /root/lineweb-Dockerfile.prebuilt -t lineweb-server:latest .
+docker compose up -d --no-build
+
+# 5) 验收
+docker compose ps                      # server 为 healthy
+curl -s http://127.0.0.1:8780/api/health
+```
+
+要点：
+
+- 只改前端时，`server/` 无 diff，预构建镜像的 `npm ci` 层会命中缓存，构建通常 < 1 分钟，几乎不吃内存。
+- 需要改服务端代码时才必须走完整 `docker compose up -d --build`；务必在低峰执行并盯 `free -m`，必要时临时停掉其他容器。
+- 回滚：`docker tag lineweb-server:prev-<日期> lineweb-server:latest && docker compose up -d --no-build`；
+  数据库备份：`docker exec lineweb-postgres pg_dump -U lineweb -d lineweb | gzip > /root/lineweb-$(date +%F).sql.gz`。
+- **CSP 限制**：生产环境 `script-src 'self'`，`client/index.html` 不能写内联 `<script>`（会被拦截并报错）。
+  首屏主题预置写在 `client/public/theme-init.js`，以 `<script src="/theme-init.js">` 引入。
+- `/opt/lineweb/client-dist` 与 `/root/lineweb-Dockerfile.prebuilt` 是服务器本地构建输入，不属于仓库；
+  `git reset --hard` 不会删除它们，但新机器部署时需要重新生成。
