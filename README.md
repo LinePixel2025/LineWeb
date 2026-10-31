@@ -1,12 +1,12 @@
 # Line Web
 
-LineWeb 采用 GitHub Primer 风格：浅色/暗色主题、细边框、克制阴影、8px 圆角和明确的 focus ring。
+LineWeb 采用 Apple 风格：毛玻璃外壳、填充式控件、22px 圆角与系统色；明暗双主题、克制阴影和明确的 focus ring。
 
 React 19 SPA 前端 + Express 4 REST API 后端 + Python 3 WebSocket 文件存储节点。
 
 ## 特性
 
-- **GitHub Primer 设计** — 语义化 CSS 令牌、边框式信息层级与明暗主题
+- **Apple 风格设计** — 语义化 CSS 令牌、表面/填充式信息层级、毛玻璃外壳与明暗主题
 - 📝 **文章系统** — Markdown 写作、发布与管理
 - ☁️ **网盘** — 文件上传/下载/预览/搜索，文件夹管理，批量操作，收藏夹跨设备同步
 - 🧮 **在线计算器** — 基础运算与科学计算
@@ -28,7 +28,7 @@ React 19 SPA 前端 + Express 4 REST API 后端 + Python 3 WebSocket 文件存�
 | 后端 | Express 4, Prisma 6, JWT, Zod, tsx 运行时 |
 | 数据库 | SQLite（本地开发） / PostgreSQL 16（生产，1Panel 上的容器） |
 | 存储节点 | Python 3 + websockets 库，WebSocket 二进制流传输 |
-| 设计 | GitHub Primer 风格，CSS 变量令牌、`.gh-*` BEM 组件和 light/dark/auto 主题 |
+| 设计 | Apple 风格（macOS/iOS 视觉语言），CSS 变量令牌、`.gh-*` 组件命名空间和 light/dark/auto 主题 |
 | 部署 | 阿里云 ECS（Ubuntu）：1Panel + Docker Compose，Express + PostgreSQL 16 容器；存储在本地 Windows |
 
 ## 架构
@@ -419,12 +419,15 @@ LineWebCLI.exe start|stop|status|update       # 本地服务一键管理，详�
 
 ## 设计系统
 
-GitHub Primer 风格通过纯 CSS 实现：
+Apple 风格（macOS 窗口外壳 + iOS 组件语言 + apple.com 排版节奏）通过纯 CSS 实现：
 
-- **设计令牌**：`variables.css` 定义 `--gh-*` 颜色、间距、字体、圆角和阴影令牌
-- **组件样式**：`components.css` 提供 `.gh-btn`、`.gh-input`、`.gh-box`、`.gh-dialog` 等共享组件
-- **主题系统**：支持 light、dark 和 auto 三种主题，使用语义化令牌适配明暗模式
-- **命名约定**：BEM 风格 `.gh-*` 设计系统、`.drive-*` 网盘、`.admin-*` 管理面板
+- **设计令牌**：`variables.css` 定义 `--gh-*` 语义令牌（画布/表面/填充/发丝线/系统色/材质/字阶/圆角/阴影/动效）；命名空间里的 `gh-` 是历史前缀，取值与语义已全部切换为 Apple 体系
+- **组件样式**：`components.css` 提供 `.gh-btn`（胶囊填充）、`.gh-input`（填充输入）、`.gh-box`（16px 圆角卡片）、`.gh-dialog`（22px 圆角 / 移动端底部 sheet）、`.gh-tabnav`（iOS 分段控件）等共享组件
+- **布局**：`layout.css` 负责毛玻璃顶栏、源列表侧栏、抽屉与认证页独立布局；`responsive.css` 负责 ≤1279px 抽屉、≤767px 底部 sheet 与 44px 触控
+- **主题**：light / dark / auto，暗色为纯黑画布 + `#1c1c1e` 抬起表面；首屏在 `index.html` 内联脚本里预置 `data-theme`，避免暗色白闪
+- **字体**：Apple 设备命中 SF Pro，其它平台回退到自托管的 Inter Variable（latin 子集，48KB）
+- **验收工具**：`node scripts/check-design-tokens.cjs`（对比度/旧色板/大写标题自检）、`node scripts/screenshot-design-audit.cjs`（多视口 × 明暗截图矩阵与水平溢出检查）
+- **README 之外的细节**：见 `docs/design-system.md`
 
 ## License
 
