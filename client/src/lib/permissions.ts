@@ -19,6 +19,7 @@ export const CAPABILITIES = [
   'feature:manage',
   'points:manage',
   'chat:manage',
+  'personal:manage',
 ] as const
 
 export type Capability = typeof CAPABILITIES[number]
@@ -37,6 +38,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   'feature:manage': '功能开关管理',
   'points:manage': '积分体系管理',
   'chat:manage': '聊天治理（封禁 / 解封）',
+  'personal:manage': '个人空间（管理员私人服务）',
 }
 
 export const ROLE_LABELS: Record<string, string> = {
@@ -96,6 +98,7 @@ export const ADMIN_ROUTE_CAPABILITIES: { prefix: string; capability: Capability 
   { prefix: '/admin/points', capability: 'points:manage' },
   { prefix: '/admin/chat', capability: 'chat:manage' },
   { prefix: '/admin/announcements', capability: 'content:manage' },
+  { prefix: '/personal-space', capability: 'personal:manage' }, // 个人空间（管理员私人服务，非 /admin 前缀）
   { prefix: '/admin/api', capability: null },        // API 接入指南：任何管理区账号可见
   { prefix: '/admin', capability: 'content:write' }, // 文章管理（含 /admin 首页）
 ]

@@ -60,6 +60,7 @@ model User {
   leaderTitles           GameLeaderTitle[]
   chatBan                ChatBan?
   pet                    Pet?
+  personalSpace          PersonalSpace? // 个人空间（管理员私人服务，每管理员一份）
   farm                   Farm?
   farmStealsMade         FarmSteal[]          @relation("FarmStealThief")
   farmStealsReceived     FarmSteal[]          @relation("FarmStealVictim")
@@ -953,4 +954,25 @@ model PetOutfit {
 
   @@unique([petId, outfitKey])
   @@map("pet_outfits")
+}
+
+// === 个人空间（管理员私人服务，每个管理员的数据互相隔离） ===
+
+/**
+ * 每个管理员一份个人空间（userId 唯一）；承载管理员私人服务配置（首个服务：RustDesk 远程桌面）。
+ * RustDesk 四个字段均可空（String?），空值表示该项未配置。
+ */
+model PersonalSpace {
+  id                  Int      @id @default(autoincrement())
+  userId              Int      @unique @map("user_id")
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  spaceName           String   @default("个人空间") @map("space_name") // 空间名（DB 默认「个人空间」；API 首访自动创建时取「<用户名> 的私人空间」）
+  rustdeskIdServer    String?  @map("rustdesk_id_server") // RustDesk ID 服务器（如 rustdesk.example.com:21116）
+  rustdeskRelayServer String?  @map("rustdesk_relay_server") // RustDesk 中继服务器
+  rustdeskKey         String?  @map("rustdesk_key") // RustDesk 公钥 Key
+  rustdeskWebClient   String?  @map("rustdesk_web_client") // RustDesk Web 客户端地址（http/https）
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("personal_spaces")
 }

@@ -76,6 +76,7 @@ const FeatureAdminPage = lazy(() => import('./pages/admin/FeatureAdminPage'))
 const AnnouncementAdminPage = lazy(() => import('./pages/admin/AnnouncementAdminPage'))
 const PointsAdminPage = lazy(() => import('./pages/admin/PointsAdminPage'))
 const ChatAdminPage = lazy(() => import('./pages/admin/ChatAdminPage'))
+const PersonalSpacePage = lazy(() => import('./pages/PersonalSpacePage'))
 const AuthorizePage = lazy(() => import('./pages/AuthorizePage'))
 
 const queryClient = new QueryClient({
@@ -330,6 +331,8 @@ export default function App() {
                     <Route path="/admin/ai-chat" element={<AiChatAdminPage />} />
                     <Route path="/admin/apps" element={<AppAdminPage />} />
                     <Route path="/admin/proxy" element={<ProxyAdminPage />} />
+                    {/* 个人空间：仅管理员可进（personal:manage），AdminCapabilityRoute 按路径能力守卫 */}
+                    <Route path="/personal-space" element={<PersonalSpacePage />} />
                   </Route>
                   </Routes>
                 </Suspense>

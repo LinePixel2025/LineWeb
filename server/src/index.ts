@@ -29,6 +29,7 @@ import gameStatsRoutes from './routes/gameStats.js'
 import pointsRoutes from './routes/points.js'
 import farmRoutes from './routes/farm.js'
 import petsRoutes from './routes/pets.js'
+import personalSpaceRoutes from './routes/personalSpace.js'
 import stockRoutes from './routes/stocks.js'
 import adminPointsRoutes from './routes/adminPoints.js'
 import { featuresRouter, adminFeaturesRouter } from './routes/features.js'
@@ -197,6 +198,8 @@ app.use('/api/points', pointsRoutes)
 app.use('/api/farm', requireFeature('farm'), farmRoutes)
 // 宠物（召唤 / 照顾 / 换装 / 升级），受 pet 功能开关控制
 app.use('/api/pets', requireFeature('pet'), petsRoutes)
+// 个人空间（管理员私人服务：空间名 + RustDesk 远程桌面配置，每管理员数据互相隔离，需 personal:manage 能力）
+app.use('/api/personal-space', personalSpaceRoutes)
 // 模拟股市（行情只读 + 积分交易），受 stock 功能开关控制
 app.use('/api/stocks', requireFeature('stock'), stockRoutes)
 // 积分体系管理（规则 / 商店 / 用户调分，需 points:manage 能力）
@@ -369,6 +372,11 @@ app.get('/api', (_req, res) => {
       outfitBuy: { method: 'POST', path: '/api/pets/outfits/buy', auth: true, description: '购买装扮 { outfitKey }（永久拥有，写积分流水）' },
       outfitEquip: { method: 'POST', path: '/api/pets/outfits/equip', auth: true, description: '佩戴/取下装扮 { outfitKey, equip:boolean }（同 slot 自动替换）' },
       rename: { method: 'POST', path: '/api/pets/rename', auth: true, description: '改名 { name }（1–12 字）' },
+    },
+    personalSpace: {
+      note: '个人空间：仅管理员可进（personal:manage 能力），每个管理员的数据互相隔离；首个私人服务为 RustDesk 远程桌面配置。无功能开关（管理员天然绕过）。',
+      view: { method: 'GET', path: '/api/personal-space', auth: 'personal:manage', description: '我的个人空间（不存在时自动创建默认空间「<用户名> 的私人空间」）' },
+      update: { method: 'PUT', path: '/api/personal-space', auth: 'personal:manage', description: '更新空间名与 RustDesk 配置 { spaceName, rustdeskIdServer?, rustdeskRelayServer?, rustdeskKey?, rustdeskWebClient? }（rustdeskWebClient 非空时必须 http(s):// 开头）' },
     },
     stocks: {
       note: '模拟股市：行情为 3 秒一 tick 的实时模拟（确定性日线锚点 + 秒级噪声，玩家交易会小幅影响价格并按 10 分钟半衰期衰减），可用统一积分按实时价买卖；买卖各收 1% 手续费。需 stock 功能开关。',

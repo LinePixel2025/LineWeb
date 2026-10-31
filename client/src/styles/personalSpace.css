@@ -1,0 +1,276 @@
+/* =============================================================
+   个人空间（/personal-space，仅管理员）
+   —— 空间名行内编辑 / RustDesk 配置卡片 / 配置摘要复制 / 快捷连接
+   —— 命名空间 .gh-ps-*，颜色全部走 variables.css 主题变量
+   ============================================================= */
+
+.gh-ps-page {
+  max-width: 1012px;
+  position: relative;
+}
+
+/* ===== 加载 ===== */
+.gh-ps-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gh-space-3);
+  padding: 80px 0;
+  color: var(--gh-text-secondary);
+}
+
+/* ===== 轻提示 ===== */
+.gh-ps-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  z-index: 120;
+  padding: 8px 16px;
+  border-radius: var(--gh-radius);
+  font-size: var(--gh-text-sm);
+  color: #fff;
+  background: var(--gh-success-emphasis);
+  box-shadow: var(--gh-shadow-lg);
+  animation: gh-ps-toast-in 0.18s ease;
+  pointer-events: none;
+}
+.gh-ps-toast--error {
+  background: var(--gh-danger);
+}
+@keyframes gh-ps-toast-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ===== 头部 ===== */
+.gh-ps-head {
+  margin-bottom: var(--gh-space-5);
+}
+.gh-ps-eyebrow {
+  margin: 0 0 2px;
+  font-size: var(--gh-text-xs);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--gh-accent);
+}
+.gh-ps-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  margin: 0;
+  font-size: var(--gh-text-2xl);
+  line-height: 1.2;
+}
+.gh-ps-title-text {
+  overflow-wrap: anywhere;
+}
+.gh-ps-name-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--gh-text-tertiary);
+  cursor: pointer;
+  transition: color var(--gh-transition), background var(--gh-transition);
+}
+.gh-ps-name-edit-btn:hover {
+  color: var(--gh-accent);
+  background: var(--gh-btn-hover);
+}
+.gh-ps-name-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  margin: 2px 0;
+  flex-wrap: wrap;
+}
+.gh-ps-name-input {
+  width: 280px;
+  max-width: 100%;
+  font-size: var(--gh-text-lg);
+  font-weight: 600;
+}
+.gh-ps-sub {
+  margin: var(--gh-space-2) 0 0;
+  max-width: 620px;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+  line-height: 1.6;
+}
+
+/* ===== 服务卡片 ===== */
+.gh-ps-card {
+  padding: var(--gh-space-4) var(--gh-space-5);
+  margin-bottom: var(--gh-space-4);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-bg);
+  box-shadow: var(--gh-shadow-sm);
+}
+[data-theme='dark'] .gh-ps-card {
+  background: var(--gh-canvas-subtle);
+}
+.gh-ps-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+}
+.gh-ps-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  margin: 0;
+  font-size: var(--gh-text-lg);
+}
+.gh-ps-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+}
+.gh-ps-badge--on {
+  color: var(--gh-success);
+  background: var(--gh-success-soft);
+}
+.gh-ps-badge--off {
+  color: var(--gh-text-secondary);
+  background: var(--gh-canvas-inset);
+}
+[data-theme='dark'] .gh-ps-badge--off {
+  background: rgba(110, 118, 129, 0.2);
+}
+.gh-ps-card-desc {
+  margin: var(--gh-space-2) 0 var(--gh-space-4);
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+  line-height: 1.6;
+}
+.gh-ps-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+  margin-top: var(--gh-space-4);
+}
+
+/* ===== 配置表单 ===== */
+.gh-ps-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gh-space-3) var(--gh-space-4);
+}
+@media (max-width: 720px) {
+  .gh-ps-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.gh-ps-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gh-ps-field--wide {
+  grid-column: 1 / -1;
+}
+.gh-ps-field-label {
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  color: var(--gh-text);
+}
+.gh-ps-field-hint {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+}
+
+/* ===== 配置摘要 ===== */
+.gh-ps-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  margin: 0 0 var(--gh-space-2);
+  padding: 0;
+  list-style: none;
+}
+.gh-ps-summary-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-2) var(--gh-space-3);
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-subtle);
+  flex-wrap: wrap;
+}
+[data-theme='dark'] .gh-ps-summary-row {
+  background: var(--gh-canvas-inset);
+}
+.gh-ps-summary-label {
+  flex: none;
+  width: 88px;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+.gh-ps-summary-value {
+  flex: 1 1 200px;
+  min-width: 0;
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text);
+  overflow-wrap: anywhere;
+}
+
+/* ===== 快捷连接 ===== */
+.gh-ps-connect {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+.gh-ps-connect-input {
+  width: 260px;
+  max-width: 100%;
+  font-family: var(--gh-font-mono);
+}
+.gh-ps-connect-link {
+  margin: var(--gh-space-2) 0 0;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+.gh-ps-connect-link code {
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-sm);
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--gh-canvas-inset);
+  color: var(--gh-accent);
+  overflow-wrap: anywhere;
+}
+
+/* ===== 更多服务占位 ===== */
+.gh-ps-more {
+  padding: var(--gh-space-6) var(--gh-space-4);
+  border: 1px dashed var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  text-align: center;
+  color: var(--gh-text-tertiary);
+}
+.gh-ps-more-title {
+  margin: 0 0 var(--gh-space-1);
+  font-size: var(--gh-text-base);
+  font-weight: 600;
+  color: var(--gh-text-secondary);
+}
+.gh-ps-more-sub {
+  margin: 0;
+  font-size: var(--gh-text-sm);
+}
