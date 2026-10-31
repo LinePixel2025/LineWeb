@@ -6,7 +6,7 @@
 
 ## 概述
 
-个人网站/CMS 单体仓库，GitHub Primer 风格的纯 CSS 前端设计系统（`.gh-*` BEM，已全面改版完成）。React 19 SPA 前端，Express 4 REST API 后端，Python 3 WebSocket 文件存储节点，以及打包为 exe 的 LineWeb CLI 本地管理工具。SQLite 仅用于本地开发，生产为 PostgreSQL 16。功能：文章/评论、动态页面构建器、网盘、计算器、屏幕时间追踪（数字健康卡片，含电脑使用热力图）、AI 助手、**DeepSeek 对话（站内统一代理的多会话 AI 聊天：SSE 流式回复、图片/拍照提问、联网搜索支持 DeepSeek 官方搜索 / 博查 / Tavily、每用户每日提问上限由管理员设置，与首页 AI 助手配置相互独立）**、头像裁剪上传、用户名登录、**私信（2026-10-31 起完全自建：好友/群聊、图片与表情、引用回复、合并/逐条转发聊天记录、5 分钟撤回、已读回执、@、拍一拍、群公告、置顶与备注，全部落 Prisma 无外部依赖，WS/长轮询双通道；原 neko XMPP 接入与全员大厅已移除）**、**游戏大厅（2048、斗地主、贪吃蛇、扫雷、跳一跳、我的世界、五子棋、骗子酒馆、UNO、中国象棋、霓虹跑酷（3D 三车道），均支持对应单机 / 好友联机与无 WebSocket 轮询降级）**、PWA。**部署：阿里云 ECS（Ubuntu，公网 IP `120.24.223.65`）上用 1Panel + Docker Compose 部署：Express :3001 容器 + PostgreSQL 16 容器，公网入口 `https://web.linetech.online`（Cloudflare Tunnel 出站隧道，`cloudflared` 已注册为 systemd 服务开机自启，入口指向 `127.0.0.1:8780`）；IP 直连 `http://120.24.223.65:8780` 备用；阿里云按 Host 头拦截未备案域名，故不能用橙云 A 记录直连源站；存储节点仍运行在本地 Windows（`D:/LineWebDrive`），主动外连服务端；本地 Windows 全栈仍为开发/备用方案。**（2026-10-17 实测：生产 `/api/health` 显示 `storageNode: connected`，但本机未运行节点、仓库 `storage-node/config.json` 仍指向已不可达的 `ws://123.207.8.77:3001`，线上实际接入的节点来源待确认。）**
+个人网站/CMS 单体仓库，GitHub Primer 风格的纯 CSS 前端设计系统（`.gh-*` BEM，已全面改版完成）。React 19 SPA 前端，Express 4 REST API 后端，Python 3 WebSocket 文件存储节点，以及打包为 exe 的 LineWeb CLI 本地管理工具。SQLite 仅用于本地开发，生产为 PostgreSQL 16。功能：文章/评论、动态页面构建器、网盘、计算器、屏幕时间追踪（数字健康卡片，含电脑使用热力图）、AI 助手、**DeepSeek 对话（站内统一代理的多会话 AI 聊天：SSE 流式回复、图片/拍照提问、联网搜索支持 DeepSeek 官方搜索 / 博查 / Tavily、每用户每日提问上限由管理员设置，与首页 AI 助手配置相互独立）**、头像裁剪上传、用户名登录、**私信（2026-10-31 起完全自建：好友/群聊、图片与表情、引用回复、合并/逐条转发聊天记录、5 分钟撤回、已读回执、@、拍一拍、群公告、置顶与备注，全部落 Prisma 无外部依赖，WS/长轮询双通道；原 neko XMPP 接入与全员大厅已移除）**、**游戏大厅（2048、斗地主、贪吃蛇、扫雷、跳一跳、我的世界、五子棋、骗子酒馆、UNO、中国象棋、霓虹跑酷（3D 三车道），均支持对应单机 / 好友联机与无 WebSocket 轮询降级）**、PWA。**部署：阿里云 ECS（Ubuntu，公网 IP `120.24.223.65`）上用 1Panel + Docker Compose 部署：Express :3001 容器 + PostgreSQL 16 容器，公网入口为 IP 直连 `http://120.24.223.65:8780`（宿主 8780 → 容器 3001；2026-10-31 起 Cloudflare Tunnel 已整体移除、不再使用任何域名，纯 HTTP 无 HTTPS）；存储节点运行在外部机器（容器日志实测自 `58.253.109.135` 直连接入），主动外连服务端；本地 Windows 全栈仍为开发/备用方案。**
 
 ## 目录结构
 
@@ -53,7 +53,7 @@ lineweb/
 | 跨模块关注点 | 位置 | 说明 |
 |----------------------|----------|-------|
 | 单体仓库编排 | `package.json` | `concurrently` 同时运行前后端；`postinstall` 级联安装子目录依赖 |
-| 部署方式 | 阿里云 ECS（Ubuntu，`120.24.223.65`）+ 本地存储节点 | 生产由 **1Panel v2.3.2 + Docker Compose** 部署，代码在 `/opt/lineweb`：应用是 compose 项目 `lineweb`（容器 `lineweb-server-1`，由仓库根 `docker-compose.yml` + `Dockerfile` 构建，对外端口 `8780`（宿主 8780 → 容器 3001），`restart: unless-stopped`，自带健康检查），数据库是 PostgreSQL 16 容器 `lineweb-postgres`；1Panel 面板在 `http://120.24.223.65:18080/lineweb_panel`（安装目录 `/opt/1panel`，**继续用 IP 访问，不要绑定域名**），公网入口 `https://web.linetech.online`（**Cloudflare Tunnel 出站隧道**：`cloudflared` 2026.9.3 装在 `/usr/local/bin/cloudflared`，已注册为 systemd 服务 `cloudflared`（enabled + active，开机自启），隧道名 `lineweb-ecs`（token 模式，入口规则在 Cloudflare 控制台），入口规则 `web.linetech.online → http://127.0.0.1:8780`；DNS 是 **CNAME → `<隧道ID>.cfargotunnel.com`**（Cloudflare 代理开启），不再是 A 记录指向源站 IP）；IP 直连 `http://120.24.223.65:8780` 备用；**阿里云安全组当前放行 `22`、`18080`、`3001`（8780 需另放行才能 IP 直连）**；存储在本地 `D:/LineWebDrive` 的 Python 节点**主动外连**服务端（`/api/health` 2026-10-17 实测为 `storageNode: connected`，但本机未运行节点、仓库 `config.json` 仍指已不可达的 `ws://123.207.8.77:3001`，实际接入来源待确认；规范地址为 `wss://web.linetech.online/ws/storage`），因此家里无需公网 IP；**服务器直连 GitHub 极慢/不可达，`git fetch + git reset --hard` 在服务器上跑不通**，更新需走镜像/代理或从本地机器 `git push` 到服务器。备选/存档：systemd 直跑 tsx、PM2（`ecosystem.config.js`）、Nginx 反代（`nginx.conf`）、Railway（`docs/DRIVE_SETUP.md` 第 1 章）；本地 Windows 全栈仍为开发/备用 |
+| 部署方式 | 阿里云 ECS（Ubuntu，`120.24.223.65`）+ 外部存储节点 | 生产由 **1Panel v2.3.2 + Docker Compose** 部署，代码在 `/opt/lineweb`：应用是 compose 项目 `lineweb`（容器 `lineweb-server-1`，由仓库根 `docker-compose.yml` + `Dockerfile` 构建，对外端口 `8780`（宿主 8780 → 容器 3001），`restart: unless-stopped`，自带健康检查），数据库是 PostgreSQL 16 容器 `lineweb-postgres`；1Panel 面板在 `http://120.24.223.65:18080/lineweb_panel`（安装目录 `/opt/1panel`，**继续用 IP 访问，不要绑定域名**）；公网入口为 **IP 直连 `http://120.24.223.65:8780`**（唯一入口，纯 HTTP；2026-10-31 起 **Cloudflare Tunnel 已整体移除**——`cloudflared` 服务/二进制/`/etc/cloudflared` 均已删除，不再使用任何域名，HTTPS 与自定义域名能力随之放弃）；**阿里云安全组实测放行 `22`、`18080`、`8780`（`3001` 公网入口已收紧关闭）**；存储节点运行在外部机器（容器日志实测自 `58.253.109.135` 主动外连接入，规范地址 `ws://120.24.223.65:8780/ws/storage`），因此节点侧无需公网 IP；**服务器直连 GitHub 极慢/不可达，`git fetch + git reset --hard` 在服务器上跑不通**，更新需走镜像/代理或从本地机器 `git push` 到服务器（本地 push → 服务器裸仓 `/root/lineweb-deploy.git` → `/opt/lineweb` fetch + reset）。备选/存档：systemd 直跑 tsx、PM2（`ecosystem.config.js`）、Nginx 反代（`nginx.conf`）、Railway（`docs/DRIVE_SETUP.md` 第 1 章）；本地 Windows 全栈仍为开发/备用 |
 | 数据库结构 | `server/prisma/schema.prisma` | **21 个模型**：User、Post、Comment、Page、DriveFile、DriveFavorite、ScreenTimeLog、AiConfig、AiChatConfig、AiConversation、AiMessage、AiChatImage（AI 对话）、OAuthClient、OAuthGrant、OAuthCode、OAuthRefreshToken、Friendship、FriendRequest、Conversation、ConversationMember、Message（`ApiKey`、`ScreenTimeToken` 已随统一登录移除）；`User.storageQuota` 为网盘空间上限（BigInt，默认 2 GiB）；**本地开发用 SQLite**，**生产为 PostgreSQL 16**（容器 `lineweb-postgres`，基于 `postgres:16-alpine`，挂在 `1panel-network` 上，数据卷 `lineweb-pg-data`） |
 | 数据库连接池 | `server/src/lib/prisma.ts` | Prisma 单例；生产（PostgreSQL 16）在 `DATABASE_URL` 上注入 `connection_limit=10&pool_timeout=30`（由 `DATABASE_POOL_SIZE`/`DATABASE_POOL_TIMEOUT` 控制，默认 10/30）；本地 SQLite 单文件无连接池 |
 | 认证（账号登录令牌） | `server/src/middleware/auth.ts` | **账号凭证**：`POST /api/auth/login` 换取 JWT（`Authorization: Bearer`，下载直链兼容 `?token=`）；**13 个公开路径**在 `index.ts` 白名单；新增公开端点必须同步改白名单；`optionalAuthenticate`（有 token 则解析、无则匿名放行，用于 AI chat；应用令牌与下载票据按游客处理） |
@@ -76,7 +76,7 @@ lineweb/
 | 本地管理 CLI | `cli/src/`（commands/autoupdate/processes/ui） | `setup` 新机器一键安装、`start` 默认生产模式、`update` GitHub 拉取（镜像降级）、`token` 查询存储节点 Key、`autoupdate` S4U 计划任务无人值守更新；构建 `npm run build:cli` → `cli/dist/LineWebCLI.exe` |
 | PWA | `client/index.html` + `client/public/manifest.json` | theme-color、apple-touch-icon、manifest 已配置 |
 | 环境配置 | `server/.env`（本地）/ `/opt/lineweb/.env`（生产） | 本地：`NODE_ENV`、`PORT=3001`、`JWT_SECRET`、`DATABASE_URL`（`file:./lineweb.db`）、`STORAGE_NODE_TOKEN`、`CORS_ORIGIN`、`MAX_FILE_SIZE_MB`；**生产 `.env` 在服务器 `/opt/lineweb/.env`，`DATABASE_URL` 指向 `lineweb-postgres:5432`**，另有 `JWT_SECRET`、`STORAGE_NODE_TOKEN`、`MAX_FILE_SIZE_MB` 等（凭据副本在服务器 `/root/lineweb-secrets.txt`，不进仓库）；缺 `JWT_SECRET`/`STORAGE_NODE_TOKEN` 会直接启动失败。本地与生产 `.env` 各自独立，`.env.docker` 为容器部署模板 |
-| 内网穿透 | `cloudflared`（Cloudflare Tunnel） | **生产公网入口即由它承载**：ECS 上跑 `cloudflared`（systemd 服务 `cloudflared`，隧道 `lineweb-ecs`），`https://web.linetech.online` → `127.0.0.1:8780`；本地开发时也可用 `cloudflared tunnel run <name>` 把本机 :3001 映射为公网 HTTPS 域名，原生支持 WebSocket；无公网 IP 要求。**若日志出现 QUIC 降级，已通过 `/etc/systemd/system/cloudflared.service.d/override.conf` 设置 `TUNNEL_TRANSPORT_PROTOCOL=http2` 强制 HTTP/2 出站**（见部署指南故障排查） |
+| 内网穿透 | 无（已移除） | **2026-10-31 起 Cloudflare Tunnel 已整体移除**（`cloudflared` systemd 服务、二进制、`/etc/cloudflared` 全部删除；移除原因：隧道入口规则长期指向已废弃的宿主 3001 端口导致域名 502，且用户决定不再维护域名入口）。公网入口唯一为 IP 直连 `http://120.24.223.65:8780`。Cloudflare 控制台侧残留（隧道 `lineweb-ecs` + DNS CNAME）由账号持有人自行删除，不删也不影响服务器 |
 | API 缓存策略 | `server/src/index.ts` cachePublic 中间件 | posts/pages/comments 5min、stats 1min；**bing 壁纸已移除** |
 
 ## 架构
@@ -91,8 +91,8 @@ lineweb/
 
 开发：  Vite :5173 → 代理 /api → Express :3001（本地，SQLite）
 生产：  阿里云 ECS：1Panel + Docker Compose（Express 容器 :3001 + PostgreSQL 16 容器），容器内提供 client/dist 静态资源 + SPA fallback
-公网：  https://web.linetech.online（Cloudflare Tunnel → 本机 127.0.0.1:8780）；IP 直连 http://120.24.223.65:8780 备用
-存储：  2026-10-17 实测生产 health 为 storageNode: connected（网盘/头像可用）；本机未运行节点，仓库 config.json 仍指已不可达的 ws://123.207.8.77:3001，实际接入来源待确认。规范配置为 wss://web.linetech.online/ws/storage（已实测可握手）
+公网：  IP 直连 http://120.24.223.65:8780（唯一入口，纯 HTTP；Cloudflare Tunnel 已于 2026-10-31 移除）
+存储：  外部存储节点主动外连（容器日志实测来源 58.253.109.135，规范配置 ws://120.24.223.65:8780/ws/storage），health 实测 storageNode: connected
 备用：  本地 Windows 全栈（开发/应急，非生产）
 ```
 
@@ -138,33 +138,24 @@ server.listen(3001)
      # 再执行 prisma db push + prisma db seed
   7. 验收：curl http://127.0.0.1:8780/api/health
      # 期望 {"status":"ok","db":"connected",...}，docker ps 显示容器 healthy
-  8. 阿里云安全组放行 22、18080、3001
-     —— 当前三者均已放行；若后续存储节点改走 wss://web.linetech.online/ws/storage（隧道），
-        可考虑关闭 3001 的公网入站
+  8. 阿里云安全组放行 22、18080、8780
+     —— 实测三者均已放行；3001 的公网入站已收紧关闭（2026-10-31 验证）
 
-本地 Windows（存储节点，文件不出本机）：
-  1. storage-node/config.json：serverUrl=wss://web.linetech.online/ws/storage（直连备选 ws://120.24.223.65:3001/ws/storage），
-     token 与服务器 /opt/lineweb/.env 的 STORAGE_NODE_TOKEN 完全一致，storagePath=D:/LineWebDrive
+存储节点（外部机器，文件不出本机）：
+  1. storage-node/config.json：serverUrl=ws://120.24.223.65:8780/ws/storage，
+     token 与服务器 /opt/lineweb/.env 的 STORAGE_NODE_TOKEN 完全一致，storagePath 指向本地磁盘
   2. python main.py（或用 nssm 注册 Windows 服务开机自启）
   3. 节点为 WebSocket 客户端主动外连，本地无需公网 IP / 端口映射
-  4. 节点接入状态（2026-10-17 实测）：/api/health 显示 "storageNode":"connected"，网盘/头像可用；
-     但本机未运行节点、仓库 config.json 仍指向已不可达的 ws://123.207.8.77:3001，
-     线上实际由哪台节点接入待确认。规范做法：serverUrl 用 wss://web.linetech.online/ws/storage
+  4. 节点接入状态（2026-10-31 实测）：/api/health 显示 "storageNode":"connected"，网盘/头像可用；
+     容器日志确认线上节点自外部 IP 58.253.109.135 直连接入（不走任何隧道）
 
 公网入口：
-  当前 https://web.linetech.online（HTTPS，Cloudflare 边缘证书）→ 由 Cloudflare Tunnel 转发到本机
-  http://127.0.0.1:3001：cloudflared 装在 /usr/local/bin/cloudflared，已注册为 systemd 服务
-  cloudflared（enabled + active，开机自启），隧道名 lineweb-ecs，入口规则
-  web.linetech.online → http://127.0.0.1:3001；DNS 是 CNAME → <隧道ID>.cfargotunnel.com（Cloudflare 代理开启），
-  不再用 A 记录指向源站 IP。实测：/api/health 200 且 db: connected、首页 200、登录接口 200、
-  wss://web.linetech.online/ws/storage 握手 101。
-  为什么必须走隧道：阿里云大陆节点会按 HTTP Host 头拦截未备案域名，返回 403 + Server: Beaver +
-  Non-compliance ICP Filing 页面；实测带 Host: web.linetech.online 直连 IP:3001 同样 403（换端口、
-  套橙云 A 记录都没用，因为回源 Host 仍是未备案域名），而 Cloudflare 免费版不代理 3001 端口。
-  隧道是 cloudflared 主动外连（TCP/QUIC 7844），不产生「带未备案域名的入站请求」，所以能正常服务。
-  IP 直连 http://120.24.223.65:3001 仍然可用（/api/health 200）。
-  ⚠️ 合规提示：未备案域名指向大陆服务器属备案合规灰区（阿里云要求指向大陆服务器的域名备案），
-  隧道只是规避了技术拦截；要彻底合规需完成 ICP 备案或把服务器换到非大陆区域。
+  唯一入口：IP 直连 http://120.24.223.65:8780（纯 HTTP，无 HTTPS）。
+  2026-10-31 起 Cloudflare Tunnel 已整体移除（此前隧道入口规则长期指向已废弃的宿主 3001 端口，
+  域名一直 502；用户决定不再维护域名入口，cloudflared 服务/二进制/配置已全部删除）。
+  Cloudflare 控制台侧残留（隧道 lineweb-ecs、DNS CNAME）由账号持有人自行处理，不删也不影响服务器。
+  若未来要恢复 HTTPS/域名：需先完成 ICP 备案（阿里云大陆节点按 Host 头拦截未备案域名，
+  返回 403 + Server: Beaver + Non-compliance ICP Filing），或把服务器换到非大陆区域。
   1Panel 面板：http://120.24.223.65:18080/lineweb_panel（用户名 lineweb）——继续用 IP:18080 访问，
   **不要在面板里绑定域名**（面板设置 → 域名绑定）：绑了之后用 IP 访问会被拦成
   "Access Temporarily Unavailable"，恢复命令是 1pctl reset domain && systemctl restart 1panel-core。
@@ -252,7 +243,7 @@ server.listen(3001)
 
 ### 安全
 
-- **明文 token 存储于 `storage-node/config.json`，且 `.gitignore` 未覆盖该文件** — 一旦提交即对外公开（仓库工作区当前就是明文 token），保守应视为**已泄露**：需轮换 `STORAGE_NODE_TOKEN` 并把该文件加入 `.gitignore`，或改用 `LINEWEB_STORAGE_TOKEN` 环境变量注入；另注意直连 `ws://` 时 token 明文过网，改用 `wss://web.linetech.online/ws/storage`（Tunnel）可加密整条链路
+- **明文 token 存储于 `storage-node/config.json`，且 `.gitignore` 未覆盖该文件** — 一旦提交即对外公开（仓库工作区当前就是明文 token），保守应视为**已泄露**：需轮换 `STORAGE_NODE_TOKEN` 并把该文件加入 `.gitignore`，或改用 `LINEWEB_STORAGE_TOKEN` 环境变量注入；另注意公网入口现为 IP 直连 `ws://`，token 明文过网（Cloudflare Tunnel 已移除，链路加密暂无方案，恢复 HTTPS 前先接受该风险）
 - **JWT 存于 localStorage** — 标准 SPA 模式，存在 XSS 风险
 - **AI chat 接口公开** — `/api/ai/chat` 匿名可调（走 `optionalAuthenticate`，登录用户获额外上下文），消耗 API key 配额，滥用风险
 
@@ -310,9 +301,9 @@ docker compose logs -f server         # 跟踪 server 容器日志
 docker compose restart server         # 重启 server 容器
 docker compose ps                     # 查看容器与健康状态
 curl http://127.0.0.1:3001/api/health # 验收：{"status":"ok","db":"connected",...}
-cd storage-node && python main.py     # 本地 Windows 存储节点，config.json 指向 wss://web.linetech.online/ws/storage（直连备选 ws://120.24.223.65:3001/ws/storage）
+cd storage-node && python main.py     # 存储节点，config.json 指向 ws://120.24.223.65:8780/ws/storage
 # 更新（服务器无法直连 GitHub，git fetch/reset 跑不通）：走镜像/代理，或从本地 git push 到服务器后走「本地产物 + Dockerfile.prebuilt」重建
-# 本地开发/备用：npm run dev + Cloudflare Tunnel（cloudflared tunnel run <name>）
+# 本地开发/备用：npm run dev（公网 HTTPS 隧道已于 2026-10-31 移除）
 
 # 备选/存档：systemd 直跑 tsx、PM2（ecosystem.config.js）、Nginx 反代（nginx.conf）
 #   原 GitHub Actions SSH 自动部署 workflow（.github/workflows/deploy.yml）已删除
@@ -324,8 +315,8 @@ cd storage-node && python main.py     # 本地 Windows 存储节点，config.jso
 - **生产需要 SQLite → PostgreSQL 的 schema 转换** — 本地开发用 SQLite，生产是 PostgreSQL 16 容器；容器首次启动时 `server/scripts/docker-entrypoint.sh` 会把 SQLite schema 改写为 PostgreSQL（`prisma/schema.pg.prisma`）后执行 `prisma db push`（首启带 `--accept-data-loss`）与 `prisma db seed`，这是生产链路的一部分，不是备选机制。
 - **服务器无法直连 GitHub** — 该 ECS 直连 GitHub 极慢/不可达（实测 clone 两分钟只拉到约 200KB），代码是本地 `git bundle` 上传后 clone 的；因此 `git fetch && git reset --hard` 在服务器上跑不通，更新需走镜像/代理，或从本地机器 `git push` 到服务器（本地 → 服务器 SSH 可达）。
 - **绝不在该 ECS 上跑 `docker compose up -d --build`** — 机器只有 2 vCPU / 1.6GB 内存（2G swap 已存在），仓库根 `Dockerfile` 的 Stage 1 是 `npm ci` + `npx vite build`，峰值约 1.2GB，会把整机拖进 swap 抖动：`web.linetech.online` 返回 Cloudflare `1033`、1Panel 面板 `:18080` 与 IP 直连 `:3001` 同时无响应、SSH 卡在 banner exchange，**同机其他站点（如 `aurora-center`）一起下线**（2026-10-24 实测踩过，最终靠重启服务器恢复）。`docker-compose.yml` 的 `deploy.resources.limits` 只限制运行期容器，**管不住构建过程**，不能当兜底。正确做法：本地 `npm run build` → 把 `dist` 传成 `/opt/lineweb/client-dist/`（该目录已 gitignore，且不在 `.dockerignore` 里，被忽略的是 `client/dist`）→ `docker build -f Dockerfile.prebuilt -t lineweb-server:latest . && docker compose up -d`（不带 `--build`），实测全程约 1 分钟、机器无压力。
-- **阿里云大陆节点按 Host 头拦截未备案域名** — 带 `Host: web.linetech.online` 请求 ECS 会返回 `403` + `Server: Beaver` + `Non-compliance ICP Filing`（实测直连 `IP:3001` 同样 403，换端口、套橙云 A 记录都无效，因为回源 Host 仍是未备案域名；Cloudflare 免费版也不代理 3001 端口）。当前用 **Cloudflare Tunnel**（cloudflared 主动外连，不产生带该域名的入站请求）规避，属**备案合规灰区**：要彻底合规需完成 ICP 备案或把服务器换到非大陆区域。
-- **storageNode 当前为 connected（2026-10-17 实测），但接入来源待确认** — 生产 `/api/health` 返回 `"storageNode":"connected"`（服务端与数据库均正常，隧道入口 `https://web.linetech.online/api/health` 200、`db: connected`），网盘/头像可用；然而**本机没有运行存储节点**，且仓库 `storage-node/config.json` 仍指向已不可达的 `ws://123.207.8.77:3001`，说明线上接入的是另一份配置/另一台机器。若要在本机跑节点：把 `serverUrl` 改为 `wss://web.linetech.online/ws/storage`（Cloudflare Tunnel，已实测握手 101；链路加密且改用隧道后可关闭安全组 3001 公网入口）或 `ws://120.24.223.65:3001/ws/storage`（直连备选），token 换成服务器 `/opt/lineweb/.env` 的 `STORAGE_NODE_TOKEN`。
+- **域名入口已放弃、Cloudflare Tunnel 已移除（2026-10-31）** — 阿里云大陆节点按 Host 头拦截未备案域名（`403` + `Server: Beaver` + `Non-compliance ICP Filing`），此前靠 Cloudflare Tunnel 规避；因隧道入口规则长期指向已废弃的宿主 3001 端口（域名持续 502）且用户决定不再维护域名，cloudflared 服务/二进制/`/etc/cloudflared` 已全部删除，公网入口收敛为 **IP 直连 `http://120.24.223.65:8780`（纯 HTTP）**。要恢复域名/HTTPS 需先完成 ICP 备案或换非大陆服务器。
+- **storageNode 来源已确认（2026-10-31）** — 生产 `/api/health` 显示 `"storageNode":"connected"`，容器日志 `Storage node connecting from ::ffff:58.253.109.135`：线上节点自外部 IP **直连**（不经任何隧道）。节点规范配置为 `serverUrl=ws://120.24.223.65:8780/ws/storage`，token 用服务器 `/opt/lineweb/.env` 的 `STORAGE_NODE_TOKEN`；仓库 `storage-node/config.json` 仍指向已不可达的 `ws://123.207.8.77:3001`（勿照抄）。
 - **Storage node 是外部进程** — Python 进程运行在本地 Windows 机器上，未容器化。通过 WebSocket 以指数退避重连（最长 60s）方式连接到 `/ws/storage`；认证 5s 超时、心跳 30s。运行期间通过 `SetThreadExecutionState` 阻止系统休眠；文件 I/O 走线程池避免阻塞事件循环。
 - **LineWeb CLI** — `cli/` 子项目打包为单文件 exe，双击即交互式管理本地服务（setup/start/stop/restart/status/update/logs/token）；`start` 默认生产模式；`autoupdate` 通过 Windows S4U 计划任务无人值守拉取更新；构建依赖 pkg 的 node22 基础二进制（缓存于 `~/.pkg-cache/v3.6`，丢失时需通过镜像下载）。
 - **中文友好默认配置** — `.npmrc` 设置 npmmirror.com 镜像；文档使用中文。
