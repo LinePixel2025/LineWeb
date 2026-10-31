@@ -598,21 +598,39 @@
 .gh-pet-ear,
 .gh-pet-tail,
 .gh-pet-wing,
-.gh-pet-tuft {
+.gh-pet-tuft,
+.gh-pet-tongue {
   transform-box: fill-box;
 }
 .gh-pet-head { transform-origin: 50% 92%; }
 .gh-pet-eye { transform-origin: center; }
-.gh-pet-ear--l { transform-origin: 78% 96%; }
-.gh-pet-ear--r { transform-origin: 22% 96%; }
+/* 耳根贴新包围盒：尖耳（猫）在底部内侧，垂耳（狗）在顶部内侧 */
+.gh-pet-ear--l { transform-origin: 86% 84%; }
+.gh-pet-ear--r { transform-origin: 14% 84%; }
+.gh-pet-ear--dog.gh-pet-ear--l { transform-origin: 92% 8%; }
+.gh-pet-ear--dog.gh-pet-ear--r { transform-origin: 8% 8%; }
 .gh-pet-tuft { transform-origin: 50% 100%; }
 
-/* --- idle 循环：眨眼 / 尾巴 / 翅膀 --- */
+/* --- idle 循环：眨眼 / 尾巴 / 翅膀 / 猫耳抽动 / 狗吐舌 --- */
 .gh-pet-eye { animation: gh-pet-blink 4.6s ease-in-out infinite; }
-.gh-pet-tail--cat { transform-origin: 6% 96%; animation: gh-pet-tail-sway 3.2s ease-in-out infinite; }
-.gh-pet-tail--dog { transform-origin: 4% 94%; animation: gh-pet-tail-wag 0.9s ease-in-out infinite; }
-.gh-pet-wing--l { transform-origin: 94% 16%; animation: gh-pet-wing-flap 3.8s ease-in-out infinite; }
-.gh-pet-wing--r { transform-origin: 6% 16%; animation: gh-pet-wing-flap 3.8s ease-in-out infinite; }
+.gh-pet-tail--cat { transform-origin: 14% 92%; animation: gh-pet-tail-sway 3.2s ease-in-out infinite; }
+.gh-pet-tail--dog { transform-origin: 20% 82%; animation: gh-pet-tail-wag 0.9s ease-in-out infinite; }
+.gh-pet-wing--l { transform-origin: 90% 8%; animation: gh-pet-wing-flap 3.8s ease-in-out infinite; }
+.gh-pet-wing--r { transform-origin: 10% 8%; animation: gh-pet-wing-flap 3.8s ease-in-out infinite; }
+/* 猫右耳偶尔抖一下（96% 前完全静止；sad 静态垂耳时不抽） */
+.gh-pet-sprite:not(.gh-pet-sprite--sad) .gh-pet-ear--cat.gh-pet-ear--r {
+  animation: gh-pet-ear-twitch 7.4s ease-in-out infinite;
+}
+/* 狗舌头：默认藏起，play/happy 吐舌并小幅摆动（摆动在 reduced-motion 块停掉） */
+.gh-pet-tongue {
+  opacity: 0;
+  transform-origin: 50% 10%;
+}
+.gh-pet-anim-play .gh-pet-tongue,
+.gh-pet-anim-happy .gh-pet-tongue {
+  opacity: 1;
+  animation: gh-pet-tongue-wash 0.5s ease-in-out infinite;
+}
 
 /* --- sad：耳朵下垂 / 呆毛耷拉 / 汗滴 / idle 放慢 --- */
 .gh-pet-sprite--sad .gh-pet-ear--l { transform: rotate(-18deg); }
@@ -728,6 +746,17 @@
 @keyframes gh-pet-wing-flap {
   0%, 11%, 27%, 100% { transform: rotate(0); }
   15%, 23% { transform: rotate(-24deg); }
+}
+/* 猫右耳抽动：长周期里只有 96%-98% 快速抖动一下 */
+@keyframes gh-pet-ear-twitch {
+  0%, 95.9%, 98.4%, 100% { transform: rotate(0); }
+  96.5% { transform: rotate(8deg); }
+  97.4% { transform: rotate(-7deg); }
+}
+/* 狗吐舌小幅摆动（从舌根向下伸缩） */
+@keyframes gh-pet-tongue-wash {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.28); }
 }
 
 /* =============================================================
@@ -900,6 +929,7 @@
   .gh-pet-sprite .gh-pet-tail,
   .gh-pet-sprite .gh-pet-wing,
   .gh-pet-sprite .gh-pet-tuft,
+  .gh-pet-sprite .gh-pet-tongue,
   .gh-pet-fx,
   .gh-pet-glow,
   .gh-pet-sweat,
@@ -908,6 +938,7 @@
     animation: none !important;
   }
   .gh-pet-fx { display: none !important; }
+  /* 舌头保持可见（opacity 由 play/happy 类控制），仅停掉摆动 */
   .gh-pet-sprite--sad .gh-pet-ear--l { transform: rotate(-18deg); }
   .gh-pet-sprite--sad .gh-pet-ear--r { transform: rotate(18deg); }
 }
