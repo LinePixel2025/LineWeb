@@ -37,7 +37,7 @@ function formatTime(value: string): string {
  *
  * 与聊天的 neko 群公告不同：这里是站点级广播，发布后全站顶部公告条与聊天页入口都会展示。
  */
-export default function AnnouncementAdminPage() {
+export function ContentAnnouncementsPanel() {
   const [announcements, setAnnouncements] = useState<SiteAnnouncement[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -328,3 +328,6 @@ export default function AnnouncementAdminPage() {
     </div>
   )
 }
+
+// 兼容默认导出（原独立页面入口，现作为「内容管理-公告」Tab嵌入 Tab 容器）
+export default ContentAnnouncementsPanel

@@ -19,7 +19,7 @@ interface PostsResponse {
   totalPages: number
 }
 
-export default function AdminPage() {
+export function ContentPostsPanel() {
   const { can } = useAuth()
   const [data, setData] = useState<PostsResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -119,3 +119,6 @@ export default function AdminPage() {
     </div>
   )
 }
+
+// 兼容默认导出（原独立页面入口，现作为「内容管理-文章」Tab嵌入 Tab 容器）
+export default ContentPostsPanel

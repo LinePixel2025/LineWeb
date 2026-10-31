@@ -86,21 +86,23 @@ export function roleLabel(role: string | undefined): string {
 export const ADMIN_ROUTE_CAPABILITIES: { prefix: string; capability: Capability | null }[] = [
   { prefix: '/admin/new', capability: 'content:write' },
   { prefix: '/admin/edit', capability: 'content:write' },
-  { prefix: '/admin/pages', capability: 'content:manage' },
-  { prefix: '/admin/comments', capability: 'comment:moderate' },
-  { prefix: '/admin/users', capability: 'user:manage' },
-  { prefix: '/admin/devices', capability: 'device:view' },
-  { prefix: '/admin/ai', capability: 'ai:configure' },
-  { prefix: '/admin/ai-chat', capability: 'ai:configure' },
+  { prefix: '/admin/pages', capability: 'content:manage' }, // 页面列表旧地址（redirect 到 /admin?tab=pages）+ 页面编辑器
+  { prefix: '/admin/comments', capability: 'comment:moderate' }, // 旧地址（redirect 到 /admin?tab=comments）
+  { prefix: '/admin/users', capability: 'user:manage' },   // 用户与设备二合一
+  { prefix: '/admin/devices', capability: 'device:view' }, // 旧地址（redirect 到 /admin/users?tab=devices）
+  { prefix: '/admin/ai', capability: 'ai:configure' },     // AI 设置二合一（助手 + 对话）
+  { prefix: '/admin/ai-chat', capability: 'ai:configure' }, // 旧地址（redirect 到 /admin/ai?tab=chat）
   { prefix: '/admin/apps', capability: 'app:manage' },
   { prefix: '/admin/proxy', capability: 'proxy:manage' },
   { prefix: '/admin/features', capability: 'feature:manage' },
   { prefix: '/admin/points', capability: 'points:manage' },
   { prefix: '/admin/chat', capability: 'chat:manage' },
-  { prefix: '/admin/announcements', capability: 'content:manage' },
+  { prefix: '/admin/announcements', capability: 'content:manage' }, // 旧地址（redirect 到 /admin?tab=announcements）
   { prefix: '/personal-space', capability: 'personal:manage' }, // 个人空间（管理员私人服务，非 /admin 前缀）
   { prefix: '/admin/api', capability: null },        // API 接入指南：任何管理区账号可见
-  { prefix: '/admin', capability: 'content:write' }, // 文章管理（含 /admin 首页）
+  // 内容管理（/admin 首页，文章/页面/公告/评论 Tab 合并）：保底 content:write（作者可见文章 Tab），
+  // 页面/公告/评论 Tab 由 ContentAdminPage 内按能力过滤，服务端端点仍各自守卫
+  { prefix: '/admin', capability: 'content:write' },
 ]
 
 /** 取路径所需能力：undefined = 非管理区路径（不做能力判断） */

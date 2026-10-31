@@ -94,7 +94,7 @@ function CommentRow({
 
 /* ---------- main component ---------- */
 
-export default function CommentAdminPage() {
+export function ContentCommentsPanel() {
   const [groups, setGroups] = useState<PostGroup[]>([])
   const [groupsLoading, setGroupsLoading] = useState(true)
   const [selectedPost, setSelectedPost] = useState<{ postId: number; title: string } | null>(null)
@@ -297,3 +297,6 @@ export default function CommentAdminPage() {
     </div>
   )
 }
+
+// 兼容默认导出（原独立页面入口，现作为「内容管理-评论」Tab嵌入 Tab 容器）
+export default ContentCommentsPanel

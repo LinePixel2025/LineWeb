@@ -37,7 +37,7 @@ const PROVIDER_PRESETS: { value: string; label: string; models: string[]; baseUr
   { value: 'custom', label: '自定义', models: [] },
 ]
 
-export default function AiChatAdminPage() {
+export function AiChatPanel() {
   const [config, setConfig] = useState<AiChatConfigData | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -484,3 +484,6 @@ export default function AiChatAdminPage() {
     </div>
   )
 }
+
+// 兼容默认导出（原独立页面入口，现作为「AI 设置-AI 对话」Tab嵌入 Tab 容器）
+export default AiChatPanel

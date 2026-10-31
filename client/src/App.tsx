@@ -1,5 +1,5 @@
 import { Component, lazy, Suspense, useEffect, type ReactNode } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { FeatureProvider } from './contexts/FeatureContext'
@@ -60,20 +60,16 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const DynamicPage = lazy(() => import('./pages/DynamicPage'))
 const DrivePage = lazy(() => import('./pages/DrivePage'))
 const ChatPage = lazy(() => import('./pages/ChatPage'))
-const AdminPage = lazy(() => import('./pages/AdminPage'))
 const EditorPage = lazy(() => import('./pages/EditorPage'))
-const CommentAdminPage = lazy(() => import('./pages/admin/CommentAdminPage'))
-const PageList = lazy(() => import('./pages/admin/PageList'))
 const PageEditor = lazy(() => import('./pages/admin/PageEditor'))
-const UserAdminPage = lazy(() => import('./pages/admin/UserAdminPage'))
+// 合并后的管理页（Tab 容器）+ 保留的独立管理页
+const ContentAdminPage = lazy(() => import('./pages/admin/ContentAdminPage'))
+const UserDeviceAdminPage = lazy(() => import('./pages/admin/UserDeviceAdminPage'))
+const AiSettingsAdminPage = lazy(() => import('./pages/admin/AiSettingsAdminPage'))
 const ApiDocsPage = lazy(() => import('./pages/admin/ApiDocsPage'))
-const DeviceMonitorPage = lazy(() => import('./pages/admin/DeviceMonitorPage'))
-const AiAdminPage = lazy(() => import('./pages/admin/AiAdminPage'))
-const AiChatAdminPage = lazy(() => import('./pages/admin/AiChatAdminPage'))
 const AppAdminPage = lazy(() => import('./pages/admin/AppAdminPage'))
 const ProxyAdminPage = lazy(() => import('./pages/admin/ProxyAdminPage'))
 const FeatureAdminPage = lazy(() => import('./pages/admin/FeatureAdminPage'))
-const AnnouncementAdminPage = lazy(() => import('./pages/admin/AnnouncementAdminPage'))
 const PointsAdminPage = lazy(() => import('./pages/admin/PointsAdminPage'))
 const ChatAdminPage = lazy(() => import('./pages/admin/ChatAdminPage'))
 const PersonalSpacePage = lazy(() => import('./pages/PersonalSpacePage'))
@@ -313,22 +309,26 @@ export default function App() {
 
                   {/* Admin layout — separate from main site */}
                   <Route element={<AdminRoute><AdminLayout /></AdminRoute>}>
-                    <Route path="/admin" element={<AdminPage />} />
+                    {/* 内容管理：文章/页面/公告/评论四合一（Tab 容器）；编辑器仍走独立路由 */}
+                    <Route path="/admin" element={<ContentAdminPage />} />
                     <Route path="/admin/new" element={<EditorPage />} />
                     <Route path="/admin/edit/:id" element={<EditorPage />} />
-                    <Route path="/admin/comments" element={<CommentAdminPage />} />
-                    <Route path="/admin/pages" element={<PageList />} />
+                    {/* 旧地址 → 内容管理对应 Tab（能力守卫由 ADMIN_ROUTE_CAPABILITIES 保持原语义） */}
+                    <Route path="/admin/comments" element={<Navigate to="/admin?tab=comments" replace />} />
+                    <Route path="/admin/pages" element={<Navigate to="/admin?tab=pages" replace />} />
                     <Route path="/admin/pages/new" element={<PageEditor />} />
                     <Route path="/admin/pages/:id/edit" element={<PageEditor />} />
-                    <Route path="/admin/users" element={<UserAdminPage />} />
+                    <Route path="/admin/announcements" element={<Navigate to="/admin?tab=announcements" replace />} />
+                    {/* 用户与设备二合一；旧地址 /admin/devices → 设备 Tab */}
+                    <Route path="/admin/users" element={<UserDeviceAdminPage />} />
+                    <Route path="/admin/devices" element={<Navigate to="/admin/users?tab=devices" replace />} />
                     <Route path="/admin/features" element={<FeatureAdminPage />} />
-                    <Route path="/admin/announcements" element={<AnnouncementAdminPage />} />
                     <Route path="/admin/points" element={<PointsAdminPage />} />
                     <Route path="/admin/chat" element={<ChatAdminPage />} />
                     <Route path="/admin/api" element={<ApiDocsPage />} />
-                    <Route path="/admin/devices" element={<DeviceMonitorPage />} />
-                    <Route path="/admin/ai" element={<AiAdminPage />} />
-                    <Route path="/admin/ai-chat" element={<AiChatAdminPage />} />
+                    {/* AI 设置二合一（AI 助手 + AI 对话）；旧地址 /admin/ai-chat → 对话 Tab */}
+                    <Route path="/admin/ai" element={<AiSettingsAdminPage />} />
+                    <Route path="/admin/ai-chat" element={<Navigate to="/admin/ai?tab=chat" replace />} />
                     <Route path="/admin/apps" element={<AppAdminPage />} />
                     <Route path="/admin/proxy" element={<ProxyAdminPage />} />
                     {/* 个人空间：仅管理员可进（personal:manage），AdminCapabilityRoute 按路径能力守卫 */}

@@ -115,7 +115,7 @@ function quotaDisplay(user: UserItem): string {
 
 /* ---------- main component ---------- */
 
-export default function UserAdminPage() {
+export function UsersPanel() {
   const { user: authUser } = useAuth()
 
   const [users, setUsers] = useState<UserItem[]>([])
@@ -481,3 +481,6 @@ export default function UserAdminPage() {
     </div>
   )
 }
+
+// 兼容默认导出（原独立页面入口，现作为「用户与设备-用户」Tab嵌入 Tab 容器）
+export default UsersPanel

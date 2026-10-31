@@ -22,7 +22,7 @@ interface DevicesResponse {
   allTime: DeviceInfo[]
 }
 
-export default function DeviceMonitorPage() {
+export function DevicesPanel() {
   const [data, setData] = useState<DevicesResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(true)
@@ -225,3 +225,6 @@ export default function DeviceMonitorPage() {
     </div>
   )
 }
+
+// 兼容默认导出（原独立页面入口，现作为「用户与设备-设备」Tab嵌入 Tab 容器）
+export default DevicesPanel

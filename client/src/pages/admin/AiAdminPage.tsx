@@ -22,7 +22,7 @@ const PROVIDER_PRESETS: { value: string; label: string; models: string[]; baseUr
 
 const DEFAULT_SYSTEM_PROMPT = `你是 LineWeb 网站的 AI 助手，你可以回答关于网站内容、文章、功能等问题。请用中文回答，保持友好、专业的语气。如果用户问到网站没有的信息，请如实告知。`
 
-export default function AiAdminPage() {
+export function AiAssistantPanel() {
   const [config, setConfig] = useState<AiConfigData | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -350,3 +350,6 @@ export default function AiAdminPage() {
     </div>
   )
 }
+
+// 兼容默认导出（原独立页面入口，现作为「AI 设置-AI 助手」Tab嵌入 Tab 容器）
+export default AiAssistantPanel

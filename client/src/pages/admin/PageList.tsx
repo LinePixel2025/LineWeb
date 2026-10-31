@@ -21,7 +21,7 @@ interface PagesResponse {
   totalPages: number
 }
 
-export default function PageList() {
+export function ContentPagesPanel() {
   const [data, setData] = useState<PagesResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
@@ -117,3 +117,6 @@ export default function PageList() {
     </div>
   )
 }
+
+// 兼容默认导出（原独立页面入口，现作为「内容管理-页面」Tab嵌入 Tab 容器）
+export default ContentPagesPanel

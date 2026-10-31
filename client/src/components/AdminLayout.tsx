@@ -8,60 +8,83 @@ import { canAccessAdminPath } from '../lib/permissions'
 import { FEATURE_KEYS, type FeatureKey } from '../lib/features'
 import api from '../lib/api'
 
-/** 导航项可见性由 lib/permissions.ts 的 ADMIN_ROUTE_CAPABILITIES 决定（与路由守卫同源） */
-const navItems: { path: string; label: string; icon: React.ReactNode }[] = [
-  { path: '/admin', label: '文章管理', icon: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 1.75A.75.75 0 01.75 1h4.253c1.227 0 2.317.59 3 1.501A3.744 3.744 0 0111.006 1h4.245a.75.75 0 01.75.75v10.5a.75.75 0 01-.75.75h-4.507a2.25 2.25 0 00-1.591.659l-.622.621a.75.75 0 01-1.06 0l-.622-.621A2.25 2.25 0 005.258 13H.75a.75.75 0 01-.75-.75V1.75zm8.755 3a3 3 0 01-2.154.886H1.5V11.5h3.753a3.73 3.73 0 012.502 1.067V4.75zm1.5 0v7.817A3.73 3.73 0 0112.747 11.5h3.253V2.5H10.9a3.745 3.745 0 00-2.645 1.136z"/></svg>
-  ) },
-  { path: '/admin/new', label: '写文章', icon: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 012.474 0l1.086 1.086a1.75 1.75 0 010 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 01-.927-.928l.929-3.25a1.75 1.75 0 01.445-.758l8.61-8.61zm1.414 1.06a.25.25 0 00-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 000-.354l-1.086-1.086zM11.189 6.25L9.75 4.81l-6.286 6.287a.25.25 0 00-.064.108l-.558 1.953 1.953-.558a.249.249 0 00.108-.064l6.286-6.286z"/></svg>
-  ) },
-  { path: '/admin/comments', label: '评论管理', icon: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0113.25 12H9.06l-2.573 2.573A1.457 1.457 0 014 13.543V12H2.75A1.75 1.75 0 011 10.25v-7.5zM2.75 2.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 01.75.75v2.19l2.72-2.72a.75.75 0 01.53-.22h4.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25H2.75z"/></svg>
-  ) },
-  { path: '/admin/pages', label: '页面管理', icon: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v12.5A1.75 1.75 0 0114.25 16H1.75A1.75 1.75 0 010 14.25V1.75zM1.75 1.5a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25V1.75a.25.25 0 00-.25-.25H1.75zM4 4.75A.75.75 0 014.75 4h6.5a.75.75 0 010 1.5h-6.5A.75.75 0 014 4.75zm0 3a.75.75 0 01.75-.75h6.5a.75.75 0 010 1.5h-6.5A.75.75 0 014 7.75zm0 3a.75.75 0 01.75-.75h3.5a.75.75 0 010 1.5h-3.5a.75.75 0 01-.75-.75z"/></svg>
-  ) },
-  { path: '/admin/users', label: '用户管理', icon: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 3.5a2.75 2.75 0 115.5 0 2.75 2.75 0 01-5.5 0zm2.75-1.25a1.25 1.25 0 100 2.5 1.25 1.25 0 000-2.5zM3.5 12.477a3.854 3.854 0 015.814-3.354 3.854 3.854 0 013.186 0c.537.3.98.763 1.215 1.334.235.57.328 1.207.326 1.848a.75.75 0 01-1.5 0c.002-.515-.09-1.013-.273-1.458a2.37 2.37 0 00-.809-1.013 2.357 2.357 0 00-2.518 0A2.37 2.37 0 008.04 10.847c-.183.445-.275.943-.273 1.458a.75.75 0 01-1.5 0c.002-.641.095-1.278.326-1.848.235-.571.678-1.034 1.215-1.334a3.855 3.855 0 00-4.309-.003.75.75 0 01-.621-1.364c1.22-.558 2.644-.77 4.008-.587.335-.18.689-.326 1.057-.437 1.002-.302 2.06-.302 3.062 0l.003.001a.75.75 0 01.003.001c.367.111.72.257 1.054.436 1.365-.183 2.789.029 4.008.587a.75.75 0 01-.621 1.364 3.855 3.855 0 00-4.308.003.75.75 0 01-.604-1.374c.543-.234 1.138-.234 1.682 0a2.354 2.354 0 01.72.393v-.425a1.75 1.75 0 00-1.75-1.75H3.75A1.75 1.75 0 002 11.625v.425c.173-.175.418-.314.72-.393.544-.234 1.139-.234 1.683 0 .486.21.934.586 1.174 1.079.241.493.365 1.06.365 1.627a.75.75 0 01-1.5 0 1.88 1.88 0 00-.25-.934 1.88 1.88 0 00-.717-.674 2.355 2.355 0 00-2.204-.001.75.75 0 01-.605-1.374c.555-.24 1.164-.241 1.721-.002a.755.755 0 01.008.003z"/></svg>
-  ) },
-  { path: '/admin/features', label: '功能开关', icon: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 2.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm-3.5 2a3.5 3.5 0 0 1 6.9-.8h5.35a.75.75 0 0 1 0 1.5H8.9a3.5 3.5 0 0 1-6.9.8H.75a.75.75 0 0 1 0-1.5H2Zm8.5 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm-3.5 2a3.5 3.5 0 0 1 6.9-.8h1.35a.75.75 0 0 1 0 1.5h-1.35a3.5 3.5 0 0 1-6.9.8H2.75a.75.75 0 0 1 0-1.5h4.25Z"/></svg>
-  ) },
-  { path: '/admin/announcements', label: '站点公告', icon: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 6.25a.75.75 0 0 1 .75.75v2a.75.75 0 0 1-1.5 0V7a.75.75 0 0 1 .75-.75Zm2.6-.98A.75.75 0 0 1 5.5 5.94v4.12a.75.75 0 0 1-1.15.67L3 10.06V5.94l1.35-.67ZM7.15 3.2a.75.75 0 0 1 1.05.3l2.3 4.02v1.03l-2.3 4.02a.75.75 0 0 1-1.35-.63V3.83a.75.75 0 0 1 .3-.63ZM11.75 5.5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5a.75.75 0 0 1 .75-.75ZM14 6.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5a.75.75 0 0 1 .75-.75Z"/></svg>
-  ) },
-  { path: '/admin/points', label: '积分体系', icon: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 110 16A8 8 0 018 0zm0 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8 3.25a.75.75 0 01.75.75v.31a2.5 2.5 0 011.62 2.36.75.75 0 01-1.5 0 .9.9 0 00-.87-.9v1.61l.63.22a1.9 1.9 0 011.24 1.79 2.5 2.5 0 01-1.87 2.41V12a.75.75 0 01-1.5 0v-.18a2.55 2.55 0 01-1.87-2.46.75.75 0 011.5 0c0 .58.44 1.06 1.12 1.13V8.9l-.62-.21a1.9 1.9 0 01-1.25-1.79A2.5 2.5 0 017.25 4.5v-.5A.75.75 0 018 3.25zm-.75 2.9v1.33l.75.25V5.9a.95.95 0 00-.75.25zm1.5 3.28v1.42c.45-.11.75-.4.75-.72 0-.3-.25-.56-.75-.7z"/></svg>
-  ) },
-  { path: '/admin/chat', label: '聊天治理', icon: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v9.5A1.75 1.75 0 0114.25 14H8.061l-2.574 2.573A1.458 1.458 0 013 15.543V14H1.75A1.75 1.75 0 010 12.25v-9.5zM1.75 2.5a.25.25 0 00-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 01.75.75v2.19l2.72-2.72a.75.75 0 01.53-.22h6.5a.25.25 0 00.25-.25v-9.5a.25.25 0 00-.25-.25H1.75zM4.5 5.25a.75.75 0 01.75-.75h5.5a.75.75 0 010 1.5h-5.5a.75.75 0 01-.75-.75zm0 2.75a.75.75 0 01.75-.75h3.5a.75.75 0 010 1.5h-3.5a.75.75 0 01-.75-.75z"/></svg>
-  ) },
-  { path: '/admin/apps', label: '应用授权', icon: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-      <path d="M8 .5 2 2.9v4.6c0 3.6 2.5 6.6 6 7.9 3.5-1.3 6-4.3 6-7.9V2.9L8 .5Zm0 1.6 4.5 1.8v3.6c0 2.8-1.9 5.2-4.5 6.2-2.6-1-4.5-3.4-4.5-6.2V3.9L8 2.1Z" />
-      <path d="M8 5.4a1.6 1.6 0 0 1 .8 2.98L8.8 10H7.2l0-1.62A1.6 1.6 0 0 1 8 5.4Z" />
-    </svg>
-  ) },
-  { path: '/admin/proxy', label: '网页反代', icon: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 110 16A8 8 0 018 0zm0 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM4.75 7.25h6.5a.75.75 0 010 1.5h-6.5a.75.75 0 010-1.5z"/></svg>
-  ) },
-  { path: '/personal-space', label: '个人空间', icon: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M6.906.664a1.749 1.749 0 0 1 2.187 0l5.25 4.2c.415.332.657.835.657 1.367v7.019A1.75 1.75 0 0 1 13.25 15h-3.5a.75.75 0 0 1-.75-.75V9H7v5.25a.75.75 0 0 1-.75.75h-3.5A1.75 1.75 0 0 1 1 13.25V6.23c0-.531.242-1.034.657-1.366l5.25-4.2Zm1.25 1.171a.25.25 0 0 0-.312 0l-5.25 4.2a.25.25 0 0 0-.094.196v7.019c0 .138.112.25.25.25H5.5V8.25a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 .75.75v5.25h2.75a.25.25 0 0 0 .25-.25V6.23a.25.25 0 0 0-.094-.195l-5.25-4.2Z"/></svg>
-  ) },
-  { path: '/admin/api', label: 'API 接入', icon: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v2.794l2.22 1.2a.75.75 0 010 1.345L14 10.039v2.461a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 12.5v-2.794L.28 8.706a.75.75 0 010-1.345L2 6.161V3.5zm1.5 0v3.294l-.22-.12A.75.75 0 013.5 6.5h1a.75.75 0 01.75.75v2.25a.75.75 0 01-.75.75h-1a.75.75 0 010-1.5h.25V8h-.25a.75.75 0 010-1.5h.25V6h-.25a.75.75 0 01-.22-.174L3.5 3.5zm0 0h9v2.661h.25a.75.75 0 010 1.5h-.25V8h.25a.75.75 0 010 1.5h-.25v.75h.25a.75.75 0 010 1.5h.25V3.5zm0 9a.25.25 0 00.25.25h9a.25.25 0 00.25-.25v-2.294l2.22-1.2a.75.75 0 000-1.345l-2.22-1.2V3.5a.25.25 0 00-.25-.25h-9a.25.25 0 00-.25.25v2.294L1.78 6.961a.75.75 0 000 1.345l2.22 1.2V12.5z"/></svg>
-  ) },
-  { path: '/admin/devices', label: '设备监控', icon: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4.75 0A2.75 2.75 0 002 2.75v5.5A2.75 2.75 0 004.75 11h2.5v2H5.5a.75.75 0 000 1.5h5a.75.75 0 000-1.5h-1.75v-2h2.5A2.75 2.75 0 0014 8.25v-5.5A2.75 2.75 0 0011.25 0h-6.5zM3.5 2.75c0-.69.56-1.25 1.25-1.25h6.5c.69 0 1.25.56 1.25 1.25v5.5c0 .69-.56 1.25-1.25 1.25h-6.5c-.69 0-1.25-.56-1.25-1.25v-5.5z"/></svg>
-  ) },
-  { path: '/admin/ai', label: 'AI 助手', icon: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 110 16A8 8 0 018 0zm0 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm0 7.75a.75.75 0 01.75.75v1.25h.5a.75.75 0 010 1.5h-2.5a.75.75 0 010-1.5h.5V10a.75.75 0 01.75-.75zM8 4a1.5 1.5 0 110 3 1.5 1.5 0 010-3z"/></svg>
-  ) },
-  { path: '/admin/ai-chat', label: 'AI 对话设置', icon: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 2h10.5c.69 0 1.25.56 1.25 1.25v7c0 .69-.56 1.25-1.25 1.25H9.25L6 14.5v-3H2.75C2.06 11.5 1.5 10.94 1.5 10.25v-7C1.5 2.56 2.06 2 2.75 2Zm5.11 2.1-.85 1.98-1.98.85 1.98.85.85 1.98.85-1.98 1.98-.85-1.98-.85z"/></svg>
-  ) },
+/** 导航项可见性由 lib/permissions.ts 的 ADMIN_ROUTE_CAPABILITIES 决定（与路由守卫同源）；
+ * 分组仅影响侧边栏展示，能力过滤与守卫仍按 path 单项判定 */
+interface AdminNavItem { path: string; label: string; icon: React.ReactNode; showPendingBadge?: boolean }
+
+const adminNavSections: { title: string; items: AdminNavItem[] }[] = [
+  {
+    title: '内容',
+    items: [
+      { path: '/admin', label: '内容管理', icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 1.75A.75.75 0 01.75 1h4.253c1.227 0 2.317.59 3 1.501A3.744 3.744 0 0111.006 1h4.245a.75.75 0 01.75.75v10.5a.75.75 0 01-.75.75h-4.507a2.25 2.25 0 00-1.591.659l-.622.621a.75.75 0 01-1.06 0l-.622-.621A2.25 2.25 0 005.258 13H.75a.75.75 0 01-.75-.75V1.75zm8.755 3a3 3 0 01-2.154.886H1.5V11.5h3.753a3.73 3.73 0 012.502 1.067V4.75zm1.5 0v7.817A3.73 3.73 0 0112.747 11.5h3.253V2.5H10.9a3.745 3.745 0 00-2.645 1.136z"/></svg>
+      ) },
+    ],
+  },
+  {
+    title: '用户',
+    items: [
+      { path: '/admin/users', label: '用户与设备', showPendingBadge: true, icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 3.5a2.75 2.75 0 115.5 0 2.75 2.75 0 01-5.5 0zm2.75-1.25a1.25 1.25 0 100 2.5 1.25 1.25 0 000-2.5zM3.5 12.477a3.854 3.854 0 015.814-3.354 3.854 3.854 0 013.186 0c.537.3.98.763 1.215 1.334.235.57.328 1.207.326 1.848a.75.75 0 01-1.5 0c.002-.515-.09-1.013-.273-1.458a2.37 2.37 0 00-.809-1.013 2.357 2.357 0 00-2.518 0A2.37 2.37 0 008.04 10.847c-.183.445-.275.943-.273 1.458a.75.75 0 01-1.5 0c.002-.641.095-1.278.326-1.848.235-.571.678-1.034 1.215-1.334a3.855 3.855 0 00-4.309-.003.75.75 0 01-.621-1.364c1.22-.558 2.644-.77 4.008-.587.335-.18.689-.326 1.057-.437 1.002-.302 2.06-.302 3.062 0l.003.001a.75.75 0 01.003.001c.367.111.72.257 1.054.436 1.365-.183 2.789.029 4.008.587a.75.75 0 01-.621 1.364 3.855 3.855 0 00-4.308.003.75.75 0 00-.604-1.374c.543-.234 1.138-.234 1.682 0a2.354 2.354 0 01.72.393v-.425a1.75 1.75 0 00-1.75-1.75H3.75A1.75 1.75 0 002 11.625v.425c.173-.175.418-.314.72-.393.544-.234 1.139-.234 1.683 0 .486.21.934.586 1.174 1.079.241.493.365 1.06.365 1.627a.75.75 0 01-1.5 0 1.88 1.88 0 00-.25-.934 1.88 1.88 0 00-.717-.674 2.355 2.355 0 00-2.204-.001.75.75 0 01-.605-1.374c.555-.24 1.164-.241 1.721-.002a.755.755 0 01.008.003z"/></svg>
+      ) },
+      { path: '/admin/chat', label: '聊天治理', icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v9.5A1.75 1.75 0 0114.25 14H8.061l-2.574 2.573A1.458 1.458 0 013 15.543V14H1.75A1.75 1.75 0 010 12.25v-9.5zM1.75 2.5a.25.25 0 00-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 01.75.75v2.19l2.72-2.72a.75.75 0 01.53-.22h6.5a.25.25 0 00.25-.25v-9.5a.25.25 0 00-.25-.25H1.75zM4.5 5.25a.75.75 0 01.75-.75h5.5a.75.75 0 010 1.5h-5.5a.75.75 0 01-.75-.75zm0 2.75a.75.75 0 01.75-.75h3.5a.75.75 0 010 1.5h-3.5a.75.75 0 01-.75-.75z"/></svg>
+      ) },
+    ],
+  },
+  {
+    title: 'AI',
+    items: [
+      { path: '/admin/ai', label: 'AI 设置', icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 110 16A8 8 0 018 0zm0 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm0 7.75a.75.75 0 01.75.75v1.25h.5a.75.75 0 010 1.5h-2.5a.75.75 0 010-1.5h.5V10a.75.75 0 01.75-.75zM8 4a1.5 1.5 0 110 3 1.5 1.5 0 010-3z"/></svg>
+      ) },
+    ],
+  },
+  {
+    title: '运营',
+    items: [
+      { path: '/admin/points', label: '积分体系', icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 110 16A8 8 0 018 0zm0 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8 3.25a.75.75 0 01.75.75v.31a2.5 2.5 0 011.62 2.36.75.75 0 01-1.5 0 .9.9 0 00-.87-.9v1.61l.63.22a1.9 1.9 0 011.24 1.79 2.5 2.5 0 01-1.87 2.41V12a.75.75 0 01-1.5 0v-.18a2.55 2.55 0 01-1.87-2.46.75.75 0 011.5 0c0 .58.44 1.06 1.12 1.13V8.9l-.62-.21a1.9 1.9 0 01-1.25-1.79A2.5 2.5 0 017.25 4.5v-.5A.75.75 0 018 3.25zm-.75 2.9v1.33l.75.25V5.9a.95.95 0 00-.75.25zm1.5 3.28v1.42c.45-.11.75-.4.75-.72 0-.3-.25-.56-.75-.7z"/></svg>
+      ) },
+    ],
+  },
+  {
+    title: '平台',
+    items: [
+      { path: '/admin/features', label: '功能开关', icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 2.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm-3.5 2a3.5 3.5 0 0 1 6.9-.8h5.35a.75.75 0 0 1 0 1.5H8.9a3.5 3.5 0 0 1-6.9.8H.75a.75.75 0 0 1 0-1.5H2Zm8.5 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm-3.5 2a3.5 3.5 0 0 1 6.9-.8h1.35a.75.75 0 0 1 0 1.5h-1.35a3.5 3.5 0 0 1-6.9.8H2.75a.75.75 0 0 1 0-1.5h4.25Z"/></svg>
+      ) },
+      { path: '/admin/apps', label: '应用授权', icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 .5 2 2.9v4.6c0 3.6 2.5 6.6 6 7.9 3.5-1.3 6-4.3 6-7.9V2.9L8 .5Zm0 1.6 4.5 1.8v3.6c0 2.8-1.9 5.2-4.5 6.2-2.6-1-4.5-3.4-4.5-6.2V3.9L8 2.1Z" />
+          <path d="M8 5.4a1.6 1.6 0 0 1 .8 2.98L8.8 10H7.2l0-1.62A1.6 1.6 0 0 1 8 5.4Z" />
+        </svg>
+      ) },
+      { path: '/admin/proxy', label: '网页反代', icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 110 16A8 8 0 018 0zm0 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM4.75 7.25h6.5a.75.75 0 010 1.5h-6.5a.75.75 0 010-1.5z"/></svg>
+      ) },
+      { path: '/admin/api', label: 'API 接入', icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v2.794l2.22 1.2a.75.75 0 010 1.345L14 10.039v2.461a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 12.5v-2.794L.28 8.706a.75.75 0 010-1.345L2 6.161V3.5zm1.5 0v3.294l-.22-.12A.75.75 0 013.5 6.5h1a.75.75 0 01.75.75v2.25a.75.75 0 01-.75.75h-1a.75.75 0 010-1.5h.25V8h-.25a.75.75 0 010-1.5h.25V6h-.25a.75.75 0 01-.22-.174L3.5 3.5zm0 0h9v2.661h.25a.75.75 0 010 1.5h-.25V8h.25a.75.75 0 010 1.5h-.25v.75h.25a.75.75 0 010 1.5h.25V3.5zm0 9a.25.25 0 00.25.25h9a.25.25 0 00.25-.25v-2.294l2.22-1.2a.75.75 0 000-1.345l-2.22-1.2V3.5a.25.25 0 00-.25-.25h-9a.25.25 0 00-.25.25v2.294L1.78 6.961a.75.75 0 000 1.345l2.22 1.2V12.5z"/></svg>
+      ) },
+    ],
+  },
 ]
+
+/** 顶栏页面标题：编辑器/个人空间等非导航路由显式映射，其余按导航项匹配 */
+function pageTitleForPathname(pathname: string): string {
+  if (pathname === '/admin/new') return '写文章'
+  if (pathname.startsWith('/admin/edit/')) return '编辑文章'
+  if (pathname === '/admin/pages/new') return '新建页面'
+  if (/^\/admin\/pages\/\d+\/edit$/.test(pathname)) return '编辑页面'
+  if (pathname === '/personal-space') return '个人空间'
+  for (const section of adminNavSections) {
+    for (const item of section.items) {
+      const matched = item.path === '/admin' ? pathname === '/admin' : pathname.startsWith(item.path)
+      if (matched) return item.label
+    }
+  }
+  return '管理面板'
+}
 
 const SIDEBAR_COLLAPSED_KEY = 'lineweb_admin_sidebar_collapsed'
 
@@ -127,6 +150,17 @@ export default memo(function AdminLayout() {
     setMobileOpen(false)
   }, [location.pathname])
 
+  // ≤1279px 为抽屉模式：视口跨回桌面档（≥1280px）时复位抽屉状态，
+  // 避免旋转/缩放后抽屉与遮罩在桌面布局中残留
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1279px)')
+    const handleChange = (e: MediaQueryListEvent) => {
+      if (!e.matches) setMobileOpen(false)
+    }
+    mq.addEventListener('change', handleChange)
+    return () => mq.removeEventListener('change', handleChange)
+  }, [])
+
   useEffect(() => {
     if (!canAccessAdminPath(user, '/admin/users')) return
     let cancelled = false
@@ -182,9 +216,10 @@ export default memo(function AdminLayout() {
 
   return (
     <div className="gh-layout-root gh-layout-root--admin">
-      {/* Mobile overlay */}
+      {/* Mobile overlay（display 由 responsive.css 在 ≤1279px 抽屉模式下控制，
+          不写内联 style——否则视口跨断点残留时内联样式会压过媒体查询） */}
       {mobileOpen && (
-        <div className="gh-sidebar-overlay" style={{ display: 'block' }} onClick={closeMobile} />
+        <div className="gh-sidebar-overlay" onClick={closeMobile} />
       )}
 
       {/* Admin sidebar */}
@@ -222,27 +257,44 @@ export default memo(function AdminLayout() {
         </div>
 
         <nav className="gh-sidebar-nav">
-          {navItems
-            .filter(item => canAccessAdminPath(user, item.path))
-            .map(item => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`gh-sidebar-item ${isActive(item.path) ? 'gh-sidebar-item--active' : ''}`}
-              onClick={closeMobile}
-            >
-              <span className="gh-sidebar-icon">{item.icon}</span>
-              <span className="gh-sidebar-label">{item.label}</span>
-              {item.path === '/admin/users' && pendingUsers > 0 && (
-                <span className="gh-chat-nav-badge">{pendingUsers > 99 ? '99+' : pendingUsers}</span>
-              )}
-            </Link>
-          ))}
+          {adminNavSections.map(section => {
+            const visibleItems = section.items.filter(item => canAccessAdminPath(user, item.path))
+            if (visibleItems.length === 0) return null
+            return (
+              <div key={section.title} className="gh-sidebar-section">
+                <div className="gh-sidebar-section-title">{section.title}</div>
+                {visibleItems.map(item => (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`gh-sidebar-item ${isActive(item.path) ? 'gh-sidebar-item--active' : ''}`}
+                    onClick={closeMobile}
+                  >
+                    <span className="gh-sidebar-icon">{item.icon}</span>
+                    <span className="gh-sidebar-label">{item.label}</span>
+                    {item.showPendingBadge && pendingUsers > 0 && (
+                      <span className="gh-chat-nav-badge">{pendingUsers > 99 ? '99+' : pendingUsers}</span>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            )
+          })}
         </nav>
 
         <div className="gh-sidebar-footer">
-          <button className="gh-sidebar-collapse-btn gh-sidebar-item" onClick={toggleCollapsed}
-            style={{ borderLeft: 'none', cursor: 'pointer', width: '100%' }}>
+          <button
+            className="gh-sidebar-collapse-btn gh-sidebar-item"
+            onClick={() => {
+              // 抽屉模式下「收起」语义是关闭抽屉；桌面模式保持折叠/展开切换
+              if (mobileOpen) {
+                closeMobile()
+                return
+              }
+              toggleCollapsed()
+            }}
+            style={{ borderLeft: 'none', cursor: 'pointer', width: '100%' }}
+          >
             <span className="gh-sidebar-icon">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M7.78 12.53a.75.75 0 01-1.06 0L2.47 8.28a.75.75 0 010-1.06l4.25-4.25a.75.75 0 011.06 1.06L4.56 7.25h7.69a.75.75 0 010 1.5H4.56l3.22 3.22a.75.75 0 010 1.06z" />
@@ -282,7 +334,7 @@ export default memo(function AdminLayout() {
             </svg>
           </button>
 
-          <h1 className="gh-admin-topbar-title" style={{ fontSize: 'var(--gh-text-xl)', fontWeight: 600, margin: 0 }}>管理面板</h1>
+          <h1 className="gh-admin-topbar-title" style={{ fontSize: 'var(--gh-text-xl)', fontWeight: 600, margin: 0 }}>{pageTitleForPathname(location.pathname)}</h1>
 
           <div style={{ flex: 1 }} />
 
