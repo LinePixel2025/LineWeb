@@ -2,7 +2,7 @@ import { memo, useState, useRef, useEffect } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useFeature } from '../contexts/FeatureContext'
-import { GitHubButton } from './ui'
+import { Button } from './ui'
 import { AdminCapabilityRoute } from './Guards'
 import { canAccessAdminPath } from '../lib/permissions'
 import { FEATURE_KEYS, type FeatureKey } from '../lib/features'
@@ -228,16 +228,18 @@ export default memo(function AdminLayout() {
         className={`gh-sidebar ${mobileOpen ? 'gh-sidebar--open' : ''} ${collapsed ? 'gh-sidebar--collapsed' : ''}`}
       >
         <div className="gh-sidebar-brand">
-          <Link to="/admin" className="gh-sidebar-item" style={{
-            borderLeft: 'none', gap: 'var(--gh-space-2)', padding: 0,
-            background: 'none', color: 'var(--gh-text)',
-          }} onClick={closeMobile}>
-            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <Link to="/admin" className="gh-sidebar-brand-link" onClick={closeMobile}>
+            <svg width="20" height="20" viewBox="0 0 22 22" fill="none">
               <rect x="1" y="1" width="20" height="20" rx="6" stroke="currentColor" strokeWidth="1.5" />
               <path d="M7 11h8M11 7v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
-            <span className="gh-sidebar-label" style={{ fontWeight: 600 }}>Line Web</span>
+            <span className="gh-sidebar-brand-name">LineWeb</span>
           </Link>
+          <button className="gh-sidebar-close" onClick={closeMobile} aria-label="关闭导航菜单">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+              <path d="m4 4 8 8M12 4l-8 8" />
+            </svg>
+          </button>
           {canManageFeatures && featureMap && (
             <button
               type="button"
@@ -293,7 +295,6 @@ export default memo(function AdminLayout() {
               }
               toggleCollapsed()
             }}
-            style={{ borderLeft: 'none', cursor: 'pointer', width: '100%' }}
           >
             <span className="gh-sidebar-icon">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -302,8 +303,7 @@ export default memo(function AdminLayout() {
             </span>
             <span className="gh-sidebar-label">{collapsed ? '展开' : '收起'}</span>
           </button>
-          <Link to="/" className="gh-sidebar-item" onClick={closeMobile}
-            style={{ borderLeft: 'none', marginTop: 'var(--gh-space-2)' }}>
+          <Link to="/" className="gh-sidebar-item gh-sidebar-back" onClick={closeMobile}>
             <span className="gh-sidebar-icon">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 0a8 8 0 110 16A8 8 0 018 0zm0 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm3.25 7.75h-6.5a.75.75 0 000 1.5h6.5a.75.75 0 000-1.5z" />
@@ -317,12 +317,8 @@ export default memo(function AdminLayout() {
 
       {/* Main content area */}
       <div className={`gh-content ${collapsed ? 'gh-content--collapsed' : ''}`}>
-        {/* Top bar */}
-        <header style={{
-          display: 'flex', alignItems: 'center', gap: 'var(--gh-space-3)',
-          paddingBottom: 'var(--gh-space-4)', borderBottom: '1px solid var(--gh-border)',
-          marginBottom: 'var(--gh-space-5)',
-        }}>
+        {/* Top bar：吸顶毛玻璃工具条 */}
+        <header className="gh-admin-toolbar">
           <button
             ref={btnRef}
             className="gh-btn gh-btn--secondary gh-btn--sm gh-visible-mobile"
@@ -334,19 +330,17 @@ export default memo(function AdminLayout() {
             </svg>
           </button>
 
-          <h1 className="gh-admin-topbar-title" style={{ fontSize: 'var(--gh-text-xl)', fontWeight: 600, margin: 0 }}>{pageTitleForPathname(location.pathname)}</h1>
+          <h1 className="gh-admin-topbar-title">{pageTitleForPathname(location.pathname)}</h1>
 
-          <div style={{ flex: 1 }} />
+          <div className="gh-admin-toolbar-spacer" />
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gh-space-2)' }}>
+          <div className="gh-admin-toolbar-actions">
             {user && (
               <>
-                <span className="gh-text-secondary gh-admin-topbar-username" style={{ fontSize: 'var(--gh-text-sm)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {user.username}
-                </span>
-                <GitHubButton variant="ghost" size="sm" onClick={handleLogout}>
+                <span className="gh-text-secondary gh-admin-topbar-username">{user.username}</span>
+                <Button variant="ghost" size="sm" onClick={handleLogout}>
                   退出
-                </GitHubButton>
+                </Button>
               </>
             )}
           </div>

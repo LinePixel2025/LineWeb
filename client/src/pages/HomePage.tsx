@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { usePostsList, usePublicStats, useFeaturedPages } from '../hooks/useQueries'
 import { useAuth } from '../contexts/AuthContext'
 import { useFeature } from '../contexts/FeatureContext'
-import { GitHubButton } from '../components/ui'
+import { Button } from '../components/ui'
 import UserAvatar from '../components/UserAvatar'
 import DigitalHealthCard from '../components/DigitalHealthCard/DigitalHealthCard'
 import AiAssistant from '../components/AiAssistant'
@@ -31,150 +31,199 @@ export default function HomePage() {
   return (
     <>
       <div className="gh-page-container">
-        <div className="gh-dashboard">
-          {/* Left: Profile */}
-          <div className="gh-dashboard-sidebar">
-            <div className="gh-box" style={{ textAlign: 'center' }}>
-              {user ? (
-                <>
-                  <UserAvatar userId={user.id} username={user.username} size="xl" />
-                  <h3 style={{ margin: '12px 0 4px', fontSize: '1.25rem' }}>{user.username}</h3>
-                  <p className="gh-text-secondary" style={{ fontSize: '0.85rem' }}>{user.email}</p>
-                  <div style={{ marginTop: '16px' }}>
-                    <GitHubButton variant="ghost" href="/profile" fullWidth>编辑资料</GitHubButton>
-                  </div>
-                </>
+        <div className="gh-home">
+          {/* 行 1：问候 hero + 最新文章（便当式） */}
+          <section className="gh-home-hero-row" aria-labelledby="home-greeting">
+            <div className="gh-hero">
+              <div className="gh-hero-sheets" aria-hidden="true">
+                <span />
+                <span />
+              </div>
+              <div className="gh-hero-sheet">
+                <svg className="gh-hero-line" viewBox="0 0 260 180" fill="none" aria-hidden="true">
+                  <path
+                    className="gh-hero-line-path"
+                    d="M14 152c30-54 50-64 84-64s50 20 82-12c22-23 32-38 58-52"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    className="gh-hero-line-path gh-hero-line-path--soft"
+                    d="M40 168c26-34 44-44 66-44 24 0 38 14 62-8 18-16 28-30 46-44"
+                    stroke="currentColor"
+                    strokeWidth="1"
+                    strokeLinecap="round"
+                  />
+                </svg>
+
+                <p className="gh-hero-eyebrow">LineWeb</p>
+                <h1 className="gh-hero-title" id="home-greeting">
+                  {user ? `你好，${user.username}` : '欢迎来到 Line Web'}
+                </h1>
+                <p className="gh-hero-subtitle">一个记录想法、项目与日常探索的个人空间。</p>
+
+                <div className="gh-hero-actions">
+                  {showPosts && (
+                    <Button variant="primary" size="lg" href="/posts">浏览文章</Button>
+                  )}
+                  <Button variant="secondary" size="lg" href={user ? '/profile' : '/login'}>
+                    {user ? '个人资料' : '登录'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="gh-home-featured">
+              {!showPosts ? (
+                <div className="gh-home-featured-empty">
+                  <p className="gh-text-secondary">文章功能当前已关闭。</p>
+                </div>
+              ) : recentPosts[0] ? (
+                <PostFeaturedCard post={recentPosts[0]} />
               ) : (
-                <>
-                  <div style={{
-                    width: '64px', height: '64px', borderRadius: '50%',
-                    background: 'var(--gh-canvas)', margin: '0 auto',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--gh-text-tertiary)' }}>
-                      <circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 1 0-16 0" />
-                    </svg>
-                  </div>
-                  <h3 style={{ margin: '12px 0 4px', fontSize: '1.25rem' }}>欢迎来访</h3>
-                  <p className="gh-text-secondary" style={{ fontSize: '0.85rem', marginBottom: '16px' }}>登录以解锁更多功能</p>
-                  <GitHubButton variant="primary" href="/login" fullWidth>登录</GitHubButton>
-                </>
+                <div className="gh-home-featured-empty">
+                  <p className="gh-text-secondary">还没有文章。</p>
+                  <Button variant="secondary" size="sm" href="/posts">去文章库看看</Button>
+                </div>
               )}
             </div>
+          </section>
 
-            <DigitalHealthCard />
-          </div>
-
-          {/* Center: Feed */}
-          <div className="gh-dashboard-feed">
-            <div className="gh-page-header">
-              <h2 className="gh-page-title">首页</h2>
-            </div>
-
-            {!showPosts ? (
-              <div className="gh-box" style={{ textAlign: 'center', padding: '48px 24px' }}>
-                <p className="gh-text-secondary">文章功能当前已关闭。</p>
+          {/* 行 2：更多文章（+ 快捷入口）+ 侧栏（身份 / 统计 / 屏幕时间） */}
+          <div className="gh-home-body">
+            <div className="gh-home-main">
+              <div className="gh-section-head">
+                <h2 className="gh-section-title">更多文章</h2>
+                {showPosts && <Link to="/posts" className="gh-section-link">全部文章 →</Link>}
               </div>
-            ) : recentPosts.length === 0 ? (
-              <div className="gh-box" style={{ textAlign: 'center', padding: '48px 24px' }}>
-                <p className="gh-text-secondary">暂无文章</p>
-                <GitHubButton variant="ghost" href="/posts" style={{ marginTop: '8px' }}>浏览文章库</GitHubButton>
-              </div>
-            ) : (
-              <>
-                <PostFeaturedCard post={recentPosts[0]} />
-                {recentPosts.length > 1 && (
-                  <div className="gh-post-list">
-                    {recentPosts.slice(1).map(post => (
-                      <PostListItem key={post.id} post={post} />
+
+              {!showPosts ? (
+                <div className="gh-empty-card">文章功能当前已关闭。</div>
+              ) : recentPosts.length > 1 ? (
+                <div className="gh-post-list">
+                  {recentPosts.slice(1).map(post => (
+                    <PostListItem key={post.id} post={post} />
+                  ))}
+                </div>
+              ) : (
+                <div className="gh-empty-card">还没有更多文章，去文章库看看吧。</div>
+              )}
+
+              <section className="gh-home-shortcuts" aria-labelledby="home-shortcuts-title">
+                <div className="gh-section-head">
+                  <h2 className="gh-section-title" id="home-shortcuts-title">快捷入口</h2>
+                </div>
+                <div className="gh-shortcut-grid">
+                  {showPosts && (
+                    <Link to="/posts" className="gh-shortcut-item">
+                      <span className="gh-shortcut-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
+                        </svg>
+                      </span>
+                      <span className="gh-shortcut-label">文章列表</span>
+                      <span className="gh-shortcut-hint">阅读最新内容</span>
+                    </Link>
+                  )}
+                  {showPages && (
+                    <Link to="/features" className="gh-shortcut-item">
+                      <span className="gh-shortcut-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
+                        </svg>
+                      </span>
+                      <span className="gh-shortcut-label">功能页面</span>
+                      <span className="gh-shortcut-hint">全部工具入口</span>
+                    </Link>
+                  )}
+                  {user && (
+                    <Link to="/profile" className="gh-shortcut-item">
+                      <span className="gh-shortcut-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <circle cx="12" cy="8" r="4.2" /><path d="M20 21a8 8 0 0 0-16 0" />
+                        </svg>
+                      </span>
+                      <span className="gh-shortcut-label">个人中心</span>
+                      <span className="gh-shortcut-hint">账号与安全</span>
+                    </Link>
+                  )}
+                  {isEnabled('calculator') && (
+                    <Link to="/calculator" className="gh-shortcut-item">
+                      <span className="gh-shortcut-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <rect x="4" y="2" width="16" height="20" rx="3" /><path d="M8 6.5h8" />
+                        </svg>
+                      </span>
+                      <span className="gh-shortcut-label">科学计算器</span>
+                      <span className="gh-shortcut-hint">三角函数与记忆</span>
+                    </Link>
+                  )}
+                </div>
+              </section>
+
+              {showPages && featuredPages.length > 0 && (
+                <section className="gh-home-featured-pages" aria-labelledby="home-featured-title">
+                  <div className="gh-section-head">
+                    <h2 className="gh-section-title" id="home-featured-title">推荐功能</h2>
+                  </div>
+                  <div className="gh-featured-list">
+                    {featuredPages.map((page) => (
+                      <Link key={page.id} to={`/page/${page.slug}`} className="gh-list-item gh-featured-item">
+                        <span className="gh-featured-emoji">{page.featureEmoji || '📄'}</span>
+                        <div className="gh-list-item-content">
+                          <span className="gh-list-item-title">{page.title}</span>
+                          {page.featureDesc && <span className="gh-featured-desc">{page.featureDesc}</span>}
+                        </div>
+                      </Link>
                     ))}
                   </div>
-                )}
-              </>
-            )}
+                </section>
+              )}
 
-            {showPosts && (
-              <div>
-                <GitHubButton variant="ghost" href="/posts" size="sm">查看全部文章 →</GitHubButton>
-              </div>
-            )}
-          </div>
-
-          {/* Right: Quick Links */}
-          <div className="gh-dashboard-sidebar">
-            {stats && (
-              <div className="gh-box">
-                <h4 className="gh-box-heading">站点统计</h4>
-                <div className="gh-stats-grid">
-                  {[
-                    { label: '文章', count: stats.posts },
-                    { label: '页面', count: stats.pages },
-                    { label: '用户', count: stats.users },
-                    { label: '评论', count: stats.comments },
-                  ].map(({ label, count }) => (
-                    <div key={label} className="gh-stat-cell">
-                      <div className="gh-stat-cell-count">{count}</div>
-                      <div className="gh-stat-cell-label">{label}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="gh-box">
-              <h4 className="gh-box-heading">快捷导航</h4>
-              <div className="gh-nav-links">
-                {showPosts && (
-                  <Link to="/posts" className="gh-btn gh-btn--ghost gh-btn--full gh-nav-link">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
-                    </svg>
-                    文章列表
-                  </Link>
-                )}
-                {showPages && (
-                  <Link to="/features" className="gh-btn gh-btn--ghost gh-btn--full gh-nav-link">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
-                    </svg>
-                    功能页面
-                  </Link>
-                )}
-                {user && (
-                  <Link to="/profile" className="gh-btn gh-btn--ghost gh-btn--full gh-nav-link">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 1 0-16 0" />
-                    </svg>
-                    个人中心
-                  </Link>
-                )}
-                {isEnabled('calculator') && (
-                  <Link to="/calculator" className="gh-btn gh-btn--ghost gh-btn--full gh-nav-link">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="4" y="2" width="16" height="20" rx="2" /><line x1="8" y1="6" x2="16" y2="6" />
-                    </svg>
-                    科学计算器
-                  </Link>
-                )}
-              </div>
+              <DigitalHealthCard />
             </div>
 
-            {showPages && featuredPages.length > 0 && (
-              <div className="gh-box">
-                <h4 className="gh-box-heading">推荐功能</h4>
-                <div className="gh-featured-list">
-                  {featuredPages.map((page) => (
-                    <Link key={page.id} to={`/page/${page.slug}`} className="gh-list-item gh-featured-item">
-                      <span className="gh-featured-emoji">{page.featureEmoji || '📄'}</span>
-                      <div className="gh-list-item-content">
-                        <span className="gh-list-item-title">{page.title}</span>
-                        {page.featureDesc && <span className="gh-featured-desc">{page.featureDesc}</span>}
-                      </div>
-                    </Link>
-                  ))}
-                </div>
+            <aside className="gh-home-aside" aria-label="个人信息与站点数据">
+              <div className="gh-identity-card">
+                {user ? (
+                  <>
+                    <UserAvatar userId={user.id} username={user.username} size="xl" />
+                    <div className="gh-identity-copy">
+                      <h2 className="gh-identity-name">{user.username}</h2>
+                      <p className="gh-identity-meta">{user.email}</p>
+                    </div>
+                    <Button variant="secondary" fullWidth href="/profile">编辑资料</Button>
+                  </>
+                ) : (
+                  <>
+                    <span className="gh-identity-name">欢迎来访</span>
+                    <p className="gh-identity-meta">登录以解锁更多功能</p>
+                    <Button variant="primary" fullWidth href="/login">登录</Button>
+                  </>
+                )}
               </div>
-            )}
+
+              {stats && (
+                <div className="gh-box">
+                  <h3 className="gh-box-heading">站点数据</h3>
+                  <div className="gh-metric-grid">
+                    {[
+                      { label: '文章', value: stats.posts },
+                      { label: '页面', value: stats.pages },
+                      { label: '用户', value: stats.users },
+                      { label: '评论', value: stats.comments },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="gh-metric">
+                        <span className="gh-metric-value">{value}</span>
+                        <span className="gh-metric-label">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            </aside>
           </div>
         </div>
       </div>

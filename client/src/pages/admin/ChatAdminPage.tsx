@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import api from '../../lib/api'
-import { GitHubAlert, GitHubBadge, GitHubButton } from '../../components/ui'
+import { Alert, Badge, Button } from '../../components/ui'
 import { roleLabel } from '../../lib/permissions'
 
 interface ChatBanRow {
@@ -167,13 +167,13 @@ export default function ChatAdminPage() {
             不影响 neko 账号本身，解封后立刻恢复。管理员账号不受封禁影响。
           </p>
         </div>
-        <GitHubButton variant="secondary" size="md" onClick={() => void loadBans(includeLifted)}>
+        <Button variant="secondary" size="md" onClick={() => void loadBans(includeLifted)}>
           刷新
-        </GitHubButton>
+        </Button>
       </div>
 
-      {error && <GitHubAlert variant="danger">{error}</GitHubAlert>}
-      {notice && <GitHubAlert variant="success">{notice}</GitHubAlert>}
+      {error && <Alert variant="danger">{error}</Alert>}
+      {notice && <Alert variant="success">{notice}</Alert>}
 
       <section className="gh-box gh-chatadmin-section" aria-label="封禁账号">
         <h2 className="gh-chatadmin-title">封禁账号</h2>
@@ -190,9 +190,9 @@ export default function ChatAdminPage() {
             placeholder="输入用户名或邮箱搜索"
             onChange={(event) => setQuery(event.target.value)}
           />
-          <GitHubButton variant="primary" size="md" type="submit" disabled={searching}>
+          <Button variant="primary" size="md" type="submit" disabled={searching}>
             {searching ? '搜索中…' : '搜索'}
-          </GitHubButton>
+          </Button>
         </form>
 
         {searched && results.length === 0 && (
@@ -209,13 +209,13 @@ export default function ChatAdminPage() {
                   <div className="gh-chatadmin-user-main">
                     <strong>{user.username}</strong>
                     <span className="gh-chatadmin-muted">{user.email}</span>
-                    <GitHubBadge variant={user.role === 'admin' ? 'danger' : 'default'}>
+                    <Badge variant={user.role === 'admin' ? 'danger' : 'default'}>
                       {roleLabel(user.role)}
-                    </GitHubBadge>
+                    </Badge>
                     <span className="gh-chatadmin-muted">
                       {STATUS_LABELS[user.status] ?? user.status}
                     </span>
-                    {user.chatBanned && <GitHubBadge variant="warning">聊天已封禁</GitHubBadge>}
+                    {user.chatBanned && <Badge variant="warning">聊天已封禁</Badge>}
                   </div>
                   <div className="gh-chatadmin-user-actions">
                     {user.chatBanned ? (
@@ -269,14 +269,14 @@ export default function ChatAdminPage() {
                         }}
                         disabled={busy}
                       />
-                      <GitHubButton
+                      <Button
                         variant="danger"
                         size="md"
                         disabled={busy}
                         onClick={() => void submitBan()}
                       >
                         {busy ? '处理中…' : `确认封禁 ${user.username}`}
-                      </GitHubButton>
+                      </Button>
                       <button
                         type="button"
                         className="gh-btn gh-btn--secondary gh-btn--sm"
@@ -334,7 +334,7 @@ export default function ChatAdminPage() {
                     </td>
                     <td>
                       {row.active ? (
-                        <GitHubBadge variant="danger">封禁中</GitHubBadge>
+                        <Badge variant="danger">封禁中</Badge>
                       ) : (
                         <span className="gh-chatadmin-muted">
                           已解封{row.liftedAt ? ` · ${formatTime(row.liftedAt)}` : ''}

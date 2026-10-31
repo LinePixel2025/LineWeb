@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { usePostsList } from '../hooks/useQueries'
-import { GitHubButton, GitHubInput } from '../components/ui'
+import { Button, Input, SegmentedControl } from '../components/ui'
 import Pagination from '../components/Pagination'
 import PostListItem, { type PostListItemData } from '../components/PostListItem'
 
@@ -24,21 +24,16 @@ export default function PostsPage() {
     setPage(1)
   }
 
-  const toggleSort = () => {
-    setPage(1)
-    setSort(prev => prev === 'desc' ? 'asc' : 'desc')
-  }
-
   return (
     <div className="gh-page-container">
       <div className="gh-page-header">
         <h1 className="gh-page-title">文章</h1>
-        <p className="gh-text-secondary">发现 Line Web 的最新内容</p>
+        <p className="gh-page-subtitle">发现 Line Web 的最新内容</p>
       </div>
 
-      <div className="gh-box gh-posts-tools" style={{ marginBottom: '16px', padding: '12px 16px' }}>
-        <form className="gh-posts-search-form" onSubmit={handleSearch} style={{ marginBottom: search ? '12px' : '0' }}>
-          <GitHubInput
+      <div className="gh-posts-tools">
+        <form className="gh-posts-search-form" onSubmit={handleSearch}>
+          <Input
             type="text"
             placeholder="搜索文章标题…"
             aria-label="搜索文章标题"
@@ -46,31 +41,36 @@ export default function PostsPage() {
             onChange={e => setSearchInput(e.target.value)}
             fullWidth
             icon={
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
               </svg>
             }
           />
-          <GitHubButton type="submit" variant="primary" size="sm">搜索</GitHubButton>
-          <GitHubButton type="button" variant="secondary" size="sm" onClick={toggleSort}>
-            {sort === 'desc' ? '最新 ↓' : '最早 ↑'}
-          </GitHubButton>
+          <Button type="submit" variant="primary" size="sm">搜索</Button>
+          <div className="gh-posts-sort">
+            <SegmentedControl
+              tabs={[
+                { value: 'desc', label: '最新' },
+                { value: 'asc', label: '最早' },
+              ]}
+              active={sort}
+              onChange={value => { setPage(1); setSort(value as 'desc' | 'asc') }}
+            />
+          </div>
         </form>
         {search && (
           <div className="gh-posts-search-summary">
-            <span className="gh-text-secondary" style={{ fontSize: '0.85rem' }}>
-              搜索 "{search}" — {data ? `${data.total} 篇结果` : '搜索中…'}
-            </span>
-            <GitHubButton variant="ghost" size="sm" onClick={handleClearSearch}>清除</GitHubButton>
+            <span>搜索 “{search}” — {data ? `${data.total} 篇结果` : '搜索中…'}</span>
+            <Button variant="ghost" size="sm" onClick={handleClearSearch}>清除</Button>
           </div>
         )}
       </div>
 
       {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}><div className="gh-spinner" /></div>
+        <div className="gh-loading-row"><div className="gh-spinner" /></div>
       ) : data?.posts.length === 0 ? (
-        <div className="gh-box" style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <p className="gh-text-secondary">{search ? `未找到包含 "${search}" 的文章` : '暂无文章'}</p>
+        <div className="gh-empty-card">
+          {search ? `未找到包含 “${search}” 的文章` : '暂无文章'}
         </div>
       ) : (
         <>
@@ -81,13 +81,11 @@ export default function PostsPage() {
           </div>
 
           {data && data.totalPages > 1 && (
-            <div className="gh-pagination">
-              <Pagination
-                page={page}
-                totalPages={data.totalPages}
-                onPageChange={setPage}
-              />
-            </div>
+            <Pagination
+              page={page}
+              totalPages={data.totalPages}
+              onPageChange={setPage}
+            />
           )}
         </>
       )}

@@ -1,115 +1,164 @@
 /* =============================================================
-   Line Web — Responsive Styles (GitHub Primer)
+   LineWeb Design System — Responsive（抽屉 / Sheet / 触控）
+   -------------------------------------------------------------
+   断点沿用历史口径，避免与页面逻辑脱节：
+   - ≤1279px：侧栏改整高抽屉（手机 + 平板）
+   - ≤1023px：页面级网格收窄（各页面自行声明）
+   - ≤767px：手机布局 + 底部 sheet + 44px 触控
    ============================================================= */
 
-/* ≤1279px（手机 + 平板横屏）：统一抽屉模式 —— 侧边栏默认滑出隐藏，
-   顶栏汉堡按钮开合、遮罩点击关闭；≥1280px 保持常驻侧栏 + 收起按钮。
-   （修复：此前 768–1279px 被强制为 64px 常驻窄轨且无任何收起手段） */
 @media (max-width: 1279px) {
   .gh-content {
-    margin-left: 0 !important;
+    margin-left: 0;
   }
+
+  /* 抽屉：整高、右圆角、毛玻璃；层级高于顶栏，抽屉自带品牌行与关闭按钮 */
   .gh-sidebar {
+    top: 0;
+    z-index: calc(var(--gh-z-header) + 100);
+    bottom: 0;
+    width: min(320px, 86vw);
+    padding-top: var(--gh-safe-top);
+    border-right: 1px solid var(--gh-border);
+    border-radius: 0 var(--gh-radius-xl) var(--gh-radius-xl) 0;
+    box-shadow: var(--gh-shadow-xl);
     transform: translateX(-100%);
+    visibility: hidden;
   }
   .gh-sidebar.gh-sidebar--open {
+    visibility: visible;
     transform: translateX(0);
-    width: var(--gh-sidebar-width) !important;
   }
-  .gh-sidebar.gh-sidebar--open .gh-sidebar-label,
-  .gh-sidebar.gh-sidebar--open .gh-sidebar-section-title {
-    display: block;
+  .gh-sidebar--collapsed { width: min(320px, 86vw); }
+
+  .gh-sidebar-brand--drawer {
+    display: flex;
+    min-height: 56px;
+    padding-top: calc(var(--gh-space-2) + var(--gh-safe-top));
+    padding-bottom: var(--gh-space-2);
   }
-  .gh-sidebar.gh-sidebar--open .gh-sidebar-item {
-    justify-content: flex-start;
-    min-height: 44px;
-    padding: var(--gh-space-2) var(--gh-space-3);
-    border-left: none;
+  .gh-sidebar-close { display: inline-flex; }
+
+  .gh-sidebar--collapsed .gh-sidebar-label,
+  .gh-sidebar--collapsed .gh-sidebar-section-title { display: block; }
+  .gh-sidebar--collapsed .gh-sidebar-item { justify-content: flex-start; padding: 8px 10px; }
+
+  .gh-sidebar-nav {
+    padding: var(--gh-space-2) var(--gh-space-3) var(--gh-space-4);
+    overscroll-behavior: contain;
   }
-  .gh-sidebar.gh-sidebar--open .gh-sidebar-collapse-btn { min-height: 44px; }
+  .gh-sidebar-item { min-height: 42px; padding: 9px 10px; }
+
   .gh-sidebar-overlay {
     display: block;
+    z-index: calc(var(--gh-z-header) + 99);
+  }
+
+  .gh-admin-toolbar {
+    top: calc(var(--gh-space-1) + var(--gh-safe-top));
   }
 }
 
 @media (max-width: 767px) {
   .gh-content {
-    padding: calc(var(--gh-nav-height) + var(--gh-safe-top) + var(--gh-space-4)) calc(var(--gh-space-4) + var(--gh-safe-right)) calc(var(--gh-space-4) + var(--gh-safe-bottom)) calc(var(--gh-space-4) + var(--gh-safe-left));
+    padding: calc(var(--gh-nav-height) + var(--gh-safe-top) + var(--gh-space-4))
+      calc(var(--gh-page-pad-x-mobile) + var(--gh-safe-right))
+      calc(var(--gh-space-6) + var(--gh-safe-bottom))
+      calc(var(--gh-page-pad-x-mobile) + var(--gh-safe-left));
   }
   .gh-layout-root--admin .gh-content {
-    padding: calc(var(--gh-space-4) + var(--gh-safe-top)) calc(var(--gh-space-4) + var(--gh-safe-right)) calc(var(--gh-space-4) + var(--gh-safe-bottom)) calc(var(--gh-space-4) + var(--gh-safe-left));
+    padding: calc(var(--gh-space-2) + var(--gh-safe-top))
+      calc(var(--gh-page-pad-x-mobile) + var(--gh-safe-right))
+      calc(var(--gh-space-6) + var(--gh-safe-bottom))
+      calc(var(--gh-page-pad-x-mobile) + var(--gh-safe-left));
+  }
+  .gh-content--auth {
+    padding: calc(var(--gh-nav-height) + var(--gh-space-4)) var(--gh-space-4) var(--gh-space-5);
   }
 
-  .gh-table-wrap {
-    overflow-x: auto;
-    max-width: 100%;
-    -webkit-overflow-scrolling: touch;
-  }
+  .gh-header-inner { padding: 0 12px; }
+  .gh-header-brand-name { font-size: var(--gh-text-base); }
+  .gh-header-actions { gap: 2px; }
+  .gh-header-theme-btn { width: 44px; height: 44px; }
+  .gh-header-user-btn { min-width: 44px; min-height: 44px; justify-content: center; padding: 3px; }
+  .gh-header-menu { min-width: 200px; max-width: calc(100vw - 24px); }
+  .gh-header-points { min-height: 32px; padding: 0 9px; }
 
+  .gh-admin-toolbar {
+    padding: 8px 10px;
+    border-radius: var(--gh-radius);
+    gap: var(--gh-space-2);
+  }
+  .gh-admin-topbar-title { font-size: var(--gh-text-lg); }
+  .gh-admin-topbar-username { display: none; }
+
+  /* 触控：所有交互控件至少 44px 高 */
+  .gh-btn,
   .gh-btn--sm,
   .gh-btn--md,
-  .gh-btn--lg,
   .gh-popover-item,
   .gh-tabnav-item,
-  .gh-pagination-btn { min-height: 44px; }
+  .gh-pagination-btn,
+  .gh-sidebar-item { min-height: 44px; }
 
-  .gh-pagination { max-width: 100%; overflow-x: auto; justify-content: flex-start; padding-bottom: 4px; }
+  .gh-pagination {
+    justify-content: flex-start;
+    max-width: 100%;
+    overflow-x: auto;
+    padding-bottom: var(--gh-space-1);
+  }
   .gh-pagination-btn { min-width: 44px; }
 
+  /* 对话框 → 底部 sheet */
   .gh-dialog-overlay {
     align-items: flex-end;
-    padding: var(--gh-safe-top) var(--gh-safe-right) 0 var(--gh-safe-left);
+    padding: 0;
   }
   .gh-dialog {
+    position: relative;
     width: 100%;
     max-width: none;
     max-height: calc(100dvh - var(--gh-safe-top) - 12px);
-    padding: var(--gh-space-4) var(--gh-space-4) calc(var(--gh-space-4) + var(--gh-safe-bottom));
-    border-radius: var(--gh-radius) var(--gh-radius) 0 0;
+    padding: var(--gh-space-5) var(--gh-space-4) calc(var(--gh-space-4) + var(--gh-safe-bottom));
+    border-radius: var(--gh-radius-xl) var(--gh-radius-xl) 0 0;
   }
-  .gh-dialog-actions { flex-wrap: wrap; }
+  .gh-dialog::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    width: 36px;
+    height: 5px;
+    border-radius: var(--gh-radius-pill);
+    background: var(--gh-fill-3);
+    transform: translateX(-50%);
+  }
+  .gh-dialog-title { margin-top: var(--gh-space-2); }
   .gh-dialog-actions .gh-btn { flex: 1; }
 
-  .gh-sidebar {
-    top: calc(var(--gh-nav-height) + var(--gh-safe-top));
-    padding-left: var(--gh-safe-left);
-  }
-  .gh-layout-root--admin .gh-sidebar {
-    top: 0;
-    padding-top: var(--gh-safe-top);
-  }
-  .gh-sidebar-nav { overscroll-behavior: contain; }
+  .gh-table-wrap { overflow-x: auto; }
 
-  .gh-header-theme-btn { width: 44px; padding: 0; }
-  .gh-header-user-btn { min-width: 44px; min-height: 44px; justify-content: center; padding: 4px; }
-  .gh-popover { max-width: calc(100vw - 32px - var(--gh-safe-left) - var(--gh-safe-right)); }
-
-  .gh-layout-root--admin header {
-    min-width: 0;
-  }
-  .gh-admin-topbar-title { font-size: var(--gh-text-lg) !important; }
-  .gh-admin-topbar-username { display: none; }
-
-  .gh-editor-actions {
-    align-items: stretch !important;
-    flex-direction: column;
-    gap: var(--gh-space-3);
-  }
-  .gh-editor-actions > div:last-child {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr;
-  }
-  .gh-editor-actions .gh-btn { min-width: 0; white-space: normal; text-align: center; }
-
-  .gh-footer-links {
-    flex-direction: column;
-    gap: var(--gh-space-2);
-    align-items: center;
-  }
+  .gh-footer-links { gap: var(--gh-space-4); }
 }
 
-@media (max-width: 1279px) {
-  .gh-hidden-tablet {
-    display: none !important;
+/* 打印：文章页去壳、去阴影（macOS 打印口径） */
+@media print {
+  .gh-header,
+  .gh-sidebar,
+  .gh-footer,
+  .gh-sidebar-overlay,
+  .gh-admin-toolbar { display: none !important; }
+  .gh-content,
+  .gh-content--collapsed {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .gh-layout-root { background: #fff; }
+  .gh-box,
+  .gh-post-list,
+  .gh-post-featured,
+  .gh-dialog {
+    border-color: #d0d0d0;
+    box-shadow: none;
   }
 }

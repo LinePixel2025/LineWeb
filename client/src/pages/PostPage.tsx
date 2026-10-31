@@ -3,7 +3,8 @@ import { useParams, Link } from 'react-router-dom'
 import DOMPurify from 'dompurify'
 import { usePost } from '../hooks/useQueries'
 import { useFeature } from '../contexts/FeatureContext'
-import { GitHubButton } from '../components/ui'
+import { Button } from '../components/ui'
+import { formatDate } from '../components/PostListItem'
 
 const CommentSection = lazy(() => import('../components/comments/CommentSection'))
 
@@ -23,18 +24,20 @@ export default function PostPage() {
   )
 
   if (loading) return (
-    <div className="gh-page-container" style={{ display: 'flex', justifyContent: 'center', paddingTop: '120px' }}>
-      <div className="gh-spinner" />
+    <div className="gh-page-container">
+      <div className="gh-loading-row"><div className="gh-spinner" /></div>
     </div>
   )
 
   if (error || !post) {
     return (
-      <div className="gh-page-container" style={{ textAlign: 'center', paddingTop: '120px', maxWidth: '760px' }}>
-        <h2>文章未找到</h2>
-        <p className="gh-text-secondary" style={{ marginTop: '8px' }}>{error instanceof Error ? error.message : (error || '请检查链接是否正确')}</p>
-        <div style={{ marginTop: '20px' }}>
-          <GitHubButton href="/posts" variant="secondary">返回文章列表</GitHubButton>
+      <div className="gh-page-container gh-post-detail">
+        <div className="gh-empty-card gh-post-notfound">
+          <h2>文章未找到</h2>
+          <p className="gh-text-secondary">
+            {error instanceof Error ? error.message : (error || '请检查链接是否正确')}
+          </p>
+          <Button href="/posts" variant="secondary">返回文章列表</Button>
         </div>
       </div>
     )
@@ -42,13 +45,22 @@ export default function PostPage() {
 
   return (
     <article className="gh-page-container gh-post-detail">
-      <Link to="/posts" className="gh-post-back">&larr; 返回文章列表</Link>
+      <Link to="/posts" className="gh-post-back">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M10 3.5 5.5 8l4.5 4.5" />
+        </svg>
+        文章列表
+      </Link>
 
       <header className="gh-post-header">
-        <h1 className="gh-page-title">{post.title}</h1>
+        <h1 className="gh-post-title">{post.title}</h1>
         <div className="gh-post-meta">
-          <div className="gh-post-author-avatar">{post.author.username.charAt(0).toUpperCase()}</div>
-          <span><strong>{post.author.username}</strong> 发布于 {new Date(post.createdAt).toLocaleDateString('zh-CN')}</span>
+          <span className="gh-post-author-avatar" aria-hidden>{post.author.username.charAt(0).toUpperCase()}</span>
+          <span className="gh-post-meta-copy">
+            <strong>{post.author.username}</strong>
+            <span className="gh-meta-dot" aria-hidden>·</span>
+            {formatDate(post.createdAt)}
+          </span>
         </div>
       </header>
 
@@ -57,11 +69,11 @@ export default function PostPage() {
       </section>
 
       {isEnabled('comments') && (
-        <div style={{ marginTop: '32px', borderTop: '1px solid var(--gh-color-border-default)', paddingTop: '24px' }}>
-          <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}><div className="gh-spinner" /></div>}>
+        <section className="gh-post-comments">
+          <Suspense fallback={<div className="gh-loading-row"><div className="gh-spinner" /></div>}>
             <CommentSection postId={post.id} />
           </Suspense>
-        </div>
+        </section>
       )}
     </article>
   )

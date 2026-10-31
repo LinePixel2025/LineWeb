@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom'
-import { GitHubTabNav } from '../../components/ui'
+import { SegmentedControl } from '../../components/ui'
 import { useAuth } from '../../contexts/AuthContext'
 import type { Capability } from '../../lib/permissions'
 
@@ -28,7 +28,7 @@ export default function AdminTabShell({ tabs }: { tabs: AdminTabDef[] }) {
   return (
     <div>
       {visible.length > 1 && (
-        <GitHubTabNav
+        <SegmentedControl
           tabs={visible.map(t => ({ value: t.value, label: t.label }))}
           active={active}
           onChange={value => setSearchParams({ tab: value })}

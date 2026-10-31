@@ -4,12 +4,27 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Line Web" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
+    <!-- 首屏主题预置：在 CSS 与 React 之前决定明暗，避免暗色模式白闪 -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('lineweb_theme') || 'auto';
+          var dark = saved === 'dark' ||
+            (saved === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="/boot.css" />
     <meta name="description" content="Line Web — 个人网站" />
     <title>Line Web</title>

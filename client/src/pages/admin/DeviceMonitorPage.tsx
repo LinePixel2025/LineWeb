@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { GitHubButton } from '../../components/ui'
+import { Button } from '../../components/ui'
 import api from '../../lib/api'
 
 interface DeviceInfo {
@@ -116,9 +116,9 @@ export function DevicesPanel() {
             />
             自动刷新 (10s)
           </label>
-          <GitHubButton variant="secondary" size="sm" onClick={() => { setLoading(true); fetchData() }}>
+          <Button variant="secondary" size="sm" onClick={() => { setLoading(true); fetchData() }}>
             刷新
-          </GitHubButton>
+          </Button>
         </div>
       </div>
 

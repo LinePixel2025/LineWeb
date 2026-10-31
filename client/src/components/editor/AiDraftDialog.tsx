@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { GitHubButton } from '../ui'
+import { Button } from '../ui'
 import { streamAiDraft, type DraftLength, type DraftTone } from '../../lib/aiWrite'
 
 const TONES: { value: DraftTone | ''; label: string }[] = [
@@ -156,8 +156,8 @@ export default function AiDraftDialog({
             </div>
             {error && <div className="ai-error" role="alert">{error}</div>}
             <div className="gh-dialog-actions">
-              <GitHubButton type="button" variant="ghost" onClick={handleClose}>取消</GitHubButton>
-              <GitHubButton type="button" variant="primary" onClick={start}>开始生成</GitHubButton>
+              <Button type="button" variant="ghost" onClick={handleClose}>取消</Button>
+              <Button type="button" variant="primary" onClick={start}>开始生成</Button>
             </div>
           </>
         )}
@@ -168,11 +168,11 @@ export default function AiDraftDialog({
             {error && <div className="ai-error" role="alert">{error}</div>}
             <div className="gh-dialog-actions">
               {phase === 'streaming' ? (
-                <GitHubButton type="button" variant="secondary" onClick={stop}>停止生成</GitHubButton>
+                <Button type="button" variant="secondary" onClick={stop}>停止生成</Button>
               ) : (
                 <>
-                  <GitHubButton type="button" variant="ghost" onClick={start} disabled={!draft}>重新生成</GitHubButton>
-                  <GitHubButton type="button" variant="primary" onClick={insert} disabled={!draft.trim()}>插入正文</GitHubButton>
+                  <Button type="button" variant="ghost" onClick={start} disabled={!draft}>重新生成</Button>
+                  <Button type="button" variant="primary" onClick={insert} disabled={!draft.trim()}>插入正文</Button>
                 </>
               )}
             </div>

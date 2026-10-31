@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import UserAvatar from '../../components/UserAvatar'
-import { GitHubButton, GitHubBadge } from '../../components/ui'
+import { Button, Badge } from '../../components/ui'
 import Pagination from '../../components/Pagination'
 import api from '../../lib/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -328,9 +328,9 @@ export function UsersPanel() {
                           ))}
                         </select>
                       ) : (
-                        <GitHubBadge variant={roleBadgeVariant(u.role)}>
+                        <Badge variant={roleBadgeVariant(u.role)}>
                           {roleLabel(u.role)}
-                        </GitHubBadge>
+                        </Badge>
                       )}
                       {isEditing ? (
                         <p className="gh-text-tertiary" style={{ fontSize: 'var(--gh-text-xs)', margin: '6px 0 0', maxWidth: 260 }}>
@@ -343,12 +343,12 @@ export function UsersPanel() {
                       )}
                     </td>
                     <td>
-                      <GitHubBadge variant={statusBadgeVariant(u.status)}>
+                      <Badge variant={statusBadgeVariant(u.status)}>
                         {STATUS_LABELS[u.status] ?? u.status}
-                      </GitHubBadge>
+                      </Badge>
                     </td>
                     <td style={{ textAlign: 'center' }}>
-                      <GitHubButton
+                      <Button
                         variant={u.canAccessDrive ? 'primary' : 'secondary'}
                         size="sm"
                         onClick={async () => {
@@ -361,7 +361,7 @@ export function UsersPanel() {
                         }}
                       >
                         {u.canAccessDrive ? '已开启' : '未开启'}
-                      </GitHubButton>
+                      </Button>
                     </td>
                     <td>
                       {isEditing ? (
@@ -433,32 +433,32 @@ export function UsersPanel() {
                             onChange={e => setEditPassword(e.target.value)}
                             style={{ width: '140px', padding: '4px 8px', fontSize: 'var(--gh-text-xs)' }}
                           />
-                          <GitHubButton
+                          <Button
                             variant="primary"
                             size="sm"
                             disabled={!hasChanges}
                             onClick={() => handleUpdate(u)}
                           >
                             保存
-                          </GitHubButton>
-                          <GitHubButton variant="ghost" size="sm" onClick={cancelEdit}>取消</GitHubButton>
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={cancelEdit}>取消</Button>
                         </div>
                       ) : (
                         <div className="gh-actions">
                           {u.status === 'pending' && (
                             <>
-                              <GitHubButton variant="primary" size="sm" onClick={() => handleStatus(u, 'active')}>通过</GitHubButton>
-                              <GitHubButton variant="danger" size="sm" onClick={() => handleStatus(u, 'rejected')}>拒绝</GitHubButton>
+                              <Button variant="primary" size="sm" onClick={() => handleStatus(u, 'active')}>通过</Button>
+                              <Button variant="danger" size="sm" onClick={() => handleStatus(u, 'rejected')}>拒绝</Button>
                             </>
                           )}
                           {u.status === 'rejected' && (
-                            <GitHubButton variant="primary" size="sm" onClick={() => handleStatus(u, 'active')}>通过</GitHubButton>
+                            <Button variant="primary" size="sm" onClick={() => handleStatus(u, 'active')}>通过</Button>
                           )}
-                          <GitHubButton variant="secondary" size="sm" onClick={() => startEdit(u)}>编辑</GitHubButton>
+                          <Button variant="secondary" size="sm" onClick={() => startEdit(u)}>编辑</Button>
                           {u.id === authUser?.id ? (
-                            <GitHubButton variant="secondary" size="sm" disabled>删除</GitHubButton>
+                            <Button variant="secondary" size="sm" disabled>删除</Button>
                           ) : (
-                            <GitHubButton variant="danger" size="sm" onClick={() => handleDelete(u.id, u.username)}>删除</GitHubButton>
+                            <Button variant="danger" size="sm" onClick={() => handleDelete(u.id, u.username)}>删除</Button>
                           )}
                         </div>
                       )}

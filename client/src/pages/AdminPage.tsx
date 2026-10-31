@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { GitHubButton, GitHubBadge } from '../components/ui'
+import { Button, Badge } from '../components/ui'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import Pagination from '../components/Pagination'
@@ -54,9 +54,9 @@ export function ContentPostsPanel() {
           <h1>文章管理</h1>
           <p>{canManageAll ? '管理所有文章（全站）' : '管理我的文章（仅显示你创建的文章）'}</p>
         </div>
-        <GitHubButton variant="primary" size="md" href="/admin/new">
+        <Button variant="primary" size="md" href="/admin/new">
           写文章
-        </GitHubButton>
+        </Button>
       </div>
 
       {loading ? (
@@ -84,22 +84,22 @@ export function ContentPostsPanel() {
                   </td>
                   <td>
                     {post.published ? (
-                      <GitHubBadge variant="success">已发布</GitHubBadge>
+                      <Badge variant="success">已发布</Badge>
                     ) : (
-                      <GitHubBadge>草稿</GitHubBadge>
+                      <Badge>草稿</Badge>
                     )}
                   </td>
                   <td>
                     <div className="gh-actions">
-                      <GitHubButton variant="secondary" size="sm" onClick={() => handleToggle(post)}>
+                      <Button variant="secondary" size="sm" onClick={() => handleToggle(post)}>
                         {post.published ? '下架' : '发布'}
-                      </GitHubButton>
-                      <GitHubButton variant="secondary" size="sm" href={`/admin/edit/${post.id}`}>
+                      </Button>
+                      <Button variant="secondary" size="sm" href={`/admin/edit/${post.id}`}>
                         编辑
-                      </GitHubButton>
-                      <GitHubButton variant="danger" size="sm" onClick={() => handleDelete(post.id)}>
+                      </Button>
+                      <Button variant="danger" size="sm" onClick={() => handleDelete(post.id)}>
                         删除
-                      </GitHubButton>
+                      </Button>
                     </div>
                   </td>
                 </tr>

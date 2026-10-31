@@ -6,7 +6,7 @@ import UserAvatar from '../components/UserAvatar'
 import UserTitleBadge from '../components/UserTitleBadge'
 import AvatarCropDialog from '../components/AvatarCropDialog'
 import DigitalHealthSection from '../components/DigitalHealthSection'
-import { GitHubButton, GitHubBadge, GitHubAlert, GitHubTabNav, GitHubInput } from '../components/ui'
+import { Button, Badge, Alert, SegmentedControl, Input } from '../components/ui'
 import api from '../lib/api'
 import { appScopeLabel, isHighRiskScope } from '../lib/appScopes'
 import { roleLabel } from '../lib/permissions'
@@ -144,74 +144,75 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="gh-page-container" style={{ maxWidth: '900px' }}>
+    <div className="gh-page-container">
       <div className="gh-page-header">
         <h1 className="gh-page-title">个人资料</h1>
+        <p className="gh-page-subtitle">管理账号信息、安全设置与已授权应用</p>
       </div>
 
-      <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
-        {/* Left: Profile Info */}
-        <div style={{ flex: '0 0 auto', minWidth: '240px' }}>
-          <div className="gh-box" style={{ textAlign: 'center' }}>
+      <div className="gh-profile">
+        {/* 左：身份卡 + 积分 + 称号 */}
+        <aside className="gh-profile-side">
+          <div className="gh-identity-card gh-identity-card--profile">
             <UserAvatar userId={user!.id} username={user!.username} size="xl" />
-            <h2 style={{ fontSize: '1.25rem', margin: '12px 0 4px' }}>{user?.username}</h2>
-            <p className="gh-text-secondary" style={{ fontSize: '0.88rem' }}>{user?.email}</p>
-            <div style={{ marginTop: '12px' }}>
-              <GitHubBadge variant={user?.role === 'admin' ? 'accent' : user?.role === 'author' ? 'success' : 'default'}>
-                {roleLabel(user?.role)}
-              </GitHubBadge>
-              {(pointsProfile?.title || pointsProfile?.equippedLeaderTitle) && (
-                <div style={{ marginTop: '8px' }}>
+            <div className="gh-identity-copy">
+              <h2 className="gh-identity-name">{user?.username}</h2>
+              <p className="gh-identity-meta">{user?.email}</p>
+              <div className="gh-identity-badges">
+                <Badge variant={user?.role === 'admin' ? 'accent' : user?.role === 'author' ? 'success' : 'default'}>
+                  {roleLabel(user?.role)}
+                </Badge>
+                {(pointsProfile?.title || pointsProfile?.equippedLeaderTitle) && (
                   <UserTitleBadge title={pointsProfile.title ?? pointsProfile.equippedLeaderTitle} size="md" />
-                </div>
-              )}
+                )}
+              </div>
             </div>
-            <div style={{ marginTop: '20px', display: 'flex', gap: '8px', flexDirection: 'column', alignItems: 'center' }}>
-              <label style={{ cursor: 'pointer', display: 'inline-flex' }}>
-                <span className="gh-btn gh-btn--secondary gh-btn--sm">上传头像</span>
+
+            <div className="gh-profile-avatar-actions">
+              <label className="gh-btn gh-btn--secondary gh-btn--sm gh-file-btn">
+                上传头像
                 <input
                   type="file"
                   accept="image/*"
-                  style={{ display: 'none' }}
+                  className="sr-only"
                   onChange={handleFileSelect}
                 />
               </label>
-              <GitHubButton variant="ghost" size="sm" onClick={handleAvatarRemove}>
+              <Button variant="ghost" size="sm" onClick={handleAvatarRemove}>
                 移除头像
-              </GitHubButton>
-              <div style={{ borderTop: '1px solid var(--gh-color-border-default)', width: '100%', margin: '8px 0' }} />
-              <GitHubButton variant="danger" size="sm" onClick={handleLogout}>
-                退出登录
-              </GitHubButton>
+              </Button>
             </div>
+            <Button variant="danger" size="sm" fullWidth onClick={handleLogout}>
+              退出登录
+            </Button>
           </div>
 
-          <div className="gh-box" style={{ marginTop: '16px' }}>
-            <h3 style={{ fontSize: '1rem', margin: '0 0 12px' }}>积分</h3>
-            <div className="gh-profile-points">
-              <div>
-                <span className="gh-text-secondary" style={{ fontSize: '0.78rem' }}>当前积分</span>
-                <div className="gh-profile-points-value">{pointsProfile?.balance ?? 0}</div>
+          <div className="gh-box">
+            <h3 className="gh-box-heading">积分</h3>
+            <div className="gh-metric-grid gh-metric-grid--three">
+              <div className="gh-metric">
+                <span className="gh-metric-value">{pointsProfile?.balance ?? 0}</span>
+                <span className="gh-metric-label">当前积分</span>
               </div>
-              <div>
-                <span className="gh-text-secondary" style={{ fontSize: '0.78rem' }}>累计获得</span>
-                <div style={{ fontSize: '0.95rem' }}>{pointsProfile?.earned ?? 0}</div>
+              <div className="gh-metric">
+                <span className="gh-metric-value">{pointsProfile?.earned ?? 0}</span>
+                <span className="gh-metric-label">累计获得</span>
               </div>
-              <div>
-                <span className="gh-text-secondary" style={{ fontSize: '0.78rem' }}>全站排名</span>
-                <div style={{ fontSize: '0.95rem' }}>#{pointsProfile?.rank ?? '—'}</div>
+              <div className="gh-metric">
+                <span className="gh-metric-value">#{pointsProfile?.rank ?? '—'}</span>
+                <span className="gh-metric-label">全站排名</span>
               </div>
             </div>
-            <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <div className="gh-profile-actions">
               <Link className="gh-btn gh-btn--secondary gh-btn--sm" to="/points">积分中心</Link>
               <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/games">赚积分</Link>
             </div>
           </div>
 
           {pointsProfile && pointsProfile.leaderTitles.length > 0 && (
-            <div className="gh-box" style={{ marginTop: '16px' }}>
-              <h3 style={{ fontSize: '1rem', margin: '0 0 4px' }}>传说称号</h3>
-              <p className="gh-text-tertiary" style={{ fontSize: '0.78rem', margin: '0 0 10px' }}>
+            <div className="gh-box">
+              <h3 className="gh-box-heading">传说称号</h3>
+              <p className="gh-settings-hint">
                 单机排行榜第一名自动获得，被超越后自动消失；点击「佩戴」显示在顶栏、聊天与排行榜。
               </p>
               <div className="gh-profile-legend-titles">
@@ -238,9 +239,11 @@ export default function ProfilePage() {
               </div>
             </div>
           )}
-        </div>
-        <div style={{ flex: '1 1 400px', minWidth: 0 }}>
-          <GitHubTabNav
+        </aside>
+
+        {/* 右：设置面板 */}
+        <div className="gh-profile-main">
+          <SegmentedControl
             tabs={[
               { value: 'overview', label: '概览' },
               { value: 'digital-health', label: '数字健康' },
@@ -249,170 +252,144 @@ export default function ProfilePage() {
             onChange={setActiveTab}
           />
 
-          <div style={{ marginTop: '16px' }}>
-            {activeTab === 'overview' && (
-              <>
-                <div className="gh-box">
-                  <h3 style={{ fontSize: '1rem', margin: '0 0 16px' }}>账号信息</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div>
-                      <span className="gh-text-secondary" style={{ fontSize: '0.78rem' }}>用户名</span>
-                      <div style={{ fontSize: '0.95rem' }}>{user?.username}</div>
-                    </div>
-                    <div>
-                      <span className="gh-text-secondary" style={{ fontSize: '0.78rem' }}>邮箱</span>
-                      <div style={{ fontSize: '0.95rem' }}>{user?.email}</div>
-                    </div>
-                    <div>
-                      <span className="gh-text-secondary" style={{ fontSize: '0.78rem' }}>角色</span>
-                      <div style={{ fontSize: '0.95rem' }}>{roleLabel(user?.role)}</div>
-                    </div>
+          {activeTab === 'overview' && (
+            <div className="gh-profile-panels">
+              <section className="gh-settings-group" aria-labelledby="profile-account-title">
+                <h2 className="gh-settings-title" id="profile-account-title">账号信息</h2>
+                <div className="gh-settings-list">
+                  <div className="gh-settings-row">
+                    <span className="gh-settings-label">用户名</span>
+                    <span className="gh-settings-value">{user?.username}</span>
+                  </div>
+                  <div className="gh-settings-row">
+                    <span className="gh-settings-label">邮箱</span>
+                    <span className="gh-settings-value">{user?.email}</span>
+                  </div>
+                  <div className="gh-settings-row">
+                    <span className="gh-settings-label">角色</span>
+                    <span className="gh-settings-value">{roleLabel(user?.role)}</span>
                   </div>
                 </div>
+              </section>
 
-                {saveSuccess && (
-                  <GitHubAlert variant="success">设置已保存</GitHubAlert>
-                )}
-                {saveError && (
-                  <GitHubAlert variant="danger">{saveError}</GitHubAlert>
-                )}
+              {saveSuccess && <Alert variant="success">设置已保存</Alert>}
+              {saveError && <Alert variant="danger">{saveError}</Alert>}
 
-                <div className="gh-box" style={{ marginTop: '16px' }}>
-                  <h3 style={{ fontSize: '1rem', margin: '0 0 16px' }}>修改用户名</h3>
-                  <form onSubmit={handleUsernameSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <GitHubInput
-                      type="text"
-                      value={username}
-                      onChange={e => setUsername(e.target.value)}
-                      placeholder="新用户名（2-50 字符）"
-                      required
-                      minLength={2}
-                      maxLength={50}
-                      fullWidth
-                    />
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <GitHubButton type="submit" variant="primary" disabled={updatingUsername || !username.trim() || username.trim() === user?.username}>
-                        {updatingUsername ? '保存中…' : '保存'}
-                      </GitHubButton>
-                    </div>
-                  </form>
-                  {usernameSuccess && (
-                    <GitHubAlert variant="success">用户名已更新</GitHubAlert>
-                  )}
-                  {usernameError && (
-                    <GitHubAlert variant="danger">{usernameError}</GitHubAlert>
-                  )}
-                </div>
+              <section className="gh-settings-group">
+                <h2 className="gh-settings-title">修改用户名</h2>
+                <form className="gh-settings-form" onSubmit={handleUsernameSubmit}>
+                  <Input
+                    type="text"
+                    value={username}
+                    onChange={e => setUsername(e.target.value)}
+                    placeholder="新用户名（2-50 字符）"
+                    required
+                    minLength={2}
+                    maxLength={50}
+                    fullWidth
+                  />
+                  <div className="gh-settings-form-actions">
+                    <Button type="submit" variant="primary" disabled={updatingUsername || !username.trim() || username.trim() === user?.username}>
+                      {updatingUsername ? '保存中…' : '保存'}
+                    </Button>
+                  </div>
+                </form>
+                {usernameSuccess && <Alert variant="success">用户名已更新</Alert>}
+                {usernameError && <Alert variant="danger">{usernameError}</Alert>}
+              </section>
 
-                <div className="gh-box" style={{ marginTop: '16px' }}>
-                  <h3 style={{ fontSize: '1rem', margin: '0 0 16px' }}>修改密码</h3>
-                  <form onSubmit={handlePasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <GitHubInput
-                      type="password"
-                      value={currentPassword}
-                      onChange={e => setCurrentPassword(e.target.value)}
-                      placeholder="当前密码"
-                      required
-                      autoComplete="current-password"
-                      fullWidth
-                    />
-                    <GitHubInput
-                      type="password"
-                      value={newPassword}
-                      onChange={e => setNewPassword(e.target.value)}
-                      placeholder="新密码（至少 6 位）"
-                      required
-                      minLength={6}
-                      autoComplete="new-password"
-                      fullWidth
-                    />
-                    <GitHubInput
-                      type="password"
-                      value={confirmPassword}
-                      onChange={e => setConfirmPassword(e.target.value)}
-                      placeholder="确认新密码"
-                      required
-                      minLength={6}
-                      autoComplete="new-password"
-                      fullWidth
-                    />
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <GitHubButton type="submit" variant="primary" disabled={updatingPassword}>
-                        {updatingPassword ? '修改中…' : '修改密码'}
-                      </GitHubButton>
-                    </div>
-                  </form>
-                  {passwordSuccess && (
-                    <GitHubAlert variant="success">密码已修改，其他设备已退出登录</GitHubAlert>
-                  )}
-                  {passwordError && (
-                    <GitHubAlert variant="danger">{passwordError}</GitHubAlert>
-                  )}
-                </div>
+              <section className="gh-settings-group">
+                <h2 className="gh-settings-title">修改密码</h2>
+                <form className="gh-settings-form" onSubmit={handlePasswordSubmit}>
+                  <Input
+                    type="password"
+                    value={currentPassword}
+                    onChange={e => setCurrentPassword(e.target.value)}
+                    placeholder="当前密码"
+                    required
+                    autoComplete="current-password"
+                    fullWidth
+                  />
+                  <Input
+                    type="password"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="新密码（至少 6 位）"
+                    required
+                    minLength={6}
+                    autoComplete="new-password"
+                    fullWidth
+                  />
+                  <Input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    placeholder="确认新密码"
+                    required
+                    minLength={6}
+                    autoComplete="new-password"
+                    fullWidth
+                  />
+                  <div className="gh-settings-form-actions">
+                    <Button type="submit" variant="primary" disabled={updatingPassword}>
+                      {updatingPassword ? '修改中…' : '修改密码'}
+                    </Button>
+                  </div>
+                </form>
+                {passwordSuccess && <Alert variant="success">密码已修改，其他设备已退出登录</Alert>}
+                {passwordError && <Alert variant="danger">{passwordError}</Alert>}
+              </section>
 
-                <div className="gh-box" style={{ marginTop: '16px' }}>
-                  <h3 style={{ fontSize: '1rem', margin: '0 0 8px' }}>已授权的应用</h3>
-                  <p className="gh-text-tertiary" style={{ fontSize: 'var(--gh-text-xs)', margin: '0 0 16px' }}>
-                    这些第三方应用可以使用你的账号访问 LineWeb API。撤销后该应用的访问令牌会立即失效。
-                  </p>
+              <section className="gh-settings-group">
+                <h2 className="gh-settings-title">已授权的应用</h2>
+                <p className="gh-settings-hint">
+                  这些第三方应用可以使用你的账号访问 LineWeb API。撤销后该应用的访问令牌会立即失效。
+                </p>
 
-                  {grantsError && (
-                    <div style={{ marginBottom: '12px' }}>
-                      <GitHubAlert variant="danger">{grantsError}</GitHubAlert>
-                    </div>
-                  )}
+                {grantsError && <Alert variant="danger">{grantsError}</Alert>}
 
-                  {grantsLoading ? (
-                    <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--gh-space-5)' }}>
-                      <div className="gh-spinner" />
-                    </div>
-                  ) : grants.length === 0 ? (
-                    <p className="gh-text-secondary" style={{ fontSize: 'var(--gh-text-sm)' }}>
-                      目前没有已授权的应用
-                    </p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {grants.map((grant) => (
-                        <div key={grant.id} className="gh-grant-row">
-                          <div style={{ minWidth: 0, flex: 1 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500 }}>
-                              {grant.client.name}
-                            </div>
-                            {grant.client.description && (
-                              <p className="gh-text-tertiary" style={{ fontSize: 'var(--gh-text-xs)', margin: '4px 0 0' }}>
-                                {grant.client.description}
-                              </p>
-                            )}
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
-                              {grant.scopes.map((scope) => (
-                                <GitHubBadge key={scope} variant={isHighRiskScope(scope) ? 'warning' : 'default'}>
-                                  {appScopeLabel(scope)}
-                                </GitHubBadge>
-                              ))}
-                            </div>
-                            <p className="gh-text-tertiary" style={{ fontSize: 'var(--gh-text-xs)', margin: '8px 0 0' }}>
-                              授权于 {new Date(grant.createdAt).toLocaleString('zh-CN')}
-                            </p>
+                {grantsLoading ? (
+                  <div className="gh-loading-row"><div className="gh-spinner" /></div>
+                ) : grants.length === 0 ? (
+                  <p className="gh-settings-hint">目前没有已授权的应用</p>
+                ) : (
+                  <div className="gh-grant-list">
+                    {grants.map((grant) => (
+                      <div key={grant.id} className="gh-grant-row">
+                        <div className="gh-grant-copy">
+                          <div className="gh-grant-name">{grant.client.name}</div>
+                          {grant.client.description && (
+                            <p className="gh-settings-hint">{grant.client.description}</p>
+                          )}
+                          <div className="gh-grant-scopes">
+                            {grant.scopes.map((scope) => (
+                              <Badge key={scope} variant={isHighRiskScope(scope) ? 'warning' : 'default'}>
+                                {appScopeLabel(scope)}
+                              </Badge>
+                            ))}
                           </div>
-                          <GitHubButton
-                            type="button"
-                            variant="danger"
-                            size="sm"
-                            disabled={revokingId === grant.id}
-                            onClick={() => handleRevoke(grant)}
-                          >
-                            {revokingId === grant.id ? '撤销中…' : '撤销授权'}
-                          </GitHubButton>
+                          <p className="gh-grant-time">
+                            授权于 {new Date(grant.createdAt).toLocaleString('zh-CN')}
+                          </p>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                        <Button
+                          type="button"
+                          variant="danger"
+                          size="sm"
+                          disabled={revokingId === grant.id}
+                          onClick={() => handleRevoke(grant)}
+                        >
+                          {revokingId === grant.id ? '撤销中…' : '撤销授权'}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
 
-              </>
-            )}
-            {activeTab === 'digital-health' && <DigitalHealthSection />}
-          </div>
+          {activeTab === 'digital-health' && <DigitalHealthSection />}
         </div>
       </div>
 

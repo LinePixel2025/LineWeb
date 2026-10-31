@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useFeaturedPages } from '../hooks/useQueries'
-import { GitHubBadge } from '../components/ui'
+import { Badge } from '../components/ui'
 
 interface FeaturedPage {
   id: number
@@ -11,12 +11,12 @@ interface FeaturedPage {
 }
 
 const featureIcons: Record<string, React.ReactNode> = {
-  calculator: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><line x1="8" y1="6" x2="16" y2="6" /><line x1="8" y1="10" x2="8" y2="10.01" /><line x1="12" y1="10" x2="16" y2="10" /><line x1="8" y1="14" x2="8" y2="14.01" /><line x1="12" y1="14" x2="16" y2="14" /><line x1="8" y1="18" x2="8" y2="18.01" /><line x1="12" y1="18" x2="16" y2="18" /></svg>,
-  games: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7.5 8.5h9a3 3 0 0 1 2.9 2.25l1 3.6a2.25 2.25 0 0 1-3.8 2.12l-1.3-1.22a2 2 0 0 0-1.37-.55h-5.86a2 2 0 0 0-1.37.55l-1.3 1.22a2.25 2.25 0 0 1-3.8-2.12l1-3.6A3 3 0 0 1 7.5 8.5Z" /><path d="M6.5 12.5h2M7.5 11.5v2" /><circle cx="16" cy="12" r=".75" fill="currentColor" stroke="none" /><circle cx="18" cy="14" r=".75" fill="currentColor" stroke="none" /></svg>,
-  posts: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" /></svg>,
-  profile: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 1 0-16 0" /></svg>,
-  aichat: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /><path d="M12 7.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z" /></svg>,
-  webproxy: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.6 3.8 5.7 3.8 9S14.5 18.4 12 21c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3Z" /></svg>,
+  calculator: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="3" /><line x1="8" y1="6" x2="16" y2="6" /><line x1="8" y1="10" x2="8" y2="10.01" /><line x1="12" y1="10" x2="16" y2="10" /><line x1="8" y1="14" x2="8" y2="14.01" /><line x1="12" y1="14" x2="16" y2="14" /><line x1="8" y1="18" x2="8" y2="18.01" /><line x1="12" y1="18" x2="16" y2="18" /></svg>,
+  games: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7.5 8.5h9a3 3 0 0 1 2.9 2.25l1 3.6a2.25 2.25 0 0 1-3.8 2.12l-1.3-1.22a2 2 0 0 0-1.37-.55h-5.86a2 2 0 0 0-1.37.55l-1.3 1.22a2.25 2.25 0 0 1-3.8-2.12l1-3.6A3 3 0 0 1 7.5 8.5Z" /><path d="M6.5 12.5h2M7.5 11.5v2" /><circle cx="16" cy="12" r=".75" fill="currentColor" stroke="none" /><circle cx="18" cy="14" r=".75" fill="currentColor" stroke="none" /></svg>,
+  posts: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" /></svg>,
+  profile: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 1 0-16 0" /></svg>,
+  aichat: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /><path d="M12 7.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z" /></svg>,
+  webproxy: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.6 3.8 5.7 3.8 9S14.5 18.4 12 21c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3Z" /></svg>,
 }
 
 const features = [
@@ -68,35 +68,20 @@ export default function FeaturesPage() {
 
   return (
     <div className="gh-page-container">
-      <div className="gh-page-header" style={{ textAlign: 'center' }}>
+      <div className="gh-page-header gh-page-header--center">
         <h1 className="gh-page-title">功能页面</h1>
-        <p className="gh-text-secondary">探索 Line Web 提供的各种工具与功能</p>
+        <p className="gh-page-subtitle">探索 Line Web 提供的各种工具与功能</p>
       </div>
 
       <div className="gh-feature-grid">
         {features.map((item) => (
-          <Link
-            key={item.path}
-            to={item.path}
-            className="gh-box"
-            style={{
-              textDecoration: 'none', color: 'inherit',
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center',
-              textAlign: 'center', gap: '12px', padding: '24px',
-            }}
-          >
-            <div style={{ color: 'var(--gh-color-fg-muted)' }}>{featureIcons[item.icon]}</div>
-            <div>
-              <h3 style={{ fontSize: '1rem', marginBottom: '4px' }}>{item.title}</h3>
-              <p className="gh-text-secondary" style={{ fontSize: '0.82rem', margin: 0 }}>{item.desc}</p>
-            </div>
-            {item.badge && (
-              <GitHubBadge variant="accent">{item.badge}</GitHubBadge>
-            )}
+          <Link key={item.path} to={item.path} className="gh-feature-card">
+            <span className="gh-feature-card-icon">{featureIcons[item.icon]}</span>
+            <h3 className="gh-feature-card-title">{item.title}</h3>
+            <p className="gh-feature-card-desc">{item.desc}</p>
+            {item.badge && <Badge variant="accent">{item.badge}</Badge>}
           </Link>
         ))}
-
       </div>
 
       {customPages.length > 0 && (
@@ -104,38 +89,24 @@ export default function FeaturesPage() {
           <h2 id="custom-pages-heading" className="gh-feature-custom-pages-title">自定义页面</h2>
           <div className="gh-feature-grid">
             {customPages.map((item) => (
-          <Link
-            key={item.slug}
-            to={`/page/${item.slug}`}
-            className="gh-box"
-            style={{
-              textDecoration: 'none', color: 'inherit',
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center',
-              textAlign: 'center', gap: '12px', padding: '24px',
-            }}
-          >
-            <div style={{ fontSize: '1.5rem' }}>{item.featureEmoji || (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--gh-color-fg-muted)' }}>
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
-              </svg>
-            )}</div>
-            <div>
-              <h3 style={{ fontSize: '1rem', marginBottom: '4px' }}>{item.title}</h3>
-              {item.featureDesc && (
-                <p className="gh-text-secondary" style={{ fontSize: '0.82rem', margin: 0 }}>{item.featureDesc}</p>
-              )}
-            </div>
-          </Link>
+              <Link key={item.slug} to={`/page/${item.slug}`} className="gh-feature-card">
+                <span className="gh-feature-card-icon gh-feature-card-emoji">
+                  {item.featureEmoji || (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                  )}
+                </span>
+                <h3 className="gh-feature-card-title">{item.title}</h3>
+                {item.featureDesc && <p className="gh-feature-card-desc">{item.featureDesc}</p>}
+              </Link>
             ))}
           </div>
         </section>
       )}
 
       {isSuccess && customPages.length === 0 && (
-        <p className="gh-text-tertiary" style={{ textAlign: 'center', marginTop: '24px' }}>
-          管理员尚未添加自定义模块
-        </p>
+        <p className="gh-text-tertiary u-center-text u-mt-4">管理员尚未添加自定义模块</p>
       )}
     </div>
   )

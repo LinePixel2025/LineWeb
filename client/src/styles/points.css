@@ -459,19 +459,20 @@
 .gh-header-points {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border: 1px solid var(--gh-border);
-  border-radius: 999px;
+  gap: 5px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: var(--gh-radius-pill);
   font-size: var(--gh-text-xs);
   font-weight: 600;
   color: var(--gh-text);
-  background: var(--gh-canvas-subtle);
+  background: var(--gh-fill-2);
   text-decoration: none;
-  transition: border-color var(--gh-transition), background var(--gh-transition);
+  transition: background var(--gh-transition), color var(--gh-transition);
 }
-.gh-header-points:hover { border-color: var(--gh-accent); background: var(--gh-accent-soft); }
-.gh-header-points-icon { font-size: 0.8rem; }
+.gh-header-points:hover { background: var(--gh-fill-3); color: var(--gh-text); }
+.gh-header-points-icon { font-size: 0.85rem; }
 .gh-header-points-value { font-variant-numeric: tabular-nums; }
 
 /* ===== 个人资料积分卡片 ===== */
@@ -678,7 +679,7 @@
 }
 .gh-points-shop-card:hover { transform: translateY(-2px); box-shadow: var(--gh-shadow-md); }
 .gh-points-shop-card--common { border-left-color: var(--gh-border); }
-.gh-points-shop-card--rare { border-left-color: #2f81f7; }
+.gh-points-shop-card--rare { border-left-color: var(--gh-accent); }
 .gh-points-shop-card--epic { border-left-color: #8250df; }
 .gh-points-shop-card--legendary {
   border-left-color: #bf3989;
@@ -722,7 +723,7 @@
   background: var(--gh-canvas-inset);
   color: var(--gh-text-secondary);
 }
-.gh-points-rarity--rare { background: rgba(47, 129, 247, 0.14); color: #2f81f7; }
+.gh-points-rarity--rare { background: rgba(47, 129, 247, 0.14); color: var(--gh-accent); }
 .gh-points-rarity--epic { background: rgba(130, 80, 223, 0.14); color: #8250df; }
 .gh-points-rarity--legendary { background: rgba(191, 57, 137, 0.14); color: #bf3989; }
 

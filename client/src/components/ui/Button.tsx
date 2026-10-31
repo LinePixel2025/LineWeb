@@ -14,9 +14,13 @@ type ButtonAsButton = BaseProps & ButtonHTMLAttributes<HTMLButtonElement> & { hr
 type ButtonAsLink = BaseProps & { href: string; external?: boolean; children?: React.ReactNode; className?: string }
 type ButtonAsAnchor = BaseProps & { href: string; external: true; children?: React.ReactNode; className?: string } & Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'>
 
-type GitHubButtonProps = ButtonAsButton | ButtonAsLink | ButtonAsAnchor
+type ButtonProps = ButtonAsButton | ButtonAsLink | ButtonAsAnchor
 
-const GitHubButton = forwardRef<HTMLButtonElement | HTMLAnchorElement, GitHubButtonProps>(
+/**
+ * 全站按钮（Apple 胶囊 / 填充）。
+ * variant: primary=强调填充 / secondary=灰底填充 / ghost=纯文字 / danger=红淡底
+ */
+const Button = forwardRef<HTMLButtonElement | HTMLAnchorElement, ButtonProps>(
   ({ variant = 'secondary', size = 'md', fullWidth, className = '', children, ...props }, ref) => {
     const cls = `gh-btn gh-btn--${variant} gh-btn--${size}${fullWidth ? ' gh-btn--full' : ''} ${className}`.trim()
 
@@ -36,5 +40,5 @@ const GitHubButton = forwardRef<HTMLButtonElement | HTMLAnchorElement, GitHubBut
   }
 )
 
-GitHubButton.displayName = 'GitHubButton'
-export default GitHubButton
+Button.displayName = 'Button'
+export default Button

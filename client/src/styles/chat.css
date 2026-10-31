@@ -1472,7 +1472,7 @@
   color: var(--gh-text-tertiary);
   font-size: var(--gh-text-xs);
   font-weight: 600;
-  text-transform: uppercase;
+  text-transform: none;
   letter-spacing: 0.02em;
 }
 

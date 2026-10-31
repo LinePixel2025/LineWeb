@@ -51,7 +51,7 @@
   font-size: var(--gh-text-xs);
   font-weight: 600;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .gh-games-title {
@@ -750,7 +750,7 @@
   font-size: var(--gh-text-xs);
   font-weight: 600;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .gh-g2048-overlay-title {
@@ -929,7 +929,7 @@
   font-size: var(--gh-text-xs);
   font-weight: 600;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .gh-game-friend-list {
@@ -1497,7 +1497,7 @@
   font-size: var(--gh-text-xs);
   font-weight: 600;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .gh-game-result-title {
@@ -1585,7 +1585,7 @@
   font-size: var(--gh-text-xs);
   font-weight: 700;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .gh-game-toast-close {
@@ -1941,3 +1941,211 @@
   .gh-games-leaderboard-row { padding: 12px 10px; }
   .gh-games-leaderboard-chip, .gh-games-leaderboard-tab { min-height: 44px; }
 }
+
+/* =============================================================
+   Apple 视觉覆盖（2026-11 重构 · P4）
+   -------------------------------------------------------------
+   覆盖大厅 / 排行榜 / 联机面板 / 结果层等 chrome；
+   牌面、棋盘、3D 场景等游戏美术保持原样。
+   ============================================================= */
+
+/* ===== 大厅 ===== */
+.gh-games-page { gap: var(--gh-space-6); }
+.gh-games-header {
+  align-items: flex-end;
+  gap: var(--gh-space-4);
+  padding-bottom: var(--gh-space-2);
+}
+.gh-games-title {
+  margin: 0 0 6px;
+  font-size: var(--gh-text-2xl);
+  font-weight: 700;
+  letter-spacing: var(--gh-tracking-tight);
+}
+.gh-games-subtitle { color: var(--gh-text-secondary); font-size: var(--gh-text-subhead, 0.9375rem); }
+.gh-games-eyebrow { display: none; }
+
+.gh-games-tools {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.gh-games-tools-note {
+  flex-basis: 100%;
+  max-width: none;
+  font-size: var(--gh-text-xs);
+}
+
+.gh-games-section { gap: var(--gh-space-3); }
+.gh-games-section-head {
+  gap: var(--gh-space-2);
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.gh-games-section-title {
+  font-size: var(--gh-text-xl);
+  font-weight: 600;
+  letter-spacing: var(--gh-tracking-snug);
+}
+
+.gh-games-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr));
+  gap: var(--gh-space-4);
+}
+.gh-games-card {
+  overflow: hidden;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+  transition: transform var(--gh-dur-2) var(--gh-ease-out),
+    box-shadow var(--gh-dur-2) var(--gh-ease-out),
+    border-color var(--gh-transition);
+}
+.gh-games-card:hover { transform: translateY(-2px); box-shadow: var(--gh-shadow-lg); }
+.gh-games-card--featured {
+  border-color: var(--gh-border);
+  box-shadow: var(--gh-shadow-card);
+}
+.gh-games-card--featured:hover { transform: translateY(-2px); }
+.gh-games-card--soon { opacity: 0.72; }
+.gh-games-card--soon:hover { transform: none; box-shadow: var(--gh-shadow-card); }
+
+.gh-games-card-body { display: flex; flex-direction: column; gap: 10px; padding: 20px; }
+.gh-games-card-title {
+  margin: 0;
+  font-size: var(--gh-text-lg);
+  font-weight: 600;
+  letter-spacing: var(--gh-tracking-snug);
+}
+.gh-games-card-desc {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.55;
+}
+.gh-games-card-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.gh-games-card-flag {
+  align-self: flex-start;
+  padding: 2px 10px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+.gh-games-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.gh-games-soon-badge { margin-left: 8px; }
+.gh-games-footnote { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); line-height: 1.6; }
+
+/* ===== 排行榜 ===== */
+.gh-games-leaderboard,
+.gh-games-leaderboard-page { max-width: 1080px; margin: 0 auto; }
+.gh-games-leaderboard-tabs,
+.gh-games-leaderboard-games { display: flex; flex-wrap: wrap; gap: 6px; }
+.gh-games-leaderboard-tab,
+.gh-games-leaderboard-chip {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-fill-2);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  font-weight: 500;
+  cursor: pointer;
+}
+.gh-games-leaderboard-tab--active,
+.gh-games-leaderboard-chip--active {
+  background: var(--gh-accent);
+  color: var(--gh-on-accent);
+  font-weight: 600;
+}
+.gh-games-leaderboard-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--gh-border-muted);
+  border-radius: 0;
+  background: transparent;
+}
+.gh-games-leaderboard-row:last-child { border-bottom: 0; }
+.gh-games-leaderboard-row:hover { background: var(--gh-canvas-inset); }
+.gh-games-leaderboard-rank,
+.gh-games-leaderboard-index { color: var(--gh-text-tertiary); font-variant-numeric: tabular-nums; }
+.gh-games-leaderboard-name { color: var(--gh-text); font-weight: 600; }
+.gh-games-leaderboard-value { color: var(--gh-accent); font-family: var(--gh-font); font-weight: 600; }
+.gh-games-leaderboard-podium { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.gh-games-leaderboard-podium > * {
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+}
+
+/* ===== 联机 / 单机页壳（共用） ===== */
+.gh-g2048-page,
+.gh-game-online-page,
+.gh-pk-online-page,
+.gh-mc-game-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-4);
+  max-width: 1320px;
+  margin: 0 auto;
+}
+.gh-game-room,
+.gh-game-match,
+.gh-game-friend-picker,
+.gh-g2048-board-wrap {
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+}
+.gh-game-room-title,
+.gh-game-match-title,
+.gh-game-friend-picker-title { font-size: var(--gh-text-xl); font-weight: 600; letter-spacing: var(--gh-tracking-snug); }
+.gh-game-room-subtitle,
+.gh-game-match-subtitle { color: var(--gh-text-secondary); font-size: var(--gh-text-sm); }
+.gh-game-friend-picker-row,
+.gh-game-room-player { border-radius: var(--gh-radius); }
+.gh-game-friend-picker-row:hover,
+.gh-game-room-player:hover { background: var(--gh-canvas-inset); }
+
+.gh-game-result,
+.gh-g2048-overlay {
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-xl);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-xl);
+}
+.gh-game-result-title,
+.gh-g2048-overlay-title { font-size: var(--gh-text-2xl); font-weight: 700; letter-spacing: var(--gh-tracking-tight); }
+.gh-game-result-subtitle { color: var(--gh-text-secondary); font-size: var(--gh-text-sm); }
+.gh-game-toast {
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-material-chrome);
+  box-shadow: var(--gh-shadow-lg);
+  -webkit-backdrop-filter: var(--gh-blur-chrome);
+  backdrop-filter: var(--gh-blur-chrome);
+}
+
+/* 游戏顶栏 chips（各游戏共用） */
+.gh-game-online-page .gh-btn,
+.gh-g2048-page .gh-btn { min-height: 34px; }
+
+@media (max-width: 900px) {
+  .gh-games-header { align-items: flex-start; }
+  .gh-games-tools { justify-content: flex-start; }
+  .gh-games-grid { grid-template-columns: minmax(0, 1fr); }
+  .gh-games-card--featured { flex-direction: column; }
+  .gh-games-card--featured .gh-games-cover { flex: 0 0 auto; min-height: 160px; }
+  .gh-games-leaderboard-podium { grid-template-columns: minmax(0, 1fr); }
+}
+

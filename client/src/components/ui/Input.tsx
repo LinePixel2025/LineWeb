@@ -1,11 +1,12 @@
 import { forwardRef, type InputHTMLAttributes } from 'react'
 
-interface GitHubInputProps extends InputHTMLAttributes<HTMLInputElement> {
+interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   icon?: React.ReactNode
   fullWidth?: boolean
 }
 
-const GitHubInput = forwardRef<HTMLInputElement, GitHubInputProps>(
+/** 填充式文本输入（Apple 表单风格）。 */
+const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ icon, fullWidth, className = '', ...props }, ref) => {
     const cls = `gh-input${fullWidth ? ' gh-input--full' : ''} ${className}`.trim()
     if (icon) {
@@ -20,5 +21,5 @@ const GitHubInput = forwardRef<HTMLInputElement, GitHubInputProps>(
   }
 )
 
-GitHubInput.displayName = 'GitHubInput'
-export default GitHubInput
+Input.displayName = 'Input'
+export default Input

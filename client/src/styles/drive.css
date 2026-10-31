@@ -1,4 +1,4 @@
-﻿/* =============================================================
+/* =============================================================
    LineWeb Drive - GitHub Files workspace
    ============================================================= */
 
@@ -252,7 +252,7 @@
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .gh-drive-sidebar-tree,
@@ -1156,7 +1156,7 @@
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.03em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .gh-drive-detail-title {
@@ -3058,3 +3058,530 @@
   font-size: var(--gh-text-xs);
   line-height: 1.5;
 }
+
+/* =============================================================
+   Apple 视觉覆盖（2026-11 重构 · P3）
+   -------------------------------------------------------------
+   只覆盖外壳与交互层：工具栏、源列表、文件行、面板、弹层。
+   缩略图内容、预览器、图标绘制保持原样。
+   ============================================================= */
+
+/* ===== 页面与顶部工具栏 ===== */
+.gh-drive-page { color: var(--gh-text); }
+
+.gh-drive-repo-header {
+  align-items: center;
+  gap: var(--gh-space-4);
+  padding: 0 0 var(--gh-space-4);
+  border-bottom: 0;
+}
+.gh-drive-repo-heading { align-items: center; gap: 12px; }
+.gh-drive-repo-mark {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: var(--gh-radius);
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+}
+.gh-drive-repo-path {
+  margin-bottom: 2px;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+.gh-drive-repo-heading h1 {
+  font-size: var(--gh-text-xl);
+  font-weight: 700;
+  letter-spacing: var(--gh-tracking-tight);
+}
+.gh-drive-repo-heading p {
+  margin-top: 2px;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+}
+.gh-drive-repo-actions { gap: 8px; }
+.gh-drive-repo-actions .gh-btn { min-height: 34px; }
+.gh-drive-repo-status {
+  margin-right: 4px;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+}
+.gh-drive-repo-status span {
+  width: 7px;
+  height: 7px;
+  background: var(--gh-success);
+}
+.gh-drive-public-note { color: var(--gh-text-tertiary); }
+
+/* 视图切换：iOS 分段控件 */
+.gh-drive-subnav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 0;
+  margin: 0 0 var(--gh-space-4);
+  padding: 3px;
+  border-bottom: 0;
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-inset);
+}
+.gh-drive-subnav-item {
+  align-self: auto;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: calc(var(--gh-radius) - 3px);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  font-weight: 500;
+}
+.gh-drive-subnav-item:hover { color: var(--gh-text); }
+.gh-drive-subnav-item--active {
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10);
+}
+.gh-drive-subnav-note { color: var(--gh-text-tertiary); }
+
+/* ===== 三栏工作区 ===== */
+.gh-drive-workspace {
+  grid-template-columns: 232px minmax(0, 1fr);
+  gap: var(--gh-space-4);
+  padding-top: var(--gh-space-4);
+}
+.gh-drive-workspace--with-detail { grid-template-columns: 232px minmax(0, 1fr) 300px; }
+
+/* ===== 源列表 ===== */
+.gh-drive-sidebar {
+  gap: var(--gh-space-4);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.gh-drive-sidebar-header { padding: 0 2px; }
+.gh-drive-sidebar-heading {
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+}
+.gh-drive-sidebar-section { gap: 2px; }
+.gh-drive-sidebar-section-label {
+  padding: 10px 4px 4px;
+  color: var(--gh-text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.gh-drive-tree-node-content {
+  min-height: 32px;
+  padding: 5px 8px;
+  border-radius: var(--gh-radius-sm);
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+}
+.gh-drive-tree-node-content:hover { background: var(--gh-canvas-inset); }
+.gh-drive-tree-node-content--active {
+  background: var(--gh-fill-2);
+  color: var(--gh-text);
+  font-weight: 600;
+}
+.gh-drive-tree-node-content--drag-over { background: var(--gh-accent-soft); outline: 1px dashed var(--gh-accent); }
+.gh-drive-sidebar-favorite-item,
+.gh-drive-sidebar-favorite-link {
+  min-height: 32px;
+  padding: 5px 8px;
+  border-radius: var(--gh-radius-sm);
+}
+.gh-drive-sidebar-favorite-item:hover { background: var(--gh-canvas-inset); }
+.gh-drive-sidebar-placeholder { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+.gh-drive-sidebar-toggle { border: 0; border-radius: var(--gh-radius-sm); }
+
+.gh-drive-scope-switcher {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-inset);
+}
+.gh-drive-scope-switcher-item {
+  min-height: 28px;
+  border: 0;
+  border-radius: calc(var(--gh-radius) - 3px);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  font-weight: 500;
+}
+.gh-drive-scope-switcher-item--active {
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10);
+}
+
+/* ===== 主内容卡 ===== */
+.gh-drive-files-card {
+  overflow: hidden;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+}
+.gh-drive-toolbar {
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--gh-border);
+  background: var(--gh-canvas);
+}
+.gh-drive-search-field {
+  min-height: 34px;
+  border: 0;
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-inset);
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+}
+.gh-drive-search-field:focus { background: var(--gh-canvas); box-shadow: var(--gh-focus-ring); }
+.gh-drive-search-clear { color: var(--gh-text-tertiary); }
+.gh-drive-icon-button,
+.gh-drive-path-bar-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: var(--gh-radius-pill);
+  background: transparent;
+  color: var(--gh-text-secondary);
+}
+.gh-drive-icon-button:hover,
+.gh-drive-path-bar-action:hover { background: var(--gh-fill-2); color: var(--gh-text); }
+
+.gh-drive-view-switcher {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-inset);
+}
+.gh-drive-view-switcher-button {
+  min-width: 30px;
+  height: 28px;
+  border: 0;
+  border-radius: calc(var(--gh-radius) - 3px);
+  color: var(--gh-text-secondary);
+}
+.gh-drive-view-switcher-button--active {
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10);
+}
+
+/* 列表视图 */
+.gh-drive-table-wrap { border-radius: 0; }
+.gh-drive-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.gh-drive-col-header {
+  height: 34px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--gh-border);
+  background: var(--gh-canvas-subtle);
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.gh-drive-row { height: 46px; transition: background var(--gh-transition); }
+.gh-drive-row:hover { background: var(--gh-canvas-inset); }
+.gh-drive-row--selected,
+.gh-drive-row--selected:hover { background: var(--gh-accent-soft); }
+.gh-drive-row--focused { outline: 2px solid var(--gh-accent-emphasis); outline-offset: -2px; }
+.gh-drive-cell {
+  padding: 0 12px;
+  border-bottom: 1px solid var(--gh-border-muted);
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+}
+.gh-drive-table tr:last-child .gh-drive-cell { border-bottom: 0; }
+.gh-drive-cell--size,
+.gh-drive-cell--date,
+.gh-drive-cell--type { color: var(--gh-text-secondary); font-size: var(--gh-text-xs); }
+.gh-drive-file-name-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  border: 0;
+  background: none;
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+.gh-drive-file-name-button:hover { color: var(--gh-accent); }
+.gh-drive-cell-icon { color: var(--gh-accent); }
+.gh-drive-cell-icon--folder { color: var(--gh-accent-emphasis); }
+.gh-drive-row-action {
+  min-width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--gh-radius-pill);
+  background: transparent;
+  color: var(--gh-text-secondary);
+  cursor: pointer;
+}
+.gh-drive-row-action:hover { background: var(--gh-fill-2); color: var(--gh-text); }
+.gh-drive-row-action--danger:hover { background: var(--gh-danger-soft); color: var(--gh-danger); }
+
+/* 网格视图 */
+.gh-drive-grid { gap: var(--gh-space-3); }
+.gh-drive-grid-card {
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-sm);
+  transition: transform var(--gh-dur-2) var(--gh-ease-out), box-shadow var(--gh-dur-2) var(--gh-ease-out);
+}
+.gh-drive-grid-card:hover { transform: translateY(-2px); box-shadow: var(--gh-shadow-md); }
+.gh-drive-grid-card--selected { border-color: var(--gh-accent); box-shadow: 0 0 0 2px var(--gh-accent-soft); }
+.gh-drive-grid-card--focused { outline: 2px solid var(--gh-accent-emphasis); outline-offset: 1px; }
+.gh-drive-grid-card-visual { border-radius: var(--gh-radius) var(--gh-radius) 0 0; background: var(--gh-canvas-inset); }
+.gh-drive-grid-card-name { font-size: var(--gh-text-sm); font-weight: 600; }
+.gh-drive-grid-card-meta,
+.gh-drive-grid-card-date { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+.gh-drive-grid-card-icon { color: var(--gh-accent); }
+
+/* 详情检查器 */
+.gh-drive-detail-panel {
+  overflow: hidden;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+}
+.gh-drive-detail-header { padding: 14px 16px; border-bottom: 1px solid var(--gh-border); }
+.gh-drive-detail-title { font-size: var(--gh-text-base); font-weight: 600; }
+.gh-drive-detail-eyebrow { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+.gh-drive-detail-close { border: 0; border-radius: var(--gh-radius-pill); background: var(--gh-fill-2); }
+.gh-drive-detail-preview { background: var(--gh-canvas-inset); border-radius: var(--gh-radius); }
+.gh-drive-file-attributes-heading { color: var(--gh-text-secondary); font-size: var(--gh-text-xs); font-weight: 600; }
+.gh-drive-file-attribute-row { padding: 8px 0; border-bottom: 1px solid var(--gh-border-muted); }
+.gh-drive-file-attribute-label { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+.gh-drive-file-attribute-value { color: var(--gh-text); font-size: var(--gh-text-sm); }
+.gh-drive-detail-fav-btn { border: 0; border-radius: var(--gh-radius-pill); background: var(--gh-fill-2); }
+
+/* 空 / 错 / 加载状态 */
+.gh-drive-state-card {
+  border: 1px dashed var(--gh-border-strong);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas-subtle);
+  color: var(--gh-text-secondary);
+}
+.gh-drive-state-icon { color: var(--gh-accent); }
+.gh-drive-state-text { color: var(--gh-text); font-size: var(--gh-text-base); }
+.gh-drive-state-hint { color: var(--gh-text-tertiary); font-size: var(--gh-text-sm); }
+.gh-drive-loading { color: var(--gh-text-secondary); }
+
+/* 分页条 */
+.gh-drive-pagination-wrap { border-top: 1px solid var(--gh-border); }
+.gh-drive-pagination-info { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+
+/* 批量操作条 */
+.gh-drive-batch-actions {
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-material-chrome);
+  box-shadow: var(--gh-shadow-lg);
+  -webkit-backdrop-filter: var(--gh-blur-chrome);
+  backdrop-filter: var(--gh-blur-chrome);
+}
+.gh-drive-batch-count { font-weight: 600; }
+.gh-drive-batch-buttons { gap: 8px; }
+
+/* 右键菜单 */
+.gh-drive-context-menu {
+  padding: 6px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-lg);
+}
+.gh-drive-context-menu-item {
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--gh-radius-sm);
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+}
+.gh-drive-context-menu-item:hover { background: var(--gh-fill-2); }
+.gh-drive-context-menu-item--danger { color: var(--gh-danger); }
+.gh-drive-context-menu-divider { height: 1px; margin: 4px 8px; background: var(--gh-border); }
+.gh-drive-context-menu-header { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+.gh-drive-context-menu-name { color: var(--gh-text); font-weight: 600; }
+
+/* 下载 / 上传浮层 */
+.gh-drive-download-toast {
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-xl);
+}
+.gh-drive-download-toast-progress-bar,
+.gh-drive-upload-zone-progress-bar,
+.gh-drive-quota-bar-track {
+  overflow: hidden;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-canvas-inset);
+}
+.gh-drive-download-toast-progress-fill,
+.gh-drive-upload-zone-progress-fill,
+.gh-drive-quota-bar { background: var(--gh-accent); }
+.gh-drive-upload-sheet {
+  border-radius: var(--gh-radius-xl) var(--gh-radius-xl) 0 0;
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-xl);
+}
+.gh-drive-upload-sheet-handle { background: var(--gh-fill-3); }
+.gh-drive-upload-zone-drop {
+  border: 1px dashed var(--gh-border-strong);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas-subtle);
+}
+.gh-drive-upload-zone-drop--drag { border-color: var(--gh-accent); background: var(--gh-accent-soft); }
+.gh-drive-upload-zone-header { color: var(--gh-text); font-weight: 600; }
+
+/* 路径栏 */
+.gh-drive-path-bar {
+  min-height: 38px;
+  padding: 4px 6px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+}
+.gh-drive-path-bar-link,
+.gh-drive-breadcrumb-button,
+.gh-drive-breadcrumb-current { border-radius: var(--gh-radius-xs); }
+.gh-drive-path-bar-link:hover,
+.gh-drive-breadcrumb-button:hover { background: var(--gh-fill-2); }
+.gh-drive-path-bar-separator { color: var(--gh-text-tertiary); }
+
+/* 标签页 */
+.gh-drive-tab-list { gap: 4px; }
+.gh-drive-tab-item {
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-canvas);
+}
+.gh-drive-tab-item--active { border-color: var(--gh-accent); background: var(--gh-accent-soft); }
+
+/* 同步提示 */
+.gh-drive-sync-message { color: var(--gh-text-secondary); font-size: var(--gh-text-xs); }
+.gh-drive-sync-message--error { color: var(--gh-danger); }
+
+/* 移动端外壳 */
+.gh-drive-mobile-shell { background: var(--gh-bg); }
+.gh-drive-mobile-header {
+  border-bottom: 1px solid var(--gh-border);
+  background: var(--gh-material-chrome);
+  -webkit-backdrop-filter: var(--gh-blur-chrome);
+  backdrop-filter: var(--gh-blur-chrome);
+}
+.gh-drive-mobile-icon-button {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: var(--gh-radius-pill);
+  background: transparent;
+  color: var(--gh-text);
+}
+.gh-drive-mobile-icon-button--active { background: var(--gh-fill-2); color: var(--gh-accent); }
+.gh-drive-mobile-titlebar { background: transparent; }
+.gh-drive-mobile-search-field {
+  border: 0;
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-inset);
+}
+.gh-drive-mobile-view-switcher {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-inset);
+}
+.gh-drive-mobile-file-row {
+  min-height: 60px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--gh-border-muted);
+  background: var(--gh-canvas);
+}
+.gh-drive-mobile-file-row--selected { background: var(--gh-accent-soft); }
+.gh-drive-mobile-nav {
+  border-bottom: 1px solid var(--gh-border);
+  background: var(--gh-canvas);
+}
+.gh-drive-mobile-nav-item { border-radius: var(--gh-radius-sm); }
+.gh-drive-mobile-nav-item--active { background: var(--gh-fill-2); color: var(--gh-accent); }
+.gh-drive-mobile-sheet {
+  border-radius: var(--gh-radius-xl) var(--gh-radius-xl) 0 0;
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-xl);
+}
+.gh-drive-mobile-sheet-handle { background: var(--gh-fill-3); }
+.gh-drive-mobile-sheet-overlay { background: var(--gh-scrim); }
+.gh-drive-mobile-selection-bar {
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-material-chrome);
+  box-shadow: var(--gh-shadow-lg);
+}
+.gh-drive-mobile-empty { color: var(--gh-text-secondary); }
+.gh-drive-mobile-empty--error { color: var(--gh-danger); }
+.gh-drive-mobile-pagination { border-top: 1px solid var(--gh-border); }
+
+/* 预览浮层 */
+.gh-drive-preview-overlay { background: var(--gh-scrim); }
+.gh-drive-preview-toolbar {
+  border-bottom: 1px solid var(--gh-border);
+  background: var(--gh-material-chrome);
+  -webkit-backdrop-filter: var(--gh-blur-chrome);
+  backdrop-filter: var(--gh-blur-chrome);
+}
+.gh-drive-preview-toolbar-label { color: var(--gh-text); font-weight: 600; }
+.gh-drive-preview-toolbar-btn {
+  min-height: 30px;
+  border: 0;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-fill-2);
+  color: var(--gh-text);
+}
+.gh-drive-preview-toolbar-btn:hover { background: var(--gh-fill-3); }
+.gh-drive-preview-close { border: 0; border-radius: var(--gh-radius-pill); background: var(--gh-fill-2); }
+.gh-drive-preview-container { background: var(--gh-canvas); }
+.gh-drive-preview-unsupported { color: var(--gh-text-secondary); }
+
+/* 文件夹选择器 */
+.gh-drive-folder-picker-row { border-radius: var(--gh-radius-sm); }
+.gh-drive-folder-picker-row:hover { background: var(--gh-canvas-inset); }
+.gh-drive-folder-picker-label { font-size: var(--gh-text-sm); }
+
+@media (max-width: 1279px) {
+  .gh-drive-workspace,
+  .gh-drive-workspace--with-detail { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 767px) {
+  .gh-drive-repo-header { align-items: flex-start; flex-direction: column; gap: var(--gh-space-3); padding-bottom: var(--gh-space-3); }
+  .gh-drive-repo-actions { width: 100%; justify-content: flex-start; }
+  .gh-drive-subnav { display: flex; width: 100%; }
+  .gh-drive-subnav-item { flex: 1; justify-content: center; }
+  .gh-drive-toolbar { flex-wrap: wrap; }
+  .gh-drive-files-card { border-radius: var(--gh-radius-lg); }
+  .gh-drive-col-header { font-size: 11px; }
+  .gh-drive-cell { font-size: var(--gh-text-sm); }
+}
+

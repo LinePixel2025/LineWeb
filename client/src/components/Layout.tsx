@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
-import GitHubHeader from './GitHubHeader'
-import GitHubSidebar from './GitHubSidebar'
+import Header from './Header'
+import Sidebar from './Sidebar'
 import SiteAnnouncementBar from './SiteAnnouncementBar'
 import SiteAnnouncementAckGate from './SiteAnnouncementAckGate'
 import { SiteAnnouncementProvider } from '../contexts/SiteAnnouncementContext'
@@ -19,6 +19,8 @@ export default memo(function Layout() {
   const isChatRoute = location.pathname === '/chat' || location.pathname.startsWith('/chat/')
   // 反代查看页铺满内容区（列表页 /webproxy 仍用普通页面布局）
   const isProxyViewRoute = /^\/webproxy\/\d+/.test(location.pathname)
+  // 登录/注册是独立认证页：不渲染侧栏与页脚，顶部只保留极简顶栏
+  const isAuthRoute = location.pathname === '/login' || location.pathname === '/register'
 
   useEffect(() => {
     setMobileOpen(false)
@@ -62,26 +64,30 @@ export default memo(function Layout() {
 
   return (
     <SiteAnnouncementProvider>
-      <div className="gh-layout-root">
-        <GitHubHeader onMenuToggle={() => setMobileOpen(prev => !prev)} />
-        <GitHubSidebar
-          collapsed={collapsed}
-          mobileOpen={mobileOpen}
-          onClose={() => setMobileOpen(false)}
-          onToggleCollapse={() => setCollapsed(prev => !prev)}
-        />
-        <main className={`gh-content ${collapsed ? 'gh-content--collapsed' : ''} ${isChatRoute ? 'gh-content--chat' : ''} ${isProxyViewRoute ? 'gh-content--proxy' : ''}`}>
+      <div className={`gh-layout-root${isAuthRoute ? ' gh-layout-root--auth' : ''}`}>
+        <Header onMenuToggle={() => setMobileOpen(prev => !prev)} />
+        {!isAuthRoute && (
+          <Sidebar
+            collapsed={collapsed}
+            mobileOpen={mobileOpen}
+            onClose={() => setMobileOpen(false)}
+            onToggleCollapse={() => setCollapsed(prev => !prev)}
+          />
+        )}
+        <main className={`gh-content ${collapsed ? 'gh-content--collapsed' : ''} ${isChatRoute ? 'gh-content--chat' : ''} ${isAuthRoute ? 'gh-content--auth' : ''}`}>
           <SiteAnnouncementBar />
           <SiteAnnouncementAckGate />
           <Outlet />
-          <footer className="gh-footer">
-            <div className="gh-footer-links">
-              {user && isEnabled('pages') && <a href="/features">About</a>}
-              {user && isEnabled('posts') && <a href="/posts">Posts</a>}
-              {user && isEnabled('drive') && <a href="/drive">Drive</a>}
-            </div>
-            <p className="gh-footer-copy">© {new Date().getFullYear()} LineWeb</p>
-          </footer>
+          {!isAuthRoute && (
+            <footer className="gh-footer">
+              <p className="gh-footer-copy">© {new Date().getFullYear()} LineWeb</p>
+              <div className="gh-footer-links">
+                {user && isEnabled('pages') && <a href="/features">关于</a>}
+                {user && isEnabled('posts') && <a href="/posts">文章</a>}
+                {user && isEnabled('drive') && <a href="/drive">网盘</a>}
+              </div>
+            </footer>
+          )}
         </main>
       </div>
     </SiteAnnouncementProvider>

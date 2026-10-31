@@ -473,7 +473,7 @@
   font-size: var(--gh-text-xs);
   font-weight: 700;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--gh-text-secondary);
 }
 .gh-farm-seed-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }

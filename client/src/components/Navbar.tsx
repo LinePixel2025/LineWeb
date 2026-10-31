@@ -1,1 +1,1 @@
-export { default } from './GitHubHeader'
+export { default } from './Header'

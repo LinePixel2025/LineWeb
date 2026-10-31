@@ -1,117 +1,233 @@
 /* =============================================================
-   Line Web — GitHub Primer Design Tokens
+   LineWeb Design System — Design Tokens（Apple 视觉语言）
+   -------------------------------------------------------------
+   设计口径：
+   - 外壳参考 macOS Sonoma（毛玻璃、源列表、发丝线）
+   - 组件参考 iOS 17（分段控件、填充输入、胶囊按钮、分组列表）
+   - 内容页参考 apple.com（大号标题、收紧字距、留白、便当卡片）
+
+   命名说明（历史原因，保持不变，勿批量改名）：
+   - 令牌前缀 `--gh-*` 与类名 `.gh-*` 来自最初的 GitHub Primer 版本，
+     现在只作为「命名空间」使用；这里的取值已全部切换为 Apple 体系。
+   - 需要旧 Primer 名时按下表对应，不要新增 `--gh-canvas-foo` 之类的 Primer 名词：
+       --gh-bg            页面画布（Page canvas）
+       --gh-canvas        卡片 / 面板表面（Surface）
+       --gh-canvas-subtle 卡片内的浅层表面（Surface muted）
+       --gh-canvas-inset  凹槽 / 轨道 / 代码块（Fill）
+       --gh-border        发丝分隔线（Separator）
+   - React 侧仍有内联 `var(--gh-*)`，任何令牌改名都会破坏它们，因此只加不改名。
    ============================================================= */
 
 :root {
-  /* ===== Color Tokens: Light (default) ===== */
-  --gh-bg:                #ffffff;
-  --gh-canvas:            #f6f8fa;
-  --gh-canvas-subtle:     #f6f8fa;
-  --gh-canvas-inset:      #f3f6f8;
-  --gh-border:            #d1d9e0;
-  --gh-border-muted:      #d8dee4;
-  --gh-accent:            #0969da;
-  --gh-accent-hover:      #0550ae;
-  --gh-accent-soft:       rgba(9, 105, 218, 0.15);
-  --gh-text:              #1f2328;
-  --gh-text-secondary:    #59636e;
-  --gh-text-tertiary:     #636c76;
-  --gh-text-placeholder:  #6e7781;
-  --gh-text-disabled:     #8c959f;
-  --gh-success:           #1a7f37;
-  --gh-success-soft:      rgba(26, 127, 55, 0.15);
-  --gh-success-emphasis:  #2da44e;
-  --gh-danger:            #cf222e;
-  --gh-danger-soft:       rgba(207, 34, 46, 0.15);
-  --gh-warning:           #9a6700;
-  --gh-warning-soft:      rgba(154, 103, 0, 0.15);
-  --gh-accent-emphasis:   #0969da;
-  --gh-btn-hover:         rgba(31, 35, 40, 0.04);
-  --gh-btn-active:        rgba(31, 35, 40, 0.08);
+  color-scheme: light;
 
-  /* Typography */
-  --gh-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans',
-             Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
-  --gh-font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  /* =========================================================
+     1. 字体
+     ========================================================= */
+  /* Apple 设备命中 SF Pro；其它平台落到自托管的 Inter Variable */
+  --gh-font-display: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Inter Variable', 'Inter',
+    'Segoe UI Variable Display', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --gh-font: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Inter Variable', 'Inter',
+    'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --gh-font-mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
 
-  /* Layout */
-  --gh-nav-height:           64px;
-  --gh-sidebar-width:        256px;
-  --gh-sidebar-collapsed:    64px;
-  --gh-max-width:            1280px;
-  --gh-content-width:        1012px;
+  /* 字距：大标题收紧，正文几乎不调（中文收紧会挤） */
+  --gh-tracking-display: -0.03em;
+  --gh-tracking-tight: -0.022em;
+  --gh-tracking-snug: -0.011em;
+  --gh-tracking-wide: 0.01em;
 
-  /* Spacing — 4px base */
-  --gh-space-1:  4px;
-  --gh-space-2:  8px;
-  --gh-space-3:  12px;
-  --gh-space-4:  16px;
-  --gh-space-5:  24px;
-  --gh-space-6:  32px;
-  --gh-space-7:  48px;
-  --gh-space-8:  64px;
+  /* 字阶（Apple HIG 比例） */
+  --gh-type-display: clamp(2.5rem, 4.4vw, 3.5rem); /* 40 → 56 */
+  --gh-type-title-1: 2.125rem;                     /* 34 */
+  --gh-type-title-2: 1.75rem;                      /* 28 */
+  --gh-type-title-3: 1.375rem;                     /* 22 */
+  --gh-type-headline: 1.0625rem;                   /* 17 semibold */
+  --gh-type-body: 1.0625rem;                       /* 17 */
+  --gh-type-callout: 1rem;                         /* 16 */
+  --gh-type-subhead: 0.9375rem;                    /* 15 */
+  --gh-type-footnote: 0.8125rem;                   /* 13 */
+  --gh-type-caption: 0.75rem;                      /* 12 */
+  --gh-type-caption-2: 0.6875rem;                  /* 11 */
 
-  /* Radius — all G2 (8px) */
-  --gh-radius: 8px;
-  --gh-radius-lg: 12px;
+  /* 旧字阶名（保持兼容，值映射到上面的比例） */
+  --gh-text-xs: var(--gh-type-caption);
+  --gh-text-sm: var(--gh-type-subhead);
+  --gh-text-base: var(--gh-type-callout);
+  --gh-text-md: var(--gh-type-callout);
+  --gh-text-lg: var(--gh-type-headline);
+  --gh-text-xl: var(--gh-type-title-3);
+  --gh-text-2xl: var(--gh-type-title-1);
+  --gh-text-3xl: 2.75rem;
 
-  /* Typography scale */
-  --gh-text-xs:  0.75rem;
-  --gh-text-sm:  0.875rem;
-  --gh-text-base: 1rem;
-  --gh-text-md:  1rem;
-  --gh-text-lg:  1.125rem;
-  --gh-text-xl:  1.5rem;
-  --gh-text-2xl: 2rem;
-  --gh-text-3xl: 2.5rem;
+  /* =========================================================
+     2. 色彩 —— Light
+     ========================================================= */
+  /* 表面与填充 */
+  --gh-bg: #f5f5f7;
+  --gh-canvas: #ffffff;
+  --gh-canvas-subtle: #fbfbfd;
+  --gh-canvas-inset: rgba(120, 120, 128, 0.08);
+  --gh-fill-2: rgba(120, 120, 128, 0.12);
+  --gh-fill-3: rgba(118, 118, 128, 0.20);
+  --gh-scrim: rgba(0, 0, 0, 0.32);
 
-  /* Transitions */
-  --gh-transition: 0.15s ease;
+  /* 发丝线 */
+  --gh-border: rgba(60, 60, 67, 0.10);
+  --gh-border-muted: rgba(60, 60, 67, 0.06);
+  --gh-border-strong: rgba(60, 60, 67, 0.18);
 
-  /* Shadows — minimal, dropdowns only */
-  --gh-shadow-sm: 0 1px 2px rgba(31, 35, 40, 0.04);
-  --gh-shadow-md: 0 3px 6px rgba(31, 35, 40, 0.08);
-  --gh-shadow-lg: 0 8px 24px rgba(31, 35, 40, 0.12);
-  --gh-shadow-xl: 0 12px 32px rgba(31, 35, 40, 0.16);
+  /* 文本 */
+  --gh-text: #1d1d1f;
+  --gh-text-secondary: #515154;
+  --gh-text-tertiary: #6e6e73;
+  --gh-text-placeholder: #86868b;
+  --gh-text-disabled: rgba(60, 60, 67, 0.30);
 
-  /* Focus ring */
-  --gh-focus-ring: 0 0 0 3px rgba(9, 105, 218, 0.3);
+  /* 强调色（链接/主按钮用 --gh-accent，白字对比度 5.6:1） */
+  --gh-accent: #0066cc;
+  --gh-accent-hover: #0057ad;
+  --gh-accent-emphasis: #0071e3;
+  --gh-accent-soft: rgba(0, 102, 204, 0.10);
+  --gh-on-accent: #ffffff;
+  /* 实心按钮/气泡的底色（与链接色分开，保证白字 AAA 级可读） */
+  --gh-accent-button: #0066cc;
+  --gh-accent-button-hover: #0057ad;
 
-  /* Safe area */
-  --gh-safe-top:    env(safe-area-inset-top, 0px);
+  /* 语义色 */
+  --gh-success: #1d7c3d;
+  --gh-success-emphasis: #1d7c3d;
+  --gh-success-soft: rgba(29, 124, 61, 0.10);
+  --gh-danger: #d70015;
+  --gh-danger-soft: rgba(215, 0, 21, 0.08);
+  --gh-warning: #8a5300;
+  --gh-warning-soft: rgba(138, 83, 0, 0.10);
+
+  /* 交互底色（旧的 Primer 命名保留） */
+  --gh-btn-hover: rgba(0, 0, 0, 0.04);
+  --gh-btn-active: rgba(0, 0, 0, 0.08);
+
+  /* 材质（毛玻璃） */
+  --gh-material-chrome: rgba(255, 255, 255, 0.72);
+  --gh-material-sidebar: rgba(248, 248, 250, 0.72);
+  --gh-blur-chrome: saturate(180%) blur(20px);
+
+  /* =========================================================
+     3. 形状 / 阴影
+     ========================================================= */
+  --gh-radius-xs: 6px;
+  --gh-radius-sm: 8px;
+  --gh-radius: 10px;
+  --gh-radius-lg: 16px;
+  --gh-radius-xl: 22px;
+  --gh-radius-pill: 999px;
+
+  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --gh-shadow-md: 0 4px 16px -6px rgba(0, 0, 0, 0.10);
+  --gh-shadow-lg: 0 12px 32px -10px rgba(0, 0, 0, 0.18);
+  --gh-shadow-xl: 0 24px 64px -20px rgba(0, 0, 0, 0.28);
+  --gh-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 10px 30px -18px rgba(0, 0, 0, 0.22);
+
+  /* focus：1px 实色 + 4px 半透明蓝环，深浅色都可见 */
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(0, 113, 227, 0.28);
+
+  /* =========================================================
+     4. 动效
+     ========================================================= */
+  --gh-dur-1: 120ms;
+  --gh-dur-2: 220ms;
+  --gh-dur-3: 320ms;
+  --gh-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --gh-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --gh-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --gh-transition: 0.18s var(--gh-ease-standard);
+
+  /* =========================================================
+     5. 布局
+     ========================================================= */
+  --gh-nav-height: 56px;
+  --gh-sidebar-width: 256px;
+  --gh-sidebar-collapsed: 64px;
+  --gh-max-width: 1320px;
+  --gh-content-width: 1012px;
+  --gh-page-pad-x: 32px;
+  --gh-page-pad-x-mobile: 16px;
+
+  /* 间距（8pt 栅格，4px 起） */
+  --gh-space-1: 4px;
+  --gh-space-2: 8px;
+  --gh-space-3: 12px;
+  --gh-space-4: 16px;
+  --gh-space-5: 24px;
+  --gh-space-6: 32px;
+  --gh-space-7: 48px;
+  --gh-space-8: 64px;
+
+  /* 层级 */
+  --gh-z-scrim: 199;
+  --gh-z-sidebar: 200;
+  --gh-z-header: 300;
+  --gh-z-menu: 1000;
+  --gh-z-dialog: 1100;
+
+  /* 安全区 */
+  --gh-safe-top: env(safe-area-inset-top, 0px);
   --gh-safe-bottom: env(safe-area-inset-bottom, 0px);
-  --gh-safe-left:   env(safe-area-inset-left, 0px);
-  --gh-safe-right:  env(safe-area-inset-right, 0px);
+  --gh-safe-left: env(safe-area-inset-left, 0px);
+  --gh-safe-right: env(safe-area-inset-right, 0px);
 }
 
+/* ===========================================================
+   Dark —— iOS 口径：纯黑画布 + 抬起的深灰表面
+   =========================================================== */
 [data-theme="dark"] {
-  --gh-bg:                #0d1117;
-  --gh-canvas:            #161b22;
-  --gh-canvas-subtle:     #161b22;
-  --gh-canvas-inset:      #010409;
-  --gh-border:            #30363d;
-  --gh-border-muted:      #21262d;
-  --gh-accent:            #2f81f7;
-  --gh-accent-hover:      #409eff;
-  --gh-accent-soft:       rgba(47, 129, 247, 0.15);
-  --gh-text:              #f0f6fc;
-  --gh-text-secondary:    #9198a1;
-  --gh-text-tertiary:     #8b949e;
-  --gh-text-placeholder:  #6e7681;
-  --gh-text-disabled:     #6e7681;
-  --gh-success:           #3fb950;
-  --gh-success-soft:      rgba(63, 185, 80, 0.15);
-  --gh-success-emphasis:  #3fb950;
-  --gh-danger:            #f85149;
-  --gh-danger-soft:       rgba(248, 81, 73, 0.15);
-  --gh-warning:           #d29922;
-  --gh-warning-soft:      rgba(210, 153, 34, 0.15);
-  --gh-accent-emphasis:   #1f6feb;
-  --gh-btn-hover:         rgba(255, 255, 255, 0.06);
-  --gh-btn-active:        rgba(255, 255, 255, 0.1);
-  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --gh-shadow-md: 0 3px 6px rgba(0, 0, 0, 0.4);
-  --gh-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --gh-shadow-xl: 0 12px 32px rgba(0, 0, 0, 0.6);
-  --gh-focus-ring: 0 0 0 3px rgba(47, 129, 247, 0.3);
+  color-scheme: dark;
+
+  --gh-bg: #000000;
+  --gh-canvas: #1c1c1e;
+  --gh-canvas-subtle: #232325;
+  --gh-canvas-inset: rgba(118, 118, 128, 0.24);
+  --gh-fill-2: rgba(118, 118, 128, 0.32);
+  --gh-fill-3: rgba(118, 118, 128, 0.40);
+  --gh-scrim: rgba(0, 0, 0, 0.56);
+
+  --gh-border: rgba(255, 255, 255, 0.10);
+  --gh-border-muted: rgba(255, 255, 255, 0.06);
+  --gh-border-strong: rgba(255, 255, 255, 0.18);
+
+  --gh-text: #f5f5f7;
+  --gh-text-secondary: #a1a1a6;
+  --gh-text-tertiary: #8e8e93;
+  --gh-text-placeholder: #8e8e93;
+  --gh-text-disabled: rgba(235, 235, 245, 0.28);
+
+  --gh-accent: #0a84ff;
+  --gh-accent-hover: #409cff;
+  --gh-accent-emphasis: #0a84ff;
+  --gh-accent-soft: rgba(10, 132, 255, 0.16);
+  --gh-on-accent: #ffffff;
+  --gh-accent-button: #0b64c9;
+  --gh-accent-button-hover: #0a5cb8;
+
+  --gh-success: #30d158;
+  --gh-success-emphasis: #30d158;
+  --gh-success-soft: rgba(48, 209, 88, 0.16);
+  --gh-danger: #ff453a;
+  --gh-danger-soft: rgba(255, 69, 58, 0.16);
+  --gh-warning: #ffd60a;
+  --gh-warning-soft: rgba(255, 214, 10, 0.16);
+
+  --gh-btn-hover: rgba(255, 255, 255, 0.06);
+  --gh-btn-active: rgba(255, 255, 255, 0.10);
+
+  --gh-material-chrome: rgba(24, 24, 26, 0.72);
+  --gh-material-sidebar: rgba(18, 18, 20, 0.72);
+
+  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --gh-shadow-md: 0 4px 16px -6px rgba(0, 0, 0, 0.55);
+  --gh-shadow-lg: 0 12px 32px -10px rgba(0, 0, 0, 0.65);
+  --gh-shadow-xl: 0 24px 64px -20px rgba(0, 0, 0, 0.80);
+  --gh-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 12px 32px -20px rgba(0, 0, 0, 0.70);
+
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(10, 132, 255, 0.32);
 }

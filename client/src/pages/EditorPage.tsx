@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import DOMPurify from 'dompurify'
 import api from '../lib/api'
-import { GitHubButton } from '../components/ui'
+import { Button } from '../components/ui'
 import LexicalEditor from '../components/editor/LexicalEditor'
 import { calcReadingTime, countWords, stripHtml } from '../lib/textStats'
 import { aiWriteSummary, aiWriteTitles } from '../lib/aiWrite'
@@ -235,17 +235,17 @@ export default function EditorPage() {
           </div>
         </div>
         <div className="article-editor-topbar-right">
-          <GitHubButton
+          <Button
             type="button" variant="ghost" size="sm"
             onClick={() => setPreview(p => !p)}
-          >{preview ? '继续编辑' : '预览'}</GitHubButton>
+          >{preview ? '继续编辑' : '预览'}</Button>
           <button
             type="button" className="article-editor-panel-toggle"
             onClick={() => setPanelOpen(o => !o)}
           >{panelOpen ? '收起设置 ▸' : '◂ 发布设置'}</button>
-          <GitHubButton type="submit" form="article-form" variant="primary" size="sm" disabled={saving}>
+          <Button type="submit" form="article-form" variant="primary" size="sm" disabled={saving}>
             {saving ? '保存中…' : '保存'}
-          </GitHubButton>
+          </Button>
         </div>
       </div>
 

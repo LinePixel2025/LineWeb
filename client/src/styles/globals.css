@@ -1,4 +1,4 @@
-/* LineWeb — GitHub Primer Design System */
+/* LineWeb — Apple 视觉语言设计系统（`.gh-*` 为历史命名空间，见 variables.css） */
 @import './variables.css';
 @import './base.css';
 @import './components.css';
@@ -28,4 +28,6 @@
 @import './deepseek.css';
 @import './proxy.css';
 @import './stocks.css';
+@import './apple-chrome.css';
+@import './utilities.css';
 @import './responsive.css';

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { GitHubAlert, GitHubBadge, GitHubButton, GitHubInput } from '../../components/ui'
+import { Alert, Badge, Button, Input } from '../../components/ui'
 import api from '../../lib/api'
 import {
   APP_SCOPES,
@@ -240,15 +240,15 @@ export default function AppAdminPage() {
         <p>只有在此注册的应用才能跳转 /authorize 请求用户授权你的 LineWeb 账号</p>
       </div>
 
-      {notice && <GitHubAlert variant="success">{notice}</GitHubAlert>}
+      {notice && <Alert variant="success">{notice}</Alert>}
       {error && (
         <div style={{ marginBottom: '16px' }}>
-          <GitHubAlert variant="danger">{error}</GitHubAlert>
+          <Alert variant="danger">{error}</Alert>
         </div>
       )}
 
       <div className="gh-actions" style={{ justifyContent: 'flex-start', marginBottom: '16px' }}>
-        <GitHubButton variant="primary" size="sm" onClick={openCreate}>注册新应用</GitHubButton>
+        <Button variant="primary" size="sm" onClick={openCreate}>注册新应用</Button>
       </div>
 
       {loading ? (
@@ -281,7 +281,7 @@ export default function AppAdminPage() {
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500 }}>
                       {client.name}
-                      {!client.isActive && <GitHubBadge variant="danger">已停用</GitHubBadge>}
+                      {!client.isActive && <Badge variant="danger">已停用</Badge>}
                     </div>
                     {client.description && (
                       <p className="gh-text-tertiary" style={{ fontSize: 'var(--gh-text-xs)', margin: '4px 0 0', maxWidth: 260 }}>
@@ -297,51 +297,51 @@ export default function AppAdminPage() {
                       <code style={{ fontSize: 'var(--gh-text-xs)', fontFamily: 'var(--gh-font-mono)', wordBreak: 'break-all' }}>
                         {client.clientId}
                       </code>
-                      <GitHubButton
+                      <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleCopy(client.clientId, `id-${client.id}`)}
                       >
                         {copied === `id-${client.id}` ? '已复制' : '复制'}
-                      </GitHubButton>
+                      </Button>
                     </div>
                   </td>
                   <td>
-                    <GitHubBadge variant={client.clientType === 'public' ? 'default' : 'accent'}>
+                    <Badge variant={client.clientType === 'public' ? 'default' : 'accent'}>
                       {client.clientType === 'public' ? '公开' : '机密'}
-                    </GitHubBadge>
+                    </Badge>
                   </td>
                   <td>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                       {client.allowedScopes.slice(0, 3).map((scope) => (
-                        <GitHubBadge key={scope} variant={isHighRiskScope(scope) ? 'warning' : 'default'}>
+                        <Badge key={scope} variant={isHighRiskScope(scope) ? 'warning' : 'default'}>
                           {appScopeLabel(scope)}
-                        </GitHubBadge>
+                        </Badge>
                       ))}
                       {client.allowedScopes.length > 3 && (
-                        <GitHubBadge variant="default">+{client.allowedScopes.length - 3}</GitHubBadge>
+                        <Badge variant="default">+{client.allowedScopes.length - 3}</Badge>
                       )}
                     </div>
                   </td>
                   <td className="gh-text-tertiary" style={{ textAlign: 'center' }}>{client.grantCount}</td>
                   <td>
                     <div className="gh-actions" style={{ flexWrap: 'wrap' }}>
-                      <GitHubButton variant="secondary" size="sm" onClick={() => openEdit(client)}>编辑</GitHubButton>
+                      <Button variant="secondary" size="sm" onClick={() => openEdit(client)}>编辑</Button>
                       {client.clientType !== 'public' && (
-                        <GitHubButton variant="secondary" size="sm" onClick={() => setConfirmAction({ kind: 'reset', client })}>
+                        <Button variant="secondary" size="sm" onClick={() => setConfirmAction({ kind: 'reset', client })}>
                           重置密钥
-                        </GitHubButton>
+                        </Button>
                       )}
-                      <GitHubButton
+                      <Button
                         variant="secondary"
                         size="sm"
                         onClick={() => setConfirmAction({ kind: 'toggle', client })}
                       >
                         {client.isActive ? '停用' : '启用'}
-                      </GitHubButton>
-                      <GitHubButton variant="danger" size="sm" onClick={() => setConfirmAction({ kind: 'delete', client })}>
+                      </Button>
+                      <Button variant="danger" size="sm" onClick={() => setConfirmAction({ kind: 'delete', client })}>
                         删除
-                      </GitHubButton>
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -359,14 +359,14 @@ export default function AppAdminPage() {
 
             {formError && (
               <div style={{ marginBottom: '16px' }}>
-                <GitHubAlert variant="danger">{formError}</GitHubAlert>
+                <Alert variant="danger">{formError}</Alert>
               </div>
             )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <label className="gh-form-field">
                 <span>应用名称</span>
-                <GitHubInput
+                <Input
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
@@ -378,7 +378,7 @@ export default function AppAdminPage() {
 
               <label className="gh-form-field">
                 <span>应用简介</span>
-                <GitHubInput
+                <Input
                   type="text"
                   value={form.description}
                   onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
@@ -390,7 +390,7 @@ export default function AppAdminPage() {
 
               <label className="gh-form-field">
                 <span>应用主页</span>
-                <GitHubInput
+                <Input
                   type="text"
                   value={form.homepage}
                   onChange={(e) => setForm((p) => ({ ...p, homepage: e.target.value }))}
@@ -437,7 +437,7 @@ export default function AppAdminPage() {
                       <span>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                           {APP_SCOPE_LABELS[scope]}
-                          {isHighRiskScope(scope) && <GitHubBadge variant="warning">高危</GitHubBadge>}
+                          {isHighRiskScope(scope) && <Badge variant="warning">高危</Badge>}
                         </span>
                         <span className="gh-text-tertiary" style={{ display: 'block', fontSize: 'var(--gh-text-xs)' }}>
                           {APP_SCOPE_DESCRIPTIONS[scope]}
@@ -450,12 +450,12 @@ export default function AppAdminPage() {
             </div>
 
             <div className="gh-dialog-actions">
-              <GitHubButton type="button" variant="ghost" onClick={() => setDialogOpen(false)} disabled={saving}>
+              <Button type="button" variant="ghost" onClick={() => setDialogOpen(false)} disabled={saving}>
                 取消
-              </GitHubButton>
-              <GitHubButton type="button" variant="primary" onClick={handleSave} disabled={saving}>
+              </Button>
+              <Button type="button" variant="primary" onClick={handleSave} disabled={saving}>
                 {saving ? '保存中…' : '保存'}
-              </GitHubButton>
+              </Button>
             </div>
           </div>
         </div>
@@ -466,9 +466,9 @@ export default function AppAdminPage() {
         <div className="gh-dialog-overlay" onClick={() => setSecretReveal(null)}>
           <div className="gh-dialog" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
             <h2 className="gh-dialog-title">请立即保存应用密钥</h2>
-            <GitHubAlert variant="warning" title="密钥只显示这一次">
+            <Alert variant="warning" title="密钥只显示这一次">
               关闭本对话框后无法再次查看该密钥。若遗失，只能重新生成（旧密钥会立即失效）。
-            </GitHubAlert>
+            </Alert>
             <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
                 <span className="gh-text-secondary" style={{ fontSize: 'var(--gh-text-xs)' }}>客户端 ID</span>
@@ -476,9 +476,9 @@ export default function AppAdminPage() {
                   <code style={{ fontFamily: 'var(--gh-font-mono)', fontSize: 'var(--gh-text-xs)', wordBreak: 'break-all' }}>
                     {secretReveal.clientId}
                   </code>
-                  <GitHubButton variant="ghost" size="sm" onClick={() => handleCopy(secretReveal.clientId, 'reveal-id')}>
+                  <Button variant="ghost" size="sm" onClick={() => handleCopy(secretReveal.clientId, 'reveal-id')}>
                     {copied === 'reveal-id' ? '已复制' : '复制'}
-                  </GitHubButton>
+                  </Button>
                 </div>
               </div>
               <div>
@@ -487,16 +487,16 @@ export default function AppAdminPage() {
                   <code style={{ fontFamily: 'var(--gh-font-mono)', fontSize: 'var(--gh-text-xs)', wordBreak: 'break-all' }}>
                     {secretReveal.clientSecret}
                   </code>
-                  <GitHubButton variant="ghost" size="sm" onClick={() => handleCopy(secretReveal.clientSecret, 'reveal-secret')}>
+                  <Button variant="ghost" size="sm" onClick={() => handleCopy(secretReveal.clientSecret, 'reveal-secret')}>
                     {copied === 'reveal-secret' ? '已复制' : '复制'}
-                  </GitHubButton>
+                  </Button>
                 </div>
               </div>
             </div>
             <div className="gh-dialog-actions">
-              <GitHubButton type="button" variant="primary" onClick={() => setSecretReveal(null)}>
+              <Button type="button" variant="primary" onClick={() => setSecretReveal(null)}>
                 我已保存
-              </GitHubButton>
+              </Button>
             </div>
           </div>
         </div>
@@ -520,14 +520,14 @@ export default function AppAdminPage() {
                     : `确定要重新启用「${confirmAction.client.name}」吗？`}
             </p>
             <div className="gh-dialog-actions">
-              <GitHubButton type="button" variant="ghost" onClick={() => setConfirmAction(null)}>取消</GitHubButton>
-              <GitHubButton
+              <Button type="button" variant="ghost" onClick={() => setConfirmAction(null)}>取消</Button>
+              <Button
                 type="button"
                 variant={confirmAction.kind === 'toggle' && !confirmAction.client.isActive ? 'primary' : 'danger'}
                 onClick={runConfirm}
               >
                 确定
-              </GitHubButton>
+              </Button>
             </div>
           </div>
         </div>

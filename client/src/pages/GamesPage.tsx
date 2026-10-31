@@ -49,7 +49,6 @@ export default function GamesPage() {
     <div className="gh-page-container gh-games-page">
       <header className="gh-games-header">
         <div className="gh-games-header-copy">
-          <p className="gh-games-eyebrow">GAMES</p>
           <h1 className="gh-games-title">游戏大厅</h1>
           <p className="gh-games-subtitle">放松一下：单机挑战最高分，或邀请好友实时对战。</p>
         </div>
@@ -82,9 +81,7 @@ export default function GamesPage() {
         </div>
 
         {playableGames.length === 0 ? (
-          <div className="gh-box" style={{ padding: '32px', textAlign: 'center' }}>
-            <p className="gh-text-secondary">单机与联机游戏当前都已关闭。</p>
-          </div>
+          <div className="gh-empty-card">单机与联机游戏当前都已关闭。</div>
         ) : (
           <div className="gh-games-grid">
             {playableGames.map((game, index) => (

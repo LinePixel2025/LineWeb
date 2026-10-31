@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { GitHubButton, GitHubAlert } from '../../components/ui'
+import { Button, Alert } from '../../components/ui'
 import api from '../../lib/api'
 
 /**
@@ -451,17 +451,17 @@ export function AiChatPanel() {
 
         {/* 错误 & 成功提示 */}
         {formError && (
-          <GitHubAlert variant="danger">{formError}</GitHubAlert>
+          <Alert variant="danger">{formError}</Alert>
         )}
         {savedMsg && (
-          <GitHubAlert variant="success">{savedMsg}</GitHubAlert>
+          <Alert variant="success">{savedMsg}</Alert>
         )}
 
         {/* 保存按钮 */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--gh-space-4)' }}>
-          <GitHubButton variant="primary" size="md" onClick={handleSave} disabled={saving || !model.trim()}>
+          <Button variant="primary" size="md" onClick={handleSave} disabled={saving || !model.trim()}>
             {saving ? '保存中…' : '保存配置'}
-          </GitHubButton>
+          </Button>
         </div>
       </div>
 

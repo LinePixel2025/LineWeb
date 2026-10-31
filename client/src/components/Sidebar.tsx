@@ -13,7 +13,7 @@ interface Props {
   onToggleCollapse: () => void
 }
 
-interface SidebarItem { path: string; label: string; icon: string }
+interface SidebarItem { path: string; label: string }
 
 function SidebarIcon({ path }: { path: string }) {
   const icon = path.startsWith('/admin') ? <><rect x="2.5" y="2.5" width="11" height="11" rx="2.5" /><path d="M2.5 6.25h11" /><path d="M5.25 9h5.5" /><path d="M5.25 11.25h3" /></>
@@ -30,46 +30,47 @@ function SidebarIcon({ path }: { path: string }) {
     : path === '/pets' ? <g fill="currentColor" stroke="none"><ellipse cx="8" cy="10.6" rx="3.3" ry="2.7" /><circle cx="4.2" cy="7.3" r="1.25" /><circle cx="8" cy="5.9" r="1.25" /><circle cx="11.8" cy="7.3" r="1.25" /></g>
     : <><circle cx="8" cy="5.5" r="2.5" /><path d="M3.5 13a4.5 4.5 0 0 1 9 0" /></>
 
-  return <svg className="gh-sidebar-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{icon}</svg>
+  return <svg className="gh-sidebar-icon" width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{icon}</svg>
 }
 
-const sections = [
+const sections: { title: string; requireAuth?: boolean; items: SidebarItem[] }[] = [
   {
-    title: 'Home',
+    title: '首页',
     items: [
-      { path: '/', label: 'Overview', icon: 'M1.75 1a.75.75 0 0 0-.75.75v12.5c0 .414.336.75.75.75h12.5a.75.75 0 0 0 0-1.5H2.5V1.75A.75.75 0 0 0 1.75 1ZM8 5.5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 5.5Z M1.75 11.5h12.5v1.5H1.75v-1.5Z' },
-    ]
+      { path: '/', label: '概览' },
+    ],
   },
   {
-    title: 'Manage', requireAuth: true,
+    title: '管理',
+    requireAuth: true,
     items: [
-      { path: '/admin', label: '管理面板', icon: 'M2.75 0A1.75 1.75 0 0 0 1 1.75v12.5C1 15.216 1.784 16 2.75 16h10.5A1.75 1.75 0 0 0 15 14.25V1.75A1.75 1.75 0 0 0 13.25 0ZM3.25 4.5a.75.75 0 0 1 .75-.75h8a.75.75 0 0 1 0 1.5H4a.75.75 0 0 1-.75-.75Zm0 3.5a.75.75 0 0 1 .75-.75h8a.75.75 0 0 1 0 1.5H4a.75.75 0 0 1-.75-.75Zm0 3.5a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5H4a.75.75 0 0 1-.75-.75Z' },
-    ]
+      { path: '/admin', label: '管理面板' },
+    ],
   },
   {
-    title: 'Explore',
+    title: '探索',
     items: [
-      { path: '/posts', label: 'Repositories', icon: 'M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.708A2.486 2.486 0 0 1 4.5 9h8ZM5 12.25a.25.25 0 0 1 .25-.25h3.5a.25.25 0 0 1 .25.25v3.25a.25.25 0 0 1-.25.25h-3.5a.25.25 0 0 1-.25-.25Zm-2 0a.25.25 0 0 1 .25-.25h.75a.25.25 0 0 1 .25.25v3.25a.25.25 0 0 1-.25.25h-.75a.25.25 0 0 1-.25-.25Z' },
-      { path: '/drive', label: 'Files', icon: 'M0 2.75C0 1.784.784 1 1.75 1H5c.55 0 1.07.26 1.4.7l.9 1.2a.25.25 0 0 0 .2.1h6.75c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25Zm1.75-.25a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25H7.5c-.55 0-1.07-.26-1.4-.7l-.9-1.2a.25.25 0 0 0-.2-.1Z' },
-      { path: '/features', label: 'About', icon: 'M6.354.646a.5.5 0 0 1 .708 0l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L10.043 5 6.354 1.354a.5.5 0 0 1 0-.708Z' },
-      { path: '/games', label: '游戏', icon: 'M3 7.5A2.5 2.5 0 0 1 5.5 5h5A2.5 2.5 0 0 1 13 7.5v1A2.5 2.5 0 0 1 10.5 11h-5A2.5 2.5 0 0 1 3 8.5z' },
-      { path: '/pets', label: '宠物', icon: 'M8 6a1.3 1.3 0 1 0 0 2.6A1.3 1.3 0 0 0 8 6Zm-3.8 1.3a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Zm7.6 0a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6ZM8 9.6c-1.9 0-3.3 1.2-3.3 2.7 0 .8.7 1.2 1.6 1.2.7 0 1.2-.2 1.7-.2s1 .2 1.7.2c.9 0 1.6-.4 1.6-1.2 0-1.5-1.4-2.7-3.3-2.7Z' },
-      { path: '/stocks', label: '模拟股市', icon: 'M2 13.5h12M2.75 10.75 6 7.5l2.5 2 4.25-5' },
-    ]
+      { path: '/posts', label: '文章' },
+      { path: '/drive', label: '网盘' },
+      { path: '/features', label: '关于' },
+      { path: '/games', label: '游戏' },
+      { path: '/pets', label: '宠物' },
+      { path: '/stocks', label: '模拟股市' },
+    ],
   },
   {
-    title: 'Personal',
+    title: '个人',
     items: [
-      { path: '/chat', label: '聊天', icon: 'M2.75 2.5h10.5a1.25 1.25 0 0 1 1.25 1.25v6.5a1.25 1.25 0 0 1-1.25 1.25H9l-3.25 2.5v-2.5H2.75A1.25 1.25 0 0 1 1.5 10.25v-6.5A1.25 1.25 0 0 1 2.75 2.5Z' },
-      { path: '/points', label: '积分中心', icon: 'M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z' },
-      { path: '/deepseek', label: 'AI 对话', icon: 'M8 2.75c-3.1 0-5.5 2.1-5.5 4.7 0 1.4.72 2.62 1.87 3.44l-.57 2.11 2.35-1.1c.58.17 1.2.26 1.85.26 3.1 0 5.5-2.1 5.5-4.71S11.1 2.75 8 2.75Z' },
-      { path: '/webproxy', label: '网页反代', icon: 'M2.5 2.5h11v11h-11z' },
-      { path: '/profile', label: 'Profile', icon: 'M2 1.75C2 .784 2.784 0 3.75 0h8.5C13.216 0 14 .784 14 1.75v12.5a1.75 1.75 0 0 1-1.75 1.75h-8.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25V1.75a.25.25 0 0 0-.25-.25Z M5.5 2.75a.75.75 0 0 1 0-1.5h5a.75.75 0 0 1 0 1.5Z M8 12a.75.75 0 0 0 .75-.75v-3.5a.75.75 0 0 0-1.5 0v3.5c0 .414.336.75.75.75Z' },
-    ]
+      { path: '/chat', label: '聊天' },
+      { path: '/points', label: '积分中心' },
+      { path: '/deepseek', label: 'AI 对话' },
+      { path: '/webproxy', label: '网页反代' },
+      { path: '/profile', label: '个人资料' },
+    ],
   },
 ]
 
-export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onToggleCollapse }: Props) {
+export default memo(function Sidebar({ collapsed, mobileOpen, onClose, onToggleCollapse }: Props) {
   const { user } = useAuth()
   const { isEnabled } = useFeature()
   const { unreadTotal } = useXmppChat()
@@ -84,7 +85,26 @@ export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onT
   return (
     <>
       {mobileOpen && <div className="gh-sidebar-overlay" onClick={onClose} />}
-      <aside className={`gh-sidebar ${collapsed ? 'gh-sidebar--collapsed' : ''} ${mobileOpen ? 'gh-sidebar--open' : ''}`}>
+      <aside
+        className={`gh-sidebar ${collapsed ? 'gh-sidebar--collapsed' : ''} ${mobileOpen ? 'gh-sidebar--open' : ''}`}
+        aria-label="主导航"
+      >
+        {/* 抽屉模式下的品牌行 + 关闭按钮（桌面端隐藏，桌面品牌在顶栏） */}
+        <div className="gh-sidebar-brand gh-sidebar-brand--drawer">
+          <Link to="/" className="gh-sidebar-brand-link" onClick={onClose}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M5 4.5A2.5 2.5 0 0 1 7.5 2h7L19 6.5v11A2.5 2.5 0 0 1 16.5 20h-9A2.5 2.5 0 0 1 5 17.5z" />
+              <path d="M14 2v5h5M8.5 11h7M8.5 15h4" />
+            </svg>
+            <span className="gh-sidebar-brand-name">LineWeb</span>
+          </Link>
+          <button className="gh-sidebar-close" onClick={onClose} aria-label="关闭导航菜单">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+              <path d="m4 4 8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        </div>
+
         <nav className="gh-sidebar-nav">
           {sections.map(section => {
             if (section.requireAuth && !user) return null
@@ -113,6 +133,7 @@ export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onT
                     key={item.path}
                     to={item.path}
                     className={`gh-sidebar-item ${isActive(item.path) ? 'gh-sidebar-item--active' : ''} ${item.path === '/chat' ? 'gh-chat-nav-item' : ''}`}
+                    aria-current={isActive(item.path) ? 'page' : undefined}
                     onClick={onClose}
                   >
                     <SidebarIcon path={item.path} />
@@ -128,6 +149,7 @@ export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onT
             )
           })}
         </nav>
+
         <div className="gh-sidebar-footer">
           <button
             className="gh-sidebar-item gh-sidebar-collapse-btn"
@@ -140,12 +162,13 @@ export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onT
               }
               onToggleCollapse()
             }}
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={collapsed ? '展开侧栏' : '收起侧栏'}
+            aria-label={collapsed ? '展开侧栏' : '收起侧栏'}
           >
-            <svg className="gh-sidebar-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg className="gh-sidebar-icon" width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d={collapsed ? 'm6 3.5 4 4.5-4 4.5' : 'm10 3.5-4 4.5 4 4.5'} />
             </svg>
-            <span className="gh-sidebar-label">{collapsed ? 'Expand' : 'Collapse'}</span>
+            <span className="gh-sidebar-label">{collapsed ? '展开' : '收起'}</span>
           </button>
         </div>
       </aside>

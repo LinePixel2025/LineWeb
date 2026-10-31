@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { GitHubAlert, GitHubBadge, GitHubButton } from '../components/ui'
+import { Alert, Badge, Button } from '../components/ui'
 import api from '../lib/api'
 import { appScopeDescription, appScopeLabel } from '../lib/appScopes'
 
@@ -131,9 +131,9 @@ export default function AuthorizePage() {
           <p className="gh-text-secondary" style={{ textAlign: 'center', marginBottom: '24px', fontSize: '0.88rem' }}>
             无法完成授权请求
           </p>
-          <GitHubAlert variant="danger" title="请求被拒绝">
+          <Alert variant="danger" title="请求被拒绝">
             {error || '授权请求无效'}
-          </GitHubAlert>
+          </Alert>
           <p className="gh-text-tertiary" style={{ fontSize: 'var(--gh-text-xs)', marginTop: '16px' }}>
             出于安全考虑，LineWeb 不会向未注册的回调地址跳转。请确认应用提供的授权链接是否正确，或联系应用开发者。
           </p>
@@ -180,7 +180,7 @@ export default function AuthorizePage() {
             <li key={item.scope} className="gh-consent-scope">
               <div className="gh-consent-scope-head">
                 <span className="gh-consent-scope-label">{item.label || appScopeLabel(item.scope)}</span>
-                {item.highRisk && <GitHubBadge variant="warning">高危权限</GitHubBadge>}
+                {item.highRisk && <Badge variant="warning">高危权限</Badge>}
               </div>
               <p className="gh-consent-scope-desc">
                 {item.description || appScopeDescription(item.scope)}
@@ -190,14 +190,14 @@ export default function AuthorizePage() {
         </ul>
 
         {context.scopes.some((item) => item.highRisk) && (
-          <GitHubAlert variant="warning" title="请注意高危权限">
+          <Alert variant="warning" title="请注意高危权限">
             该应用可以代表你创建、编辑或删除站点内容与评论。请仅在你信任该应用时授权。
-          </GitHubAlert>
+          </Alert>
         )}
 
         {decisionError && (
           <div style={{ marginTop: '16px' }}>
-            <GitHubAlert variant="danger">{decisionError}</GitHubAlert>
+            <Alert variant="danger">{decisionError}</Alert>
           </div>
         )}
 
@@ -208,7 +208,7 @@ export default function AuthorizePage() {
         </div>
 
         <div className="gh-consent-actions">
-          <GitHubButton
+          <Button
             type="button"
             variant="secondary"
             size="lg"
@@ -217,8 +217,8 @@ export default function AuthorizePage() {
             onClick={() => handleDecision('deny')}
           >
             拒绝
-          </GitHubButton>
-          <GitHubButton
+          </Button>
+          <Button
             type="button"
             variant="primary"
             size="lg"
@@ -227,7 +227,7 @@ export default function AuthorizePage() {
             onClick={() => handleDecision('approve')}
           >
             {submitting ? '处理中…' : '同意授权'}
-          </GitHubButton>
+          </Button>
         </div>
 
         <p className="gh-text-tertiary" style={{ fontSize: 'var(--gh-text-xs)', marginTop: '20px', textAlign: 'center' }}>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { GitHubButton, GitHubBadge } from '../../components/ui'
+import { Button, Badge } from '../../components/ui'
 import api from '../../lib/api'
 import type { CommentData } from '../../types/comment'
 
@@ -59,8 +59,8 @@ function CommentRow({
               style={{ resize: 'vertical' }}
             />
             <div style={{ display: 'flex', gap: 'var(--gh-space-2)' }}>
-              <GitHubButton variant="primary" size="sm" onClick={() => onSave(comment.id)}>保存</GitHubButton>
-              <GitHubButton variant="ghost" size="sm" onClick={cancelEdit}>取消</GitHubButton>
+              <Button variant="primary" size="sm" onClick={() => onSave(comment.id)}>保存</Button>
+              <Button variant="ghost" size="sm" onClick={cancelEdit}>取消</Button>
             </div>
           </div>
         ) : (
@@ -71,9 +71,9 @@ function CommentRow({
       </td>
       <td>{comment.author.username}</td>
       <td>
-        <GitHubBadge variant={isReply ? 'default' : 'accent'}>
+        <Badge variant={isReply ? 'default' : 'accent'}>
           {isReply ? '回复' : '主评论'}
-        </GitHubBadge>
+        </Badge>
       </td>
       <td className="gh-text-tertiary">
         {new Date(comment.createdAt).toLocaleString('zh-CN')}
@@ -82,8 +82,8 @@ function CommentRow({
         <div className="gh-actions">
           {!isEditing && (
             <>
-              <GitHubButton variant="secondary" size="sm" onClick={() => onStartEdit(comment)}>编辑</GitHubButton>
-              <GitHubButton variant="danger" size="sm" onClick={() => onDelete(comment.id)}>删除</GitHubButton>
+              <Button variant="secondary" size="sm" onClick={() => onStartEdit(comment)}>编辑</Button>
+              <Button variant="danger" size="sm" onClick={() => onDelete(comment.id)}>删除</Button>
             </>
           )}
         </div>
@@ -207,15 +207,15 @@ export function ContentCommentsPanel() {
                       <div style={{ fontWeight: 500 }}>{g.title}</div>
                     </td>
                     <td onClick={() => selectPost(g.postId, g.title)}>
-                      <GitHubBadge variant="accent">{g.commentCount}</GitHubBadge>
+                      <Badge variant="accent">{g.commentCount}</Badge>
                     </td>
                     <td className="gh-text-tertiary" onClick={() => selectPost(g.postId, g.title)}>
                       {new Date(g.latestAt).toLocaleString('zh-CN')}
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <GitHubButton variant="secondary" size="sm" onClick={() => selectPost(g.postId, g.title)}>
+                      <Button variant="secondary" size="sm" onClick={() => selectPost(g.postId, g.title)}>
                         管理
-                      </GitHubButton>
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -231,11 +231,11 @@ export function ContentCommentsPanel() {
   return (
     <div>
       <div className="gh-page-header" style={{ display: 'flex', alignItems: 'center', gap: 'var(--gh-space-3)' }}>
-        <GitHubButton variant="secondary" size="sm" onClick={backToList}>
+        <Button variant="secondary" size="sm" onClick={backToList}>
           &larr; 返回
-        </GitHubButton>
+        </Button>
         <h1 style={{ margin: 0 }}>{truncate(selectedPost.title, 30)}</h1>
-        <GitHubBadge variant="accent">{totalComments}</GitHubBadge>
+        <Badge variant="accent">{totalComments}</Badge>
       </div>
 
       {commentsLoading ? (

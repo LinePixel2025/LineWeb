@@ -1,12 +1,45 @@
-/* 首屏加载骨架（在 JS/CSS 主包到达前生效） */
+/* 首屏加载骨架（在 JS/CSS 主包到达前生效）
+   颜色与 variables.css 的明暗令牌保持一致，避免暗色模式白闪。 */
+:root {
+  color-scheme: light dark;
+  --lw-boot-bg: #f5f5f7;
+  --lw-boot-track: rgba(60, 60, 67, 0.10);
+  --lw-boot-thumb: rgba(60, 60, 67, 0.32);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --lw-boot-bg: #000000;
+    --lw-boot-track: rgba(255, 255, 255, 0.12);
+    --lw-boot-thumb: rgba(255, 255, 255, 0.40);
+  }
+}
+
+html[data-theme="light"] {
+  --lw-boot-bg: #f5f5f7;
+  --lw-boot-track: rgba(60, 60, 67, 0.10);
+  --lw-boot-thumb: rgba(60, 60, 67, 0.32);
+}
+
+html[data-theme="dark"] {
+  --lw-boot-bg: #000000;
+  --lw-boot-track: rgba(255, 255, 255, 0.12);
+  --lw-boot-thumb: rgba(255, 255, 255, 0.40);
+}
+
+html,
+body {
+  background: var(--lw-boot-bg);
+}
+
 #root:empty::before {
   content: '';
   display: block;
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   margin: 40vh auto 0;
-  border: 3px solid rgba(128, 128, 128, 0.15);
-  border-top-color: rgba(128, 128, 128, 0.5);
+  border: 2.5px solid var(--lw-boot-track);
+  border-top-color: var(--lw-boot-thumb);
   border-radius: 50%;
   animation: lw-spin 0.8s linear infinite;
 }
@@ -15,4 +48,6 @@
   to { transform: rotate(360deg); }
 }
 
-body { background: #ffffff; }
+@media (prefers-reduced-motion: reduce) {
+  #root:empty::before { animation-duration: 2s; }
+}

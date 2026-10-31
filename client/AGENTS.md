@@ -1,6 +1,6 @@
 # AGENTS.md — LineWeb Client
 
-React 19 + Vite 6 + TypeScript 前端。端口 5173，路由级代码分割，GitHub Primer 风格纯 CSS 设计系统。
+React 19 + Vite 6 + TypeScript 前端。端口 5173，路由级代码分割，Apple 风格（macOS/iOS 视觉语言）纯 CSS 设计系统。
 
 ## 目录结构
 
@@ -34,7 +34,7 @@ client/src/
 │   └── admin/              # 6 个管理页面（CommentAdmin/PageEditor/UserAdmin/ApiDocs/DeviceMonitor/PageList）
 ├── hooks/               # useThumbnails / useKeyboardShortcuts / useDragAndDrop / useResponsive / useGame2048Input
 ├── lib/                 # api.ts + permissions.ts + format.ts + realtime.ts + games/（2048 引擎/目录）
-├── styles/              # 11 个 CSS 文件（无 Tailwind，无 CSS-in-JS）
+├── styles/              # 31 个 CSS 文件（Apple 设计令牌 + 模块样式；无 Tailwind，无 CSS-in-JS）
 └── types/               # drive.ts + comment.ts + chat.ts + game.ts
 ```
 

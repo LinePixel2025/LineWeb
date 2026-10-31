@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { GitHubAlert, GitHubBadge, GitHubButton, GitHubInput } from '../../components/ui'
+import { Alert, Badge, Button, Input } from '../../components/ui'
 import {
   webProxyAdminApi,
   type ProxyAdminOverview,
@@ -294,8 +294,8 @@ export default function ProxyAdminPage() {
         <p>统一管理反代黑名单、访问统计与并发排队豁免；反代页面本身在「网页反代」功能页打开</p>
       </div>
 
-      {error && <GitHubAlert variant="danger">{error}</GitHubAlert>}
-      {notice && <GitHubAlert variant="success">{notice}</GitHubAlert>}
+      {error && <Alert variant="danger">{error}</Alert>}
+      {notice && <Alert variant="success">{notice}</Alert>}
 
       {/* 总览卡片 */}
       <div style={{ display: 'flex', gap: 'var(--gh-space-3)', flexWrap: 'wrap', margin: 'var(--gh-space-4) 0' }}>
@@ -408,7 +408,7 @@ export default function ProxyAdminPage() {
                         <td style={tdStyle}>{formatNumber(item.requests)}</td>
                         <td style={tdStyle}>
                           {item.errors > 0
-                            ? <GitHubBadge variant="danger">{formatNumber(item.errors)}</GitHubBadge>
+                            ? <Badge variant="danger">{formatNumber(item.errors)}</Badge>
                             : <span className="gh-text-tertiary">0</span>}
                         </td>
                         <td style={tdStyle}>{formatNumber(item.totalRequests)}</td>
@@ -448,7 +448,7 @@ export default function ProxyAdminPage() {
                         <td style={tdStyle}>{formatNumber(item.requests)}</td>
                         <td style={tdStyle}>{formatNumber(item.errors)}</td>
                         <td style={tdStyle}>
-                          {item.exempt ? <GitHubBadge variant="success">已豁免</GitHubBadge> : <span className="gh-text-tertiary">—</span>}
+                          {item.exempt ? <Badge variant="success">已豁免</Badge> : <span className="gh-text-tertiary">—</span>}
                         </td>
                       </tr>
                     ))}
@@ -469,22 +469,22 @@ export default function ProxyAdminPage() {
             填域名即可（可贴完整链接）：<code>example.com</code> 会同时拦截所有子域名；<code>*.example.com</code> 只拦截子域名。命中后既不能新建站点，已存在的站点也会立即停止转发。
           </p>
           <div style={{ display: 'flex', gap: 'var(--gh-space-2)', flexWrap: 'wrap', margin: 'var(--gh-space-3) 0' }}>
-            <GitHubInput
+            <Input
               style={{ flex: '1 1 240px' }}
               placeholder="example.com 或 *.example.com"
               value={pattern}
               onChange={(event) => setPattern(event.target.value)}
               onKeyDown={(event) => { if (event.key === 'Enter') void handleAdd() }}
             />
-            <GitHubInput
+            <Input
               style={{ flex: '1 1 200px' }}
               placeholder="原因（可选）"
               value={reason}
               onChange={(event) => setReason(event.target.value)}
             />
-            <GitHubButton variant="primary" onClick={() => void handleAdd()} disabled={busy || !pattern.trim()}>
+            <Button variant="primary" onClick={() => void handleAdd()} disabled={busy || !pattern.trim()}>
               {busy ? '添加中…' : '加入黑名单'}
-            </GitHubButton>
+            </Button>
           </div>
 
           {entries.length > 0 ? (
@@ -505,9 +505,9 @@ export default function ProxyAdminPage() {
                       <td style={tdStyle}>{entry.reason || <span className="gh-text-tertiary">—</span>}</td>
                       <td style={tdStyle}>{formatTime(entry.createdAt)}</td>
                       <td style={tdStyle}>
-                        <GitHubButton variant="danger" size="sm" onClick={() => void handleRemove(entry)}>
+                        <Button variant="danger" size="sm" onClick={() => void handleRemove(entry)}>
                           移除
-                        </GitHubButton>
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -528,14 +528,14 @@ export default function ProxyAdminPage() {
           </p>
 
           <div style={{ display: 'flex', gap: 'var(--gh-space-2)', margin: 'var(--gh-space-3) 0', flexWrap: 'wrap' }}>
-            <GitHubInput
+            <Input
               style={{ flex: '1 1 240px' }}
               placeholder="搜索用户名或邮箱"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={(event) => { if (event.key === 'Enter') void handleSearch() }}
             />
-            <GitHubButton onClick={() => void handleSearch()}>搜索</GitHubButton>
+            <Button onClick={() => void handleSearch()}>搜索</Button>
           </div>
 
           {users.length > 0 ? (
@@ -561,22 +561,22 @@ export default function ProxyAdminPage() {
                       <td style={tdStyle}>{user.siteCount}</td>
                       <td style={tdStyle}>
                         {user.role === 'admin'
-                          ? <GitHubBadge variant="accent">管理员天然豁免</GitHubBadge>
+                          ? <Badge variant="accent">管理员天然豁免</Badge>
                           : user.exempt
-                            ? <GitHubBadge variant="success">已豁免</GitHubBadge>
+                            ? <Badge variant="success">已豁免</Badge>
                             : <span className="gh-text-tertiary">正常排队</span>}
                       </td>
                       <td style={tdStyle}>
                         {user.role === 'admin' ? (
                           <span className="gh-text-tertiary">—</span>
                         ) : (
-                          <GitHubButton
+                          <Button
                             size="sm"
                             variant={user.exempt ? 'secondary' : 'primary'}
                             onClick={() => void handleExemption(user, !user.exempt)}
                           >
                             {user.exempt ? '取消豁免' : '授予豁免'}
-                          </GitHubButton>
+                          </Button>
                         )}
                       </td>
                     </tr>

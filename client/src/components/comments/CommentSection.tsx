@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import api from '../../lib/api'
 import UserAvatar from '../UserAvatar'
-import { GitHubButton } from '../ui'
+import { Button } from '../ui'
 import type { CommentData } from '../../types/comment'
 
 const CONTENT_MAX = 300
@@ -28,9 +28,9 @@ const CollapsibleContent = memo(function CollapsibleContent({ content }: { conte
         {isLong && !showAll ? content.slice(0, CONTENT_MAX) + '…' : content}
       </div>
       {isLong && (
-        <GitHubButton className="comment-expand-button" size="sm" variant="secondary" onClick={() => setShowAll(prev => !prev)}>
+        <Button className="comment-expand-button" size="sm" variant="secondary" onClick={() => setShowAll(prev => !prev)}>
           {showAll ? '收起' : '展开全部'}
-        </GitHubButton>
+        </Button>
       )}
     </div>
   )
@@ -89,12 +89,12 @@ const ReplyForm = memo(function ReplyForm({
       <div className="reply-form-actions">
         <span className="comment-char-count">{text.length}/2000</span>
         <div className="reply-form-buttons">
-          <GitHubButton type="button" variant="ghost" size="sm" onClick={onCancel}>
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
             取消
-          </GitHubButton>
-          <GitHubButton type="button" variant="primary" size="sm" onClick={handleSubmit} disabled={sending || !text.trim()}>
+          </Button>
+          <Button type="button" variant="primary" size="sm" onClick={handleSubmit} disabled={sending || !text.trim()}>
             {sending ? '发送中…' : '回复'}
-          </GitHubButton>
+          </Button>
         </div>
       </div>
     </div>
@@ -133,19 +133,19 @@ const CommentCard = memo(function CommentCard({
 
         <div className="comment-actions">
           {user && (
-            <GitHubButton className="comment-action-button" size="sm" variant="ghost" onClick={() => setShowReplyForm(prev => !prev)}>
+            <Button className="comment-action-button" size="sm" variant="ghost" onClick={() => setShowReplyForm(prev => !prev)}>
               {showReplyForm ? '取消回复' : '回复'}
-            </GitHubButton>
+            </Button>
           )}
           {hasReplies && (
-            <GitHubButton
+            <Button
               size="sm"
               variant="ghost"
               className="comment-action-button"
               onClick={() => setExpanded(prev => !prev)}
             >
               {expanded ? `收起回复 (${comment.replies.length})` : `展开回复 (${comment.replies.length})`}
-            </GitHubButton>
+            </Button>
           )}
         </div>
 
@@ -262,9 +262,9 @@ export default function CommentSection({ postId }: { postId: number }) {
               {error && <p className="comment-error">{error}</p>}
               <div className="comment-form-actions">
                 <span className="comment-char-count">{text.length}/2000</span>
-                <GitHubButton type="submit" variant="primary" size="sm" disabled={sending || !text.trim()}>
+                <Button type="submit" variant="primary" size="sm" disabled={sending || !text.trim()}>
                   {sending ? '发表中…' : '发表评论'}
-                </GitHubButton>
+                </Button>
               </div>
             </form>
           </div>

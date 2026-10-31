@@ -1,0 +1,86 @@
+/* =============================================================
+   LineWeb Design System — Utilities
+   -------------------------------------------------------------
+   目的：替换页面/组件里「只为间距或对齐」的静态内联 style。
+   约束：
+   - 只放结构性工具类，不放视觉主题（颜色/阴影走组件类或令牌）
+   - 前缀用 .u-*，与组件命名空间 .gh-* 区分
+   - 必须在模块样式之后、responsive.css 之前引入
+   ============================================================= */
+
+/* ===== 布局 ===== */
+.u-stack { display: flex; flex-direction: column; }
+.u-row { display: flex; align-items: center; }
+.u-between { display: flex; align-items: center; justify-content: space-between; }
+.u-center { display: flex; align-items: center; justify-content: center; }
+.u-start { display: flex; align-items: flex-start; }
+.u-wrap { flex-wrap: wrap; }
+.u-grow { flex: 1 1 auto; min-width: 0; }
+.u-full { width: 100%; }
+.u-min-0 { min-width: 0; }
+
+.u-gap-1 { gap: var(--gh-space-1); }
+.u-gap-2 { gap: var(--gh-space-2); }
+.u-gap-3 { gap: var(--gh-space-3); }
+.u-gap-4 { gap: var(--gh-space-4); }
+.u-gap-5 { gap: var(--gh-space-5); }
+.u-gap-6 { gap: var(--gh-space-6); }
+
+.u-mt-1 { margin-top: var(--gh-space-1); }
+.u-mt-2 { margin-top: var(--gh-space-2); }
+.u-mt-3 { margin-top: var(--gh-space-3); }
+.u-mt-4 { margin-top: var(--gh-space-4); }
+.u-mt-5 { margin-top: var(--gh-space-5); }
+.u-mt-6 { margin-top: var(--gh-space-6); }
+
+.u-mb-1 { margin-bottom: var(--gh-space-1); }
+.u-mb-2 { margin-bottom: var(--gh-space-2); }
+.u-mb-3 { margin-bottom: var(--gh-space-3); }
+.u-mb-4 { margin-bottom: var(--gh-space-4); }
+.u-mb-5 { margin-bottom: var(--gh-space-5); }
+.u-mb-6 { margin-bottom: var(--gh-space-6); }
+
+.u-p-0 { padding: 0; }
+.u-p-2 { padding: var(--gh-space-2); }
+.u-p-3 { padding: var(--gh-space-3); }
+.u-p-4 { padding: var(--gh-space-4); }
+.u-p-5 { padding: var(--gh-space-5); }
+
+/* ===== 文本 ===== */
+.u-muted { color: var(--gh-text-secondary); }
+.u-faint { color: var(--gh-text-tertiary); }
+.u-accent { color: var(--gh-accent); }
+.u-danger { color: var(--gh-danger); }
+.u-num { font-variant-numeric: tabular-nums; }
+.u-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.u-pre-wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.u-center-text { text-align: center; }
+.u-nowrap { white-space: nowrap; }
+
+/* ===== 表面 ===== */
+.u-panel {
+  padding: var(--gh-space-4);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+}
+.u-inset {
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-inset);
+}
+.u-divider {
+  height: 1px;
+  margin: var(--gh-space-3) 0;
+  background: var(--gh-border);
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 767px) {
+  .u-hide-mobile { display: none !important; }
+  .u-stack-mobile { flex-direction: column; align-items: stretch; }
+}

@@ -1,0 +1,332 @@
+/* =============================================================
+   Apple 视觉覆盖（2026-11 重构）— 功能模块与管理端 chrome
+   -------------------------------------------------------------
+   设计口径：
+   - 这里的规则只覆盖「外壳 / 容器 / 控件」，不覆盖游戏牌面与棋盘美术；
+   - 优先使用设计令牌，不做硬编码颜色；
+   - 该文件必须最后引入（responsive.css 之前），仅用于尚未就地重写的模块。
+   - 后续把某个模块就地重写后，应同步删掉这里对应的覆盖块。
+   ============================================================= */
+
+/* =========================================================
+   0. 全局原生控件（复选框 / 单选框 / 下拉 / 进度条）
+   ========================================================= */
+input[type="checkbox"],
+input[type="radio"],
+progress {
+  accent-color: var(--gh-accent);
+}
+select.gh-input {
+  padding-right: 30px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--gh-text-tertiary) 50%),
+    linear-gradient(135deg, var(--gh-text-tertiary) 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) calc(50% - 2px),
+    calc(100% - 11px) calc(50% - 2px);
+  background-repeat: no-repeat;
+  background-size: 5px 5px, 5px 5px;
+  appearance: none;
+}
+::file-selector-button {
+  margin-right: 10px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-fill-2);
+  color: var(--gh-text);
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-xs);
+  cursor: pointer;
+}
+
+/* =========================================================
+   1. 积分中心
+   ========================================================= */
+.gh-points-hero {
+  align-items: stretch;
+  gap: var(--gh-space-5);
+  padding: clamp(22px, 3vw, 32px);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-xl);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+}
+.gh-points-hero-eyebrow {
+  margin: 0 0 6px;
+  color: var(--gh-accent);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.gh-points-hero-title {
+  font-size: var(--gh-text-2xl);
+  font-weight: 700;
+  letter-spacing: var(--gh-tracking-tight);
+}
+.gh-points-hero-sub { font-size: var(--gh-text-subhead, 0.9375rem); line-height: 1.6; }
+.gh-points-hero-card {
+  border: 0;
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas-inset);
+  box-shadow: none;
+}
+.gh-points-hero-value {
+  color: var(--gh-text);
+  font-weight: 700;
+  letter-spacing: var(--gh-tracking-tight);
+}
+.gh-points-hero-label { color: var(--gh-text-secondary); }
+.gh-points-hero-meta { color: var(--gh-text-secondary); }
+
+.gh-points-checkin {
+  padding: var(--gh-space-4) var(--gh-space-5);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+}
+.gh-points-checkin--done { background: var(--gh-canvas-subtle); }
+.gh-points-checkin-text h2 { font-size: var(--gh-text-base); font-weight: 600; }
+.gh-points-checkin-stat strong { font-size: var(--gh-text-lg); font-weight: 600; }
+
+.gh-points-empty { color: var(--gh-text-tertiary); font-size: var(--gh-text-sm); }
+
+/* 积分页内的分段（商店 / 排行榜 / 流水） */
+.gh-points-tabs,
+.gh-points-view-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-inset);
+}
+.gh-points-tab,
+.gh-points-view-tab {
+  min-height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: calc(var(--gh-radius) - 3px);
+  background: transparent;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+.gh-points-tab--active,
+.gh-points-view-tab--active {
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10);
+}
+
+/* 商店卡片：去掉厚左侧色条，保留稀有度色调 */
+.gh-points-shop-card,
+.gh-points-item-card {
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+}
+.gh-points-shop-card:hover,
+.gh-points-item-card:hover { border-color: var(--gh-border-strong); }
+.gh-points-shop-price,
+.gh-points-item-price { font-variant-numeric: tabular-nums; }
+
+/* =========================================================
+   2. 管理端密度与开关
+   ========================================================= */
+.gh-layout-root--admin .gh-page-title {
+  font-size: var(--gh-text-xl);
+  font-weight: 700;
+}
+.gh-layout-root--admin .gh-page-subtitle { margin-top: 4px; font-size: var(--gh-text-sm); }
+.gh-layout-root--admin .gh-page-header { margin-bottom: var(--gh-space-4); padding-bottom: 0; }
+
+/* 表格：单行显示 + 需要时在容器内横向滚动 */
+/* 只给包在 .gh-table-wrap 里的表格设最小宽度，避免未包裹的表格撑破页面 */
+.gh-layout-root--admin .gh-table-wrap .gh-table { min-width: 720px; }
+.gh-layout-root--admin .gh-table th { padding: 9px 14px; font-size: var(--gh-text-xs); }
+.gh-layout-root--admin .gh-table td {
+  padding: 10px 14px;
+  font-size: var(--gh-text-sm);
+  white-space: nowrap;
+}
+.gh-layout-root--admin .gh-table td .gh-text-tertiary { font-size: var(--gh-text-xs); }
+.gh-layout-root--admin .gh-box { border-radius: var(--gh-radius-lg); }
+
+/* 功能开关：iOS 开关 */
+.gh-feature-row { gap: var(--gh-space-4); padding: 12px 16px; }
+.gh-feature-group-title {
+  padding: 10px 16px;
+  background: var(--gh-canvas-subtle);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+}
+.gh-feature-label { font-size: var(--gh-text-sm); font-weight: 600; }
+.gh-feature-desc { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+.gh-feature-switch {
+  width: 48px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-fill-3);
+  transition: background var(--gh-dur-2) var(--gh-ease-standard);
+}
+.gh-feature-switch--on { background: var(--gh-success); border-color: transparent; }
+.gh-feature-switch-knob {
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform var(--gh-dur-2) var(--gh-ease-spring);
+}
+.gh-feature-switch--on .gh-feature-switch-knob { transform: translateX(20px); }
+.gh-feature-switch:focus-visible {
+  outline: none;
+  box-shadow: var(--gh-focus-ring);
+}
+
+/* 管理页内的状态胶囊 / 标签 */
+.gh-layout-root--admin .gh-badge { padding: 2px 10px; }
+
+/* =========================================================
+   3. 宠物 / 农场 / 股市 / 反代 / 个人空间
+   ========================================================= */
+.gh-pet-stage,
+.gh-pet-side > .gh-box,
+.gh-pet-dock,
+.gh-pet-summon {
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+}
+.gh-pet-dock-group-title { color: var(--gh-text-tertiary); font-size: 11px; font-weight: 600; }
+.gh-pet-warn { border-radius: var(--gh-radius-lg); background: var(--gh-warning-soft); color: var(--gh-warning); }
+
+.gh-farm-scene-head,
+.gh-farm-toolbar,
+.gh-farm-aside > .gh-box,
+.gh-farm-create,
+.gh-farm-neighbors {
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+}
+.gh-farm-tabs {
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-inset);
+}
+
+.gh-stocks-list,
+.gh-stocks-detail,
+.gh-stocks-portfolio,
+.gh-stocks-trade,
+.gh-stocks-chart-head {
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+}
+.gh-stocks-badge { border-radius: var(--gh-radius-pill); }
+
+.gh-proxy-card {
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+}
+.gh-proxy-card:hover { border-color: var(--gh-border-strong); box-shadow: var(--gh-shadow-md); }
+.gh-proxy-form,
+.gh-proxy-list-section,
+.gh-proxy-notes,
+.gh-proxy-error-card {
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+}
+
+.gh-ps-card,
+.gh-ps-summary,
+.gh-ps-connect {
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+}
+.gh-ps-card:hover { border-color: var(--gh-border-strong); }
+
+/* =========================================================
+   4. AI 助手浮窗 / 站内 AI 对话
+   ========================================================= */
+.gh-ai-fab {
+  border: 0;
+  background: var(--gh-accent-button);
+  color: var(--gh-on-accent);
+  box-shadow: var(--gh-shadow-lg);
+  transition: transform var(--gh-dur-2) var(--gh-ease-out), background var(--gh-transition);
+}
+.gh-ai-fab:hover { background: var(--gh-accent-button-hover); transform: translateY(-1px); }
+.gh-ai-panel {
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-xl);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-xl);
+}
+.gh-ai-header {
+  border-bottom: 1px solid var(--gh-border);
+  background: var(--gh-material-chrome);
+  -webkit-backdrop-filter: var(--gh-blur-chrome);
+  backdrop-filter: var(--gh-blur-chrome);
+}
+.gh-ai-header-btn { border: 0; border-radius: var(--gh-radius-pill); background: transparent; }
+.gh-ai-header-btn:hover { background: var(--gh-fill-2); }
+.gh-ai-compose {
+  border-top: 1px solid var(--gh-border);
+  background: var(--gh-canvas);
+}
+.gh-ai-input {
+  border: 0;
+  border-radius: 18px;
+  background: var(--gh-canvas-inset);
+}
+.gh-ai-input:focus { background: var(--gh-canvas); box-shadow: var(--gh-focus-ring); }
+.gh-ai-bubble { border-radius: 16px; background: var(--gh-canvas-inset); color: var(--gh-text); }
+.gh-ai-message--user .gh-ai-bubble { background: var(--gh-accent-button); color: var(--gh-on-accent); }
+.gh-ai-empty { color: var(--gh-text-secondary); }
+.gh-ai-empty-title { color: var(--gh-text); font-weight: 600; }
+
+.gh-ds-reasoning {
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-subtle);
+}
+.gh-ds-quota {
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-canvas-inset);
+  color: var(--gh-text-secondary);
+}
+.gh-ds-quota--out { background: var(--gh-danger-soft); color: var(--gh-danger); }
+.gh-ds-images img { border-radius: var(--gh-radius); }
+
+/* =========================================================
+   5. 通用容器微调
+   ========================================================= */
+.gh-announce-dialog,
+.gh-announce-ack-dialog {
+  border-radius: var(--gh-radius-xl);
+}
+.gh-announce-dialog-head,
+.gh-announce-ack-hint { color: var(--gh-text-secondary); }
+
+@media (max-width: 767px) {
+  .gh-points-hero { padding: var(--gh-space-4); }
+  .gh-points-hero-card { flex: 1 1 100%; }
+  .gh-feature-row { padding: 12px; }
+}

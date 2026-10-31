@@ -1,240 +1,310 @@
 /* =============================================================
-   Line Web — Component Styles (GitHub Primer)
+   LineWeb Design System — Components（Apple 视觉语言）
+   -------------------------------------------------------------
+   规则口径：
+   - 控件用「填充 + 胶囊」，容器用「表面 + 发丝线 + 大圆角」
+   - 不再用 1px 实边框包住一切；分隔线统一走 --gh-border 发丝线
+   - 所有可交互元素必须有 focus-visible 环（base.css 已提供兜底）
    ============================================================= */
 
-/* ===== GitHub Button ===== */
+/* =========================================================
+   1. Button —— 胶囊 / 填充
+   ========================================================= */
 .gh-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius);
+  min-height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--gh-radius-pill);
+  background: transparent;
+  color: var(--gh-text);
   font-family: var(--gh-font);
+  font-size: var(--gh-text-sm);
   font-weight: 500;
+  letter-spacing: var(--gh-tracking-snug);
+  line-height: 1.2;
   cursor: pointer;
-  transition: background var(--gh-transition),
-              color var(--gh-transition),
-              border-color var(--gh-transition),
-              box-shadow var(--gh-transition);
   user-select: none;
   text-decoration: none;
   white-space: nowrap;
-  line-height: 1.4;
+  transition: background var(--gh-transition), color var(--gh-transition),
+    box-shadow var(--gh-transition), transform var(--gh-dur-1) var(--gh-ease-standard),
+    opacity var(--gh-transition);
 }
-.gh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.gh-btn:active { transform: scale(0.98); }
+.gh-btn:hover { text-decoration: none; }
+.gh-btn:active:not(:disabled) { transform: scale(0.97); }
+.gh-btn:disabled { opacity: 0.42; cursor: not-allowed; }
+.gh-btn > svg { flex-shrink: 0; }
 
-.gh-btn--sm { padding: 4px 10px; font-size: var(--gh-text-sm); }
-.gh-btn--md { padding: 6px 14px; font-size: var(--gh-text-sm); }
-.gh-btn--lg { padding: 8px 20px; font-size: var(--gh-text-base); }
+.gh-btn--sm { min-height: 30px; padding: 0 12px; font-size: var(--gh-text-xs); }
+.gh-btn--md { min-height: 36px; padding: 0 16px; font-size: var(--gh-text-sm); }
+.gh-btn--lg { min-height: 46px; padding: 0 24px; font-size: var(--gh-text-base); font-weight: 600; }
 .gh-btn--full { width: 100%; }
 
 .gh-btn--primary {
-  background: var(--gh-accent);
-  color: #fff;
-  border-color: var(--gh-accent);
+  background: var(--gh-accent-button);
+  color: var(--gh-on-accent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 .gh-btn--primary:hover:not(:disabled) {
-  background: var(--gh-accent-hover);
-  border-color: var(--gh-accent-hover);
+  background: var(--gh-accent-button-hover);
+  color: var(--gh-on-accent);
 }
 
 .gh-btn--secondary {
-  background: var(--gh-canvas);
+  background: var(--gh-fill-2);
   color: var(--gh-text);
 }
 .gh-btn--secondary:hover:not(:disabled) {
-  background: var(--gh-btn-hover);
-  border-color: var(--gh-border-muted);
+  background: var(--gh-fill-3);
+  color: var(--gh-text);
 }
 
 .gh-btn--danger {
-  background: var(--gh-canvas);
+  background: var(--gh-danger-soft);
   color: var(--gh-danger);
-  border-color: var(--gh-border);
 }
 .gh-btn--danger:hover:not(:disabled) {
   background: var(--gh-danger-soft);
-  border-color: var(--gh-danger);
+  color: var(--gh-danger);
+  box-shadow: inset 0 0 0 1px var(--gh-danger);
 }
 
 .gh-btn--ghost {
   background: transparent;
   color: var(--gh-accent);
-  border-color: transparent;
 }
 .gh-btn--ghost:hover:not(:disabled) {
   background: var(--gh-accent-soft);
+  color: var(--gh-accent);
 }
 
-/* ===== GitHub Input ===== */
+/* =========================================================
+   2. Input —— 填充式输入
+   ========================================================= */
 .gh-input-wrap {
   position: relative;
   display: inline-flex;
   align-items: center;
   min-width: 0;
 }
+
 .gh-input {
-  padding: 6px 12px;
-  font-size: var(--gh-text-sm);
-  font-family: var(--gh-font);
-  line-height: 1.4;
-  color: var(--gh-text);
-  background: var(--gh-canvas);
-  border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius);
-  outline: none;
-  transition: border-color var(--gh-transition), box-shadow var(--gh-transition);
   width: 260px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-inset);
+  color: var(--gh-text);
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-sm);
+  line-height: 1.4;
+  outline: none;
+  transition: background var(--gh-transition), box-shadow var(--gh-transition),
+    border-color var(--gh-transition);
 }
+.gh-input::placeholder { color: var(--gh-text-placeholder); }
+.gh-input:hover:not(:focus) { background: var(--gh-fill-2); }
+.gh-input:focus {
+  background: var(--gh-canvas);
+  border-color: var(--gh-accent-emphasis);
+  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.20);
+}
+.gh-input:disabled { color: var(--gh-text-disabled); cursor: not-allowed; }
 .gh-input--full { width: 100%; }
+
+textarea.gh-input {
+  min-height: 84px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
 .gh-form-field {
   display: grid;
   gap: 6px;
   color: var(--gh-text-secondary);
-  font-size: var(--gh-text-sm);
-  font-weight: 600;
+  font-size: var(--gh-text-xs);
+  font-weight: 500;
 }
 .gh-form-field > .gh-input-wrap { width: 100%; }
-.gh-input:focus {
-  border-color: var(--gh-accent);
-  box-shadow: var(--gh-focus-ring);
-}
-.gh-input::placeholder { color: var(--gh-text-placeholder); }
+.gh-form-field > span { letter-spacing: var(--gh-tracking-wide); }
+
 .gh-input-icon {
   position: absolute;
-  left: 10px;
-  color: var(--gh-text-tertiary);
+  left: 12px;
   display: flex;
+  color: var(--gh-text-tertiary);
   pointer-events: none;
 }
-.gh-input-icon + .gh-input { padding-left: 32px; }
+.gh-input-icon + .gh-input { padding-left: 34px; }
 
-/* ===== GitHub Badge ===== */
+/* =========================================================
+   3. Badge —— 胶囊淡底
+   ========================================================= */
 .gh-badge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  gap: 4px;
+  padding: 2px 10px;
+  border: 0;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-fill-2);
+  color: var(--gh-text-secondary);
   font-size: var(--gh-text-xs);
   font-weight: 500;
-  border-radius: var(--gh-radius);
-  border: 1px solid var(--gh-border);
-  color: var(--gh-text-secondary);
-  background: var(--gh-canvas);
-  line-height: 1.4;
+  line-height: 1.5;
+  white-space: nowrap;
 }
-.gh-badge--success {
-  background: var(--gh-success-soft);
-  color: var(--gh-success);
-  border-color: var(--gh-success-soft);
-}
-.gh-badge--danger {
-  background: var(--gh-danger-soft);
-  color: var(--gh-danger);
-  border-color: var(--gh-danger-soft);
-}
-.gh-badge--warning {
-  background: var(--gh-warning-soft);
-  color: var(--gh-warning);
-  border-color: var(--gh-warning-soft);
-}
-.gh-badge--accent {
-  background: var(--gh-accent-soft);
-  color: var(--gh-accent);
-  border-color: var(--gh-accent-soft);
-}
+.gh-badge--success { background: var(--gh-success-soft); color: var(--gh-success); }
+.gh-badge--danger { background: var(--gh-danger-soft); color: var(--gh-danger); }
+.gh-badge--warning { background: var(--gh-warning-soft); color: var(--gh-warning); }
+.gh-badge--accent { background: var(--gh-accent-soft); color: var(--gh-accent); }
 
-/* ===== GitHub Alert ===== */
+/* =========================================================
+   4. Alert —— 淡底提示条（不再用 4px 色条）
+   ========================================================= */
 .gh-alert {
   padding: 12px 16px;
-  border-radius: var(--gh-radius);
-  border: 1px solid var(--gh-border);
-  border-left-width: 4px;
-  background: var(--gh-canvas);
+  border: 0;
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-accent-soft);
   color: var(--gh-text);
+  font-size: var(--gh-text-sm);
 }
-.gh-alert--info { border-left-color: var(--gh-accent); }
-.gh-alert--success { border-left-color: var(--gh-success-emphasis); }
-.gh-alert--warning { border-left-color: var(--gh-warning); }
-.gh-alert--danger { border-left-color: var(--gh-danger); }
-.gh-alert-title { font-weight: 600; margin-bottom: 4px; }
-.gh-alert-body { font-size: var(--gh-text-sm); }
+.gh-alert--success { background: var(--gh-success-soft); }
+.gh-alert--warning { background: var(--gh-warning-soft); }
+.gh-alert--danger { background: var(--gh-danger-soft); }
+.gh-alert-title {
+  margin-bottom: 2px;
+  font-weight: 600;
+  letter-spacing: var(--gh-tracking-snug);
+}
+.gh-alert--success .gh-alert-title { color: var(--gh-success); }
+.gh-alert--warning .gh-alert-title { color: var(--gh-warning); }
+.gh-alert--danger .gh-alert-title { color: var(--gh-danger); }
+.gh-alert-body { font-size: var(--gh-text-sm); line-height: 1.5; }
 
-/* ===== GitHub TabNav ===== */
+/* =========================================================
+   5. TabNav —— iOS 分段控件
+   ========================================================= */
 .gh-tabnav {
-  display: flex;
-  border-bottom: 1px solid var(--gh-border);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
   margin-bottom: var(--gh-space-5);
+  max-width: 100%;
   overflow-x: auto;
+  scrollbar-width: none;
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-inset);
 }
+.gh-tabnav::-webkit-scrollbar { display: none; }
+
 .gh-tabnav-item {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 16px;
-  font-size: var(--gh-text-sm);
-  font-family: var(--gh-font);
-  font-weight: 500;
+  min-height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: calc(var(--gh-radius) - 3px);
+  background: transparent;
   color: var(--gh-text-secondary);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-sm);
+  font-weight: 500;
   cursor: pointer;
-  transition: color var(--gh-transition), border-color var(--gh-transition);
-  margin-bottom: -1px;
   white-space: nowrap;
+  transition: background var(--gh-transition), color var(--gh-transition),
+    box-shadow var(--gh-transition);
 }
 .gh-tabnav-item:hover { color: var(--gh-text); }
 .gh-tabnav-item--active {
+  background: var(--gh-canvas);
   color: var(--gh-text);
-  border-bottom-color: var(--gh-accent);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
 }
 .gh-tabnav-count {
-  font-size: var(--gh-text-xs);
-  color: var(--gh-text-tertiary);
-  background: var(--gh-canvas-inset);
-  padding: 1px 6px;
-  border-radius: var(--gh-radius);
+  padding: 0 6px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-fill-2);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-type-caption-2);
+  font-weight: 600;
+  line-height: 18px;
+}
+.gh-tabnav-item--active .gh-tabnav-count {
+  background: var(--gh-fill-2);
+  color: var(--gh-text-secondary);
 }
 
-/* ===== GitHub Card / Box ===== */
+/* =========================================================
+   6. Card / Box —— 表面 + 发丝线 + 16px 圆角
+   ========================================================= */
 .gh-box {
-  background: var(--gh-canvas);
-  border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius);
   padding: var(--gh-space-4);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+  min-width: 0;
 }
 .gh-box + .gh-box { margin-top: var(--gh-space-4); }
 
-/* ===== GitHub List Item ===== */
+.gh-box-heading {
+  margin: 0 0 var(--gh-space-3);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  letter-spacing: var(--gh-tracking-wide);
+}
+
+/* =========================================================
+   7. 列表 / 行 —— 内缩发丝线
+   ========================================================= */
 .gh-list-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--gh-space-3);
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--gh-border-muted);
-  transition: background var(--gh-transition);
-  text-decoration: none;
+  padding: 12px 16px;
   color: inherit;
+  text-decoration: none;
+  transition: background var(--gh-transition);
 }
-.gh-list-item:last-child { border-bottom: none; }
+.gh-list-item::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 16px;
+  height: 1px;
+  background: var(--gh-border-muted);
+  pointer-events: none;
+}
+.gh-list-item:last-child::after { display: none; }
 .gh-list-item:hover { background: var(--gh-canvas-inset); }
 
-/* 列表项内容区（此前被使用但未定义，导致文章行布局全靠浏览器默认） */
 .gh-list-item-content {
-  flex: 1;
-  min-width: 0;
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 .gh-list-item-title {
-  font-weight: 600;
-  font-size: var(--gh-text-sm);
-  color: var(--gh-text);
-  text-decoration: none;
   overflow: hidden;
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  letter-spacing: var(--gh-tracking-snug);
+  text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -243,21 +313,24 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--gh-text-xs);
   color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
 }
 .gh-meta-dot { color: var(--gh-text-tertiary); opacity: 0.6; }
 .gh-list-item-excerpt {
-  margin: 0;
-  font-size: var(--gh-text-sm);
-  color: var(--gh-text-secondary);
   display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
   overflow: hidden;
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-/* ===== Repo color circle（保留纯装饰小圆点用法；带字母的场景用 .gh-post-avatar） ===== */
+/* =========================================================
+   8. 文章卡片 / 头像圆点
+   ========================================================= */
 .gh-repo-circle {
   width: 12px;
   height: 12px;
@@ -265,7 +338,6 @@
   flex-shrink: 0;
 }
 
-/* ===== Post avatar（色相由 postId 派生的圆形头标） ===== */
 .gh-post-avatar {
   display: inline-flex;
   align-items: center;
@@ -278,21 +350,22 @@
   user-select: none;
 }
 
-/* ===== Post featured card（首页最新一篇） ===== */
 .gh-post-featured {
   display: block;
-  background: var(--gh-canvas);
-  border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius);
   padding: var(--gh-space-5);
-  text-decoration: none;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-xl);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
   color: inherit;
-  box-shadow: var(--gh-shadow-sm);
-  transition: border-color var(--gh-transition), box-shadow var(--gh-transition);
+  text-decoration: none;
+  transition: transform var(--gh-dur-2) var(--gh-ease-out),
+    box-shadow var(--gh-dur-2) var(--gh-ease-out);
 }
 .gh-post-featured:hover {
-  border-color: var(--gh-accent);
-  box-shadow: var(--gh-shadow-md);
+  transform: translateY(-2px);
+  box-shadow: var(--gh-shadow-lg);
+  text-decoration: none;
 }
 .gh-post-featured-top {
   display: flex;
@@ -301,45 +374,47 @@
   margin-bottom: var(--gh-space-3);
 }
 .gh-post-featured-badge {
+  padding: 2px 10px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
   font-size: var(--gh-text-xs);
   font-weight: 600;
-  color: var(--gh-accent);
-  background: var(--gh-accent-soft);
-  padding: 2px 10px;
-  border-radius: 999px;
 }
 .gh-post-featured-title {
   margin: 0 0 var(--gh-space-2);
-  font-size: var(--gh-text-xl);
-  line-height: 1.35;
   color: var(--gh-text);
+  font-size: var(--gh-text-xl);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: var(--gh-tracking-tight);
 }
 .gh-post-featured:hover .gh-post-featured-title { color: var(--gh-accent); }
 .gh-post-featured-excerpt {
+  display: -webkit-box;
+  overflow: hidden;
   margin: 0 0 var(--gh-space-3);
+  color: var(--gh-text-secondary);
   font-size: var(--gh-text-sm);
   line-height: 1.6;
-  color: var(--gh-text-secondary);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  overflow: hidden;
+  -webkit-line-clamp: 2;
 }
 .gh-post-featured .gh-list-item-meta { padding: 0; }
-
-/* 文章列表行：头像与内容顶部对齐 */
 .gh-post-row { align-items: flex-start; }
 
-/* 文章列表盒（多行条目包一层卡片） */
 .gh-post-list {
   margin-top: var(--gh-space-2);
-  background: var(--gh-canvas);
-  border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius);
   overflow: hidden;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
 }
 
-/* 首页三栏 dashboard 容器（此前被使用但未定义） */
+/* =========================================================
+   9. Dashboard 容器（页面级网格在 pages.css）
+   ========================================================= */
 .gh-dashboard-sidebar,
 .gh-dashboard-feed {
   display: flex;
@@ -347,137 +422,249 @@
   gap: var(--gh-space-4);
   min-width: 0;
 }
-/* gap 接管列间距后，抵消相邻 .gh-box 的 margin，避免双重间距 */
 .gh-dashboard-sidebar > .gh-box + .gh-box { margin-top: 0; }
 
-/* 侧栏 box 小节标题 */
-.gh-box-heading {
-  margin: 0 0 var(--gh-space-3);
-  font-size: var(--gh-text-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--gh-text-secondary);
+.gh-nav-links { display: flex; flex-direction: column; gap: 2px; }
+.gh-nav-link {
+  justify-content: flex-start;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: var(--gh-radius);
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  font-weight: 500;
+  text-decoration: none;
 }
+.gh-nav-link:hover { background: var(--gh-canvas-inset); color: var(--gh-text); }
+.gh-nav-link svg { flex-shrink: 0; color: var(--gh-accent); }
 
-/* 侧栏快捷导航链接组 */
-.gh-nav-links { display: flex; flex-direction: column; gap: 4px; }
-.gh-nav-link { justify-content: flex-start; text-decoration: none; }
-.gh-nav-link svg { flex-shrink: 0; }
-
-/* 侧栏推荐功能列表 */
 .gh-featured-list { display: flex; flex-direction: column; gap: 2px; }
-.gh-featured-list .gh-list-item { padding-left: 8px; padding-right: 8px; }
-.gh-featured-item { text-decoration: none; color: inherit; }
-.gh-featured-emoji { font-size: 1.1rem; flex-shrink: 0; }
-.gh-featured-desc { font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
+.gh-featured-list .gh-list-item {
+  padding-right: 8px;
+  padding-left: 8px;
+  border-radius: var(--gh-radius);
+}
+.gh-featured-list .gh-list-item::after { display: none; }
+.gh-featured-item { color: inherit; text-decoration: none; }
+.gh-featured-emoji {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--gh-radius-sm);
+  background: var(--gh-canvas-inset);
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.gh-featured-desc { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
 
-/* 站点统计 2x2 网格 */
 .gh-stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--gh-space-2);
 }
 .gh-stat-cell {
-  text-align: center;
-  padding: 10px;
+  padding: 12px 10px;
+  border-radius: var(--gh-radius);
   background: var(--gh-canvas-inset);
-  border: 1px solid var(--gh-border-muted);
-  border-radius: var(--gh-radius);
+  text-align: center;
 }
-.gh-stat-cell-count { font-size: 1.25rem; font-weight: 600; }
-.gh-stat-cell-label { font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
+.gh-stat-cell-count {
+  color: var(--gh-text);
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: var(--gh-tracking-tight);
+  font-variant-numeric: tabular-nums;
+}
+.gh-stat-cell-label { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
 
-/* ===== GitHub Dropdown / Popover ===== */
+/* =========================================================
+   10. Popover / Menu —— 毛玻璃菜单
+   ========================================================= */
 .gh-popover {
-  background: var(--gh-canvas);
+  z-index: var(--gh-z-menu);
+  min-width: 200px;
+  padding: 6px;
   border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
   box-shadow: var(--gh-shadow-lg);
-  padding: 4px;
-  min-width: 180px;
-  z-index: 1000;
+  animation: gh-pop-in var(--gh-dur-2) var(--gh-ease-out);
 }
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .gh-popover {
+    background: var(--gh-material-chrome);
+    -webkit-backdrop-filter: var(--gh-blur-chrome);
+    backdrop-filter: var(--gh-blur-chrome);
+  }
+}
+@keyframes gh-pop-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
 .gh-popover-item {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 8px 12px;
-  border: none;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--gh-radius-sm);
   background: none;
   color: var(--gh-text);
-  font-size: var(--gh-text-sm);
   font-family: var(--gh-font);
-  cursor: pointer;
-  border-radius: var(--gh-radius);
+  font-size: var(--gh-text-sm);
   text-align: left;
-  transition: background var(--gh-transition);
   text-decoration: none;
+  cursor: pointer;
+  transition: background var(--gh-transition), color var(--gh-transition);
 }
-.gh-popover-item:hover { background: var(--gh-btn-hover); }
+.gh-popover-item:hover { background: var(--gh-fill-2); color: var(--gh-text); }
+.gh-popover-item:active { background: var(--gh-fill-3); }
 .gh-popover-divider {
   height: 1px;
+  margin: 6px 10px;
   background: var(--gh-border);
-  margin: 4px 0;
+}
+.gh-popover-titles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 10px 6px;
 }
 
-/* ===== GitHub Table ===== */
+/* =========================================================
+   11. Table —— 卡片内表格
+   ========================================================= */
+.gh-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: var(--gh-radius-lg);
+  -webkit-overflow-scrolling: touch;
+}
+
 .gh-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: var(--gh-text-sm);
 }
 .gh-table th {
-  text-align: left;
   padding: 10px 16px;
-  font-weight: 500;
-  color: var(--gh-text-secondary);
   border-bottom: 1px solid var(--gh-border);
+  background: var(--gh-canvas-subtle);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  text-align: left;
   white-space: nowrap;
 }
 .gh-table td {
-  padding: 10px 16px;
-  vertical-align: middle;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--gh-border-muted);
+  color: var(--gh-text);
+  vertical-align: middle;
 }
-.gh-table tr:last-child td { border-bottom: none; }
-.gh-table tr:hover td { background: var(--gh-canvas-inset); }
+.gh-table tbody tr:last-child td { border-bottom: none; }
+.gh-table tbody tr:hover td { background: var(--gh-canvas-inset); }
 
-/* ===== GitHub Dialog ===== */
+/* =========================================================
+   12. Dialog —— 22px 圆角 + 毛玻璃遮罩
+   ========================================================= */
 .gh-dialog-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--gh-z-dialog);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(31, 35, 40, 0.4);
-}
-.gh-dialog {
-  background: var(--gh-canvas);
-  border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius);
-  box-shadow: var(--gh-shadow-xl);
   padding: var(--gh-space-5);
+  background: var(--gh-scrim);
+  animation: gh-fade-in var(--gh-dur-2) var(--gh-ease-out);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .gh-dialog-overlay {
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+}
+
+.gh-dialog {
   width: 90%;
   max-width: 440px;
-  max-height: 80vh;
+  max-height: 84vh;
   overflow-y: auto;
+  padding: var(--gh-space-5);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-xl);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-xl);
+  animation: gh-dialog-in var(--gh-dur-3) var(--gh-ease-out);
 }
-.gh-dialog-title { font-size: var(--gh-text-base); font-weight: 600; margin-bottom: var(--gh-space-4); }
-.gh-dialog-actions { display: flex; gap: var(--gh-space-2); justify-content: flex-end; margin-top: var(--gh-space-4); }
+.gh-dialog-title {
+  margin-bottom: var(--gh-space-3);
+  color: var(--gh-text);
+  font-size: var(--gh-text-xl);
+  font-weight: 600;
+  letter-spacing: var(--gh-tracking-tight);
+}
+.gh-dialog-actions {
+  display: flex;
+  gap: var(--gh-space-2);
+  justify-content: flex-end;
+  margin-top: var(--gh-space-5);
+}
+/* 行内 code 里的长 URL / token 必须能换行，否则会把整页撑出横向滚动 */
+p code,
+li code,
+td code,
+th code,
+h1 code,
+h2 code,
+h3 code,
+h4 code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 
-/* ===== GitHub Page Header ===== */
+@keyframes gh-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes gh-dialog-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* =========================================================
+   13. 页面标题 / 操作行
+   ========================================================= */
 .gh-page-header {
   padding-bottom: var(--gh-space-4);
-  border-bottom: 1px solid var(--gh-border);
   margin-bottom: var(--gh-space-5);
 }
-.gh-page-header h1 { font-size: var(--gh-text-xl); margin-bottom: var(--gh-space-1); }
+.gh-page-header h1 { font-size: var(--gh-text-xl); margin-bottom: 2px; }
 .gh-page-header p { color: var(--gh-text-secondary); font-size: var(--gh-text-sm); }
 
-/* ===== GitHub Actions Row ===== */
+.gh-page-title {
+  margin: 0;
+  color: var(--gh-text);
+  font-size: var(--gh-text-2xl);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: var(--gh-tracking-tight);
+}
+.gh-page-subtitle {
+  margin-top: 6px;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.5;
+}
+
 .gh-actions {
   display: flex;
   align-items: center;
@@ -485,92 +672,123 @@
   justify-content: flex-end;
 }
 
-/* ===== article content ===== */
+/* =========================================================
+   14. 正文排版（文章 / 动态页）
+   ========================================================= */
 .article-content {
-  line-height: 1.8;
   color: var(--gh-text);
+  font-size: var(--gh-type-body);
+  line-height: 1.8;
+  letter-spacing: var(--gh-tracking-snug);
   overflow-wrap: break-word;
   word-break: break-word;
 }
-.article-content h1, .article-content h2, .article-content h3, .article-content h4 {
-  margin-top: 1.8em; margin-bottom: 0.6em;
+.article-content h1,
+.article-content h2,
+.article-content h3,
+.article-content h4 {
+  margin-top: 1.7em;
+  margin-bottom: 0.55em;
 }
-.article-content h1:first-child, .article-content h2:first-child, .article-content h3:first-child {
-  margin-top: 0;
-}
-.article-content p { margin-bottom: 1em; }
-.article-content ul, .article-content ol { margin-bottom: 1em; padding-left: 1.5em; }
+.article-content h1 { font-size: var(--gh-type-title-2); }
+.article-content h2 { font-size: var(--gh-type-title-3); }
+.article-content h3 { font-size: var(--gh-type-headline); }
+.article-content h1:first-child,
+.article-content h2:first-child,
+.article-content h3:first-child { margin-top: 0; }
+.article-content p { margin-bottom: 1.1em; }
+.article-content ul,
+.article-content ol { margin-bottom: 1.1em; padding-left: 1.4em; }
+.article-content li { margin-bottom: 0.35em; }
+.article-content a { color: var(--gh-accent); text-decoration: underline; text-underline-offset: 2px; }
 .article-content blockquote {
-  border-left: 4px solid var(--gh-border);
-  padding: 8px 16px;
-  margin: 1em 0;
+  margin: 1.4em 0;
+  padding: 4px 0 4px 16px;
+  border-left: 3px solid var(--gh-accent-emphasis);
   color: var(--gh-text-secondary);
 }
 .article-content code {
-  font-family: var(--gh-font-mono);
+  padding: 2px 6px;
+  border-radius: var(--gh-radius-xs);
   background: var(--gh-canvas-inset);
-  padding: 2px 8px;
-  border-radius: var(--gh-radius);
   font-size: 0.9em;
 }
 .article-content pre {
-  background: var(--gh-canvas-inset);
-  border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius);
+  margin-bottom: 1.2em;
   padding: 16px;
   overflow-x: auto;
-  margin-bottom: 1em;
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas-inset);
 }
-.article-content pre code { background: none; padding: 0; }
-.article-content img { max-width: 100%; border-radius: var(--gh-radius); }
-.article-content table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.article-content pre code { padding: 0; background: none; }
+.article-content img {
+  max-width: 100%;
+  margin: 1.2em auto;
+  border-radius: var(--gh-radius-lg);
+}
+.article-content table {
+  display: block;
+  max-width: 100%;
+  margin-bottom: 1.2em;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
 .article-content iframe,
 .article-content video,
 .article-content audio { max-width: 100%; }
 .article-content iframe { width: 100%; }
 
-/* ===== Pagination ===== */
+/* =========================================================
+   15. 分页 —— 胶囊
+   ========================================================= */
 .gh-pagination {
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   margin-top: var(--gh-space-5);
 }
 .gh-pagination-btn {
-  min-width: 32px;
-  height: 32px;
-  padding: 0 8px;
-  border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius);
-  background: var(--gh-canvas);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--gh-radius-pill);
+  background: transparent;
   color: var(--gh-text-secondary);
   font-family: var(--gh-font);
   font-size: var(--gh-text-sm);
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
   transition: background var(--gh-transition), color var(--gh-transition);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
-.gh-pagination-btn:hover { background: var(--gh-btn-hover); color: var(--gh-text); }
-.gh-pagination-btn--active { background: var(--gh-accent); color: #fff; border-color: var(--gh-accent); }
-.gh-pagination-btn--active:hover { background: var(--gh-accent-hover); }
+.gh-pagination-btn:hover { background: var(--gh-fill-2); color: var(--gh-text); }
+.gh-pagination-btn--active {
+  background: var(--gh-accent-button);
+  color: var(--gh-on-accent);
+}
+.gh-pagination-btn--active:hover {
+  background: var(--gh-accent-button-hover);
+  color: var(--gh-on-accent);
+}
 
-/* ===== Avatar Crop Dialog ===== */
-.gh-dialog--crop {
-  max-width: 560px;
-}
+/* =========================================================
+   16. 头像裁剪 / 滑杆
+   ========================================================= */
+.gh-dialog--crop { max-width: 560px; }
 
 .gh-crop-container {
   position: relative;
   width: 100%;
   height: 340px;
-  background: var(--gh-canvas-inset);
-  border-radius: var(--gh-radius);
-  overflow: hidden;
   margin-bottom: var(--gh-space-3);
+  overflow: hidden;
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas-inset);
 }
 
 .gh-crop-zoom-slider {
@@ -579,84 +797,86 @@
   gap: var(--gh-space-2);
   margin-bottom: var(--gh-space-3);
 }
-
 .gh-crop-zoom-slider label {
-  font-size: var(--gh-text-sm);
   color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
   white-space: nowrap;
 }
 
-/* ===== Range Input (Zoom Slider) ===== */
 .gh-range-input {
   -webkit-appearance: none;
   appearance: none;
   flex: 1;
-  height: 6px;
-  background: var(--gh-canvas-inset);
-  border-radius: 3px;
+  height: 4px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-fill-3);
   outline: none;
   cursor: pointer;
 }
-
 .gh-range-input::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
+  border: 0;
   border-radius: 50%;
-  background: var(--gh-accent);
-  border: 2px solid var(--gh-canvas);
-  box-shadow: var(--gh-shadow-sm);
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
   cursor: pointer;
   transition: transform var(--gh-transition);
 }
-
-.gh-range-input::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
-}
-
+.gh-range-input::-webkit-slider-thumb:hover { transform: scale(1.08); }
 .gh-range-input::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
+  border: 0;
   border-radius: 50%;
-  background: var(--gh-accent);
-  border: 2px solid var(--gh-canvas);
-  box-shadow: var(--gh-shadow-sm);
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
   cursor: pointer;
 }
 
-/* ===== Crop Upload Progress ===== */
 .gh-crop-upload-progress {
   padding: var(--gh-space-6) var(--gh-space-4);
   text-align: center;
 }
-
 .gh-crop-upload-progress-text {
-  font-size: var(--gh-text-sm);
-  color: var(--gh-text-secondary);
   margin-bottom: var(--gh-space-4);
-}
-
-.gh-crop-upload-progress-pct {
-  font-size: var(--gh-text-sm);
   color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+.gh-crop-upload-progress-pct {
   margin-top: var(--gh-space-2);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
   font-variant-numeric: tabular-nums;
 }
 
-/* ===== Mobile / Tablet visibility ===== */
-/* 汉堡按钮：≤1279px（手机 + 平板）抽屉模式都需要；≥1280px 常驻侧栏时隐藏 */
+/* =========================================================
+   17. 响应式可见性
+   ========================================================= */
 .gh-visible-mobile { display: none !important; }
-.gh-hidden-mobile {}
-.gh-hidden-tablet {}
 
 @media (max-width: 1279px) {
   .gh-visible-mobile { display: flex !important; }
+  .gh-hidden-tablet { display: none !important; }
 }
 
 @media (max-width: 767px) {
   .gh-hidden-mobile { display: none !important; }
+  .gh-dialog-actions { flex-wrap: wrap; }
 }
 
-@media (max-width: 1279px) {
-  .gh-hidden-tablet { display: none !important; }
+/* 强制色彩模式：发丝线在 forced-colors 下会消失，补实色边框 */
+@media (forced-colors: active) {
+  .gh-box,
+  .gh-dialog,
+  .gh-popover,
+  .gh-post-list,
+  .gh-post-featured {
+    border: 1px solid CanvasText;
+  }
+  .gh-btn,
+  .gh-tabnav-item--active {
+    border: 1px solid ButtonText;
+  }
 }

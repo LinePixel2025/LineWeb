@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { GitHubBadge, GitHubButton, GitHubAlert } from '../../components/ui'
+import { Badge, Button, Alert } from '../../components/ui'
 import { useAuth } from '../../contexts/AuthContext'
 import { CAPABILITIES, capabilityLabel, roleLabel } from '../../lib/permissions'
 
@@ -129,10 +129,10 @@ export default function ApiDocsPage() {
         <p>LineWeb 只使用账号登录令牌：登录一次，即可访问全部 API；权限由账号角色自动决定。</p>
       </div>
 
-      <GitHubAlert variant="info">
+      <Alert variant="info">
         自 2026-09 起 API Key 与屏幕时间 Token 已移除。所有请求统一使用
         <code> Authorization: Bearer &lt;登录令牌&gt;</code>，第三方设备（如 Time Master）请改为账号登录。
-      </GitHubAlert>
+      </Alert>
 
       <div style={{ display: 'grid', gap: 'var(--gh-space-4)', marginTop: 'var(--gh-space-4)' }}>
         <div className="gh-box" style={{ padding: 'var(--gh-space-4)' }}>
@@ -143,9 +143,9 @@ export default function ApiDocsPage() {
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--gh-space-2)' }}>
             {CAPABILITIES.map(cap => (
-              <GitHubBadge key={cap} variant={can(cap) ? 'success' : 'default'}>
+              <Badge key={cap} variant={can(cap) ? 'success' : 'default'}>
                 {can(cap) ? '✓ ' : '— '}{capabilityLabel(cap)}
-              </GitHubBadge>
+              </Badge>
             ))}
           </div>
         </div>
@@ -153,9 +153,9 @@ export default function ApiDocsPage() {
         <div className="gh-box" style={{ padding: 'var(--gh-space-4)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--gh-space-3)' }}>
             <h2 style={{ margin: 0, fontSize: 'var(--gh-text-lg)' }}>1. 登录换取令牌（curl）</h2>
-            <GitHubButton variant="secondary" size="sm" onClick={() => copy(CURL_EXAMPLE, 'curl')}>
+            <Button variant="secondary" size="sm" onClick={() => copy(CURL_EXAMPLE, 'curl')}>
               {copied === 'curl' ? '✓ 已复制' : '复制'}
-            </GitHubButton>
+            </Button>
           </div>
           <pre style={{ ...codeStyle, marginTop: 'var(--gh-space-3)' }}>{CURL_EXAMPLE}</pre>
         </div>
@@ -163,9 +163,9 @@ export default function ApiDocsPage() {
         <div className="gh-box" style={{ padding: 'var(--gh-space-4)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--gh-space-3)' }}>
             <h2 style={{ margin: 0, fontSize: 'var(--gh-text-lg)' }}>2. 设备推送示例（Python）</h2>
-            <GitHubButton variant="secondary" size="sm" onClick={() => copy(PY_EXAMPLE, 'python')}>
+            <Button variant="secondary" size="sm" onClick={() => copy(PY_EXAMPLE, 'python')}>
               {copied === 'python' ? '✓ 已复制' : '复制'}
-            </GitHubButton>
+            </Button>
           </div>
           <pre style={{ ...codeStyle, marginTop: 'var(--gh-space-3)' }}>{PY_EXAMPLE}</pre>
         </div>

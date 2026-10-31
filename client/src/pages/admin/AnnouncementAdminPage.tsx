@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import api from '../../lib/api'
-import { GitHubAlert, GitHubButton } from '../../components/ui'
+import { Alert, Button } from '../../components/ui'
 import {
   ANNOUNCEMENT_LEVEL_LABELS,
   type AnnouncementLevel,
@@ -155,17 +155,17 @@ export function ContentAnnouncementsPanel() {
           </p>
         </div>
         <div className="gh-announce-admin-actions">
-          <GitHubButton variant="secondary" size="md" onClick={() => void load()}>
+          <Button variant="secondary" size="md" onClick={() => void load()}>
             刷新
-          </GitHubButton>
-          <GitHubButton variant="primary" size="md" onClick={openCreate}>
+          </Button>
+          <Button variant="primary" size="md" onClick={openCreate}>
             发布公告
-          </GitHubButton>
+          </Button>
         </div>
       </div>
 
-      {error && <GitHubAlert variant="danger">{error}</GitHubAlert>}
-      {notice && <GitHubAlert variant="success">{notice}</GitHubAlert>}
+      {error && <Alert variant="danger">{error}</Alert>}
+      {notice && <Alert variant="success">{notice}</Alert>}
 
       {formOpen && (
         <section className="gh-box gh-announce-editor" aria-label="公告编辑器">
@@ -247,12 +247,12 @@ export function ContentAnnouncementsPanel() {
             </label>
           </div>
           <div className="gh-dialog-actions">
-            <GitHubButton variant="secondary" size="md" disabled={saving} onClick={() => setFormOpen(false)}>
+            <Button variant="secondary" size="md" disabled={saving} onClick={() => setFormOpen(false)}>
               取消
-            </GitHubButton>
-            <GitHubButton variant="primary" size="md" disabled={saving} onClick={() => void save()}>
+            </Button>
+            <Button variant="primary" size="md" disabled={saving} onClick={() => void save()}>
               {saving ? '保存中…' : editing ? '保存修改' : '发布公告'}
-            </GitHubButton>
+            </Button>
           </div>
         </section>
       )}

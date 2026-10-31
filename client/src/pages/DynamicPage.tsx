@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import DOMPurify from 'dompurify'
 import { usePageBySlug } from '../hooks/useQueries'
-import { GitHubButton } from '../components/ui'
+import { Button } from '../components/ui'
 
 interface PageSchema {
   id: number
@@ -25,18 +25,20 @@ export default function DynamicPage() {
 
   if (loading) {
     return (
-      <div className="gh-page-container" style={{ display: 'flex', justifyContent: 'center', paddingTop: '120px' }}>
-        <div className="gh-spinner" />
+      <div className="gh-page-container">
+        <div className="gh-loading-row"><div className="gh-spinner" /></div>
       </div>
     )
   }
 
   if (error || !page) {
     return (
-      <div className="gh-page-container" style={{ textAlign: 'center', paddingTop: '120px' }}>
-        <h2 style={{ marginBottom: 16 }}>页面未找到</h2>
-        <p className="gh-text-secondary" style={{ marginBottom: 24 }}>{error || '该页面不存在或尚未发布'}</p>
-        <GitHubButton href="/features" variant="secondary">&larr; 返回功能界面</GitHubButton>
+      <div className="gh-page-container">
+        <div className="gh-empty-card gh-post-notfound">
+          <h2>页面未找到</h2>
+          <p className="gh-text-secondary">{error || '该页面不存在或尚未发布'}</p>
+          <Button href="/features" variant="secondary">&larr; 返回功能界面</Button>
+        </div>
       </div>
     )
   }
@@ -45,9 +47,9 @@ export default function DynamicPage() {
   try { components = JSON.parse(page.schema) } catch { components = [] }
 
   return (
-    <div className="gh-page-container" style={{ maxWidth: '800px' }}>
-      <div style={{ marginBottom: 32 }}>
-        <Link to="/features" className="gh-text-tertiary" style={{ fontSize: '0.85rem' }}>&larr; 返回功能界面</Link>
+    <div className="gh-page-container gh-dynamic-page">
+      <div className="gh-dynamic-back">
+        <Link to="/features" className="gh-post-back">&larr; 返回功能界面</Link>
       </div>
 
       <div className="gh-page-header">
@@ -61,7 +63,7 @@ export default function DynamicPage() {
 
 function RenderComponents({ components }: { components: ComponentData[] }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="gh-dynamic-html u-stack u-gap-4">
       {components.map(comp => <RenderComponent key={comp.id} comp={comp} />)}
     </div>
   )
@@ -96,9 +98,9 @@ function RenderComponent({ comp }: { comp: ComponentData }) {
       const link = comp.props.link as string
       const text = (comp.props.text as string) || '按钮'
       if (link) {
-        return <GitHubButton href={link} variant={variant}>{text}</GitHubButton>
+        return <Button href={link} variant={variant}>{text}</Button>
       }
-      return <GitHubButton variant={variant}>{text}</GitHubButton>
+      return <Button variant={variant}>{text}</Button>
     }
     case 'divider':
       return <hr style={{ border: 'none', borderTop: '1px solid var(--gh-border)', margin: 0 }} />

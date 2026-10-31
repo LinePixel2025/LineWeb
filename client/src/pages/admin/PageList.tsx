@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { GitHubButton, GitHubBadge } from '../../components/ui'
+import { Button, Badge } from '../../components/ui'
 import Pagination from '../../components/Pagination'
 import api from '../../lib/api'
 
@@ -52,9 +52,9 @@ export function ContentPagesPanel() {
           <h1>页面管理</h1>
           <p>管理自定义页面</p>
         </div>
-        <GitHubButton variant="primary" size="md" href="/admin/pages/new">
+        <Button variant="primary" size="md" href="/admin/pages/new">
           新建页面
-        </GitHubButton>
+        </Button>
       </div>
 
       {loading ? (
@@ -82,22 +82,22 @@ export function ContentPagesPanel() {
                   </td>
                   <td>
                     {item.published ? (
-                      <GitHubBadge variant="success">已发布</GitHubBadge>
+                      <Badge variant="success">已发布</Badge>
                     ) : (
-                      <GitHubBadge>草稿</GitHubBadge>
+                      <Badge>草稿</Badge>
                     )}
                   </td>
                   <td>
                     <div className="gh-actions">
-                      <GitHubButton variant="secondary" size="sm" onClick={() => handleToggle(item)}>
+                      <Button variant="secondary" size="sm" onClick={() => handleToggle(item)}>
                         {item.published ? '下架' : '发布'}
-                      </GitHubButton>
-                      <GitHubButton variant="secondary" size="sm" href={`/admin/pages/${item.id}/edit`}>
+                      </Button>
+                      <Button variant="secondary" size="sm" href={`/admin/pages/${item.id}/edit`}>
                         编辑
-                      </GitHubButton>
-                      <GitHubButton variant="danger" size="sm" onClick={() => handleDelete(item.id)}>
+                      </Button>
+                      <Button variant="danger" size="sm" onClick={() => handleDelete(item.id)}>
                         删除
-                      </GitHubButton>
+                      </Button>
                     </div>
                   </td>
                 </tr>

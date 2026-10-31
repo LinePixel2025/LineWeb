@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { GitHubButton } from '../ui'
+import { Button } from '../ui'
 import type { NekoContact } from '../../types/chat'
 
 interface Props {
@@ -64,14 +64,14 @@ export default function ContactRemarkDialog({ contact, onClose, onSubmit }: Prop
         </label>
         <div className="gh-dialog-actions">
           {contact.remark ? (
-            <GitHubButton variant="ghost" size="md" disabled={saving} onClick={() => void save('')}>
+            <Button variant="ghost" size="md" disabled={saving} onClick={() => void save('')}>
               清空备注
-            </GitHubButton>
+            </Button>
           ) : null}
-          <GitHubButton variant="secondary" size="md" disabled={saving} onClick={onClose}>取消</GitHubButton>
-          <GitHubButton variant="primary" size="md" disabled={saving} onClick={() => void save(remark)}>
+          <Button variant="secondary" size="md" disabled={saving} onClick={onClose}>取消</Button>
+          <Button variant="primary" size="md" disabled={saving} onClick={() => void save(remark)}>
             {saving ? '保存中…' : '保存'}
-          </GitHubButton>
+          </Button>
         </div>
       </div>
     </div>
