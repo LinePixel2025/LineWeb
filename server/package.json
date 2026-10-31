@@ -25,6 +25,7 @@
     "verify:aichat": "tsx scripts/verify-aichat.ts",
     "verify:webproxy": "tsx scripts/verify-webproxy.ts",
     "verify:points": "tsx scripts/verify-points.ts",
+    "verify:pet": "tsx scripts/verify-pet.ts",
     "verify:stocks": "tsx scripts/verify-stocks.ts",
     "verify:chat": "tsx scripts/verify-chat.ts"
   },

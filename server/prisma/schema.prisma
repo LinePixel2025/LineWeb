@@ -59,6 +59,7 @@ model User {
   checkins               DailyCheckin[]
   leaderTitles           GameLeaderTitle[]
   chatBan                ChatBan?
+  pet                    Pet?
   farm                   Farm?
   farmStealsMade         FarmSteal[]          @relation("FarmStealThief")
   farmStealsReceived     FarmSteal[]          @relation("FarmStealVictim")
@@ -910,4 +911,46 @@ model ChatBan {
 
   @@index([active, createdAt])
   @@map("chat_bans")
+}
+
+// === 宠物 ===
+
+/**
+ * 每用户一只宠物（userId 唯一）；离家出走（status='gone'）后召唤同一行重置，已购装扮（PetOutfit）保留。
+ * hunger / cleanliness / mood 为 0–100 的连续值，按 PET_DECAY_PER_HOUR 线性衰减，读取时惰性结算。
+ */
+model Pet {
+  id            Int       @id @default(autoincrement())
+  userId        Int       @unique @map("user_id")
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  species       String // 物种 key（PET_SPECIES：cat | dog | bird）
+  name          String    @default("小宠物")
+  level         Int       @default(1)
+  hunger        Float     @default(100)
+  cleanliness   Float     @default(100)
+  mood          Float     @default(100)
+  status        String    @default("alive") // alive | gone
+  equipped      String    @default("{}") // JSON 字符串: { "hat": "key"|null, "neck": ..., "face": ... }
+  decayedAt     DateTime  @default(now()) @map("decayed_at") // 上次衰减结算基准时刻
+  criticalSince DateTime? @map("critical_since") // 最早一项数值归零的时刻（判定离家出走）
+  lastTouchAt   DateTime? @map("last_touch_at") // 抚摸心情加成冷却
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  outfits       PetOutfit[]
+
+  @@map("pets")
+}
+
+/**
+ * 已购买的宠物装扮（species 无关）；equipped JSON 只引用这里存在的 outfitKey。
+ */
+model PetOutfit {
+  id        Int      @id @default(autoincrement())
+  petId     Int      @map("pet_id")
+  pet       Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  outfitKey String   @map("outfit_key")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([petId, outfitKey])
+  @@map("pet_outfits")
 }

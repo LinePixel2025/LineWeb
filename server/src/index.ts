@@ -28,6 +28,7 @@ import gameRoutes from './routes/games.js'
 import gameStatsRoutes from './routes/gameStats.js'
 import pointsRoutes from './routes/points.js'
 import farmRoutes from './routes/farm.js'
+import petsRoutes from './routes/pets.js'
 import stockRoutes from './routes/stocks.js'
 import adminPointsRoutes from './routes/adminPoints.js'
 import { featuresRouter, adminFeaturesRouter } from './routes/features.js'
@@ -194,6 +195,8 @@ app.use('/api/games', requireFeature('gamesOnline'), gameRoutes)
 app.use('/api/points', pointsRoutes)
 // 开心农场（种菜 / 偷菜 / 扩建），受 farm 功能开关控制
 app.use('/api/farm', requireFeature('farm'), farmRoutes)
+// 宠物（召唤 / 照顾 / 换装 / 升级），受 pet 功能开关控制
+app.use('/api/pets', requireFeature('pet'), petsRoutes)
 // 模拟股市（行情只读 + 积分交易），受 stock 功能开关控制
 app.use('/api/stocks', requireFeature('stock'), stockRoutes)
 // 积分体系管理（规则 / 商店 / 用户调分，需 points:manage 能力）
@@ -354,6 +357,18 @@ app.get('/api', (_req, res) => {
       neighbors: { method: 'GET', path: '/api/farm/neighbors?q=', auth: true, description: '邻居农场（有可偷作物优先）' },
       visit: { method: 'GET', path: '/api/farm/users/:id', auth: true, description: '访问他人农场' },
       steal: { method: 'POST', path: '/api/farm/users/:id/steal/:index', auth: true, description: '偷菜（每日次数上限；同一茬每人一次；地主至少保留 1 单位）' },
+    },
+    pets: {
+      note: '宠物：花积分召唤一只 2D 小宠物（每用户一只），三项状态随时间衰减，冷落太久（最早一项归零后 48 小时）会离家出走，可花积分重新召唤（等级重置、已购装扮保留）。需 pet 功能开关。',
+      view: { method: 'GET', path: '/api/pets', auth: true, description: '我的宠物（未召唤时 pet 为 null；返回已结算状态 / 装扮 / 解锁动作 / 目录 / 积分）' },
+      summon: { method: 'POST', path: '/api/pets/summon', auth: true, description: '召唤宠物 { species:"cat"|"dog"|"bird", name? }（300 积分；出走后可重新召唤）' },
+      care: { method: 'POST', path: '/api/pets/feed|bathe|play', auth: true, description: '照顾动作：喂食 10 积分（L1）/ 洗澡 15 积分（L2）/ 玩耍 20 积分（L3）' },
+      touch: { method: 'POST', path: '/api/pets/touch', auth: true, description: '抚摸（免费，60 秒冷却，心情 +2；冷却中返回 gained:false）' },
+      action: { method: 'POST', path: '/api/pets/action', auth: true, description: '特技动作 { action:"dance"|"roll"|"sing"|"flip"|"spin"|"magic"|"firework" }（免费，按等级解锁 L4–L10）' },
+      upgrade: { method: 'POST', path: '/api/pets/upgrade', auth: true, description: '升级（花费 = 100 × 当前等级，满级 10）' },
+      outfitBuy: { method: 'POST', path: '/api/pets/outfits/buy', auth: true, description: '购买装扮 { outfitKey }（永久拥有，写积分流水）' },
+      outfitEquip: { method: 'POST', path: '/api/pets/outfits/equip', auth: true, description: '佩戴/取下装扮 { outfitKey, equip:boolean }（同 slot 自动替换）' },
+      rename: { method: 'POST', path: '/api/pets/rename', auth: true, description: '改名 { name }（1–12 字）' },
     },
     stocks: {
       note: '模拟股市：行情为 3 秒一 tick 的实时模拟（确定性日线锚点 + 秒级噪声，玩家交易会小幅影响价格并按 10 分钟半衰期衰减），可用统一积分按实时价买卖；买卖各收 1% 手续费。需 stock 功能开关。',

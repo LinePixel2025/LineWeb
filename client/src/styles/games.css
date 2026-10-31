@@ -154,6 +154,12 @@
   --cover-b: #7c2d12;
 }
 
+/* 主打游戏：农田的专属清新绿渐变 */
+.gh-games-cover[data-game='farm'] {
+  --cover-a: #8ee07c;
+  --cover-b: #2fa84f;
+}
+
 .gh-games-cover[data-game='doudizhu'] {
   --cover-a: #1f8055;
   --cover-b: #082f1e;

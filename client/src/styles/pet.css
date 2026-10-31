@@ -1,0 +1,924 @@
+/* =============================================================
+   宠物系统（/pets）
+   —— 召唤卡 / 离家出走空状态 / 宠物舞台 / 动作坞 / 状态条 / 衣柜
+   —— PetSprite 立绘动画（眨眼 / 尾巴 / 翅膀 + 动作 keyframes）
+   ============================================================= */
+
+.gh-pet-page {
+  --pet-wall-a: #fff7ea;
+  --pet-wall-b: #fdeed4;
+  --pet-floor: #e4d3b2;
+  --pet-floor-b: #d6c19a;
+  --pet-accent: #e0762f;
+  --pet-accent-soft: rgba(224, 118, 47, 0.14);
+  --pet-panel: #ffffff;
+  max-width: 1180px;
+}
+
+[data-theme='dark'] .gh-pet-page {
+  --pet-wall-a: #1d2431;
+  --pet-wall-b: #232a38;
+  --pet-floor: #3a3630;
+  --pet-floor-b: #302d27;
+  --pet-accent: #f0883e;
+  --pet-accent-soft: rgba(240, 136, 62, 0.18);
+  --pet-panel: #161b22;
+}
+
+/* ===== 加载 ===== */
+.gh-pet-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 80px 0;
+  color: var(--gh-text-secondary);
+}
+.gh-pet-loading-emoji {
+  font-size: 3rem;
+  animation: gh-pet-idle 1.8s ease-in-out infinite;
+}
+
+/* ===== 头部 ===== */
+.gh-pet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gh-space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--gh-space-4);
+}
+.gh-pet-eyebrow {
+  margin: 0 0 2px;
+  font-size: var(--gh-text-xs);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--pet-accent);
+}
+.gh-pet-head h1 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--gh-text-2xl);
+  line-height: 1.2;
+}
+.gh-pet-sub {
+  margin: 6px 0 0;
+  max-width: 560px;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+  line-height: 1.6;
+}
+.gh-pet-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gh-pet-points {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid var(--gh-border);
+  border-radius: 999px;
+  background: var(--pet-panel);
+  font-weight: 700;
+}
+
+/* ===== 离家出走预警条 ===== */
+.gh-pet-warn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--gh-space-4);
+  padding: 10px 14px;
+  border: 1px solid rgba(154, 103, 0, 0.4);
+  border-radius: var(--gh-radius);
+  background: var(--gh-warning-soft);
+  color: var(--gh-warning);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  animation: gh-pet-fade 0.3s ease;
+}
+
+/* ===== Toast（仿聊天/农场的浮动消息条） ===== */
+.gh-pet-toast {
+  position: fixed;
+  left: 50%;
+  top: 68px;
+  transform: translateX(-50%);
+  z-index: 80;
+  max-width: min(90vw, 460px);
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  color: #fff;
+  box-shadow: var(--gh-shadow-lg);
+  animation: gh-pet-toast-in 0.22s ease;
+  pointer-events: none;
+}
+.gh-pet-toast--success { background: var(--gh-success-emphasis); }
+.gh-pet-toast--error { background: var(--gh-danger); }
+
+/* ===== 召唤卡 ===== */
+.gh-pet-summon {
+  padding: var(--gh-space-5);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--pet-panel);
+  text-align: center;
+}
+.gh-pet-summon h2 { margin: 0 0 6px; }
+.gh-pet-summon-note {
+  margin: 0 0 var(--gh-space-4);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+.gh-pet-summon-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--gh-space-4);
+  margin-bottom: var(--gh-space-4);
+}
+.gh-pet-summon-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: var(--gh-space-4) var(--gh-space-3);
+  border: 2px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+.gh-pet-summon-card:hover { transform: translateY(-2px); box-shadow: var(--gh-shadow-sm); }
+.gh-pet-summon-card--active {
+  border-color: var(--pet-accent);
+  background: var(--pet-accent-soft);
+}
+.gh-pet-summon-card strong { font-size: var(--gh-text-base); }
+.gh-pet-summon-card-desc {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-secondary);
+  line-height: 1.5;
+}
+.gh-pet-summon-form {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.gh-pet-summon-input {
+  width: 220px;
+  max-width: 100%;
+  padding: 7px 12px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+}
+.gh-pet-summon-input:focus {
+  outline: none;
+  border-color: var(--pet-accent);
+  box-shadow: 0 0 0 3px var(--pet-accent-soft);
+}
+.gh-pet-cost-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--pet-accent-soft);
+  color: var(--pet-accent);
+  font-weight: 700;
+  font-size: var(--gh-text-sm);
+  white-space: nowrap;
+}
+
+/* ===== 离家出走空状态 ===== */
+.gh-pet-gone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: var(--gh-space-7) var(--gh-space-5);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--pet-panel);
+  text-align: center;
+}
+.gh-pet-gone-silhouette {
+  position: relative;
+  width: 170px;
+  height: 170px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--gh-border);
+  border-radius: 50%;
+  filter: grayscale(1) opacity(0.45);
+}
+.gh-pet-gone-wind {
+  position: absolute;
+  right: -26px;
+  top: 6px;
+  font-size: 1.8rem;
+  filter: none;
+  animation: gh-pet-wind 1.6s ease-in-out infinite;
+}
+.gh-pet-gone h2 { margin: 6px 0 0; }
+.gh-pet-gone p {
+  margin: 0 0 var(--gh-space-3);
+  max-width: 420px;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.6;
+}
+
+/* ===== 主布局（左右两栏，窄屏堆叠） ===== */
+.gh-pet-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: var(--gh-space-5);
+  align-items: start;
+}
+
+/* ===== 宠物舞台 ===== */
+.gh-pet-stage {
+  position: relative;
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse 60% 42% at 50% 6%, rgba(255, 255, 255, 0.5), transparent 70%),
+    linear-gradient(180deg, var(--pet-wall-a) 0%, var(--pet-wall-b) 68%, var(--pet-floor) 68.5%, var(--pet-floor-b) 100%);
+}
+[data-theme='dark'] .gh-pet-stage {
+  background:
+    radial-gradient(ellipse 60% 42% at 50% 6%, rgba(148, 163, 184, 0.16), transparent 70%),
+    linear-gradient(180deg, var(--pet-wall-a) 0%, var(--pet-wall-b) 68%, var(--pet-floor) 68.5%, var(--pet-floor-b) 100%);
+}
+/* 舞台装饰：挂画 + 窗光 + 地毯 */
+.gh-pet-stage-frame {
+  position: absolute;
+  left: 6%;
+  top: 12%;
+  width: 64px;
+  height: 48px;
+  border: 4px solid #b98b52;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #9bd0f5, #cfe9c8);
+  opacity: 0.85;
+}
+.gh-pet-stage-window {
+  position: absolute;
+  right: 8%;
+  top: 10%;
+  width: 74px;
+  height: 58px;
+  border: 4px solid #b98b52;
+  border-radius: 8px 8px 0 0;
+  background: linear-gradient(180deg, #bfe4ff, #eaf7e4);
+  opacity: 0.9;
+}
+.gh-pet-stage-window::after {
+  content: '';
+  position: absolute;
+  inset: 0 47% 0 0;
+  border-right: 3px solid #b98b52;
+}
+[data-theme='dark'] .gh-pet-stage-window { background: linear-gradient(180deg, #142234, #17251d); }
+.gh-pet-stage-rug {
+  position: absolute;
+  bottom: 7%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 62%;
+  height: 26px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(224, 118, 47, 0.28), rgba(224, 118, 47, 0.08) 70%, transparent 75%);
+}
+/* 点击宠物本体 = 抚摸 */
+.gh-pet-stage-hit {
+  position: relative;
+  z-index: 1;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  line-height: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.gh-pet-stage-hit:focus-visible {
+  outline: 2px solid var(--pet-accent);
+  outline-offset: 6px;
+  border-radius: 24px;
+}
+.gh-pet-stage-hint {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+  pointer-events: none;
+}
+
+/* ===== 动作按钮坞 ===== */
+.gh-pet-dock {
+  margin-top: var(--gh-space-4);
+  padding: var(--gh-space-3);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--pet-panel);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+}
+.gh-pet-dock-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.gh-pet-dock-group-title {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--gh-text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--gh-text-tertiary);
+}
+.gh-pet-dock-btn {
+  flex: 1 1 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.1s ease, background 0.15s ease;
+}
+.gh-pet-dock-btn:hover:not(:disabled) {
+  border-color: var(--pet-accent);
+  background: var(--pet-accent-soft);
+  transform: translateY(-1px);
+}
+.gh-pet-dock-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.gh-pet-dock-emoji { font-size: 1.35rem; line-height: 1.2; }
+.gh-pet-dock-meta {
+  font-size: var(--gh-text-xs);
+  font-weight: 700;
+  color: var(--pet-accent);
+}
+.gh-pet-dock-btn--locked .gh-pet-dock-meta { color: var(--gh-text-tertiary); }
+.gh-pet-dock-btn--trick { flex: 1 1 84px; }
+
+/* ===== 右栏面板 ===== */
+.gh-pet-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-4);
+  min-width: 0;
+}
+.gh-pet-panel {
+  padding: var(--gh-space-4);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--pet-panel);
+}
+.gh-pet-panel-title {
+  margin: 0 0 var(--gh-space-3);
+  font-size: var(--gh-text-sm);
+  font-weight: 700;
+  color: var(--gh-text-secondary);
+}
+
+/* 名牌 */
+.gh-pet-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: var(--gh-space-3);
+}
+.gh-pet-name {
+  margin: 0;
+  font-size: var(--gh-text-xl);
+  line-height: 1.25;
+  word-break: break-all;
+}
+.gh-pet-rename-btn {
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--gh-radius);
+  background: transparent;
+  font-size: var(--gh-text-sm);
+  cursor: pointer;
+}
+.gh-pet-rename-btn:hover { border-color: var(--gh-border); }
+.gh-pet-level-badge {
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--pet-accent-soft);
+  color: var(--pet-accent);
+  font-size: var(--gh-text-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.gh-pet-rename-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: var(--gh-space-3);
+}
+.gh-pet-rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+}
+.gh-pet-rename-input:focus {
+  outline: none;
+  border-color: var(--pet-accent);
+  box-shadow: 0 0 0 3px var(--pet-accent-soft);
+}
+
+/* 状态条 */
+.gh-pet-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: var(--gh-space-3);
+}
+.gh-pet-stat:last-of-type { margin-bottom: 0; }
+.gh-pet-stat-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--gh-text-sm);
+}
+.gh-pet-stat-num {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.gh-pet-stat-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--gh-canvas-inset);
+  border: 1px solid var(--gh-border-muted);
+  overflow: hidden;
+}
+.gh-pet-stat-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6ccb5f, #2da44e);
+  transition: width 0.4s ease;
+}
+.gh-pet-stat-fill--mood { background: linear-gradient(90deg, #ffd257, #f5a623); }
+.gh-pet-stat-fill--low { background: linear-gradient(90deg, #f27b7b, #cf222e); }
+.gh-pet-stat-warn {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-danger);
+  font-weight: 600;
+}
+.gh-pet-stat-countdown {
+  margin: var(--gh-space-3) 0 0;
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+}
+.gh-pet-stat-countdown--urgent { color: var(--gh-warning); font-weight: 600; }
+
+/* 衣柜 */
+.gh-pet-wardrobe-slot { margin-bottom: var(--gh-space-4); }
+.gh-pet-wardrobe-slot:last-child { margin-bottom: 0; }
+.gh-pet-wardrobe-slot h3 {
+  margin: 0 0 8px;
+  font-size: var(--gh-text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--gh-text-tertiary);
+}
+.gh-pet-outfit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.gh-pet-outfit {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+}
+.gh-pet-outfit--worn {
+  border-color: var(--pet-accent);
+  background: var(--pet-accent-soft);
+}
+.gh-pet-outfit-emoji { font-size: 1.3rem; line-height: 1.2; }
+.gh-pet-outfit-name {
+  font-size: var(--gh-text-sm);
+  font-weight: 700;
+}
+.gh-pet-outfit-desc {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+  line-height: 1.45;
+  min-height: 2.6em;
+}
+.gh-pet-outfit-btn {
+  margin-top: 4px;
+  padding: 5px 8px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--pet-panel);
+  color: var(--gh-text);
+  font-size: var(--gh-text-xs);
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.gh-pet-outfit-btn:hover:not(:disabled) { border-color: var(--pet-accent); color: var(--pet-accent); }
+.gh-pet-outfit-btn--primary {
+  background: var(--pet-accent);
+  border-color: var(--pet-accent);
+  color: #fff;
+}
+.gh-pet-outfit-btn--primary:hover:not(:disabled) { color: #fff; filter: brightness(1.06); }
+.gh-pet-outfit-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* =============================================================
+   PetSprite 立绘
+   ============================================================= */
+
+.gh-pet-sprite {
+  position: relative;
+  display: inline-block;
+}
+.gh-pet-sprite svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* --- 部件基类：SVG 内动画统一用 fill-box 坐标 --- */
+.gh-pet-head,
+.gh-pet-eye,
+.gh-pet-ear,
+.gh-pet-tail,
+.gh-pet-wing,
+.gh-pet-tuft {
+  transform-box: fill-box;
+}
+.gh-pet-head { transform-origin: 50% 92%; }
+.gh-pet-eye { transform-origin: center; }
+.gh-pet-ear--l { transform-origin: 78% 96%; }
+.gh-pet-ear--r { transform-origin: 22% 96%; }
+.gh-pet-tuft { transform-origin: 50% 100%; }
+
+/* --- idle 循环：眨眼 / 尾巴 / 翅膀 --- */
+.gh-pet-eye { animation: gh-pet-blink 4.6s ease-in-out infinite; }
+.gh-pet-tail--cat { transform-origin: 6% 96%; animation: gh-pet-tail-sway 3.2s ease-in-out infinite; }
+.gh-pet-tail--dog { transform-origin: 4% 94%; animation: gh-pet-tail-wag 0.9s ease-in-out infinite; }
+.gh-pet-wing--l { transform-origin: 94% 16%; animation: gh-pet-wing-flap 3.8s ease-in-out infinite; }
+.gh-pet-wing--r { transform-origin: 6% 16%; animation: gh-pet-wing-flap 3.8s ease-in-out infinite; }
+
+/* --- sad：耳朵下垂 / 呆毛耷拉 / 汗滴 / idle 放慢 --- */
+.gh-pet-sprite--sad .gh-pet-ear--l { transform: rotate(-18deg); }
+.gh-pet-sprite--sad .gh-pet-ear--r { transform: rotate(18deg); }
+.gh-pet-sprite--sad .gh-pet-tuft { transform: rotate(10deg) scaleY(0.82); }
+.gh-pet-sprite--sad .gh-pet-wing--l,
+.gh-pet-sprite--sad .gh-pet-wing--r { animation-duration: 6s; }
+.gh-pet-sprite--sad.gh-pet-anim-idle { animation-duration: 5.6s; }
+
+/* =============================================================
+   动作 keyframes（容器级）
+   ============================================================= */
+
+.gh-pet-anim-idle { animation: gh-pet-idle 3s ease-in-out infinite; }
+
+.gh-pet-anim-eat { animation: gh-pet-bounce-sm 1.9s ease-in-out; }
+.gh-pet-anim-eat .gh-pet-head { animation: gh-pet-peck 0.62s ease-in-out 3; }
+
+.gh-pet-anim-bath { animation: gh-pet-sway 1.9s ease-in-out infinite; transform-origin: 50% 100%; }
+
+.gh-pet-anim-play { animation: gh-pet-hop 1.9s ease-out; }
+
+.gh-pet-anim-happy { animation: gh-pet-squish 1.7s ease-in-out; transform-origin: 50% 100%; }
+
+.gh-pet-anim-dance { animation: gh-pet-dance 1.9s ease-in-out; transform-origin: 50% 100%; }
+
+.gh-pet-anim-sing { animation: gh-pet-bounce-sm 2s ease-in-out; }
+.gh-pet-anim-sing .gh-pet-head { animation: gh-pet-look-up 2s ease-in-out; }
+
+.gh-pet-anim-roll { animation: gh-pet-roll 1.9s ease-in-out; }
+
+.gh-pet-anim-flip { animation: gh-pet-flip 2.1s ease-in-out; transform-origin: 50% 100%; }
+
+.gh-pet-anim-spin { animation: gh-pet-spin 1.7s ease-in-out; }
+
+.gh-pet-anim-magic { animation: gh-pet-idle 2.1s ease-in-out infinite; }
+
+.gh-pet-anim-firework { animation: gh-pet-bounce-sm 2s ease-in-out; }
+
+@keyframes gh-pet-idle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+@keyframes gh-pet-bounce-sm {
+  0%, 100% { transform: translateY(0); }
+  28% { transform: translateY(-9px); }
+  60% { transform: translateY(-3px); }
+}
+@keyframes gh-pet-peck {
+  0%, 100% { transform: rotate(0); }
+  50% { transform: rotate(10deg); }
+}
+@keyframes gh-pet-look-up {
+  0%, 100% { transform: rotate(0); }
+  35%, 70% { transform: rotate(-9deg); }
+}
+@keyframes gh-pet-sway {
+  0%, 100% { transform: rotate(-4deg); }
+  50% { transform: rotate(4deg); }
+}
+@keyframes gh-pet-hop {
+  0%, 100% { transform: translateY(0); }
+  18% { transform: translateY(-24px); }
+  38% { transform: translateY(0); }
+  56% { transform: translateY(-15px); }
+  74% { transform: translateY(0); }
+}
+@keyframes gh-pet-squish {
+  0%, 100% { transform: scale(1, 1); }
+  25% { transform: scale(1.12, 0.84); }
+  55% { transform: scale(0.94, 1.08); }
+  80% { transform: scale(1.05, 0.96); }
+}
+@keyframes gh-pet-dance {
+  0%, 100% { transform: rotate(0) translateY(0); }
+  20% { transform: rotate(-8deg) translateY(-4px); }
+  40% { transform: rotate(8deg) translateY(0); }
+  60% { transform: rotate(-6deg) translateY(-3px); }
+  80% { transform: rotate(6deg) translateY(0); }
+}
+@keyframes gh-pet-roll {
+  0% { transform: translateX(0) rotate(0); }
+  45% { transform: translateX(24px) rotate(200deg); }
+  100% { transform: translateX(0) rotate(360deg); }
+}
+@keyframes gh-pet-flip {
+  0% { transform: translateY(0) rotate(0); }
+  30% { transform: translateY(-36px) rotate(-130deg); }
+  62% { transform: translateY(-10px) rotate(-300deg); }
+  100% { transform: translateY(0) rotate(-360deg); }
+}
+@keyframes gh-pet-spin {
+  0% { transform: rotate(0); }
+  24% { transform: rotate(360deg); }
+  50% { transform: rotate(360deg); }
+  74% { transform: rotate(720deg); }
+  100% { transform: rotate(720deg); }
+}
+
+/* --- 部件循环 keyframes --- */
+@keyframes gh-pet-blink {
+  0%, 91%, 100% { transform: scaleY(1); }
+  94%, 96.5% { transform: scaleY(0.08); }
+}
+@keyframes gh-pet-tail-sway {
+  0%, 100% { transform: rotate(0); }
+  50% { transform: rotate(-11deg); }
+}
+@keyframes gh-pet-tail-wag {
+  0%, 100% { transform: rotate(-9deg); }
+  50% { transform: rotate(15deg); }
+}
+@keyframes gh-pet-wing-flap {
+  0%, 11%, 27%, 100% { transform: rotate(0); }
+  15%, 23% { transform: rotate(-24deg); }
+}
+
+/* =============================================================
+   动作特效元素（默认隐藏，按容器类显示）
+   ============================================================= */
+
+.gh-pet-fx {
+  position: absolute;
+  display: none;
+  z-index: 2;
+  font-size: 21px;
+  line-height: 1;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.18));
+}
+
+/* 吃饭：食盆 */
+.gh-pet-anim-eat .gh-pet-fx-bowl {
+  display: block;
+  left: 50%;
+  bottom: 4%;
+  font-size: 30px;
+  animation: gh-pet-fx-pop 1.9s ease-in-out;
+}
+
+/* 洗澡：泡泡上浮 */
+.gh-pet-anim-bath .gh-pet-fx-bubble {
+  display: block;
+  animation: gh-pet-fx-bubble 2s ease-out forwards;
+}
+.gh-pet-fx-bubble--a { left: 22%; bottom: 30%; }
+.gh-pet-fx-bubble--b { left: 56%; bottom: 22%; font-size: 16px; animation-delay: 0.25s; }
+.gh-pet-fx-bubble--c { left: 74%; bottom: 36%; font-size: 25px; animation-delay: 0.5s; }
+
+/* 玩耍：小球弹过 */
+.gh-pet-anim-play .gh-pet-fx-ball {
+  display: block;
+  left: 2%;
+  bottom: 14%;
+  font-size: 25px;
+  animation: gh-pet-fx-ball 1.9s ease-in-out forwards;
+}
+
+/* 抚摸：爱心上浮 */
+.gh-pet-anim-happy .gh-pet-fx-heart {
+  display: block;
+  animation: gh-pet-fx-rise 1.8s ease-out forwards;
+}
+.gh-pet-fx-heart--a { left: 24%; top: 12%; }
+.gh-pet-fx-heart--b { left: 68%; top: 6%; font-size: 17px; animation-delay: 0.3s; }
+
+/* 跳舞 / 唱歌：音符 */
+.gh-pet-anim-dance .gh-pet-fx-note,
+.gh-pet-anim-sing .gh-pet-fx-note {
+  display: block;
+  animation: gh-pet-fx-rise 2s ease-out forwards;
+}
+.gh-pet-fx-note--a { left: 70%; top: 10%; }
+.gh-pet-fx-note--b { left: 22%; top: 16%; font-size: 17px; animation-delay: 0.35s; }
+
+/* 魔法：星星环绕 + 光晕脉冲 */
+.gh-pet-anim-magic .gh-pet-fx-star {
+  display: block;
+  left: 50%;
+  top: 50%;
+  margin: -11px;
+  animation: gh-pet-fx-orbit 2.1s linear forwards;
+}
+.gh-pet-fx-star--a { }
+.gh-pet-fx-star--b { font-size: 15px; animation-delay: 0.15s; }
+.gh-pet-fx-star--c { font-size: 25px; animation-delay: 0.3s; }
+.gh-pet-glow {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 74%;
+  height: 62%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 214, 102, 0.8), rgba(255, 214, 102, 0) 68%);
+  pointer-events: none;
+}
+.gh-pet-anim-magic .gh-pet-glow {
+  display: block;
+  animation: gh-pet-fx-glow 2.1s ease-in-out;
+}
+
+/* 烟花：头顶粒子迸发 */
+.gh-pet-anim-firework .gh-pet-fx-spark {
+  display: block;
+  left: 50%;
+  top: 8%;
+  animation: gh-pet-fx-spark 1.7s ease-out forwards;
+}
+.gh-pet-fx-spark--a { --spark-x: -52px; --spark-y: -18px; }
+.gh-pet-fx-spark--b { --spark-x: 52px; --spark-y: -18px; }
+.gh-pet-fx-spark--c { --spark-x: -30px; --spark-y: -52px; }
+.gh-pet-fx-spark--d { --spark-x: 30px; --spark-y: -52px; }
+.gh-pet-fx-spark--e { --spark-x: 0px; --spark-y: -64px; }
+
+/* --- 特效 keyframes --- */
+@keyframes gh-pet-fx-pop {
+  0% { opacity: 0; transform: translateX(-50%) scale(0.4); }
+  18% { opacity: 1; transform: translateX(-50%) scale(1.12); }
+  82% { opacity: 1; transform: translateX(-50%) scale(1); }
+  100% { opacity: 0; transform: translateX(-50%) scale(0.96); }
+}
+@keyframes gh-pet-fx-bubble {
+  0% { opacity: 0; transform: translateY(14px) scale(0.6); }
+  20% { opacity: 0.95; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-58px) scale(1.18); }
+}
+@keyframes gh-pet-fx-ball {
+  0% { opacity: 0; transform: translate(0, 0); }
+  10% { opacity: 1; }
+  30% { transform: translate(38px, -34px); }
+  55% { transform: translate(76px, 0); }
+  80% { transform: translate(114px, -24px); }
+  100% { opacity: 0; transform: translate(148px, 0); }
+}
+@keyframes gh-pet-fx-rise {
+  0% { opacity: 0; transform: translateY(10px) scale(0.7) rotate(-8deg); }
+  25% { opacity: 1; transform: translateY(-4px) scale(1) rotate(4deg); }
+  100% { opacity: 0; transform: translateY(-66px) scale(1.15) rotate(12deg); }
+}
+@keyframes gh-pet-fx-orbit {
+  0% { opacity: 0; transform: rotate(0) translateX(52px) rotate(0) scale(0.7); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(360deg) translateX(52px) rotate(-360deg) scale(1.05); }
+}
+@keyframes gh-pet-fx-glow {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.55); }
+  40% { opacity: 0.9; transform: translate(-50%, -50%) scale(1.05); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.28); }
+}
+@keyframes gh-pet-fx-spark {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.5); }
+  15% { opacity: 1; transform: translate(0, -8px) scale(1.1); }
+  100% { opacity: 0; transform: translate(var(--spark-x), var(--spark-y)) scale(0.55); }
+}
+
+/* 汗滴（sad） */
+.gh-pet-sweat { animation: gh-pet-fx-sweat 2.2s ease-in-out infinite; }
+@keyframes gh-pet-fx-sweat {
+  0%, 100% { opacity: 0.85; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(3px); }
+}
+
+/* ===== 通用小动画 ===== */
+@keyframes gh-pet-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes gh-pet-toast-in {
+  from { opacity: 0; transform: translate(-50%, -8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes gh-pet-wind {
+  0%, 100% { transform: translateX(0) rotate(0); opacity: 0.9; }
+  50% { transform: translateX(8px) rotate(8deg); opacity: 1; }
+}
+
+/* ===== 无动画偏好：全部降级为静态 ===== */
+@media (prefers-reduced-motion: reduce) {
+  .gh-pet-sprite,
+  .gh-pet-sprite .gh-pet-head,
+  .gh-pet-sprite .gh-pet-eye,
+  .gh-pet-sprite .gh-pet-ear,
+  .gh-pet-sprite .gh-pet-tail,
+  .gh-pet-sprite .gh-pet-wing,
+  .gh-pet-sprite .gh-pet-tuft,
+  .gh-pet-fx,
+  .gh-pet-glow,
+  .gh-pet-sweat,
+  .gh-pet-loading-emoji,
+  .gh-pet-gone-wind {
+    animation: none !important;
+  }
+  .gh-pet-fx { display: none !important; }
+  .gh-pet-sprite--sad .gh-pet-ear--l { transform: rotate(-18deg); }
+  .gh-pet-sprite--sad .gh-pet-ear--r { transform: rotate(18deg); }
+}
+
+/* ===== 响应式（<900px 侧栏下沉，<640px 单列紧凑） ===== */
+@media (max-width: 900px) {
+  .gh-pet-layout { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .gh-pet-summon-grid { grid-template-columns: minmax(0, 1fr); }
+  .gh-pet-stage { min-height: 260px; }
+  .gh-pet-outfit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gh-pet-stage-frame { display: none; }
+}

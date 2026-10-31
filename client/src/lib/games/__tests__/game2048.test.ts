@@ -23,9 +23,8 @@ import {
 } from '../game2048'
 import {
   COMING_SOON_GAMES,
-  GAME_2048_ONLINE_ROUTE,
-  GAME_2048_ROUTE,
   GAME_CATALOG,
+  GAME_FARM_ROUTE,
   PLAYABLE_GAMES,
   getGameCatalogEntry,
   isGamePlayable,
@@ -463,20 +462,19 @@ describe('确定性', () => {
 })
 
 describe('catalog：游戏大厅目录', () => {
-  it('包含 2048 / 斗地主 / 贪吃蛇 / 扫雷 / 跳一跳 / 我的世界 / 五子棋 / 骗子酒馆 / UNO / 中国象棋', () => {
+  it('第一款是主打游戏：开心农场', () => {
     expect(GAME_CATALOG.length).toBeGreaterThanOrEqual(7)
     expect(GAME_CATALOG.length).toBeLessThanOrEqual(12)
 
     const first = GAME_CATALOG[0]
-    expect(first.id).toBe('2048')
-    expect(first.name).toBe('2048')
+    expect(first.id).toBe('farm')
+    expect(first.name).toBe('开心农场')
     expect(first.status).toBe('available')
     expect(first.playable).toBe(true)
-    expect(first.modes).toEqual(['single', 'online'])
-    expect(first.route).toBe(GAME_2048_ROUTE)
-    expect(first.onlineRoute).toBe(GAME_2048_ONLINE_ROUTE)
-    expect(first.route).toBe('/games/2048')
-    expect(first.onlineRoute).toBe('/games/2048/online')
+    expect(first.modes).toEqual(['single'])
+    expect(first.route).toBe(GAME_FARM_ROUTE)
+    expect(first.onlineRoute).toBeNull()
+    expect(first.route).toBe('/games/farm')
 
     const placeholders = GAME_CATALOG.filter((game) => game.status === 'coming-soon')
     expect(placeholders.length).toBeGreaterThanOrEqual(0)
@@ -502,6 +500,7 @@ describe('catalog：游戏大厅目录', () => {
 
   it('PLAYABLE_GAMES / COMING_SOON_GAMES 与 status 划分一致', () => {
     expect(PLAYABLE_GAMES.map((game) => game.id)).toEqual([
+      'farm',
       '2048',
       'doudizhu',
       'snake',
@@ -513,7 +512,6 @@ describe('catalog：游戏大厅目录', () => {
       'uno',
       'xiangqi',
       'parkour',
-      'farm',
     ])
     expect(COMING_SOON_GAMES.every((game) => game.status === 'coming-soon')).toBe(true)
     expect(PLAYABLE_GAMES.length + COMING_SOON_GAMES.length).toBe(GAME_CATALOG.length)

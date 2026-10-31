@@ -51,6 +51,7 @@ const XiangqiOnlinePage = lazy(() => import('./pages/games/XiangqiOnlinePage'))
 const ParkourPage = lazy(() => import('./pages/games/ParkourPage'))
 const ParkourOnlinePage = lazy(() => import('./pages/games/ParkourOnlinePage'))
 const FarmPage = lazy(() => import('./pages/games/FarmPage'))
+const PetsPage = lazy(() => import('./pages/PetsPage'))
 const PointsPage = lazy(() => import('./pages/PointsPage'))
 const DeepSeekChatPage = lazy(() => import('./pages/DeepSeekChatPage'))
 const WebProxyPage = lazy(() => import('./pages/WebProxyPage'))
@@ -173,6 +174,10 @@ export default function App() {
                         <Route path="/stocks" element={
                           <ProtectedRoute><StocksPage /></ProtectedRoute>
                         } />
+                      </Route>
+                      {/* 宠物：花积分召唤并照顾一只 2D 小宠物（需登录） */}
+                      <Route element={<RequireFeature feature="pet" />}>
+                        <Route path="/pets" element={<PetsPage />} />
                       </Route>
                       <Route element={<RequireFeature feature="games" />}>
                         <Route path="/games" element={<GamesPage />} />

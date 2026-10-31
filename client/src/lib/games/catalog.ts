@@ -2,7 +2,8 @@
  * 游戏大厅目录（客户端，纯数据）
  *
  * 大厅页按 `GAME_CATALOG` 渲染卡片：只有 `status === 'available'`（同时 `playable === true`）
- * 的游戏可进入，其余显示为「即将上线」占位。2048 支持单机与好友联机，
+ * 的游戏可进入，其余显示为「即将上线」占位。数组第一款为主打游戏（当前是开心农场），
+ * 会被渲染成 featured 大卡并带「主打」徽标。2048 支持单机与好友联机，
  * 路由与 `App.tsx` 中的 `/games/2048`、`/games/2048/online` 保持一致。
  */
 
@@ -81,8 +82,20 @@ export const GAME_PARKOUR_ONLINE_ROUTE = '/games/parkour/online'
 /** 开心农场路由（单机经营 + 站内偷菜，无实时对局） */
 export const GAME_FARM_ROUTE = '/games/farm'
 
-/** 大厅完整目录：可玩游戏在前，即将上线占位在后 */
+/** 大厅完整目录：主打游戏（农田）在最前，其余可玩游戏随后，即将上线占位在后 */
 export const GAME_CATALOG: readonly GameCatalogEntry[] = [
+  {
+    // 主打游戏：农田（大厅第一款渲染为 featured 大卡 + 「主打」徽标）
+    id: 'farm',
+    name: '开心农场',
+    description: '开一块自己的小农田：种菜、施肥、等收成换积分；扩建农田，还能去站内好友的农场偷菜（每日限量）。',
+    icon: '🌱',
+    modes: ['single'],
+    status: 'available',
+    playable: true,
+    route: GAME_FARM_ROUTE,
+    onlineRoute: null,
+  },
   {
     id: '2048',
     name: '2048',
@@ -203,17 +216,6 @@ export const GAME_CATALOG: readonly GameCatalogEntry[] = [
     playable: true,
     route: GAME_PARKOUR_ROUTE,
     onlineRoute: GAME_PARKOUR_ONLINE_ROUTE,
-  },
-  {
-    id: 'farm',
-    name: '开心农场',
-    description: '开一块自己的小农田：种菜、施肥、等收成换积分；扩建农田，还能去站内好友的农场偷菜（每日限量）。',
-    icon: '🌱',
-    modes: ['single'],
-    status: 'available',
-    playable: true,
-    route: GAME_FARM_ROUTE,
-    onlineRoute: null,
   },
 ]
 
