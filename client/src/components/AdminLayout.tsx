@@ -1,9 +1,11 @@
 import { memo, useState, useRef, useEffect } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useFeature } from '../contexts/FeatureContext'
 import { GitHubButton } from './ui'
 import { AdminCapabilityRoute } from './Guards'
 import { canAccessAdminPath } from '../lib/permissions'
+import { FEATURE_KEYS, type FeatureKey } from '../lib/features'
 import api from '../lib/api'
 
 /** 导航项可见性由 lib/permissions.ts 的 ADMIN_ROUTE_CAPABILITIES 决定（与路由守卫同源） */
@@ -62,6 +64,7 @@ const SIDEBAR_COLLAPSED_KEY = 'lineweb_admin_sidebar_collapsed'
 
 export default memo(function AdminLayout() {
   const { user, logout } = useAuth()
+  const { refresh: refreshFeatures } = useFeature()
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -76,6 +79,8 @@ export default memo(function AdminLayout() {
   const sidebarRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const [pendingUsers, setPendingUsers] = useState(0)
+  const [featureMap, setFeatureMap] = useState<Record<FeatureKey, boolean> | null>(null)
+  const [featureBusy, setFeatureBusy] = useState(false)
 
   const closeMobile = () => setMobileOpen(false)
 
@@ -91,6 +96,9 @@ export default memo(function AdminLayout() {
     logout()
     navigate('/login')
   }
+
+  const canManageFeatures = canAccessAdminPath(user, '/admin/features')
+  const allFeaturesEnabled = !!featureMap && FEATURE_KEYS.every((key) => featureMap[key] !== false)
 
   useEffect(() => {
     if (mobileOpen) {
@@ -125,6 +133,36 @@ export default memo(function AdminLayout() {
     return () => { cancelled = true }
   }, [user, location.pathname])
 
+  // 一键开关按钮的状态来源；拉取失败静默降级为「不渲染按钮」——开关状态未知时不提供
+  // 一键批量操作（避免按错误的假定价执行全站关闭），管理员仍可用功能开关页逐个调整
+  useEffect(() => {
+    if (!canManageFeatures) return
+    let cancelled = false
+    api.get<{ features: Record<FeatureKey, boolean> }>('/admin/features', { noRedirect: true })
+      .then((data) => { if (!cancelled) setFeatureMap(data.features ?? null) })
+      .catch(() => { if (!cancelled) setFeatureMap(null) })
+    return () => { cancelled = true }
+  }, [canManageFeatures, location.pathname])
+
+  const handleToggleAllFeatures = () => {
+    if (!featureMap || featureBusy) return
+    const enabled = !allFeaturesEnabled
+    const confirmed = window.confirm(enabled
+      ? '确认一键开启全部功能？所有功能开关将恢复为开启状态。'
+      : '确认一键关闭网站全部功能？关闭后普通用户将无法使用文章、聊天、游戏等全部功能（管理员不受影响），可随时回到这里一键恢复。')
+    if (!confirmed) return
+    setFeatureBusy(true)
+    api.put<{ features: Record<FeatureKey, boolean> }>('/admin/features/all', { enabled })
+      .then((data) => {
+        setFeatureMap(data.features)
+        void refreshFeatures() // 立即刷新全站开关状态，导航与页面同步生效
+      })
+      .catch((err) => {
+        window.alert(err instanceof Error ? err.message : '批量更新功能开关失败')
+      })
+      .finally(() => setFeatureBusy(false))
+  }
+
   useEffect(() => {
     if (!mobileOpen) return
     const handleEscape = (event: KeyboardEvent) => {
@@ -151,10 +189,7 @@ export default memo(function AdminLayout() {
         ref={sidebarRef}
         className={`gh-sidebar ${mobileOpen ? 'gh-sidebar--open' : ''} ${collapsed ? 'gh-sidebar--collapsed' : ''}`}
       >
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 'var(--gh-space-2)',
-          padding: 'var(--gh-space-4)', borderBottom: '1px solid var(--gh-border)',
-        }}>
+        <div className="gh-sidebar-brand">
           <Link to="/admin" className="gh-sidebar-item" style={{
             borderLeft: 'none', gap: 'var(--gh-space-2)', padding: 0,
             background: 'none', color: 'var(--gh-text)',
@@ -165,6 +200,22 @@ export default memo(function AdminLayout() {
             </svg>
             <span className="gh-sidebar-label" style={{ fontWeight: 600 }}>Line Web</span>
           </Link>
+          {canManageFeatures && featureMap && (
+            <button
+              type="button"
+              className={`gh-sidebar-feature-toggle ${allFeaturesEnabled ? 'gh-sidebar-feature-toggle--danger' : ''}`}
+              onClick={handleToggleAllFeatures}
+              disabled={featureBusy}
+              title={allFeaturesEnabled ? '一键关闭全部功能' : '一键开启全部功能'}
+              aria-label={allFeaturesEnabled ? '一键关闭全部功能' : '一键开启全部功能'}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M8 1v6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M3.24 6.25a5.5 5.5 0 1 0 9.52 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              <span className="gh-sidebar-label">{allFeaturesEnabled ? '一键关闭' : '一键开启'}</span>
+            </button>
+          )}
         </div>
 
         <nav className="gh-sidebar-nav">

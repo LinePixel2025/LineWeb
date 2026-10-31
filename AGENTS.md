@@ -352,7 +352,7 @@ cd storage-node && python main.py     # 存储节点，config.json 指向 ws://1
 
 - **全站登录**：除 `/api/auth/login|register`、`/api/health`、`/api/version`、`/api/oauth/token|revoke`、`/api/features` 外，所有 API 需登录；`cachePublic` 已移除，认证响应统一 `no-store`。
 - **限流**：认证前 IP 硬上限 + 认证后按用户 `User.apiRateLimit`（默认 600/15min，0=不限）；管理员豁免全局与模块限流、AI 每日上限；管理端可逐个用户调整。游戏/聊天/AI 专用限流保留。
-- **功能开关**：`FeatureFlag` 表 + `feature:manage`；14 个模块键；管理员始终可访问被关闭功能；关闭对普通用户返回 `403 FEATURE_DISABLED`。
+- **功能开关**：`FeatureFlag` 表 + `feature:manage`；17 个模块键；管理员始终可访问被关闭功能；关闭对普通用户返回 `403 FEATURE_DISABLED`。另提供 `PUT /api/admin/features/all` 批量开关全部键（须注册在 `PUT /:key` 之前），管理面板侧边栏「Line Web」品牌标题栏内置一键关闭/一键开启按钮（确认后调用并即时刷新全站开关）。
 - **注册审核**：`User.status`（默认 active；新注册 pending）；pending/rejected 不能登录；管理员通过/拒绝；通过即自动加入官方大群、不可被聊天搜索。
 - **游戏战绩**：`GameStat` 表；单机上报 + 联机结算回调；旧 localStorage 一次性导入；我的世界存档/贪吃蛇同屏仍本地；`/api/game-stats` + 排行榜 `/games/leaderboard`。
 - **联系人备注**：`ChatContactSetting` 表（ownerId+targetUserId 唯一），仅自己可见、≤30 字；显示名 `remark || displayName || username`。

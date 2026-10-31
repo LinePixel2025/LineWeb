@@ -50,3 +50,18 @@ export async function setFeature(key: FeatureKey, enabled: boolean, updatedBy: n
   invalidateFeatureCache()
   return getFeatureMap(true)
 }
+
+/** 一键批量开关全部功能（事务内逐个 upsert，保证全部成功或全部回滚） */
+export async function setAllFeatures(enabled: boolean, updatedBy: number): Promise<FeatureMap> {
+  await prisma.$transaction(
+    FEATURE_KEYS.map((key) =>
+      prisma.featureFlag.upsert({
+        where: { key },
+        create: { key, enabled, updatedBy },
+        update: { enabled, updatedBy },
+      }),
+    ),
+  )
+  invalidateFeatureCache()
+  return getFeatureMap(true)
+}
