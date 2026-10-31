@@ -71,3 +71,6 @@ client/admin-new.png
 # 低内存服务器部署用的前端产物快照（由本地 npm run build 产出，传给 ECS，不进仓库）
 client-dist/
 .e2e-tmp/
+
+# TypeScript 增量构建缓存（纯本地产物，每次 tsc 都会变化）
+*.tsbuildinfo
