@@ -3,6 +3,7 @@
  */
 
 import type { GameKey } from './gameStatsRules.js'
+import { sanitizeTitleEffect, type TitleEffectStyle } from './pointsRules.js'
 
 /** 游戏展示名（与客户端游戏大厅保持一致） */
 export const GAME_DISPLAY_NAMES: Record<GameKey, string> = {
@@ -26,6 +27,8 @@ export interface LeaderTitleDto {
   color: string
   icon: string
   rarity: 'legendary'
+  /** 传说称号动态特效（classic/stardust/flame/aurora/thunder），缺省/非法回退 classic */
+  effect: TitleEffectStyle
   awardedAt: string
 }
 
@@ -37,7 +40,12 @@ export function leaderTitleName(game: string): string {
   return `${gameName}传说`
 }
 
-export function leaderTitleDto(row: { id: number; game: string; awardedAt: Date }): LeaderTitleDto {
+/**
+ * 榜一称号 DTO。effect 只由管理员经 PATCH /api/admin/points/leader-titles/:id 设置；
+ * 重算 upsert（gameLeaderTitleService）不写 effect 字段，故换人时不会覆盖特效。
+ * row.effect 缺省（select 未取或历史行未初始化前的默认值兜底）/非法时回退 classic。
+ */
+export function leaderTitleDto(row: { id: number; game: string; awardedAt: Date; effect?: string }): LeaderTitleDto {
   return {
     id: row.id,
     game: row.game,
@@ -46,6 +54,7 @@ export function leaderTitleDto(row: { id: number; game: string; awardedAt: Date 
     color: LEADER_TITLE_COLOR,
     icon: LEADER_TITLE_ICON,
     rarity: 'legendary',
+    effect: sanitizeTitleEffect(row.effect) ?? 'classic',
     awardedAt: row.awardedAt.toISOString(),
   }
 }
@@ -65,14 +74,17 @@ export interface LeaderTitleAsTitleDto {
   color: string
   icon: string
   rarity: 'legendary'
+  /** 传说称号动态特效，缺省/非法回退 classic（与 UserTitleDto.effect 口径一致） */
+  effect: TitleEffectStyle
 }
 
-export function leaderTitleAsTitleDto(row: { id: number; game: string }): LeaderTitleAsTitleDto {
+export function leaderTitleAsTitleDto(row: { id: number; game: string; effect?: string }): LeaderTitleAsTitleDto {
   return {
     id: row.id,
     name: leaderTitleName(row.game),
     color: LEADER_TITLE_COLOR,
     icon: LEADER_TITLE_ICON,
     rarity: 'legendary',
+    effect: sanitizeTitleEffect(row.effect) ?? 'classic',
   }
 }

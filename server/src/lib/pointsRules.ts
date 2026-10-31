@@ -312,3 +312,13 @@ export function sanitizeAvatarFrame(value: unknown): AvatarFrameStyle | null {
     ? value as AvatarFrameStyle
     : null
 }
+
+/** 传说称号动态特效（classic＝现有金色流光默认特效；客户端 CSS 类名后缀 gh-title-badge--fx-*） */
+export const TITLE_EFFECT_STYLES = ['classic', 'stardust', 'flame', 'aurora', 'thunder'] as const
+export type TitleEffectStyle = typeof TITLE_EFFECT_STYLES[number]
+
+export function sanitizeTitleEffect(value: unknown): TitleEffectStyle | null {
+  return typeof value === 'string' && (TITLE_EFFECT_STYLES as readonly string[]).includes(value)
+    ? value as TitleEffectStyle
+    : null
+}

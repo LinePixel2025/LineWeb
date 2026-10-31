@@ -211,7 +211,7 @@ type LeaderboardRow = StatRow & {
   user: {
     username: string
     equippedTitle: { id: number; type: string; name: string; payload: string | null; rarity: string } | null
-    equippedLeaderTitle: { id: number; game: string; userId: number } | null
+    equippedLeaderTitle: { id: number; game: string; userId: number; effect?: string } | null
   }
 }
 
@@ -277,7 +277,7 @@ export async function getLeaderboard(params: {
           select: {
             username: true,
             equippedTitle: { select: { id: true, type: true, name: true, payload: true, rarity: true } },
-            equippedLeaderTitle: { select: { id: true, game: true, userId: true } },
+            equippedLeaderTitle: { select: { id: true, game: true, userId: true, effect: true } },
           },
         },
       },
@@ -298,7 +298,7 @@ export async function getLeaderboard(params: {
           select: {
             username: true,
             equippedTitle: { select: { id: true, type: true, name: true, payload: true, rarity: true } },
-            equippedLeaderTitle: { select: { id: true, game: true, userId: true } },
+            equippedLeaderTitle: { select: { id: true, game: true, userId: true, effect: true } },
           },
         },
       },

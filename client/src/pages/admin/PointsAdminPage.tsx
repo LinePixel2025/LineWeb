@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import api from '../../lib/api'
+import UserTitleBadge from '../../components/UserTitleBadge'
 import { usePoints } from '../../contexts/PointsContext'
 import type {
   AdminPointsResponse,
@@ -9,11 +10,14 @@ import type {
   CheckinRule,
   FarmPointRule,
   GamePointRule,
+  LeaderTitleDto,
   LeaderTitleRule,
   PointsConfig,
   ShopItemType,
   ShopRarity,
+  TitleEffectStyle,
 } from '../../types/points'
+import { TITLE_EFFECTS } from '../../types/points'
 
 /** 与服务端 gameStatsRules 的 GAME_KEYS 对齐（展示名在客户端维护） */
 const GAME_LABELS: Array<{ key: string; label: string }> = [
@@ -50,6 +54,15 @@ const AVATAR_FRAME_OPTIONS: ReadonlyArray<readonly [AvatarFrameStyle, string]> =
   ['galaxy', '星河'],
 ]
 
+/** 传说称号特效白名单（与服务端 TITLE_EFFECT_STYLES 一致） */
+const TITLE_EFFECT_OPTIONS: ReadonlyArray<readonly [TitleEffectStyle, string]> = [
+  ['classic', '经典流光'],
+  ['stardust', '星尘'],
+  ['flame', '烈焰'],
+  ['aurora', '极光'],
+  ['thunder', '雷霆'],
+]
+
 const RULE_FIELDS: Array<{ key: keyof GamePointRule; label: string; hint?: string }> = [
   { key: 'win', label: '胜利' },
   { key: 'loss', label: '失败', hint: '负数扣分' },
@@ -72,6 +85,7 @@ interface ShopForm {
   color: string
   pack: string
   frame: AvatarFrameStyle
+  effect: TitleEffectStyle
   isActive: boolean
   sortOrder: number
 }
@@ -87,6 +101,7 @@ const EMPTY_SHOP_FORM: ShopForm = {
   color: '#57606a',
   pack: 'nailong',
   frame: 'gold',
+  effect: 'classic',
   isActive: true,
   sortOrder: 100,
 }
@@ -206,6 +221,9 @@ export default function PointsAdminPage() {
               saving={saving}
               onChange={setConfig}
               onSave={() => void saveConfig()}
+              leaderTitles={data.leaderTitles}
+              onLeaderEffectChanged={(message) => { setNotice(message); void load() }}
+              onError={setError}
             />
           )}
 
@@ -239,11 +257,17 @@ function RulesPanel({
   saving,
   onChange,
   onSave,
+  leaderTitles,
+  onLeaderEffectChanged,
+  onError,
 }: {
   config: PointsConfig
   saving: boolean
   onChange: (next: PointsConfig) => void
   onSave: () => void
+  leaderTitles: Array<LeaderTitleDto & { holderName: string }>
+  onLeaderEffectChanged: (message: string) => void
+  onError: (message: string) => void
 }) {
   const updateGame = (game: string, key: keyof GamePointRule, value: number) => {
     onChange({
@@ -494,7 +518,95 @@ function RulesPanel({
           </button>
         </div>
       </section>
+
+      <LeaderTitlesPanel leaderTitles={leaderTitles} onChanged={onLeaderEffectChanged} onError={onError} />
     </div>
+  )
+}
+
+/* ============================================================
+   榜一传说称号（自动授予，特效可调）
+   ============================================================ */
+
+function LeaderTitlesPanel({
+  leaderTitles,
+  onChanged,
+  onError,
+}: {
+  leaderTitles: Array<LeaderTitleDto & { holderName: string }>
+  onChanged: (message: string) => void
+  onError: (message: string) => void
+}) {
+  const [busyId, setBusyId] = useState<number | null>(null)
+
+  const changeEffect = async (row: LeaderTitleDto & { holderName: string }, effect: TitleEffectStyle) => {
+    if (busyId !== null) return
+    setBusyId(row.id)
+    try {
+      await api.patch<{ ok: boolean; leaderTitle: LeaderTitleDto }>(`/admin/points/leader-titles/${row.id}`, { effect })
+      const label = TITLE_EFFECT_OPTIONS.find(([value]) => value === effect)?.[1] ?? effect
+      onChanged(`已将「${row.gameName}」榜一称号特效设为 ${label}`)
+    } catch (err) {
+      onError(err instanceof Error ? err.message : '更新榜一称号特效失败')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <section className="gh-box gh-points-rules-card">
+      <h2>榜一传说称号</h2>
+      <p className="gh-text-tertiary">
+        榜一称号由系统自动授予：每个游戏当前单机纪录保持者一位，被超过即自动转移；此处调整特效后立即对持有者生效。
+      </p>
+      {leaderTitles.length === 0 ? (
+        <p className="gh-text-tertiary" style={{ padding: '8px 0' }}>
+          还没有产生榜一称号，玩家在单机模式取得第一名后自动生成。
+        </p>
+      ) : (
+        <div className="gh-table-wrap">
+          <table className="gh-table">
+            <thead>
+              <tr>
+                <th>游戏</th>
+                <th>称号</th>
+                <th>持有者</th>
+                <th>授予时间</th>
+                <th>特效</th>
+              </tr>
+            </thead>
+            <tbody>
+              {leaderTitles.map((row) => {
+                const effect = (TITLE_EFFECTS as readonly string[]).includes(row.effect)
+                  ? (row.effect as TitleEffectStyle)
+                  : 'classic'
+                return (
+                  <tr key={row.id}>
+                    <td>{row.gameName}</td>
+                    <td><UserTitleBadge title={row} size="sm" /></td>
+                    <td>{row.holderName}</td>
+                    <td>{new Date(row.awardedAt).toLocaleString('zh-CN')}</td>
+                    <td>
+                      <select
+                        className="gh-input"
+                        value={effect}
+                        disabled={busyId === row.id}
+                        onChange={(event) => void changeEffect(row, event.target.value as TitleEffectStyle)}
+                        aria-label={`${row.gameName} 榜一称号特效`}
+                      >
+                        {TITLE_EFFECT_OPTIONS.map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -540,6 +652,9 @@ function ShopPanel({
       frame: (AVATAR_FRAME_OPTIONS.some(([value]) => value === item.payload.frame)
         ? item.payload.frame
         : 'gold') as AvatarFrameStyle,
+      effect: (TITLE_EFFECT_OPTIONS.some(([value]) => value === item.payload.effect)
+        ? item.payload.effect
+        : 'classic') as TitleEffectStyle,
       isActive: item.isActive,
       sortOrder: item.sortOrder,
     })
@@ -554,7 +669,7 @@ function ShopPanel({
         ? { pack: form.pack }
         : form.type === 'avatar_frame'
           ? { frame: form.frame, color: form.color }
-          : { icon: form.icon, color: form.color }
+          : { icon: form.icon, color: form.color, effect: form.effect }
       if (editing) {
         await api.patch(`/admin/points/shop/${editing.id}`, {
           name: form.name,
@@ -591,11 +706,19 @@ function ShopPanel({
 
   const remove = async (item: AdminShopItem) => {
     if (busyId !== null) return
-    if (!window.confirm(`删除「${item.name}」？若已有用户拥有，将改为下架而不是删除。`)) return
+    // 商品删除为真删除：拥有记录与佩戴引用一并清除，不可恢复
+    const ownerNote = item.ownerCount > 0
+      ? `已有 ${item.ownerCount} 位用户拥有，删除后他们将失去该称号，此操作不可恢复。`
+      : '此操作不可恢复。'
+    if (!window.confirm(`删除「${item.name}」？${ownerNote}`)) return
     setBusyId(item.id)
     try {
-      const res = await api.delete<{ ok: boolean; deleted: boolean; note?: string }>(`/admin/points/shop/${item.id}`)
-      onChanged(res.note ?? (res.deleted ? `已删除「${item.name}」` : `已下架「${item.name}」`))
+      const res = await api.delete<{ ok: boolean; deleted: boolean; removedOwners?: number; clearedEquipped?: number }>(`/admin/points/shop/${item.id}`)
+      const removed = res.removedOwners ?? 0
+      const cleared = res.clearedEquipped ?? 0
+      onChanged(removed === 0 && cleared === 0
+        ? `已删除「${item.name}」`
+        : `已删除「${item.name}」，清除 ${removed} 条拥有记录、${cleared} 处佩戴引用`)
     } catch (err) {
       onError(err instanceof Error ? err.message : '删除失败')
     } finally {
@@ -817,6 +940,38 @@ function ShopPanel({
                     ))}
                   </select>
                 </label>
+              )}
+
+              {form.type === 'title' && form.rarity === 'legendary' && (
+                <div className="gh-points-shop-form-row">
+                  <label className="gh-form-field">
+                    传说特效
+                    <select
+                      className="gh-input"
+                      value={form.effect}
+                      onChange={(event) => setForm({ ...form, effect: event.target.value as TitleEffectStyle })}
+                    >
+                      {TITLE_EFFECT_OPTIONS.map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="gh-form-field">
+                    预览
+                    <div style={{ paddingTop: '4px' }}>
+                      <UserTitleBadge
+                        size="md"
+                        title={{
+                          name: form.name.trim() || '称号预览',
+                          color: form.color,
+                          icon: form.icon,
+                          rarity: 'legendary',
+                          effect: form.effect,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
               )}
 
               <label className="gh-points-checkbox">

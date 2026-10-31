@@ -137,11 +137,296 @@
   }
 }
 
+/* ===== 传说称号动态特效 =====
+   UserTitleBadge 按 effect 白名单追加 gh-title-badge--fx-<key>（classic 不加类，走上面的基础样式）。
+   双类选择器以更高特异性覆盖基础 legendary 的金色流光（含 color !important 与双 animation），
+   复用既有 DOM 层：::before 外层光环 / .gh-title-badge-aura 内层扫光 / sparks 粒子 ×4。 */
+
+/* --- 星尘 stardust：深蓝紫夜空 + 银河扫光 + 四角星上浮 --- */
+.gh-title-badge--legendary.gh-title-badge--fx-stardust {
+  background: linear-gradient(165deg, #1b1b3a 0%, #23244d 48%, #2c2e5e 100%);
+  background-size: 100% 100%;
+  color: #f5f3e7 !important;
+  text-shadow: 0 0 6px rgba(190, 200, 255, .75);
+  animation: gh-title-badge-fx-stardust-glow 5.4s ease-in-out infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-stardust::before {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(126, 132, 255, .5) 0%, rgba(126, 132, 255, 0) 62%),
+    repeating-conic-gradient(
+      from 0deg,
+      rgba(154, 166, 255, .38) 0deg 6deg,
+      rgba(154, 166, 255, 0) 6deg 36deg
+    );
+  filter: blur(3px);
+  opacity: .9;
+  animation: gh-title-badge-fx-stardust-orbit 7.2s linear infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-stardust .gh-title-badge-aura {
+  background: linear-gradient(
+    115deg,
+    transparent 28%,
+    rgba(159, 168, 255, .78) 44%,
+    rgba(140, 220, 255, .62) 52%,
+    transparent 68%
+  );
+  background-size: 220% 100%;
+  animation: gh-title-badge-fx-stardust-sweep 3.4s ease-in-out infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-stardust .gh-title-badge-sparks i {
+  border-radius: 0;
+  background: #cdd9ff;
+  clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
+  animation: gh-title-badge-fx-stardust-float 3.8s ease-in-out infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-stardust .gh-title-badge-sparks i:nth-child(even) { background: #9cd8ff; }
+.gh-title-badge--legendary.gh-title-badge--fx-stardust .gh-title-badge-sparks i:nth-child(2) { animation-delay: .8s; }
+.gh-title-badge--legendary.gh-title-badge--fx-stardust .gh-title-badge-sparks i:nth-child(3) { animation-delay: 1.6s; }
+.gh-title-badge--legendary.gh-title-badge--fx-stardust .gh-title-badge-sparks i:nth-child(4) { animation-delay: 2.4s; }
+
+/* --- 烈焰 flame：暗红炭火 + 橙红辉光呼吸 + 火星上飘 --- */
+.gh-title-badge--legendary.gh-title-badge--fx-flame {
+  background: linear-gradient(165deg, #3a1408 0%, #4a1a08 52%, #5e1f0a 100%);
+  background-size: 100% 100%;
+  color: #ffd9b0 !important;
+  text-shadow: 0 0 6px rgba(255, 150, 70, .7);
+  animation: gh-title-badge-fx-flame-flicker 3.2s ease-in-out infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-flame::before {
+  background: radial-gradient(
+    circle at 50% 62%,
+    rgba(255, 138, 48, .65) 0%,
+    rgba(255, 94, 26, .3) 46%,
+    transparent 72%
+  );
+  filter: blur(4px);
+  animation: gh-title-badge-fx-flame-breath 2.6s ease-in-out infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-flame .gh-title-badge-aura {
+  background: linear-gradient(
+    115deg,
+    transparent 25%,
+    rgba(255, 157, 77, .5) 40%,
+    rgba(255, 215, 90, .62) 50%,
+    rgba(255, 120, 40, .38) 60%,
+    transparent 76%
+  );
+  background-size: 250% 100%;
+  animation: gh-title-badge-fx-flame-flow 2.9s linear infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-flame .gh-title-badge-sparks i {
+  background: radial-gradient(circle, #ffd75a 0 35%, #ff9d4d 65%, transparent 78%);
+  animation: gh-title-badge-fx-flame-spark 2.2s ease-in infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-flame .gh-title-badge-sparks i:nth-child(1) { --sx: -7px; --sy: -20px; }
+.gh-title-badge--legendary.gh-title-badge--fx-flame .gh-title-badge-sparks i:nth-child(2) { --sx: 6px; --sy: -24px; animation-delay: .5s; }
+.gh-title-badge--legendary.gh-title-badge--fx-flame .gh-title-badge-sparks i:nth-child(3) { --sx: -4px; --sy: -17px; animation-delay: 1s; }
+.gh-title-badge--legendary.gh-title-badge--fx-flame .gh-title-badge-sparks i:nth-child(4) { --sx: 8px; --sy: -22px; animation-delay: 1.5s; }
+
+/* --- 极光 aurora：深青底流动极光 + 环状流光旋转 + 冰蓝光点漂浮 --- */
+.gh-title-badge--legendary.gh-title-badge--fx-aurora {
+  background: linear-gradient(120deg, #0b3b3c 0%, #14555a 50%, #0b3b3c 100%);
+  background-size: 300% 100%;
+  color: #d8fff4 !important;
+  text-shadow: 0 0 6px rgba(140, 255, 225, .7);
+  animation:
+    gh-title-badge-fx-aurora-drift 10s linear infinite,
+    gh-title-badge-fx-aurora-glow 4.6s ease-in-out infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-aurora::before {
+  background: conic-gradient(
+    from 0deg,
+    rgba(64, 224, 190, .8),
+    rgba(110, 231, 140, .55),
+    rgba(150, 120, 255, .6),
+    rgba(64, 224, 190, .8)
+  );
+  filter: blur(4px);
+  -webkit-mask-image: radial-gradient(closest-side, transparent 34%, #000 62%);
+  mask-image: radial-gradient(closest-side, transparent 34%, #000 62%);
+  animation: gh-title-badge-fx-aurora-spin 5.2s linear infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-aurora .gh-title-badge-aura {
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(120, 255, 215, .5) 45%,
+    rgba(190, 255, 238, .68) 52%,
+    transparent 66%
+  );
+  background-size: 220% 100%;
+  animation: gh-title-badge-fx-aurora-sweep 3.6s ease-in-out infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-aurora .gh-title-badge-sparks i {
+  background: radial-gradient(circle, #d9fff7 0 25%, #8ff0e0 55%, transparent 75%);
+  animation: gh-title-badge-fx-aurora-float 4s ease-in-out infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-aurora .gh-title-badge-sparks i:nth-child(2) { animation-delay: 1s; }
+.gh-title-badge--legendary.gh-title-badge--fx-aurora .gh-title-badge-sparks i:nth-child(3) { animation-delay: 2s; }
+.gh-title-badge--legendary.gh-title-badge--fx-aurora .gh-title-badge-sparks i:nth-child(4) { animation-delay: 3s; }
+
+/* --- 雷霆 thunder：深紫黑底 + 间歇白紫闪电脉冲 + 细长电花 --- */
+.gh-title-badge--legendary.gh-title-badge--fx-thunder {
+  background: linear-gradient(165deg, #1f1030 0%, #2a1445 52%, #33175a 100%);
+  background-size: 200% 100%;
+  color: #efe6ff !important;
+  text-shadow: 0 0 6px rgba(201, 167, 255, .8);
+  animation:
+    gh-title-badge-fx-thunder-flash 4s linear infinite,
+    gh-title-badge-fx-thunder-shimmer 8s linear infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-thunder::before {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(178, 132, 255, .45) 0%, rgba(178, 132, 255, 0) 60%),
+    repeating-conic-gradient(
+      from 0deg,
+      rgba(201, 167, 255, .42) 0deg 3deg,
+      rgba(201, 167, 255, 0) 3deg 22deg
+    );
+  filter: blur(3px);
+  opacity: .9;
+  animation: gh-title-badge-fx-thunder-orbit 3.8s linear infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-thunder .gh-title-badge-aura {
+  background: linear-gradient(
+    115deg,
+    transparent 32%,
+    rgba(255, 255, 255, .85) 44%,
+    rgba(201, 167, 255, .7) 52%,
+    transparent 64%
+  );
+  background-size: 220% 100%;
+  animation: gh-title-badge-fx-thunder-sweep 1.9s ease-in-out infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-thunder .gh-title-badge-sparks i {
+  width: 11px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, #ffffff 45%, #c9a7ff 100%);
+  animation: gh-title-badge-fx-thunder-spark 1.6s steps(4, end) infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-thunder .gh-title-badge-sparks i:nth-child(1) { --rot: 24deg; }
+.gh-title-badge--legendary.gh-title-badge--fx-thunder .gh-title-badge-sparks i:nth-child(2) { --rot: -32deg; animation-delay: .4s; }
+.gh-title-badge--legendary.gh-title-badge--fx-thunder .gh-title-badge-sparks i:nth-child(3) { --rot: 58deg; animation-delay: .8s; }
+.gh-title-badge--legendary.gh-title-badge--fx-thunder .gh-title-badge-sparks i:nth-child(4) { --rot: -12deg; animation-delay: 1.2s; }
+
+/* --- 星尘 keyframes --- */
+@keyframes gh-title-badge-fx-stardust-glow {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(154, 166, 255, .55), 0 0 12px rgba(126, 132, 255, .4); }
+  50% { box-shadow: 0 0 0 1px rgba(190, 200, 255, .85), 0 0 22px rgba(140, 160, 255, .65), 0 0 38px rgba(120, 220, 255, .35); }
+}
+@keyframes gh-title-badge-fx-stardust-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes gh-title-badge-fx-stardust-sweep {
+  0% { background-position: 180% 50%; opacity: 0; }
+  25% { opacity: 1; }
+  60% { background-position: -80% 50%; opacity: 1; }
+  100% { background-position: -80% 50%; opacity: 0; }
+}
+@keyframes gh-title-badge-fx-stardust-float {
+  0% { transform: translate(-50%, calc(-50% + 12px)) scale(.35) rotate(0deg); opacity: 0; }
+  20% { opacity: 1; }
+  55% { transform: translate(calc(-50% + var(--sx) * .5), calc(-50% + var(--sy) * .85)) scale(1) rotate(90deg); opacity: .85; }
+  72% { opacity: .3; }
+  100% { transform: translate(calc(-50% + var(--sx)), calc(-50% + var(--sy) * 1.6)) scale(.5) rotate(180deg); opacity: 0; }
+}
+
+/* --- 烈焰 keyframes --- */
+@keyframes gh-title-badge-fx-flame-flicker {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(255, 120, 40, .55), 0 0 12px rgba(255, 96, 26, .4); }
+  50% { box-shadow: 0 0 0 1px rgba(255, 170, 80, .9), 0 0 22px rgba(255, 120, 40, .7), 0 0 36px rgba(255, 80, 20, .4); }
+}
+@keyframes gh-title-badge-fx-flame-breath {
+  0%, 100% { box-shadow: 0 0 12px rgba(255, 120, 40, .4); opacity: .75; }
+  50% { box-shadow: 0 0 26px rgba(255, 110, 30, .8), 0 0 48px rgba(255, 140, 50, .45); opacity: 1; }
+}
+@keyframes gh-title-badge-fx-flame-flow {
+  0% { background-position: 200% 50%; }
+  100% { background-position: -100% 50%; }
+}
+@keyframes gh-title-badge-fx-flame-spark {
+  0% { transform: translate(-50%, calc(-50% + 12px)) scale(.35); opacity: 0; }
+  18% { opacity: 1; }
+  50% { transform: translate(calc(-50% + var(--sx)), calc(-50% + var(--sy))) scale(1); opacity: .95; }
+  75% { transform: translate(calc(-50% + var(--sx) * -.6), calc(-50% + var(--sy) * 1.5)) scale(.7); opacity: .65; }
+  100% { transform: translate(calc(-50% + var(--sx) * .8), calc(-50% + var(--sy) * 2.1)) scale(.2); opacity: 0; }
+}
+
+/* --- 极光 keyframes --- */
+@keyframes gh-title-badge-fx-aurora-drift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes gh-title-badge-fx-aurora-glow {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(64, 224, 190, .5), 0 0 12px rgba(64, 224, 190, .35); }
+  50% { box-shadow: 0 0 0 1px rgba(140, 255, 225, .8), 0 0 20px rgba(110, 231, 140, .55), 0 0 34px rgba(150, 120, 255, .35); }
+}
+@keyframes gh-title-badge-fx-aurora-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes gh-title-badge-fx-aurora-sweep {
+  0% { background-position: 180% 50%; opacity: 0; }
+  25% { opacity: 1; }
+  60% { background-position: -80% 50%; opacity: 1; }
+  100% { background-position: -80% 50%; opacity: 0; }
+}
+@keyframes gh-title-badge-fx-aurora-float {
+  0% { transform: translate(-50%, calc(-50% + 8px)) scale(.5); opacity: 0; }
+  25% { opacity: .9; }
+  55% { transform: translate(calc(-50% + var(--sx) * .7), calc(-50% + var(--sy) * .9)) scale(.85); opacity: .5; }
+  100% { transform: translate(calc(-50% + var(--sx)), calc(-50% + var(--sy) * 1.4)) scale(.35); opacity: 0; }
+}
+
+/* --- 雷霆 keyframes（flash：0–68% 平静 → 72% 主闪 → 78% 回落 → 84% 二次闪 → 100% 回落） --- */
+@keyframes gh-title-badge-fx-thunder-flash {
+  0%, 68% { filter: brightness(1); box-shadow: 0 0 0 1px rgba(150, 100, 255, .4), 0 0 10px rgba(120, 70, 220, .3); }
+  72% { filter: brightness(1.6); box-shadow: 0 0 0 1px rgba(255, 255, 255, .95), 0 0 22px rgba(201, 167, 255, .9), 0 0 40px rgba(150, 100, 255, .55); }
+  78% { filter: brightness(1.05); box-shadow: 0 0 0 1px rgba(150, 100, 255, .45), 0 0 12px rgba(120, 70, 220, .35); }
+  84% { filter: brightness(1.45); box-shadow: 0 0 0 1px rgba(255, 255, 255, .8), 0 0 18px rgba(201, 167, 255, .7); }
+  100% { filter: brightness(1); box-shadow: 0 0 0 1px rgba(150, 100, 255, .4), 0 0 10px rgba(120, 70, 220, .3); }
+}
+@keyframes gh-title-badge-fx-thunder-shimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+@keyframes gh-title-badge-fx-thunder-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes gh-title-badge-fx-thunder-sweep {
+  0% { background-position: 180% 50%; opacity: 0; }
+  22% { opacity: 1; }
+  55% { background-position: -80% 50%; opacity: 1; }
+  100% { background-position: -80% 50%; opacity: 0; }
+}
+@keyframes gh-title-badge-fx-thunder-spark {
+  0%, 100% { transform: translate(-50%, -50%) rotate(var(--rot, 24deg)) scaleX(.4); opacity: 0; }
+  15% { opacity: 1; }
+  35% { opacity: .15; }
+  50% { opacity: 1; }
+  70% { opacity: .25; }
+  85% { transform: translate(calc(-50% + var(--sx) * .4), calc(-50% + var(--sy) * .4)) rotate(calc(var(--rot, 24deg) * -1)) scaleX(1.2); opacity: .9; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .gh-title-badge--legendary {
+  /* fx 双类特异性高于单类基础规则，必须逐个显式关闭，否则会绕过降级；
+     动画关闭后各特效的静态底色渐变保留（辨识度），粒子与光环直接隐藏 */
+  .gh-title-badge--legendary,
+  .gh-title-badge--legendary.gh-title-badge--fx-stardust,
+  .gh-title-badge--legendary.gh-title-badge--fx-flame,
+  .gh-title-badge--legendary.gh-title-badge--fx-aurora,
+  .gh-title-badge--legendary.gh-title-badge--fx-thunder {
     animation: none;
   }
   .gh-title-badge--legendary::before,
+  .gh-title-badge--legendary.gh-title-badge--fx-stardust::before,
+  .gh-title-badge--legendary.gh-title-badge--fx-flame::before,
+  .gh-title-badge--legendary.gh-title-badge--fx-aurora::before,
+  .gh-title-badge--legendary.gh-title-badge--fx-thunder::before,
   .gh-title-badge-aura,
   .gh-title-badge-sparks {
     display: none;

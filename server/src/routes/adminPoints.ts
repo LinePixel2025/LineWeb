@@ -11,8 +11,11 @@ import {
   parseShopPayload,
   sanitizeAvatarFrame,
   sanitizeTitleColor,
+  sanitizeTitleEffect,
   sanitizeTitleIcon,
+  TITLE_EFFECT_STYLES,
 } from '../lib/pointsRules.js'
+import { leaderTitleDto } from '../lib/gameLeaderTitles.js'
 import {
   getPointsConfig,
   savePointsConfig,
@@ -45,6 +48,7 @@ const payloadSchema = z.object({
   color: z.string().max(20).optional(),
   pack: z.string().max(30).optional(),
   frame: z.string().max(20).optional(),
+  effect: z.string().max(20).optional(),
 }).optional()
 
 const shopCreateSchema = z.object({
@@ -74,13 +78,18 @@ const adjustSchema = z.object({
   note: z.string().trim().max(100).optional(),
 })
 
-/** 把管理员提交的 payload 规范成存库 JSON（称号颜色/图标消毒，表情包与头像框只收白名单） */
+/** 榜一传说称号特效只收白名单（classic/stardust/flame/aurora/thunder） */
+const leaderTitlePatchSchema = z.object({
+  effect: z.enum(TITLE_EFFECT_STYLES),
+})
+
+/** 把管理员提交的 payload 规范成存库 JSON（称号颜色/图标/特效消毒，表情包与头像框只收白名单） */
 function normalizePayload(
   type: string,
-  payload: { icon?: string; color?: string; pack?: string; frame?: string } | undefined,
+  payload: { icon?: string; color?: string; pack?: string; frame?: string; effect?: string } | undefined,
 ): string | null {
   if (!payload) {
-    if (type === 'title') return JSON.stringify({ icon: '', color: '#57606a' })
+    if (type === 'title') return JSON.stringify({ icon: '', color: '#57606a', effect: 'classic' })
     if (type === 'avatar_frame') throw new AppError(`头像框样式必须是：${AVATAR_FRAME_STYLES.join(' / ')}`, 400)
     return null
   }
@@ -99,6 +108,7 @@ function normalizePayload(
   return JSON.stringify({
     icon: sanitizeTitleIcon(payload.icon),
     color: sanitizeTitleColor(payload.color),
+    effect: sanitizeTitleEffect(payload.effect) ?? 'classic',
   })
 }
 
@@ -124,10 +134,10 @@ function serializeItem(item: {
   }
 }
 
-// GET /api/admin/points — 规则 + 商品 + 统计
+// GET /api/admin/points — 规则 + 商品 + 榜一称号 + 统计
 router.get('/', asyncHandler(async (_req: Request, res: Response) => {
   const dayStart = getTodayDayStart()
-  const [config, items, stats, farmStats, totals, todayAward] = await Promise.all([
+  const [config, items, stats, farmStats, totals, todayAward, leaderTitleRows] = await Promise.all([
     getPointsConfig(),
     prisma.pointsShopItem.findMany({
       orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }, { id: 'asc' }],
@@ -141,11 +151,17 @@ router.get('/', asyncHandler(async (_req: Request, res: Response) => {
       _sum: { amount: true },
       _count: true,
     }),
+    prisma.gameLeaderTitle.findMany({
+      include: { user: { select: { username: true } } },
+      orderBy: { game: 'asc' },
+    }),
   ])
 
   res.json({
     config,
     items: items.map(serializeItem),
+    // 榜一传说称号（每游戏一行，重算自动换主；effect 可经 PATCH /leader-titles/:id 调整）
+    leaderTitles: leaderTitleRows.map((row) => ({ ...leaderTitleDto(row), holderName: row.user.username })),
     catalog: farmCatalog(),
     emojiPacks: EMOJI_PACK_KEYS,
     stats: {
@@ -221,21 +237,39 @@ router.patch('/shop/:id', asyncHandler(async (req: Request, res: Response) => {
   res.json(serializeItem(item))
 }))
 
-// DELETE /api/admin/points/shop/:id — 有人拥有时改为下架，避免吞掉已购内容
+// DELETE /api/admin/points/shop/:id — 彻底删除商品；已拥有/佩戴中的用户一并清除
+//（外键本会级联/SetNull，这里在事务内显式执行以便返回受影响人数）
 router.delete('/shop/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = itemId(req.params.id)
-  const current = await prisma.pointsShopItem.findUnique({
-    where: { id },
-    include: { _count: { select: { owners: true } } },
-  })
+  const current = await prisma.pointsShopItem.findUnique({ where: { id } })
   if (!current) throw new AppError('商品不存在', 404)
-  if (current._count.owners > 0) {
-    await prisma.pointsShopItem.update({ where: { id }, data: { isActive: false } })
-    res.json({ ok: true, deleted: false, note: '已有用户拥有，已改为下架' })
-    return
-  }
-  await prisma.pointsShopItem.delete({ where: { id } })
-  res.json({ ok: true, deleted: true })
+  const result = await prisma.$transaction(async (tx) => {
+    const removedOwners = await tx.userPointsItem.deleteMany({ where: { itemId: id } })
+    // 称号与头像框分开清：OR + 双字段置空会误清另一类仍佩戴的商品
+    const clearedTitle = await tx.user.updateMany({
+      where: { equippedTitleId: id },
+      data: { equippedTitleId: null },
+    })
+    const clearedFrame = await tx.user.updateMany({
+      where: { equippedAvatarFrameId: id },
+      data: { equippedAvatarFrameId: null },
+    })
+    await tx.pointsShopItem.delete({ where: { id } })
+    return { removedOwners: removedOwners.count, clearedEquipped: clearedTitle.count + clearedFrame.count }
+  })
+  res.json({ ok: true, deleted: true, removedOwners: result.removedOwners, clearedEquipped: result.clearedEquipped })
+}))
+
+// PATCH /api/admin/points/leader-titles/:id — 设置榜一传说称号特效
+//（重算 upsert 不写 effect，换主后特效保留；缺省/非法值在出口处回退 classic）
+router.patch('/leader-titles/:id', asyncHandler(async (req: Request, res: Response) => {
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id) || id <= 0) throw new AppError('无效的传说称号 ID', 400)
+  const input = parseInput(leaderTitlePatchSchema, req.body)
+  const current = await prisma.gameLeaderTitle.findUnique({ where: { id } })
+  if (!current) throw new AppError('传说称号不存在', 404)
+  const updated = await prisma.gameLeaderTitle.update({ where: { id }, data: { effect: input.effect } })
+  res.json({ ok: true, leaderTitle: leaderTitleDto(updated) })
 }))
 
 // GET /api/admin/points/users?q= — 用户积分查询

@@ -494,6 +494,7 @@ function ShopTab({
                     name: item.name,
                     color: typeof item.payload.color === 'string' ? item.payload.color : '#57606a',
                     icon: typeof item.payload.icon === 'string' ? item.payload.icon : '',
+                    effect: typeof item.payload.effect === 'string' ? item.payload.effect : undefined,
                     rarity: item.rarity,
                   }}
                   size="md"

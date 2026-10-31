@@ -24,6 +24,8 @@ export interface ChatTitleView {
   name: string
   color: string
   icon: string
+  /** 传说特效（classic/stardust/flame/aurora/thunder）：UserTitleDto 全量透传，仅补类型 */
+  effect?: string
 }
 
 export interface ChatContactView {

@@ -24,7 +24,9 @@ import {
   parseShopPayload,
   sanitizeAvatarFrame,
   sanitizeTitleColor,
+  sanitizeTitleEffect,
   sanitizeTitleIcon,
+  TITLE_EFFECT_STYLES,
 } from '../src/lib/pointsRules.js'
 import {
   CROP_MAP,
@@ -210,6 +212,19 @@ assertEqual(sanitizeAvatarFrame('galaxy'), 'galaxy', 'galaxy 头像框合法')
 assertEqual(sanitizeAvatarFrame('rainbow'), null, '未知头像框样式回退 null')
 assertEqual(sanitizeAvatarFrame(''), null, '空头像框样式回退 null')
 assertEqual(sanitizeAvatarFrame(123), null, '非字符串头像框回退 null')
+
+assertEqual(TITLE_EFFECT_STYLES.length, 5, '传说特效共 5 种样式')
+assertEqual(
+  [...TITLE_EFFECT_STYLES],
+  ['classic', 'stardust', 'flame', 'aurora', 'thunder'],
+  '传说特效白名单依次为 classic/stardust/flame/aurora/thunder',
+)
+for (const style of TITLE_EFFECT_STYLES) {
+  assertEqual(sanitizeTitleEffect(style), style, `特效 ${style} 白名单内原样返回`)
+}
+assertEqual(sanitizeTitleEffect('nope'), null, '未知特效回退 null')
+assertEqual(sanitizeTitleEffect(123), null, '非字符串特效回退 null')
+assertEqual(sanitizeTitleEffect(null), null, 'null 特效回退 null')
 
 assertEqual(EMOJI_PACK_KEYS, ['nailong', 'felyne', 'twemoji'], '付费表情包 key 与客户端商店一致')
 

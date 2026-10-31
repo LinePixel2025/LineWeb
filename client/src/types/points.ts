@@ -1,3 +1,7 @@
+/** 传说称号动态特效白名单（与服务端 TITLE_EFFECT_STYLES 一致，顺序一致） */
+export const TITLE_EFFECTS = ['classic', 'stardust', 'flame', 'aurora', 'thunder'] as const
+export type TitleEffectStyle = typeof TITLE_EFFECTS[number]
+
 /** 站内称号（只在 LineWeb 内部展示，不写入 neko / 聊天服务） */
 export interface UserTitleDto {
   id: number
@@ -6,6 +10,8 @@ export interface UserTitleDto {
   icon: string
   /** 商品稀有度：legendary 会触发炸裂特效 */
   rarity: string
+  /** 传说特效（legendary 时的动态特效 key，非 legendary 忽略；非法值回退 classic） */
+  effect: string
 }
 
 /** 每日签到状态 */
@@ -53,6 +59,8 @@ export interface LeaderTitleDto {
   color: string
   icon: string
   rarity: 'legendary'
+  /** 传说特效（非法值由客户端回退 classic） */
+  effect: string
   awardedAt: string
 }
 
@@ -205,6 +213,8 @@ export interface AdminShopItem {
 export interface AdminPointsResponse {
   config: PointsConfig
   items: AdminShopItem[]
+  /** 单机榜一传说称号（自动授予，每游戏一位；管理端可调整特效） */
+  leaderTitles: Array<LeaderTitleDto & { holderName: string }>
   catalog: Array<{
     key: string
     name: string

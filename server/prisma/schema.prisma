@@ -867,6 +867,8 @@ model GameLeaderTitle {
   game              String   @unique
   userId            Int      @map("user_id")
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // 传说称号特效（TITLE_EFFECT_STYLES 白名单，管理员可改；重算 upsert 不写该字段故不会覆盖）
+  effect            String   @default("classic")
   awardedAt         DateTime @default(now()) @map("awarded_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
   equippedByUsers   User[]   @relation("UserEquippedLeaderTitle")

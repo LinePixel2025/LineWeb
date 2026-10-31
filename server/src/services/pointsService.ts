@@ -14,6 +14,7 @@ import {
   parseShopPayload,
   sanitizeAvatarFrame,
   sanitizeTitleColor,
+  sanitizeTitleEffect,
   sanitizeTitleIcon,
   type AvatarFrameStyle,
   type CheckinRule,
@@ -42,6 +43,8 @@ export interface UserTitleDto {
   icon: string
   /** 商品稀有度：legendary 在客户端触发炸裂特效 */
   rarity: string
+  /** 传说特效：classic/stardust/flame/aurora/thunder，非 legendary 忽略 */
+  effect: string
 }
 
 /** 头像框（只在 LineWeb 站内展示，不同步 neko） */
@@ -228,13 +231,14 @@ export function toUserTitleDto(item: { id: number; type: string; name: string; p
     color: sanitizeTitleColor(payload.color),
     icon: sanitizeTitleIcon(payload.icon),
     rarity: item.rarity,
+    effect: sanitizeTitleEffect(payload.effect) ?? 'classic',
   }
 }
 
 interface TitleOwnerRow {
   id: number
   equippedTitle: { id: number; type: string; name: string; payload: string | null; rarity: string } | null
-  equippedLeaderTitle: { id: number; game: string; userId: number } | null
+  equippedLeaderTitle: { id: number; game: string; userId: number; effect?: string } | null
 }
 
 /**
@@ -284,7 +288,7 @@ export async function getTitleMapForLineWebIds(
     select: {
       id: true,
       equippedTitle: { select: { id: true, type: true, name: true, payload: true, rarity: true } },
-      equippedLeaderTitle: { select: { id: true, game: true, userId: true } },
+      equippedLeaderTitle: { select: { id: true, game: true, userId: true, effect: true } },
     },
   })
   const map = new Map<number, UserTitleDto>()
@@ -453,7 +457,7 @@ export async function getPointsProfile(userId: number): Promise<PointsProfileDto
         pointsEarned: true,
         equippedTitle: true,
         equippedAvatarFrame: true,
-        equippedLeaderTitle: { select: { id: true, game: true, userId: true, awardedAt: true } },
+        equippedLeaderTitle: { select: { id: true, game: true, userId: true, effect: true, awardedAt: true } },
       },
     }),
     prisma.userPointsItem.findMany({
@@ -464,7 +468,7 @@ export async function getPointsProfile(userId: number): Promise<PointsProfileDto
     prisma.gameLeaderTitle.findMany({
       where: { userId },
       orderBy: { game: 'asc' },
-      select: { id: true, game: true, awardedAt: true },
+      select: { id: true, game: true, effect: true, awardedAt: true },
     }),
   ])
   if (!user) throw new AppError('用户不存在', 404)
@@ -532,7 +536,7 @@ export async function getPointsLeaderboard(params: {
         pointsEarned: true,
         equippedTitle: true,
         equippedAvatarFrame: true,
-        equippedLeaderTitle: { select: { id: true, game: true, userId: true } },
+        equippedLeaderTitle: { select: { id: true, game: true, userId: true, effect: true } },
       },
     }),
     prisma.user.findUnique({
@@ -544,7 +548,7 @@ export async function getPointsLeaderboard(params: {
         pointsEarned: true,
         equippedTitle: true,
         equippedAvatarFrame: true,
-        equippedLeaderTitle: { select: { id: true, game: true, userId: true } },
+        equippedLeaderTitle: { select: { id: true, game: true, userId: true, effect: true } },
       },
     }),
   ])
