@@ -4,8 +4,9 @@ import { z } from 'zod'
 import { AppError } from '../middleware/errorHandler.js'
 import { asyncHandler } from '../lib/asyncHandler.js'
 import { authenticate } from '../middleware/auth.js'
-import { config } from '../config/index.js'
 import { chatUserTargetSchema, chatSearchSchema, chatContactRemarkSchema } from '../config/index.js'
+import prisma from '../lib/prisma.js'
+import { linewebIdOf } from '../lib/chatIdentity.js'
 import {
   getSummary,
   searchUsers,
@@ -14,27 +15,19 @@ import {
   listFriendRequests,
   sendFriendRequest,
   respondFriendRequest,
-  getUserBrief,
-  areFriends,
 } from '../services/chatService.js'
 import { sendToUser } from '../services/chatHub.js'
-import {
-  assertNekoChatEnabled,
-  importFriendships,
-  linewebIdOf,
-  removeFriendOnNeko,
-  setFriendRemarkOnNeko,
-  toNekoId,
-} from '../services/nekoChat.js'
-import { ensureNekoAccounts } from '../services/nekoAccountSync.js'
+import { emitFriendHeadline } from '../services/chatMessaging.js'
+import { isNodeConnected, streamRead } from '../services/storageTunnel.js'
 
 /**
  * 好友关系 REST 路由（挂载于 /api/chat）
  *
- * 聊天（会话 / 消息 / 图片 / 群聊）已迁移到 neko XMPP 服务：
- *   - 本文件只保留好友申请、好友列表、用户搜索、摘要（好友关系仍是 LineWeb Prisma 唯一真相源）
- *   - 旧会话/消息端点全部返回 410 CHAT_MIGRATED，避免旧客户端静默写入只读存档
- *   - 新聊天走 /api/chat/xmpp/* + /ws/xmpp（见 routes/chatXmpp.ts）
+ * 聊天（会话 / 消息 / 群聊）自建于 /api/chat/xmpp/* + /ws/xmpp（见 routes/chatXmpp.ts）：
+ *   - 本文件保留好友申请、好友列表、用户搜索、备注（ChatContactSetting）与摘要
+ *     （好友关系是 Prisma 唯一真相源）
+ *   - 旧会话/消息端点维持 410 CHAT_MIGRATED，仅 GET /messages/:id/image 复活
+ *     （旧自建时期存档图片的直链，前端历史消息渲染用）
  */
 const router = Router()
 router.use(authenticate)
@@ -81,7 +74,7 @@ function parseIdParam(raw: string | undefined, name: string): number {
 
 // === 摘要与用户搜索 ===
 
-// GET /api/chat/summary — 待处理好友申请数（未读消息已改由客户端水位统计）
+// GET /api/chat/summary — 待处理好友申请数（未读消息由客户端水位统计）
 router.get('/summary', asyncHandler(async (req: Request, res: Response) => {
   const summary = await getSummary(currentUserId(req))
   res.json({ unreadTotal: 0, pendingFriendRequests: summary.pendingFriendRequests })
@@ -105,43 +98,34 @@ router.delete('/friends/:userId', chatWriteLimiter, asyncHandler(async (req: Req
   const userId = currentUserId(req)
   const friendId = parseIdParam(req.params.userId, '用户 ID')
   await removeFriend(userId, friendId)
-  // neko 侧可能残留好友行（同一 lw_* 账号也可能用原生客户端登录）：best-effort 清理
-  void removeFriendOnNeko(userId, toNekoId(friendId))
-  // 双方各自收到「对方已把你删除好友」事件
+  // 双方各自收到「对方已把你删除好友」事件（/ws/chat 角标 + 聊天面板刷新）
   sendToUser(friendId, { type: 'friend:removed', userId })
   sendToUser(userId, { type: 'friend:removed', userId: friendId })
+  emitFriendHeadline([userId, friendId], 'friend-update', userId)
   res.json({ ok: true })
 }))
 
 /**
  * PUT /api/chat/friends/remark — 设置联系人备注（仅自己可见，≤30 字，空串清除）
  *
- * LineWeb 好友：先幂等补齐 neko accepted 关系，再写 neko 备注；
- * neko 原生好友：直接由 neko 校验并写入。
+ * 自建聊天（2026-10 起）：备注存在 ChatContactSetting，不再写外部服务。
  */
 router.put('/friends/remark', chatWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
   const userId = currentUserId(req)
   const { nekoId, remark } = parseInput(chatContactRemarkSchema, req.body)
-  if (nekoId === toNekoId(userId)) throw new AppError('不能给自己设置备注', 400)
-  assertNekoChatEnabled()
-
   const linewebId = linewebIdOf(nekoId)
-  const me = await getUserBrief(userId)
+  if (!linewebId || linewebId === userId) throw new AppError('不能给自己设置备注', 400)
+  const target = await prisma.user.findUnique({
+    where: { id: linewebId },
+    select: { id: true, status: true },
+  })
+  if (!target || target.status !== 'active') throw new AppError('用户不存在', 404)
 
-  if (linewebId !== null && await areFriends(userId, linewebId)) {
-    // 先确保双方 neko 账号存在，再幂等补齐 accepted 关系（已存在时不会覆盖备注）
-    await ensureNekoAccounts([userId, linewebId])
-    await importFriendships([{
-      requesterId: toNekoId(userId),
-      addresseeId: nekoId,
-      requesterRemark: remark,
-      createdAt: Date.now(),
-    }])
-  } else if (linewebId === null && !config.nekoChatAllowNative) {
-    throw new AppError('当前不允许与 neko 原生账号设置备注', 403)
-  }
-
-  await setFriendRemarkOnNeko(me, nekoId, remark)
+  await prisma.chatContactSetting.upsert({
+    where: { ownerId_targetUserId: { ownerId: userId, targetUserId: linewebId } },
+    create: { ownerId: userId, targetUserId: linewebId, remark },
+    update: { remark },
+  })
   res.json({ ok: true, nekoId, remark })
 }))
 
@@ -160,6 +144,8 @@ router.post('/friend-requests', chatWriteLimiter, asyncHandler(async (req: Reque
     type: 'friend:request',
     request: { id: request.id, from, createdAt: request.createdAt },
   })
+  // 聊天面板的申请列表（requestsIn）靠 headline 驱动刷新
+  emitFriendHeadline([targetUserId], 'friend-request', userId)
   res.status(201).json({ request })
 }))
 
@@ -168,8 +154,15 @@ router.post('/friend-requests/:id/accept', chatWriteLimiter, asyncHandler(async 
   const userId = currentUserId(req)
   const requestId = parseIdParam(req.params.id, '好友申请 ID')
   const { request } = await respondFriendRequest(userId, requestId, 'accept')
-  const me = await getUserBrief(userId)
-  sendToUser(request.fromUserId, { type: 'friend:accepted', friend: me })
+  const me = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, username: true },
+  })
+  sendToUser(request.fromUserId, {
+    type: 'friend:accepted',
+    friend: me ?? { id: userId, username: '' },
+  })
+  emitFriendHeadline([request.fromUserId, userId], 'friend-update', request.fromUserId)
   res.json({ ok: true })
 }))
 
@@ -179,18 +172,61 @@ router.post('/friend-requests/:id/reject', chatWriteLimiter, asyncHandler(async 
   const requestId = parseIdParam(req.params.id, '好友申请 ID')
   const { request } = await respondFriendRequest(userId, requestId, 'reject')
   sendToUser(request.fromUserId, { type: 'friend:rejected', userId })
+  emitFriendHeadline([request.fromUserId], 'friend-update', request.fromUserId)
   res.json({ ok: true })
+}))
+
+// === 旧自建存档：图片直链 ===
+
+/**
+ * GET /api/chat/messages/:id/image — 旧存档图片消息直链（?token= 兼容）
+ *
+ * 旧自建聊天（2026-10-23~27）的图片存 _chat/<conversationId>/<uuid>.webp；
+ * 历史消息渲染与转发快照都经本端点取字节（前端会追加 ?token= 登录令牌）。
+ * 非成员 / 已撤回 / 无图片一律 404（不泄露存在性）。
+ */
+router.get('/messages/:id/image', asyncHandler(async (req: Request, res: Response) => {
+  const userId = currentUserId(req)
+  const messageId = parseIdParam(req.params.id, '消息 ID')
+  const message = await prisma.message.findUnique({
+    where: { id: messageId },
+    select: {
+      type: true,
+      imagePath: true,
+      imageSize: true,
+      recalledAt: true,
+      conversation: { select: { members: { select: { userId: true } } } },
+    },
+  })
+  const isMember = message?.conversation.members.some((member) => member.userId === userId)
+  if (!message || !isMember || message.type !== 'image' || message.recalledAt || !message.imagePath) {
+    throw new AppError('图片不存在', 404)
+  }
+  if (!isNodeConnected()) throw new AppError('存储节点未接入', 503)
+
+  const chunks: Buffer[] = []
+  try {
+    for await (const chunk of streamRead(message.imagePath)) chunks.push(chunk)
+  } catch {
+    throw new AppError('图片不存在', 404)
+  }
+  const data = Buffer.concat(chunks)
+  res.setHeader('Content-Type', 'image/webp')
+  res.setHeader('Content-Length', String(data.length))
+  if (message.imageSize !== null) res.setHeader('X-Image-Size', message.imageSize.toString())
+  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable')
+  res.send(data)
 }))
 
 // === 已迁移：旧会话 / 消息端点统一 410 ===
 
 /**
- * 旧聊天端点（会话、消息、图片、已读、群管理）已整体迁移到 neko XMPP 服务。
- * 返回 410 Gone + code CHAT_MIGRATED，让旧客户端明确失败而不是写入只读存档。
+ * 旧聊天端点（会话、消息写入、已读、群管理）已由自建聊天取代（/api/chat/xmpp/*）。
+ * 返回 410 Gone + code CHAT_MIGRATED，让旧客户端明确失败而不是写入存档。
  */
 const migratedHandler = (_req: Request, res: Response) => {
   res.status(410).json({
-    error: '聊天已迁移到 XMPP 服务，请刷新页面',
+    error: '聊天已迁移到自建服务，请刷新页面',
     code: 'CHAT_MIGRATED',
   })
 }
@@ -202,7 +238,6 @@ router.get('/conversations/:id/messages', migratedHandler)
 router.post('/conversations/:id/messages', migratedHandler)
 router.post('/conversations/:id/images', migratedHandler)
 router.post('/messages/:id/recall', migratedHandler)
-router.get('/messages/:id/image', migratedHandler)
 router.put('/conversations/:id/read', migratedHandler)
 router.put('/conversations/:id', migratedHandler)
 router.post('/conversations/:id/members', migratedHandler)

@@ -35,7 +35,9 @@ services:
   server:
     build: .
     ports:
-      - "3001:3001"
+      # 2026-10-31 起：对外端口改为 8780（容器内仍监听 3001）
+      # Cloudflare Tunnel 入口需同步指向 http://127.0.0.1:8780
+      - "8780:3001"
     environment:
       DATABASE_URL: ${DATABASE_URL:?请在 .env 中设置 DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET:?请在 .env 中设置 JWT_SECRET}
@@ -46,7 +48,11 @@ services:
       MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-10240}
       DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
       DATABASE_POOL_TIMEOUT: ${DATABASE_POOL_TIMEOUT:-30}
-      # 聊天（XMPP · neko 独立主机）：令牌只写在服务器 .env，仓库内仅占位
+      # 自建聊天（2026-10 起）：会话/消息落 Prisma，无外部依赖；仅大群可配置
+      CHAT_BIG_GROUP_ENABLED: ${CHAT_BIG_GROUP_ENABLED:-true}
+      CHAT_BIG_GROUP_NAME: ${CHAT_BIG_GROUP_NAME:-LineWeb 用户群}
+      CHAT_BIG_GROUP_SYNC_INTERVAL: ${CHAT_BIG_GROUP_SYNC_INTERVAL:-600000}
+      # 聊天双后端（可选）：配置了 neko XMPP 后，用户可在聊天设置切回 XMPP；不配即不出现该选项
       NEKO_CHAT_ENABLED: ${NEKO_CHAT_ENABLED:-false}
       NEKO_CHAT_INTERNAL_URL: ${NEKO_CHAT_INTERNAL_URL:-}
       NEKO_CHAT_TOKEN: ${NEKO_CHAT_TOKEN:-}
@@ -54,6 +60,7 @@ services:
       NEKO_CHAT_ACCOUNT_BASE: ${NEKO_CHAT_ACCOUNT_BASE:-1000000000000}
       NEKO_CHAT_USERNAME_PREFIX: ${NEKO_CHAT_USERNAME_PREFIX:-lw_}
       NEKO_CHAT_ALLOW_NATIVE: ${NEKO_CHAT_ALLOW_NATIVE:-true}
+      NEKO_CHAT_TIMEOUT_MS: ${NEKO_CHAT_TIMEOUT_MS:-10000}
       NEKO_LINEWEB_GROUP_ENABLED: ${NEKO_LINEWEB_GROUP_ENABLED:-true}
       NEKO_LINEWEB_GROUP_NAME: ${NEKO_LINEWEB_GROUP_NAME:-LineWeb 用户群}
       NEKO_LINEWEB_GROUP_SYNC_INTERVAL: ${NEKO_LINEWEB_GROUP_SYNC_INTERVAL:-600000}

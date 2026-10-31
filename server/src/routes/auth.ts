@@ -3,9 +3,9 @@ import rateLimit from 'express-rate-limit'
 import { AppError } from '../middleware/errorHandler.js'
 import { authenticate } from '../middleware/auth.js'
 import { registerUser, loginUser, getUserById, updateUserSettings, updateUserProfile, invalidateUserTokens } from '../services/authService.js'
+import { ensureNekoAccount } from '../services/nekoAccountSync.js'
 import { registerSchema, loginSchema, updateSettingsSchema, updateProfileSchema } from '../config/index.js'
 import { getErrorMessage, getErrorStatus } from '../lib/utils.js'
-import { ensureNekoAccount } from '../services/nekoAccountSync.js'
 import { requireFeature } from '../middleware/featureGuard.js'
 
 const router = Router()
@@ -30,7 +30,6 @@ router.post('/register', authLimiter, requireFeature('registration'), async (req
   const { username, email, password } = parsed.data
   try {
     const data = await registerUser(username, email, password)
-    // 待审核用户不创建 neko 聊天账号；管理员通过审批后再补建
     res.status(201).json({ ...data, message: '注册成功，等待管理员审核' })
   } catch (err: unknown) {
     if (getErrorStatus(err) === 409) {
@@ -84,7 +83,8 @@ router.put('/profile', authenticate, async (req: Request, res: Response) => {
 
   try {
     const result = await updateUserProfile(req.user!.userId, parsed.data)
-    // 改名后同步 neko displayName；kick 让在线端重连并刷新显示名（用户名 lw_<id> 不变）
+    // 用户名 lw_<id>（JID localpart）不随改名变化；改名后同步 neko displayName
+    // （kick 让 XMPP 后端的在线端重连并刷新显示名；未配置 neko 时内部 no-op）
     if (parsed.data.username) {
       void ensureNekoAccount(req.user!.userId, { kick: true })
     }

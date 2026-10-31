@@ -91,7 +91,6 @@ export default memo(function ChatConversationList({
           {list.map((conversation) => {
             const unread = formatUnread(conversation.unread)
             const active = conversation.key === activeKey
-            const isLobby = conversation.room?.isLobby
             const isBigGroup = conversation.room?.isBigGroup
             return (
               <li key={conversation.key} className={conversation.pinned ? 'gh-chat-conv-li--pinned' : undefined}>
@@ -114,8 +113,8 @@ export default memo(function ChatConversationList({
                     <span className="gh-chat-conv-top">
                       <span className="gh-chat-conv-name">
                         {conversation.kind === 'room' && (
-                          <span className={`gh-chat-group-tag ${isLobby || isBigGroup ? 'gh-chat-group-tag--official' : ''}`}>
-                            {isLobby ? '大厅' : isBigGroup ? '官方' : '群'}
+                          <span className={`gh-chat-group-tag ${isBigGroup ? 'gh-chat-group-tag--official' : ''}`}>
+                            {isBigGroup ? '官方' : '群'}
                           </span>
                         )}
                         <span className="gh-chat-name-text">{conversation.title}</span>

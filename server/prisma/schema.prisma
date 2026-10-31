@@ -19,6 +19,8 @@ model User {
   canAccessDrive         Boolean              @default(false) // 是否有网盘访问权限
   storageQuota           BigInt               @default(2147483648) @map("storage_quota") // 网盘空间上限（字节，默认 2 GiB）
   avatarPath             String?              @map("avatar_path") // 存储节点路径（如 _avatars/1.webp）
+  avatarVersion          Int                  @default(0) @map("avatar_version") // 聊天头像版本号（上传/删除自增，0 = 无头像）
+  chatBackend            String               @default("self") @map("chat_backend") // 聊天后端：self = 自建（默认）| xmpp = neko XMPP（可选）
   tokenValidAfter        DateTime             @default(now()) @map("token_valid_after") // JWT 失效校验基准时间
   gameStatsImportedAt    DateTime?            @map("game_stats_imported_at") // 本地战绩一次性迁移标记
   createdAt              DateTime             @default(now()) @map("created_at")
@@ -60,6 +62,10 @@ model User {
   farm                   Farm?
   farmStealsMade         FarmSteal[]          @relation("FarmStealThief")
   farmStealsReceived     FarmSteal[]          @relation("FarmStealVictim")
+  chatUploads            ChatUpload[] // 聊天图片/表情上传
+  chatStickers           ChatSticker[] // 聊天表情收藏
+  chatRemarksOwned       ChatContactSetting[] @relation("ChatContactOwner") // 我给别人设置的备注
+  chatRemarksTarget      ChatContactSetting[] @relation("ChatContactTarget") // 别人给我的备注行（仅对方视角）
   /**
    * 网页反代排队赦免：不受并发闸门限制（管理员另有 role 兜底）
    */
@@ -378,6 +384,11 @@ model Conversation {
   ownerId       Int?     @map("owner_id")
   directKey     String?  @unique @map("direct_key") // direct 会话去重键：`minUserId:maxUserId`
   lastMessageAt DateTime @default(now()) @map("last_message_at")
+  // 自建聊天（2026-10 起）：群公告与全员禁言（与旧 neko 群语义对齐）
+  announcementText         String?   @map("announcement_text")
+  announcementUpdatedAt    DateTime? @map("announcement_updated_at")
+  announcementAckRequired  Boolean   @default(false) @map("announcement_ack_required")
+  allMuted                 Boolean   @default(false) @map("all_muted")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -393,9 +404,14 @@ model ConversationMember {
   id                Int      @id @default(autoincrement())
   conversationId    Int      @map("conversation_id")
   userId            Int      @map("user_id")
-  role              String   @default("member") // owner | member
+  role              String   @default("member") // owner | admin | member
   joinedAt          DateTime @default(now()) @map("joined_at")
   lastReadMessageId Int      @default(0) @map("last_read_message_id")
+  // 自建聊天（2026-10 起）：会话级偏好与群管理状态
+  notifyMuted              Boolean   @default(false) @map("notify_muted") // 群免打扰（只提醒 @我 与拍一拍）
+  pinned                   Boolean   @default(false) // 会话置顶
+  announcementConfirmedAt  DateTime? @map("announcement_confirmed_at") // 最近一次确认群公告的时间
+  mutedUntil               DateTime? @map("muted_until") // 被禁言截止时间（null = 未禁言）
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -411,19 +427,72 @@ model Message {
   senderId       Int       @map("sender_id")
   content        String    @default("") // 文本正文；图片消息与已撤回消息为空串
   type           String    @default("text") // text | image
-  imagePath      String?   @map("image_path") // 存储节点相对路径 _chat/<conversationId>/<uuid>.webp
+  imagePath      String?   @map("image_path") // 存储节点相对路径（旧存档：_chat/<conversationId>/<uuid>.webp）
   imageWidth     Int?      @map("image_width")
   imageHeight    Int?      @map("image_height")
   imageSize      BigInt?   @map("image_size") // 处理后的字节数（计入网盘配额）
   recalledAt     DateTime? @map("recalled_at") // 非空 = 已撤回
+  // 自建聊天（2026-10 起）：引用 / @ / 富文本 / 合并转发快照
+  replyToId      Int?      @map("reply_to_id")
+  mentions       String? // JSON 数组：被 @ 的 neko id（0 = @所有人）
+  xhtml          String? // 净化后的 XHTML-IM 片段（图片/表情/拍一拍）
+  forwardBundle  String?   @map("forward_bundle") // 合并转发快照 JSON（[{u,n,t,b,h,r}…]）
+  recalledBy     Int?      @map("recalled_by") // 执行撤回的用户（群主/管理员撤回时 ≠ senderId）
+  uploadId       String?   @map("upload_id") // 24hex：引用的 ChatUpload（撤回时判断图片是否仍被其它消息引用）
   createdAt      DateTime  @default(now()) @map("created_at")
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo      Message?     @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies      Message[]    @relation("MessageReply")
 
   @@index([conversationId, id])
   @@index([senderId])
+  @@index([replyToId])
   @@map("messages")
+}
+
+/** 聊天图片/表情上传（raw body 直传，24hex id；存储节点 _chat/uploads/，storageSync 排除） */
+model ChatUpload {
+  id        String   @id // 24 位小写 hex
+  ownerId   Int      @map("owner_id")
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  path      String // 存储节点路径 _chat/uploads/<id>.<ext>
+  mime      String
+  size      Int // 处理后字节数（写入消息行 imageSize 的来源）
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([ownerId])
+  @@map("chat_uploads")
+}
+
+/** 聊天表情收藏（引用 ChatUpload 的 24hex id） */
+model ChatSticker {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  uploadId  String   @map("upload_id") // 24 位小写 hex
+  mime      String   @default("image/png")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, uploadId])
+  @@index([userId])
+  @@map("chat_stickers")
+}
+
+/** 联系人备注（仅自己可见；≤30 字） */
+model ChatContactSetting {
+  id           Int      @id @default(autoincrement())
+  ownerId      Int      @map("owner_id")
+  owner        User     @relation("ChatContactOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  targetUserId Int      @map("target_user_id")
+  target       User     @relation("ChatContactTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+  remark       String   @default("")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([ownerId, targetUserId])
+  @@index([targetUserId])
+  @@map("chat_contact_settings")
 }
 
 model ProxySite {

@@ -9,7 +9,7 @@ import {
   liftChatBan,
   listChatBans,
 } from '../services/chatBanService.js'
-import { closeUserChatSockets } from '../services/nekoWsProxy.js'
+import { closeUserChatSockets } from '../services/chatWsGateway.js'
 
 /**
  * 聊天治理（需 chat:manage）：封禁 / 解封账号的聊天入口。

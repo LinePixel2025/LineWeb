@@ -198,13 +198,17 @@ export interface XmppChatValue {
   acceptRequest: (request: NekoFriendRequest) => Promise<void>
   rejectRequest: (request: NekoFriendRequest) => Promise<void>
   addFriend: (linewebId: number) => Promise<void>
-  /** 向 neko 原生账号发起好友申请 */
-  addNativeFriend: (nekoId: number) => Promise<void>
   removeFriend: (contact: NekoContact) => Promise<void>
   /** 设置联系人备注（仅自己可见；空串清除） */
   setContactRemark: (nekoId: number, remark: string) => Promise<void>
   searchDirectory: (query: string) => Promise<NekoDirectoryUser[]>
   refresh: () => Promise<void>
+  /** 当前聊天后端（self=自建默认 / xmpp=neko）；仅 xmppAvailable 时可切换 */
+  chatBackend: 'self' | 'xmpp'
+  /** 服务端是否配置了 XMPP 服务 */
+  xmppAvailable: boolean
+  /** 切换聊天后端（服务端保存后自动重连到新后端） */
+  setChatBackend: (backend: 'self' | 'xmpp') => Promise<void>
   stickers: NekoSticker[]
   /** 全局新消息提示（仅非当前会话的实时消息；点击/自动消失后清空） */
   messageNotice: NekoMessageNotice | null
@@ -326,6 +330,9 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   const [historyMeta, setHistoryMeta] = useState<Record<string, HistoryMeta>>({})
   const [peerRead, setPeerRead] = useState<Record<string, number>>({})
   const [messageNotice, setMessageNotice] = useState<NekoMessageNotice | null>(null)
+  // 聊天双后端：self=自建（默认）/ xmpp=neko；切换由服务端保存 User.chatBackend 后重连生效
+  const [chatBackend, setChatBackendState] = useState<'self' | 'xmpp'>('self')
+  const [xmppAvailable, setXmppAvailable] = useState(false)
 
   // === 可变状态（事件回调里读，避免闭包过期）===
   const viewRef = useRef<ViewState>({ domain: '', mucDomain: '', self: null })
@@ -726,6 +733,8 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
     (view: NekoStateView) => {
       viewRef.current = { domain: view.domain, mucDomain: view.mucDomain, self: view.self }
       setSelf(view.self)
+      setChatBackendState(view.backend ?? 'self')
+      setXmppAvailable(!!view.xmppAvailable)
       pinnedRef.current = view.pinnedChats ?? []
       commitRooms(view.rooms ?? [])
       commitContacts(view.contacts ?? [])
@@ -960,7 +969,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       if (isRoom) {
         roomId = roomIdOfJid(el.attrs.from || '')
         if (!roomId) return
-        // 全员大厅与未加入的 room 一律丢弃
+        // 未加入的 room 一律丢弃（全员大厅已随 neko 移除）
         if (!roomsRef.current.some((room) => room.id === roomId)) return
         key = roomKeyOf(roomId)
       } else {
@@ -1043,6 +1052,8 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
     previewQueuedRef.current = new Set()
     previewRunningRef.current = 0
     setSelf(null)
+    setChatBackendState('self')
+    setXmppAvailable(false)
     setConversations([])
     setContacts([])
     setRooms([])
@@ -1302,6 +1313,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
     userId,
     chatEnabled,
     realtimeEnabled,
+    chatBackend,
     applyView,
     ensureLoaded,
     ensurePreviews,
@@ -1669,11 +1681,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
 
   const acceptRequest = useCallback(
     async (request: NekoFriendRequest) => {
-      if (request.source === 'neko') {
-        await api.post('/chat/xmpp/friends/respond', { requestId: request.id, accept: true })
-      } else {
-        await api.post(`/chat/friend-requests/${request.id}/accept`)
-      }
+      await api.post(`/chat/friend-requests/${request.id}/accept`)
       await refreshView()
       void refreshSummary()
     },
@@ -1682,11 +1690,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
 
   const rejectRequest = useCallback(
     async (request: NekoFriendRequest) => {
-      if (request.source === 'neko') {
-        await api.post('/chat/xmpp/friends/respond', { requestId: request.id, accept: false })
-      } else {
-        await api.post(`/chat/friend-requests/${request.id}/reject`)
-      }
+      await api.post(`/chat/friend-requests/${request.id}/reject`)
       await refreshView()
       void refreshSummary()
     },
@@ -1702,21 +1706,11 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
     [refreshSummary, refreshView],
   )
 
-  const addNativeFriend = useCallback(
-    async (nekoId: number) => {
-      await api.post('/chat/xmpp/friends/request', { nekoId })
-      await refreshView()
-    },
-    [refreshView],
-  )
-
   const removeFriend = useCallback(
     async (contact: NekoContact) => {
       if (contact.linewebId !== null) {
         await api.delete(`/chat/friends/${contact.linewebId}`)
         void refreshSummary()
-      } else {
-        await api.post('/chat/xmpp/friends/remove', { nekoId: contact.nekoId })
       }
       await refreshView()
     },
@@ -1768,6 +1762,19 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     await refreshView()
   }, [refreshView])
+
+  const setChatBackend = useCallback(
+    async (backend: 'self' | 'xmpp') => {
+      if (backend === chatBackend) return
+      const data = await api.put<{ ok: boolean; backend: 'self' | 'xmpp' }>(
+        '/chat/xmpp/backend',
+        { backend },
+      )
+      // 状态变化触发重连 effect：重新 bootstrap（读取新后端的数据）
+      setChatBackendState(data.backend ?? backend)
+    },
+    [chatBackend],
+  )
 
   const loadMoreFor = useCallback(
     (key: string) => {
@@ -1837,11 +1844,13 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       acceptRequest,
       rejectRequest,
       addFriend,
-      addNativeFriend,
       removeFriend,
       setContactRemark,
       searchDirectory,
       refresh,
+      chatBackend,
+      xmppAvailable,
+      setChatBackend,
       stickers,
       messageNotice,
       dismissMessageNotice,
@@ -1891,11 +1900,13 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       acceptRequest,
       rejectRequest,
       addFriend,
-      addNativeFriend,
       removeFriend,
       setContactRemark,
       searchDirectory,
       refresh,
+      chatBackend,
+      xmppAvailable,
+      setChatBackend,
       stickers,
       messageNotice,
       dismissMessageNotice,

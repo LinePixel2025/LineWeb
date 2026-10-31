@@ -183,17 +183,17 @@ describe('ChatThread', () => {
     expect(screen.queryByRole('menuitem', { name: '撤回' })).not.toBeInTheDocument()
   })
 
-  it('群成员中标记原生 neko 账号，群主可移出其他成员', async () => {
+  it('群成员列表渲染角色，群主可移出其他成员', async () => {
     const user = userEvent.setup()
     const onRemoveMember = vi.fn()
     const owner = { ...ALICE, role: 'owner' }
-    const nativeBob: NekoRoomMember = {
+    const bob: NekoRoomMember = {
       ...ALICE,
       nekoId: 1000000000003,
-      linewebId: null,
-      username: 'bob',
+      linewebId: 3,
+      username: 'lw_3',
       displayName: 'bob',
-      kind: 'native',
+      kind: 'lineweb',
     }
     const conversation = createConversation({
       key: 'r7',
@@ -215,11 +215,10 @@ describe('ChatThread', () => {
         announcementConfirmedAt: 0,
         notifyMuted: false,
         lastMessageAt: 0,
-        isLobby: false,
         isBigGroup: false,
-        members: [owner, nativeBob],
+        members: [owner, bob],
       },
-      members: [owner, nativeBob],
+      members: [owner, bob],
     })
 
     render(
@@ -234,7 +233,6 @@ describe('ChatThread', () => {
     await user.click(screen.getByRole('button', { name: '群聊操作' }))
     await user.click(screen.getByRole('menuitem', { name: /群成员/ }))
 
-    expect(screen.getByText('neko')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '移出' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '移出' }))
     expect(onRemoveMember).toHaveBeenCalledWith(1000000000003)
@@ -262,7 +260,6 @@ describe('ChatThread', () => {
         announcementConfirmedAt: 0,
         notifyMuted: false,
         lastMessageAt: 0,
-        isLobby: false,
         isBigGroup: false,
         members: [ALICE],
       },
@@ -296,7 +293,6 @@ describe('ChatThread', () => {
         announcementConfirmedAt: 0,
         notifyMuted: false,
         lastMessageAt: 0,
-        isLobby: false,
         isBigGroup: false,
         members: [ALICE],
       },
@@ -333,7 +329,6 @@ describe('ChatThread', () => {
         announcementConfirmedAt: 0,
         notifyMuted: false,
         lastMessageAt: 0,
-        isLobby: false,
         isBigGroup: false,
         members: [ALICE],
       },
@@ -380,7 +375,6 @@ describe('ChatThread', () => {
         announcementConfirmedAt: 0,
         notifyMuted: false,
         lastMessageAt: 0,
-        isLobby: false,
         isBigGroup: false,
         members: [ALICE],
       },

@@ -5,11 +5,11 @@ import { roleHasCapability } from '../lib/permissions.js'
  * 网盘空间配额服务
  *
  * 口径（全站统一）：
- *   - 「已用空间」= 网盘文件大小之和 + 该用户作为发送者的聊天图片大小之和
- *     + 该用户上传的 AI 对话图片大小之和
+ *   - 「已用空间」= 网盘文件大小之和 + 聊天图片占用 + 该用户上传的 AI 对话图片大小之和
  *     · 网盘文件：DriveFile.size（不含文件夹，文件夹 size 恒为 0）
- *     · 聊天图片：Message.imageSize，仅统计 type='image' 且未撤回（recalledAt IS NULL）
- *       —— 图片消息同时影响网盘与聊天，删除/撤回后立即释放空间
+ *     · 聊天图片：ChatUpload.size（自建聊天 2026-10 起按「上传」计费，含表情收藏；
+ *       撤回最后一处引用时删除文件并释放）+ 旧存档 Message.imageSize（仅统计
+ *       type='image' 且未撤回的存量行，新消息不再写 imageSize 以免与 ChatUpload 重复计费）
  *     · AI 对话图片：AiChatImage.size（含待发送附件，附件清理后自动释放）
  *   - 具备 drive:all 能力的角色（目前为 admin）不限空间，quota / remaining 返回 null
  *   - 普通用户的 quota 来自 User.storageQuota（默认 2 GiB）
@@ -20,9 +20,13 @@ import { roleHasCapability } from '../lib/permissions.js'
 
 /** 统计某用户已使用的空间（字节）= 网盘文件 + 聊天图片 + AI 对话图片；无记录时返回 0n */
 export async function getDriveUsage(userId: number): Promise<bigint> {
-  const [fileUsage, chatImageUsage, aiImageUsage] = await Promise.all([
+  const [fileUsage, chatUploadUsage, legacyChatImageUsage, aiImageUsage] = await Promise.all([
     prisma.driveFile.aggregate({
       where: { uploadedById: userId, isFolder: false },
+      _sum: { size: true },
+    }),
+    prisma.chatUpload.aggregate({
+      where: { ownerId: userId },
       _sum: { size: true },
     }),
     prisma.message.aggregate({
@@ -39,7 +43,10 @@ export async function getDriveUsage(userId: number): Promise<bigint> {
       _sum: { size: true },
     }),
   ])
-  return (fileUsage._sum.size ?? 0n) + (chatImageUsage._sum.imageSize ?? 0n) + BigInt(aiImageUsage._sum.size ?? 0)
+  return (fileUsage._sum.size ?? 0n)
+    + BigInt(chatUploadUsage._sum.size ?? 0)
+    + (legacyChatImageUsage._sum.imageSize ?? 0n)
+    + BigInt(aiImageUsage._sum.size ?? 0)
 }
 
 export interface DriveQuotaInfo {

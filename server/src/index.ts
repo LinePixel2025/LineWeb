@@ -43,8 +43,9 @@ import { requireChatNotBanned } from './middleware/chatBanGuard.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel, isNodeConnected } from './services/storageTunnel.js'
 import { initChatHub } from './services/chatHub.js'
-import { initNekoXmppProxy } from './services/nekoWsProxy.js'
+import { initChatWsGateway } from './services/chatWsGateway.js'
 import { initWebProxyWs } from './services/webProxyWs.js'
+import { startBigGroupSync, stopBigGroupSync } from './services/bigGroup.js'
 import { startNekoAccountSync, stopNekoAccountSync } from './services/nekoAccountSync.js'
 import { startLineWebBigGroupSync, stopLineWebBigGroupSync } from './services/nekoBigGroup.js'
 import { startGameSweeper } from './services/gameService.js'
@@ -362,20 +363,20 @@ app.get('/api', (_req, res) => {
       sell: { method: 'POST', path: '/api/stocks/sell', auth: true, description: '卖出全部持仓 { code }，到账积分写入台账' },
     },
     chat: {
-      note: '私信 / 群聊已迁移到独立 XMPP 服务（internet_neko）：消息与会话走 /api/chat/xmpp/*，浏览器经 /ws/xmpp 中继（不可用时降级 /api/chat/xmpp/http-* 长轮询）。好友关系仍以 LineWeb Prisma 为唯一真相源。',
-      summary: { method: 'GET', path: '/api/chat/summary', auth: true, description: '待处理好友申请数（unreadTotal 恒为 0，未读改由客户端水位统计）' },
+      note: '聊天自建（2026-10 起）：会话 / 消息 / 群聊全部落 Prisma，无外部依赖。消息走 /ws/xmpp（不可用时降级 /api/chat/xmpp/http-* 长轮询），协议与原 XMPP 中继完全兼容。好友关系以 LineWeb Prisma 为唯一真相源。',
+      summary: { method: 'GET', path: '/api/chat/summary', auth: true, description: '待处理好友申请数（unreadTotal 恒为 0，未读由客户端水位统计）' },
       friends: { method: 'GET', path: '/api/chat/friends', auth: true, description: '好友列表（DELETE /api/chat/friends/:userId 删除好友）' },
-      remark: { method: 'PUT', path: '/api/chat/friends/remark', auth: true, description: '设置联系人备注 { nekoId, remark }（≤30 字，空串清除，仅自己可见）' },
+      remark: { method: 'PUT', path: '/api/chat/friends/remark', auth: true, description: '设置联系人备注 { nekoId, remark }（≤30 字，空串清除，仅自己可见，存 ChatContactSetting）' },
       friendRequests: { method: 'GET', path: '/api/chat/friend-requests', auth: true, description: '收到/发出的好友申请；POST /api/chat/friend-requests 发送，POST /api/chat/friend-requests/:id/accept|reject 处理' },
-      bootstrap: { method: 'GET', path: '/api/chat/xmpp/bootstrap', auth: true, description: '一次性票据 + 过滤后的聊天状态（好友 / 有往来的原生联系人 / 群 / 申请 / 置顶）' },
+      bootstrap: { method: 'GET', path: '/api/chat/xmpp/bootstrap', auth: true, description: '一次性票据 + 聊天状态（好友 / 有往来的联系人 / 群 / 申请 / 表情 / 置顶）' },
       state: { method: 'GET', path: '/api/chat/xmpp/state', auth: true, description: '刷新聊天状态（轮询降级时使用）；GET /api/chat/xmpp/ticket 换新票据' },
-      directory: { method: 'GET', path: '/api/chat/xmpp/directory?q=', auth: true, description: '搜索 neko 用户（≤30 条；lw_* 只回好友；受 NEKO_CHAT_ALLOW_NATIVE 控制）；GET /api/chat/xmpp/users?jids= 反查陌生来信' },
-      rooms: { method: 'POST', path: '/api/chat/xmpp/rooms', auth: true, description: '建群 { name, memberIds }；群管理 POST /api/chat/xmpp/rooms/:id/name|members|leave|disband|role|transfer|mute|mute-all|announcement' },
+      directory: { method: 'GET', path: '/api/chat/xmpp/directory?q=', auth: true, description: '搜索站内用户（≤30 条）；GET /api/chat/xmpp/users?jids= 反查陌生来信' },
+      rooms: { method: 'POST', path: '/api/chat/xmpp/rooms', auth: true, description: '建群 { name, memberIds }；群管理 POST /api/chat/xmpp/rooms/:id/name|members|leave|disband|role|transfer|mute|mute-all|mute-notify|announcement|announcement-ack' },
       messages: { method: 'POST', path: '/api/chat/xmpp/messages/recall', auth: true, description: '撤回消息（5 分钟内，仅本人）；群主/管理员用 /messages/admin-recall' },
-      uploads: { method: 'POST', path: '/api/chat/xmpp/uploads', auth: true, description: '图片上传（multipart/form-data，字段名 file）→ {ok,url:"/chat/uploads/<24hex>",id,mime}；读取 GET /chat/uploads/:id?token=<登录令牌>' },
-      avatars: { method: 'GET', path: '/chat/avatars/:nekoId?v=&token=', auth: true, description: '聊天头像中继（头像存在 neko accounts.avatar；LineWeb 上传/删除头像时自动同步；?v=avatarVersion 用于缓存击穿）' },
-      legacy: { method: 'GET', path: '/api/chat/conversations', auth: true, description: '已废弃：会话/消息相关旧端点全部返回 410 CHAT_MIGRATED；旧 Prisma 聊天表与存储节点 _chat/ 图片仅作只读存档' },
-      ws: '实时连接：ws(s)://<host>/ws/xmpp?token=<登录令牌>（Express 字节级中继到 neko /xmpp-websocket，SASL/bind 由浏览器侧完成）。/ws/chat 保留给游戏与好友事件：连接后 5 秒内发送 {"type":"auth","token":"<登录令牌>"}，推送 game:* / friend:*，客户端 {type:"ping"} ↔ 服务端 {type:"pong"}，认证失败以 close code 4001 断开。',
+      uploads: { method: 'POST', path: '/api/chat/xmpp/uploads', auth: true, description: '图片上传（raw 二进制 body，魔数判定）→ {ok,url:"/chat/uploads/<24hex>",id,mime}；读取 GET /chat/uploads/:id?token=<登录令牌>' },
+      avatars: { method: 'GET', path: '/chat/avatars/:nekoId?v=&token=', auth: true, description: '聊天头像直链（存储节点 _avatars/<id>.webp；?v=avatarVersion 击穿缓存）' },
+      legacy: { method: 'GET', path: '/api/chat/conversations', auth: true, description: '已废弃：会话/消息相关旧端点返回 410 CHAT_MIGRATED（GET /api/chat/messages/:id/image 除外，供旧存档图片直链）' },
+      ws: '实时连接：ws(s)://<host>/ws/xmpp?token=<登录令牌>（自建网关：SASL PLAIN + bind 在浏览器侧完成，stanza 由服务端解析落库）。/ws/chat 保留给游戏与好友事件：连接后 5 秒内发送 {"type":"auth","token":"<登录令牌>"}，推送 game:* / friend:*，客户端 {type:"ping"} ↔ 服务端 {type:"pong"}，认证失败以 close code 4001 断开。',
     },
     aiChat: {
       quota: { method: 'GET', path: '/api/ai-chat/quota', auth: true, description: 'AI 对话功能开关与当日已用/剩余提问次数（Asia/Shanghai 0 点重置；dailyLimit=0 不限）' },
@@ -641,9 +642,9 @@ const server = http.createServer(app)
 // 初始化 WebSocket 隧道
 initStorageTunnel(server)
 
-// 聊天 XMPP 中继（/ws/xmpp）：必须在 initChatHub 之前注册，
+// 自建聊天 WS 网关（/ws/xmpp）：必须在 initChatHub 之前注册，
 // chatHub 会快照并转发未知路径的 upgrade
-initNekoXmppProxy(server)
+initChatWsGateway(server)
 
 // 网页反代 WebSocket 中继（/proxy-ws/:siteId）——同样必须在 initChatHub 之前注册
 initWebProxyWs(server)
@@ -658,9 +659,10 @@ startGameSweeper()
 startProxyStatsFlusher()
 refreshProxyBlacklist().catch((err) => console.warn('[proxy] 黑名单预热失败:', err instanceof Error ? err.message : err))
 
-// 聊天账号全量同步（延迟 10 秒，失败只告警，不影响站点启动）
+// 自建官方大群（延迟 20 秒；每 10 分钟对账一次，失败只告警）
+startBigGroupSync()
+// 聊天双后端：neko 账号全量同步 + neko 侧大群对账（未配置 NEKO_* 时内部 no-op）
 startNekoAccountSync()
-// LineWeb 用户大群（延迟 20 秒等账号同步完成；每 10 分钟对账一次）
 startLineWebBigGroupSync()
 
 // 网盘文件定期同步
@@ -717,6 +719,7 @@ const shutdown = (signal: string) => {
 
   clearInterval(syncInterval)
   clearTimeout(startupTimer)
+  stopBigGroupSync()
   stopNekoAccountSync()
   stopLineWebBigGroupSync()
 

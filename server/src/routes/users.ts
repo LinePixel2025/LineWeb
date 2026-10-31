@@ -7,6 +7,7 @@ import { adminSetAvatar } from '../services/avatarService.js'
 import { sendCommand, isNodeConnected } from '../services/storageTunnel.js'
 import { updateUserSchema, updateUserQuotaSchema, updateUserStatusSchema, updateUserRateLimitSchema } from '../config/index.js'
 import { authenticate, requireCapability } from '../middleware/auth.js'
+import { syncBigGroupMember } from '../services/bigGroup.js'
 import { deactivateNekoAccount, ensureNekoAccount } from '../services/nekoAccountSync.js'
 import { syncLineWebBigGroupMember } from '../services/nekoBigGroup.js'
 import { invalidateUserTokens } from '../services/authService.js'
@@ -222,10 +223,12 @@ router.put('/:id/status', async (req: Request, res: Response) => {
 
   if (target === 'rejected') {
     await invalidateUserTokens(id)
+    void syncBigGroupMember(id, false)
     void deactivateNekoAccount(id)
     void syncLineWebBigGroupMember(id, false)
   } else {
-    // 审核通过：补建聊天账号并加入 LineWeb 大群（失败不阻塞审批，周期对账会自愈）
+    // 审核通过：加入自建官方大群；补建 neko 账号并加入 neko 大群（聊天双后端，失败只告警）
+    void syncBigGroupMember(id, true)
     void ensureNekoAccount(id).then(() => syncLineWebBigGroupMember(id, true))
   }
 
@@ -452,7 +455,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
     }
   }
 
-  // 停用 neko 聊天账号并踢线（聊天记录保留，账号不可再登录），并移出 LineWeb 大群
+  // 移出自建官方大群 + 停用 neko 账号并移出 neko 大群
+  void syncBigGroupMember(id, false)
   await deactivateNekoAccount(id)
   void syncLineWebBigGroupMember(id, false)
 

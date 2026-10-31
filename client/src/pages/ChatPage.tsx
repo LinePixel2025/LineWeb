@@ -86,10 +86,12 @@ export default function ChatPage() {
     acceptRequest,
     rejectRequest,
     addFriend,
-    addNativeFriend,
     removeFriend,
     setContactRemark,
     searchDirectory,
+    chatBackend,
+    xmppAvailable,
+    setChatBackend,
   } = useXmppChat()
 
   const { visible: visibleAnnouncements } = useSiteAnnouncements()
@@ -99,7 +101,21 @@ export default function ChatPage() {
   const [dialogLoading, setDialogLoading] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [backendBusy, setBackendBusy] = useState(false)
   const [announcementDialogOpen, setAnnouncementDialogOpen] = useState(false)
+
+  /** 切换聊天后端（自建 ↔ XMPP）；成功后数据层自动重连到新后端 */
+  const handleChatBackend = async (backend: 'self' | 'xmpp') => {
+    if (backendBusy || backend === chatBackend) return
+    setBackendBusy(true)
+    try {
+      await setChatBackend(backend)
+    } catch (error) {
+      setActionError(errorMessage(error, '切换聊天服务失败'))
+    } finally {
+      setBackendBusy(false)
+    }
+  }
 
   /** 记录「曾经存在」的会话：之后从列表消失说明被移出/被解散，需要退回列表 */
   const seenKeyRef = useRef<string | null>(null)
@@ -362,19 +378,6 @@ export default function ChatPage() {
     [addFriend],
   )
 
-  const handleAddNativeFriend = useCallback(
-    async (nekoId: number) => {
-      setActionError(null)
-      try {
-        await addNativeFriend(nekoId)
-      } catch (error) {
-        setActionError(errorMessage(error, '发送好友申请失败'))
-        throw error
-      }
-    },
-    [addNativeFriend],
-  )
-
   const handleRemoveFriend = useCallback(
     async (contact: NekoContact) => {
       setActionError(null)
@@ -522,6 +525,38 @@ export default function ChatPage() {
                   <div className="gh-chat-settings-backdrop" onClick={() => setSettingsOpen(false)} />
                   <div className="gh-chat-settings" role="dialog" aria-label="聊天设置">
                     <p className="gh-chat-settings-title">聊天设置</p>
+                    {xmppAvailable && (
+                      <div className="gh-chat-settings-row gh-chat-settings-row--stack">
+                        <span className="gh-chat-settings-copy">
+                          <span className="gh-chat-settings-label">聊天服务</span>
+                          <span className="gh-chat-settings-hint">
+                            自建：消息存站点数据库（默认）。XMPP：独立聊天服务，显示它上面的历史消息；两侧消息互不相通，可随时切回。
+                          </span>
+                        </span>
+                        <div className="gh-chat-backend-switch" role="radiogroup" aria-label="聊天服务">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={chatBackend === 'self'}
+                            className={`gh-chat-backend-option ${chatBackend === 'self' ? 'gh-chat-backend-option--on' : ''}`}
+                            disabled={backendBusy}
+                            onClick={() => void handleChatBackend('self')}
+                          >
+                            自建
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={chatBackend === 'xmpp'}
+                            className={`gh-chat-backend-option ${chatBackend === 'xmpp' ? 'gh-chat-backend-option--on' : ''}`}
+                            disabled={backendBusy}
+                            onClick={() => void handleChatBackend('xmpp')}
+                          >
+                            XMPP
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <label className="gh-chat-settings-row">
                       <span className="gh-chat-settings-copy">
                         <span className="gh-chat-settings-label">聊天消息实时连接（WebSocket）</span>
@@ -562,6 +597,7 @@ export default function ChatPage() {
                       当前传输：{transport === 'ws' ? 'WebSocket' : 'HTTP 长轮询'}
                       {realtimeEnabled && transport === 'polling' ? '（正在尝试实时连接）' : ''}
                       {dndEnabled ? ' · 免打扰已开启' : ''}
+                      {xmppAvailable ? ` · 聊天服务：${chatBackend === 'xmpp' ? 'XMPP' : '自建'}` : ''}
                     </p>
                   </div>
                 </>
@@ -600,7 +636,6 @@ export default function ChatPage() {
                 searchUsers={searchUsers}
                 searchDirectory={searchDirectory}
                 onAddFriend={handleAddFriend}
-                onAddNativeFriend={handleAddNativeFriend}
                 onInviteGame={inviteGame}
                 onSetRemark={handleSetRemark}
               />

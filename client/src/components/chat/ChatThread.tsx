@@ -268,7 +268,6 @@ export default function ChatThread({
   const myRole = roomInfo?.myRole ?? ''
   const isOwner = conversation?.kind === 'room' && (myRole === 'owner' || myRole === 'admin')
   const isGroup = conversation?.kind === 'room'
-  const isLobby = !!roomInfo?.isLobby
   const isBigGroup = !!roomInfo?.isBigGroup
   const canEditAnnouncement = isGroup && isOwner
 
@@ -661,7 +660,7 @@ export default function ChatThread({
     ? [
         `${conversation.members.length} 位成员`,
         onlineMembers > 0 ? `${onlineMembers} 在线` : '',
-        isLobby ? '全员大厅' : isBigGroup ? 'LineWeb 官方大群' : '',
+        isBigGroup ? 'LineWeb 官方大群' : '',
       ].filter(Boolean).join(' · ')
     : conversation.contact
       ? conversation.contact.kind === 'native'
@@ -731,7 +730,6 @@ export default function ChatThread({
               <p className="gh-chat-thread-name">
                 <span className="gh-chat-thread-name-text">{title}</span>
                 {!isGroup && <UserTitleBadge title={conversation.contact?.title} />}
-                {isLobby && <span className="gh-chat-official-tag gh-chat-official-tag--lobby">大厅</span>}
                 {isBigGroup && <span className="gh-chat-official-tag">官方</span>}
                 {dndEnabled && (
                   <span className="gh-chat-dnd-tag" title="免打扰开启：新消息不会弹出提示，未读角标照常">
@@ -843,7 +841,7 @@ export default function ChatThread({
                   >
                     群成员（{conversation.members.length}）
                   </button>
-                  {isOwner && !isLobby && !isBigGroup && (
+                  {isOwner && !isBigGroup && (
                     <button
                       type="button"
                       role="menuitem"
@@ -856,7 +854,7 @@ export default function ChatThread({
                       添加成员
                     </button>
                   )}
-                  {isOwner && !isLobby && (
+                  {isOwner && (
                     <button
                       type="button"
                       role="menuitem"
@@ -870,10 +868,8 @@ export default function ChatThread({
                       修改群名
                     </button>
                   )}
-                  {(isLobby || isBigGroup) && (
-                    <p className="gh-chat-thread-menu-note">
-                      {isLobby ? '全员大厅由聊天服务维护，成员自动同步' : '官方大群由 LineWeb 自动维护成员'}
-                    </p>
+                  {isBigGroup && (
+                    <p className="gh-chat-thread-menu-note">官方大群由 LineWeb 自动维护成员</p>
                   )}
                 </div>
               )}
@@ -919,12 +915,11 @@ export default function ChatThread({
                     <span className="gh-chat-member-name">
                       <span className="gh-chat-name-text">{member.displayName || member.username}</span>
                       <UserTitleBadge title={member.title} />
-                      {member.kind === 'native' && <span className="gh-chat-member-tag">neko</span>}
-                      {member.online && <span className="gh-chat-member-online" title="在线" />}
+                        {member.online && <span className="gh-chat-member-online" title="在线" />}
                     </span>
                     {member.role === 'owner' && <span className="gh-chat-member-role">群主</span>}
                     {member.role === 'admin' && <span className="gh-chat-member-role">管理员</span>}
-                    {isOwner && !isLobby && !isBigGroup && !isMe && member.role !== 'owner' && (
+                    {isOwner && !isBigGroup && !isMe && member.role !== 'owner' && (
                       <button
                         type="button"
                         className="gh-btn gh-btn--danger gh-btn--sm"
@@ -941,10 +936,8 @@ export default function ChatThread({
               )}
             </ul>
             <div className="gh-chat-members-footer">
-              {isLobby || isBigGroup ? (
-                <span className="gh-chat-members-note">
-                  {isLobby ? '全员大厅成员自动同步，不可退出或解散' : '官方大群成员由 LineWeb 自动维护'}
-                </span>
+              {isBigGroup ? (
+                <span className="gh-chat-members-note">官方大群成员由 LineWeb 自动维护</span>
               ) : myRole === 'owner' ? (
                 <button type="button" className="gh-btn gh-btn--danger gh-btn--sm" onClick={onDissolve}>
                   解散群聊
@@ -1262,8 +1255,8 @@ export default function ChatThread({
           <div className="gh-dialog gh-chat-announce-dialog" role="dialog" aria-modal="true" aria-label="群公告">
             <div className="gh-chat-announce-dialog-head">
               <div>
-                <p className="gh-announce-eyebrow">neko · 群公告</p>
-                <h3 className="gh-dialog-title">{isLobby ? '全员大厅公告' : roomInfo.name}</h3>
+                <p className="gh-announce-eyebrow">群公告</p>
+                <h3 className="gh-dialog-title">{roomInfo.name}</h3>
               </div>
               <button
                 type="button"
@@ -1358,7 +1351,7 @@ export default function ChatThread({
             <div className="gh-chat-announce-dialog-head">
               <div>
                 <p className="gh-announce-eyebrow">需要确认的群公告</p>
-                <h3 className="gh-dialog-title">{isLobby ? '全员大厅公告' : roomInfo.name}</h3>
+                <h3 className="gh-dialog-title">{roomInfo.name}</h3>
               </div>
               <button
                 type="button"

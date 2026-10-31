@@ -597,3 +597,39 @@
   font-weight: 700;
   line-height: 15px;
 }
+
+/* === 聊天双后端设置（聊天服务：自建 / XMPP） === */
+.gh-chat-settings-row--stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.gh-chat-backend-switch {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.gh-chat-backend-option {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--gh-border, #d0d7de);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gh-fg-muted, #57606a);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.gh-chat-backend-option:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.gh-chat-backend-option--on {
+  border-color: var(--gh-accent, #0969da);
+  color: var(--gh-accent, #0969da);
+  background: color-mix(in srgb, var(--gh-accent, #0969da) 8%, transparent);
+  font-weight: 600;
+}

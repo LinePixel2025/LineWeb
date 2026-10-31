@@ -1733,36 +1733,39 @@ curl -s -X DELETE http://<ECS 公网 IP>:3001/api/posts/1 \
 
 ## 18. 聊天（Chat）
 
-好友 / 私聊 / 群聊与 WebSocket 实时推送的完整协议、请求示例与错误码见 **[`chat-api.md`](./chat-api.md)**。要点：
+完整协议、请求示例与错误码见 **[`chat-api.md`](./chat-api.md)**（第 0 章 = 自建聊天现行口径）。要点：
 
+- **聊天自建（2026-10-31 起）**：会话 / 消息 / 群聊 / 表情 / 置顶 / 备注 / 公告全部落 Prisma，无外部依赖。消息收发走 `ws(s)://<host>/ws/xmpp?token=<登录令牌>`（不可用时降级 `/api/chat/xmpp/http-*` 长轮询），协议与原 XMPP 中继完全兼容（前端零改动）。
 - 全部聊天端点要求**账号登录令牌**；OAuth 应用令牌与下载票据不可用。
-- 好友需申请 + 对方接受；仅好友可创建私聊；群主只能邀请自己的好友（群上限 50 人）。
-- 消息写入走 REST（`POST /api/chat/conversations/:id/messages` 纯文本 1–2000 字；`POST /api/chat/conversations/:id/images` 图片，multipart 字段名 `file`，服务端统一转 WebP 并计入发送者网盘配额），实时推送走 `ws(s)://<host>/ws/chat`（连接后 5 秒内发送 `{ "type": "auth", "token": "..." }`，认证失败 close code `4001`）。
-- 消息可在发出后 **2 分钟内撤回**（`POST /api/chat/messages/:id/recall`），双方收到 `message:recalled` 推送；图片通过 `GET /api/chat/messages/:id/image` 读取（支持 `?token=` 供 `<img src>` 使用）。
-- 未读数以 `GET /api/chat/summary` / 会话列表为准；断线重连后重新拉取，不依赖推送补全。
+- 好友需申请 + 对方接受（`/api/chat/friend-requests*`，Prisma 唯一真相源）；非好友单聊被拒绝；群成员上限 50；官方大群（全员自动加入）由服务端维护，不可退群/解散。
+- 消息 5 分钟内可撤回（`POST /api/chat/xmpp/messages/recall`，仅本人）；群主/管理员可用 `/messages/admin-recall`。引用回复 / 合并转发 / @ / 拍一拍 / 已读回执均走 `urn:wlxx:chat` stanza 扩展，由服务端落库与快照。
+- 图片上传 `POST /api/chat/xmpp/uploads`（raw 二进制 body，8MB，魔数复核）→ `{ok, url:"/chat/uploads/<24hex>", id, mime}`；**按上传计入发送者网盘配额**（撤回释放）；读取 `GET /chat/uploads/:id?token=<登录令牌>`。旧存档图片直链 `GET /api/chat/messages/:id/image`（成员校验）。
+- 聊天头像 `GET /chat/avatars/:nekoId?v=&token=`（存储节点 `_avatars/<id>.webp`，`User.avatarVersion` 击穿缓存）。
+- 实时事件（撤回 / 已读 / 群变更 / 好友申请）走 XMPP headline 帧；`/ws/chat` 保留给游戏与好友角标事件（连接后 5 秒内发 `{"type":"auth","token":"..."}`，认证失败 close 4001）。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/chat/summary` | 未读总数 + 待处理好友申请数 |
+| GET | `/api/chat/summary` | 待处理好友申请数（未读由客户端水位统计） |
 | GET | `/api/chat/users/search?q=` | 搜索用户（含好友关系） |
 | GET | `/api/chat/friends` | 好友列表 |
 | DELETE | `/api/chat/friends/:userId` | 删除好友（保留历史） |
+| PUT | `/api/chat/friends/remark` | 联系人备注 `{nekoId, remark}`（≤30 字，仅自己可见，存 ChatContactSetting） |
 | GET | `/api/chat/friend-requests` | 待处理好友申请 |
 | POST | `/api/chat/friend-requests` | 发送好友申请 |
 | POST | `/api/chat/friend-requests/:id/accept` / `reject` | 接受 / 拒绝 |
-| GET | `/api/chat/conversations` | 会话列表 |
-| POST | `/api/chat/conversations/direct` | 创建 / 获取私聊 |
-| POST | `/api/chat/conversations/group` | 创建群聊 |
-| GET | `/api/chat/conversations/:id/messages` | 历史消息（游标分页） |
-| POST | `/api/chat/conversations/:id/messages` | 发送文本消息 |
-| POST | `/api/chat/conversations/:id/images` | 发送图片消息（multipart/form-data，字段名 `file`） |
-| GET | `/api/chat/messages/:id/image` | 读取图片（成员校验；支持 `?token=` 直链） |
-| POST | `/api/chat/messages/:id/recall` | 撤回自己 2 分钟内发送的消息 |
-| PUT | `/api/chat/conversations/:id/read` | 标记已读 |
-| PUT | `/api/chat/conversations/:id` | 群主改群名 |
-| POST | `/api/chat/conversations/:id/members` | 群主加人 |
-| DELETE | `/api/chat/conversations/:id/members/:userId` | 退群 / 群主移人 |
-| DELETE | `/api/chat/conversations/:id` | 群主解散群 |
+| GET | `/api/chat/xmpp/bootstrap` | 一次性票据 + 聊天状态（好友/联系人/群/申请/表情/置顶） |
+| GET | `/api/chat/xmpp/ticket` / `state` | 换新票据 / 刷新状态 |
+| GET | `/api/chat/xmpp/directory?q=` | 搜索站内用户（≤30 条） |
+| GET | `/api/chat/xmpp/users?jids=` | 陌生来信反查 |
+| POST | `/api/chat/xmpp/rooms` | 建群 `{name, memberIds}` |
+| POST | `/api/chat/xmpp/rooms/:id/name\|members\|leave\|role\|transfer\|mute\|mute-all\|mute-notify\|disband\|announcement\|announcement-ack` | 群管理 |
+| POST | `/api/chat/xmpp/pins` | 置顶会话 |
+| POST | `/api/chat/xmpp/messages/recall` / `admin-recall` | 撤回（5 分钟本人 / 群主管理员） |
+| POST | `/api/chat/xmpp/uploads` | 图片上传（raw body） |
+| POST | `/api/chat/xmpp/stickers` / `stickers/remove` | 表情收藏 |
+| POST | `/api/chat/xmpp/http-session` / `http-stanza` / `http-close`、GET `http-poll` | 长轮询降级通道 |
+| GET | `/api/chat/messages/:id/image` | 旧存档图片直链（成员校验；`?token=` 兼容） |
+| GET | `/api/chat/conversations` 等旧端点 | 返回 410 `CHAT_MIGRATED`（会话/消息已迁自建协议） |
 
 ---
 

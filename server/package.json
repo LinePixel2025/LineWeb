@@ -23,10 +23,10 @@
     "verify:parkour": "tsx scripts/verify-parkour.ts",
     "verify:gamestats": "tsx scripts/verify-gamestats.ts",
     "verify:aichat": "tsx scripts/verify-aichat.ts",
-    "verify:neko": "tsx scripts/verify-neko-chat.ts",
     "verify:webproxy": "tsx scripts/verify-webproxy.ts",
     "verify:points": "tsx scripts/verify-points.ts",
-    "verify:stocks": "tsx scripts/verify-stocks.ts"
+    "verify:stocks": "tsx scripts/verify-stocks.ts",
+    "verify:chat": "tsx scripts/verify-chat.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

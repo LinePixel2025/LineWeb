@@ -294,9 +294,7 @@ export interface NekoRoom {
   announcementConfirmedAt: number
   notifyMuted: boolean
   lastMessageAt: number
-  /** neko 全员大厅：所有 neko 账号都在里面，名称 / 成员 / 退群不可管理 */
-  isLobby: boolean
-  /** LineWeb 用户大群：服务端自动维护成员，仅 lw_* 账号 */
+  /** LineWeb 用户大群：服务端自动维护成员（官方标记，不可退群/解散） */
   isBigGroup: boolean
   members: NekoRoomMember[]
 }
@@ -339,6 +337,10 @@ export interface NekoBootstrap {
   mucDomain: string
   historyLimit: number
   wsPath: string
+  /** 聊天后端：self = 自建（默认）/ xmpp = neko XMPP（双后端设置） */
+  backend?: 'self' | 'xmpp'
+  /** 服务端是否配置了 XMPP 服务（决定设置里是否出现「聊天服务」选项） */
+  xmppAvailable?: boolean
   self: NekoSelf
   friends: NekoContact[]
   contacts: NekoContact[]

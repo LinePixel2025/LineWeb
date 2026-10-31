@@ -56,27 +56,27 @@ export const config = {
   proxyUpstreamTimeoutMs: Math.max(5_000, parseInt(process.env.PROXY_UPSTREAM_TIMEOUT_MS || '60000', 10)),
   // 上游网络错误时的重试次数（0 = 不重试）
   proxyUpstreamRetries: Math.max(0, parseInt(process.env.PROXY_UPSTREAM_RETRIES || '1', 10)),
-  // === 聊天服务（neko XMPP）===
-  // 聊天已迁移到独立的 internet_neko XMPP 服务；本服务只做代理与账号映射，不存聊天数据。
-  // 令牌只在服务端使用（x-internal-token），绝不能下发浏览器；缺失时聊天降级为未配置。
+  // === 自建聊天（2026-10 起；会话/消息/群聊全部落 Prisma，无外部依赖） ===
+  // 身份映射、域与撤回窗口等常量内聚于 lib/chatIdentity.ts（前端协议硬契约）
+  // LineWeb 用户大群：服务端自动创建并维护成员
+  chatBigGroupEnabled: process.env.CHAT_BIG_GROUP_ENABLED !== 'false',
+  // === 聊天双后端（可选）：配置了 neko XMPP 服务后，用户可在聊天设置里切回 XMPP ===
+  // 生效条件：NEKO_CHAT_ENABLED=true 且 NEKO_CHAT_TOKEN 非空；未配置时「聊天服务」选项不出现。
   nekoChatEnabled: process.env.NEKO_CHAT_ENABLED === 'true' && !!process.env.NEKO_CHAT_TOKEN,
   nekoChatInternalUrl: (process.env.NEKO_CHAT_INTERNAL_URL || 'http://8.148.238.168:8090').replace(/\/+$/, ''),
   nekoChatToken: process.env.NEKO_CHAT_TOKEN || '',
   nekoChatWsPath: process.env.NEKO_CHAT_WS_PATH || '/xmpp-websocket',
-  // LineWeb 用户 id → neko 账号 id 的固定偏移（neko 账号 id 必须是整数）
   nekoChatAccountBase: parseInt(process.env.NEKO_CHAT_ACCOUNT_BASE || '1000000000000', 10),
-  // LineWeb 账号在 neko 侧的用户名前缀（固定不变，改名只更新 displayName）
   nekoChatUsernamePrefix: process.env.NEKO_CHAT_USERNAME_PREFIX || 'lw_',
-  // 是否允许与 neko 原生用户互通（好友关系仍只存在于 LineWeb 账号之间）
   nekoChatAllowNative: process.env.NEKO_CHAT_ALLOW_NATIVE !== 'false',
   nekoChatTimeoutMs: parseInt(process.env.NEKO_CHAT_TIMEOUT_MS || '10000', 10),
-  // 消息与未读口径（与 neko 服务端一致）
   nekoChatRecallWindowMs: 5 * 60 * 1000,
   nekoChatHistoryLimit: 30,
-  // LineWeb 用户大群（只含 lw_* 账号）：由服务端在 neko 上自动创建并维护成员
   nekoLinewebGroupEnabled: process.env.NEKO_LINEWEB_GROUP_ENABLED !== 'false',
   nekoLinewebGroupName: (process.env.NEKO_LINEWEB_GROUP_NAME || 'LineWeb 用户群').trim() || 'LineWeb 用户群',
   nekoLinewebGroupSyncIntervalMs: Math.max(60_000, parseInt(process.env.NEKO_LINEWEB_GROUP_SYNC_INTERVAL || '600000', 10)),
+  chatBigGroupName: (process.env.CHAT_BIG_GROUP_NAME || 'LineWeb 用户群').trim() || 'LineWeb 用户群',
+  chatBigGroupSyncIntervalMs: Math.max(60_000, parseInt(process.env.CHAT_BIG_GROUP_SYNC_INTERVAL || '600000', 10)),
 }
 
 export const registerSchema = z.object({

@@ -2,13 +2,7 @@ import sharp from 'sharp'
 import { Readable } from 'stream'
 import prisma from '../lib/prisma.js'
 import { streamWriteBinary, streamRead, sendCommand, isNodeConnected } from './storageTunnel.js'
-import {
-  ensureAccount,
-  fetchAvatar,
-  isNekoChatEnabled,
-  syncAvatarToNeko,
-  toNekoId,
-} from './nekoChat.js'
+import { ensureAccount, fetchAvatar, isNekoChatEnabled, syncAvatarToNeko, toNekoId } from './nekoChat.js'
 
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const MAX_FILE_SIZE = 2 * 1024 * 1024
@@ -19,10 +13,8 @@ function getAvatarPath(userId: number): string {
 }
 
 /**
- * 把 LineWeb 头像推给 neko（best-effort）。
- *
- * neko 的 `/internal/avatar` 要求账号已存在，因此先幂等同步账号；
- * 用户可能在还没打开过聊天时就上传头像，这一步不能省。
+ * 把 LineWeb 头像推给 neko（best-effort；仅当用户配置了 XMPP 后端时才有意义，
+ * 用于聊天服务切回 XMPP 的账号能看到头像）。
  */
 async function pushAvatarToNeko(userId: number, buffer: Buffer | null): Promise<void> {
   if (!isNekoChatEnabled()) return
@@ -105,11 +97,33 @@ export async function uploadAvatar(userId: number, buffer: Buffer, mimeType: str
   await streamWriteBinary(avatarPath, chunks, processed.length)
   await prisma.user.update({
     where: { id: userId },
-    data: { avatarPath },
+    // 自增版本号：聊天头像直链（/chat/avatars/<nekoId>?v=）用 ?v= 击穿浏览器缓存
+    data: { avatarPath, avatarVersion: { increment: 1 } },
   })
-  // 聊天头像以 neko 为准：上传后后台同步一份（失败只记日志，不拖慢头像上传）
+  // best-effort 同步到 neko（用户切回 XMPP 后端时头像可用；失败只记日志）
   void pushAvatarToNeko(userId, processed)
   return avatarPath
+}
+
+/**
+ * 补齐历史头像到 neko：bootstrap（XMPP 后端）时调用一次（best-effort）——
+ * neko 侧没有头像才从存储节点读 `_avatars/<id>.webp` 推送，已有头像直接跳过。
+ */
+export async function ensureAvatarSyncedToNeko(user: {
+  id: number
+  username: string
+}): Promise<void> {
+  if (!isNekoChatEnabled() || !isNodeConnected()) return
+  const avatarPath = await getAvatarPathByUserId(user.id)
+  if (!avatarPath) return
+  const existing = await fetchAvatar(toNekoId(user.id), {
+    id: user.id,
+    username: user.username,
+  }).catch(() => null)
+  if (existing) return
+  const chunks: Buffer[] = []
+  for await (const chunk of await getAvatarStream(avatarPath)) chunks.push(chunk)
+  await pushAvatarToNeko(user.id, Buffer.concat(chunks))
 }
 
 export async function getAvatarPathByUserId(userId: number): Promise<string | null> {
@@ -131,29 +145,6 @@ export async function adminSetAvatar(userId: number, buffer: Buffer, mimeType: s
   return uploadAvatar(userId, buffer, mimeType)
 }
 
-/**
- * 补齐历史头像：老用户在这个功能上线前上传的头像只存在 LineWeb 存储节点。
- *
- * 聊天页 bootstrap 时调用一次（best-effort）：neko 侧没有头像才读取存储节点并同步，
- * 已有头像直接跳过，避免每次登录都重置版本号导致缓存失效。
- */
-export async function ensureAvatarSyncedToNeko(user: {
-  id: number
-  username: string
-}): Promise<void> {
-  if (!isNekoChatEnabled() || !isNodeConnected()) return
-  const avatarPath = await getAvatarPathByUserId(user.id)
-  if (!avatarPath) return
-  const existing = await fetchAvatar(toNekoId(user.id), {
-    id: user.id,
-    username: user.username,
-  }).catch(() => null)
-  if (existing) return
-  const chunks: Buffer[] = []
-  for await (const chunk of await getAvatarStream(avatarPath)) chunks.push(chunk)
-  await pushAvatarToNeko(user.id, Buffer.concat(chunks))
-}
-
 export async function deleteAvatar(userId: number): Promise<void> {
   const avatarPath = await getAvatarPathByUserId(userId)
   if (avatarPath && isNodeConnected()) {
@@ -161,9 +152,9 @@ export async function deleteAvatar(userId: number): Promise<void> {
   }
   await prisma.user.update({
     where: { id: userId },
-    data: { avatarPath: null },
+    // 版本号同样自增：聊天侧用 ?v= 请求新地址，即使头像清空也能立刻看到回退
+    data: { avatarPath: null, avatarVersion: { increment: 1 } },
   })
-  // 聊天侧头像一并清除（best-effort；即使 LineWeb 侧没有头像也清一次，
-  // 避免历史遗留的 neko 头像继续显示）
+  // 聊天侧（neko）头像一并清除（best-effort；即使 LineWeb 侧没有头像也清一次）
   void pushAvatarToNeko(userId, null)
 }

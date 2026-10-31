@@ -18,15 +18,13 @@ interface Props {
   onAcceptRequest: (request: NekoFriendRequest) => void | Promise<void>
   onRejectRequest: (request: NekoFriendRequest) => void | Promise<void>
   onRemoveFriend: (contact: NekoContact) => void | Promise<void>
-  /** 发起私聊：好友传 NekoContact，搜索到的 neko 原生用户传 NekoDirectoryUser */
-  onStartDirect: (target: NekoContact | NekoDirectoryUser) => void | Promise<void>
+  /** 发起私聊 */
+  onStartDirect: (target: NekoContact) => void | Promise<void>
   /** LineWeb 用户搜索（LineWeb 好友申请走 Prisma） */
   searchUsers: (query: string) => Promise<ChatUser[]>
-  /** neko 目录搜索（可搜到原生账号） */
+  /** 站内用户搜索（目录口径，可发起会话的对象） */
   searchDirectory: (query: string) => Promise<NekoDirectoryUser[]>
   onAddFriend: (linewebId: number) => void | Promise<void>
-  /** 向 neko 原生账号发起好友申请 */
-  onAddNativeFriend: (nekoId: number) => void | Promise<void>
   /** 邀请好友进行联机对战（仅 LineWeb 好友可用；未传则不渲染按钮） */
   onInviteGame?: (linewebId: number) => void
   /** 设置联系人备注（未传则不渲染按钮） */
@@ -65,28 +63,18 @@ export default function FriendPanel({
   searchUsers,
   searchDirectory,
   onAddFriend,
-  onAddNativeFriend,
   onInviteGame,
   onSetRemark,
 }: Props) {
   const [query, setQuery] = useState('')
   const [users, setUsers] = useState<ChatUser[]>([])
-  const [natives, setNatives] = useState<NekoDirectoryUser[]>([])
   const [searching, setSearching] = useState(false)
   const [busyKey, setBusyKey] = useState<string | null>(null)
-  // 本次会话内已发出的原生好友申请（refresh 后以 outgoing 为准）
-  const [requestedNatives, setRequestedNatives] = useState<number[]>([])
-
-  const friendNekoIds = new Set(friends.map((friend) => friend.nekoId))
-  const outgoingNekoIds = new Set(
-    outgoing.filter((request) => request.source === 'neko').map((request) => request.nekoId),
-  )
 
   useEffect(() => {
     const keyword = query.trim()
     if (!keyword) {
       setUsers([])
-      setNatives([])
       setSearching(false)
       return
     }
@@ -97,13 +85,9 @@ export default function FriendPanel({
         searchUsers(keyword).catch(() => [] as ChatUser[]),
         searchDirectory(keyword).catch(() => [] as NekoDirectoryUser[]),
       ])
-        .then(([userList, directory]) => {
+        .then(([userList]) => {
           if (cancelled) return
           setUsers(userList)
-          const usernames = new Set(userList.map((user) => user.username))
-          setNatives(
-            directory.filter((user) => !user.isLineWeb && !usernames.has(user.username)),
-          )
         })
         .finally(() => {
           if (!cancelled) setSearching(false)
@@ -141,20 +125,6 @@ export default function FriendPanel({
     }
   }
 
-  const handleAddNative = async (user: NekoDirectoryUser) => {
-    setBusyKey(`add-native-${user.nekoId}`)
-    try {
-      await onAddNativeFriend(user.nekoId)
-      setRequestedNatives((prev) =>
-        prev.includes(user.nekoId) ? prev : [...prev, user.nekoId],
-      )
-    } catch {
-      // 错误由页面统一展示
-    } finally {
-      setBusyKey(null)
-    }
-  }
-
   if (loading) {
     return (
       <div className="gh-chat-list-state">
@@ -164,7 +134,7 @@ export default function FriendPanel({
     )
   }
 
-  const hasResults = users.length > 0 || natives.length > 0
+  const hasResults = users.length > 0
 
   return (
     <div className="gh-chat-friends">
@@ -173,7 +143,7 @@ export default function FriendPanel({
           className="gh-input gh-chat-search-input"
           type="search"
           value={query}
-          placeholder="搜索用户名或 neko 用户"
+          placeholder="搜索用户名"
           aria-label="搜索用户"
           onChange={(event) => setQuery(event.target.value)}
         />
@@ -206,59 +176,7 @@ export default function FriendPanel({
                 </li>
               )
             })}
-            {natives.map((user) => {
-              const rowKey = `native-${user.nekoId}`
-              const isFriend = friendNekoIds.has(user.nekoId)
-              const requested =
-                requestedNatives.includes(user.nekoId) || outgoingNekoIds.has(user.nekoId)
-              return (
-                <li key={rowKey} className="gh-chat-friend-row">
-                  <NekoAvatar
-                    nekoId={user.nekoId}
-                    avatarVersion={user.avatarVersion}
-                    fallbackId={avatarIdOf(user.linewebId, user.nekoId)}
-                    name={user.displayName || user.username}
-                    size="sm"
-                  />
-                  <span className="gh-chat-friend-name">
-                    <span className="gh-chat-name-text">{contactLabel(user)}</span>
-                    <UserTitleBadge title={user.title} />
-                    <span className="gh-chat-member-tag">neko</span>
-                  </span>
-                  <span className="gh-chat-friend-actions">
-                    {isFriend ? (
-                      <span className="gh-chat-friend-relation">已是好友</span>
-                    ) : requested ? (
-                      <span className="gh-chat-friend-relation">已发送申请</span>
-                    ) : (
-                      <button
-                        type="button"
-                        className="gh-btn gh-btn--secondary gh-btn--sm"
-                        disabled={busyKey === `add-native-${user.nekoId}`}
-                        onClick={() => void handleAddNative(user)}
-                      >
-                        加好友
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="gh-btn gh-btn--primary gh-btn--sm"
-                      disabled={busyKey === `chat-${rowKey}`}
-                      onClick={() => {
-                        setBusyKey(`chat-${rowKey}`)
-                        setQuery('')
-                        setUsers([])
-                        setNatives([])
-                        void onStartDirect(user)
-                        setBusyKey(null)
-                      }}
-                    >
-                      发消息
-                    </button>
-                  </span>
-                </li>
-              )
-            })}
+
           </ul>
         </section>
       )}
@@ -278,7 +196,6 @@ export default function FriendPanel({
                 />
                 <span className="gh-chat-friend-name">
                   {contactLabel(request)}
-                  {request.source === 'neko' && <span className="gh-chat-member-tag">neko</span>}
                 </span>
                 <span className="gh-chat-friend-actions">
                   <button
