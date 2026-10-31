@@ -43,6 +43,9 @@ export const apiLimiterSkipPaths = [
   /^\/games\/parkour\/presence\/?$/,
   // 聊天 XMPP 长轮询（25s 挂起）由路由内按用户限流接管
   /^\/chat\/xmpp\/http-/,
+  // 股市行情轮询（3 秒/次）由路由内按用户限流接管
+  /^\/stocks\/market\/?$/,
+  /^\/stocks\/market\/trend\/?$/,
 ]
 
 export function isHighFrequencyPath(req: Request): boolean {

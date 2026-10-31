@@ -303,6 +303,141 @@
   margin-top: 18px;
 }
 
+/* ===== 图表模式切换（分时 / 日线） ===== */
+.gh-stocks-chart-head {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px 2px;
+}
+.gh-stocks-chart-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 999px;
+  background: var(--gh-canvas-inset);
+}
+.gh-stocks-chart-tab {
+  border: none;
+  border-radius: 999px;
+  padding: 2px 12px;
+  background: none;
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  color: var(--gh-text-secondary);
+  cursor: pointer;
+  transition: background var(--gh-transition), color var(--gh-transition);
+}
+.gh-stocks-chart-tab:hover {
+  background: var(--gh-btn-hover);
+  color: var(--gh-text);
+}
+.gh-stocks-chart-tab--active {
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+}
+
+/* ===== 实时行情：异动 badge / 价格闪烁 ===== */
+.gh-stocks-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  line-height: 1.4;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.gh-stocks-badge--up { color: var(--gh-danger); }
+.gh-stocks-badge--down { color: var(--gh-success); }
+.gh-stocks-badge--strong {
+  font-weight: 700;
+  background: color-mix(in srgb, currentColor 20%, transparent);
+}
+
+.gh-stocks-flash-up,
+.gh-stocks-flash-down {
+  border-radius: 4px;
+  padding: 0 3px;
+  margin: 0 -3px;
+  animation-duration: 900ms;
+  animation-timing-function: ease-out;
+}
+.gh-stocks-flash-up { animation-name: gh-stocks-flash-up; }
+.gh-stocks-flash-down { animation-name: gh-stocks-flash-down; }
+
+@keyframes gh-stocks-flash-up {
+  0% { background-color: color-mix(in srgb, var(--gh-danger) 30%, transparent); }
+  100% { background-color: transparent; }
+}
+@keyframes gh-stocks-flash-down {
+  0% { background-color: color-mix(in srgb, var(--gh-success) 30%, transparent); }
+  100% { background-color: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-stocks-flash-up,
+  .gh-stocks-flash-down {
+    animation: none;
+  }
+}
+
+/* ===== 卖出对话框 ===== */
+.gh-stocks-sell-dialog { max-width: 420px; }
+.gh-stocks-sell-holding-line {
+  margin: 0 0 12px;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+.gh-stocks-sell-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gh-stocks-sell-label {
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+}
+.gh-stocks-sell-input { width: 130px; }
+.gh-stocks-sell-presets {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.gh-stocks-sell-error {
+  margin: 8px 0 0;
+  font-size: var(--gh-text-xs);
+  color: var(--gh-danger);
+}
+.gh-stocks-sell-preview {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-inset);
+}
+.gh-stocks-sell-preview > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.gh-stocks-sell-preview span {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+}
+.gh-stocks-sell-preview strong {
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  color: var(--gh-text);
+}
+
 @media (max-width: 860px) {
   .gh-stocks-layout { grid-template-columns: minmax(0, 1fr); }
   .gh-stocks-detail-stats { grid-template-columns: repeat(2, minmax(80px, auto)); }

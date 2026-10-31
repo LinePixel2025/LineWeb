@@ -1,9 +1,10 @@
 /**
  * 模拟股市交易规则（纯函数，禁止 import prisma / 网络依赖）。
  *
- * 玩家用统一积分买入虚构股票，行情每天 0 点（Asia/Shanghai）刷新一次，
- * 卖出时按当日收盘价结算。买卖双向各收 1% 手续费（单笔最少 1 积分），
- * 因此「当天买当天卖」必然小幅亏损，收益来自跨日行情波动。
+ * 玩家用统一积分按实时价买卖虚构股票：行情每 3 秒推进一个 tick（见 stockTicks.ts），
+ * 价格随行情实时变动，玩家交易本身还会小幅影响价格（10 分钟半衰期衰减）。
+ * 买卖双向各收 1% 手续费（单笔最少 1 积分）——手续费仍是固定的摩擦成本，
+ * 但盈亏主要由持仓期间的实时行情波动决定，不再有「每天 0 点刷新」的保底价差。
  */
 
 /** 单边手续费率 */
@@ -62,6 +63,16 @@ export function positionMarketValue(shares: number, price: number): number {
 /** 持仓盈亏：市值 - 累计投入（含买入手续费） */
 export function positionProfit(marketValue: number, costPoints: number): number {
   return marketValue - costPoints
+}
+
+/**
+ * 部分卖出的成本分摊：按卖出份额占总份额的比例等比分摊，四舍五入后夹在 [0, costPoints]。
+ * 整仓（shares = totalShares）时恰好返回全部成本，保持旧的一次性清仓语义。
+ */
+export function splitCostForShares(costPoints: number, shares: number, totalShares: number): number {
+  if (!(totalShares > 0) || !(shares > 0)) return 0
+  const portion = Math.round((costPoints * shares) / totalShares)
+  return Math.max(0, Math.min(costPoints, portion))
 }
 
 /** 盈亏百分比（两位小数；成本为 0 时按 0 处理） */

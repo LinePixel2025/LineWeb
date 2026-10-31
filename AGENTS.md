@@ -404,12 +404,12 @@ cd storage-node && python main.py     # 本地 Windows 存储节点，config.jso
 - **每日签到**：`DailyCheckin`（`userId + dateKey` 唯一，Asia/Shanghai 日界），奖励 `base + min(streakMaxBonus, (streak-1) × streakStep)`，重复签到 409 `CHECKIN_DONE`；`GET /api/points/me` 的 `checkin` 下发今日/连签/明日可得。
 - **头像框**：`PointsShopItem.type = avatar_frame`，payload `frame` 白名单 `gold|neon|sakura|galaxy`；佩戴写 `User.equippedAvatarFrameId`，只在 LineWeb 站内展示（`UserAvatar` 外框包裹层），**不同步 neko**；头像框种子标记独立（`points.shop.frames.seeded`），不会复活已删商品。
 - **单机榜一传说称号**：`GameLeaderTitle`（每个 game 一行）；扫雷以 `expert` 为代表项（`SOLO_LEADER_VARIANTS`），其余为 `solo`；`recordSoloResult` 提交后按游戏 2s debounce 重算 + 启动 30s 全量重算；仅换人时发 `leader_bonus`（同日同游戏 `PointsLedger` 去重，`game:null` 不占游戏日上限）。前端 `UserTitleBadge` 支持 `rarity=legendary` 金色流光（`prefers-reduced-motion` 关闭）。
-- **模拟股市**：`server/src/lib/stockMarket.ts` 用 mulberry32 按 `dateKey + code` 生成 8 只虚构股票的 30 日 OHLC（同日稳定、相邻日连续），`GET /api/stocks/market` 只读、不可交易、零收益；功能键 `stock`（分组「工具」），前端 `/stocks` 进入前弹窗声明「模拟行情」。
+- **模拟股市**（2026-10-31 起实时化，详见下方「股市实时化」章节）：日线锚点仍由 `server/src/lib/stockMarket.ts` mulberry32 确定性生成（8 只股票 30 日 OHLC、同日稳定、相邻日连续）；报价改为 3 秒 tick 实时行情（`stockTicks.ts`），玩家交易小幅影响价格；功能键 `stock`（分组「工具」），前端 `/stocks` 进入前弹窗声明「模拟行情」。
 - **聊天治理（`chat:manage`）**：`/admin/chat` 搜索账号并封禁/解封；`ChatBan` 表 + 30s 内存缓存，`/api/chat*`、聊天图片/头像直链与 `/ws/xmpp` 握手返回 `403 CHAT_BANNED`（含原因），封禁时通过自定义关闭码 4003 断开该账号全部聊天会话（WS + 长轮询）；管理员不可被封禁。聊天页对封禁显示整页说明并停止重连。
 - **免打扰 / 快速回复（纯前端）**：`localStorage lineweb_chat_dnd` 控制全局新消息 Toast（`pushMessageNotice` 首行短路），未读与 @ 角标照常；会话头部显示「免打扰中」。新消息提示内新增「快速回复」：4 个常用短语 + 输入框直接 `sendText` 到该会话、不跳页，展开时暂停自动消失。
 - **新增表**：`FarmMerchantOffer`、`DailyCheckin`、`GameLeaderTitle`、`ChatBan` 与 `Farm.lastSeedDropDate`、`User.equippedAvatarFrameId` 均为 additive；`prisma db push` 即可。
 - **新路由/管理页**：`/api/farm/merchant/:offerId/buy`、`POST /api/points/checkin`、`POST /api/points/shop/:id/equip-frame`、`DELETE /api/points/equipped-frame`、`/api/stocks/market`、`/api/admin/chat/*`；管理页 `/admin/chat`，积分/农场/签到/榜一参数集中在 `/admin/points`。
-- **自检**：`cd server && npm run verify:points`（337）、`verify:gamestats`（81）、`verify:stocks`（569）；`cd client && npm run test`（48 文件 / 538 用例）。
+- **自检**：`cd server && npm run verify:points`（337）、`verify:gamestats`（81）、`verify:stocks`（9199）；`cd client && npm run test`（48 文件 / 538 用例）。
 - **部署**：2026-10-29 已按本地产物链路上线（`781bb62`）：本地 `cd client && npm run build` → dist 覆盖 `/opt/lineweb/client-dist` → `docker build -f Dockerfile.prebuilt` + `docker compose up -d`；容器启动日志显示 PostgreSQL schema 同步完成。
 
 ---
@@ -419,9 +419,21 @@ cd storage-node && python main.py     # 本地 Windows 存储节点，config.jso
 - **称号特效由 `rarity` 驱动**：`UserTitleDto` 统一带 `rarity`（shop 商品继承配置；榜一传说恒为 `legendary`）；`UserTitleBadge` 在 `rarity==='legendary'` 时渲染光环 + 4 颗粒子火花 + 旋转锥形光线（`points.css`，`prefers-reduced-motion` 降级为静态）。凡是走统一 DTO 的位置（顶部导航、个人资料、积分榜、战绩榜、农场邻居/地主、聊天 titleMap）自动带特效。
 - **统一“有效称号”口径**：`effectiveTitleDto()` 依次取 已佩戴商店称号 → 已佩戴榜一称号（必须仍属于本人）→ 无；`setEquippedTitle` 与 `setEquippedLeaderTitle` 互斥，`DELETE /api/points/equipped-title` 两者一起清空；榜一称号易主时 `gameLeaderTitleService` 在重算事务内清空旧主的 `equippedLeaderTitleId`。
 - **榜一称号佩戴**：`User.equippedLeaderTitleId` + `GameLeaderTitle.id` 关系（additive）；`POST /api/points/leader-titles/:id/equip`，`GET /api/points/me` 下发 `equippedLeaderTitle`，`/api/points/shop` 下发 `equippedLeaderTitleId`。
-- **股市积分投资**：`StockHolding`（`userId+code` 唯一，`shares Float`、`costPoints Int`）；买卖各收 1% 手续费（最低 1 积分），单笔 100–100,000 积分，`quoteStockBuy` / `quoteStockSell` 纯函数在 `server/src/lib/stockTrading.ts`；`POST /api/stocks/buy`（`stock_buy` 流水）、`POST /api/stocks/sell`（`stock_sell` 流水）、`GET /api/stocks/portfolio`；行情仍按 `dateKey + code` 确定性生成，当日往返必亏手续费，跨日才有涨跌收益。
-- **自检**：`cd server && npm run verify:stocks`（591）、`verify:points`（337）、`verify:gamestats`（81）；`cd client && npm run test`（48 文件 / 538 用例）+ `npm run build`。
+- **股市积分投资**：`StockHolding`（`userId+code` 唯一，`shares Float`、`costPoints Int`）；买卖各收 1% 手续费（最低 1 积分），单笔 100–100,000 积分，`quoteStockBuy` / `quoteStockSell` 纯函数在 `server/src/lib/stockTrading.ts`；`POST /api/stocks/buy`（`stock_buy` 流水）、`POST /api/stocks/sell`（`stock_sell` 流水，支持 `shares` 部分卖出）、`GET /api/stocks/portfolio`；行情为 3 秒实时 tick（见「股市实时化」章节），玩家买卖会小幅推动价格，当日往返不再「必亏」但手续费仍是固定摩擦成本。
+- **自检**：`cd server && npm run verify:stocks`（9199）、`verify:points`（337）、`verify:gamestats`（81）；`cd client && npm run test`（48 文件 / 538 用例）+ `npm run build`。
 - **数据库**：`StockHolding`、`User.equippedLeaderTitleId`、`GameLeaderTitle.id` 均为 additive，`prisma db push` 即可；部署仍走本地产物链（不要在 ECS 上 `docker compose up --build`）。
+
+---
+
+## 2026-10-31 股市实时化：3 秒 tick 行情引擎 + 玩家交易冲击（实现口径）
+
+- **删除「闭市」机制**：行情不再「当天冻结在当日 close、0 点刷新」，改为 **3 秒一 tick 的实时行情**（`STOCK_TICK_MS = 3000`、每日常数 28800 tick，`server/src/lib/stockTicks.ts`）；日线锚点与 30 日历史 K 线全部不变（`simulateStock` 日生成器原样保留，历史数据零变化）。
+- **三层价格模型**：① 日线锚点（不动）；② 秒级基准路径 `basePath(tick) = anchor(tick) × (1 + noise(tick))`，anchor 由今日 open 线性插值到今日 close，noise 为 OU 式均值回归随机游走（种子 `lineweb-stock-tick:${code}:${dateKey}`，σ_tick = volatility × √(TICK_MS/86_400_000) × 2.0，每 tick ×0.993 回归），按 (dateKey, code) 惰性延展 + 双 Float64Array 缓存（basePath + 物化价，约 460KB/股/日，只保留当日），重启从 tick 0 重算 → **重启价格零跳变**；③ 玩家冲击 `impact`：`livePrice = basePath(tick) × (1 + impact)`，买入 `impact += points × 2e-7`（每 1 万积分 +0.2%）、卖出按毛收入负向，clamp ±5%，读时惰性指数衰减（半衰期 10 分钟），**无定时器**。
+- **冲击持久化**：`SiteSetting('stock.marketImpact')` JSON（`{savedAt, impacts}`），在买卖事务内与积分扣减原子 upsert；启动懒加载并按 savedAt 差值衰减，解析失败一律重置为 0。lib 层（`stockTicks.ts`）不 import prisma，读写留在 `stockService.ts`。
+- **零玩家也活跃 / 50 人可运作**：行情由确定性引擎驱动，不依赖任何玩家参与（模拟资金托底）；`/market` 与 `/market/trend` 加入 `apiLimiterSkipPaths` 全局限流豁免（游戏 sync 同款机制），路由级限流 market 40/min、trend 20/min、交易仍 60/5min（均按用户、admin 豁免）；纯内存计算，50 用户 × 3s 轮询 ≈ 17 QPS。
+- **API 变更**：`GET /api/stocks/market` 轻量化（`StockQuote` 去掉内嵌 history，新增 `tickMs/tickIndex/updatedAt`，disclaimer 改「每 3 秒刷新…玩家交易会小幅影响价格」）；新增 `GET /api/stocks/market/trend?code=`（近 30 根日线——今日一根为实时 candle——+ 今日分时采样点每 60s 一点，`t` = 当日 00:00 Asia/Shanghai 起毫秒）；`POST /api/stocks/sell` 支持 `shares?` **部分卖出**（缺省整仓向后兼容；成本等比分摊 `splitCostForShares`，返回新增 `remainingShares/closed`）；买卖成交价与持仓估值全部按实时价（`getLiveQuoteByCode`）。
+- **前端**（`StocksPage.tsx` + `types/stock.ts` + `stocks.css`）：行情 3s 轮询（`document.hidden` 暂停、失败保留旧数据 + 10s 退避自愈、visibilitychange 恢复可见立即刷新）、走势 30s 轮询 + 切换股票即拉（过期响应按自增 id 丢弃）；图表「分时 / 日线」双模式切换（分时含昨收虚线基准与实时末端点）；卖出对话框支持 25%/50%/全部 份额快捷 + 预估到账；`|涨跌幅| ≥5%` 「异动」、`≥9%` 「强烈异动」badge（纯提示，不限制交易）+ 价格红绿闪烁（`prefers-reduced-motion` 降级）；`client/src/lib/features.ts` 与 `server/src/lib/features.ts` 的 stock 描述同步为实时口径。
+- **无 schema 变更**（复用 SiteSetting）；自检 `cd server && npm run verify:stocks`（9199 断言：日线回归 + tick 确定性/噪声有界/日界衔接/冲击纯函数与序列化容错/新 DTO 契约/分时采样）；`cd client && npx tsc --noEmit` + `npm run build` + `npm run test`（48 文件 / 538 用例）；部署仍走本地产物链（不要在 ECS 上 `docker compose up --build`）。
 
 ---
 

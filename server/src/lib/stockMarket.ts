@@ -1,10 +1,14 @@
 /**
- * 股市「模拟行情」。
+ * 股市「模拟行情」—— 日线锚点层。
  *
  * 全部数据由确定性随机数生成：
  * - 每只股票用固定种子（取股票代码）从固定纪元开始做带均值回归的随机游走，
  *   因此相邻两天的 30 日走势天然衔接，同一天重复请求结果完全一致；
  * - 不使用数据库、不写任何文件，也不消耗外部接口。
+ *
+ * 本文件是「每日一价」的确定性日线生成器（历史 K 线唯一真相源）；
+ * 秒级实时行情（3 秒一 tick + 玩家交易冲击）由 `stockTicks.ts` 在日线锚点上延展，
+ * 对外 API 一律走 stockTicks 的实时报价。
  *
  * 交易（积分买入 / 卖出）的纯函数规则见 `stockTrading.ts`。
  */
@@ -68,13 +72,19 @@ export interface StockQuoteDto {
   /** 涨跌幅（百分比数值，如 1.23 表示 +1.23%） */
   changePct: number
   volume: number
-  /** 最近 30 个自然日的走势（含今日） */
-  history: StockCandle[]
 }
 
 export interface StockMarketDto {
   dateKey: string
-  /** 交易日固定为请求日，行情「当天不变、次日刷新」 */
+  /**
+   * 实时 tick 引擎信息（由 stockTicks.buildLiveMarket 填写）：
+   * tickMs = 行情刷新间隔毫秒、tickIndex = 当日第几个 tick、updatedAt = 报价时间 ISO。
+   * 日线构建器 buildStockMarket 不产生这三个字段（历史走势本身不含实时状态）。
+   */
+  tickMs?: number
+  tickIndex?: number
+  updatedAt?: string
+  /** 交易日固定为请求日 */
   currency: string
   disclaimer: string
   /** 交易规则（手续费率 / 单笔投入上下限） */
@@ -114,12 +124,14 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100
 }
 
-function dateKeyToUtc(dateKey: string): number {
+/** 日期键（YYYY-MM-DD）→ 当日 UTC 0 点毫秒（Asia/Shanghai 0 点 = 该值 − 8 小时） */
+export function dateKeyToUtc(dateKey: string): number {
   const [year, month, day] = dateKey.split('-').map((part) => Number(part))
   return Date.UTC(year, (month || 1) - 1, day || 1)
 }
 
-function utcToDateKey(ms: number): string {
+/** UTC 毫秒 → 日期键（YYYY-MM-DD） */
+export function utcToDateKey(ms: number): string {
   const date = new Date(ms)
   const year = date.getUTCFullYear()
   const month = String(date.getUTCMonth() + 1).padStart(2, '0')
@@ -204,18 +216,22 @@ function quoteOf(definition: StockDefinition, series: SimulatedDay[]): StockQuot
     change,
     changePct,
     volume: today.volume,
-    history: series.map((day) => ({
-      date: day.date,
-      open: day.open,
-      high: day.high,
-      low: day.low,
-      close: day.close,
-      volume: day.volume,
-    })),
   }
 }
 
-/** 构建某一天的全市场行情（纯函数，同参数同结果） */
+/** 取某只股票截至 dateKey 的近 30 根日线（含今日），供秒级 tick 引擎取锚点 / 前端画日 K */
+export function getStockDailySeries(definition: StockDefinition, dateKey: string): StockCandle[] {
+  return simulateStock(definition, dayIndexSinceEpoch(dateKey), STOCK_HISTORY_DAYS)
+}
+
+/** 行情免责声明（日线构建器与实时 tick 引擎共用同一文案） */
+export const STOCK_MARKET_DISCLAIMER =
+  '模拟行情，全部数据虚构；可用积分投资，行情每 3 秒刷新（买卖各收 1% 手续费）；玩家交易会小幅影响价格。'
+
+/**
+ * 构建某一天的全市场「日线行情」（纯函数，同参数同结果）。
+ * 仅作为日线构建器保留（自检 / 日线断言用）；对外 API 走 stockTicks.buildLiveMarket。
+ */
 export function buildStockMarket(dateKey: string): StockMarketDto {
   const targetIndex = dayIndexSinceEpoch(dateKey)
   const stocks = STOCK_DEFINITIONS.map((definition) =>
@@ -228,7 +244,7 @@ export function buildStockMarket(dateKey: string): StockMarketDto {
   return {
     dateKey,
     currency: '模拟币',
-    disclaimer: '模拟行情，全部数据虚构；可用积分投资，行情每天 0 点刷新（买卖各收 1% 手续费）。',
+    disclaimer: STOCK_MARKET_DISCLAIMER,
     trade: {
       feeRate: STOCK_FEE_RATE,
       minInvest: STOCK_MIN_INVEST,
@@ -237,18 +253,4 @@ export function buildStockMarket(dateKey: string): StockMarketDto {
     marketChangePct,
     stocks,
   }
-}
-
-/** 按股票代码取单只报价（未知代码返回 null） */
-export function findStockQuote(market: StockMarketDto, code: string): StockQuoteDto | null {
-  return market.stocks.find((stock) => stock.code === code) ?? null
-}
-
-let cached: StockMarketDto | null = null
-
-/** 按日期缓存的行情（同一天只生成一次；跨日自动失效） */
-export function getStockMarket(dateKey: string): StockMarketDto {
-  if (cached && cached.dateKey === dateKey) return cached
-  cached = buildStockMarket(dateKey)
-  return cached
 }

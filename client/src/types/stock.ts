@@ -1,4 +1,7 @@
-/** 模拟股市行情（GET /api/stocks/market）：行情只读，交易用积分 */
+/**
+ * 模拟股市实时行情：行情 3 秒一跳、玩家交易会小幅影响价格，交易用积分。
+ * GET /api/stocks/market 返回全市场快照（快照不含历史，历史走势走 /api/stocks/market/trend）。
+ */
 export interface StockCandle {
   date: string
   open: number
@@ -6,6 +9,12 @@ export interface StockCandle {
   low: number
   close: number
   volume: number
+}
+
+/** 当日分时采样点（t = 当日 00:00 起的毫秒数） */
+export interface StockIntradayPoint {
+  t: number
+  price: number
 }
 
 export interface StockQuote {
@@ -21,7 +30,17 @@ export interface StockQuote {
   change: number
   changePct: number
   volume: number
-  history: StockCandle[]
+}
+
+/** 个股走势（GET /api/stocks/market/trend?code=）：daily 近 30 根（含今日实时 candle）+ 当日分时采样 */
+export interface StockTrend {
+  code: string
+  name: string
+  dateKey: string
+  /** 行情 tick 间隔毫秒（3000） */
+  tickMs: number
+  daily: StockCandle[]
+  intraday: StockIntradayPoint[]
 }
 
 export interface StockTradeRule {
@@ -35,6 +54,12 @@ export interface StockTradeRule {
 
 export interface StockMarket {
   dateKey: string
+  /** 行情 tick 间隔毫秒（3000） */
+  tickMs: number
+  /** 当前 tick 序号（0..28799，乘以 tickMs 即当日毫秒偏移） */
+  tickIndex: number
+  /** 快照生成时间（ISO） */
+  updatedAt: string
   currency: string
   disclaimer: string
   trade: StockTradeRule
@@ -84,6 +109,7 @@ export interface StockBuyResult {
   }
 }
 
+/** 卖出（POST /api/stocks/sell { code, shares? }）：shares 缺省 = 整仓 */
 export interface StockSellResult {
   balance: number
   code: string
@@ -93,6 +119,11 @@ export interface StockSellResult {
   gross: number
   fee: number
   proceeds: number
+  /** 本次卖出部分分摊的成本 */
   costPoints: number
   profit: number
+  /** 剩余份额（整仓为 0） */
+  remainingShares: number
+  /** 是否已清仓 */
+  closed: boolean
 }

@@ -356,11 +356,12 @@ app.get('/api', (_req, res) => {
       steal: { method: 'POST', path: '/api/farm/users/:id/steal/:index', auth: true, description: '偷菜（每日次数上限；同一茬每人一次；地主至少保留 1 单位）' },
     },
     stocks: {
-      note: '模拟股市：行情由日期确定性生成（同一天重复请求一致），可用统一积分买入、次日行情刷新后卖出；买卖各收 1% 手续费。需 stock 功能开关。',
-      market: { method: 'GET', path: '/api/stocks/market', auth: true, description: '8 只虚构股票的最新价 / 涨跌幅 / 30 日走势 + 交易规则' },
-      portfolio: { method: 'GET', path: '/api/stocks/portfolio', auth: true, description: '我的持仓、市值与浮动盈亏' },
-      buy: { method: 'POST', path: '/api/stocks/buy', auth: true, description: '用积分买入 { code, points }（单笔 100–100000 积分，含 1% 手续费）' },
-      sell: { method: 'POST', path: '/api/stocks/sell', auth: true, description: '卖出全部持仓 { code }，到账积分写入台账' },
+      note: '模拟股市：行情为 3 秒一 tick 的实时模拟（确定性日线锚点 + 秒级噪声，玩家交易会小幅影响价格并按 10 分钟半衰期衰减），可用统一积分按实时价买卖；买卖各收 1% 手续费。需 stock 功能开关。',
+      market: { method: 'GET', path: '/api/stocks/market', auth: true, description: '8 只虚构股票的实时报价 / 涨跌幅 / 成交量 + 交易规则（40 次/min，tickMs=3000）' },
+      trend: { method: 'GET', path: '/api/stocks/market/trend?code=', auth: true, description: '单只股票近 30 根日线 + 当日分时（每 60 秒一点 + 最新实时价）（20 次/min）' },
+      portfolio: { method: 'GET', path: '/api/stocks/portfolio', auth: true, description: '我的持仓、市值与浮动盈亏（按实时价估值）' },
+      buy: { method: 'POST', path: '/api/stocks/buy', auth: true, description: '用积分按实时价买入 { code, points }（单笔 100–100000 积分，含 1% 手续费；买入会小幅推高价格）' },
+      sell: { method: 'POST', path: '/api/stocks/sell', auth: true, description: '按实时价卖出 { code, shares? }（缺省整仓，支持部分卖出并等比分摊成本；卖出会小幅压低价格），到账积分写入台账' },
     },
     chat: {
       note: '聊天自建（2026-10 起）：会话 / 消息 / 群聊全部落 Prisma，无外部依赖。消息走 /ws/xmpp（不可用时降级 /api/chat/xmpp/http-* 长轮询），协议与原 XMPP 中继完全兼容。好友关系以 LineWeb Prisma 为唯一真相源。',
