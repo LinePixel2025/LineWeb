@@ -644,12 +644,16 @@
 }
 
 /* ===== Mobile / Tablet visibility ===== */
+/* 汉堡按钮：≤1279px（手机 + 平板）抽屉模式都需要；≥1280px 常驻侧栏时隐藏 */
 .gh-visible-mobile { display: none !important; }
 .gh-hidden-mobile {}
 .gh-hidden-tablet {}
 
-@media (max-width: 767px) {
+@media (max-width: 1279px) {
   .gh-visible-mobile { display: flex !important; }
+}
+
+@media (max-width: 767px) {
   .gh-hidden-mobile { display: none !important; }
 }
 

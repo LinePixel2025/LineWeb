@@ -24,6 +24,17 @@ export default memo(function Layout() {
     setMobileOpen(false)
   }, [location.pathname])
 
+  // ≤1279px 为抽屉模式：视口跨回桌面档（≥1280px）时复位抽屉状态，
+  // 避免手机旋转/缩放窗口后抽屉在桌面布局中残留
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1279px)')
+    const handleChange = (e: MediaQueryListEvent) => {
+      if (!e.matches) setMobileOpen(false)
+    }
+    mq.addEventListener('change', handleChange)
+    return () => mq.removeEventListener('change', handleChange)
+  }, [])
+
   useEffect(() => {
     if (!mobileOpen) return
     const previousOverflow = document.body.style.overflow

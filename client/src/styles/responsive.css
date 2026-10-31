@@ -2,34 +2,12 @@
    Line Web — Responsive Styles (GitHub Primer)
    ============================================================= */
 
+/* ≤1279px（手机 + 平板横屏）：统一抽屉模式 —— 侧边栏默认滑出隐藏，
+   顶栏汉堡按钮开合、遮罩点击关闭；≥1280px 保持常驻侧栏 + 收起按钮。
+   （修复：此前 768–1279px 被强制为 64px 常驻窄轨且无任何收起手段） */
 @media (max-width: 1279px) {
   .gh-content {
-    margin-left: var(--gh-sidebar-collapsed);
-  }
-  .gh-sidebar {
-    width: var(--gh-sidebar-collapsed);
-  }
-  .gh-sidebar .gh-sidebar-label,
-  .gh-sidebar .gh-sidebar-section-title {
-    display: none;
-  }
-  .gh-sidebar .gh-sidebar-item {
-    justify-content: center;
-    padding: var(--gh-space-2);
-    border-left: none;
-  }
-  .gh-sidebar .gh-sidebar-section {
-    margin-bottom: var(--gh-space-2);
-  }
-}
-
-@media (max-width: 767px) {
-  .gh-content {
     margin-left: 0 !important;
-    padding: calc(var(--gh-nav-height) + var(--gh-safe-top) + var(--gh-space-4)) calc(var(--gh-space-4) + var(--gh-safe-right)) calc(var(--gh-space-4) + var(--gh-safe-bottom)) calc(var(--gh-space-4) + var(--gh-safe-left));
-  }
-  .gh-layout-root--admin .gh-content {
-    padding: calc(var(--gh-space-4) + var(--gh-safe-top)) calc(var(--gh-space-4) + var(--gh-safe-right)) calc(var(--gh-space-4) + var(--gh-safe-bottom)) calc(var(--gh-space-4) + var(--gh-safe-left));
   }
   .gh-sidebar {
     transform: translateX(-100%);
@@ -46,10 +24,20 @@
     justify-content: flex-start;
     min-height: 44px;
     padding: var(--gh-space-2) var(--gh-space-3);
+    border-left: none;
   }
   .gh-sidebar.gh-sidebar--open .gh-sidebar-collapse-btn { min-height: 44px; }
   .gh-sidebar-overlay {
     display: block;
+  }
+}
+
+@media (max-width: 767px) {
+  .gh-content {
+    padding: calc(var(--gh-nav-height) + var(--gh-safe-top) + var(--gh-space-4)) calc(var(--gh-space-4) + var(--gh-safe-right)) calc(var(--gh-space-4) + var(--gh-safe-bottom)) calc(var(--gh-space-4) + var(--gh-safe-left));
+  }
+  .gh-layout-root--admin .gh-content {
+    padding: calc(var(--gh-space-4) + var(--gh-safe-top)) calc(var(--gh-space-4) + var(--gh-safe-right)) calc(var(--gh-space-4) + var(--gh-safe-bottom)) calc(var(--gh-space-4) + var(--gh-safe-left));
   }
 
   .gh-table-wrap {

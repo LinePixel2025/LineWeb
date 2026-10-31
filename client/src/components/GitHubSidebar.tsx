@@ -129,7 +129,19 @@ export default memo(function GitHubSidebar({ collapsed, mobileOpen, onClose, onT
           })}
         </nav>
         <div className="gh-sidebar-footer">
-          <button className="gh-sidebar-item gh-sidebar-collapse-btn" onClick={onToggleCollapse} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+          <button
+            className="gh-sidebar-item gh-sidebar-collapse-btn"
+            onClick={() => {
+              // ≤1279px 为抽屉模式：此时桌面折叠无视觉意义（宽度/标签均被 --open 覆盖），
+              // 「收起」语义应为关闭抽屉；≥1280px 保持折叠/展开切换
+              if (window.matchMedia('(max-width: 1279px)').matches) {
+                onClose()
+                return
+              }
+              onToggleCollapse()
+            }}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
             <svg className="gh-sidebar-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d={collapsed ? 'm6 3.5 4 4.5-4 4.5' : 'm10 3.5-4 4.5 4 4.5'} />
             </svg>
