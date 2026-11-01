@@ -1,5 +1,17 @@
-/** 传说称号动态特效白名单（与服务端 TITLE_EFFECT_STYLES 一致，顺序一致） */
-export const TITLE_EFFECTS = ['classic', 'stardust', 'flame', 'aurora', 'thunder'] as const
+/**
+ * 传说称号动态特效白名单（与服务端 TITLE_EFFECT_STYLES 一致，顺序一致）。
+ * 炸裂系列：nova 超新星 / prism 棱镜虹光 / void 虚空黑洞。
+ */
+export const TITLE_EFFECTS = [
+  'classic',
+  'stardust',
+  'flame',
+  'aurora',
+  'thunder',
+  'nova',
+  'prism',
+  'void',
+] as const
 export type TitleEffectStyle = typeof TITLE_EFFECTS[number]
 
 /** 站内称号（只在 LineWeb 内部展示，不写入 neko / 聊天服务） */
@@ -66,7 +78,25 @@ export interface LeaderTitleDto {
 
 export type ShopItemType = 'title' | 'emoji' | 'avatar_frame'
 export type ShopRarity = 'common' | 'rare' | 'epic' | 'legendary'
-export type AvatarFrameStyle = 'gold' | 'neon' | 'sakura' | 'galaxy'
+
+/**
+ * 头像框样式白名单（与服务端 AVATAR_FRAME_STYLES 一致，顺序一致）。
+ * 炸裂系列：inferno 炽焰 / storm 雷霆 / supernova 星爆。
+ */
+export const AVATAR_FRAMES = [
+  'gold',
+  'neon',
+  'sakura',
+  'galaxy',
+  'inferno',
+  'storm',
+  'supernova',
+] as const
+export type AvatarFrameStyle = typeof AVATAR_FRAMES[number]
+
+/** 需要额外装饰层（gh-avatar-frame-fx）的炸裂头像框；其余框只用外圈伪元素 */
+export const PREMIUM_AVATAR_FRAMES = ['inferno', 'storm', 'supernova'] as const
+export type PremiumAvatarFrameStyle = typeof PREMIUM_AVATAR_FRAMES[number]
 
 /** 头像框（LineWeb 站内展示，不同步 neko） */
 export interface AvatarFrameDto {

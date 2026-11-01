@@ -1,6 +1,6 @@
 import { memo, useState, useEffect, type CSSProperties } from 'react'
 import { useOptionalPoints } from '../contexts/PointsContext'
-import type { AvatarFrameStyle } from '../types/points'
+import { PREMIUM_AVATAR_FRAMES, type AvatarFrameStyle } from '../types/points'
 
 interface UserAvatarProps {
   userId: number
@@ -121,6 +121,9 @@ export default memo(function UserAvatar({ userId, username, size = 'md', frame }
 
   if (!frameStyle) return content
 
+  // 炸裂系列框额外渲染装饰层（余烬 / 闪弧 / 星芒）；层本身绝对定位，不改变头像占位尺寸
+  const premiumFx = (PREMIUM_AVATAR_FRAMES as readonly string[]).includes(frameStyle)
+
   // 包裹层不改变原有占位尺寸：外圈用绝对定位的伪元素绘制，不占布局
   return (
     <span
@@ -129,6 +132,11 @@ export default memo(function UserAvatar({ userId, username, size = 'md', frame }
       data-frame={frameStyle}
     >
       {content}
+      {premiumFx && (
+        <span className="gh-avatar-frame-fx" aria-hidden>
+          <i /><i /><i /><i />
+        </span>
+      )}
     </span>
   )
 })

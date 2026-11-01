@@ -303,8 +303,12 @@ export function sanitizeTitleIcon(value: unknown): string {
 /** 可购买的表情包 key（与客户端表情商店的包 id 对应） */
 export const EMOJI_PACK_KEYS = ['nailong', 'felyne', 'twemoji'] as const
 
-/** 头像框样式（客户端 CSS 类名后缀） */
-export const AVATAR_FRAME_STYLES = ['gold', 'neon', 'sakura', 'galaxy'] as const
+/**
+ * 头像框样式（客户端 CSS 类名后缀 gh-avatar-frame--<key>）。
+ * 新增炸裂系列：inferno（炽焰）/ storm（雷霆）/ supernova（星爆）。
+ * 客户端 types/points.ts 保留一份顺序一致的拷贝，titleEffects.test.ts 会断言两边一致。
+ */
+export const AVATAR_FRAME_STYLES = ['gold', 'neon', 'sakura', 'galaxy', 'inferno', 'storm', 'supernova'] as const
 export type AvatarFrameStyle = typeof AVATAR_FRAME_STYLES[number]
 
 export function sanitizeAvatarFrame(value: unknown): AvatarFrameStyle | null {
@@ -313,8 +317,12 @@ export function sanitizeAvatarFrame(value: unknown): AvatarFrameStyle | null {
     : null
 }
 
-/** 传说称号动态特效（classic＝现有金色流光默认特效；客户端 CSS 类名后缀 gh-title-badge--fx-*） */
-export const TITLE_EFFECT_STYLES = ['classic', 'stardust', 'flame', 'aurora', 'thunder'] as const
+/**
+ * 传说称号动态特效（classic＝现有金色流光默认特效；客户端 CSS 类名后缀 gh-title-badge--fx-*）。
+ * 炸裂系列：nova（超新星爆发）/ prism（棱镜虹光）/ void（虚空黑洞）。
+ * 客户端 types/points.ts 保留一份顺序一致的拷贝，titleEffects.test.ts 会断言两边一致。
+ */
+export const TITLE_EFFECT_STYLES = ['classic', 'stardust', 'flame', 'aurora', 'thunder', 'nova', 'prism', 'void'] as const
 export type TitleEffectStyle = typeof TITLE_EFFECT_STYLES[number]
 
 export function sanitizeTitleEffect(value: unknown): TitleEffectStyle | null {

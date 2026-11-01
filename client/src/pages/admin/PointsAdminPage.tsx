@@ -53,6 +53,9 @@ const AVATAR_FRAME_OPTIONS: ReadonlyArray<readonly [AvatarFrameStyle, string]> =
   ['neon', '霓虹'],
   ['sakura', '樱花'],
   ['galaxy', '星河'],
+  ['inferno', '炽焰'],
+  ['storm', '雷霆'],
+  ['supernova', '星爆'],
 ]
 
 /** 传说称号特效白名单（与服务端 TITLE_EFFECT_STYLES 一致） */
@@ -62,6 +65,9 @@ const TITLE_EFFECT_OPTIONS: ReadonlyArray<readonly [TitleEffectStyle, string]> =
   ['flame', '烈焰'],
   ['aurora', '极光'],
   ['thunder', '雷霆'],
+  ['nova', '超新星'],
+  ['prism', '棱镜虹光'],
+  ['void', '虚空黑洞'],
 ]
 
 const RULE_FIELDS: Array<{ key: keyof GamePointRule; label: string; hint?: string }> = [

@@ -5,6 +5,7 @@ import UserAvatar from '../components/UserAvatar'
 import { usePoints } from '../contexts/PointsContext'
 import { useFeature } from '../contexts/FeatureContext'
 import api from '../lib/api'
+import { PREMIUM_AVATAR_FRAMES } from '../types/points'
 import type {
   CheckinResult,
   LeaderTitleDto,
@@ -75,6 +76,28 @@ function formatTime(value: string): string {
 }
 
 /**
+ * 商店 / 已购列表里的头像框预览。
+ * 炸裂系列需要额外渲染 .gh-avatar-frame-fx（余烬 / 闪弧 / 星芒），
+ * 否则预览只剩外圈，和真正佩戴后的效果对不上。
+ */
+function FramePreview({ frame, size }: { frame: string; size: string }) {
+  const premium = (PREMIUM_AVATAR_FRAMES as readonly string[]).includes(frame)
+  return (
+    <span
+      className={`gh-avatar-frame gh-avatar-frame--${frame}`}
+      style={{ '--avatar-size': size } as CSSProperties}
+    >
+      <span className="gh-points-frame-preview">🧑</span>
+      {premium && (
+        <span className="gh-avatar-frame-fx" aria-hidden>
+          <i /><i /><i /><i />
+        </span>
+      )}
+    </span>
+  )
+}
+
+/**
  * 积分中心：余额 / 排行榜 / 商店（称号 + 表情包） / 流水。
  * 所有游戏的胜负与农场收益都会写进同一份台账，因此这里只有一个余额。
  */
@@ -121,12 +144,7 @@ export default function PointsPage() {
           {profile?.avatarFrame && (
             <div className="gh-points-hero-title-badge">
               <span className="gh-text-tertiary">当前头像框</span>
-              <span
-                className={`gh-avatar-frame gh-avatar-frame--${profile.avatarFrame.frame}`}
-                style={{ '--avatar-size': '24px' } as CSSProperties}
-              >
-                <span className="gh-points-frame-preview">🧑</span>
-              </span>
+              <FramePreview frame={profile.avatarFrame.frame} size="24px" />
               <span>{profile.avatarFrame.name}</span>
             </div>
           )}
@@ -413,12 +431,7 @@ function ShopTab({
                     {item.type === 'title' && (icon || '🏷️')}
                     {item.type === 'emoji' && '🙂'}
                     {item.type === 'avatar_frame' && (
-                      <span
-                        className={`gh-avatar-frame gh-avatar-frame--${frame}`}
-                        style={{ '--avatar-size': '40px' } as CSSProperties}
-                      >
-                        <span className="gh-points-frame-preview">🧑</span>
-                      </span>
+                      <FramePreview frame={frame} size="40px" />
                     )}
                   </span>
                   <span className={`gh-points-rarity gh-points-rarity--${item.rarity}`}>
@@ -577,9 +590,7 @@ function ShopTab({
               const frame = typeof item.payload.frame === 'string' ? item.payload.frame : ''
               return (
                 <div key={item.id} className={`gh-points-title-row ${item.equipped ? 'gh-points-title-row--active' : ''}`}>
-                  <span className={`gh-avatar-frame gh-avatar-frame--${frame}`} style={{ '--avatar-size': '32px' } as CSSProperties}>
-                    <span className="gh-points-frame-preview">🧑</span>
-                  </span>
+                  <FramePreview frame={frame} size="32px" />
                   <span>{item.name}</span>
                   {item.equipped ? (
                     <span className="gh-badge gh-badge--success">佩戴中</span>

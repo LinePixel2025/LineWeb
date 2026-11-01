@@ -43,7 +43,7 @@ export interface UserTitleDto {
   icon: string
   /** 商品稀有度：legendary 在客户端触发炸裂特效 */
   rarity: string
-  /** 传说特效：classic/stardust/flame/aurora/thunder，非 legendary 忽略 */
+  /** 传说特效：classic/stardust/flame/aurora/thunder/nova/prism/void，非 legendary 忽略 */
   effect: string
 }
 
@@ -93,6 +93,16 @@ export interface PointsProfileDto {
 const DEFAULT_SHOP_SEED_FLAG = 'points.shop.seeded'
 /** 头像框是后加的默认商品，单独打标记：只补框，不复活管理员已删除的其它商品 */
 const DEFAULT_FRAME_SEED_FLAG = 'points.shop.frames.seeded'
+/**
+ * 第二批（炸裂系列）头像框单独再用一个新 flag：旧 flag 已在生产置位，
+ * 复用旧 flag 永远补不到线上；新 flag 只补下面这批新 key，管理员删掉的旧框不会被复活。
+ */
+const DEFAULT_PREMIUM_FRAME_SEED_FLAG = 'points.shop.frames.premium.seeded'
+/**
+ * 炸裂称号同样用独立 flag 补种：只新增带 nova / prism / void 特效的三件传说称号，
+ * 不修改管理员已经改过的旧称号，也不复活已删除的商品。
+ */
+const DEFAULT_PREMIUM_TITLE_SEED_FLAG = 'points.shop.titles.premium.seeded'
 
 interface DefaultShopItem {
   key: string
@@ -127,6 +137,26 @@ const DEFAULT_FRAME_ITEMS: readonly DefaultShopItem[] = [
   { key: 'frame_neon', type: 'avatar_frame', name: '霓虹边框', description: '赛博感的冷色流光，跑酷与 2048 玩家的最爱。', cost: 1500, rarity: 'epic', payload: { frame: 'neon', color: '#1f6feb' }, sortOrder: 210 },
   { key: 'frame_sakura', type: 'avatar_frame', name: '樱花边框', description: '春日限定的粉樱花瓣，绕着头像缓缓飘落。', cost: 2500, rarity: 'epic', payload: { frame: 'sakura', color: '#bf3989' }, sortOrder: 220 },
   { key: 'frame_galaxy', type: 'avatar_frame', name: '星河边框', description: '旋转的星云与细碎星尘，农场大亨的专属光环。', cost: 4000, rarity: 'legendary', payload: { frame: 'galaxy', color: '#6639ba' }, sortOrder: 230 },
+]
+
+/**
+ * 炸裂系列头像框：用独立的 seed flag 补种到已有环境。
+ * 与旧批次一样是幂等 upsert（update 为空），只新增这三个 key，不复活管理员删掉的旧商品。
+ */
+const DEFAULT_PREMIUM_FRAME_ITEMS: readonly DefaultShopItem[] = [
+  { key: 'frame_inferno', type: 'avatar_frame', name: '炽焰边框', description: '旋转的火环与升腾余烬，头像边缘永远烧着一圈橙红。', cost: 6000, rarity: 'legendary', payload: { frame: 'inferno', color: '#ff5a00' }, sortOrder: 240 },
+  { key: 'frame_storm', type: 'avatar_frame', name: '雷霆边框', description: '紫电环身、随机闪弧，像把一小片雷暴戴在头上。', cost: 8000, rarity: 'legendary', payload: { frame: 'storm', color: '#8b5cf6' }, sortOrder: 250 },
+  { key: 'frame_supernova', type: 'avatar_frame', name: '星爆边框', description: '双层脉冲光环与四向星芒，一圈圈炸开的恒星余晖。', cost: 12000, rarity: 'legendary', payload: { frame: 'supernova', color: '#f5c542' }, sortOrder: 260 },
+]
+
+/**
+ * 炸裂系列传说称号：让新增的 nova / prism / void 特效开箱即可体验。
+ * 同样是独立 flag 的幂等补种，管理员可以在管理端点「设置特效」改成别的风格。
+ */
+const DEFAULT_PREMIUM_TITLE_ITEMS: readonly DefaultShopItem[] = [
+  { key: 'title_nova', type: 'title', name: '超新星', description: '一颗恒星在你名字旁边炸开，连排行榜都要眯一下眼。', cost: 8000, rarity: 'legendary', payload: { icon: '💥', color: '#d4a72c', effect: 'nova' }, sortOrder: 91 },
+  { key: 'title_prism', type: 'title', name: '棱镜虹光', description: '把光拆成七种颜色，走过的地方都留下全息残影。', cost: 10000, rarity: 'legendary', payload: { icon: '💠', color: '#8250df', effect: 'prism' }, sortOrder: 92 },
+  { key: 'title_void', type: 'title', name: '虚空领主', description: '名字周围的光开始向内坍缩，像一个小小的黑洞。', cost: 15000, rarity: 'legendary', payload: { icon: '🕳️', color: '#6639ba', effect: 'void' }, sortOrder: 93 },
 ]
 
 /* ============================================================
@@ -191,6 +221,8 @@ export async function savePointsConfig(input: unknown, adminId: number): Promise
 async function ensureDefaultShop(): Promise<void> {
   await seedShopItems(DEFAULT_SHOP_SEED_FLAG, DEFAULT_SHOP_ITEMS)
   await seedShopItems(DEFAULT_FRAME_SEED_FLAG, DEFAULT_FRAME_ITEMS)
+  await seedShopItems(DEFAULT_PREMIUM_FRAME_SEED_FLAG, DEFAULT_PREMIUM_FRAME_ITEMS)
+  await seedShopItems(DEFAULT_PREMIUM_TITLE_SEED_FLAG, DEFAULT_PREMIUM_TITLE_ITEMS)
 }
 
 /** 幂等播种：同一批商品只补一次，已存在（或被管理员删掉）的 key 不受影响 */
