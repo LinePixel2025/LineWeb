@@ -5,16 +5,19 @@ import { useGameStats } from '../../contexts/GameStatsContext'
 import {
   GOMOKU_BLACK,
   GOMOKU_BOARD_SIZE,
-  GOMOKU_CELL_COUNT,
   GOMOKU_WHITE,
   createGomokuBoard,
   findGomokuWin,
   isGomokuBoardFull,
   placeGomokuStone,
   suggestGomokuMove,
-  type GomokuBoard,
   type GomokuColor,
 } from '../../lib/games/gomoku'
+import {
+  rebuildGomokuPosition,
+  undoGomokuRound,
+  type GomokuPosition,
+} from '../../lib/games/gomokuSolo'
 
 /** AI 思考延迟（毫秒）：给画面留出落子节奏，也避免长阻塞 */
 const AI_THINK_DELAY_MS = 400
@@ -34,16 +37,18 @@ const GOMOKU_STARS: ReadonlyArray<readonly [number, number]> = [
 const CELL_MIN = 18
 const CELL_MAX = 34
 
-/** 单局状态（引擎棋盘 + 结算 + 悔棋快照） */
-interface GameState {
-  board: GomokuBoard
+/** 单局状态（引擎棋盘 + 结算 + 按时间顺序的落子历史） */
+interface GameState extends GomokuPosition {
   status: GameStatus
   winningLine: Array<{ x: number; y: number }> | null
-  lastMove: { x: number; y: number; color: GomokuColor } | null
 }
 
 function newGame(): GameState {
-  return { board: createGomokuBoard(), status: 'playing', winningLine: null, lastMove: null }
+  return {
+    ...rebuildGomokuPosition([]),
+    status: 'playing',
+    winningLine: null,
+  }
 }
 
 /**
@@ -112,22 +117,27 @@ export default function GomokuPage() {
   const applyMove = useCallback((prev: GameState, x: number, y: number, color: GomokuColor): GameState => {
     const board = [...prev.board]
     placeGomokuStone(board, x, y, color)
+    const moves = [...prev.moves, { x, y, color }]
     const win = findGomokuWin(board, x, y)
     if (win !== null) {
-      return { board, status: color === playerColor ? 'won' : 'lost', winningLine: win, lastMove: { x, y, color } }
+      return {
+        board,
+        status: color === playerColor ? 'won' : 'lost',
+        winningLine: win,
+        lastMove: { x, y, color },
+        moves,
+      }
     }
     if (isGomokuBoardFull(board)) {
-      return { board, status: 'draw', winningLine: null, lastMove: { x, y, color } }
+      return { board, status: 'draw', winningLine: null, lastMove: { x, y, color }, moves }
     }
-    return { board, status: 'playing', winningLine: null, lastMove: { x, y, color } }
+    return { board, status: 'playing', winningLine: null, lastMove: { x, y, color }, moves }
   }, [playerColor])
-
   // AI 回合：轮到 AI 且对局进行中时延迟落子
   useEffect(() => {
     if (!playing || state.status !== 'playing') return
-    // 轮到谁：按手数奇偶推（黑恒先手）
-    const blackPlays = state.board.reduce((count, cell) => count + (cell !== 0 ? 1 : 0), 0) % 2 === 0
-    const turnColor: GomokuColor = blackPlays ? GOMOKU_BLACK : GOMOKU_WHITE
+    // 轮到谁：按落子手数奇偶推（黑恒先手）
+    const turnColor: GomokuColor = state.moves.length % 2 === 0 ? GOMOKU_BLACK : GOMOKU_WHITE
     if (turnColor !== aiColor) return
 
     setThinking(true)
@@ -151,8 +161,7 @@ export default function GomokuPage() {
         if (prev.status !== 'playing') return prev
         if (prev.board[y * size + x] !== 0) return prev
         // 手数奇偶判定轮到谁：轮到 AI 时点击无效
-        const blackPlays = prev.board.reduce((count, cell) => count + (cell !== 0 ? 1 : 0), 0) % 2 === 0
-        const turnColor: GomokuColor = blackPlays ? GOMOKU_BLACK : GOMOKU_WHITE
+        const turnColor: GomokuColor = prev.moves.length % 2 === 0 ? GOMOKU_BLACK : GOMOKU_WHITE
         if (turnColor !== playerColor) return prev
         return applyMove(prev, x, y, playerColor)
       })
@@ -160,27 +169,18 @@ export default function GomokuPage() {
     [playing, thinking, playerColor, applyMove, size]
   )
 
-  /** 悔棋：撤销「AI + 自己」各一手（不足两手时只撤已有的）；结算后悔棋视为继续本局 */
+  /** 悔棋：按落子历史撤销「自己 + AI」最近一轮；结算后也可悔棋继续本局 */
   const handleUndo = useCallback(() => {
     if (thinking) return
     setState((prev) => {
-      const stones: number[] = []
-      for (let index = 0; index < GOMOKU_CELL_COUNT; index += 1) {
-        if (prev.board[index] !== 0) stones.push(index)
-      }
-      if (stones.length === 0) return prev
-      const keep = Math.max(0, stones.length - 2)
-      const board = createGomokuBoard()
-      let last: GameState['lastMove'] = null
-      for (let i = 0; i < keep; i += 1) {
-        const index = stones[i]
-        board[index] = prev.board[index]
-        last = { x: index % size, y: Math.floor(index / size), color: board[index] as GomokuColor }
-      }
+      const position = undoGomokuRound(prev, playerColor)
+      if (position === null) return prev
       statsRecordedRef.current = false
-      return { board, status: 'playing', winningLine: null, lastMove: last }
+      return { ...prev, ...position, status: 'playing', winningLine: null }
     })
-  }, [thinking, size])
+  }, [playerColor, thinking])
+
+  const canUndo = !thinking && state.moves.some((move) => move.color === playerColor)
 
   /** 重开一局（换边时同时重开） */
   const handleRestart = useCallback(
@@ -199,8 +199,7 @@ export default function GomokuPage() {
     if (state.status === 'lost') return 'AI 连成五子，再接再厉'
     if (state.status === 'draw') return '棋盘已下满，平局'
     if (thinking) return 'AI 思考中…'
-    const blackPlays = state.board.reduce((count, cell) => count + (cell !== 0 ? 1 : 0), 0) % 2 === 0
-    const turnColor: GomokuColor = blackPlays ? GOMOKU_BLACK : GOMOKU_WHITE
+    const turnColor: GomokuColor = state.moves.length % 2 === 0 ? GOMOKU_BLACK : GOMOKU_WHITE
     return turnColor === playerColor ? '轮到你落子' : '等待 AI 落子'
   }, [state, thinking, playerColor])
 
@@ -211,7 +210,7 @@ export default function GomokuPage() {
     return set
   }, [state.winningLine, size])
 
-  const placedCount = state.board.reduce((count, cell) => count + (cell !== 0 ? 1 : 0), 0)
+  const placedCount = state.moves.length
 
   return (
     <div className="gh-page-container gh-games-page gh-gmk-page">
@@ -257,7 +256,7 @@ export default function GomokuPage() {
             type="button"
             className="gh-btn gh-btn--secondary gh-btn--sm"
             onClick={handleUndo}
-            disabled={!playing || placedCount === 0 || thinking}
+            disabled={!canUndo}
           >
             悔棋
           </button>
