@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Icon from '../ui/Icon'
+import MusicImage from './MusicImage'
 import {
   findLrcIndex,
   formatSongDuration,
-  upgradeMediaUrl,
   type SongView,
 } from '../../lib/music/song'
 import { useLyrics } from '../../lib/music/useLyrics'
+import { getToken } from '../../lib/api'
+import { resolveMusicImageSrc } from '../../lib/music/stream'
 import { useMusicPlayer, type MusicPlayMode } from '../../contexts/MusicPlayerContext'
 
 /**
@@ -36,16 +38,19 @@ const MODE_LABEL: Record<MusicPlayMode, string> = {
 /** 用户滚歌词后暂停跟随的时长；期间不会把视图拽回当前行 */
 const FOLLOW_RESUME_MS = 12_000
 
-function CoverArt({ song, size }: { song: SongView | null; size: 'lg' | 'sm' }) {
-  const src = upgradeMediaUrl(song?.picUrl)
-  if (!src) {
-    return (
-      <span className={`gh-music-now-cover gh-music-now-cover--${size} gh-music-now-cover--fallback`}>
-        <Icon name="music" size={size === 'lg' ? 34 : 18} />
-      </span>
-    )
-  }
-  return <img className={`gh-music-now-cover gh-music-now-cover--${size}`} src={src} alt="" />
+function CoverArt({ song, size, proxy }: { song: SongView | null; size: 'lg' | 'sm'; proxy: boolean }) {
+  return (
+    <MusicImage
+      url={song?.picUrl}
+      proxy={proxy}
+      className={`gh-music-now-cover gh-music-now-cover--${size}`}
+      fallback={(
+        <span className={`gh-music-now-cover gh-music-now-cover--${size} gh-music-now-cover--fallback`}>
+          <Icon name="music" size={size === 'lg' ? 34 : 18} />
+        </span>
+      )}
+    />
+  )
 }
 
 function MiniEqualizer({ className = '' }: { className?: string }) {
@@ -67,7 +72,7 @@ export default function NowPlayingCard() {
   const lineRefs = useRef(new Map<number, HTMLButtonElement>())
   const followTimerRef = useRef<number | null>(null)
 
-  const cover = upgradeMediaUrl(song?.picUrl)
+  const cover = resolveMusicImageSrc(song?.picUrl, player.streamViaProxy, getToken())
 
   const duration = player.durationSec > 0
     ? player.durationSec
@@ -164,7 +169,7 @@ export default function NowPlayingCard() {
         <div className="gh-music-now-head">
           <div className="gh-music-now-art">
             <span className="gh-music-now-art-ring" aria-hidden="true" />
-            <CoverArt song={song} size="lg" />
+            <CoverArt song={song} size="lg" proxy={player.streamViaProxy} />
             {player.playing && (
               <span className="gh-music-now-art-eq" title="正在播放" aria-hidden="true">
                 <MiniEqualizer />

@@ -123,7 +123,9 @@ app.use(compression({
     && !/\/chat\/messages\/\d+\/image(\?|$)/.test(req.originalUrl)
     && !/\/ai-chat\/images\/\d+\/image(\?|$)/.test(req.originalUrl)
     // 阅读器书籍/封面（二进制 + WebP 不可变内容，且书籍可能很大）
-    && !/\/reader\/books\/\d+\/(file|cover)(\?|$)/.test(req.originalUrl),
+    && !/\/reader\/books\/\d+\/(file|cover)(\?|$)/.test(req.originalUrl)
+    // 音乐音频中转 / 封面中转：必须保留 Content-Length 与 Content-Range，Range/seek 才有效
+    && !/\/music\/(stream|image)(\?|$)/.test(req.originalUrl),
 }))
 
 app.set('trust proxy', 1)  // 信任反向代理，用于 rate-limiter 正确获取客户端 IP
@@ -402,6 +404,8 @@ app.get('/api', (_req, res) => {
       logout: { method: 'POST', path: '/api/music/logout', auth: true, description: '解绑网易云账号' },
       search: { method: 'GET', path: '/api/music/search?keywords=&type=&limit=&offset=', auth: true, description: '搜索（歌曲/专辑/歌单）（60 次/5min）' },
       songUrl: { method: 'GET', path: '/api/music/song/url?id=&level=', auth: true, description: '取播放地址（level 默认 exhigh；浏览器直连网易 CDN 播放）' },
+      stream: { method: 'GET', path: '/api/music/stream?id=&level=', auth: true, description: '音频中转：设备无法直连网易云 CDN 时经服务器流式转发（支持 Range/seek，?token= 直链）' },
+      image: { method: 'GET', path: '/api/music/image?u=', auth: true, description: '封面中转：只代理网易云 CDN 图片（?token= 直链，浏览器缓存 1 天）' },
       lyric: { method: 'GET', path: '/api/music/lyric?id=', auth: true, description: '歌词（含翻译/罗马音）' },
       recommend: { method: 'GET', path: '/api/music/recommend/songs', auth: true, description: '每日推荐（需已绑定账号）' },
       toplist: { method: 'GET', path: '/api/music/toplist', auth: true, description: '官方排行榜列表' },

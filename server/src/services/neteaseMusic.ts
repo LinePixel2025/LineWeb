@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma.js'
 import { AppError } from '../middleware/errorHandler.js'
+import { hostMatchesSuffix } from './webProxyHosts.js'
 
 /**
  * 网易云音乐服务：对 @neteasecloudmusicapienhanced/api 的函数级薄封装（库挂载，不起独立 HTTP 服务）。
@@ -261,6 +262,91 @@ export async function callNcmForUser(
   }
 
   return upgradeNcmMediaUrlsIn(res.body)
+}
+
+// ============================================================
+// 音频中转（设备无法直连网易云 CDN 时经服务器流式转发）
+// ============================================================
+
+/** 网易云媒体 CDN 域名后缀（音频 / 封面 / 头像）。只允许这些域名，永不放行任意 URL */
+const NCM_MEDIA_HOST_SUFFIXES = ['music.126.net', '126.net', '127.net', 'netease.com']
+
+/** 解析结果缓存：音频元素每个 Range 请求都会打 /stream，不能每次都查库 + 打上游 */
+const SONG_URL_CACHE_TTL_MS = 5 * 60 * 1000
+const SONG_URL_CACHE_MAX = 400
+
+export interface SongStreamSource {
+  /** 可直接下载的音频地址（已升级为 https） */
+  url: string
+  /** VIP 试听片段的结束秒数；完整歌曲为 null */
+  trialEnd: number | null
+}
+
+const songUrlCache = new Map<string, SongStreamSource & { expiresAt: number }>()
+
+/**
+ * 校验媒体地址：仅允许 http(s) + 网易云 CDN 域名，拒绝账号密码与其它主机。
+ *
+ * 地址只应来自上游接口响应（或上游 302 的 Location），绝不直接采用客户端传入的
+ * URL；图片中转虽由客户端传 `u`，也必须过这道白名单，避免变成开放代理 / SSRF。
+ */
+export function assertNeteaseMediaUrl(
+  raw: string,
+  options: { base?: string; status?: number } = {},
+): URL {
+  const status = options.status ?? 502
+  let url: URL
+  try {
+    url = options.base ? new URL(raw, options.base) : new URL(raw)
+  } catch {
+    throw new AppError('媒体地址无效', status, 'MUSIC_BAD_MEDIA_URL')
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new AppError('媒体地址协议不受支持', status, 'MUSIC_BAD_MEDIA_URL')
+  }
+  if (url.username || url.password) {
+    throw new AppError('媒体地址包含不受支持的凭证', status, 'MUSIC_BAD_MEDIA_URL')
+  }
+  if (!NCM_MEDIA_HOST_SUFFIXES.some((suffix) => hostMatchesSuffix(url.hostname, suffix))) {
+    throw new AppError('媒体地址不在网易云 CDN 允许范围内', status, 'MUSIC_BAD_MEDIA_URL')
+  }
+  return url
+}
+
+/**
+ * 取某首歌在指定音质下的可播放地址（5 分钟内存缓存）。
+ *
+ * 返回 null 表示上游没有给出地址（版权限制 / 需要付费），与调用失败区分开。
+ */
+export async function resolveSongStream(
+  userId: number,
+  songId: string,
+  level: string,
+): Promise<SongStreamSource | null> {
+  const key = `${userId}:${songId}:${level}`
+  const now = Date.now()
+  const cached = songUrlCache.get(key)
+  if (cached) {
+    if (cached.expiresAt > now) return { url: cached.url, trialEnd: cached.trialEnd }
+    songUrlCache.delete(key)
+  }
+
+  const body = await callNcmForUser(userId, 'song_url_v1', { id: songId, level })
+  const entry = (body as {
+    data?: Array<{ url?: string | null; freeTrialInfo?: { end?: number } | null }>
+  })?.data?.[0]
+  const url = typeof entry?.url === 'string' ? entry.url : ''
+  if (!url) return null
+
+  const trialEndRaw = entry?.freeTrialInfo?.end
+  const trialEnd = typeof trialEndRaw === 'number' && trialEndRaw > 0 ? trialEndRaw : null
+
+  songUrlCache.set(key, { url, trialEnd, expiresAt: now + SONG_URL_CACHE_TTL_MS })
+  if (songUrlCache.size > SONG_URL_CACHE_MAX) {
+    const oldest = songUrlCache.keys().next().value
+    if (oldest !== undefined) songUrlCache.delete(oldest)
+  }
+  return { url, trialEnd }
 }
 
 // ============================================================

@@ -1,13 +1,21 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { api } from '../lib/api'
+import { API_BASE, api, getToken } from '../lib/api'
 import { normalizeSongList, upgradeMediaUrl, type SongView } from '../lib/music/song'
+import {
+  buildMusicImageUrl,
+  buildMusicStreamUrl,
+  readMusicStreamProxyPreference,
+  writeMusicStreamProxyPreference,
+} from '../lib/music/stream'
 import type { MusicSongUrlResponse } from '../types/music'
 
 /**
  * 全局音乐播放器状态（跨页持续播放）。
  *
  * - <audio> 实例挂在 Provider 上，/music 页与全局迷你播放条共享
- * - 播放地址走 /api/music/song/url 代理取网易 CDN 直链（浏览器直连，不经服务器）
+ * - 音频默认走 /api/music/song/url 取网易 CDN 直链（浏览器直连，不经服务器）；
+ *   设备无法直连 CDN 时自动改走 /api/music/stream 由服务器中转，并在本设备记住
+ *   （localStorage `lineweb_music_stream_proxy`，播放器里可手动改回直连）
  * - MediaSession：锁屏/系统媒体控制
  * - 队列 / 播放模式 / 音量 / 进度 localStorage 持久化（刷新后恢复队列，不自动播放——浏览器限制）
  */
@@ -27,6 +35,11 @@ const SILENT_CLIP =
 const FALLBACK_LEVEL = 'standard'
 /** 设置 src 后等待真正出声的上限：超过即判定音频源不可达，避免加载态无限转圈 */
 const PLAY_WATCHDOG_MS = 20_000
+/**
+ * 直连探测的看门狗：比中转短得多。设备连不上网易 CDN 时往往「连接被黑洞」，
+ * 浏览器媒体栈迟迟不报错；8 秒拿不到声音就改走服务器中转，避免用户干等。
+ */
+const DIRECT_PROBE_WATCHDOG_MS = 8_000
 
 /**
  * 媒体层播放失败（与浏览器拒绝自动播放的 NotAllowedError 区分开）：
@@ -163,6 +176,9 @@ export interface MusicPlayerContextValue {
   error: string
   /** 当前音频是 VIP 试听片段时给出可播放上限（秒）；完整歌曲为 null */
   trialEndSec: number | null
+  /** 是否经服务器中转音频/封面（设备无法直连网易云 CDN 时自动开启并记住） */
+  streamViaProxy: boolean
+  setStreamViaProxy: (enabled: boolean) => void
   playQueue: (songs: SongView[], startIndex?: number) => void
   playAt: (index: number) => void
   toggle: () => void
@@ -188,6 +204,13 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [volume, setVolumeState] = useState(initial.volume)
   const [error, setError] = useState('')
   const [trialEndSec, setTrialEndSec] = useState<number | null>(null)
+  const [streamViaProxy, setStreamViaProxyState] = useState<boolean>(() => readMusicStreamProxyPreference())
+
+  /** 写入偏好 + 即时切换（封面等依赖该值的展示会一起变化） */
+  const setStreamViaProxy = useCallback((enabled: boolean) => {
+    writeMusicStreamProxyPreference(enabled)
+    setStreamViaProxyState(enabled)
+  }, [])
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   /** 正在走「取地址 → 出声」流程：此刻媒体 error 由播放流程自己降级处理，不要弹全局错误 */
@@ -285,21 +308,39 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             continue
           }
 
-          try {
-            await playAudioSource(audio, url)
-            if (token !== playTokenRef.current) return
-            setLoading(false)
-            setPlaying(true)
-            // 起播即落盘一次：刷新后顶栏仍能显示这首歌（不自动播放）
-            persist()
-            return
-          } catch (err) {
-            if (token !== playTokenRef.current) return
-            // 浏览器拒绝播放 / 用户取消：不降级，交给外层统一提示
-            if (err instanceof DOMException && (err.name === 'AbortError' || err.name === 'NotAllowedError')) throw err
-            lastError = err
-            // 加载不出来就继续尝试下一个音质
+          // 候选音源：默认直连网易 CDN；本设备已记录「无法直连」时直接走服务器中转。
+          // 直连失败（媒体错误/黑洞超时）自动再试中转，成功即记住偏好。
+          const directUrl = url
+          const proxyUrl = buildMusicStreamUrl(API_BASE, target.id, level, getToken())
+          const candidates = streamViaProxy ? [proxyUrl] : [directUrl, proxyUrl]
+          let played = false
+
+          for (const candidate of candidates) {
+            const viaProxy = candidate === proxyUrl
+            try {
+              await playAudioSource(
+                audio,
+                candidate,
+                viaProxy ? PLAY_WATCHDOG_MS : DIRECT_PROBE_WATCHDOG_MS,
+              )
+              if (token !== playTokenRef.current) return
+              // 直连失败→中转成功：记录这台设备需要中转，后续歌曲不再每次先等直连超时
+              if (viaProxy && !streamViaProxy) setStreamViaProxy(true)
+              setLoading(false)
+              setPlaying(true)
+              // 起播即落盘一次：刷新后顶栏仍能显示这首歌（不自动播放）
+              persist()
+              played = true
+              break
+            } catch (err) {
+              if (token !== playTokenRef.current) return
+              // 浏览器拒绝播放 / 用户取消：不降级，交给外层统一提示
+              if (err instanceof DOMException && (err.name === 'AbortError' || err.name === 'NotAllowedError')) throw err
+              lastError = err
+            }
           }
+          if (played) return
+          // 直连与中转都没成功：继续尝试下一个音质
         }
 
         if (token !== playTokenRef.current) return
@@ -313,7 +354,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         setLoading(false)
         setPlaying(false)
         if (lastError instanceof MediaPlaybackError) {
-          setError('音频加载失败：这台设备的网络可能无法直连网易云音乐 CDN，请检查网络后重试')
+          setError('音频加载失败：直连与服务器中转都没有成功，请稍后重试')
           return
         }
         if (lastError instanceof Error && lastError.message) {
@@ -341,7 +382,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         if (token === playTokenRef.current) startingRef.current = false
       }
     })()
-  }, [getAudio, persist])
+  }, [getAudio, persist, setStreamViaProxy, streamViaProxy])
 
   const next = useCallback(() => {
     playAt(pickNextIndex(modeRef.current, indexRef.current, queueRef.current.length))
@@ -523,12 +564,22 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!('mediaSession' in navigator)) return
     if (song) {
+      // 封面与音频保持一致：设备连不上网易 CDN 时锁屏封面也走服务器中转
+      const rawArtwork = streamViaProxy
+        ? buildMusicImageUrl(API_BASE, song.picUrl, getToken())
+        : song.picUrl
+      let artwork = ''
+      try {
+        artwork = rawArtwork ? new URL(rawArtwork, window.location.href).href : ''
+      } catch {
+        artwork = song.picUrl ?? ''
+      }
       try {
         navigator.mediaSession.metadata = new MediaMetadata({
           title: song.name,
           artist: song.artists,
           album: song.albumName,
-          artwork: song.picUrl ? [{ src: song.picUrl, sizes: '512x512' }] : [],
+          artwork: artwork ? [{ src: artwork, sizes: '512x512' }] : [],
         })
       } catch { /* 旧浏览器忽略 */ }
     }
@@ -547,7 +598,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [song])
+  }, [song, streamViaProxy])
 
   // === 离开页面前保存一次 ===
   useEffect(() => {
@@ -575,6 +626,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     volume,
     error,
     trialEndSec,
+    streamViaProxy,
+    setStreamViaProxy,
     playQueue,
     playAt,
     toggle,
@@ -585,6 +638,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     cycleMode,
     clearError,
   }), [song, queue, index, playing, loading, positionSec, durationSec, mode, volume, error, trialEndSec,
+    streamViaProxy, setStreamViaProxy,
     playQueue, playAt, toggle, next, prev, seek, setVolume, cycleMode, clearError])
 
   return <MusicPlayerContext.Provider value={value}>{children}</MusicPlayerContext.Provider>

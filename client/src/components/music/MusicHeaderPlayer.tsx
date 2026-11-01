@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import Icon from '../ui/Icon'
+import MusicImage from './MusicImage'
 import { useMusicPlayer, type MusicPlayMode } from '../../contexts/MusicPlayerContext'
-import { findLrcIndex, formatSongDuration, upgradeMediaUrl } from '../../lib/music/song'
+import { getToken } from '../../lib/api'
+import { findLrcIndex, formatSongDuration } from '../../lib/music/song'
+import { resolveMusicImageSrc } from '../../lib/music/stream'
 import { useLyrics } from '../../lib/music/useLyrics'
 
 /**
@@ -68,7 +71,8 @@ export default function MusicHeaderPlayer() {
     ? player.durationSec
     : song.durationMs > 0 ? song.durationMs / 1000 : 0
   const progress = duration > 0 ? Math.min(player.positionSec / duration, 1) : 0
-  const cover = upgradeMediaUrl(song.picUrl)
+  // 背景氛围图用同一套地址策略（直连失败时列表里的 <MusicImage> 会自行降级）
+  const cover = resolveMusicImageSrc(song.picUrl, player.streamViaProxy, getToken())
   const subtitle = activeLyric || song.artists || '未知歌手'
   const rootStyle = cover
     ? ({ '--gh-hp-art': `url("${cover}")` } as CSSProperties)
@@ -83,9 +87,13 @@ export default function MusicHeaderPlayer() {
       style={rootStyle}
     >
       <Link to="/music" className="gh-music-hp-info" title={`${song.name} · ${subtitle}`}>
-        {cover
-          ? <img className="gh-music-hp-cover" src={cover} alt="" />
-          : <span className="gh-music-hp-cover gh-music-hp-cover--fallback"><Icon name="music" size={14} /></span>}
+        <MusicImage
+          url={song.picUrl}
+          proxy={player.streamViaProxy}
+          className="gh-music-hp-cover"
+          loading="eager"
+          fallback={<span className="gh-music-hp-cover gh-music-hp-cover--fallback"><Icon name="music" size={14} /></span>}
+        />
         <span className={`gh-music-hp-meta${activeLyric ? ' gh-music-hp-meta--lyric' : ''}`}>
           <span className="gh-music-hp-name">
             {song.name}

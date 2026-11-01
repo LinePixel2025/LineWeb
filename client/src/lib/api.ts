@@ -1,4 +1,5 @@
-const API_BASE = import.meta.env.VITE_API_URL || '/api'
+/** API 基址：默认同源 `/api`；部署为独立 API 域名时由 VITE_API_URL 覆盖 */
+export const API_BASE = import.meta.env.VITE_API_URL || '/api'
 const TOKEN_KEY = 'lineweb_token'
 const DEFAULT_TIMEOUT_MS = 30_000
 /** 图片上传需要更长的超时（服务端还会处理图片，30s 不够） */

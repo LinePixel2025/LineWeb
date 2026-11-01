@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Icon from '../components/ui/Icon'
 import NowPlayingCard from '../components/music/NowPlayingCard'
+import MusicImage from '../components/music/MusicImage'
 import { useMusicPlayer } from '../contexts/MusicPlayerContext'
 import { api } from '../lib/api'
-import { formatSongDuration, normalizeSongList, upgradeMediaUrl, type SongView } from '../lib/music/song'
+import { formatSongDuration, normalizeSongList, type SongView } from '../lib/music/song'
 import type {
   MusicQrCheck,
   MusicQrPrepare,
@@ -255,9 +256,13 @@ export default function MusicPage() {
                   {isPlaying ? <PlayingBars /> : String(songIndex + 1).padStart(2, '0')}
                 </span>
                 <span className="gh-music-song-cover-wrap">
-                  {song.picUrl
-                    ? <img className="gh-music-song-cover" src={upgradeMediaUrl(song.picUrl) ?? undefined} alt="" loading="lazy" />
-                    : <span className="gh-music-song-cover gh-music-song-cover--fallback"><Icon name="music" size={14} /></span>}
+                  <MusicImage
+                    url={song.picUrl}
+                    proxy={player.streamViaProxy}
+                    className="gh-music-song-cover"
+                    loading="lazy"
+                    fallback={<span className="gh-music-song-cover gh-music-song-cover--fallback"><Icon name="music" size={14} /></span>}
+                  />
                   <span className="gh-music-song-play"><Icon name="play" size={13} /></span>
                 </span>
                 <span className="gh-music-song-meta">
@@ -310,9 +315,12 @@ export default function MusicPage() {
           <li key={item.id}>
             <button className="gh-music-playlist-card" onClick={() => void openPlaylist(item.id, item.name)}>
               <span className="gh-music-card-art">
-                {item.coverImgUrl
-                  ? <img src={upgradeMediaUrl(item.coverImgUrl) ?? undefined} alt="" loading="lazy" />
-                  : <span className="gh-music-playlist-card-fallback"><Icon name="music" size={20} /></span>}
+                <MusicImage
+                  url={item.coverImgUrl}
+                  proxy={player.streamViaProxy}
+                  loading="lazy"
+                  fallback={<span className="gh-music-playlist-card-fallback"><Icon name="music" size={20} /></span>}
+                />
                 <span className="gh-music-card-play"><Icon name="play" size={16} /></span>
                 {typeof item.trackCount === 'number' && item.trackCount > 0 && (
                   <span className="gh-music-card-count">{item.trackCount} 首</span>
@@ -340,7 +348,11 @@ export default function MusicPage() {
         ) : status?.bound ? (
           <div className="gh-music-account">
             {status.avatarUrl && (
-              <img className="gh-music-account-avatar" src={upgradeMediaUrl(status.avatarUrl) ?? undefined} alt="" />
+              <MusicImage
+                url={status.avatarUrl}
+                proxy={player.streamViaProxy}
+                className="gh-music-account-avatar"
+              />
             )}
             <span className="gh-music-account-name">{status.nickname || '已绑定'}</span>
             <button className="gh-btn gh-btn--ghost gh-btn--sm" onClick={() => void unbind()} disabled={unbinding}>
@@ -361,6 +373,22 @@ export default function MusicPage() {
           <span>{player.error}</span>
           <button className="gh-reader-icon-btn" onClick={player.clearError} aria-label="关闭提示">
             <Icon name="close" size={12} />
+          </button>
+        </div>
+      )}
+
+      {player.streamViaProxy && (
+        <div className="gh-music-notice">
+          <Icon name="globe" size={14} />
+          <span>
+            当前设备的网络无法直连网易云 CDN，音频与封面已改走服务器中转（会占用站点带宽）。
+          </span>
+          <button
+            type="button"
+            className="gh-btn gh-btn--ghost gh-btn--sm"
+            onClick={() => player.setStreamViaProxy(false)}
+          >
+            改回直连
           </button>
         </div>
       )}
@@ -466,9 +494,12 @@ export default function MusicPage() {
                     <li key={item.id}>
                       <button className="gh-music-toplist-card" onClick={() => void openPlaylist(item.id, item.name)}>
                         <span className="gh-music-card-art">
-                          {item.coverImgUrl
-                            ? <img src={upgradeMediaUrl(item.coverImgUrl) ?? undefined} alt="" loading="lazy" />
-                            : <span className="gh-music-playlist-card-fallback"><Icon name="trophy" size={20} /></span>}
+                          <MusicImage
+                            url={item.coverImgUrl}
+                            proxy={player.streamViaProxy}
+                            loading="lazy"
+                            fallback={<span className="gh-music-playlist-card-fallback"><Icon name="trophy" size={20} /></span>}
+                          />
                           <span className="gh-music-card-play"><Icon name="play" size={16} /></span>
                         </span>
                         <span className="gh-music-toplist-card-name">{item.name}</span>

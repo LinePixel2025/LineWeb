@@ -46,6 +46,8 @@ export const apiLimiterSkipPaths = [
   // 股市行情轮询（3 秒/次）由路由内按用户限流接管
   /^\/stocks\/market\/?$/,
   /^\/stocks\/market\/trend\/?$/,
+  // 音乐中转：<audio> 的 Range 请求与封面图批量加载，由路由内 600/5min 按用户限流接管
+  /^\/music\/(stream|image)\/?$/,
 ]
 
 export function isHighFrequencyPath(req: Request): boolean {
