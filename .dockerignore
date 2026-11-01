@@ -30,6 +30,12 @@ server/prisma/migrations
 deploy.log
 npm-debug.log*
 
+# Local verification artifacts (screenshots / e2e scratch)
+test-screenshots
+.e2e-tmp
+.playwright-mcp
+test-results
+
 # IDE
 .idea
 .vscode
