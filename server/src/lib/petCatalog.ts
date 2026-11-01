@@ -75,14 +75,20 @@ export interface PetTrickDef {
   minLevel: number
 }
 
-/** 特技动作：免费、不改数值，纯展示 */
+/** 特技动作：免费、不改数值，纯展示（key 只允许小写字母 / 数字 / 下划线） */
 export const PET_TRICKS: readonly PetTrickDef[] = [
+  { key: 'stretch', name: '伸懒腰', emoji: '🙆', minLevel: 2, description: '前爪一伸，尾巴翘起来打个哈欠' },
+  { key: 'beg', name: '作揖', emoji: '🥺', minLevel: 3, description: '双爪并拢，眼巴巴地讨一口吃的' },
   { key: 'dance', name: '跳舞', emoji: '🎵', minLevel: 4, description: '跟着节奏扭一扭' },
   { key: 'roll', name: '翻滚', emoji: '🌀', minLevel: 5, description: '咕噜咕噜滚一圈' },
+  { key: 'highfive', name: '击掌', emoji: '✋', minLevel: 5, description: '抬起前爪和你击个掌' },
   { key: 'sing', name: '唱歌', emoji: '🎤', minLevel: 6, description: '清清嗓子来一段' },
   { key: 'flip', name: '后空翻', emoji: '🤸', minLevel: 7, description: '空中转体一周' },
+  { key: 'moonwalk', name: '太空步', emoji: '🕺', minLevel: 7, description: '踩着拍子向后滑，经典太空步' },
   { key: 'spin', name: '转圈圈', emoji: '🌪️', minLevel: 8, description: '原地小旋风' },
+  { key: 'playdead', name: '装死', emoji: '😵', minLevel: 8, description: '四脚一摊，装死骗你摸摸' },
   { key: 'magic', name: '魔法秀', emoji: '✨', minLevel: 9, description: '凭空变出小花' },
+  { key: 'cheer', name: '欢呼', emoji: '🎉', minLevel: 9, description: '蹦起来为你欢呼，撒一把彩纸' },
   { key: 'firework', name: '烟花庆祝', emoji: '🎆', minLevel: 10, description: '满级专属庆祝仪式' },
 ]
 

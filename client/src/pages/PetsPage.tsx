@@ -12,7 +12,6 @@ import type {
   PetOutfitInfo,
   PetActionResult,
   PetSpecies,
-  PetSpeciesInfo,
   PetTouchResult,
   PetUpdateResult,
   PetSummonResult,
@@ -73,6 +72,19 @@ const CARE_ANIMS: Record<PetCareActionInfo['key'], string> = {
 /** 抚摸随机小动画：爱心 / 歪头 / 蹦跳翻滚 */
 const TOUCH_ANIMS = ['happy', 'sing', 'roll'] as const
 
+/** 状态条文案与图标 */
+const STAT_LABELS: Record<'hunger' | 'cleanliness' | 'mood', string> = {
+  hunger: '饱食度',
+  cleanliness: '清洁度',
+  mood: '心情',
+}
+
+const STAT_ICONS: Record<'hunger' | 'cleanliness' | 'mood', string> = {
+  hunger: '🍖',
+  cleanliness: '🧼',
+  mood: '💛',
+}
+
 /** 状态条低值警告文案 */
 const STAT_WARN_TEXTS: Record<'hunger' | 'cleanliness' | 'mood', string> = {
   hunger: '快饿肚子啦',
@@ -86,8 +98,51 @@ const SLOT_LABELS: Record<'hat' | 'neck' | 'face', string> = {
   face: '面部',
 }
 
-/** 立绘动画结束回到 idle 的时长（覆盖最长动画 2.1s） */
-const ANIM_DURATION_MS = 2_200
+const SLOT_ICONS: Record<'hat' | 'neck' | 'face', string> = {
+  hat: '🎩',
+  neck: '🧣',
+  face: '👓',
+}
+
+/** 对话气泡：动作台词 */
+interface BubbleLine {
+  emoji: string
+  text: string
+}
+
+const ACTION_QUOTES: Record<string, BubbleLine> = {
+  eat: { emoji: '🍖', text: '好吃！还想再来一碗～' },
+  bath: { emoji: '🫧', text: '泡泡软软的，好舒服呀。' },
+  play: { emoji: '🎾', text: '接住球啦！再来一次！' },
+  happy: { emoji: '💗', text: '最喜欢你摸摸我啦～' },
+  dance: { emoji: '🎵', text: '跟着节拍摇起来～' },
+  roll: { emoji: '🌀', text: '咕噜咕噜…转得有点晕啦。' },
+  sing: { emoji: '🎤', text: '啦啦啦～这首歌送给你。' },
+  flip: { emoji: '🤸', text: '看我的空中转体！' },
+  spin: { emoji: '🌪️', text: '原地小旋风——转！' },
+  magic: { emoji: '✨', text: '见证奇迹的时刻！' },
+  firework: { emoji: '🎆', text: '满级庆祝，砰！' },
+  stretch: { emoji: '💤', text: '伸——个——大懒腰…好舒服。' },
+  beg: { emoji: '🥺', text: '拜托拜托，就一小口嘛。' },
+  highfive: { emoji: '✋', text: '击掌！今天也要加油呀。' },
+  moonwalk: { emoji: '🕺', text: '看我的太空步，酷不酷？' },
+  playdead: { emoji: '💫', text: '我…倒下了…（偷偷睁眼）' },
+  cheer: { emoji: '🎉', text: '好耶！一起欢呼吧！' },
+}
+
+/** 无动作时的气泡文案：按最低状态给一句关心 / 心情话 */
+function petBubbleLine(pet: PetDto): BubbleLine {
+  if (pet.hunger < 20) return { emoji: '🍖', text: '肚子咕咕叫…可以喂我一点吗？' }
+  if (pet.cleanliness < 20) return { emoji: '🧼', text: '毛毛有点脏了，想洗个热水澡…' }
+  if (pet.mood < 20) return { emoji: '💛', text: '有点无聊，陪我玩一会儿嘛。' }
+  if (pet.hunger < 45) return { emoji: '🍗', text: '好像有点饿了，待会儿喂我嘛。' }
+  if (pet.cleanliness < 45) return { emoji: '🫧', text: '身上痒痒的，想搓搓泡泡。' }
+  if (pet.mood < 45) return { emoji: '🐾', text: '摸摸头会变开心哦。' }
+  return { emoji: '✨', text: '今天也安静地陪着你～' }
+}
+
+/** 立绘动画结束回到 idle 的时长（覆盖最长动画 2.2s） */
+const ANIM_DURATION_MS = 2_400
 
 /* ============================================================
    页面
@@ -361,7 +416,7 @@ export default function PetsPage() {
 
   /* ---------- 派生数据 ---------- */
 
-  const selectedInfo: PetSpeciesInfo | undefined = catalog?.species.find((item) => item.key === selected)
+  const aliveSpeciesInfo = alivePet ? catalog?.species.find((item) => item.key === alivePet.species) : undefined
   const lowStat = !!alivePet && Math.min(alivePet.hunger, alivePet.cleanliness, alivePet.mood) < 20
   const warnStats = alivePet
     ? (['hunger', 'cleanliness', 'mood'] as const).filter((key) => alivePet[key] < 20)
@@ -371,6 +426,15 @@ export default function PetsPage() {
   const untilGoneHours = untilZero != null
     ? untilZero + (pet?.graceHours ?? 0)
     : null
+
+  // 对话气泡：动作中显示台词，闲置时按状态给一句短文案
+  const bubble: BubbleLine = alivePet
+    ? (ACTION_QUOTES[action] ?? petBubbleLine(alivePet))
+    : { emoji: '🐾', text: '它会回来的。' }
+  const levelPercent = pet && catalog ? Math.round((pet.level / catalog.maxLevel) * 100) : 0
+  const unlockedTricks = pet && catalog
+    ? catalog.tricks.filter((trick) => pet.unlockedActions.includes(trick.key)).length
+    : 0
 
   /* ---------- 渲染 ---------- */
 
@@ -449,9 +513,26 @@ export default function PetsPage() {
         <div className="gh-pet-layout">
           <section>
             <div className="gh-pet-stage">
-              <span className="gh-pet-stage-frame" aria-hidden />
-              <span className="gh-pet-stage-window" aria-hidden />
-              <span className="gh-pet-stage-rug" aria-hidden />
+              <div className="gh-pet-stage-scene" aria-hidden>
+                <span className="gh-pet-stage-wall" />
+                <span className="gh-pet-stage-window"><i /></span>
+                <span className="gh-pet-stage-frame" />
+                <span className="gh-pet-stage-shelf"><i /><i /><i /></span>
+                <span className="gh-pet-stage-floor" />
+                <span className="gh-pet-stage-beam" />
+                <span className="gh-pet-stage-rug" />
+                <span className="gh-pet-stage-plant"><i /><i /><i /><i /></span>
+                <span className="gh-pet-stage-ball"><i /></span>
+                <span className="gh-pet-stage-mote gh-pet-stage-mote--1" />
+                <span className="gh-pet-stage-mote gh-pet-stage-mote--2" />
+                <span className="gh-pet-stage-mote gh-pet-stage-mote--3" />
+                <span className="gh-pet-stage-mote gh-pet-stage-mote--4" />
+                <span className="gh-pet-stage-mote gh-pet-stage-mote--5" />
+              </div>
+              <div className="gh-pet-bubble" role="status" aria-live="polite" key={bubble.text}>
+                <span className="gh-pet-bubble-emoji" aria-hidden>{bubble.emoji}</span>
+                {bubble.text}
+              </div>
               <button
                 type="button"
                 className="gh-pet-stage-hit"
@@ -471,57 +552,82 @@ export default function PetsPage() {
             </div>
 
             <div className="gh-pet-dock">
-              <div className="gh-pet-dock-group">
-                <p className="gh-pet-dock-group-title">照顾</p>
-                {catalog.careActions.map((care) => {
-                  const levelLocked = pet.level < care.minLevel
-                  const affordable = points >= care.cost
-                  return (
-                    <button
-                      key={care.key}
-                      type="button"
-                      className={`gh-pet-dock-btn ${levelLocked ? 'gh-pet-dock-btn--locked' : ''}`}
-                      title={care.description}
-                      disabled={levelLocked || !affordable || !!busy}
-                      onClick={() => void handleCare(care)}
-                    >
-                      <span className="gh-pet-dock-emoji" aria-hidden>{care.emoji}</span>
-                      <strong>{care.name}</strong>
-                      <span className="gh-pet-dock-meta">
-                        {levelLocked ? `🔒 Lv.${care.minLevel}` : `-${care.cost} 积分`}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-              <div className="gh-pet-dock-group">
-                <p className="gh-pet-dock-group-title">小把戏（免费）</p>
-                {catalog.tricks.map((trick) => {
-                  const unlocked = pet.unlockedActions.includes(trick.key)
-                  return (
-                    <button
-                      key={trick.key}
-                      type="button"
-                      className={`gh-pet-dock-btn gh-pet-dock-btn--trick ${unlocked ? '' : 'gh-pet-dock-btn--locked'}`}
-                      title={trick.description}
-                      disabled={!unlocked || !!busy}
-                      onClick={() => void handleTrick(trick.key)}
-                    >
-                      <span className="gh-pet-dock-emoji" aria-hidden>{unlocked ? trick.emoji : '🔒'}</span>
-                      <strong>{trick.name}</strong>
-                      <span className="gh-pet-dock-meta">
-                        {unlocked ? '表演' : `Lv.${trick.minLevel} 解锁`}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
+              <section className="gh-pet-dock-group">
+                <div className="gh-pet-dock-group-head">
+                  <p className="gh-pet-dock-group-title">
+                    <span className="gh-pet-dock-dot" aria-hidden />
+                    照顾
+                  </p>
+                  <span className="gh-pet-dock-group-note">恢复状态 · {catalog.careActions.length} 个</span>
+                </div>
+                <div className="gh-pet-dock-grid">
+                  {catalog.careActions.map((care) => {
+                    const levelLocked = pet.level < care.minLevel
+                    const affordable = points >= care.cost
+                    return (
+                      <button
+                        key={care.key}
+                        type="button"
+                        className={`gh-pet-dock-btn ${levelLocked ? 'gh-pet-dock-btn--locked' : ''}`}
+                        title={care.description}
+                        disabled={levelLocked || !affordable || !!busy}
+                        onClick={() => void handleCare(care)}
+                      >
+                        <span className="gh-pet-dock-emoji" aria-hidden>{care.emoji}</span>
+                        <strong>{care.name}</strong>
+                        <span className="gh-pet-dock-meta">
+                          {levelLocked ? `🔒 Lv.${care.minLevel}` : `-${care.cost} 积分`}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </section>
+              <section className="gh-pet-dock-group gh-pet-dock-group--tricks">
+                <div className="gh-pet-dock-group-head">
+                  <p className="gh-pet-dock-group-title">
+                    <span className="gh-pet-dock-dot" aria-hidden />
+                    小把戏
+                  </p>
+                  <span className="gh-pet-dock-group-note">
+                    免费表演 · 已解锁 {unlockedTricks} / {catalog.tricks.length}
+                  </span>
+                </div>
+                <div className="gh-pet-dock-grid">
+                  {catalog.tricks.map((trick) => {
+                    const unlocked = pet.unlockedActions.includes(trick.key)
+                    return (
+                      <button
+                        key={trick.key}
+                        type="button"
+                        className={`gh-pet-dock-btn gh-pet-dock-btn--trick ${unlocked ? '' : 'gh-pet-dock-btn--locked'}`}
+                        title={trick.description}
+                        disabled={!unlocked || !!busy}
+                        onClick={() => void handleTrick(trick.key)}
+                      >
+                        <span className="gh-pet-dock-emoji" aria-hidden>{unlocked ? trick.emoji : '🔒'}</span>
+                        <strong>{trick.name}</strong>
+                        <span className="gh-pet-dock-meta">
+                          {unlocked ? '表演' : `Lv.${trick.minLevel} 解锁`}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </section>
             </div>
           </section>
 
           <aside className="gh-pet-side">
-            {/* 名牌 */}
-            <div className="gh-pet-panel">
+            {/* 名牌 + 等级 */}
+            <div className="gh-pet-panel gh-pet-panel--profile">
+              <div className="gh-pet-profile-top">
+                <span className="gh-pet-species-chip">
+                  <span aria-hidden>{aliveSpeciesInfo?.emoji ?? '🐾'}</span>
+                  {aliveSpeciesInfo?.name ?? '宠物'}
+                </span>
+                <span className="gh-pet-level-badge">Lv.{pet.level} / {catalog.maxLevel}</span>
+              </div>
               {renaming ? (
                 <div className="gh-pet-rename-form">
                   <input
@@ -560,12 +666,19 @@ export default function PetsPage() {
                   >
                     ✏️
                   </button>
-                  <span className="gh-pet-level-badge">Lv.{pet.level} / {catalog.maxLevel}</span>
                 </div>
               )}
+              <div className="gh-pet-level-track" aria-hidden>
+                <span className="gh-pet-level-fill" style={{ width: `${levelPercent}%` }} />
+              </div>
+              <span className="gh-pet-level-hint">
+                {pet.nextLevelCost == null
+                  ? '已经满级，全部动作解锁'
+                  : `成长进度 ${pet.level} / ${catalog.maxLevel} · 升级解锁更多动作`}
+              </span>
               <button
                 type="button"
-                className="gh-btn gh-btn--primary gh-btn--sm"
+                className="gh-btn gh-btn--primary gh-btn--sm gh-pet-upgrade-btn"
                 disabled={pet.nextLevelCost == null || !!busy || points < (pet.nextLevelCost ?? 0)}
                 onClick={() => void handleUpgrade()}
               >
@@ -576,20 +689,28 @@ export default function PetsPage() {
             </div>
 
             {/* 状态条 */}
-            <div className="gh-pet-panel">
-              <h3 className="gh-pet-panel-title">状态</h3>
+            <div className="gh-pet-panel gh-pet-panel--stats">
+              <div className="gh-pet-panel-head">
+                <h3 className="gh-pet-panel-title">状态</h3>
+                <span className="gh-pet-panel-hint">随时间缓慢下降</span>
+              </div>
               {(['hunger', 'cleanliness', 'mood'] as const).map((key) => {
                 const value = pet[key]
-                const labels = { hunger: '🍖 饱食度', cleanliness: '🧼 清洁', mood: '💛 心情' } as const
                 return (
                   <div key={key} className="gh-pet-stat">
                     <div className="gh-pet-stat-head">
-                      <span>{labels[key]}</span>
-                      <span className="gh-pet-stat-num">{value}</span>
+                      <span className="gh-pet-stat-label">
+                        <span className="gh-pet-stat-icon" aria-hidden>{STAT_ICONS[key]}</span>
+                        {STAT_LABELS[key]}
+                      </span>
+                      <span className="gh-pet-stat-num">
+                        {value}
+                        <em> / 100</em>
+                      </span>
                     </div>
                     <div className="gh-pet-stat-bar">
                       <span
-                        className={`gh-pet-stat-fill ${key === 'mood' ? 'gh-pet-stat-fill--mood' : ''} ${value < 20 ? 'gh-pet-stat-fill--low' : ''}`}
+                        className={`gh-pet-stat-fill gh-pet-stat-fill--${key} ${value < 20 ? 'gh-pet-stat-fill--low' : ''}`}
                         style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
                       />
                     </div>
@@ -605,11 +726,17 @@ export default function PetsPage() {
             </div>
 
             {/* 衣柜 */}
-            <div className="gh-pet-panel">
-              <h3 className="gh-pet-panel-title">衣柜</h3>
+            <div className="gh-pet-panel gh-pet-panel--wardrobe">
+              <div className="gh-pet-panel-head">
+                <h3 className="gh-pet-panel-title">衣柜</h3>
+                <span className="gh-pet-panel-hint">已购 {pet.ownedOutfits.length} / {catalog.outfits.length}</span>
+              </div>
               {(['hat', 'neck', 'face'] as const).map((slot) => (
                 <div key={slot} className="gh-pet-wardrobe-slot">
-                  <h3>{SLOT_LABELS[slot]}</h3>
+                  <p className="gh-pet-wardrobe-slot-head">
+                    <span aria-hidden>{SLOT_ICONS[slot]}</span>
+                    {SLOT_LABELS[slot]}
+                  </p>
                   <div className="gh-pet-outfit-grid">
                     {catalog.outfits.filter((outfit) => outfit.slot === slot).map((outfit) => {
                       const owned = pet.ownedOutfits.includes(outfit.key)
@@ -620,7 +747,10 @@ export default function PetsPage() {
                           key={outfit.key}
                           className={`gh-pet-outfit ${worn ? 'gh-pet-outfit--worn' : ''}`}
                         >
-                          <span className="gh-pet-outfit-emoji" aria-hidden>{outfit.emoji}</span>
+                          <div className="gh-pet-outfit-top">
+                            <span className="gh-pet-outfit-emoji" aria-hidden>{outfit.emoji}</span>
+                            {worn && <span className="gh-pet-outfit-worn">穿着中</span>}
+                          </div>
                           <strong className="gh-pet-outfit-name">{outfit.name}</strong>
                           <span className="gh-pet-outfit-desc">{outfit.description}</span>
                           {owned ? (
@@ -685,25 +815,35 @@ function SummonCard({
   const affordable = points >= catalog.costs.summon
   return (
     <section className="gh-pet-summon">
-      <h2>{resummon ? '重新召唤一位新伙伴' : '召唤一只小宠物'}</h2>
-      <p className="gh-pet-summon-note">
-        {resummon
-          ? '已购的装扮会一直保留，重新召唤后还能穿上。'
-          : '挑一只喜欢的伙伴起个名字，之后记得按时喂食、洗澡、陪它玩。'}
-      </p>
+      <div className="gh-pet-summon-head">
+        <span className="gh-pet-summon-eyebrow">
+          <span aria-hidden>🐾</span>
+          {resummon ? 'WELCOME BACK' : 'NEW COMPANION'}
+        </span>
+        <h2>{resummon ? '重新召唤一位新伙伴' : '召唤一只小宠物'}</h2>
+        <p className="gh-pet-summon-note">
+          {resummon
+            ? '已购的装扮会一直保留，重新召唤后还能穿上。'
+            : '挑一只喜欢的伙伴起个名字，之后记得按时喂食、洗澡、陪它玩。'}
+        </p>
+      </div>
       <div className="gh-pet-summon-grid">
-        {catalog.species.map((species) => (
-          <button
-            key={species.key}
-            type="button"
-            className={`gh-pet-summon-card ${selected === species.key ? 'gh-pet-summon-card--active' : ''}`}
-            onClick={() => onSelect(species.key)}
-          >
-            <PetSprite species={species.key} action="idle" size={110} />
-            <strong>{species.emoji} {species.name}</strong>
-            <span className="gh-pet-summon-card-desc">{species.description}</span>
-          </button>
-        ))}
+        {catalog.species.map((species) => {
+          const active = selected === species.key
+          return (
+            <button
+              key={species.key}
+              type="button"
+              className={`gh-pet-summon-card ${active ? 'gh-pet-summon-card--active' : ''}`}
+              onClick={() => onSelect(species.key)}
+            >
+              {active && <span className="gh-pet-summon-check" aria-hidden>✓</span>}
+              <PetSprite species={species.key} action={active ? 'happy' : 'idle'} size={110} />
+              <strong>{species.emoji} {species.name}</strong>
+              <span className="gh-pet-summon-card-desc">{species.description}</span>
+            </button>
+          )
+        })}
       </div>
       <div className="gh-pet-summon-form">
         <input
@@ -742,6 +882,11 @@ function GoneCard({ pet, onResummon }: { pet: PetDto; onResummon: () => void }) 
       <div className="gh-pet-gone-silhouette" aria-hidden>
         <PetSprite species={pet.species} action="idle" equipped={pet.equipped} size={140} sad />
         <span className="gh-pet-gone-wind">💨</span>
+      </div>
+      <div className="gh-pet-gone-trail" aria-hidden>
+        <span>🐾</span>
+        <span>🐾</span>
+        <span>🐾</span>
       </div>
       <h2>你的宠物因太久没人照顾，离家出走了…</h2>
       <p>

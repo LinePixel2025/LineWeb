@@ -1,28 +1,82 @@
 /* =============================================================
    宠物系统（/pets）
-   —— 召唤卡 / 离家出走空状态 / 宠物舞台 / 动作坞 / 状态条 / 衣柜
-   —— PetSprite 立绘动画（眨眼 / 尾巴 / 翅膀 + 动作 keyframes）
+   —— 召唤卡 / 离家出走空状态 / 宠物房间舞台 / 对话气泡 /
+      动作坞 / 状态条 / 衣柜 / PetSprite 立绘与动作动画
+   —— 游戏美术允许自定配色；页面外壳仍走设计令牌
    ============================================================= */
 
 .gh-pet-page {
-  --pet-wall-a: #fff7ea;
-  --pet-wall-b: #fdeed4;
-  --pet-floor: #e4d3b2;
-  --pet-floor-b: #d6c19a;
   --pet-accent: #e0762f;
+  --pet-accent-strong: #b95a17;
   --pet-accent-soft: rgba(224, 118, 47, 0.14);
-  --pet-panel: #ffffff;
+  --pet-trick: #6f5bd8;
+  --pet-trick-soft: rgba(111, 91, 216, 0.12);
+  --pet-panel: var(--gh-canvas);
+
+  /* 房间场景（浅色：暖木 + 奶油墙） */
+  --pet-scene-wall-1: #fdf6ea;
+  --pet-scene-wall-2: #f5e5cb;
+  --pet-scene-wall-3: #eed8b6;
+  --pet-scene-stripe: rgba(191, 150, 101, 0.1);
+  --pet-scene-floor-1: #dfbf92;
+  --pet-scene-floor-2: #cba474;
+  --pet-scene-floor-3: #b78c5c;
+  --pet-scene-floor-line: rgba(96, 63, 31, 0.14);
+  --pet-scene-base: #ecd7b4;
+  --pet-scene-wood: #b78a55;
+  --pet-scene-wood-dark: #8a6138;
+  --pet-scene-rug-1: #fbe3c8;
+  --pet-scene-rug-2: #f3c9a6;
+  --pet-scene-rug-3: #e7ab89;
+  --pet-scene-leaf: #7fbb7a;
+  --pet-scene-leaf-dark: #5a9a60;
+  --pet-scene-pot: #d98a63;
+  --pet-scene-pot-dark: #b66a49;
+  --pet-scene-sky-1: #cfeaff;
+  --pet-scene-sky-2: #eef8ff;
+  --pet-scene-window-light: rgba(255, 236, 186, 0.62);
+  --pet-scene-mote: rgba(255, 248, 222, 0.95);
+  --pet-scene-bubble: rgba(255, 255, 255, 0.93);
+  --pet-scene-hint: rgba(255, 255, 255, 0.6);
+  --pet-stage-shadow: 0 24px 50px -32px rgba(74, 45, 18, 0.55);
+  --pet-stage-inner-line: rgba(255, 255, 255, 0.6);
+
   max-width: 1180px;
 }
 
 [data-theme='dark'] .gh-pet-page {
-  --pet-wall-a: #1d2431;
-  --pet-wall-b: #232a38;
-  --pet-floor: #3a3630;
-  --pet-floor-b: #302d27;
   --pet-accent: #f0883e;
-  --pet-accent-soft: rgba(240, 136, 62, 0.18);
-  --pet-panel: #161b22;
+  --pet-accent-strong: #ffa25e;
+  --pet-accent-soft: rgba(240, 136, 62, 0.16);
+  --pet-trick: #a894ff;
+  --pet-trick-soft: rgba(168, 148, 255, 0.16);
+
+  --pet-scene-wall-1: #262e3d;
+  --pet-scene-wall-2: #1c2330;
+  --pet-scene-wall-3: #171d28;
+  --pet-scene-stripe: rgba(255, 255, 255, 0.035);
+  --pet-scene-floor-1: #3a332b;
+  --pet-scene-floor-2: #2f2922;
+  --pet-scene-floor-3: #262119;
+  --pet-scene-floor-line: rgba(0, 0, 0, 0.3);
+  --pet-scene-base: #443a2f;
+  --pet-scene-wood: #6d5236;
+  --pet-scene-wood-dark: #4f3a26;
+  --pet-scene-rug-1: #5a4640;
+  --pet-scene-rug-2: #4b3a36;
+  --pet-scene-rug-3: #3f302c;
+  --pet-scene-leaf: #4f8560;
+  --pet-scene-leaf-dark: #3b6a4d;
+  --pet-scene-pot: #8c5b47;
+  --pet-scene-pot-dark: #6e4535;
+  --pet-scene-sky-1: #0f1c2b;
+  --pet-scene-sky-2: #1b2a3a;
+  --pet-scene-window-light: rgba(150, 190, 255, 0.2);
+  --pet-scene-mote: rgba(210, 230, 255, 0.75);
+  --pet-scene-bubble: rgba(30, 30, 33, 0.94);
+  --pet-scene-hint: rgba(20, 20, 22, 0.55);
+  --pet-stage-shadow: 0 26px 54px -30px rgba(0, 0, 0, 0.85);
+  --pet-stage-inner-line: rgba(255, 255, 255, 0.06);
 }
 
 /* ===== 加载 ===== */
@@ -36,11 +90,11 @@
 }
 .gh-pet-loading-emoji {
   font-size: 3rem;
-  animation: gh-pet-idle 1.8s ease-in-out infinite;
+  animation: gh-pet-idle-float 1.8s ease-in-out infinite;
 }
 
-/* ===== 头部 ===== */
-.gh-pet-head {
+/* ===== 头部（限定为页面直属 header，避免命中 PetSprite 的 SVG 头部组） ===== */
+.gh-pet-page > .gh-pet-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -80,22 +134,24 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
+  padding: 5px 13px;
   border: 1px solid var(--gh-border);
   border-radius: 999px;
-  background: var(--pet-panel);
+  background: linear-gradient(180deg, var(--gh-canvas), var(--gh-canvas-subtle));
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  box-shadow: var(--gh-shadow-sm);
 }
 
 /* ===== 离家出走预警条 ===== */
-.gh-pet-warn {
+.gh-pet-page .gh-pet-warn {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: var(--gh-space-4);
-  padding: 10px 14px;
-  border: 1px solid rgba(154, 103, 0, 0.4);
-  border-radius: var(--gh-radius);
+  padding: 11px 15px;
+  border: 1px solid var(--gh-border-strong);
+  border-radius: var(--gh-radius-lg);
   background: var(--gh-warning-soft);
   color: var(--gh-warning);
   font-size: var(--gh-text-sm);
@@ -103,7 +159,7 @@
   animation: gh-pet-fade 0.3s ease;
 }
 
-/* ===== Toast（仿聊天/农场的浮动消息条） ===== */
+/* ===== Toast ===== */
 .gh-pet-toast {
   position: fixed;
   left: 50%;
@@ -124,50 +180,134 @@
 .gh-pet-toast--error { background: var(--gh-danger); }
 
 /* ===== 召唤卡 ===== */
-.gh-pet-summon {
-  padding: var(--gh-space-5);
+.gh-pet-page .gh-pet-summon {
+  position: relative;
+  overflow: hidden;
+  padding: var(--gh-space-6) var(--gh-space-5);
   border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius-lg);
-  background: var(--pet-panel);
+  border-radius: var(--gh-radius-xl);
+  background:
+    radial-gradient(120% 70% at 50% -20%, var(--pet-accent-soft), transparent 60%),
+    linear-gradient(180deg, var(--gh-canvas), var(--gh-canvas-subtle));
+  box-shadow: var(--gh-shadow-card);
   text-align: center;
 }
-.gh-pet-summon h2 { margin: 0 0 6px; }
+.gh-pet-summon::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, var(--pet-accent-soft) 0 2.5px, transparent 3px);
+  background-size: 34px 34px;
+  opacity: 0.55;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 62%);
+  mask-image: linear-gradient(180deg, #000 0%, transparent 62%);
+  pointer-events: none;
+}
+.gh-pet-summon-head {
+  position: relative;
+  max-width: 520px;
+  margin: 0 auto var(--gh-space-5);
+}
+.gh-pet-summon-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  margin-bottom: 10px;
+  border-radius: 999px;
+  background: var(--pet-accent-soft);
+  color: var(--pet-accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+.gh-pet-summon h2 {
+  margin: 0 0 6px;
+  font-size: var(--gh-text-xl);
+  letter-spacing: var(--gh-tracking-tight);
+}
 .gh-pet-summon-note {
-  margin: 0 0 var(--gh-space-4);
+  margin: 0;
   color: var(--gh-text-secondary);
   font-size: var(--gh-text-sm);
+  line-height: 1.6;
 }
 .gh-pet-summon-grid {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--gh-space-4);
-  margin-bottom: var(--gh-space-4);
+  margin-bottom: var(--gh-space-5);
 }
 .gh-pet-summon-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: var(--gh-space-4) var(--gh-space-3);
+  gap: 4px;
+  padding: var(--gh-space-3) var(--gh-space-3) var(--gh-space-4);
   border: 2px solid var(--gh-border);
   border-radius: var(--gh-radius-lg);
-  background: var(--gh-canvas);
+  background: linear-gradient(180deg, var(--gh-canvas), var(--gh-canvas-subtle));
   cursor: pointer;
   text-align: center;
-  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, transform 0.2s var(--gh-ease-spring), box-shadow 0.2s ease;
 }
-.gh-pet-summon-card:hover { transform: translateY(-2px); box-shadow: var(--gh-shadow-sm); }
+.gh-pet-summon-card::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  width: 132px;
+  height: 112px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, var(--pet-accent-soft), transparent 70%);
+  pointer-events: none;
+}
+.gh-pet-summon-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--gh-border-strong);
+  box-shadow: var(--gh-shadow-md);
+}
 .gh-pet-summon-card--active {
   border-color: var(--pet-accent);
-  background: var(--pet-accent-soft);
+  background: linear-gradient(180deg, var(--pet-accent-soft), var(--gh-canvas));
+  box-shadow: 0 0 0 3px var(--pet-accent-soft);
 }
-.gh-pet-summon-card strong { font-size: var(--gh-text-base); }
+.gh-pet-summon-card .gh-pet-sprite {
+  position: relative;
+  z-index: 1;
+  margin: -4px 0 0;
+}
+.gh-pet-summon-card strong {
+  position: relative;
+  font-size: var(--gh-text-base);
+}
 .gh-pet-summon-card-desc {
+  position: relative;
   font-size: var(--gh-text-xs);
   color: var(--gh-text-secondary);
   line-height: 1.5;
 }
+.gh-pet-summon-check {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--pet-accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  animation: gh-pet-pop-in 0.2s var(--gh-ease-spring);
+}
 .gh-pet-summon-form {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -175,9 +315,9 @@
   flex-wrap: wrap;
 }
 .gh-pet-summon-input {
-  width: 220px;
+  width: 240px;
   max-width: 100%;
-  padding: 7px 12px;
+  padding: 8px 13px;
   border: 1px solid var(--gh-border);
   border-radius: var(--gh-radius);
   background: var(--gh-canvas);
@@ -193,10 +333,10 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 12px;
+  padding: 6px 13px;
   border-radius: 999px;
   background: var(--pet-accent-soft);
-  color: var(--pet-accent);
+  color: var(--pet-accent-strong);
   font-weight: 700;
   font-size: var(--gh-text-sm);
   white-space: nowrap;
@@ -204,222 +344,700 @@
 
 /* ===== 离家出走空状态 ===== */
 .gh-pet-gone {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  overflow: hidden;
   padding: var(--gh-space-7) var(--gh-space-5);
   border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius-lg);
-  background: var(--pet-panel);
+  border-radius: var(--gh-radius-xl);
+  background:
+    radial-gradient(90% 70% at 50% 0%, rgba(148, 163, 184, 0.16), transparent 65%),
+    linear-gradient(180deg, var(--gh-canvas), var(--gh-canvas-subtle));
+  box-shadow: var(--gh-shadow-card);
   text-align: center;
+}
+.gh-pet-gone::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, var(--gh-border) 0 1.6px, transparent 2.2px);
+  background-size: 30px 30px;
+  opacity: 0.55;
+  -webkit-mask-image: radial-gradient(80% 70% at 50% 30%, #000, transparent 78%);
+  mask-image: radial-gradient(80% 70% at 50% 30%, #000, transparent 78%);
+  pointer-events: none;
 }
 .gh-pet-gone-silhouette {
   position: relative;
-  width: 170px;
-  height: 170px;
+  width: 176px;
+  height: 176px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px dashed var(--gh-border);
+  border: 2px dashed var(--gh-border-strong);
   border-radius: 50%;
-  filter: grayscale(1) opacity(0.45);
+  filter: grayscale(1) opacity(0.5);
+  background: radial-gradient(circle, rgba(120, 120, 128, 0.08), transparent 70%);
 }
 .gh-pet-gone-wind {
   position: absolute;
   right: -26px;
-  top: 6px;
+  top: 8px;
   font-size: 1.8rem;
   filter: none;
   animation: gh-pet-wind 1.6s ease-in-out infinite;
 }
-.gh-pet-gone h2 { margin: 6px 0 0; }
+.gh-pet-gone-trail {
+  position: absolute;
+  left: 8%;
+  bottom: 12%;
+  display: flex;
+  gap: 10px;
+  opacity: 0.26;
+  font-size: 16px;
+  transform: rotate(-12deg);
+  pointer-events: none;
+}
+.gh-pet-gone-trail span:nth-child(2) { transform: translateY(10px) scale(0.9); }
+.gh-pet-gone-trail span:nth-child(3) { transform: translateY(20px) scale(0.8); }
+.gh-pet-gone > h2,
+.gh-pet-gone > p,
+.gh-pet-gone > .gh-btn,
+.gh-pet-gone > .gh-pet-gone-silhouette,
+.gh-pet-gone > .gh-pet-gone-trail {
+  z-index: 1;
+}
+.gh-pet-gone h2 {
+  position: relative;
+  margin: 6px 0 0;
+}
 .gh-pet-gone p {
+  position: relative;
   margin: 0 0 var(--gh-space-3);
-  max-width: 420px;
+  max-width: 430px;
   color: var(--gh-text-secondary);
   font-size: var(--gh-text-sm);
   line-height: 1.6;
 }
 
-/* ===== 主布局（左右两栏，窄屏堆叠） ===== */
+/* ===== 主布局 ===== */
 .gh-pet-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) 344px;
   gap: var(--gh-space-5);
   align-items: start;
 }
 
-/* ===== 宠物舞台 ===== */
-.gh-pet-stage {
+/* =============================================================
+   宠物房间舞台
+   ============================================================= */
+
+.gh-pet-page .gh-pet-stage {
   position: relative;
-  min-height: 320px;
+  min-height: 396px;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
-  border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius-lg);
+  padding: 0 18px 52px;
   overflow: hidden;
   isolation: isolate;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-xl);
   background:
-    radial-gradient(ellipse 60% 42% at 50% 6%, rgba(255, 255, 255, 0.5), transparent 70%),
-    linear-gradient(180deg, var(--pet-wall-a) 0%, var(--pet-wall-b) 68%, var(--pet-floor) 68.5%, var(--pet-floor-b) 100%);
+    radial-gradient(120% 70% at 50% -10%, rgba(255, 255, 255, 0.42), transparent 62%),
+    linear-gradient(180deg, var(--pet-scene-wall-1) 0%, var(--pet-scene-wall-2) 62%, var(--pet-scene-wall-3) 100%);
+  box-shadow:
+    inset 0 1px 0 var(--pet-stage-inner-line),
+    var(--pet-stage-shadow);
 }
-[data-theme='dark'] .gh-pet-stage {
+[data-theme='dark'] .gh-pet-page .gh-pet-stage {
   background:
-    radial-gradient(ellipse 60% 42% at 50% 6%, rgba(148, 163, 184, 0.16), transparent 70%),
-    linear-gradient(180deg, var(--pet-wall-a) 0%, var(--pet-wall-b) 68%, var(--pet-floor) 68.5%, var(--pet-floor-b) 100%);
+    radial-gradient(120% 70% at 50% -12%, rgba(148, 163, 184, 0.14), transparent 62%),
+    linear-gradient(180deg, var(--pet-scene-wall-1) 0%, var(--pet-scene-wall-2) 62%, var(--pet-scene-wall-3) 100%);
 }
-/* 舞台装饰：挂画 + 窗光 + 地毯 */
-.gh-pet-stage-frame {
+
+.gh-pet-stage-scene {
   position: absolute;
-  left: 6%;
-  top: 12%;
-  width: 64px;
-  height: 48px;
-  border: 4px solid #b98b52;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #9bd0f5, #cfe9c8);
-  opacity: 0.85;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
+
+/* 墙面：细竖纹壁纸 + 暗角 */
+.gh-pet-stage-wall {
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(90deg, transparent 0 39px, var(--pet-scene-stripe) 39px 41px),
+    radial-gradient(100% 80% at 50% 40%, transparent 55%, rgba(60, 38, 16, 0.1));
+}
+[data-theme='dark'] .gh-pet-stage-wall {
+  background-image:
+    repeating-linear-gradient(90deg, transparent 0 39px, var(--pet-scene-stripe) 39px 41px),
+    radial-gradient(100% 80% at 50% 38%, transparent 46%, rgba(0, 0, 0, 0.42));
+}
+
+/* 木地板：拼板缝 + 木纹 + 窗光倒影 */
+.gh-pet-stage-floor {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 37%;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 62px, var(--pet-scene-floor-line) 62px 64px),
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0 2px, transparent 2px 28px),
+    linear-gradient(180deg, var(--pet-scene-floor-1), var(--pet-scene-floor-2) 56%, var(--pet-scene-floor-3));
+  box-shadow: inset 0 16px 26px -20px rgba(52, 30, 8, 0.7);
+}
+.gh-pet-stage-floor::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -12px;
+  height: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.24);
+  background: linear-gradient(180deg, var(--pet-scene-base), transparent);
+}
+.gh-pet-stage-floor::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(58% 92% at 82% 0%, var(--pet-scene-window-light), transparent 72%);
+  opacity: 0.75;
+}
+
+/* 拱形窗 + 日月 + 十字窗棂 */
 .gh-pet-stage-window {
   position: absolute;
-  right: 8%;
-  top: 10%;
-  width: 74px;
-  height: 58px;
-  border: 4px solid #b98b52;
-  border-radius: 8px 8px 0 0;
-  background: linear-gradient(180deg, #bfe4ff, #eaf7e4);
-  opacity: 0.9;
+  right: 7%;
+  top: 24px;
+  width: 112px;
+  height: 126px;
+  border: 5px solid var(--pet-scene-wood);
+  border-radius: 58px 58px 8px 8px;
+  background: linear-gradient(180deg, var(--pet-scene-sky-1), var(--pet-scene-sky-2));
+  box-shadow:
+    inset 0 10px 26px rgba(255, 255, 255, 0.35),
+    0 10px 22px -14px rgba(70, 42, 14, 0.6);
+  overflow: hidden;
+}
+.gh-pet-stage-window::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.55) 0 18%, transparent 42%);
+  opacity: 0.7;
 }
 .gh-pet-stage-window::after {
   content: '';
   position: absolute;
-  inset: 0 47% 0 0;
-  border-right: 3px solid #b98b52;
+  inset: 0;
+  background:
+    linear-gradient(var(--pet-scene-wood), var(--pet-scene-wood)) center / 4px 100% no-repeat,
+    linear-gradient(var(--pet-scene-wood), var(--pet-scene-wood)) center / 100% 4px no-repeat;
+  opacity: 0.9;
 }
-[data-theme='dark'] .gh-pet-stage-window { background: linear-gradient(180deg, #142234, #17251d); }
+.gh-pet-stage-window i {
+  position: absolute;
+  right: 14px;
+  top: 16px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 34%, #fff8d4, #ffd36d 70%);
+  box-shadow: 0 0 20px rgba(255, 213, 120, 0.85);
+}
+[data-theme='dark'] .gh-pet-stage-window i {
+  background: radial-gradient(circle at 38% 34%, #ffffff, #cfd9e8 72%);
+  box-shadow: 0 0 18px rgba(190, 215, 255, 0.6);
+}
+
+/* 窗光光束 */
+.gh-pet-stage-beam {
+  position: absolute;
+  right: 1%;
+  top: 118px;
+  width: 360px;
+  height: 320px;
+  background: linear-gradient(198deg, var(--pet-scene-window-light), transparent 62%);
+  clip-path: polygon(36% 0, 100% 0, 72% 100%, 0 100%);
+  opacity: 0.85;
+  mix-blend-mode: screen;
+  filter: blur(1px);
+}
+
+/* 墙上挂画 */
+.gh-pet-stage-frame {
+  position: absolute;
+  left: 7%;
+  top: 16%;
+  width: 86px;
+  height: 66px;
+  border: 5px solid var(--pet-scene-wood);
+  border-radius: 6px;
+  background: linear-gradient(160deg, #cfeaff, #f8ecc4);
+  box-shadow:
+    0 2px 0 var(--pet-scene-wood-dark),
+    0 10px 18px -12px rgba(60, 35, 12, 0.6);
+  transform: rotate(-1.5deg);
+  overflow: hidden;
+}
+.gh-pet-stage-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 68% 28%, #ffe8a6 0 13%, transparent 14%),
+    radial-gradient(circle at 30% 72%, #a7cf94 0 40%, transparent 41%),
+    linear-gradient(180deg, transparent 52%, #a7cf94 53% 70%, #7fb383 71% 100%);
+}
+.gh-pet-stage-frame::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 2px;
+}
+
+/* 小书架 */
+.gh-pet-stage-shelf {
+  position: absolute;
+  left: 6%;
+  top: 40%;
+  width: 110px;
+  height: 7px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--pet-scene-wood), var(--pet-scene-wood-dark));
+  box-shadow:
+    0 8px 12px -8px rgba(60, 35, 12, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.gh-pet-stage-shelf i {
+  position: absolute;
+  bottom: 7px;
+  width: 11px;
+  border-radius: 2px 2px 0 0;
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.3);
+}
+.gh-pet-stage-shelf i:nth-child(1) {
+  left: 16px;
+  height: 27px;
+  background: linear-gradient(180deg, #e8a07c, #d3845f);
+}
+.gh-pet-stage-shelf i:nth-child(2) {
+  left: 29px;
+  height: 33px;
+  background: linear-gradient(180deg, #8fb6d4, #6f98b9);
+}
+.gh-pet-stage-shelf i:nth-child(3) {
+  left: 42px;
+  height: 24px;
+  background: linear-gradient(180deg, #ecd08a, #d8b566);
+}
+
+/* 绿植 */
+.gh-pet-stage-plant {
+  position: absolute;
+  left: 5%;
+  bottom: 11%;
+  width: 76px;
+  height: 120px;
+}
+.gh-pet-stage-plant::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  bottom: 0;
+  width: 48px;
+  height: 44px;
+  border-radius: 7px 7px 15px 15px;
+  background: linear-gradient(145deg, var(--pet-scene-pot), var(--pet-scene-pot-dark));
+  box-shadow:
+    inset 0 6px 0 rgba(255, 255, 255, 0.18),
+    0 10px 14px -10px rgba(60, 35, 12, 0.65);
+}
+.gh-pet-stage-plant::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  bottom: 36px;
+  width: 54px;
+  height: 16px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, var(--pet-scene-pot), var(--pet-scene-pot-dark));
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.22);
+}
+.gh-pet-stage-plant i {
+  position: absolute;
+  left: 32px;
+  bottom: 44px;
+  width: 24px;
+  height: 50px;
+  border-radius: 60% 60% 50% 50% / 70% 70% 40% 40%;
+  background: linear-gradient(150deg, var(--pet-scene-leaf), var(--pet-scene-leaf-dark));
+  transform-origin: 50% 100%;
+  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.16);
+}
+.gh-pet-stage-plant i:nth-child(1) { height: 44px; transform: rotate(-38deg) translateY(-2px); }
+.gh-pet-stage-plant i:nth-child(2) { height: 54px; transform: rotate(-13deg); }
+.gh-pet-stage-plant i:nth-child(3) { height: 48px; transform: rotate(14deg); }
+.gh-pet-stage-plant i:nth-child(4) { height: 40px; transform: rotate(38deg) translateY(-2px); }
+
+/* 玩具球 */
+.gh-pet-stage-ball {
+  position: absolute;
+  right: 10%;
+  bottom: 9%;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 26%, #ffe9b3, #f7bd63 52%, #dc9138 100%);
+  box-shadow:
+    0 10px 12px -8px rgba(60, 35, 10, 0.6),
+    inset -3px -4px 6px rgba(150, 85, 20, 0.32);
+}
+.gh-pet-stage-ball i {
+  position: absolute;
+  inset: 7px -1px;
+  border-radius: 50%;
+  border-top: 3px solid rgba(255, 255, 255, 0.6);
+  border-bottom: 3px solid rgba(180, 105, 28, 0.35);
+  transform: rotate(-18deg);
+}
+.gh-pet-stage-ball::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 7px;
+  width: 9px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.72);
+  transform: rotate(-25deg);
+}
+
+/* 圆形地毯（同心纹样） */
 .gh-pet-stage-rug {
   position: absolute;
-  bottom: 7%;
   left: 50%;
+  bottom: 38px;
+  width: min(74%, 430px);
+  height: 76px;
   transform: translateX(-50%);
-  width: 62%;
-  height: 26px;
   border-radius: 50%;
-  background: radial-gradient(ellipse at center, rgba(224, 118, 47, 0.28), rgba(224, 118, 47, 0.08) 70%, transparent 75%);
+  background:
+    radial-gradient(ellipse at center, var(--pet-scene-rug-3) 0 22%, transparent 23%),
+    radial-gradient(ellipse at center, var(--pet-scene-rug-2) 0 46%, transparent 47%),
+    radial-gradient(ellipse at center, var(--pet-scene-rug-1) 0 100%);
+  box-shadow:
+    0 16px 26px -20px rgba(60, 35, 10, 0.65),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.22);
+  opacity: 0.96;
 }
-/* 点击宠物本体 = 抚摸 */
+.gh-pet-stage-rug::before {
+  content: '';
+  position: absolute;
+  inset: 8px 14px;
+  border: 2px dashed rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  opacity: 0.65;
+}
+
+/* 光尘 */
+.gh-pet-stage-mote {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--pet-scene-mote), transparent 70%);
+  opacity: 0.7;
+  animation: gh-pet-mote-float 11s ease-in-out infinite;
+}
+.gh-pet-stage-mote--1 { left: 24%; top: 26%; animation-delay: -1s; }
+.gh-pet-stage-mote--2 { left: 62%; top: 18%; width: 4px; height: 4px; animation-delay: -4s; animation-duration: 14s; }
+.gh-pet-stage-mote--3 { left: 78%; top: 44%; animation-delay: -7s; }
+.gh-pet-stage-mote--4 { left: 42%; top: 36%; width: 3px; height: 3px; animation-delay: -9s; animation-duration: 16s; }
+.gh-pet-stage-mote--5 { left: 13%; top: 56%; width: 4px; height: 4px; animation-delay: -6s; animation-duration: 13s; }
+
+/* 宠物本体（点击抚摸） */
 .gh-pet-stage-hit {
   position: relative;
-  z-index: 1;
+  z-index: 3;
   padding: 0;
   border: none;
+  border-radius: 24px;
   background: transparent;
   cursor: pointer;
   line-height: 0;
   -webkit-tap-highlight-color: transparent;
+  transition: transform 0.2s var(--gh-ease-spring);
 }
+.gh-pet-stage-hit:hover { transform: translateY(-2px); }
+.gh-pet-stage-hit:active { transform: translateY(0) scale(0.995); }
 .gh-pet-stage-hit:focus-visible {
   outline: 2px solid var(--pet-accent);
   outline-offset: 6px;
-  border-radius: 24px;
+}
+
+/* 对话气泡 */
+.gh-pet-bubble {
+  position: absolute;
+  left: 50%;
+  top: 16px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: min(78%, 340px);
+  padding: 9px 14px;
+  border: 1px solid var(--gh-border);
+  border-radius: 16px;
+  background: var(--pet-scene-bubble);
+  color: var(--gh-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: left;
+  box-shadow:
+    0 12px 26px -18px rgba(40, 25, 8, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(8px);
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: gh-pet-bubble-in 0.3s var(--gh-ease-out) both;
+}
+.gh-pet-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 11px;
+  height: 11px;
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--pet-scene-bubble);
+  border-right: 1px solid var(--gh-border);
+  border-bottom: 1px solid var(--gh-border);
+  border-radius: 0 0 3px 0;
+}
+.gh-pet-bubble-emoji {
+  font-size: 14px;
+  line-height: 1;
 }
 .gh-pet-stage-hint {
   position: absolute;
-  bottom: 10px;
   left: 50%;
+  bottom: 12px;
+  z-index: 2;
   transform: translateX(-50%);
-  font-size: var(--gh-text-xs);
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--pet-scene-hint);
   color: var(--gh-text-tertiary);
+  font-size: 11px;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
   pointer-events: none;
 }
 
-/* ===== 动作按钮坞 ===== */
-.gh-pet-dock {
+/* =============================================================
+   动作坞（照顾 / 小把戏）
+   ============================================================= */
+
+.gh-pet-page .gh-pet-dock {
+  display: grid;
+  gap: 12px;
   margin-top: var(--gh-space-4);
-  padding: var(--gh-space-3);
+  padding: 12px;
   border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius-lg);
-  background: var(--pet-panel);
-  display: flex;
-  flex-direction: column;
-  gap: var(--gh-space-3);
+  border-radius: var(--gh-radius-xl);
+  background: linear-gradient(180deg, var(--gh-canvas), var(--gh-canvas-subtle));
+  box-shadow: var(--gh-shadow-card);
 }
 .gh-pet-dock-group {
+  padding: 12px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas-subtle);
+}
+.gh-pet-dock-group--tricks {
+  background: linear-gradient(180deg, var(--gh-canvas-subtle), var(--gh-canvas));
+}
+.gh-pet-dock-group-head {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
+  margin-bottom: 10px;
 }
-.gh-pet-dock-group-title {
-  flex-basis: 100%;
+.gh-pet-page .gh-pet-dock-group-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   margin: 0;
-  font-size: var(--gh-text-xs);
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.02em;
+  color: var(--gh-text-secondary);
+}
+.gh-pet-dock-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pet-accent);
+  box-shadow: 0 0 0 3px var(--pet-accent-soft);
+}
+.gh-pet-dock-group--tricks .gh-pet-dock-dot {
+  background: var(--pet-trick);
+  box-shadow: 0 0 0 3px var(--pet-trick-soft);
+}
+.gh-pet-dock-group-note {
+  font-size: 11px;
   color: var(--gh-text-tertiary);
 }
+.gh-pet-dock-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 8px;
+}
 .gh-pet-dock-btn {
-  flex: 1 1 96px;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 9px;
   align-items: center;
-  gap: 2px;
-  padding: 10px 8px;
+  padding: 8px 10px;
   border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius);
+  border-radius: 12px;
   background: var(--gh-canvas);
   color: var(--gh-text);
-  font-size: var(--gh-text-sm);
+  text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s ease, transform 0.1s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
 }
 .gh-pet-dock-btn:hover:not(:disabled) {
   border-color: var(--pet-accent);
   background: var(--pet-accent-soft);
   transform: translateY(-1px);
+  box-shadow: var(--gh-shadow-sm);
+}
+.gh-pet-dock-btn--trick:hover:not(:disabled) {
+  border-color: var(--pet-trick);
+  background: var(--pet-trick-soft);
 }
 .gh-pet-dock-btn:disabled {
-  opacity: 0.55;
+  opacity: 0.52;
   cursor: not-allowed;
 }
-.gh-pet-dock-emoji { font-size: 1.35rem; line-height: 1.2; }
-.gh-pet-dock-meta {
-  font-size: var(--gh-text-xs);
-  font-weight: 700;
-  color: var(--pet-accent);
+.gh-pet-dock-btn--locked {
+  background: var(--gh-canvas-inset);
 }
-.gh-pet-dock-btn--locked .gh-pet-dock-meta { color: var(--gh-text-tertiary); }
-.gh-pet-dock-btn--trick { flex: 1 1 84px; }
+.gh-pet-dock-emoji {
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--pet-accent-soft);
+  font-size: 17px;
+  line-height: 1;
+}
+.gh-pet-dock-btn--trick .gh-pet-dock-emoji {
+  background: var(--pet-trick-soft);
+}
+.gh-pet-dock-btn strong {
+  font-size: 12.5px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gh-pet-dock-meta {
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--pet-accent-strong);
+  white-space: nowrap;
+}
+.gh-pet-dock-btn--trick .gh-pet-dock-meta { color: var(--pet-trick); }
+.gh-pet-dock-btn--locked .gh-pet-dock-meta {
+  color: var(--gh-text-tertiary);
+  font-weight: 600;
+}
 
-/* ===== 右栏面板 ===== */
+/* =============================================================
+   右栏：名牌 / 状态 / 衣柜
+   ============================================================= */
+
 .gh-pet-side {
   display: flex;
   flex-direction: column;
-  gap: var(--gh-space-4);
+  gap: 14px;
   min-width: 0;
 }
 .gh-pet-panel {
-  padding: var(--gh-space-4);
+  position: relative;
+  padding: 16px;
   border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius-lg);
-  background: var(--pet-panel);
+  border-radius: var(--gh-radius-xl);
+  background: linear-gradient(180deg, var(--gh-canvas), var(--gh-canvas-subtle));
+  box-shadow: var(--gh-shadow-card);
 }
-.gh-pet-panel-title {
-  margin: 0 0 var(--gh-space-3);
-  font-size: var(--gh-text-sm);
+.gh-pet-panel--profile {
+  overflow: hidden;
+}
+.gh-pet-panel--profile::before {
+  content: '';
+  position: absolute;
+  left: -20%;
+  right: -20%;
+  top: -70px;
+  height: 130px;
+  background: radial-gradient(ellipse at center, var(--pet-accent-soft), transparent 70%);
+  pointer-events: none;
+}
+.gh-pet-panel--profile > .gh-pet-profile-top,
+.gh-pet-panel--profile > .gh-pet-name-row,
+.gh-pet-panel--profile > .gh-pet-rename-form,
+.gh-pet-panel--profile > .gh-pet-level-track,
+.gh-pet-panel--profile > .gh-pet-level-hint,
+.gh-pet-panel--profile > .gh-pet-upgrade-btn {
+  position: relative;
+  z-index: 1;
+}
+.gh-pet-profile-top {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.gh-pet-species-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--pet-accent-soft);
+  color: var(--pet-accent-strong);
+  font-size: 11px;
   font-weight: 700;
-  color: var(--gh-text-secondary);
 }
-
-/* 名牌 */
 .gh-pet-name-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: var(--gh-space-3);
+  margin-bottom: 10px;
 }
 .gh-pet-name {
   margin: 0;
@@ -435,21 +1053,50 @@
   font-size: var(--gh-text-sm);
   cursor: pointer;
 }
-.gh-pet-rename-btn:hover { border-color: var(--gh-border); }
+.gh-pet-rename-btn:hover {
+  border-color: var(--gh-border);
+  background: var(--gh-btn-hover);
+}
 .gh-pet-level-badge {
-  margin-left: auto;
   padding: 3px 10px;
   border-radius: 999px;
-  background: var(--pet-accent-soft);
-  color: var(--pet-accent);
+  background: var(--gh-canvas-inset);
+  color: var(--gh-text-secondary);
   font-size: var(--gh-text-xs);
   font-weight: 700;
   white-space: nowrap;
 }
+.gh-pet-level-track {
+  position: relative;
+  height: 6px;
+  margin: 0 0 6px;
+  border-radius: 999px;
+  background: var(--gh-canvas-inset);
+  overflow: hidden;
+}
+.gh-pet-level-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ffc266, var(--pet-accent));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  transition: width 0.5s var(--gh-ease-out);
+}
+.gh-pet-level-hint {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 10px;
+  color: var(--gh-text-tertiary);
+}
+.gh-pet-upgrade-btn {
+  position: relative;
+  width: 100%;
+}
 .gh-pet-rename-form {
+  position: relative;
   display: flex;
   gap: 8px;
-  margin-bottom: var(--gh-space-3);
+  margin-bottom: 10px;
 }
 .gh-pet-rename-input {
   flex: 1;
@@ -467,26 +1114,68 @@
   box-shadow: 0 0 0 3px var(--pet-accent-soft);
 }
 
-/* 状态条 */
-.gh-pet-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: var(--gh-space-3);
-}
-.gh-pet-stat:last-of-type { margin-bottom: 0; }
-.gh-pet-stat-head {
+/* 面板标题 */
+.gh-pet-panel-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
+  margin-bottom: 12px;
+}
+.gh-pet-panel-title {
+  margin: 0;
+  font-size: var(--gh-text-sm);
+  font-weight: 700;
+  color: var(--gh-text-secondary);
+}
+.gh-pet-panel-hint {
+  font-size: 10px;
+  color: var(--gh-text-tertiary);
+}
+
+/* 状态条 */
+.gh-pet-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+.gh-pet-stat:last-of-type { margin-bottom: 0; }
+.gh-pet-stat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-size: var(--gh-text-sm);
 }
+.gh-pet-stat-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--gh-text-secondary);
+  font-weight: 600;
+}
+.gh-pet-stat-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: var(--gh-canvas-inset);
+  font-size: 13px;
+}
 .gh-pet-stat-num {
-  font-weight: 700;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
+.gh-pet-stat-num em {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--gh-text-tertiary);
+}
 .gh-pet-stat-bar {
+  position: relative;
   height: 10px;
   border-radius: 999px;
   background: var(--gh-canvas-inset);
@@ -497,33 +1186,52 @@
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #6ccb5f, #2da44e);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
   transition: width 0.4s ease;
 }
-.gh-pet-stat-fill--mood { background: linear-gradient(90deg, #ffd257, #f5a623); }
-.gh-pet-stat-fill--low { background: linear-gradient(90deg, #f27b7b, #cf222e); }
+.gh-pet-stat-fill--hunger { background: linear-gradient(90deg, #ffbe67, #ee8b3b); }
+.gh-pet-stat-fill--cleanliness { background: linear-gradient(90deg, #8fdcf5, #3d9ed9); }
+.gh-pet-stat-fill--mood { background: linear-gradient(90deg, #ffc0d0, #ef7d9f); }
+.gh-pet-stat-fill--low {
+  background: linear-gradient(90deg, #f37878, #cf222e);
+  animation: gh-pet-stat-pulse 1.6s ease-in-out infinite;
+}
 .gh-pet-stat-warn {
   font-size: var(--gh-text-xs);
   color: var(--gh-danger);
   font-weight: 600;
 }
 .gh-pet-stat-countdown {
-  margin: var(--gh-space-3) 0 0;
-  font-size: var(--gh-text-xs);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 12px 0 0;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--gh-canvas-inset);
+  font-size: 11px;
   color: var(--gh-text-tertiary);
 }
-.gh-pet-stat-countdown--urgent { color: var(--gh-warning); font-weight: 600; }
+.gh-pet-stat-countdown--urgent {
+  background: var(--gh-warning-soft);
+  color: var(--gh-warning);
+  font-weight: 700;
+}
 
 /* 衣柜 */
-.gh-pet-wardrobe-slot { margin-bottom: var(--gh-space-4); }
+.gh-pet-wardrobe-slot { margin-bottom: 14px; }
 .gh-pet-wardrobe-slot:last-child { margin-bottom: 0; }
-.gh-pet-wardrobe-slot h3 {
-  margin: 0 0 8px;
-  font-size: var(--gh-text-xs);
-  font-weight: 700;
-  letter-spacing: 0.08em;
+.gh-pet-wardrobe-slot-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
   color: var(--gh-text-tertiary);
 }
+.gh-pet-wardrobe-slot-head span:first-child { font-size: 12px; }
 .gh-pet-outfit-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -537,21 +1245,49 @@
   border: 1px solid var(--gh-border);
   border-radius: var(--gh-radius);
   background: var(--gh-canvas);
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
+.gh-pet-outfit:hover { border-color: var(--gh-border-strong); }
 .gh-pet-outfit--worn {
   border-color: var(--pet-accent);
   background: var(--pet-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--pet-accent-soft);
 }
-.gh-pet-outfit-emoji { font-size: 1.3rem; line-height: 1.2; }
+.gh-pet-outfit-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.gh-pet-outfit-emoji {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--gh-canvas-inset);
+  font-size: 15px;
+  line-height: 1;
+}
+.gh-pet-outfit--worn .gh-pet-outfit-emoji { background: rgba(255, 255, 255, 0.55); }
+.gh-pet-outfit-worn {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--pet-accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
 .gh-pet-outfit-name {
   font-size: var(--gh-text-sm);
   font-weight: 700;
 }
 .gh-pet-outfit-desc {
-  font-size: var(--gh-text-xs);
+  font-size: 10.5px;
   color: var(--gh-text-tertiary);
   line-height: 1.45;
-  min-height: 2.6em;
+  min-height: 2.9em;
 }
 .gh-pet-outfit-btn {
   margin-top: 4px;
@@ -564,14 +1300,21 @@
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
-.gh-pet-outfit-btn:hover:not(:disabled) { border-color: var(--pet-accent); color: var(--pet-accent); }
+.gh-pet-outfit-btn:hover:not(:disabled) {
+  border-color: var(--pet-accent);
+  color: var(--pet-accent);
+}
 .gh-pet-outfit-btn--primary {
   background: var(--pet-accent);
   border-color: var(--pet-accent);
   color: #fff;
 }
-.gh-pet-outfit-btn--primary:hover:not(:disabled) { color: #fff; filter: brightness(1.06); }
+.gh-pet-outfit-btn--primary:hover:not(:disabled) {
+  color: #fff;
+  filter: brightness(1.06);
+}
 .gh-pet-outfit-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -584,6 +1327,7 @@
 .gh-pet-sprite {
   position: relative;
   display: inline-block;
+  flex: none;
 }
 .gh-pet-sprite svg {
   display: block;
@@ -599,52 +1343,89 @@
 .gh-pet-tail,
 .gh-pet-wing,
 .gh-pet-tuft,
-.gh-pet-tongue {
+.gh-pet-tongue,
+.gh-pet-arm,
+.gh-pet-brow,
+.gh-pet-breathe {
   transform-box: fill-box;
 }
 .gh-pet-head { transform-origin: 50% 92%; }
 .gh-pet-eye { transform-origin: center; }
-/* 耳根贴新包围盒：尖耳（猫）在底部内侧，垂耳（狗）在顶部内侧 */
-.gh-pet-ear--l { transform-origin: 86% 84%; }
-.gh-pet-ear--r { transform-origin: 14% 84%; }
-.gh-pet-ear--dog.gh-pet-ear--l { transform-origin: 92% 8%; }
-.gh-pet-ear--dog.gh-pet-ear--r { transform-origin: 8% 8%; }
+.gh-pet-breathe { transform-origin: 50% 95%; }
+.gh-pet-brow { transform-origin: center; }
+.gh-pet-tongue { transform-origin: 50% 10%; }
 .gh-pet-tuft { transform-origin: 50% 100%; }
+.gh-pet-arm { transform-origin: 50% 7%; }
+/* 耳根：猫耳在包围盒底部内侧，狗垂耳在顶部内侧 */
+.gh-pet-ear--cat.gh-pet-ear--l { transform-origin: 42% 96%; }
+.gh-pet-ear--cat.gh-pet-ear--r { transform-origin: 58% 96%; }
+.gh-pet-ear--dog.gh-pet-ear--l { transform-origin: 81% 4%; }
+.gh-pet-ear--dog.gh-pet-ear--r { transform-origin: 19% 4%; }
+/* 尾巴：猫 / 狗根在左下，鸟尾在左上 */
+.gh-pet-tail--cat { transform-origin: 2% 94%; }
+.gh-pet-tail--dog { transform-origin: 4% 92%; }
+.gh-pet-tail--bird { transform-origin: 8% 20%; }
+/* 翅膀：根部在身体一侧上沿 */
+.gh-pet-wing--l { transform-origin: 76% 6%; }
+.gh-pet-wing--r { transform-origin: 24% 6%; }
 
-/* --- idle 循环：眨眼 / 尾巴 / 翅膀 / 猫耳抽动 / 狗吐舌 --- */
-.gh-pet-eye { animation: gh-pet-blink 4.6s ease-in-out infinite; }
-.gh-pet-tail--cat { transform-origin: 14% 92%; animation: gh-pet-tail-sway 3.2s ease-in-out infinite; }
-.gh-pet-tail--dog { transform-origin: 20% 82%; animation: gh-pet-tail-wag 0.9s ease-in-out infinite; }
-.gh-pet-wing--l { transform-origin: 90% 8%; animation: gh-pet-wing-flap 3.8s ease-in-out infinite; }
-.gh-pet-wing--r { transform-origin: 10% 8%; animation: gh-pet-wing-flap 3.8s ease-in-out infinite; }
-/* 猫右耳偶尔抖一下（96% 前完全静止；sad 静态垂耳时不抽） */
+/* --- idle 循环：呼吸 / 眨眼 / 尾巴 / 翅膀 / 猫耳抽动 --- */
+.gh-pet-breathe { animation: gh-pet-breathe 3.4s ease-in-out infinite; }
+.gh-pet-eye { animation: gh-pet-blink 4.8s ease-in-out infinite; }
+.gh-pet-tail--cat { animation: gh-pet-tail-sway 3.6s ease-in-out infinite; }
+.gh-pet-tail--dog { animation: gh-pet-tail-wag 0.9s ease-in-out infinite; }
+.gh-pet-tail--bird { animation: gh-pet-tail-sway-soft 4.2s ease-in-out infinite; }
+.gh-pet-wing--l,
+.gh-pet-wing--r { animation: gh-pet-wing-flap 4.2s ease-in-out infinite; }
+.gh-pet-tuft { animation: gh-pet-crest-bob 3.6s ease-in-out infinite; }
 .gh-pet-sprite:not(.gh-pet-sprite--sad) .gh-pet-ear--cat.gh-pet-ear--r {
-  animation: gh-pet-ear-twitch 7.4s ease-in-out infinite;
+  animation: gh-pet-ear-twitch 8.2s ease-in-out infinite;
 }
-/* 狗舌头：默认藏起，play/happy 吐舌并小幅摆动（摆动在 reduced-motion 块停掉） */
-.gh-pet-tongue {
-  opacity: 0;
-  transform-origin: 50% 10%;
+.gh-pet-sprite:not(.gh-pet-sprite--sad) .gh-pet-ear--dog.gh-pet-ear--l {
+  animation: gh-pet-ear-flop 5.4s ease-in-out infinite;
 }
+.gh-pet-sprite:not(.gh-pet-sprite--sad) .gh-pet-ear--dog.gh-pet-ear--r {
+  animation: gh-pet-ear-flop 5.4s ease-in-out infinite reverse;
+}
+/* 舌头：默认藏起；play/happy/beg/cheer/playdead 时露出并小幅摆动 */
+.gh-pet-tongue { opacity: 0; }
 .gh-pet-anim-play .gh-pet-tongue,
-.gh-pet-anim-happy .gh-pet-tongue {
+.gh-pet-anim-happy .gh-pet-tongue,
+.gh-pet-anim-beg .gh-pet-tongue,
+.gh-pet-anim-cheer .gh-pet-tongue,
+.gh-pet-anim-playdead .gh-pet-tongue {
   opacity: 1;
   animation: gh-pet-tongue-wash 0.5s ease-in-out infinite;
 }
+/* 装死时的 × 眼 */
+.gh-pet-xeyes { opacity: 0; }
+.gh-pet-anim-playdead .gh-pet-xeyes { opacity: 1; }
+.gh-pet-anim-playdead .gh-pet-eyes { opacity: 0; }
 
-/* --- sad：耳朵下垂 / 呆毛耷拉 / 汗滴 / idle 放慢 --- */
-.gh-pet-sprite--sad .gh-pet-ear--l { transform: rotate(-18deg); }
-.gh-pet-sprite--sad .gh-pet-ear--r { transform: rotate(18deg); }
-.gh-pet-sprite--sad .gh-pet-tuft { transform: rotate(10deg) scaleY(0.82); }
+/* --- sad：垂耳 / 眉压 / 嘴角 / 高光变暗 + 汗滴 --- */
+.gh-pet-sprite--sad .gh-pet-ear--cat.gh-pet-ear--l { transform: rotate(-15deg) translateY(3px); }
+.gh-pet-sprite--sad .gh-pet-ear--cat.gh-pet-ear--r { transform: rotate(15deg) translateY(3px); }
+.gh-pet-sprite--sad .gh-pet-ear--dog.gh-pet-ear--l { transform: rotate(-7deg) translateY(4px); }
+.gh-pet-sprite--sad .gh-pet-ear--dog.gh-pet-ear--r { transform: rotate(7deg) translateY(4px); }
+.gh-pet-sprite--sad .gh-pet-tuft { transform: rotate(-12deg) scaleY(0.72); }
+.gh-pet-sprite--sad .gh-pet-brow--l { transform: rotate(13deg) translateY(2px); }
+.gh-pet-sprite--sad .gh-pet-brow--r { transform: rotate(-13deg) translateY(2px); }
+.gh-pet-sprite--sad .gh-pet-eye { animation-duration: 6.6s; }
+.gh-pet-sprite--sad .gh-pet-eye-shine { opacity: 0.4; }
+.gh-pet-sprite--sad .gh-pet-mouth-happy { opacity: 0; }
+.gh-pet-sprite--sad .gh-pet-mouth-sad { opacity: 1; }
+.gh-pet-mouth-sad { opacity: 0; }
 .gh-pet-sprite--sad .gh-pet-wing--l,
-.gh-pet-sprite--sad .gh-pet-wing--r { animation-duration: 6s; }
-.gh-pet-sprite--sad.gh-pet-anim-idle { animation-duration: 5.6s; }
+.gh-pet-sprite--sad .gh-pet-wing--r { animation-duration: 6.8s; }
+.gh-pet-sprite--sad.gh-pet-anim-idle { animation-duration: 5.4s; }
+.gh-pet-sprite--sad .gh-pet-breathe { animation-duration: 5.4s; }
+.gh-pet-sprite--sad .gh-pet-tail--dog { animation-duration: 1.8s; }
 
 /* =============================================================
-   动作 keyframes（容器级）
+   动作 keyframes（容器级；0% / 100% 均回到 idle 姿态）
    ============================================================= */
 
-.gh-pet-anim-idle { animation: gh-pet-idle 3s ease-in-out infinite; }
+.gh-pet-anim-idle { animation: gh-pet-idle 3.4s ease-in-out infinite; }
 
 .gh-pet-anim-eat { animation: gh-pet-bounce-sm 1.9s ease-in-out; }
 .gh-pet-anim-eat .gh-pet-head { animation: gh-pet-peck 0.62s ease-in-out 3; }
@@ -652,6 +1433,7 @@
 .gh-pet-anim-bath { animation: gh-pet-sway 1.9s ease-in-out infinite; transform-origin: 50% 100%; }
 
 .gh-pet-anim-play { animation: gh-pet-hop 1.9s ease-out; }
+.gh-pet-anim-play .gh-pet-tail--dog { animation-duration: 0.42s; }
 
 .gh-pet-anim-happy { animation: gh-pet-squish 1.7s ease-in-out; transform-origin: 50% 100%; }
 
@@ -664,15 +1446,64 @@
 
 .gh-pet-anim-flip { animation: gh-pet-flip 2.1s ease-in-out; transform-origin: 50% 100%; }
 
-.gh-pet-anim-spin { animation: gh-pet-spin 1.7s ease-in-out; }
+.gh-pet-anim-spin { animation: gh-pet-spin 1.7s ease-in-out; transform-origin: 50% 88%; }
 
 .gh-pet-anim-magic { animation: gh-pet-idle 2.1s ease-in-out infinite; }
 
 .gh-pet-anim-firework { animation: gh-pet-bounce-sm 2s ease-in-out; }
 
+/* 伸懒腰 */
+.gh-pet-anim-stretch { animation: gh-pet-stretch 2.2s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: 50% 100%; }
+.gh-pet-anim-stretch .gh-pet-head { animation: gh-pet-stretch-head 2.2s ease-in-out; }
+.gh-pet-anim-stretch .gh-pet-arm--l { animation: gh-pet-stretch-arm-l 2.2s ease-in-out; }
+.gh-pet-anim-stretch .gh-pet-arm--r { animation: gh-pet-stretch-arm-r 2.2s ease-in-out; }
+.gh-pet-anim-stretch .gh-pet-tail--cat { animation-duration: 1.1s; }
+.gh-pet-anim-stretch .gh-pet-tail--dog { animation-duration: 0.55s; }
+
+/* 作揖 */
+.gh-pet-anim-beg { animation: gh-pet-beg 1.8s ease-in-out; transform-origin: 50% 100%; }
+.gh-pet-anim-beg .gh-pet-head { animation: gh-pet-beg-head 1.8s ease-in-out; }
+.gh-pet-anim-beg .gh-pet-arm--l { animation: gh-pet-beg-arm-l 1.8s ease-in-out; }
+.gh-pet-anim-beg .gh-pet-arm--r { animation: gh-pet-beg-arm-r 1.8s ease-in-out; }
+.gh-pet-anim-beg .gh-pet-tail--cat { animation-duration: 1.4s; }
+
+/* 击掌 */
+.gh-pet-anim-highfive { animation: gh-pet-highfive 1.8s cubic-bezier(0.34, 1.2, 0.64, 1); transform-origin: 50% 100%; }
+.gh-pet-anim-highfive .gh-pet-head { animation: gh-pet-highfive-head 1.8s ease-in-out; }
+.gh-pet-anim-highfive .gh-pet-arm--r { animation: gh-pet-highfive-arm 1.8s ease-in-out; }
+.gh-pet-anim-highfive .gh-pet-tail--dog { animation-duration: 0.36s; }
+
+/* 太空步 */
+.gh-pet-anim-moonwalk { animation: gh-pet-moonwalk 2.2s cubic-bezier(0.45, 0, 0.55, 1); }
+.gh-pet-anim-moonwalk .gh-pet-arm--l { animation: gh-pet-moon-leg-l 2.2s ease-in-out; }
+.gh-pet-anim-moonwalk .gh-pet-arm--r { animation: gh-pet-moon-leg-r 2.2s ease-in-out; }
+.gh-pet-anim-moonwalk .gh-pet-head { animation: gh-pet-moon-head 2.2s ease-in-out; }
+.gh-pet-anim-moonwalk .gh-pet-tail--cat,
+.gh-pet-anim-moonwalk .gh-pet-tail--bird { animation-duration: 1.2s; }
+
+/* 装死 */
+.gh-pet-anim-playdead { animation: gh-pet-playdead 2.2s ease-in-out; transform-origin: 50% 92%; }
+.gh-pet-anim-playdead .gh-pet-head { animation: gh-pet-playdead-head 2.2s ease-in-out; }
+.gh-pet-anim-playdead .gh-pet-arm--l { animation: gh-pet-playdead-arm-l 2.2s ease-in-out; }
+.gh-pet-anim-playdead .gh-pet-arm--r { animation: gh-pet-playdead-arm-r 2.2s ease-in-out; }
+.gh-pet-anim-playdead .gh-pet-wing--l,
+.gh-pet-anim-playdead .gh-pet-wing--r { animation: none; }
+
+/* 欢呼 */
+.gh-pet-anim-cheer { animation: gh-pet-cheer 2s cubic-bezier(0.34, 1.3, 0.64, 1); transform-origin: 50% 100%; }
+.gh-pet-anim-cheer .gh-pet-head { animation: gh-pet-cheer-head 2s ease-in-out; }
+.gh-pet-anim-cheer .gh-pet-arm--l { animation: gh-pet-cheer-arm-l 2s ease-in-out; }
+.gh-pet-anim-cheer .gh-pet-arm--r { animation: gh-pet-cheer-arm-r 2s ease-in-out; }
+.gh-pet-anim-cheer .gh-pet-tail--dog { animation-duration: 0.4s; }
+
+/* --- 容器 / 部件动作 keyframes --- */
 @keyframes gh-pet-idle {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-7px); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes gh-pet-breathe {
+  0%, 100% { transform: scale(1, 1); }
+  50% { transform: scale(1.012, 0.992); }
 }
 @keyframes gh-pet-bounce-sm {
   0%, 100% { transform: translateY(0); }
@@ -729,34 +1560,194 @@
   74% { transform: rotate(720deg); }
   100% { transform: rotate(720deg); }
 }
+@keyframes gh-pet-stretch {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  16% { transform: translateY(2px) scale(1.05, 0.93); }
+  38% { transform: translateY(-3px) scale(0.95, 1.06); }
+  56% { transform: translateY(-5px) scale(0.93, 1.09); }
+  74% { transform: translateY(-1px) scale(0.99, 1.01); }
+  88% { transform: translateY(1px) scale(1.02, 0.98); }
+}
+@keyframes gh-pet-stretch-head {
+  0%, 100% { transform: rotate(0) translateY(0); }
+  30% { transform: rotate(5deg) translateY(2px); }
+  52% { transform: rotate(-6deg) translateY(-3px); }
+  72% { transform: rotate(-2deg) translateY(-1px); }
+}
+@keyframes gh-pet-stretch-arm-l {
+  0%, 100% { transform: rotate(0) translateY(0); }
+  38%, 62% { transform: rotate(8deg) translateY(2px); }
+}
+@keyframes gh-pet-stretch-arm-r {
+  0%, 100% { transform: rotate(0) translateY(0); }
+  38%, 62% { transform: rotate(-8deg) translateY(2px); }
+}
+@keyframes gh-pet-beg {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  12% { transform: translateY(-6px) rotate(-2deg); }
+  30% { transform: translateY(-2px) rotate(2deg); }
+  50% { transform: translateY(-6px) rotate(-2deg); }
+  68% { transform: translateY(-2px) rotate(1deg); }
+  84% { transform: translateY(-4px) rotate(0); }
+}
+@keyframes gh-pet-beg-head {
+  0%, 100% { transform: rotate(0); }
+  20% { transform: rotate(5deg); }
+  45% { transform: rotate(-4deg); }
+  68% { transform: rotate(4deg); }
+  84% { transform: rotate(-2deg); }
+}
+@keyframes gh-pet-beg-arm-l {
+  0%, 100% { transform: rotate(0) translateY(0); }
+  18%, 62% { transform: rotate(-22deg) translateY(-3px); }
+  32%, 48% { transform: rotate(-14deg) translateY(1px); }
+  80% { transform: rotate(-20deg) translateY(-2px); }
+}
+@keyframes gh-pet-beg-arm-r {
+  0%, 100% { transform: rotate(0) translateY(0); }
+  18%, 62% { transform: rotate(22deg) translateY(-3px); }
+  32%, 48% { transform: rotate(14deg) translateY(1px); }
+  80% { transform: rotate(20deg) translateY(-2px); }
+}
+@keyframes gh-pet-highfive {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  18% { transform: translate(-3px, 2px) rotate(-3deg) scale(0.99, 0.98); }
+  40% { transform: translate(4px, -7px) rotate(4deg) scale(1.01, 1.01); }
+  54% { transform: translate(6px, -5px) rotate(6deg); }
+  70% { transform: translate(2px, -1px) rotate(2deg); }
+  86% { transform: translate(-1px, 1px) rotate(-1deg); }
+}
+@keyframes gh-pet-highfive-head {
+  0%, 100% { transform: rotate(0); }
+  38%, 56% { transform: rotate(-7deg); }
+  74% { transform: rotate(2deg); }
+}
+@keyframes gh-pet-highfive-arm {
+  0%, 100% { transform: rotate(0) translateY(0); }
+  34% { transform: rotate(-48deg) translateY(-4px); }
+  50% { transform: rotate(-56deg) translateY(-6px); }
+  62% { transform: rotate(-34deg) translateY(-2px); }
+}
+@keyframes gh-pet-moonwalk {
+  0% { transform: translate(0, 0) rotate(0); }
+  12% { transform: translate(-10px, 0) rotate(-3deg) scale(1, 0.99); }
+  28% { transform: translate(-16px, -2px) rotate(2deg); }
+  44% { transform: translate(-4px, 0) rotate(0) scale(1.01, 0.99); }
+  60% { transform: translate(10px, 0) rotate(3deg); }
+  76% { transform: translate(16px, -2px) rotate(-2deg); }
+  90% { transform: translate(4px, 0) rotate(0); }
+  100% { transform: translate(0, 0) rotate(0); }
+}
+@keyframes gh-pet-moon-leg-l {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  20% { transform: translateY(-5px) rotate(9deg); }
+  40% { transform: translateY(0) rotate(0); }
+  60% { transform: translateY(-5px) rotate(9deg); }
+  80% { transform: translateY(0) rotate(0); }
+}
+@keyframes gh-pet-moon-leg-r {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  10% { transform: translateY(-5px) rotate(-9deg); }
+  30% { transform: translateY(0) rotate(0); }
+  50% { transform: translateY(-5px) rotate(-9deg); }
+  70% { transform: translateY(0) rotate(0); }
+  90% { transform: translateY(-5px) rotate(-9deg); }
+}
+@keyframes gh-pet-moon-head {
+  0%, 100% { transform: rotate(0) translateY(0); }
+  22% { transform: rotate(-4deg) translateY(-1px); }
+  50% { transform: rotate(3deg) translateY(0); }
+  78% { transform: rotate(-3deg) translateY(-1px); }
+}
+@keyframes gh-pet-playdead {
+  0% { transform: translate(0, 0) rotate(0); }
+  8% { transform: translate(0, -10px) rotate(-5deg); }
+  20% { transform: translate(11px, 13px) rotate(58deg); }
+  30% { transform: translate(13px, 16px) rotate(76deg); }
+  34%, 68% { transform: translate(13px, 17px) rotate(78deg); }
+  78% { transform: translate(8px, 6px) rotate(36deg); }
+  90% { transform: translate(0, -5px) rotate(-4deg); }
+  96% { transform: translate(0, 1px) rotate(0); }
+  100% { transform: translate(0, 0) rotate(0); }
+}
+@keyframes gh-pet-playdead-head {
+  0%, 100% { transform: rotate(0); }
+  30%, 70% { transform: rotate(10deg); }
+}
+@keyframes gh-pet-playdead-arm-l {
+  0%, 100% { transform: rotate(0); }
+  30%, 70% { transform: rotate(14deg) translateY(-2px); }
+}
+@keyframes gh-pet-playdead-arm-r {
+  0%, 100% { transform: rotate(0); }
+  30%, 70% { transform: rotate(-14deg) translateY(-2px); }
+}
+@keyframes gh-pet-cheer {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  10% { transform: translateY(2px) scale(1.06, 0.93); }
+  24% { transform: translateY(-15px) scale(0.97, 1.04); }
+  38% { transform: translateY(0) scale(1.03, 0.97); }
+  52% { transform: translateY(-14px) scale(0.98, 1.03); }
+  66% { transform: translateY(0) scale(1.02, 0.98); }
+  82% { transform: translateY(-3px) scale(1, 1); }
+}
+@keyframes gh-pet-cheer-head {
+  0%, 100% { transform: rotate(0); }
+  20%, 48% { transform: rotate(-7deg); }
+  34%, 62% { transform: rotate(5deg); }
+}
+@keyframes gh-pet-cheer-arm-l {
+  0%, 100% { transform: rotate(0) translateY(0); }
+  18%, 66% { transform: rotate(32deg) translateY(-3px); }
+  40% { transform: rotate(24deg) translateY(-1px); }
+}
+@keyframes gh-pet-cheer-arm-r {
+  0%, 100% { transform: rotate(0) translateY(0); }
+  18%, 66% { transform: rotate(-32deg) translateY(-3px); }
+  40% { transform: rotate(-24deg) translateY(-1px); }
+}
 
 /* --- 部件循环 keyframes --- */
 @keyframes gh-pet-blink {
-  0%, 91%, 100% { transform: scaleY(1); }
-  94%, 96.5% { transform: scaleY(0.08); }
+  0%, 90%, 100% { transform: scaleY(1); }
+  93%, 95% { transform: scaleY(0.08); }
 }
 @keyframes gh-pet-tail-sway {
   0%, 100% { transform: rotate(0); }
-  50% { transform: rotate(-11deg); }
+  50% { transform: rotate(-10deg); }
+}
+@keyframes gh-pet-tail-sway-soft {
+  0%, 100% { transform: rotate(0); }
+  50% { transform: rotate(6deg); }
 }
 @keyframes gh-pet-tail-wag {
-  0%, 100% { transform: rotate(-9deg); }
-  50% { transform: rotate(15deg); }
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(14deg); }
 }
 @keyframes gh-pet-wing-flap {
   0%, 11%, 27%, 100% { transform: rotate(0); }
-  15%, 23% { transform: rotate(-24deg); }
+  15%, 23% { transform: rotate(-18deg); }
 }
-/* 猫右耳抽动：长周期里只有 96%-98% 快速抖动一下 */
+@keyframes gh-pet-crest-bob {
+  0%, 100% { transform: rotate(0) scaleY(1); }
+  50% { transform: rotate(-4deg) scaleY(1.06); }
+}
 @keyframes gh-pet-ear-twitch {
   0%, 95.9%, 98.4%, 100% { transform: rotate(0); }
   96.5% { transform: rotate(8deg); }
   97.4% { transform: rotate(-7deg); }
 }
-/* 狗吐舌小幅摆动（从舌根向下伸缩） */
+@keyframes gh-pet-ear-flop {
+  0%, 100% { transform: rotate(0); }
+  50% { transform: rotate(3deg); }
+}
 @keyframes gh-pet-tongue-wash {
   0%, 100% { transform: scaleY(1); }
-  50% { transform: scaleY(1.28); }
+  50% { transform: scaleY(1.24); }
+}
+@keyframes gh-pet-sweat {
+  0%, 100% { opacity: 0.85; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(3px); }
 }
 
 /* =============================================================
@@ -779,7 +1770,7 @@
   left: 50%;
   bottom: 4%;
   font-size: 30px;
-  animation: gh-pet-fx-pop 1.9s ease-in-out;
+  animation: gh-pet-fx-pop 1.9s ease-in-out forwards;
 }
 
 /* 洗澡：泡泡上浮 */
@@ -800,8 +1791,9 @@
   animation: gh-pet-fx-ball 1.9s ease-in-out forwards;
 }
 
-/* 抚摸：爱心上浮 */
-.gh-pet-anim-happy .gh-pet-fx-heart {
+/* 抚摸 / 作揖：爱心上浮 */
+.gh-pet-anim-happy .gh-pet-fx-heart,
+.gh-pet-anim-beg .gh-pet-fx-heart {
   display: block;
   animation: gh-pet-fx-rise 1.8s ease-out forwards;
 }
@@ -825,7 +1817,6 @@
   margin: -11px;
   animation: gh-pet-fx-orbit 2.1s linear forwards;
 }
-.gh-pet-fx-star--a { }
 .gh-pet-fx-star--b { font-size: 15px; animation-delay: 0.15s; }
 .gh-pet-fx-star--c { font-size: 25px; animation-delay: 0.3s; }
 .gh-pet-glow {
@@ -842,7 +1833,7 @@
 }
 .gh-pet-anim-magic .gh-pet-glow {
   display: block;
-  animation: gh-pet-fx-glow 2.1s ease-in-out;
+  animation: gh-pet-fx-glow 2.1s ease-in-out forwards;
 }
 
 /* 烟花：头顶粒子迸发 */
@@ -857,6 +1848,69 @@
 .gh-pet-fx-spark--c { --spark-x: -30px; --spark-y: -52px; }
 .gh-pet-fx-spark--d { --spark-x: 30px; --spark-y: -52px; }
 .gh-pet-fx-spark--e { --spark-x: 0px; --spark-y: -64px; }
+
+/* 伸懒腰：困倦的 zzz */
+.gh-pet-anim-stretch .gh-pet-fx-zzz {
+  display: block;
+  animation: gh-pet-fx-zzz 2.2s ease-out forwards;
+}
+.gh-pet-fx-zzz--a { left: 60%; top: 20%; font-size: 18px; }
+.gh-pet-fx-zzz--b { left: 72%; top: 10%; font-size: 14px; animation-delay: 0.35s; }
+
+/* 击掌：伸过来的手掌 */
+.gh-pet-anim-highfive .gh-pet-fx-hand {
+  display: block;
+  right: -2%;
+  top: 30%;
+  font-size: 26px;
+  animation: gh-pet-fx-hand 1.8s ease-out forwards;
+}
+.gh-pet-anim-highfive .gh-pet-fx-hand::after {
+  content: '✦';
+  position: absolute;
+  right: 4px;
+  top: -12px;
+  font-size: 15px;
+  color: #ffe6a1;
+  text-shadow: 0 0 8px rgba(255, 214, 102, 0.9);
+  animation: gh-pet-fx-hand-spark 0.6s ease-out 0.6s both;
+}
+
+/* 太空步：脚下扬尘 */
+.gh-pet-anim-moonwalk .gh-pet-fx-dust {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 246, 224, 0.95), rgba(214, 186, 148, 0));
+  filter: none;
+  animation: gh-pet-fx-dust 1.1s ease-out 2 forwards;
+}
+.gh-pet-fx-dust--a { left: 18%; bottom: 6%; }
+.gh-pet-fx-dust--b { left: 48%; bottom: 2%; animation-delay: 0.55s; }
+.gh-pet-fx-dust--c { left: 72%; bottom: 7%; animation-delay: 0.3s; }
+
+/* 装死：头顶晕眩星星 */
+.gh-pet-anim-playdead .gh-pet-fx-dizzy {
+  display: block;
+  animation: gh-pet-fx-dizzy 2.2s ease-in-out forwards;
+}
+.gh-pet-fx-dizzy--a { left: 60%; top: 4%; font-size: 22px; }
+.gh-pet-fx-dizzy--b { left: 28%; top: 12%; font-size: 16px; animation-delay: 0.35s; }
+
+/* 欢呼：彩纸 */
+.gh-pet-anim-cheer .gh-pet-fx-confetti {
+  display: block;
+  width: 8px;
+  height: 13px;
+  border-radius: 2px;
+  animation: gh-pet-fx-confetti 1.8s ease-out forwards;
+}
+.gh-pet-fx-confetti--1 { left: 18%; top: 10%; background: #f26b63; --confetti-x: -22px; }
+.gh-pet-fx-confetti--2 { left: 36%; top: 4%; background: #ffd45e; --confetti-x: 12px; animation-delay: 0.12s; }
+.gh-pet-fx-confetti--3 { left: 64%; top: 6%; background: #6fc6e8; --confetti-x: -16px; animation-delay: 0.06s; }
+.gh-pet-fx-confetti--4 { left: 80%; top: 14%; background: #9c8cf0; --confetti-x: 20px; animation-delay: 0.2s; }
+.gh-pet-fx-confetti--5 { left: 50%; top: 12%; background: #8fd694; --confetti-x: 4px; animation-delay: 0.3s; }
 
 /* --- 特效 keyframes --- */
 @keyframes gh-pet-fx-pop {
@@ -898,15 +1952,45 @@
   15% { opacity: 1; transform: translate(0, -8px) scale(1.1); }
   100% { opacity: 0; transform: translate(var(--spark-x), var(--spark-y)) scale(0.55); }
 }
-
-/* 汗滴（sad） */
-.gh-pet-sweat { animation: gh-pet-fx-sweat 2.2s ease-in-out infinite; }
-@keyframes gh-pet-fx-sweat {
-  0%, 100% { opacity: 0.85; transform: translateY(0); }
-  50% { opacity: 1; transform: translateY(3px); }
+@keyframes gh-pet-fx-zzz {
+  0% { opacity: 0; transform: translate(0, 6px) scale(0.6); }
+  30% { opacity: 0.95; transform: translate(6px, -10px) scale(1); }
+  100% { opacity: 0; transform: translate(16px, -42px) scale(1.1); }
+}
+@keyframes gh-pet-fx-hand {
+  0% { opacity: 0; transform: translate(24px, 10px) scale(0.5) rotate(-16deg); }
+  18% { opacity: 1; }
+  42% { opacity: 1; transform: translate(0, 0) scale(1.06) rotate(0); }
+  54% { transform: translate(-4px, -5px) scale(1.12) rotate(4deg); }
+  74% { opacity: 1; transform: translate(2px, -2px) scale(1); }
+  100% { opacity: 0; transform: translate(16px, -16px) scale(0.7) rotate(12deg); }
+}
+@keyframes gh-pet-fx-hand-spark {
+  0% { opacity: 0; transform: scale(0.3) rotate(0); }
+  50% { opacity: 1; transform: scale(1.15) rotate(30deg); }
+  100% { opacity: 0; transform: scale(0.6) rotate(70deg); }
+}
+@keyframes gh-pet-fx-dust {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.4); }
+  25% { opacity: 0.9; transform: translate(0, -5px) scale(1); }
+  100% { opacity: 0; transform: translate(-22px, -14px) scale(1.5); }
+}
+@keyframes gh-pet-fx-dizzy {
+  0% { opacity: 0; transform: translateY(8px) scale(0.6) rotate(-8deg); }
+  20%, 70% { opacity: 1; }
+  50% { transform: translateY(-4px) scale(1.05) rotate(8deg); }
+  100% { opacity: 0; transform: translateY(-26px) scale(0.8) rotate(-6deg); }
+}
+@keyframes gh-pet-fx-confetti {
+  0% { opacity: 0; transform: translate(0, -10px) rotate(0) scale(0.6); }
+  15% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--confetti-x, 0), 96px) rotate(360deg) scale(1); }
 }
 
-/* ===== 通用小动画 ===== */
+/* 汗滴（sad） */
+.gh-pet-sweat { animation: gh-pet-sweat 2.2s ease-in-out infinite; }
+
+/* ===== 页面小动画 ===== */
 @keyframes gh-pet-fade {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -919,37 +2003,104 @@
   0%, 100% { transform: translateX(0) rotate(0); opacity: 0.9; }
   50% { transform: translateX(8px) rotate(8deg); opacity: 1; }
 }
+@keyframes gh-pet-idle-float {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-7px) rotate(3deg); }
+}
+@keyframes gh-pet-bubble-in {
+  from { opacity: 0; transform: translate(-50%, 6px) scale(0.96); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+@keyframes gh-pet-pop-in {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes gh-pet-stat-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.18); }
+}
+@keyframes gh-pet-mote-float {
+  0%, 100% { transform: translate(0, 0); opacity: 0.45; }
+  40% { opacity: 0.85; }
+  50% { transform: translate(8px, -16px); }
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 900px) {
+  .gh-pet-layout { grid-template-columns: minmax(0, 1fr); }
+  .gh-pet-side {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+  .gh-pet-panel--wardrobe { grid-column: 1 / -1; }
+}
+
+@media (max-width: 640px) {
+  .gh-pet-page .gh-pet-stage {
+    min-height: 342px;
+    padding: 0 10px 44px;
+    border-radius: var(--gh-radius-lg);
+  }
+  .gh-pet-bubble {
+    top: 12px;
+    max-width: calc(100% - 28px);
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+  .gh-pet-stage-hint { font-size: 10px; bottom: 9px; }
+  .gh-pet-stage-frame,
+  .gh-pet-stage-shelf { display: none; }
+  .gh-pet-stage-window {
+    right: 5%;
+    top: 18px;
+    width: 86px;
+    height: 98px;
+  }
+  .gh-pet-stage-window i { width: 18px; height: 18px; right: 10px; top: 12px; }
+  .gh-pet-stage-beam { top: 92px; width: 250px; height: 230px; }
+  .gh-pet-stage-plant { left: 2%; bottom: 10%; transform: scale(0.82); transform-origin: 50% 100%; }
+  .gh-pet-stage-ball { right: 7%; bottom: 8%; width: 28px; height: 28px; }
+  .gh-pet-stage-rug { bottom: 32px; width: 84%; height: 62px; }
+  .gh-pet-page .gh-pet-dock { padding: 10px; gap: 10px; }
+  .gh-pet-dock-group { padding: 10px; }
+  .gh-pet-dock-grid { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 7px; }
+  .gh-pet-summon-grid { grid-template-columns: minmax(0, 1fr); }
+  .gh-pet-page .gh-pet-summon { padding: var(--gh-space-5) var(--gh-space-4); }
+  .gh-pet-side { grid-template-columns: minmax(0, 1fr); }
+  .gh-pet-panel { padding: 14px; }
+  .gh-pet-outfit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 380px) {
+  .gh-pet-dock-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gh-pet-dock-btn { grid-template-columns: 26px minmax(0, 1fr); column-gap: 7px; padding: 7px 8px; }
+  .gh-pet-dock-emoji { width: 26px; height: 26px; font-size: 15px; }
+  .gh-pet-dock-btn strong { font-size: 12px; }
+  .gh-pet-dock-meta { font-size: 10px; }
+}
 
 /* ===== 无动画偏好：全部降级为静态 ===== */
 @media (prefers-reduced-motion: reduce) {
   .gh-pet-sprite,
-  .gh-pet-sprite .gh-pet-head,
-  .gh-pet-sprite .gh-pet-eye,
-  .gh-pet-sprite .gh-pet-ear,
-  .gh-pet-sprite .gh-pet-tail,
-  .gh-pet-sprite .gh-pet-wing,
-  .gh-pet-sprite .gh-pet-tuft,
-  .gh-pet-sprite .gh-pet-tongue,
+  .gh-pet-sprite *,
   .gh-pet-fx,
   .gh-pet-glow,
   .gh-pet-sweat,
   .gh-pet-loading-emoji,
-  .gh-pet-gone-wind {
+  .gh-pet-gone-wind,
+  .gh-pet-stage-mote,
+  .gh-pet-bubble,
+  .gh-pet-toast,
+  .gh-pet-stat-fill,
+  .gh-pet-summon-check {
     animation: none !important;
+    transition: none !important;
   }
-  .gh-pet-fx { display: none !important; }
-  /* 舌头保持可见（opacity 由 play/happy 类控制），仅停掉摆动 */
-  .gh-pet-sprite--sad .gh-pet-ear--l { transform: rotate(-18deg); }
-  .gh-pet-sprite--sad .gh-pet-ear--r { transform: rotate(18deg); }
-}
-
-/* ===== 响应式（<900px 侧栏下沉，<640px 单列紧凑） ===== */
-@media (max-width: 900px) {
-  .gh-pet-layout { grid-template-columns: minmax(0, 1fr); }
-}
-@media (max-width: 640px) {
-  .gh-pet-summon-grid { grid-template-columns: minmax(0, 1fr); }
-  .gh-pet-stage { min-height: 260px; }
-  .gh-pet-outfit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .gh-pet-stage-frame { display: none; }
+  .gh-pet-fx,
+  .gh-pet-glow { display: none !important; }
+  .gh-pet-sprite--sad .gh-pet-ear--cat.gh-pet-ear--l { transform: rotate(-15deg) translateY(3px); }
+  .gh-pet-sprite--sad .gh-pet-ear--cat.gh-pet-ear--r { transform: rotate(15deg) translateY(3px); }
+  .gh-pet-sprite--sad .gh-pet-ear--dog.gh-pet-ear--l { transform: rotate(-7deg) translateY(4px); }
+  .gh-pet-sprite--sad .gh-pet-ear--dog.gh-pet-ear--r { transform: rotate(7deg) translateY(4px); }
 }

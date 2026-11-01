@@ -189,9 +189,25 @@ assertEqual(recomputeCriticalSince(50, 0, 0, null), null, '无记录且不新增
    ============================================================ */
 
 assertEqual(petUnlockedActions(1), ['feed'], 'L1 只解锁喂食')
-assertEqual(petUnlockedActions(3), ['feed', 'bathe', 'play'], 'L3 解锁全部照顾动作')
-assertEqual(petUnlockedActions(4), ['feed', 'bathe', 'play', 'dance'], 'L4 解锁跳舞')
-assertEqual(petUnlockedActions(10), ['feed', 'bathe', 'play', 'dance', 'roll', 'sing', 'flip', 'spin', 'magic', 'firework'], 'L10 全解锁')
+assertEqual(
+  petUnlockedActions(3),
+  ['feed', 'bathe', 'play', 'stretch', 'beg'],
+  'L3 解锁全部照顾动作 + 伸懒腰/作揖',
+)
+assertEqual(
+  petUnlockedActions(4),
+  ['feed', 'bathe', 'play', 'stretch', 'beg', 'dance'],
+  'L4 追加跳舞',
+)
+assertEqual(
+  petUnlockedActions(10),
+  [
+    'feed', 'bathe', 'play',
+    'stretch', 'beg', 'dance', 'roll', 'highfive', 'sing', 'flip',
+    'moonwalk', 'spin', 'playdead', 'magic', 'cheer', 'firework',
+  ],
+  'L10 全解锁',
+)
 assertEqual(petUnlockedActions(0), [], 'L0 无解锁')
 
 /* ============================================================
@@ -283,14 +299,14 @@ assertEqual(cleanEquipped('{"face":"glasses_round","neck":"bowtie"}'), { hat: nu
 {
   const keys = PET_TRICKS.map((trick) => trick.key)
   assertEqual(new Set(keys).size, keys.length, '特技 key 唯一')
-  assertEqual(keys.length, 7, '共 7 个特技')
+  assertEqual(keys.length, 13, '共 13 个特技（7 个既有 + 6 个新增）')
   for (const trick of PET_TRICKS) {
-    assert(trick.minLevel >= 4 && trick.minLevel <= PET_MAX_LEVEL, `特技 ${trick.key} minLevel 在 4–10`)
+    assert(trick.minLevel >= 2 && trick.minLevel <= PET_MAX_LEVEL, `特技 ${trick.key} minLevel 在 2–10`)
     assert(trick.emoji.length > 0, `特技 ${trick.key} 有 emoji`)
   }
-  // minLevel 连续：L4..L10 每级一个新特技
+  // minLevel 覆盖 L2–L10；L5/L7/L8/L9 各有两档动作，其余等级一档
   const levels = PET_TRICKS.map((trick) => trick.minLevel).sort((a, b) => a - b)
-  assertEqual(levels, [4, 5, 6, 7, 8, 9, 10], '特技解锁等级连续 L4–L10')
+  assertEqual(levels, [2, 3, 4, 5, 5, 6, 7, 7, 8, 8, 9, 9, 10], '特技解锁等级覆盖 L2–L10')
 }
 
 // decay
