@@ -141,7 +141,7 @@ function directKeyOf(a: number, b: number): string {
 }
 
 /** 取（或建）两人 direct 会话，返回会话 id 与对方 id */
-async function ensureDirectConversation(
+export async function ensureDirectConversation(
   userId: number,
   targetId: number,
 ): Promise<{ conversationId: number; otherId: number } | null> {

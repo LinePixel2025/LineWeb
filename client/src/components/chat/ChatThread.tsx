@@ -4,6 +4,8 @@ import ChatComposer, { type ComposerReply } from './ChatComposer'
 import ChatImageLightbox from './ChatImageLightbox'
 import ChatStickerPanel from './ChatStickerPanel'
 import ChatBundleDialog from './ChatBundleDialog'
+import ChatRedPacketDialog from './ChatRedPacketDialog'
+import ChatRedPacketCreateDialog, { type ChatRedPacketTarget } from './ChatRedPacketCreateDialog'
 import ChatForwardDialog from './ChatForwardDialog'
 import ChatMessageRow from './ChatMessageRow'
 import MessageActionMenu, { type MessageActionItem } from './MessageActionMenu'
@@ -122,6 +124,8 @@ interface Props {
   onAckAnnouncement?: () => Promise<void> | void
   /** 免打扰开启中：会话头部显示「免打扰中」提示 */
   dndEnabled?: boolean
+  /** 聊天红包功能开关（FeatureContext 在页面层读取；关闭时隐藏红包入口且点击红包无响应） */
+  redPacketEnabled?: boolean
 }
 
 function avatarOf(
@@ -188,6 +192,7 @@ export default function ChatThread({
   onSaveAnnouncement,
   onAckAnnouncement,
   dndEnabled = false,
+  redPacketEnabled = false,
 }: Props) {
   const listRef = useRef<HTMLDivElement | null>(null)
   const lastAvatarTapRef = useRef<{ id: number; at: number } | null>(null)
@@ -219,6 +224,8 @@ export default function ChatThread({
   const [atBottom, setAtBottom] = useState(true)
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [stickersOpen, setStickersOpen] = useState(false)
+  const [redPacketCreateOpen, setRedPacketCreateOpen] = useState(false)
+  const [activeRedPacketId, setActiveRedPacketId] = useState<number | null>(null)
   const [replyTo, setReplyTo] = useState<ComposerReply | null>(null)
   const [selecting, setSelecting] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set())
@@ -249,6 +256,22 @@ export default function ChatThread({
     [membersSignature],
   )
 
+  /** 发红包目标：单聊取对方 neko id，群聊取房间 id（会话缺失字段时为 null，红包入口隐藏） */
+  const redPacketTarget = useMemo<ChatRedPacketTarget | null>(() => {
+    if (!conversation) return null
+    if (conversation.kind === 'direct') {
+      const peerNekoId = conversation.contact?.nekoId ?? conversation.avatarNekoId
+      if (!peerNekoId) return null
+      return { key: conversation.key, type: 'direct', peerNekoId }
+    }
+    const roomId = conversation.room?.id
+      ?? (conversation.key.startsWith('r')
+        ? Number.parseInt(conversation.key.slice(1), 10)
+        : Number.NaN)
+    if (!Number.isInteger(roomId) || roomId <= 0) return null
+    return { key: conversation.key, type: 'group', roomId }
+  }, [conversation])
+
   // 切换会话时回到最新消息
   useEffect(() => {
     stickToBottomRef.current = true
@@ -260,6 +283,8 @@ export default function ChatThread({
     setRenaming(false)
     setPreviewImage(null)
     setStickersOpen(false)
+    setRedPacketCreateOpen(false)
+    setActiveRedPacketId(null)
     setReplyTo(null)
     setSelecting(false)
     setSelectedIds(new Set())
@@ -432,6 +457,12 @@ export default function ChatThread({
     setBundlePreview(bundle)
   }, [])
 
+  /** 点击红包消息卡片：打开详情/领取弹窗（功能关闭时不响应） */
+  const handleOpenRedPacket = useCallback((redPacketId: number) => {
+    if (!redPacketEnabled) return
+    setActiveRedPacketId(redPacketId)
+  }, [redPacketEnabled])
+
   const jumpToMessage = useCallback((messageId: number) => {
     const element = listRef.current?.querySelector<HTMLElement>(
       `[data-message-id="${messageId}"]`,
@@ -452,6 +483,7 @@ export default function ChatThread({
   /** 消息的引用预览文本 */
   const previewOf = (message: NekoMessage): string => {
     if (message.recalled) return '消息已撤回'
+    if (message.redPacketId != null) return '[红包]'
     if (message.poke) return '[拍一拍]'
     if (message.image) return message.body === '[表情]' ? '[表情]' : '[图片]'
     if (message.bundle) return '[聊天记录]'
@@ -645,6 +677,9 @@ export default function ChatThread({
         && !message.recalled
         && !prev.poke
         && !message.poke
+        // 红包卡片始终带头像独立展示（与微信一致），不并入同发送者分组
+        && prev.redPacketId == null
+        && message.redPacketId == null
         && prev.fromUsername === message.fromUsername
         && message.ts - prev.ts >= 0
         && message.ts - prev.ts < MESSAGE_GROUP_WINDOW_MS
@@ -1061,6 +1096,7 @@ export default function ChatThread({
             onPokeAvatar={handlePokeAvatar}
             onPreviewImage={handlePreviewImage}
             onOpenBundle={handleOpenBundle}
+            onOpenRedPacket={handleOpenRedPacket}
             onJumpQuote={jumpToMessage}
           />
         ))}      </div>
@@ -1256,6 +1292,22 @@ export default function ChatThread({
         onClose={() => setBundlePreview(null)}
       />
 
+      {redPacketCreateOpen && redPacketTarget && (
+        <ChatRedPacketCreateDialog
+          open
+          target={redPacketTarget}
+          onClose={() => setRedPacketCreateOpen(false)}
+        />
+      )}
+
+      {activeRedPacketId !== null && (
+        <ChatRedPacketDialog
+          open
+          redPacketId={activeRedPacketId}
+          onClose={() => setActiveRedPacketId(null)}
+        />
+      )}
+
       {actionMenu && (() => {
         const message = actionMenu.message
         const key = conversation?.key
@@ -1309,6 +1361,11 @@ export default function ChatThread({
           onSendSticker ? () => setStickersOpen((open) => !open) : undefined
         }
         stickersOpen={stickersOpen}
+        onToggleRedPacket={
+          redPacketEnabled && redPacketTarget
+            ? () => setRedPacketCreateOpen(true)
+            : undefined
+        }
         disabled={!conversation.canSend}
         disabledHint={
           conversation.kind === 'room'

@@ -70,6 +70,8 @@ model User {
   chatStickers           ChatSticker[] // 聊天表情收藏
   chatRemarksOwned       ChatContactSetting[] @relation("ChatContactOwner") // 我给别人设置的备注
   chatRemarksTarget      ChatContactSetting[] @relation("ChatContactTarget") // 别人给我的备注行（仅对方视角）
+  sentRedPackets         RedPacket[]          @relation("RedPacketSender") // 我发出的聊天红包
+  redPacketClaims        RedPacketClaim[] // 我领取的红包记录
   /**
    * 网页反代排队赦免：不受并发闸门限制（管理员另有 role 兜底）
    */
@@ -397,9 +399,10 @@ model Conversation {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  owner    User?                @relation("ConversationOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  members  ConversationMember[]
-  messages Message[]
+  owner       User?                @relation("ConversationOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  members     ConversationMember[]
+  messages    Message[]
+  redPackets  RedPacket[] // 会话内的积分红包
 
   @@index([lastMessageAt])
   @@map("conversations")
@@ -483,6 +486,46 @@ model ChatSticker {
   @@unique([userId, uploadId])
   @@index([userId])
   @@map("chat_stickers")
+}
+
+/** 聊天积分红包（单聊专属：对方领全部；群聊拼手气：N 份二倍均值随机；24h 未领完惰性退回） */
+model RedPacket {
+  id             Int      @id @default(autoincrement())
+  conversationId Int      @map("conversation_id")
+  senderId       Int      @map("sender_id")
+  totalPoints    Int      @map("total_points")
+  count          Int // 份数（single 恒为 1）
+  type           String // single | lucky
+  greeting       String   @default("")
+  status         String   @default("active") // active | finished | expired
+  claimedPoints  Int      @default(0) @map("claimed_points")
+  claimedCount   Int      @default(0) @map("claimed_count")
+  expireAt       DateTime @map("expire_at") // 创建 + 24h，过期未领完退回发送者
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation Conversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User               @relation("RedPacketSender", fields: [senderId], references: [id], onDelete: Cascade)
+  claims       RedPacketClaim[]
+
+  @@index([conversationId, createdAt])
+  @@index([status, expireAt])
+  @@map("red_packets")
+}
+
+/** 红包领取记录（一个红包一人最多领一次） */
+model RedPacketClaim {
+  id          Int      @id @default(autoincrement())
+  redPacketId Int      @map("red_packet_id")
+  userId      Int      @map("user_id")
+  amount      Int
+  claimedAt   DateTime @default(now()) @map("claimed_at")
+
+  redPacket RedPacket @relation(fields: [redPacketId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([redPacketId, userId])
+  @@index([userId])
+  @@map("red_packet_claims")
 }
 
 /** 联系人备注（仅自己可见；≤30 字） */
@@ -680,7 +723,7 @@ model PointsLedger {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   amount    Int // 正数=获得，负数=扣除
   balance   Int // 变动后余额
-  reason    String // game_result | farm_harvest | farm_steal | farm_welcome | farm_shop | farm_expand | farm_merchant | shop_purchase | checkin | leader_bonus | stock | admin_adjust
+  reason    String // game_result | farm_harvest | farm_steal | farm_welcome | farm_shop | farm_expand | farm_merchant | shop_purchase | checkin | leader_bonus | stock | redpacket_send | redpacket_receive | redpacket_refund | admin_adjust
   game      String? // 来源游戏 id（2048 / doudizhu / ... / farm）
   note      String?
   createdAt DateTime @default(now()) @map("created_at")

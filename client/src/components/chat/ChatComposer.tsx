@@ -38,6 +38,8 @@ interface Props {
   /** 打开/收起表情包面板（传入才渲染「表情」按钮） */
   onToggleStickers?: () => void
   stickersOpen?: boolean
+  /** 打开发红包弹窗（传入且功能开关开启才渲染「红包」按钮） */
+  onToggleRedPacket?: () => void
   /** 禁用输入（如对方已不是好友） */
   disabled?: boolean
   disabledHint?: string
@@ -55,6 +57,7 @@ export default function ChatComposer({
   onCancelReply,
   onToggleStickers,
   stickersOpen = false,
+  onToggleRedPacket,
   disabled = false,
   disabledHint,
   placeholder = '输入消息…',
@@ -343,7 +346,7 @@ export default function ChatComposer({
         onPaste={handlePaste}
       />
       <div className="gh-chat-composer-bar">
-        {(onSendImage || onToggleStickers) && (
+        {(onSendImage || onToggleStickers || onToggleRedPacket) && (
           <div className="gh-chat-composer-tools">
             {onToggleStickers && (
               <button
@@ -356,6 +359,18 @@ export default function ChatComposer({
                 onClick={onToggleStickers}
               >
                 表情
+              </button>
+            )}
+            {onToggleRedPacket && (
+              <button
+                type="button"
+                className="gh-chat-composer-tool"
+                aria-label="发红包"
+                title="发红包"
+                disabled={!canAttach}
+                onClick={onToggleRedPacket}
+              >
+                红包
               </button>
             )}
             {onSendImage && (

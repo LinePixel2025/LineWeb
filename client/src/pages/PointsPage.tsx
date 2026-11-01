@@ -52,6 +52,9 @@ const REASON_LABELS: Record<string, string> = {
   leader_bonus: '榜首奖励',
   stock_buy: '股市买入',
   stock_sell: '股市卖出',
+  redpacket_send: '发出红包',
+  redpacket_receive: '领取红包',
+  redpacket_refund: '红包退回',
   admin_adjust: '管理员调整',
 }
 

@@ -4,6 +4,7 @@ import { z } from 'zod'
 import sharp from 'sharp'
 import { AppError } from '../middleware/errorHandler.js'
 import { asyncHandler } from '../lib/asyncHandler.js'
+import { requireFeature } from '../middleware/featureGuard.js'
 import prisma from '../lib/prisma.js'
 import { config } from '../config/index.js'
 import {
@@ -32,6 +33,11 @@ import {
 } from '../services/chatView.js'
 import { getBigGroupConversationId } from '../services/bigGroup.js'
 import { getTitleMapForLineWebIds } from '../services/pointsService.js'
+import {
+  claimRedPacket,
+  createRedPacket,
+  getRedPacketView,
+} from '../services/redPacketService.js'
 
 /**
  * 自建聊天 REST 网关（聊天双后端的「自建」侧；由 routes/chatXmpp.ts 分发器按用户选择挂载）
@@ -843,6 +849,59 @@ router.get(
     if (!sessionId) throw new AppError('缺少 sessionId', 400)
     const stanza = await pollStanza(sessionId, currentUserId(req))
     res.json(stanza ? { stanza } : {})
+  }),
+)
+
+// === 积分红包（单聊专属 / 群聊拼手气；金额走统一积分，账本落 red_packets） ===
+
+function parseRedPacketId(req: Request): number {
+  const id = Number.parseInt(req.params.id ?? '', 10)
+  if (!Number.isInteger(id) || id <= 0) throw new AppError('无效的红包', 400)
+  return id
+}
+
+const redPacketCreateSchema = z.object({
+  peer: z.number().int().positive().optional(),
+  roomId: z.number().int().positive().optional(),
+  totalPoints: z.number().int(),
+  count: z.number().int().optional(),
+  type: z.enum(['single', 'lucky']),
+  greeting: z.string().max(200).optional(),
+})
+
+// POST /api/chat/xmpp/redpackets — 发红包（专属/拼手气）
+// { peer?: 联系人 id(nekoId), roomId?: 群会话 id, totalPoints, count?, type, greeting? }
+router.post(
+  '/redpackets',
+  chatWriteLimiter,
+  requireFeature('redpacket'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const parsed = redPacketCreateSchema.safeParse(req.body || {})
+    if (!parsed.success) throw new AppError('红包参数无效', 400)
+    const created = await createRedPacket(currentUserId(req), parsed.data)
+    res.json(created)
+  }),
+)
+
+// GET /api/chat/xmpp/redpackets/:id — 详情（含过期惰性结算与领取名单）
+router.get(
+  '/redpackets/:id',
+  chatWriteLimiter,
+  requireFeature('redpacket'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const view = await getRedPacketView(currentUserId(req), parseRedPacketId(req))
+    res.json(view)
+  }),
+)
+
+// POST /api/chat/xmpp/redpackets/:id/claim — 领取
+router.post(
+  '/redpackets/:id/claim',
+  chatWriteLimiter,
+  requireFeature('redpacket'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const result = await claimRedPacket(currentUserId(req), parseRedPacketId(req))
+    res.json(result)
   }),
 )
 

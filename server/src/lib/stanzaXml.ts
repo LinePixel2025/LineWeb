@@ -201,7 +201,8 @@ const XHTML_MAX_LENGTH = 16 * 1024
 /**
  * 净化客户端发来的 XHTML-IM 片段 → 白名单节点树。
  *
- * 只保留 img（src 限 `/chat/uploads/<24hex>`）、span（data-lw-poke 数字）与纯文本；
+ * 只保留 img（src 限 `/chat/uploads/<24hex>`）、span（data-lw-poke 拍一拍 /
+ * data-lw-red 红包私有数字标记）与纯文本；
  * 其余标签剥壳留文本，非法属性丢弃。空片段 / 超长 / 解析失败返回 []。
  * 实时投递直接嵌入节点树（真实元素），落库存 serialize 后的字符串。
  */
@@ -228,17 +229,17 @@ function sanitizeElement(node: StanzaElement): StanzaElement | null {
   }
   if (node.name === 'span') {
     const poke = node.attrs['data-lw-poke'] || ''
+    const red = node.attrs['data-lw-red'] || ''
     const children: StanzaElement[] = []
     for (const child of node.children) {
       const sanitized = sanitizeElement(child)
       if (sanitized) children.push(sanitized)
     }
-    return elementOf(
-      'span',
-      /^\d{1,15}$/.test(poke) && Number(poke) > 0 ? { 'data-lw-poke': poke } : {},
-      children,
-      node.text.slice(0, 500),
-    )
+    // 拍一拍 / 红包私有标记各自独立校验；都非法时保留 span 但不带属性
+    const attrs: Record<string, string> = {}
+    if (/^\d{1,15}$/.test(poke) && Number(poke) > 0) attrs['data-lw-poke'] = poke
+    if (/^\d{1,10}$/.test(red) && Number(red) > 0) attrs['data-lw-red'] = red
+    return elementOf('span', attrs, children, node.text.slice(0, 500))
   }
   // 其它标签一律剥壳留文本（前端只发 img / span / 纯文本）
   const children: StanzaElement[] = []

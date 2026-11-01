@@ -28,7 +28,8 @@
     "verify:pet": "tsx scripts/verify-pet.ts",
     "verify:stocks": "tsx scripts/verify-stocks.ts",
     "verify:chat": "tsx scripts/verify-chat.ts",
-    "verify:reader": "tsx scripts/verify-reader.ts"
+    "verify:reader": "tsx scripts/verify-reader.ts",
+    "verify:redpacket": "tsx scripts/verify-redpacket.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

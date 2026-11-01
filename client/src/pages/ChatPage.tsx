@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import api from '../lib/api'
 import { isConversationKey } from '../lib/chat'
 import { useXmppChat } from '../contexts/XmppChatContext'
+import { useFeature } from '../contexts/FeatureContext'
 import { useSiteAnnouncements } from '../contexts/SiteAnnouncementContext'
 import SiteAnnouncementDialog from '../components/SiteAnnouncementDialog'
 import Icon from '../components/ui/Icon'
@@ -96,6 +97,9 @@ export default function ChatPage() {
   } = useXmppChat()
 
   const { visible: visibleAnnouncements } = useSiteAnnouncements()
+  // 聊天红包功能开关（页面层读取后下传，ChatThread 保持无上下文依赖、便于独立测试）
+  const { isEnabled: isFeatureEnabled } = useFeature()
+  const redPacketEnabled = isFeatureEnabled('redpacket')
 
   const [panelTab, setPanelTab] = useState<PanelTab>('conversations')
   const [dialog, setDialog] = useState<DialogState>(null)
@@ -642,6 +646,7 @@ export default function ChatPage() {
           conversation={activeConversation}
           selfNekoId={self?.nekoId ?? null}
           dndEnabled={dndEnabled}
+          redPacketEnabled={redPacketEnabled}
           messages={messages}
           peerRead={activeKey ? peerRead[activeKey] ?? 0 : 0}
           loading={messagesLoading && messages.length === 0}

@@ -163,6 +163,8 @@ export interface XmppChatValue {
   sendText: (key: string, text: string, replyTo?: number, mentions?: number[]) => Promise<void>
   /** 拍一拍（普通消息 + XHTML 私有标记；2 秒节流） */
   sendPoke: (key: string, targetNekoId: number) => Promise<void>
+  /** 发送红包消息（红包本体走 /chat/xmpp/redpackets REST，这里只发 data-lw-red 私有标记消息） */
+  sendRedPacketMessage: (key: string, redPacketId: number, greeting?: string) => Promise<void>
   sendImage: (key: string, file: File) => Promise<void>
   /**
    * 转发聊天记录：
@@ -1443,6 +1445,26 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
   )
 
   /**
+   * 发送红包消息（与拍一拍同构）：
+   * 红包已在 REST 侧创建并扣分，这里只发承载红包 id 的消息——
+   * 正文 = 祝福语（缺省 [红包]），XHTML 私有标记 data-lw-red 供收发双方解析出红包卡片。
+   */
+  const sendRedPacketMessage = useCallback(
+    async (key: string, redPacketId: number, greeting?: string) => {
+      if (!Number.isInteger(redPacketId) || redPacketId <= 0) return
+      const client = requireClient()
+      const target = requireTarget(key)
+      client.sendMessage({
+        to: target.to,
+        type: target.type,
+        body: greeting?.trim() || '[红包]',
+        xhtml: `<span data-lw-red="${redPacketId}">[红包]</span>`,
+      })
+    },
+    [requireClient, requireTarget],
+  )
+
+  /**
    * 转发聊天记录。
    *
    * 合并转发由 neko 按所选消息行自身推导源会话（不再依赖目标会话），因此可以发往
@@ -1831,6 +1853,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       loadMore: loadMoreFor,
       sendText,
       sendPoke,
+      sendRedPacketMessage,
       forwardMessages,
       sendImage,
       sendSticker,
@@ -1887,6 +1910,7 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
       loadMoreFor,
       sendText,
       sendPoke,
+      sendRedPacketMessage,
       forwardMessages,
       sendImage,
       sendSticker,

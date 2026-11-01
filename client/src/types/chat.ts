@@ -236,6 +236,8 @@ export interface NekoMessage {
   mentionedMe?: boolean
   /** 拍一拍目标（仅 LineWeb 私有标记的消息） */
   poke?: { toNekoId: number } | null
+  /** 红包 id（仅 LineWeb 私有标记 data-lw-red 的消息；与拍一拍互斥，红包优先） */
+  redPacketId?: number
   /** 图片地址（已归一化为 /chat/uploads/<id>，渲染时再追加 token） */
   image: string | null
   /** 引用回复的快照（非引用消息为 null） */

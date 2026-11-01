@@ -49,6 +49,7 @@ import { initStorageTunnel, isNodeConnected } from './services/storageTunnel.js'
 import { initChatHub } from './services/chatHub.js'
 import { initChatWsGateway } from './services/chatWsGateway.js'
 import { initWebProxyWs } from './services/webProxyWs.js'
+import { settleExpiredRedPackets } from './services/redPacketService.js'
 import { startBigGroupSync, stopBigGroupSync } from './services/bigGroup.js'
 import { startNekoAccountSync, stopNekoAccountSync } from './services/nekoAccountSync.js'
 import { startLineWebBigGroupSync, stopLineWebBigGroupSync } from './services/nekoBigGroup.js'
@@ -431,6 +432,9 @@ app.get('/api', (_req, res) => {
       rooms: { method: 'POST', path: '/api/chat/xmpp/rooms', auth: true, description: '建群 { name, memberIds }；群管理 POST /api/chat/xmpp/rooms/:id/name|members|leave|disband|role|transfer|mute|mute-all|mute-notify|announcement|announcement-ack' },
       messages: { method: 'POST', path: '/api/chat/xmpp/messages/recall', auth: true, description: '撤回消息（5 分钟内，仅本人）；群主/管理员用 /messages/admin-recall' },
       uploads: { method: 'POST', path: '/api/chat/xmpp/uploads', auth: true, description: '图片上传（raw 二进制 body，魔数判定）→ {ok,url:"/chat/uploads/<24hex>",id,mime}；读取 GET /chat/uploads/:id?token=<登录令牌>' },
+      redPacketSend: { method: 'POST', path: '/api/chat/xmpp/redpackets', auth: true, description: '发红包 { type:"single"|"lucky", peer?(联系人 nekoId)|roomId?(群会话 id), totalPoints, count?, greeting? }（单聊专属=对方领全部，群聊拼手气=N 份随机；需 redpacket 功能开关；金额走统一积分，24h 未领完退回）' },
+      redPacketView: { method: 'GET', path: '/api/chat/xmpp/redpackets/:id', auth: true, description: '红包详情（状态 / 已领名单 / 我的份额；已过期时先惰性结算退回再返回）' },
+      redPacketClaim: { method: 'POST', path: '/api/chat/xmpp/redpackets/:id/claim', auth: true, description: '领取红包 → { amount, balance }（每人一次，不能领自己的；400=已领完/已过期，409=重复领取）' },
       avatars: { method: 'GET', path: '/chat/avatars/:nekoId?v=&token=', auth: true, description: '聊天头像直链（存储节点 _avatars/<id>.webp；?v=avatarVersion 击穿缓存）' },
       legacy: { method: 'GET', path: '/api/chat/conversations', auth: true, description: '已废弃：会话/消息相关旧端点返回 410 CHAT_MIGRATED（GET /api/chat/messages/:id/image 除外，供旧存档图片直链）' },
       ws: '实时连接：ws(s)://<host>/ws/xmpp?token=<登录令牌>（自建网关：SASL PLAIN + bind 在浏览器侧完成，stanza 由服务端解析落库）。/ws/chat 保留给游戏与好友事件：连接后 5 秒内发送 {"type":"auth","token":"<登录令牌>"}，推送 game:* / friend:*，客户端 {type:"ping"} ↔ 服务端 {type:"pong"}，认证失败以 close code 4001 断开。',
@@ -756,6 +760,12 @@ const leaderTitleTimer = setTimeout(() => {
 }, 30000)
 leaderTitleTimer.unref()
 
+// 聊天积分红包：每分钟扫描退回过期红包（读时惰性结算的兜底，失败只告警）
+const redPacketTimer = setInterval(() => {
+  void settleExpiredRedPackets()
+}, 60_000)
+redPacketTimer.unref()  // 不阻止进程退出
+
 // === 进程级错误处理 ===
 process.on('unhandledRejection', (reason) => {
   console.error('[Unhandled Rejection]', reason)
@@ -775,6 +785,7 @@ const shutdown = (signal: string) => {
   console.log(`\n[${signal}] 正在关闭服务器...`)
 
   clearInterval(syncInterval)
+  clearInterval(redPacketTimer)
   clearTimeout(startupTimer)
   stopBigGroupSync()
   stopNekoAccountSync()

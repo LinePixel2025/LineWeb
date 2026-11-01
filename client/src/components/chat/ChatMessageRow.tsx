@@ -1,6 +1,7 @@
-import { Fragment, memo, useMemo, type ReactNode, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from 'react'
+import { Fragment, memo, useEffect, useMemo, useState, type ReactNode, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import NekoAvatar from './NekoAvatar'
 import UserTitleBadge from '../UserTitleBadge'
+import ChatRedPacketCard from './ChatRedPacketCard'
 import { chatImageUrl } from '../../lib/chat'
 import { useLongPress } from '../../hooks/useLongPress'
 import type { NekoBundleItem, NekoMessage, NekoRoomMember } from '../../types/chat'
@@ -40,6 +41,8 @@ export interface ChatMessageRowProps {
   onPokeAvatar: (nekoId: number, mode: 'double' | 'touch') => void
   onPreviewImage: (image: string) => void
   onOpenBundle: (bundle: NekoBundleItem[]) => void
+  /** 打开红包详情/领取弹窗（红包消息点击） */
+  onOpenRedPacket: (redPacketId: number) => void
   onJumpQuote: (messageId: number) => void
 }
 
@@ -105,9 +108,25 @@ export default memo(function ChatMessageRow({
   onPokeAvatar,
   onPreviewImage,
   onOpenBundle,
+  onOpenRedPacket,
   onJumpQuote,
 }: ChatMessageRowProps) {
   const longPress = useLongPress((x, y) => onLongPress(message, x, y))
+  // 聊天图片走存储节点；节点离线或文件被清理时浏览器会显示 alt 文本，用占位块替代
+  const [imageFailed, setImageFailed] = useState(false)
+  const [imageLoaded, setImageLoaded] = useState(false)
+
+  useEffect(() => {
+    setImageFailed(false)
+    setImageLoaded(false)
+  }, [message.image])
+
+  // 存储节点离线时请求可能长时间挂起而不是报错，超时后也走占位块
+  useEffect(() => {
+    if (!message.image || imageLoaded || imageFailed) return undefined
+    const timer = window.setTimeout(() => setImageFailed(true), 8000)
+    return () => window.clearTimeout(timer)
+  }, [message.image, imageLoaded, imageFailed])
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (selecting) return
@@ -229,7 +248,15 @@ export default memo(function ChatMessageRow({
               <span className="gh-chat-quote-text">{quote.text}</span>
             </button>
           )}
-          {poke ? (
+          {message.redPacketId != null ? (
+            <ChatRedPacketCard
+              greeting={message.body}
+              onOpen={() => {
+                if (longPress.wasLongPress()) return
+                onOpenRedPacket(message.redPacketId!)
+              }}
+            />
+          ) : poke ? (
             <div className={`gh-chat-poke ${poke.toNekoId === selfNekoId ? 'gh-chat-poke--me' : ''}`} role="note">
               {message.mine ? '你' : sender.name} 拍了拍 {nameOfNekoId(poke.toNekoId)}
             </div>
@@ -256,31 +283,49 @@ export default memo(function ChatMessageRow({
               </span>
             </button>
           ) : isSticker ? (
-            <img
-              className="gh-chat-message-sticker"
-              src={chatImageUrl(message.image)}
-              alt="表情"
-              loading="lazy"
-              decoding="async"
-            />
-          ) : isImage ? (
-            <button
-              type="button"
-              className="gh-chat-message-image-wrap"
-              aria-label="查看大图"
-              onClick={() => {
-                if (longPress.wasLongPress()) return
-                onPreviewImage(message.image!)
-              }}
-            >
+            imageFailed ? (
+              <span className="gh-chat-message-media-error" role="status">
+                <span className="gh-chat-message-media-error-icon" aria-hidden>🙂</span>
+                表情加载失败
+              </span>
+            ) : (
               <img
-                className="gh-chat-message-image"
+                className="gh-chat-message-sticker"
                 src={chatImageUrl(message.image)}
-                alt="图片消息"
+                alt="表情"
                 loading="lazy"
                 decoding="async"
+                onLoad={() => setImageLoaded(true)}
+                onError={() => setImageFailed(true)}
               />
-            </button>
+            )
+          ) : isImage ? (
+            imageFailed ? (
+              <span className="gh-chat-message-media-error" role="status">
+                <span className="gh-chat-message-media-error-icon" aria-hidden>🖼️</span>
+                图片加载失败
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="gh-chat-message-image-wrap"
+                aria-label="查看大图"
+                onClick={() => {
+                  if (longPress.wasLongPress()) return
+                  onPreviewImage(message.image!)
+                }}
+              >
+                <img
+                  className="gh-chat-message-image"
+                  src={chatImageUrl(message.image)}
+                  alt="图片消息"
+                  loading="lazy"
+                  decoding="async"
+                  onLoad={() => setImageLoaded(true)}
+                  onError={() => setImageFailed(true)}
+                />
+              </button>
+            )
           ) : (
             <div className={`gh-chat-message-bubble ${message.mentionedMe ? 'gh-chat-message-bubble--mention' : ''}`}>
               {isRoom

@@ -1,0 +1,334 @@
+/* ===== 聊天积分红包（gh-chat-redpacket-*）=====
+   消息流内的红包信封卡片 + 详情/领取弹窗 + 发送弹窗。
+   红包是庆祝语境，红金配色为固定品牌色，不随主题翻转；
+   表面 / 文字 / 边框等中性色一律走 variables.css 的 --gh-* 令牌。 */
+
+/* --- 消息流信封卡片 --- */
+.gh-chat-redpacket-card {
+  display: flex;
+  width: min(232px, 100%);
+  align-items: center;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-3);
+  border: 1px solid rgba(198, 47, 47, 0.55);
+  border-radius: 12px;
+  background: linear-gradient(165deg, #ef7a4f 0%, #e04040 58%, #c93030 100%);
+  color: #fff;
+  font-family: var(--gh-font);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--gh-transition), box-shadow var(--gh-transition);
+}
+
+.gh-chat-redpacket-card:hover {
+  box-shadow: var(--gh-shadow-md);
+  transform: translateY(-1px);
+}
+
+.gh-chat-redpacket-card:active {
+  transform: scale(0.98);
+}
+
+.gh-chat-redpacket-card-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 0 0 1.5px rgba(246, 217, 160, 0.85);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.gh-chat-redpacket-card-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gh-chat-redpacket-card-greeting {
+  overflow: hidden;
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.gh-chat-redpacket-card-brand {
+  color: rgba(246, 217, 160, 0.92);
+  font-size: var(--gh-type-caption-2);
+  letter-spacing: var(--gh-tracking-wide);
+}
+
+/* --- 详情 / 领取弹窗 --- */
+.gh-chat-redpacket-dialog {
+  width: min(380px, calc(100vw - 32px));
+}
+
+.gh-chat-redpacket-envelope {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gh-space-1);
+  padding: var(--gh-space-5) var(--gh-space-4) var(--gh-space-4);
+  background: linear-gradient(165deg, #ef7a4f 0%, #e04040 58%, #c93030 100%);
+  color: #fff;
+  text-align: center;
+}
+
+.gh-chat-redpacket-close {
+  position: absolute;
+  top: var(--gh-space-2);
+  right: var(--gh-space-2);
+  padding: 0 var(--gh-space-1);
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: var(--gh-text-xl);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gh-chat-redpacket-close:hover {
+  color: #fff;
+}
+
+.gh-chat-redpacket-greeting {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--gh-type-title-3);
+  font-weight: 600;
+  letter-spacing: var(--gh-tracking-snug);
+  line-height: 1.35;
+}
+
+.gh-chat-redpacket-sender {
+  margin: 0;
+  color: rgba(246, 217, 160, 0.92);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-chat-redpacket-body {
+  gap: var(--gh-space-3);
+  background: var(--gh-canvas);
+}
+
+/* 加载 / 错误 / 状态提示的居中块 */
+.gh-chat-redpacket-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-4) 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  text-align: center;
+}
+
+/* 大圆形「開」按钮 */
+.gh-chat-redpacket-open-wrap {
+  display: flex;
+  justify-content: center;
+  padding: var(--gh-space-4) 0;
+}
+
+.gh-chat-redpacket-open-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 76px;
+  padding: 0;
+  border: 3px solid #f0c674;
+  border-radius: 50%;
+  background: #fdf6e8;
+  color: #b3352c;
+  font-family: var(--gh-font-display);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 0 0 0 rgba(240, 198, 116, 0.55);
+  transition: transform var(--gh-transition), box-shadow var(--gh-transition);
+  animation: gh-chat-redpacket-open-pulse 2.2s var(--gh-ease-standard) infinite;
+}
+
+.gh-chat-redpacket-open-btn:hover:not(:disabled) {
+  transform: scale(1.04);
+}
+
+.gh-chat-redpacket-open-btn:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
+.gh-chat-redpacket-open-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+  animation: none;
+}
+
+@keyframes gh-chat-redpacket-open-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(240, 198, 116, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 14px rgba(240, 198, 116, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(240, 198, 116, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-chat-redpacket-card,
+  .gh-chat-redpacket-card:hover,
+  .gh-chat-redpacket-card:active,
+  .gh-chat-redpacket-open-btn,
+  .gh-chat-redpacket-open-btn:hover:not(:disabled),
+  .gh-chat-redpacket-open-btn:active:not(:disabled) {
+    transform: none;
+    animation: none;
+    transition: none;
+  }
+}
+
+/* 领取结果：大字金额 */
+.gh-chat-redpacket-result {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: var(--gh-space-1);
+  padding: var(--gh-space-4) 0;
+}
+
+.gh-chat-redpacket-result-amount {
+  color: #b3352c;
+  font-size: 34px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--gh-tracking-tight);
+  line-height: 1.2;
+}
+
+.gh-chat-redpacket-result-amount small {
+  font-size: var(--gh-text-sm);
+  font-weight: 500;
+  color: var(--gh-text-secondary);
+}
+
+.gh-chat-redpacket-result-hint {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+/* 领取明细列表 */
+.gh-chat-redpacket-claims {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--gh-border-muted);
+  overflow-y: auto;
+  list-style: none;
+}
+
+.gh-chat-redpacket-claim {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-2) 0;
+  border-bottom: 1px solid var(--gh-border-muted);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-chat-redpacket-claim-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--gh-space-2);
+  overflow: hidden;
+  color: var(--gh-text);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-chat-redpacket-claim--empty {
+  justify-content: center;
+  color: var(--gh-text-tertiary);
+  font-weight: 400;
+}
+
+.gh-chat-redpacket-claim-best {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--gh-radius-pill);
+  background: rgba(240, 198, 116, 0.22);
+  color: #8a5300;
+  font-size: var(--gh-type-caption-2);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+[data-theme='dark'] .gh-chat-redpacket-claim-best {
+  background: rgba(240, 198, 116, 0.16);
+  color: #f0c674;
+}
+
+.gh-chat-redpacket-claim-amount {
+  flex-shrink: 0;
+  color: var(--gh-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-chat-redpacket-summary {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  text-align: center;
+}
+
+/* --- 发送弹窗 --- */
+.gh-chat-redpacket-form {
+  gap: var(--gh-space-3);
+}
+
+.gh-chat-redpacket-balance {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-1);
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-chat-redpacket-balance strong {
+  color: var(--gh-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-chat-redpacket-hint {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-chat-redpacket-warn {
+  margin: 0;
+  color: var(--gh-warning);
+  font-size: var(--gh-text-xs);
+}
