@@ -2,15 +2,23 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import UserAvatar from '../../components/UserAvatar'
 import GameFriendPicker from '../../components/games/GameFriendPicker'
-import LiarCardView from '../../components/games/liar/LiarCardView'
+import {
+  LiarActionBar,
+  LiarHand,
+  LiarInfoPanel,
+  LiarPileLane,
+  LiarRevealBanner,
+  LiarRoundBar,
+  LiarSeat,
+  LiarTurnBanner,
+} from '../../components/games/liar/LiarTableParts'
 import { useOnlineGameRoom } from '../../hooks/useOnlineGameRoom'
 import { GAME_LIAR_ONLINE_ROUTE, GAME_LIAR_ROUTE } from '../../lib/games/catalog'
-import { liarCardKind, liarCardIsTruthy } from '../../lib/games/liar'
+import { liarCardKind } from '../../lib/games/liar'
 import type {
   GameLiarEndReason,
   GameLiarLogEntry,
   GameLiarMatch,
-  GameLiarPlayer,
   LiarActionBody,
 } from '../../types/game'
 
@@ -261,7 +269,7 @@ export default function LiarOnlinePage() {
     }
 
     return (
-      <div className="gh-page-container gh-games-page gh-liar-online">
+      <div className="gh-page-container gh-games-page gh-liar-online gh-l2-page">
         <LiarOnlineStage
           key={match.id}
           match={match}
@@ -376,7 +384,7 @@ function LiarOnlineStage({
   const canPlay = myTurn && selectedCards.length >= 1 && selectedCards.length <= 3
   const turnSeconds = turnRemainingMs === null ? null : Math.ceil(turnRemainingMs / 1000)
   const winner = match.players.find((player) => player.userId === match.winnerId) ?? null
-  const recentLog = match.log.slice(-10)
+  const recentLog = match.log.slice(-10).map((entry) => logText(match, entry)).reverse()
 
   useEffect(() => {
     setSelected(new Set())
@@ -413,25 +421,40 @@ function LiarOnlineStage({
     onSubmit({ type: 'challenge' })
   }
 
-  const gunDots = Array.from({ length: 6 }, (_, index) => index < match.gunBullets)
+  const turnName = match.status === 'finished'
+    ? '本场结束'
+    : match.turn
+      ? `${nameOf(match, match.turn.userId)}${match.turn.userId === meId ? '（你）' : ''}`
+      : '等待服务端安排回合…'
+  const turnHint = match.status === 'finished'
+    ? '本场已结束，回大厅可以再开一局。'
+    : myTurn
+      ? (top && top.userId !== meId
+        ? `出 1–3 张盖牌，或质疑 ${nameOf(match, top.userId)} 的 ${top.count} 张。`
+        : '先出 1–3 张盖牌；下一家可以质疑你。')
+      : '等待对手出牌；他们质疑或出牌后会自动轮到你。'
+  const challengeLabel = canChallenge && top
+    ? `开牌：全真 → 你扣扳机；有假 → ${nameOf(match, top.userId)} 扣扳机`
+    : top === null
+      ? '牌堆为空，暂无可质疑目标'
+      : top.userId === meId
+        ? '不能质疑自己的出牌'
+        : '还没轮到你'
 
   return (
     <>
-      <header className="gh-liar-online-header">
-        <div>
+      <header className="gh-l2-page-head">
+        <div className="gh-l2-page-copy">
           <p className="gh-g2048-eyebrow"><Link to={GAME_LIAR_ONLINE_ROUTE}>← 骗子酒馆联机大厅</Link></p>
-          <h1 className="gh-games-title">
-            骗子酒馆 · 好友对局
-            <span className={`gh-game-conn-chip gh-game-conn-chip--${transport}`}>
-              {transport === 'ws' ? '实时' : '轮询'}
-            </span>
-          </h1>
+          <h1 className="gh-games-title">骗子酒馆 · 好友对局</h1>
           <p className="gh-games-subtitle">
-            第 {match.round} 局 · 目标 {match.target ?? '—'} · 左轮 {match.gunBullets}/6
-            {transport === 'polling' ? ' · 轮询模式，约 2 秒延迟' : ''}
+            {match.players.length} 人牌桌 · 回合 60 秒超时自动托管 · 掉线 120 秒判负
           </p>
         </div>
-        <div className="gh-liar-online-actions">
+        <div className="gh-l2-page-actions">
+          <span className={`gh-u2-transport gh-u2-transport--${transport}`}>
+            {transport === 'ws' ? '实时' : '轮询（约 2 秒延迟）'}
+          </span>
           {playing && (
             <button
               type="button"
@@ -450,173 +473,99 @@ function LiarOnlineStage({
 
       {actionError && <div className="gh-alert gh-alert--danger gh-game-alert" role="alert">{actionError}</div>}
 
-      <div className="gh-liar-online-body">
-        <section className="gh-liar-online-main">
-          <div className="gh-liar-round-bar">
-            <span className="gh-liar-round-chip">第 {match.round} 局</span>
-            <span className="gh-liar-target">
-              目标牌面
-              <span
-                className={`gh-liar-target-card${match.target ? ` gh-liar-target-card--${match.target.toLowerCase()}` : ''}`}
-                aria-label={`目标牌面 ${match.target ?? '未定'}`}
-              >
-                {match.target ?? '—'}
-              </span>
-            </span>
-            <span className={`gh-liar-gun${match.gunBullets >= 4 ? ' gh-liar-gun--danger' : ''}`}>
-              左轮 {match.gunBullets}/6
-              <span className="gh-liar-gun-dots" aria-hidden="true">
-                {gunDots.map((loaded, index) => (
-                  <span key={index} className={`gh-liar-gun-dot${loaded ? ' gh-liar-gun-dot--loaded' : ''}`} />
-                ))}
-              </span>
-            </span>
+      <div className="gh-l2-layout">
+        <div className="gh-l2-main">
+          <div className="gh-l2-seats" aria-label="座位">
+            {match.players.map((player) => (
+              <LiarSeat
+                key={player.userId}
+                name={player.username}
+                handCount={player.handCount}
+                isTurn={match.turn?.userId === player.userId}
+                isMe={player.userId === meId}
+                isHost={player.userId === match.hostId}
+                online={player.online}
+                alive={player.status === 'playing' || player.status === 'won'}
+                avatar={<UserAvatar userId={player.userId} username={player.username} size="sm" />}
+              />
+            ))}
           </div>
 
-          <div className={`gh-liar-turn${myTurn ? ' gh-liar-turn--me' : ''}`}>
-            <span className="gh-liar-turn-label">当前回合</span>
-            <strong>
-              {match.status === 'finished'
-                ? '本场结束'
-                : match.turn
-                  ? `${nameOf(match, match.turn.userId)}${match.turn.userId === meId ? '（你）' : ''}`
-                  : '等待服务端安排回合…'}
-            </strong>
-            {playing && turnSeconds !== null && (
-              <span className={`gh-liar-countdown${turnSeconds <= 10 ? ' gh-liar-countdown--low' : ''}`} role="timer">
-                {turnSeconds} 秒
-              </span>
+          <div className="gh-l2-table">
+            <LiarRoundBar round={match.round} target={match.target} bullets={match.gunBullets} />
+
+            <LiarTurnBanner
+              isMyTurn={myTurn}
+              turnName={turnName}
+              hint={turnHint}
+              countdown={playing ? turnSeconds : null}
+            />
+
+            <LiarPileLane
+              items={match.pile.map((entry, index) => ({
+                key: `${entry.userId}-${index}`,
+                name: nameOf(match, entry.userId),
+                count: entry.count,
+              }))}
+            />
+
+            {match.lastReveal && (
+              <LiarRevealBanner
+                cards={match.lastReveal.cards}
+                truthful={match.lastReveal.truthful}
+                title={`${nameOf(match, match.lastReveal.userId)} 的第 ${match.lastReveal.round} 局出牌`}
+                verdict={match.lastReveal.truthful ? '全是真牌 —— 质疑者扣扳机' : '掺了假牌 —— 被打出者扣扳机'}
+              />
             )}
-            <span className="gh-liar-turn-hint">
-              {myTurn ? '出 1–3 张盖牌，或质疑上一手。' : top ? `上一手：${nameOf(match, top.userId)} 的 ${top.count} 张` : '等待首位玩家出牌'}
-            </span>
+
+            <LiarHand
+              hand={myHand}
+              target={match.target}
+              selected={selected}
+              canSelect={myTurn && !actionPending}
+              onToggle={toggleCard}
+            />
+
+            <LiarActionBar
+              myTurn={myTurn}
+              selectedCount={selectedCards.length}
+              canPlay={canPlay && !actionPending}
+              canChallenge={canChallenge && !actionPending}
+              challengeLabel={challengeLabel}
+              onPlay={handlePlay}
+              onChallenge={handleChallenge}
+              actionPending={actionPending}
+              hint={myTurn
+                ? `目标 ${match.target ?? '—'}：真牌 / 鬼牌可直接出；假牌也能盖着出，赌对手不质疑。`
+                : '等待对手行动，轮到你时按钮会亮起。'}
+            />
           </div>
+        </div>
 
-          <div className="gh-liar-pile">
-            <span className="gh-liar-pile-label">牌堆</span>
-            <div className="gh-liar-pile-cards">
-              {match.pile.length === 0 && <span className="gh-liar-pile-empty">本局还没有人出牌</span>}
-              {match.pile.map((entry, index) => (
-                <span key={`${entry.userId}-${index}`} className="gh-liar-pile-entry">
-                  <span className="gh-liar-pile-backs" aria-hidden="true">
-                    {Array.from({ length: Math.min(entry.count, 3) }, (_, cardIndex) => (
-                      <span key={cardIndex} className="gh-liar-pile-back" />
-                    ))}
-                  </span>
-                  <span className="gh-liar-pile-count">×{entry.count}</span>
-                  <span className="gh-liar-pile-name">{nameOf(match, entry.userId)}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {match.lastReveal && (
-            <div className={`gh-liar-reveal${match.lastReveal.truthful ? ' gh-liar-reveal--true' : ' gh-liar-reveal--lie'}`}>
-              <span className="gh-liar-reveal-stamp" aria-hidden="true">
-                {match.lastReveal.truthful ? '真' : '假'}
-              </span>
-              <span className="gh-liar-reveal-title">
-                最近开牌 · {nameOf(match, match.lastReveal.userId)} 的第 {match.lastReveal.round} 局出牌
-              </span>
-              <div className="gh-liar-reveal-cards">
-                {match.lastReveal.cards.map((card) => <LiarCardView key={card} card={card} size="sm" />)}
-              </div>
-              <span className="gh-liar-reveal-verdict">
-                {match.lastReveal.truthful ? '全是真牌 —— 质疑者扣扳机' : '掺了假牌 —— 被打出者扣扳机'}
-              </span>
-            </div>
-          )}
-
-          <div className="gh-liar-online-actions-row">
-            <button type="button" className="gh-btn gh-btn--primary gh-btn--md" onClick={handlePlay} disabled={!canPlay || actionPending}>
-              盖牌出牌（{selectedCards.length} 张）
-            </button>
-            <button type="button" className="gh-btn gh-btn--danger gh-btn--md" onClick={handleChallenge} disabled={!canChallenge || actionPending}>
-              质疑上一手
-            </button>
-            {actionPending && <span className="gh-liar-action-pending">提交中…</span>}
-          </div>
-
-          <div className="gh-liar-me">
-            <div className="gh-liar-me-header">
-              <span className="gh-liar-me-name">你的手牌</span>
-              <span className="gh-liar-me-meta">{me?.handCount ?? 0} 张</span>
-              {myTurn && <span className="gh-liar-me-hint">点击选择 1–3 张</span>}
-            </div>
-            <div className="gh-liar-hand">
-              {myHand.map((card) => (
-                <LiarCardView
-                  key={card}
-                  card={card}
-                  selected={selected.has(card)}
-                  disabled={!myTurn || actionPending}
-                  onClick={myTurn ? () => toggleCard(card) : undefined}
-                  title={`${liarCardKind(card) === 'JOKER' ? '鬼牌（万能）' : liarCardKind(card)}${
-                    match.target && liarCardIsTruthy(card, match.target) ? ' · 真牌' : ' · 假牌'
-                  }`}
-                />
-              ))}
-            </div>
-          </div>
-
-        </section>
-
-        <aside className="gh-liar-online-side">
-          <section className="gh-liar-online-players" aria-label="玩家状态">
-            <h2 className="gh-liar-log-title">玩家</h2>
-            <ul className="gh-liar-player-list">
-              {match.players.map((player: GameLiarPlayer) => (
-                <li
-                  key={player.userId}
-                  className={[
-                    'gh-liar-player',
-                    player.userId === meId ? 'gh-liar-player--me' : '',
-                    player.status === 'playing' ? '' : 'gh-liar-player--out',
-                    match.turn?.userId === player.userId ? 'gh-liar-player--turn' : '',
-                  ].filter(Boolean).join(' ')}
-                >
-                  <UserAvatar userId={player.userId} username={player.username} size="sm" />
-                  <span className="gh-liar-player-copy">
-                    <span className="gh-liar-player-name">
-                      {player.username}
-                      {player.userId === meId && <span className="gh-game-room-badge gh-game-room-badge--me">你</span>}
-                      {player.userId === match.hostId && <span className="gh-game-room-badge">房主</span>}
-                    </span>
-                    <span className="gh-liar-player-meta">
-                      <span className={`gh-game-presence-dot${player.online ? ' gh-game-presence-dot--online' : ''}`} />
-                      {player.status === 'playing' ? `手牌 ${player.handCount} 张` : player.status === 'won' ? '获胜' : '出局'}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section className="gh-liar-log" aria-label="对局记录">
-            <h2 className="gh-liar-log-title">对局记录</h2>
-            <ul className="gh-liar-log-list">
-              {recentLog.length === 0 && <li className="gh-liar-log-empty">等待第一条记录…</li>}
-              {recentLog.map((entry, index) => (
-                <li key={`${entry.type}-${index}`} className={`gh-liar-log-item gh-liar-log-item--${entry.type}`}>
-                  {logText(match, entry)}
-                </li>
-              ))}
-            </ul>
-          </section>
-        </aside>
+        <LiarInfoPanel
+          turnHint={turnHint}
+          logLines={recentLog}
+          rules={[
+            '2–4 人成桌，每人 5 张手牌；每局随机宣布目标牌面（K / Q / A），鬼牌万能。',
+            '轮到你了：盖着出 1–3 张，或质疑上一手。质疑只翻开上一手。',
+            '开出的牌全真 → 质疑者输；掺假 → 被打出者输。输家扣左轮（子弹数 = 死亡人数 + 1）。',
+            '中弹出局；扣扳机后无论生死都重洗重发。最后存活者获胜。',
+            '回合 60 秒超时自动托管；掉线 120 秒判负出局。',
+          ]}
+        />
       </div>
 
       {match.status === 'finished' && (
-        <div className="gh-liar-overlay" role="dialog" aria-modal="true" aria-label="对局结算">
-          <div className="gh-liar-overlay-card">
-            <p className="gh-liar-overlay-eyebrow">牌局结束</p>
-            <h2 className={`gh-liar-overlay-title${winner?.userId === meId ? ' gh-liar-overlay-title--win' : ''}`}>
+        <div className="gh-l2-modal" role="dialog" aria-modal="true" aria-label="对局结算">
+          <div className="gh-l2-result-card">
+            <p className="gh-l2-result-kicker">牌局结束</p>
+            <h2 className={`gh-l2-result-title${winner?.userId === meId ? ' gh-l2-result-title--win' : ''}`}>
               {winner ? `${winner.username} 获胜` : '本场无胜者'}
             </h2>
-            <p className="gh-liar-overlay-detail">
+            <p className="gh-l2-result-detail">
               {match.reason ? END_REASON_LABELS[match.reason] : '本场已结束'} · 共 {match.round} 局
             </p>
-            <div className="gh-liar-overlay-actions">
+            <div className="gh-l2-result-actions">
               <button type="button" className="gh-btn gh-btn--primary gh-btn--lg" onClick={onBackToLobby}>
                 {isHost ? '回大厅再开一局' : '返回大厅'}
               </button>

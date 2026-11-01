@@ -11,6 +11,7 @@
 @import './announcements.css';
 @import './chat-admin.css';
 @import './games.css';
+@import './game-lobby.css';
 @import './doudizhu.css';
 @import './snake.css';
 @import './minesweeper.css';
@@ -19,6 +20,8 @@
 @import './gomoku.css';
 @import './liar.css';
 @import './uno.css';
+@import './uno-table.css';
+@import './liar-table.css';
 @import './xiangqi.css';
 @import './parkour.css';
 @import './points.css';

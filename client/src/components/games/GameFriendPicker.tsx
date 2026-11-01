@@ -25,9 +25,85 @@ export interface GameFriendPickerProps {
   onRefresh?: () => void
 }
 
+interface FriendRowProps {
+  friend: GameFriend
+  outgoing?: GameInvite
+  highlighted: boolean
+  busyKey: string | null
+  onInvite: (friendId: number) => void | Promise<void>
+  onCancelInvite: (inviteId: number) => void | Promise<void>
+}
+
+function FriendRow({
+  friend,
+  outgoing,
+  highlighted,
+  busyKey,
+  onInvite,
+  onCancelInvite,
+}: FriendRowProps) {
+  const disabled = !friend.online || friend.inMatch
+  return (
+    <li
+      className={[
+        'gh-game-friend-row',
+        highlighted ? 'gh-game-friend-row--highlight' : '',
+        friend.inMatch ? 'gh-game-friend-row--busy' : '',
+        friend.online ? '' : 'gh-game-friend-row--offline',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      data-friend-id={friend.id}
+    >
+      <span className="gh-game-friend-avatar">
+        <UserAvatar userId={friend.id} username={friend.username} size="md" />
+        <span
+          className={`gh-game-online-dot${friend.online ? ' gh-game-online-dot--online' : ''}`}
+          aria-hidden="true"
+        />
+      </span>
+      <span className="gh-game-friend-copy">
+        <span className="gh-game-friend-name">
+          {friend.username}
+          {highlighted && <span className="gh-game-friend-hint">来自聊天邀请</span>}
+        </span>
+        <span className="gh-game-friend-meta">
+          {friend.inMatch ? '房间/对局中' : friend.online ? '在线 · 可邀请' : '离线 · 无法接收邀请'}
+        </span>
+      </span>
+      <span className="gh-game-friend-actions">
+        {outgoing ? (
+          <button
+            type="button"
+            className="gh-btn gh-btn--secondary gh-btn--md"
+            disabled={busyKey === `cancel-${outgoing.id}`}
+            onClick={() => void onCancelInvite(outgoing.id)}
+            aria-label={`取消邀请 ${friend.username}`}
+          >
+            取消邀请
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={`gh-btn gh-btn--md ${friend.online && !friend.inMatch ? 'gh-btn--primary' : 'gh-btn--secondary'}`}
+            disabled={disabled || busyKey === `invite-${friend.id}`}
+            onClick={() => void onInvite(friend.id)}
+            aria-label={`邀请 ${friend.username} 对战`}
+            title={!friend.online ? '对方不在线' : friend.inMatch ? '对方正在房间/对局中' : undefined}
+          >
+            {friend.inMatch ? '对局中' : friend.online ? '邀请' : '离线'}
+          </button>
+        )}
+      </span>
+    </li>
+  )
+}
+
 /**
  * 联机大厅好友选择器：展示在线状态 / 对局中状态，支持发出、取消、接受、拒绝邀请。
- * 拉取数据由页面负责，本组件只做展示与回调。
+ *
+ * 排序口径：收到的邀请 → 在线好友 → 离线好友。离线好友保留但按钮禁用，
+ * 避免玩家反复点击「邀请」却不知道对方收不到。
  */
 export default function GameFriendPicker({
   friends,
@@ -69,11 +145,27 @@ export default function GameFriendPicker({
     )
   }
 
+  const available = friends.filter((friend) => !excludeIds.includes(friend.id))
+  const online = available.filter((friend) => friend.online)
+  const offline = available.filter((friend) => !friend.online)
+  const sortByName = (list: GameFriend[]) => [...list].sort((a, b) => a.username.localeCompare(b.username, 'zh-CN'))
+
   return (
     <div className="gh-game-friend-picker">
+      <div className="gh-game-friend-flow" aria-label="联机开桌流程">
+        <span className="gh-game-friend-flow-step"><b>1</b> 邀请在线好友</span>
+        <span className="gh-game-friend-flow-arrow" aria-hidden="true">→</span>
+        <span className="gh-game-friend-flow-step"><b>2</b> 对方接受邀请</span>
+        <span className="gh-game-friend-flow-arrow" aria-hidden="true">→</span>
+        <span className="gh-game-friend-flow-step"><b>3</b> 入座后房主开始</span>
+      </div>
+
       {incomingInvites.length > 0 && (
-        <section className="gh-game-friend-section" aria-label="收到的对战邀请">
-          <h2 className="gh-game-friend-section-title">收到的邀请（{incomingInvites.length}）</h2>
+        <section className="gh-game-friend-section gh-game-friend-section--incoming" aria-label="收到的对战邀请">
+          <h2 className="gh-game-friend-section-title">
+            收到的邀请
+            <span className="gh-game-friend-count">{incomingInvites.length}</span>
+          </h2>
           <ul className="gh-game-friend-list">
             {incomingInvites.map((invite) => (
               <li key={invite.id} className="gh-game-friend-row gh-game-friend-row--invite">
@@ -108,84 +200,66 @@ export default function GameFriendPicker({
         </section>
       )}
 
-      <section className="gh-game-friend-section" aria-label="好友列表">
+      <section className="gh-game-friend-section" aria-label="在线好友">
         <h2 className="gh-game-friend-section-title">
-          好友（{friends.filter((friend) => !excludeIds.includes(friend.id)).length}）
+          在线好友
+          <span className="gh-game-friend-count gh-game-friend-count--online">{online.length}</span>
         </h2>
-        {friends.filter((friend) => !excludeIds.includes(friend.id)).length === 0 ? (
-          <div className="gh-game-list-state">
-            <p className="gh-game-list-state-title">没有可邀请的好友</p>
+        {online.length === 0 ? (
+          <div className="gh-game-list-state gh-game-list-state--compact">
+            <p className="gh-game-list-state-title">当前没有在线好友</p>
             <p className="gh-game-list-state-hint">
-              可能好友已在房间中，或还没有添加好友。可在聊天页搜索用户名添加好友。
+              离线好友收不到邀请；可以先去聊天页约人，或让对方打开 LineWeb 后再刷新列表。
             </p>
           </div>
         ) : (
           <ul className="gh-game-friend-list">
-            {friends
-              .filter((friend) => !excludeIds.includes(friend.id))
-              .map((friend) => {
-              const outgoing = outgoingByFriendId.get(friend.id)
-              const highlighted = highlightFriendId === friend.id
-              const disabled = !friend.online || friend.inMatch
-              return (
-                <li
-                  key={friend.id}
-                  className={[
-                    'gh-game-friend-row',
-                    highlighted ? 'gh-game-friend-row--highlight' : '',
-                    friend.inMatch ? 'gh-game-friend-row--busy' : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                  data-friend-id={friend.id}
-                >
-                  <span className="gh-game-friend-avatar">
-                    <UserAvatar userId={friend.id} username={friend.username} size="md" />
-                    <span
-                      className={`gh-game-online-dot${friend.online ? ' gh-game-online-dot--online' : ''}`}
-                      aria-hidden="true"
-                    />
-                  </span>
-                  <span className="gh-game-friend-copy">
-                    <span className="gh-game-friend-name">
-                      {friend.username}
-                      {highlighted && <span className="gh-game-friend-hint">来自聊天邀请</span>}
-                    </span>
-                    <span className="gh-game-friend-meta">
-                      {friend.online ? '在线' : '离线'}
-                      {friend.inMatch ? ' · 房间/对局中' : ''}
-                    </span>
-                  </span>
-                  <span className="gh-game-friend-actions">
-                    {outgoing ? (
-                      <button
-                        type="button"
-                        className="gh-btn gh-btn--secondary gh-btn--md"
-                        disabled={busyKey === `cancel-${outgoing.id}`}
-                        onClick={() => void onCancelInvite(outgoing.id)}
-                        aria-label={`取消邀请 ${friend.username}`}
-                      >
-                        取消邀请
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="gh-btn gh-btn--primary gh-btn--md"
-                        disabled={disabled || busyKey === `invite-${friend.id}`}
-                        onClick={() => void onInvite(friend.id)}
-                        aria-label={`邀请 ${friend.username} 对战`}
-                        title={!friend.online ? '对方不在线' : friend.inMatch ? '对方正在房间/对局中' : undefined}
-                      >
-                        {friend.inMatch ? '房间/对局中' : '邀请对战'}
-                      </button>
-                    )}
-                  </span>
-                </li>
-              )
-            })}
+            {sortByName(online).map((friend) => (
+              <FriendRow
+                key={friend.id}
+                friend={friend}
+                outgoing={outgoingByFriendId.get(friend.id)}
+                highlighted={highlightFriendId === friend.id}
+                busyKey={busyKey}
+                onInvite={onInvite}
+                onCancelInvite={onCancelInvite}
+              />
+            ))}
           </ul>
         )}
       </section>
+
+      {offline.length > 0 && (
+        <details className="gh-game-friend-section gh-game-friend-section--offline">
+          <summary className="gh-game-friend-section-title">
+            离线好友
+            <span className="gh-game-friend-count">{offline.length}</span>
+            <span className="gh-game-friend-summary-hint">展开后无法邀请</span>
+          </summary>
+          <ul className="gh-game-friend-list">
+            {sortByName(offline).map((friend) => (
+              <FriendRow
+                key={friend.id}
+                friend={friend}
+                outgoing={outgoingByFriendId.get(friend.id)}
+                highlighted={highlightFriendId === friend.id}
+                busyKey={busyKey}
+                onInvite={onInvite}
+                onCancelInvite={onCancelInvite}
+              />
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {available.length === 0 && (
+        <div className="gh-game-list-state">
+          <p className="gh-game-list-state-title">没有可邀请的好友</p>
+          <p className="gh-game-list-state-hint">
+            可能好友已在房间中，或还没有添加好友。可在聊天页搜索用户名添加好友。
+          </p>
+        </div>
+      )}
     </div>
   )
 }

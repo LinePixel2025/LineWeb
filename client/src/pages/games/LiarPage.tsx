@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import LiarCardView from '../../components/games/liar/LiarCardView'
+import {
+  LiarActionBar,
+  LiarHand,
+  LiarInfoPanel,
+  LiarPileLane,
+  LiarRevealBanner,
+  LiarRoundBar,
+  LiarSeat,
+  LiarTurnBanner,
+} from '../../components/games/liar/LiarTableParts'
 import { GAME_LIAR_ONLINE_ROUTE } from '../../lib/games/catalog'
 import { useGameStats } from '../../contexts/GameStatsContext'
 import {
@@ -12,7 +21,6 @@ import {
   createLiarTable,
   isValidLiarPlay,
   liarCardKind,
-  liarCardIsTruthy,
   liarGunBullets,
   suggestLiarMove,
   type LiarTableLogEntry,
@@ -25,11 +33,6 @@ function seatName(state: LiarTableState, seat: number): string {
   if (seat === 0) return '你'
   const player = state.players[seat]
   return player ? `AI ${seat}` : `座位 ${seat + 1}`
-}
-
-function playerStatus(state: LiarTableState, seat: number): string {
-  if (state.players[seat]?.alive) return `手牌 ${state.players[seat]?.hand.length ?? 0} 张`
-  return '已出局'
 }
 
 function logText(state: LiarTableState, entry: LiarTableLogEntry): string {
@@ -61,13 +64,7 @@ export default function LiarPage() {
   const [error, setError] = useState<string | null>(null)
   const { getStat, recordResult } = useGameStats()
   const stat = getStat('liar', 'solo')
-  const [rulesOpen, setRulesOpen] = useState(false)
   const recordedRef = useRef(false)
-  const tableRef = useRef(table)
-
-  useEffect(() => {
-    tableRef.current = table
-  }, [table])
 
   const aiSeat = !table.finished && table.turnSeat !== null && table.turnSeat !== 0
     ? table.turnSeat
@@ -186,250 +183,179 @@ export default function LiarPage() {
 
   const bullets = liarGunBullets(table.deaths)
   const iWon = table.finished && table.winnerSeat === 0
-  const recentLog = table.log.slice(-8)
-  const myStatus = playerStatus(table, 0)
+  const recentLog = table.log.slice(-10).map((entry) => logText(table, entry)).reverse()
+  const opponents = table.players.filter((player) => player.seat !== 0)
+  const me = table.players[0]
+  const turnName = table.finished
+    ? '本场结束'
+    : table.turnSeat === null
+      ? '等待中'
+      : table.turnSeat === 0
+        ? '你'
+        : `${seatName(table, table.turnSeat)} 思考中…`
+  const turnHint = table.finished
+    ? '本场已结束，点「再来一场」重新开始。'
+    : myTurn
+      ? (top && top.seat !== 0
+        ? `出 1–3 张盖牌，或质疑 ${seatName(table, top.seat)} 的 ${top.count} 张。`
+        : '先出 1–3 张盖牌；下一家可以质疑你。')
+      : '等待对手出牌；他们质疑或出牌后会自动轮到你。'
+  const challengeLabel = canChallenge && top
+    ? `开牌：全真 → 你扣扳机；有假 → ${seatName(table, top.seat)} 扣扳机`
+    : top === null
+      ? '牌堆为空，暂无可质疑目标'
+      : top.seat === 0
+        ? '不能质疑自己的出牌'
+        : '还没轮到你'
+  const actionHint = myTurn
+    ? `目标 ${table.target ?? '—'}：真牌 / 鬼牌可直接出；假牌也能盖着出，赌对手不质疑。`
+    : '等待对手行动，轮到你时按钮会亮起。'
+  const lastReveal = table.lastReveal
 
   return (
-    <div className="gh-page-container gh-games-page gh-liar-page">
-      <header className="gh-games-header">
-        <div className="gh-games-header-copy">
-          <p className="gh-g2048-eyebrow">
-            <Link to="/games">← 游戏大厅</Link>
-          </p>
+    <div className="gh-page-container gh-games-page gh-l2-page">
+      <header className="gh-l2-page-head">
+        <div className="gh-l2-page-copy">
+          <p className="gh-g2048-eyebrow"><Link to="/games">← 游戏大厅</Link></p>
           <h1 className="gh-games-title">骗子酒馆 · 单机</h1>
           <p className="gh-games-subtitle">
-            盖着出牌、虚张声势：轮到你时出 1–3 张手牌，或质疑上一手。开牌见真假，输家扣左轮扳机。
+            盖着出牌、互相质疑：每局随机一个目标牌面，质疑只翻开上一手，输家扣左轮扳机。
           </p>
         </div>
-        <div className="gh-liar-header-actions">
-          <Link className="gh-btn gh-btn--secondary gh-btn--md" to={GAME_LIAR_ONLINE_ROUTE}>
-            好友联机
-          </Link>
+        <div className="gh-l2-page-actions">
+          <Link className="gh-btn gh-btn--secondary gh-btn--md" to={GAME_LIAR_ONLINE_ROUTE}>好友联机</Link>
           <button type="button" className="gh-btn gh-btn--primary gh-btn--md" onClick={() => newGame()}>
             重新开局
           </button>
         </div>
       </header>
 
-      <div className="gh-liar-toolbar">
-        <div className="gh-liar-toolbar-group" role="group" aria-label="人数选择">
-          <span className="gh-liar-toolbar-label">人数</span>
+      <div className="gh-l2-toolbar">
+        <div className="gh-l2-toolbar-group" role="group" aria-label="人数选择">
+          <span className="gh-l2-toolbar-label">人数</span>
           {[2, 3, 4].map((count) => (
             <button
               key={count}
               type="button"
               className={`gh-btn gh-btn--sm ${playerCount === count ? 'gh-btn--primary' : 'gh-btn--secondary'}`}
+              aria-pressed={playerCount === count}
               onClick={() => newGame(count)}
             >
               {count} 人
             </button>
           ))}
+          <span className="gh-l2-toolbar-note">联机 {LIAR_MIN_PLAYERS}–{LIAR_MAX_PLAYERS} 人</span>
         </div>
-        <span className="gh-liar-toolbar-hint">
-          账号战绩：{stat?.games ?? 0} 局 · {stat?.wins ?? 0} 胜 · 中弹 {stat?.deaths ?? 0} 次
+        <span className="gh-l2-toolbar-record">
+          账号战绩 <strong>{stat?.games ?? 0}</strong> 局 · <strong>{stat?.wins ?? 0}</strong> 胜 · 中弹{' '}
+          <strong>{stat?.deaths ?? 0}</strong> 次
         </span>
       </div>
 
       {error && <div className="gh-alert gh-alert--danger gh-game-alert" role="alert">{error}</div>}
 
-      <div className="gh-liar-table">
-        <section className="gh-liar-opponents" aria-label="其他玩家">
-          {table.players.filter((player) => player.seat !== 0).map((player) => (
-            <article
-              key={player.seat}
-              className={[
-                'gh-liar-opponent',
-                table.turnSeat === player.seat && !table.finished ? 'gh-liar-opponent--turn' : '',
-                player.alive ? '' : 'gh-liar-opponent--dead',
-              ].filter(Boolean).join(' ')}
-            >
-              <span className="gh-liar-opponent-name">
-                AI {player.seat}
-                {table.turnSeat === player.seat && !table.finished && (
-                  <span className="gh-game-room-badge gh-gmk-turn-badge">回合中</span>
-                )}
-                {!player.alive && <span className="gh-game-room-badge">出局</span>}
-              </span>
-              <span className="gh-liar-opponent-meta">{playerStatus(table, player.seat)}</span>
-              <div className="gh-liar-hand-stack" aria-hidden="true">
-                {Array.from({ length: Math.min(player.hand.length, 5) }, (_, index) => (
-                  <LiarCardView key={index} card={0} faceDown size="sm" />
-                ))}
-              </div>
-            </article>
-          ))}
-        </section>
-
-        <section className="gh-liar-center" aria-label="牌桌中心">
-          <div className="gh-liar-round-bar">
-            <span className="gh-liar-round-chip">第 {table.round} 局</span>
-            <span className="gh-liar-target">
-              目标牌面
-              <span
-                className={`gh-liar-target-card gh-liar-target-card--${table.target.toLowerCase()}`}
-                aria-label={`目标牌面 ${table.target}`}
-              >
-                {table.target}
-              </span>
-            </span>
-            <span className={`gh-liar-gun${bullets >= 4 ? ' gh-liar-gun--danger' : ''}`} title={`左轮 ${bullets}/6 有子弹`}>
-              左轮 {bullets}/6
-              <span className="gh-liar-gun-dots" aria-hidden="true">
-                {Array.from({ length: 6 }, (_, index) => (
-                  <span
-                    key={index}
-                    className={`gh-liar-gun-dot${index < bullets ? ' gh-liar-gun-dot--loaded' : ''}`}
-                  />
-                ))}
-              </span>
-            </span>
-          </div>
-
-          <div className="gh-liar-pile">
-            <span className="gh-liar-pile-label">牌堆</span>
-            <div className="gh-liar-pile-cards">
-              {table.pile.length === 0 && <span className="gh-liar-pile-empty">本局还没有人出牌</span>}
-              {table.pile.map((entry, index) => (
-                <span key={`${entry.seat}-${index}`} className="gh-liar-pile-entry">
-                  <span className="gh-liar-pile-backs" aria-hidden="true">
-                    {Array.from({ length: Math.min(entry.count, 3) }, (_, cardIndex) => (
-                      <span key={cardIndex} className="gh-liar-pile-back" />
-                    ))}
-                  </span>
-                  <span className="gh-liar-pile-count">×{entry.count}</span>
-                  <span className="gh-liar-pile-name">{seatName(table, entry.seat)}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className={`gh-liar-turn${myTurn ? ' gh-liar-turn--me' : ''}`}>
-            <span className="gh-liar-turn-label">当前回合</span>
-            <strong>
-              {table.finished
-                ? '本场结束'
-                : table.turnSeat === null
-                  ? '等待中'
-                  : table.turnSeat === 0
-                    ? '你'
-                    : `${seatName(table, table.turnSeat)} 思考中…`}
-            </strong>
-            {top && !table.finished && (
-              <span className="gh-liar-turn-hint">
-                上一手是 {seatName(table, top.seat)} 的 {top.count} 张牌 —— 质疑只翻开这一手
-              </span>
+      <div className="gh-l2-layout">
+        <div className="gh-l2-main">
+          <div className="gh-l2-seats" aria-label="座位">
+            {opponents.map((player) => (
+              <LiarSeat
+                key={player.seat}
+                name={`AI ${player.seat}`}
+                handCount={player.hand.length}
+                isTurn={!table.finished && table.turnSeat === player.seat}
+                alive={player.alive}
+                avatar={<span className="gh-l2-seat-robot">AI</span>}
+              />
+            ))}
+            {me && (
+              <LiarSeat
+                name="你"
+                handCount={me.hand.length}
+                isTurn={myTurn}
+                isMe
+                alive={me.alive}
+                avatar={<span className="gh-l2-seat-robot">你</span>}
+              />
             )}
           </div>
 
-          {table.lastReveal && (
-            <div className={`gh-liar-reveal${table.lastReveal.truthful ? ' gh-liar-reveal--true' : ' gh-liar-reveal--lie'}`}>
-              <span className="gh-liar-reveal-stamp" aria-hidden="true">
-                {table.lastReveal.truthful ? '真' : '假'}
-              </span>
-              <span className="gh-liar-reveal-title">
-                最近开牌 · {seatName(table, table.lastReveal.seat)} 的第 {table.lastReveal.round} 局出牌
-              </span>
-              <div className="gh-liar-reveal-cards">
-                {table.lastReveal.cards.map((card) => (
-                  <LiarCardView key={card} card={card} size="sm" />
-                ))}
-              </div>
-              <span className="gh-liar-reveal-verdict">
-                {table.lastReveal.truthful ? '全是真牌 —— 质疑者扣扳机' : '掺了假牌 —— 被打出者扣扳机'}
-              </span>
-            </div>
-          )}
+          <div className="gh-l2-table">
+            <LiarRoundBar round={table.round} target={table.target} bullets={bullets} />
 
-          {myTurn && (
-            <div className="gh-liar-actions">
-              <button
-                type="button"
-                className="gh-btn gh-btn--primary gh-btn--md"
-                onClick={handlePlay}
-                disabled={!canPlay}
-              >
-                盖牌出牌（{selectedCards.length} 张）
-              </button>
-              <button
-                type="button"
-                className="gh-btn gh-btn--danger gh-btn--md"
-                onClick={handleChallenge}
-                disabled={!canChallenge}
-                title={canChallenge ? '质疑上一手，翻开定真假' : '当前没有可质疑的上一手'}
-              >
-                质疑上一手
-              </button>
-            </div>
-          )}
-        </section>
+            <LiarTurnBanner
+              isMyTurn={myTurn}
+              turnName={turnName}
+              hint={turnHint}
+              countdown={null}
+            />
 
-        <section className="gh-liar-me" aria-label="我的手牌">
-          <div className="gh-liar-me-header">
-            <span className="gh-liar-me-name">你</span>
-            <span className="gh-liar-me-meta">{myStatus}</span>
-            {myTurn && <span className="gh-liar-me-hint">选择 1–3 张盖牌出牌，或质疑上一手</span>}
-          </div>
-          <div className="gh-liar-hand">
-            {myHand.length === 0 && <span className="gh-liar-pile-empty">本局手牌已出完</span>}
-            {myHand.map((card) => (
-              <LiarCardView
-                key={card}
-                card={card}
-                selected={selected.has(card)}
-                disabled={!myTurn}
-                onClick={myTurn ? () => toggleCard(card) : undefined}
-                title={`${liarCardKind(card) === 'JOKER' ? '鬼牌（万能）' : liarCardKind(card)}${
-                  liarCardIsTruthy(card, table.target) ? ' · 真牌' : ' · 假牌'
-                }`}
+            <LiarPileLane
+              items={table.pile.map((entry, index) => ({
+                key: `${entry.seat}-${index}`,
+                name: seatName(table, entry.seat),
+                count: entry.count,
+              }))}
+            />
+
+            {lastReveal && (
+              <LiarRevealBanner
+                cards={lastReveal.cards}
+                truthful={lastReveal.truthful}
+                title={`${seatName(table, lastReveal.seat)} 的第 ${lastReveal.round} 局出牌`}
+                verdict={lastReveal.truthful ? '全是真牌 —— 质疑者扣扳机' : '掺了假牌 —— 被打出者扣扳机'}
               />
-            ))}
+            )}
+
+            <LiarHand
+              hand={myHand}
+              target={table.target}
+              selected={selected}
+              canSelect={myTurn}
+              onToggle={toggleCard}
+            />
+
+            <LiarActionBar
+              myTurn={myTurn}
+              selectedCount={selectedCards.length}
+              canPlay={canPlay}
+              canChallenge={canChallenge}
+              challengeLabel={challengeLabel}
+              onPlay={handlePlay}
+              onChallenge={handleChallenge}
+              actionPending={false}
+              hint={actionHint}
+            />
           </div>
-          <p className="gh-liar-hand-tip">
-            鬼牌万能；开牌只看被质疑的那一手。手牌 {myHand.length}/{LIAR_HAND_SIZE} 张。
+
+          <p className="gh-l2-footnote">
+            鬼牌万能；开牌只看被质疑的那一手。手牌 {myHand.length}/{LIAR_HAND_SIZE} 张 · 当前目标 {table.target ?? '—'}
           </p>
-        </section>
-      </div>
+        </div>
 
-      <div className="gh-liar-bottom">
-        <section className="gh-liar-log" aria-label="对局记录">
-          <h2 className="gh-liar-log-title">对局记录</h2>
-          <ul className="gh-liar-log-list">
-            {recentLog.length === 0 && <li className="gh-liar-log-empty">还没有动作，先出牌吧。</li>}
-            {recentLog.map((entry, index) => (
-              <li key={`${entry.type}-${index}`} className={`gh-liar-log-item gh-liar-log-item--${entry.type}`}>
-                {logText(table, entry)}
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="gh-liar-rules">
-          <button type="button" className="gh-ddz-rules-toggle" onClick={() => setRulesOpen((prev) => !prev)}>
-            {rulesOpen ? '收起玩法说明' : '玩法说明'}
-          </button>
-          {rulesOpen && (
-            <ul className="gh-ddz-rules-list">
-              <li>牌堆 20 张：K×6、Q×6、A×6、鬼牌×2；每局每人 5 张，系统随机宣布目标牌面（K/Q/A）。</li>
-              <li>轮到你时盖着出 1–3 张（声称是目标牌面，实际可以是任意牌），或质疑上一手。</li>
-              <li>质疑只翻开上一手：全是目标牌面 / 鬼牌则质疑者输，否则被打出者输。</li>
-              <li>输家扣左轮扳机：子弹数 = 死亡人数 + 1（6 弹巢），中弹出局；无论生死都重洗重发。</li>
-              <li>全员出完无人质疑为流局直接重发；最后存活者获胜。</li>
-            </ul>
-          )}
-        </section>
+        <LiarInfoPanel
+          turnHint={turnHint}
+          logLines={recentLog}
+          rules={[
+            '牌堆 20 张：K×6、Q×6、A×6、鬼牌×2；每局每人 5 张，系统随机宣布目标牌面。',
+            '轮到你时盖着出 1–3 张（声称是目标牌面，实际可以任意），或质疑上一手。',
+            '质疑只翻开上一手：全是目标牌面 / 鬼牌则质疑者输，否则被打出者输。',
+            '输家扣左轮：子弹数 = 死亡人数 + 1（6 弹巢），中弹出局；无论生死都重洗重发。',
+            '全员出完无人质疑为流局直接重发；最后存活者获胜。',
+          ]}
+        />
       </div>
 
       {table.finished && (
-        <div className="gh-liar-overlay" role="dialog" aria-modal="true" aria-label="本场结算">
-          <div className="gh-liar-overlay-card">
-            <p className="gh-liar-overlay-eyebrow">本场结束</p>
-            <h2 className={`gh-liar-overlay-title${iWon ? ' gh-liar-overlay-title--win' : ''}`}>
+        <div className="gh-l2-modal" role="dialog" aria-modal="true" aria-label="本场结算">
+          <div className="gh-l2-result-card">
+            <p className="gh-l2-result-kicker">本场结束</p>
+            <h2 className={`gh-l2-result-title${iWon ? ' gh-l2-result-title--win' : ''}`}>
               {iWon ? '你是最后的幸存者！' : table.winnerSeat === null ? '无人幸存' : `${seatName(table, table.winnerSeat)} 获胜`}
             </h2>
-            <p className="gh-liar-overlay-detail">
+            <p className="gh-l2-result-detail">
               共进行 {table.round} 局，累计 {table.deaths} 人死亡，左轮子弹数 {bullets}/6。
             </p>
-            <div className="gh-liar-overlay-actions">
+            <div className="gh-l2-result-actions">
               <button type="button" className="gh-btn gh-btn--primary gh-btn--lg" onClick={() => newGame()}>
                 再来一场
               </button>
@@ -443,7 +369,6 @@ export default function LiarPage() {
 
       <p className="gh-games-footnote">
         规则引擎与好友联机完全一致；AI 的决策由 suggestLiarMove 启发式给出，也会虚张声势。
-        当前目标牌面：{table.target}（鬼牌万能）。
       </p>
     </div>
   )

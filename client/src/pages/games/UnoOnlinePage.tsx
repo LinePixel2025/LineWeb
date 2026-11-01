@@ -2,7 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import UserAvatar from '../../components/UserAvatar'
 import GameFriendPicker from '../../components/games/GameFriendPicker'
-import UnoCardView from '../../components/games/uno/UnoCardView'
+import {
+  UnoColorChooser,
+  UnoHand,
+  UnoInfoPanel,
+  UnoSeat,
+  UnoTurnStrip,
+  UnoCardsCenter,
+} from '../../components/games/uno/UnoTableParts'
 import { useOnlineGameRoom } from '../../hooks/useOnlineGameRoom'
 import { GAME_UNO_ONLINE_ROUTE, GAME_UNO_ROUTE } from '../../lib/games/catalog'
 import {
@@ -15,7 +22,6 @@ import {
 import type {
   GameUnoEndReason,
   GameUnoMatch,
-  GameUnoPlayer,
   UnoActionBody,
   UnoCardDto,
   UnoLatelyDto,
@@ -237,7 +243,7 @@ export default function UnoOnlinePage() {
     }
 
     return (
-      <div className="gh-page-container gh-games-page gh-uno-online">
+      <div className="gh-page-container gh-games-page gh-uno-online gh-u2-page">
         <UnoOnlineStage
           key={match.id}
           match={match}
@@ -355,10 +361,10 @@ function UnoOnlineStage({
     return cards
   }, [myHand, top, currentColor, match.drawnCardId])
   const playableIds = useMemo(() => new Set(playable.map((card) => card.id)), [playable])
-  const opponents = match.players.filter((player) => player.userId !== meId)
   const winner = match.players.find((player) => player.userId === match.winnerId) ?? null
   const turnSeconds = turnRemainingMs === null ? null : Math.ceil(turnRemainingMs / 1000)
   const drawnCard = match.drawnCardId === null ? null : myHand.find((card) => card.id === match.drawnCardId) ?? null
+  const pendingWildCard = pendingWild === null ? null : myHand.find((card) => card.id === pendingWild) ?? null
 
   useEffect(() => {
     setPendingWild(null)
@@ -373,7 +379,7 @@ function UnoOnlineStage({
       onBlocked(
         card.kind === 'wild4' && currentColor && myHand.some((item) => item.color === currentColor)
           ? '手里还有当前颜色的牌，不能出万能+4'
-          : '这张牌现在不能出（需要同色 / 同数字 / 同功能）',
+          : '这张牌现在不能出：需要同色、同数字或同功能（万能牌可随时出）',
       )
       return
     }
@@ -401,23 +407,42 @@ function UnoOnlineStage({
     onSubmit({ type: 'pass' })
   }
 
+  const turnName = match.status === 'finished'
+    ? '本局结束'
+    : myTurn
+      ? '你'
+      : match.turn
+        ? nameOf(match, match.turn.userId)
+        : '等待中'
+  const turnSub = match.status === 'finished'
+    ? '本局已结算'
+    : myTurn
+      ? (match.drawnCardId !== null
+        ? `摸到 ${drawnCard ? unoCardLabel(drawnCard) : '一张牌'}，可立即打出或跳过`
+        : '点高亮手牌出牌，或点牌堆摸一张')
+      : match.turn
+        ? `${nameOf(match, match.turn.userId)} 正在出牌…`
+        : '等待服务端安排回合…'
+  const turnHint = match.status === 'finished'
+    ? '本局已结束，回大厅可以再开一局。'
+    : myTurn
+      ? '先看桌面顶牌与当前颜色：能出就点抬起的手牌，不能出就点牌堆摸一张。'
+      : '等对手出牌会自动轮到你，不需要点任何按钮。'
+  const lastActionText = actionText(match, match.lastAction)
+
   return (
     <>
-      <header className="gh-uno-online-header">
-        <div>
+      <header className="gh-u2-page-head">
+        <div className="gh-u2-page-copy">
           <p className="gh-g2048-eyebrow"><Link to={GAME_UNO_ONLINE_ROUTE}>← UNO 联机大厅</Link></p>
           <h1 className="gh-games-title">
             UNO · 好友对局
-            <span className={`gh-game-conn-chip gh-game-conn-chip--${transport}`}>
-              {transport === 'ws' ? '实时' : '轮询'}
-            </span>
           </h1>
           <p className="gh-games-subtitle">
-            {match.players.length} 人 · 牌堆 {match.deckCount} 张 · 当前颜色{' '}
-            {currentColor ? UNO_COLOR_LABELS[currentColor] : '—'} · {match.direction === 1 ? '顺时针' : '逆时针'}
+            {match.players.length} 人牌桌 · 先出完手牌者获胜 · 回合 60 秒超时自动托管
           </p>
         </div>
-        <div className="gh-uno-online-actions">
+        <div className="gh-u2-page-actions">
           {playing && (
             <button
               type="button"
@@ -436,186 +461,137 @@ function UnoOnlineStage({
 
       {actionError && <div className="gh-alert gh-alert--danger gh-game-alert" role="alert">{actionError}</div>}
 
-      <div className="gh-uno-online-body">
-        <section className="gh-uno-online-main">
-          <div className="gh-uno-status-bar">
-            <span className="gh-uno-turn-chip">
-              {match.status === 'finished'
-                ? '本局结束'
-                : myTurn
-                  ? '轮到你出牌'
-                  : match.turn
-                    ? `${nameOf(match, match.turn.userId)} 的回合`
-                    : '等待回合'}
-            </span>
-            {playing && turnSeconds !== null && (
-              <span className={`gh-liar-countdown${turnSeconds <= 10 ? ' gh-liar-countdown--low' : ''}`} role="timer">
-                {turnSeconds} 秒
-              </span>
-            )}
-            {currentColor && (
-              <span className={`gh-uno-color-chip gh-uno-color-chip--${currentColor}`}>
-                当前颜色 {UNO_COLOR_LABELS[currentColor]}
-              </span>
-            )}
-            <span className="gh-uno-last-action">{actionText(match, match.lastAction)}</span>
+      <div className="gh-u2-layout">
+        <div className="gh-u2-main">
+          <div className="gh-u2-seats" aria-label="座位">
+            {match.players.map((player) => (
+              <UnoSeat
+                key={player.userId}
+                name={player.username}
+                handCount={player.handCount}
+                isTurn={match.turn?.userId === player.userId}
+                isMe={player.userId === meId}
+                isHost={player.userId === match.hostId}
+                online={player.online}
+                status={player.status === 'won' ? 'won' : player.status === 'lost' ? 'lost' : 'playing'}
+                avatar={<UserAvatar userId={player.userId} username={player.username} size="sm" />}
+              />
+            ))}
           </div>
 
-          <div className="gh-uno-center-row">
-            <div className="gh-uno-pile-box">
-              <span className="gh-uno-pile-label">牌堆</span>
-              <span className="gh-uno-deck" aria-label={`牌堆剩余 ${match.deckCount} 张`}>
-                <span className="gh-uno-deck-count">{match.deckCount}</span>
-              </span>
-              <button
-                type="button"
-                className="gh-btn gh-btn--secondary gh-btn--sm"
-                onClick={handleDraw}
-                disabled={!myTurn || match.drawnCardId !== null || actionPending}
-              >
-                摸一张
-              </button>
-            </div>
+          <UnoTurnStrip
+            turnLabel={turnName}
+            subLabel={turnSub}
+            countdown={playing ? turnSeconds : null}
+            currentColor={currentColor}
+            direction={match.direction}
+            deckCount={match.deckCount}
+            isMyTurn={myTurn}
+            transport={transport}
+          />
 
-            <div className={`gh-uno-discard${currentColor ? ` gh-uno-discard--${currentColor}` : ''}`}>
-              <span className="gh-uno-pile-label">弃牌堆顶</span>
-              <span className="gh-uno-discard-stack">
-                <span className="gh-uno-discard-under" aria-hidden="true" />
-                {top && <UnoCardView card={top} size="lg" />}
-              </span>
-              <span className="gh-uno-discard-count">弃牌 {match.discardCount} 张</span>
-            </div>
+          <div className="gh-u2-board">
+            <UnoCardsCenter
+              topCard={top}
+              deckCount={match.deckCount}
+              discardCount={match.discardCount}
+              currentColor={currentColor}
+              canDraw={myTurn && match.drawnCardId === null && !actionPending}
+              drawDisabledReason={
+                !myTurn ? '还没轮到你' : match.drawnCardId !== null ? '本回合已摸过牌' : undefined
+              }
+              onDraw={handleDraw}
+              hint={
+                !myTurn
+                  ? '对手出牌中，牌堆暂时不可摸'
+                  : match.drawnCardId !== null
+                    ? '摸牌完成：打出刚摸到的那张，或点「跳过」结束回合'
+                    : playableIds.size > 0
+                      ? '有可出的牌：直接点手牌出牌'
+                      : '没有可出的牌：点牌堆摸一张'
+              }
+              pulseDraw={myTurn && match.drawnCardId === null && playableIds.size === 0}
+            />
 
-            <div className="gh-uno-action-box">
-              <span className="gh-uno-pile-label">本回合</span>
+            <div className={`gh-u2-action-row${myTurn ? ' gh-u2-action-row--me' : ''}`}>
+              <div className="gh-u2-action-copy">
+                <strong>
+                  {match.status === 'finished'
+                    ? '本局结算'
+                    : myTurn
+                      ? (match.drawnCardId !== null ? '你已摸牌' : '轮到你行动')
+                      : `${match.turn ? nameOf(match, match.turn.userId) : '对手'} 行动中`}
+                </strong>
+                <span>
+                  {match.status === 'finished'
+                    ? '回大厅可以再开一局'
+                    : myTurn
+                      ? (match.drawnCardId !== null
+                        ? '只能打出刚摸到的那张牌，或跳过'
+                        : '点手牌出牌；没有可出的牌就摸一张')
+                      : '等待对手出牌，轮到你时会自动提示'}
+                </span>
+              </div>
               {myTurn && match.drawnCardId !== null ? (
-                <>
-                  <span className="gh-uno-drawn-hint">
-                    摸到 {drawnCard ? unoCardLabel(drawnCard) : '一张牌'}
-                    {drawnCard && playableIds.has(drawnCard.id) ? '，可以立即打出' : '，不可出'}
-                  </span>
-                  <button
-                    type="button"
-                    className="gh-btn gh-btn--secondary gh-btn--sm"
-                    onClick={handlePass}
-                    disabled={!myTurn || actionPending}
-                  >
-                    跳过
-                  </button>
-                </>
+                <button
+                  type="button"
+                  className="gh-btn gh-btn--secondary gh-btn--md"
+                  onClick={handlePass}
+                  disabled={actionPending}
+                >
+                  跳过本回合
+                </button>
               ) : (
-                <span className="gh-uno-drawn-hint">
-                  {myTurn ? '点击手牌出牌；没有可出的牌就摸一张' : '等待对方行动'}
+                <span className="gh-u2-action-state">
+                  {actionPending ? '提交中…' : match.status === 'finished' ? '—' : myTurn ? '等待你出牌' : '自动轮转'}
                 </span>
               )}
-              {actionPending && <span className="gh-liar-action-pending">提交中…</span>}
             </div>
-          </div>
 
-          <div className="gh-uno-hand-wrap">
-            <div className="gh-uno-me-header">
-              <span className="gh-uno-me-name">你的手牌</span>
-              <span className="gh-uno-me-count">{myHand.length} 张</span>
-              {myHand.length === 1 && <span className="gh-uno-uno-badge">UNO!</span>}
-              {myTurn && <span className="gh-uno-me-hint">高亮 = 当前可出</span>}
-            </div>
-            <div className="gh-uno-hand">
-              {myHand.map((card) => (
-                <UnoCardView
-                  key={card.id}
-                  card={card}
-                  size="md"
-                  playable={myTurn && playableIds.has(card.id)}
-                  disabled={!myTurn || actionPending}
-                  onClick={() => handleCardClick(card)}
-                />
-              ))}
-            </div>
-          </div>
-
-        </section>
-
-        <aside className="gh-uno-online-side">
-          <section className="gh-uno-players" aria-label="玩家状态">
-            <h2 className="gh-liar-log-title">玩家（{match.players.length}）</h2>
-            <ul className="gh-uno-player-list">
-              {match.players.map((player: GameUnoPlayer) => (
-                <li
-                  key={player.userId}
-                  className={[
-                    'gh-uno-player',
-                    player.userId === meId ? 'gh-uno-player--me' : '',
-                    player.status === 'playing' ? '' : 'gh-uno-player--out',
-                    match.turn?.userId === player.userId ? 'gh-uno-player--turn' : '',
-                  ].filter(Boolean).join(' ')}
-                >
-                  <span className="gh-uno-player-name">
-                    {player.username}
-                    {player.userId === meId && <span className="gh-game-room-badge gh-game-room-badge--me">你</span>}
-                    {player.userId === match.hostId && <span className="gh-game-room-badge">房主</span>}
-                    {player.handCount === 1 && player.status === 'playing' && <span className="gh-uno-uno-badge">UNO!</span>}
-                  </span>
-                  <span className="gh-uno-player-meta">
-                    <span className={`gh-game-presence-dot${player.online ? ' gh-game-presence-dot--online' : ''}`} />
-                    {player.status === 'playing'
-                      ? `手牌 ${player.handCount} 张 · 出牌 ${player.plays} 次`
-                      : player.status === 'won'
-                        ? '获胜'
-                        : '出局'}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section className="gh-liar-rules">
-            <h2 className="gh-liar-log-title">操作提示</h2>
-            <ul className="gh-uno-online-tips">
-              <li>点击高亮手牌直接出牌；万能牌会弹出颜色选择。</li>
-              <li>摸牌后只能打出刚摸到的那张，或点「跳过」。</li>
-              <li>万能+4 在你手里还有当前颜色时不可出。</li>
-              <li>倒计时结束由服务端自动托管，不会踢出玩家。</li>
-            </ul>
-          </section>
-        </aside>
-      </div>
-
-      {pendingWild !== null && (
-        <div className="gh-uno-color-overlay" role="dialog" aria-modal="true" aria-label="选择万能牌颜色">
-          <div className="gh-uno-color-dialog">
-            <p className="gh-uno-color-title">选择万能牌的颜色</p>
-            <div className="gh-uno-color-options">
-              {(['red', 'yellow', 'green', 'blue'] as UnoColor[]).map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  className={`gh-uno-color-btn gh-uno-color-btn--${color}`}
-                  onClick={() => {
-                    const cardId = pendingWild
-                    setPendingWild(null)
-                    onSubmit({ type: 'play', cardId, color })
-                  }}
-                >
-                  {UNO_COLOR_LABELS[color]}
-                </button>
-              ))}
-            </div>
-            <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm" onClick={() => setPendingWild(null)}>
-              取消
-            </button>
+            <UnoHand
+              cards={myHand}
+              playableIds={playableIds}
+              myTurn={myTurn}
+              actionPending={actionPending}
+              drawnCardId={match.drawnCardId}
+              onCardClick={handleCardClick}
+            />
           </div>
         </div>
-      )}
+
+        <UnoInfoPanel
+          turnHint={turnHint}
+          lastActionText={`最近一步：${lastActionText}`}
+          recentLog={match.lastAction ? [lastActionText] : []}
+          rules={[
+            '点击高亮手牌直接出牌；万能牌会弹出颜色选择。',
+            '摸牌后只能打出刚摸到的那张，或点「跳过」。',
+            '万能+4 在你手里还有当前颜色时不可出。',
+            '回合 60 秒超时由服务端自动托管；掉线 120 秒出局。',
+          ]}
+        />
+      </div>
+
+      <UnoColorChooser
+        open={pendingWild !== null}
+        card={pendingWildCard}
+        onPick={(color) => {
+          const cardId = pendingWild
+          setPendingWild(null)
+          if (cardId !== null) onSubmit({ type: 'play', cardId, color })
+        }}
+        onCancel={() => setPendingWild(null)}
+      />
 
       {match.status === 'finished' && (
-        <div className="gh-uno-overlay" role="dialog" aria-modal="true" aria-label="对局结算">
-          <div className="gh-uno-overlay-card">
-            <p className="gh-uno-overlay-eyebrow">牌局结束</p>
-            <h2 className={`gh-uno-overlay-title${winner?.userId === meId ? ' gh-uno-overlay-title--win' : ''}`}>
+        <div className="gh-u2-modal" role="dialog" aria-modal="true" aria-label="对局结算">
+          <div className="gh-u2-result-card">
+            <p className="gh-u2-result-kicker">牌局结束</p>
+            <h2 className={`gh-u2-result-title${winner?.userId === meId ? ' gh-u2-result-title--win' : ''}`}>
               {winner ? `${winner.username} 获胜` : '本局无胜者'}
             </h2>
-            <p className="gh-uno-overlay-detail">{match.reason ? END_REASON_LABELS[match.reason] : '本局已结束'}</p>
-            <div className="gh-uno-overlay-actions">
+            <p className="gh-u2-result-detail">{match.reason ? END_REASON_LABELS[match.reason] : '本局已结束'}</p>
+            <div className="gh-u2-result-actions">
               <button type="button" className="gh-btn gh-btn--primary gh-btn--lg" onClick={onBackToLobby}>
                 {isHost ? '回大厅再开一局' : '返回大厅'}
               </button>

@@ -1,0 +1,170 @@
+/* =============================================================
+   LineWeb — 联机大厅好友选择器 v2
+   目标：把「邀请 → 接受 → 入座开始」的流程写在最上面，
+   在线好友优先，离线好友收进折叠区。
+   ============================================================= */
+
+.gh-game-friend-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3, 12px);
+}
+
+.gh-game-friend-flow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border: 1px solid var(--gh-border);
+  border-radius: 14px;
+  background: var(--gh-canvas-subtle, var(--gh-canvas));
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-game-friend-flow-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.gh-game-friend-flow-step b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--gh-accent) 14%, transparent);
+  color: var(--gh-accent);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.gh-game-friend-flow-arrow {
+  color: var(--gh-text-tertiary);
+  font-size: 12px;
+}
+
+.gh-game-friend-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gh-game-friend-section--incoming {
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--gh-accent) 28%, var(--gh-border));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--gh-accent) 5%, var(--gh-canvas));
+}
+
+.gh-game-friend-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm, 13px);
+  font-weight: 650;
+}
+
+.gh-game-friend-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--gh-canvas-inset);
+  color: var(--gh-text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.gh-game-friend-count--online {
+  background: color-mix(in srgb, var(--gh-success) 14%, transparent);
+  color: var(--gh-success);
+}
+
+.gh-game-friend-section--offline {
+  padding: 12px;
+  border: 1px solid var(--gh-border);
+  border-radius: 16px;
+  background: var(--gh-canvas);
+}
+
+.gh-game-friend-section--offline > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.gh-game-friend-section--offline > summary::-webkit-details-marker {
+  display: none;
+}
+
+.gh-game-friend-section--offline > summary::after {
+  content: '展开';
+  margin-left: auto;
+  color: var(--gh-text-tertiary);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.gh-game-friend-section--offline[open] > summary::after {
+  content: '收起';
+}
+
+.gh-game-friend-summary-hint {
+  color: var(--gh-text-tertiary);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.gh-game-friend-row--offline {
+  opacity: 0.72;
+}
+
+.gh-game-friend-row--offline .gh-game-friend-actions .gh-btn {
+  font-size: 11px;
+}
+
+.gh-game-list-state--compact {
+  align-items: flex-start;
+  padding: 16px;
+  border: 1px dashed var(--gh-border);
+  border-radius: 14px;
+  text-align: left;
+}
+
+.gh-game-list-state--compact .gh-game-list-state-title {
+  margin-bottom: 4px;
+  font-size: var(--gh-text-sm, 13px);
+}
+
+.gh-game-list-state--compact .gh-game-list-state-hint {
+  font-size: var(--gh-text-xs);
+}
+
+@media (max-width: 720px) {
+  .gh-game-friend-flow {
+    font-size: 11px;
+    padding: 8px 10px;
+  }
+
+  .gh-game-friend-flow-arrow {
+    display: none;
+  }
+
+  .gh-game-friend-row {
+    align-items: center;
+  }
+
+  .gh-game-friend-actions .gh-btn {
+    min-width: 72px;
+    padding: 6px 10px;
+  }
+}
