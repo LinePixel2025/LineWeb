@@ -76,8 +76,10 @@ app.use(helmet({
         : ["'self'", "'unsafe-inline'", "'unsafe-eval'", "'blob:'"],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
-      // mediaSrc 允许外链音视频：网易云音乐播放地址为网易 CDN 直连（音频流量不经服务器）
-      mediaSrc: ["'self'", 'https:', 'http:'],
+      // mediaSrc 允许外链音视频：网易云音乐播放地址为网易 CDN 直连（音频流量不经服务器）。
+      // data:/blob: 供播放器的「静音片段解锁」使用（iOS Safari 只允许在手势任务里 play()，
+      // 点歌后要等接口返回，因此先用极短的 data: 音频解锁该 <audio> 元素）。
+      mediaSrc: ["'self'", 'https:', 'http:', 'data:', 'blob:'],
       // connectSrc 需允许 ws/wss：聊天实时推送走 /ws/chat
       connectSrc: ["'self'", 'https:', 'http:', 'ws:', 'wss:'],
       fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com', 'https://fonts.googleapis.com'],
