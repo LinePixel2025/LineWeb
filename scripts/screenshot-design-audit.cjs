@@ -74,6 +74,8 @@ const ROUTES = [
   { name: 'deepseek', path: '/deepseek' },
   { name: 'points', path: '/points' },
   { name: 'pets', path: '/pets' },
+  { name: 'music', path: '/music' },
+  { name: 'reader', path: '/reader' },
   { name: 'stocks', path: '/stocks' },
   { name: 'webproxy', path: '/webproxy' },
   { name: 'admin', path: '/admin' },

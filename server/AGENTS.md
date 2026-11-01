@@ -111,6 +111,8 @@ helmet(CSP) → cors → compression → body parser(1mb) → rate-limit(600/15m
 - **游戏高频端点要绕开全局限流**：`/games/2048/matches/:id/moves`、`/games/2048/sync`、`/games/2048/presence` 在 `index.ts` 的 `apiLimiter` 里用精确正则 `skip`（`req.path` 不含 `/api`），改路由路径时必须同步改这三条正则，否则轮询/对局会被 600/15min 卡死。
 - **游戏事件不新增 WS 服务**：`game:invite` / `game:invite:removed` / `game:match:started|update|ended` 全部经 `chatHub.sendToUser` 推送；无 WS 时客户端用 `GET /sync` 轮询 + `POST /presence` 心跳降级。
 - **BigInt 序列化**：`User.storageQuota`、`DriveFile.size` 不能直接进 JSON；所有对外响应显式 `String()`，客户端按字符串展示。
+- **`ws` 不会发 `'drain'`**（2026-11-01 踩过）：`storageTunnel.streamWriteBinary` 的背压**不能**用 `ws.on('drain')` 等待发送缓冲回落——该事件永远不会来，`bufferedAmount` 超过 8MB 高水位后 Promise 永不 resolve，表现为「上传进度 100% 但请求永不返回」（小说/网盘上传都中招）。正确做法见 `waitForDrain`：轮询 `bufferedAmount` + readyState/close 立即失败 + 上限超时；另外 **pong 不走 `'message'`**，心跳存活检测必须单独监听 `'pong'`，否则空闲的健康连接会被误判半开而断掉。
+- **FTS 只在 SQLite 生效**：`services/ftsSearch.ts` 的 FTS5 语句在 PostgreSQL 下全是非法 SQL，模块加载时已判定 `ftsSupported`，非 SQLite 的 sync/delete/search 一律跳过（搜索走 LIKE），**新增调用点不要再绕过这个开关**。
 
 ## 命令
 

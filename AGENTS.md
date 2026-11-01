@@ -500,3 +500,17 @@ cd storage-node && python main.py     # 存储节点，config.json 指向 ws://1
 - **接入面改动**：server/client 两份 `features.ts` 双写 `reader`/`music`（17→19 键，`/admin/features` 数据驱动自动出现）；index.ts 挂载 `requireFeature('reader'/'music')` + compression 排除 + CSP mediaSrc + `GET /api` 自描述两组；`multipartImage.ts` 泛化出 `receiveMultipartFile`（返回 fileName，busboy `defParamCharset: 'utf8'` 保中文文件名），`receiveMultipartImage` 委托兼容旧调用；drive.ts 根级保留名报错文案加 `_books`。
 - **数据库**：`Book` / `BookProgress` / `MusicAccount` 均为 additive（51 模型），`prisma db push` 即可（本地撞 FTS 影子表先 DROP 虚拟表，启动自动重建）；生产走 docker-entrypoint.sh 自动 push，部署仍走本地产物链，不要在 ECS 上 `docker compose up --build`。
 - **自检**：`cd server && npx tsc --noEmit` 零错误；`cd server && npm run verify:reader`（32 断言）；`cd client && npx tsc --noEmit` + `npm run build`（foliate 独立 chunk）+ `npm run test`（52 文件 / 564 用例）全过；详见 `docs/reader-api.md`、`docs/music-api.md`。
+
+---
+
+## 2026-11-01 上传卡 100% / 网易云封面与播放（修复口径）
+
+- **上传卡在 100%（影响小说与网盘，线上必现）**：`storageTunnel.streamWriteBinary` 原来用 `ws.on('drain')` 等待发送缓冲回落。**`ws` 的 WebSocket 实例不会发出 'drain'**（只有内部 receiver 有），所以 `bufferedAmount` 一旦超过 8MB 高水位，Promise 永不 resolve——浏览器进度 100% 后请求永不返回（本地 20MB 书必现，生产 20MB 书 >200s 不返回）。修复：`waitForDrain` 改轮询 `bufferedAmount`（5ms，60s 上限）+ readyState/close 立即失败；`streamWriteBinary` 锁定本次连接的 ws 引用并用 `ws.send` 回调捕获发送错误（重连后不会把帧发到新连接）；心跳加 ping/pong 存活检测，连续一个周期无任何入站数据即 terminate 半开连接，**并且 pong 必须单独监听**（pong 不走 'message'，漏掉会把空闲健康连接误断）。新增数据面校验：生产 20MB 书 4s 成功、150MB 网盘文件 20s 成功。
+- **上传内存**：`lib/multipartImage.ts` 改为按 `content-length` 预分配目标缓冲并逐块拷入，去掉「chunks 数组 + Buffer.concat」的 2 倍峰值（512MB 容器下 50MiB 书原本要占 100MB+）。生产容器常态占用 185–330MB/512MB。
+- **FTS 在 PostgreSQL 上每次上传都报错**：`ftsSearch.ts` 的 FTS5 语句（`INSERT OR REPLACE` / `MATCH` / `rank`）在 PG 下是非法 SQL，曾每次上传打一条 `42601 syntax error at or near "OR"`。现在模块加载时判定一次，非 SQLite 直接跳过 sync/delete/search 的 FTS 分支（搜索走 LIKE）。
+- **网易云封面（大多数不显示）**：上游返回的封面是 `http://p*.music.126.net/…`，而 CSP `img-src` 只放行 `https:`，浏览器直接拦（生产实测 `securitypolicyviolation`）。修复：`callNcmForUser` 返回前用 `upgradeNcmMediaUrlsIn` 递归把网易 CDN（`*.music.126.net`/`*.126.net`/`*.127.net`/`*.netease.com`）的 http 地址升级为 https，前端 `lib/music/song.ts` 的 `upgradeMediaUrl` 兜底（含 localStorage 旧队列与绑定头像）。音频地址同样升级，将来上 HTTPS 不会被混合内容阻塞。
+- **网易云播放偶发失败**：容器冷启动时匿名 token 注册失败会连带 `xeapi public key is missing`，之后 `song/url` 一直 502（生产日志实测）。修复：识别初始化类错误 → 重置并重跑一次启动例程后重试；匿名 token 过期（301 且未绑定）重新注册后重试，只有**已绑定**账号的 301 才清绑定抛 401。另外 **iOS Safari** 只允许在手势任务里 `play()`，点歌要先等接口返回，故在首次 pointerdown/keydown 播一段 `data:audio/wav` 静音片段解锁 `<audio>`（CSP `media-src` 因此放行 `data: blob:`）。
+- **VIP 试听不是播放失败**：非黑胶账号请求会员歌曲时上游只给 30–45s 片段并带 `freeTrialInfo`；前端在正在播放卡/迷你条显示「试听片段 · 会员歌曲」与说明，不再当成错误。
+- **前端展示（音乐页/书架）**：音乐页新增 `NowPlayingCard`（大封面 + 控制 + 可拖进度 + 音量 + 模式 + LRC 歌词面板，歌词滚动只作用于容器、不再把整页滚走），歌曲行加序号/播放脉冲条/封面悬浮播放，榜单卡片加曲目数与「播放全部」，搜索改分段控件 + 骨架屏。书架加两阶段上传反馈（浏览器上传进度 → 「服务器正在写入存储」计时 + 流动条纹 + 5min 超时 + 可取消；**第二阶段看起来像卡 100% 的观感即来源于此**）、封面进度细条、悬浮「继续阅读」、书脊+首字占位封面、拖拽上传、骨架屏；并修复阅读纸张配色（浅色纸固定深色墨水，暗色主题下不再白底白字）。
+- **验收脚本**：`scripts/screenshot-design-audit.cjs` 路由表补 `music`/`reader`；`--routes music,reader --widths 1440,390` 双主题 0 横向溢出、0 console 错误。
+- **部署**：本地 `vite build` → `client-dist` 上传 → `git push deploy master` → 服务器 `git fetch deploy && git reset --hard deploy/master` → `docker build -f Dockerfile.prebuilt` + `docker compose up -d`（照旧不在 ECS 上 `--build`）。
