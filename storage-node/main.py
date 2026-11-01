@@ -428,8 +428,10 @@ async def connect():
                 await ws.send(json.dumps({"type": "auth", "token": config["token"]}))
                 auth_resp = json.loads(await ws.recv())
                 if auth_resp.get("type") != "auth_ok":
+                    # 不要 return：token 写错时 return 会让进程彻底停摆（不再重连），
+                    # 用户改好服务端 token 后也恢复不了。改为抛错走退避重连。
                     log.error(f"认证失败: {auth_resp}")
-                    return
+                    raise RuntimeError("存储节点认证失败（token 与服务端 STORAGE_NODE_TOKEN 不一致？）")
                 log.info("认证成功")
 
                 # 主循环 — 接收并执行指令

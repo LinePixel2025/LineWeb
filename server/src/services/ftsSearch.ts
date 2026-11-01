@@ -3,17 +3,23 @@ import prisma from '../lib/prisma.js'
 const FTS_TABLE = 'drive_files_fts'
 
 /**
+ * 当前数据库是否支持 FTS5（只有 SQLite 有）。
+ *
+ * PostgreSQL 下所有 FTS 语句（`INSERT OR REPLACE`、`MATCH`、`rank`）都是非法 SQL，
+ * 早期每次上传都会在 syncFTSIndex 里打一条 `syntax error at or near "OR"` 的报错，
+ * 搜索也要先失败一次再回退 LIKE。因此这里在模块加载时判定一次，非 SQLite 一律跳过。
+ */
+const ftsSupported = (() => {
+  const url = process.env.DATABASE_URL ?? ''
+  return url.startsWith('file:') || url === '' || url.includes('sqlite')
+})()
+
+/**
  * 创建或确保 FTS5 虚拟表存在（SQLite only）
  * PostgreSQL 下自动跳过
  */
 export async function ensureFTSTable(): Promise<boolean> {
-  // 检测数据库类型 — 仅 SQLite 支持 FTS5
-  const isSQLite = process.env.DATABASE_URL?.startsWith('file:') ||
-    process.env.DATABASE_URL === '' ||
-    !process.env.DATABASE_URL ||
-    process.env.DATABASE_URL?.includes('sqlite')
-
-  if (!isSQLite) {
+  if (!ftsSupported) {
     console.log('[FTS] PostgreSQL detected, skipping FTS5 setup')
     return false
   }
@@ -54,6 +60,7 @@ export async function ensureFTSTable(): Promise<boolean> {
  * 增量同步：为指定文件更新 FTS 索引
  */
 export async function syncFTSIndex(fileIds: number[]): Promise<void> {
+  if (!ftsSupported) return
   try {
     const files = await prisma.driveFile.findMany({
       where: { id: { in: fileIds } },
@@ -75,6 +82,7 @@ export async function syncFTSIndex(fileIds: number[]): Promise<void> {
  * 删除 FTS 索引条目
  */
 export async function deleteFTSIndex(fileIds: number[]): Promise<void> {
+  if (!ftsSupported) return
   try {
     for (const id of fileIds) {
       await prisma.$executeRawUnsafe(
@@ -100,37 +108,41 @@ export async function searchFTS(
   limit = 50,
   scope: DriveSearchScope = 'private',
 ): Promise<{ id: number; name: string; storagePath: string }[]> {
-  try {
-    // 先尝试 FTS5 搜索
-    // SQLite 布尔列存 0/1；scope 决定 is_public 过滤，private 再叠加所有权过滤
-    const results = await prisma.$queryRawUnsafe<
-      { id: number; name: string; storagePath: string }[]
-    >(
-      `SELECT f.id, f.name, f.storagePath
-       FROM ${FTS_TABLE} fts
-       JOIN drive_files f ON f.id = fts.rowid
-       WHERE ${FTS_TABLE} MATCH ?
-       ${scope === 'public' ? 'AND f.is_public = 1' : 'AND f.is_public = 0'}
-       ${!isAdmin && scope === 'private' ? 'AND f.uploaded_by_id = ?' : ''}
-       ORDER BY rank
-       LIMIT ?`,
-      query,
-      ...(!isAdmin && scope === 'private' ? [userId, limit] as const : [limit] as const)
-    )
-    return results
-  } catch {
-    // FTS5 失败（表不存在 / 语法错误等），回退到 LIKE 查询
-    console.warn('[FTS] FTS5 search failed, falling back to LIKE')
-    const where: { name: { contains: string }; uploadedById?: number; isPublic: boolean } = {
-      name: { contains: query },
-      isPublic: scope === 'public',
+  if (ftsSupported) {
+    try {
+      // 先尝试 FTS5 搜索
+      // SQLite 布尔列存 0/1；scope 决定 is_public 过滤，private 再叠加所有权过滤
+      const results = await prisma.$queryRawUnsafe<
+        { id: number; name: string; storagePath: string }[]
+      >(
+        `SELECT f.id, f.name, f.storagePath
+         FROM ${FTS_TABLE} fts
+         JOIN drive_files f ON f.id = fts.rowid
+         WHERE ${FTS_TABLE} MATCH ?
+         ${scope === 'public' ? 'AND f.is_public = 1' : 'AND f.is_public = 0'}
+         ${!isAdmin && scope === 'private' ? 'AND f.uploaded_by_id = ?' : ''}
+         ORDER BY rank
+         LIMIT ?`,
+        query,
+        ...(!isAdmin && scope === 'private' ? [userId, limit] as const : [limit] as const)
+      )
+      return results
+    } catch {
+      // FTS5 失败（表不存在 / 语法错误等），回退到 LIKE 查询
+      console.warn('[FTS] FTS5 search failed, falling back to LIKE')
     }
-    if (!isAdmin && scope === 'private') where.uploadedById = userId
-    const files = await prisma.driveFile.findMany({
-      where,
-      select: { id: true, name: true, storagePath: true },
-      take: limit,
-    })
-    return files
   }
+
+  // LIKE 回退（PostgreSQL 或 FTS5 不可用时的唯一路径）
+  const where: { name: { contains: string }; uploadedById?: number; isPublic: boolean } = {
+    name: { contains: query },
+    isPublic: scope === 'public',
+  }
+  if (!isAdmin && scope === 'private') where.uploadedById = userId
+  const files = await prisma.driveFile.findMany({
+    where,
+    select: { id: true, name: true, storagePath: true },
+    take: limit,
+  })
+  return files
 }

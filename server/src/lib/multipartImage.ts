@@ -50,7 +50,37 @@ export function receiveMultipartFile(
       return
     }
 
-    const chunks: Buffer[] = []
+    // 预分配目标缓冲：content-length 是文件大小的上界（含极小的 multipart 头尾开销），
+    // 一次性分配再逐块拷入，避免「chunks 数组 + Buffer.concat」造成 2 倍内存峰值
+    // （50MiB 的 EPUB 原本在 512MB 容器里要占 100MB，很容易触发 OOM）。
+    const contentLength = Number(req.headers['content-length'] ?? 0)
+    const allocation = Number.isFinite(contentLength) && contentLength > 0
+      ? Math.min(contentLength, fileSizeLimit + 64 * 1024)
+      : 0
+    let target: Buffer | null = allocation > 0 ? Buffer.allocUnsafe(allocation) : null
+    let targetLength = 0
+    /** 超出预分配容量后的溢出块（chunked 传输无法预知大小、或估算偏小） */
+    const overflow: Buffer[] = []
+
+    const appendChunk = (chunk: Buffer): void => {
+      if (target) {
+        if (targetLength + chunk.length <= target.length) {
+          chunk.copy(target, targetLength)
+          targetLength += chunk.length
+          return
+        }
+        // 估算偏小：已写部分转为溢出块，之后一律追加
+        if (targetLength > 0) overflow.push(target.subarray(0, targetLength))
+        target = null
+        targetLength = 0
+      }
+      overflow.push(chunk)
+    }
+
+    const collect = (): Buffer => target
+      ? target.subarray(0, targetLength)
+      : Buffer.concat(overflow)
+
     let fileSeen = false
     let limitHit = false
     let mimeType = ''
@@ -73,7 +103,7 @@ export function receiveMultipartFile(
       fileSeen = true
       mimeType = info.mimeType
       fileName = info.filename
-      stream.on('data', (chunk: Buffer) => chunks.push(chunk))
+      stream.on('data', (chunk: Buffer) => appendChunk(chunk))
       stream.on('limit', () => { limitHit = true })
       stream.on('error', (err: Error) => finish(err))
     })
@@ -83,7 +113,7 @@ export function receiveMultipartFile(
         finish(new AppError(requiredMessage, 400))
         return
       }
-      finish(null, { buffer: Buffer.concat(chunks), mimeType, fileName, limitHit })
+      finish(null, { buffer: collect(), mimeType, fileName, limitHit })
     })
     req.on('aborted', () => finish(new AppError('上传已中断', 400)))
     req.pipe(bb)

@@ -48,26 +48,72 @@ const pendingCommands = new Map<string, {
   timer: ReturnType<typeof setTimeout>
 }>()
 
+/**
+ * 连接存活标记（心跳用）。值为 false 表示「上一轮 ping 之后没收到任何入站数据」，
+ * 下一轮心跳仍未恢复就判定链路已死并 terminate。
+ */
+const liveness = new Map<WebSocket, boolean>()
+
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
 }
 
 const WS_MAX_BUFFER = 8 * 1024 * 1024  // 8MB high water mark
+/** 背压轮询间隔：只在缓冲超高水位时生效，正常发送不进这个循环 */
+const WS_DRAIN_POLL_MS = 5
+/** 单次等待缓冲回落的超时（持续 60s 无法写入即判定链路已死，避免请求永久挂起） */
+const WS_DRAIN_TIMEOUT_MS = 60_000
 
+/**
+ * 等待发送缓冲回落到高水位以下（流式上传的背压控制）。
+ *
+ * ⚠️ 历史坑：这里曾经用 `ws.on('drain', ...)` 等待回落。`ws` 的 WebSocket 实例
+ * **不会**发出 'drain' 事件（只有内部 receiver 有），因此只要一次上传让
+ * `bufferedAmount` 超过高水位，Promise 就永远不会 resolve —— 现象是浏览器
+ * 上传进度走到 100% 后请求永不返回（小说/网盘上传都中招）。
+ *
+ * 现在改为轮询 `bufferedAmount`，并额外处理三种终止条件：
+ *   - 连接关闭 / 不是 OPEN 状态 → 立即 reject（调用方按「存储节点已断开」处理）
+ *   - 超过 WS_DRAIN_TIMEOUT_MS 仍未回落 → reject（链路假死，不能无限等）
+ */
 function waitForDrain(maxBuffer: number): Promise<void> {
-  if (!activeNode) return Promise.resolve()
-  return new Promise<void>(resolve => {
-    if ((activeNode!.bufferedAmount ?? 0) <= maxBuffer) {
-      resolve()
-      return
+  const ws = activeNode
+  if (!ws || !nodeConnected || ws.readyState !== WebSocket.OPEN) {
+    return Promise.reject(new Error('存储节点已断开'))
+  }
+  if ((ws.bufferedAmount ?? 0) <= maxBuffer) return Promise.resolve()
+
+  return new Promise<void>((resolve, reject) => {
+    const startedAt = Date.now()
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    const stop = (err?: Error) => {
+      if (timer) clearTimeout(timer)
+      timer = null
+      if (err) reject(err)
+      else resolve()
     }
-    const check = () => {
-      if ((activeNode!.bufferedAmount ?? 0) <= maxBuffer) {
-        activeNode!.removeListener('drain', check)
-        resolve()
+
+    const poll = () => {
+      timer = null
+      // 连接可能在等待期间断开（close 事件会清空 activeNode）
+      if (ws.readyState !== WebSocket.OPEN || !nodeConnected) {
+        stop(new Error('存储节点已断开'))
+        return
       }
+      if ((ws.bufferedAmount ?? 0) <= maxBuffer) {
+        stop()
+        return
+      }
+      if (Date.now() - startedAt > WS_DRAIN_TIMEOUT_MS) {
+        stop(new Error('向存储节点发送数据超时（链路持续拥塞）'))
+        return
+      }
+      timer = setTimeout(poll, WS_DRAIN_POLL_MS)
+      timer.unref?.()
     }
-    activeNode!.on('drain', check)
+
+    poll()
   })
 }
 
@@ -340,15 +386,19 @@ export async function streamWriteBinary(
   if (!activeNode || !nodeConnected) {
     throw new Error('存储节点未连接')
   }
+  // 锁定本次写入使用的连接：中途重连不会把帧发到新连接上（新连接上没有这个 streamId）
+  const ws = activeNode
 
   const streamId = nextStreamId()
   const sha256 = createHash('sha256')
-  const CHUNK = config.streamChunkKB * 1024
+  const CHUNK = Math.max(config.streamChunkKB * 1024, 64 * 1024)
 
   // pending 数组避免 O(n²) 的 Buffer.concat([buffered, chunk]) 模式
   const pending: Buffer[] = []
   let pendingBytes = 0
   let totalBytes = 0
+  /** 发送回调里的错误（ws.send 是异步写入，错误只能通过回调拿到） */
+  let sendError: Error | null = null
 
   const initResp = await sendCommand({
     type: 'write_file_stream',
@@ -382,9 +432,13 @@ export async function streamWriteBinary(
         const frame = Buffer.concat([createStreamHeader(streamId), frameData])
         totalBytes += frameData.length
 
+        if (sendError) throw sendError
+        // 背压：缓冲超过高水位时等它回落（waitForDrain 内部有超时，不会永久挂起）
         await waitForDrain(WS_MAX_BUFFER)
-        if (!activeNode) throw new Error('存储节点已断开')
-        activeNode.send(frame)
+        if (ws.readyState !== WebSocket.OPEN) throw new Error('存储节点已断开')
+        ws.send(frame, (err?: Error) => {
+          if (err && !sendError) sendError = err
+        })
       }
     }
 
@@ -398,6 +452,7 @@ export async function streamWriteBinary(
 
     // 强制刷出剩余数据
     await flush(true)
+    if (sendError) throw sendError
 
     const digest = sha256.digest('hex')
     const streamEndResp = await sendCommand({
@@ -458,6 +513,8 @@ export function initStorageTunnel(server: HttpServer) {
     }, 5000)
 
     ws.on('message', (raw: Buffer, isBinary: boolean) => {
+      // 任何入站数据都视为链路存活信号
+      liveness.set(ws, true)
       try {
         // 二进制帧：路由到 PendingStream
         if (isBinary) {
@@ -481,6 +538,7 @@ export function initStorageTunnel(server: HttpServer) {
             activeNode = ws
             nodeConnected = true
             nodeConnectTime = new Date()
+            liveness.set(ws, true)
             console.log('✅ Storage node authenticated')
             ws.send(JSON.stringify({ type: 'auth_ok' }))
           } else {
@@ -528,6 +586,7 @@ export function initStorageTunnel(server: HttpServer) {
 
     ws.on('close', () => {
       console.log('🔌 Storage node disconnected')
+      liveness.delete(ws)
       if (activeNode === ws) {
         activeNode = null
         nodeConnected = false
@@ -553,14 +612,25 @@ export function initStorageTunnel(server: HttpServer) {
     })
   })
 
-  // 心跳：每 30 秒 ping
+  // 心跳：每 30 秒 ping；连续一个周期没收到任何入站数据（pong 或消息）就判定链路已死。
+  // 没有这层检测时，节点机器掉线/拔网线这类「TCP 半开」连接会一直留着 nodeConnected=true，
+  // 上传会挂在发送缓冲上直到超时（历史现象：上传 100% 后卡死）。
   const heartbeatInterval = setInterval(() => {
-    if (activeNode && nodeConnected) {
+    if (!activeNode || !nodeConnected) return
+    if (liveness.get(activeNode) === false) {
+      console.warn('[StorageTunnel] 存储节点心跳超时，主动断开半开连接')
       try {
-        activeNode.ping()
+        activeNode.terminate()
       } catch {
         // ignore
       }
+      return
+    }
+    liveness.set(activeNode, false)
+    try {
+      activeNode.ping()
+    } catch {
+      // ignore
     }
   }, 30000)
 
