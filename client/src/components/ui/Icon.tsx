@@ -21,7 +21,7 @@ export type IconName =
   | 'arrow-up' | 'arrow-down' | 'arrow-left' | 'folder-plus' | 'cloud' | 'users' | 'message' | 'ai'
   | 'api' | 'trophy' | 'calendar' | 'tag' | 'bell' | 'eye' | 'database' | 'wallet' | 'send' | 'megaphone'
   | 'bookOpen' | 'music'
-  | 'play' | 'pause' | 'volume' | 'repeat' | 'shuffle' | 'skip-back' | 'skip-forward'
+  | 'play' | 'pause' | 'volume' | 'repeat' | 'shuffle' | 'skip-back' | 'skip-forward' | 'queue'
 
 interface IconProps {
   name: IconName
@@ -536,6 +536,13 @@ const glyphs: Record<IconName, ReactNode> = {
       <path d="M5.4 5.6v12.8L14.6 12 5.4 5.6Z" fill="currentColor" fillOpacity=".13" />
       <path d="M5.4 5.6v12.8L14.6 12 5.4 5.6Z" />
       <path d="M18.1 5.4v13.2" />
+    </>
+  ),
+  queue: (
+    <>
+      <path d="M4 6.25h8.5M4 12h7M4 17.75h8.5" />
+      <path d="m15.6 9.1 4.5 2.9-4.5 2.9V9.1Z" fill="currentColor" fillOpacity=".14" />
+      <path d="m15.6 9.1 4.5 2.9-4.5 2.9V9.1Z" />
     </>
   ),
 }

@@ -1,13 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import Icon from '../ui/Icon'
 import { useMusicPlayer, type MusicPlayMode } from '../../contexts/MusicPlayerContext'
-import { formatSongDuration, upgradeMediaUrl } from '../../lib/music/song'
+import { findLrcIndex, formatSongDuration, upgradeMediaUrl } from '../../lib/music/song'
+import { useLyrics } from '../../lib/music/useLyrics'
 
 /**
  * 标题栏内嵌的音乐播放器（取代原先悬浮在页面底部挡住内容的迷你播放条）。
  *
  * - 挂在全局 Header 中间，跨页持续显示；没有播放中的歌曲时返回 null（顶栏保持原有留白）
+ * - 宽度允许时（播放器自身 ≥ 380px）第二行显示当前一句歌词，否则回退为歌手名；
+ *   没有歌词时始终显示歌手名
  * - 窄屏逐级收窄：先去掉进度条/时间，再去掉模式键，最后只保留封面 + 播放/暂停 + 下一首
  * - 队列是顶栏内的下拉浮层（.gh-music-hp-queue），不占用页面空间
  */
@@ -29,6 +32,13 @@ export default function MusicHeaderPlayer() {
   const [queueOpen, setQueueOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const { song } = player
+  const { lines } = useLyrics(song?.id ?? null)
+
+  const activeIndex = useMemo(
+    () => findLrcIndex(lines, player.positionSec),
+    [lines, player.positionSec],
+  )
+  const activeLyric = activeIndex >= 0 ? (lines[activeIndex]?.line ?? '').trim() : ''
 
   // 点浮层外面收起队列
   useEffect(() => {
@@ -59,24 +69,38 @@ export default function MusicHeaderPlayer() {
     : song.durationMs > 0 ? song.durationMs / 1000 : 0
   const progress = duration > 0 ? Math.min(player.positionSec / duration, 1) : 0
   const cover = upgradeMediaUrl(song.picUrl)
+  const subtitle = activeLyric || song.artists || '未知歌手'
+  const rootStyle = cover
+    ? ({ '--gh-hp-art': `url("${cover}")` } as CSSProperties)
+    : undefined
 
   return (
     <div
-      className={`gh-music-hp${queueOpen ? ' gh-music-hp--open' : ''}`}
+      className={`gh-music-hp${queueOpen ? ' gh-music-hp--open' : ''}${activeLyric ? ' gh-music-hp--lyric' : ''}${player.playing ? ' gh-music-hp--playing' : ''}`}
       role="region"
       aria-label="音乐播放器"
       ref={rootRef}
+      style={rootStyle}
     >
-      <Link to="/music" className="gh-music-hp-info" title={`${song.name} · ${song.artists || '未知歌手'}`}>
+      <Link to="/music" className="gh-music-hp-info" title={`${song.name} · ${subtitle}`}>
         {cover
           ? <img className="gh-music-hp-cover" src={cover} alt="" />
           : <span className="gh-music-hp-cover gh-music-hp-cover--fallback"><Icon name="music" size={14} /></span>}
-        <span className="gh-music-hp-meta">
+        <span className={`gh-music-hp-meta${activeLyric ? ' gh-music-hp-meta--lyric' : ''}`}>
           <span className="gh-music-hp-name">
             {song.name}
             {player.trialEndSec !== null && <span className="gh-music-hp-trial">试听</span>}
           </span>
           <span className="gh-music-hp-artists">{song.artists || '未知歌手'}</span>
+          {activeLyric && (
+            <span
+              key={`${activeIndex}-${activeLyric}`}
+              className="gh-music-hp-lyric"
+              title={activeLyric}
+            >
+              {activeLyric}
+            </span>
+          )}
         </span>
       </Link>
 
@@ -85,7 +109,7 @@ export default function MusicHeaderPlayer() {
           <Icon name="skip-back" size={15} />
         </button>
         <button
-          className="gh-music-hp-btn gh-music-hp-btn--play"
+          className={`gh-music-hp-btn gh-music-hp-btn--play${player.loading ? ' gh-music-hp-btn--loading' : ''}`}
           onClick={player.toggle}
           disabled={player.loading}
           aria-label={player.playing ? '暂停' : '播放'}
@@ -134,7 +158,7 @@ export default function MusicHeaderPlayer() {
           aria-expanded={queueOpen}
           title="播放队列"
         >
-          <Icon name="list" size={14} />
+          <Icon name="queue" size={14} />
         </button>
       </div>
 

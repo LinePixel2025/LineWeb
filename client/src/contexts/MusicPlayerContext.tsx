@@ -227,8 +227,15 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const seek = useCallback((sec: number) => {
     const audio = audioRef.current
     if (!audio || !Number.isFinite(sec)) return
-    audio.currentTime = Math.min(Math.max(sec, 0), audio.duration || sec)
-    setPositionSec(audio.currentTime)
+    const target = Math.min(Math.max(sec, 0), audio.duration || sec)
+    try {
+      audio.currentTime = target
+      setPositionSec(audio.currentTime)
+    } catch {
+      // 尚未加载音频源（点歌词/拖动进度但还没播放）时 currentTime 可能不可写：
+      // 只推进 UI 位置，等真正播放时再从音频元数据对齐，避免抛异常打断交互。
+      setPositionSec(target)
+    }
   }, [])
 
   const setVolume = useCallback((value: number) => {
