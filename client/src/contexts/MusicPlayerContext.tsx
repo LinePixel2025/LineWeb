@@ -170,6 +170,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         await audio.play()
         setLoading(false)
         setPlaying(true)
+        // 起播即落盘一次：刷新后顶栏仍能显示这首歌（不自动播放）
+        persist()
       } catch (err) {
         setLoading(false)
         setPlaying(false)
@@ -182,7 +184,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         setError(err instanceof Error && err.message ? err.message : '播放失败，请稍后再试')
       }
     })()
-  }, [getAudio])
+  }, [getAudio, persist])
 
   const next = useCallback(() => {
     playAt(pickNextIndex(modeRef.current, indexRef.current, queueRef.current.length))

@@ -23,12 +23,16 @@ interface RawSong {
   id?: number
   name?: string
   ar?: { name?: string; id?: number }[]
-  artists?: { name?: string; id?: number }[]
+  artists?: { name?: string; id?: number }[] | string
   al?: { name?: string; picUrl?: string; id?: number }
   album?: { name?: string; picUrl?: string; id?: number }
   dt?: number
   duration?: number
   fee?: number
+  // 下面几项是「已经归一化过的 SongView」形态（localStorage 里的播放队列会原样存回来）
+  albumName?: string
+  picUrl?: string | null
+  durationMs?: number
 }
 
 /**
@@ -48,15 +52,19 @@ export function upgradeMediaUrl(url: string | null | undefined): string | null {
 
 export function normalizeSong(raw: RawSong): SongView | null {
   if (raw?.id == null || !raw.name) return null
-  const artistList = raw.ar ?? raw.artists ?? []
+  const rawAr = raw.ar ?? raw.artists
+  const artistList = Array.isArray(rawAr) ? rawAr : []
   const album = raw.al ?? raw.album
   return {
     id: raw.id,
     name: raw.name,
-    artists: artistList.map(a => a?.name).filter(Boolean).join(' / '),
-    albumName: album?.name ?? '',
-    picUrl: upgradeMediaUrl(album?.picUrl),
-    durationMs: raw.dt ?? raw.duration ?? 0,
+    // 持久化队列里 artists 已经是拼接好的字符串，直接沿用（否则重载后歌手会丢）
+    artists: typeof rawAr === 'string'
+      ? rawAr
+      : artistList.map(a => a?.name).filter(Boolean).join(' / '),
+    albumName: raw.albumName ?? album?.name ?? '',
+    picUrl: upgradeMediaUrl(album?.picUrl ?? raw.picUrl),
+    durationMs: raw.dt ?? raw.duration ?? raw.durationMs ?? 0,
     fee: raw.fee ?? 0,
   }
 }

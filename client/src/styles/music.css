@@ -1,16 +1,11 @@
 /* ============================================================
-   网易云音乐（/music 页 + 正在播放卡 + 全局迷你播放条）
+   网易云音乐（/music 页 + 正在播放卡 + 顶栏内嵌播放器）
    命名空间 .gh-music-*；颜色只用全局 --gh-* 令牌（自动适配暗色）。
    ============================================================ */
 
 .gh-music-page {
   max-width: 1020px;
   padding-bottom: var(--gh-space-8);
-}
-
-/* 有迷你播放条时给页面留出底部空间，避免最后一行被挡住 */
-body:has(.gh-music-bar) .gh-page {
-  padding-bottom: 96px;
 }
 
 .gh-music-header {
@@ -307,8 +302,7 @@ body:has(.gh-music-bar) .gh-page {
   text-align: center;
 }
 
-.gh-music-now-track,
-.gh-music-bar-track {
+.gh-music-now-track {
   position: relative;
   flex: 1;
   height: 18px;
@@ -316,8 +310,7 @@ body:has(.gh-music-bar) .gh-page {
   align-items: center;
 }
 
-.gh-music-now-track::before,
-.gh-music-bar-track::before {
+.gh-music-now-track::before {
   content: '';
   position: absolute;
   inset-inline: 0;
@@ -326,8 +319,7 @@ body:has(.gh-music-bar) .gh-page {
   background: var(--gh-border-muted);
 }
 
-.gh-music-now-track-fill,
-.gh-music-bar-track-fill {
+.gh-music-now-track-fill {
   position: absolute;
   left: 0;
   height: 5px;
@@ -336,8 +328,7 @@ body:has(.gh-music-bar) .gh-page {
   pointer-events: none;
 }
 
-.gh-music-now-seek,
-.gh-music-bar-seek {
+.gh-music-now-seek {
   position: relative;
   z-index: 1;
   width: 100%;
@@ -351,14 +342,12 @@ body:has(.gh-music-bar) .gh-page {
 }
 
 /* 轨道透明（下面自绘进度条），只显示可抓的圆形滑块 */
-.gh-music-now-seek::-webkit-slider-runnable-track,
-.gh-music-bar-seek::-webkit-slider-runnable-track {
+.gh-music-now-seek::-webkit-slider-runnable-track {
   height: 18px;
   background: transparent;
 }
 
-.gh-music-now-seek::-webkit-slider-thumb,
-.gh-music-bar-seek::-webkit-slider-thumb {
+.gh-music-now-seek::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 12px;
@@ -369,14 +358,12 @@ body:has(.gh-music-bar) .gh-page {
   box-shadow: var(--gh-shadow-sm);
 }
 
-.gh-music-now-seek::-moz-range-track,
-.gh-music-bar-seek::-moz-range-track {
+.gh-music-now-seek::-moz-range-track {
   height: 18px;
   background: transparent;
 }
 
-.gh-music-now-seek::-moz-range-thumb,
-.gh-music-bar-seek::-moz-range-thumb {
+.gh-music-now-seek::-moz-range-thumb {
   width: 12px;
   height: 12px;
   border-radius: var(--gh-radius-pill);
@@ -384,15 +371,13 @@ body:has(.gh-music-bar) .gh-page {
   border: 2px solid var(--gh-canvas);
 }
 
-.gh-music-now-seek:focus-visible,
-.gh-music-bar-seek:focus-visible {
+.gh-music-now-seek:focus-visible {
   outline: none;
   box-shadow: var(--gh-focus-ring);
   border-radius: var(--gh-radius-pill);
 }
 
-.gh-music-now-track:hover::before,
-.gh-music-bar-track:hover::before {
+.gh-music-now-track:hover::before {
   background: var(--gh-border-strong);
 }
 
@@ -964,161 +949,252 @@ body:has(.gh-music-bar) .gh-page {
 .gh-music-search-input input::placeholder {
   color: var(--gh-text-placeholder);
 }
-
 /* ============================================================
-   全局迷你播放条（fixed 底部，跨页持续）
+   顶栏内嵌播放器（Header 中段，跨页持续；无歌时返回 null 不占位）
    ============================================================ */
 
-.gh-music-bar {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: max(12px, env(safe-area-inset-bottom));
-  width: min(880px, calc(100vw - 24px));
+.gh-music-hp {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--gh-space-3);
-  padding: 8px 14px;
-  border-radius: var(--gh-radius-lg);
+  gap: var(--gh-space-2);
+  width: min(100%, 620px);
+  min-width: 0;
+  height: 40px;
+  padding: 0 6px 0 5px;
   border: 1px solid var(--gh-border);
-  background: var(--gh-material-chrome);
-  backdrop-filter: blur(var(--gh-blur-chrome));
-  box-shadow: var(--gh-shadow-lg);
-  z-index: var(--gh-z-header, 1000);
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-canvas);
 }
 
-.gh-music-bar-info {
+.gh-music-hp--open {
+  border-color: var(--gh-border-strong);
+}
+
+.gh-music-hp-info {
   display: flex;
   align-items: center;
   gap: var(--gh-space-2);
   min-width: 0;
   flex: 1;
+  padding: 2px 2px 2px 3px;
+  border-radius: var(--gh-radius-pill);
   text-decoration: none;
 }
 
-.gh-music-bar-cover {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--gh-radius-sm);
-  object-fit: cover;
+.gh-music-hp-info:hover {
+  text-decoration: none;
+}
+
+.gh-music-hp-cover {
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
+  border-radius: var(--gh-radius-xs);
+  object-fit: cover;
   background: var(--gh-canvas-subtle);
 }
 
-.gh-music-bar-cover--fallback {
+.gh-music-hp-cover--fallback {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--gh-canvas-subtle);
   color: var(--gh-text-secondary);
 }
 
-.gh-music-bar-meta {
+.gh-music-hp-meta {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   min-width: 0;
+  line-height: 1.25;
 }
 
-.gh-music-bar-name {
+.gh-music-hp-name {
   color: var(--gh-text);
-  font-size: var(--gh-text-sm);
+  font-size: var(--gh-text-xs);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.gh-music-bar-trial {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 0 5px;
-  border-radius: var(--gh-radius-xs);
-  background: var(--gh-warning-soft);
-  color: var(--gh-warning);
-  font-size: 10px;
-  font-weight: 700;
-  vertical-align: 1px;
-}
-
-.gh-music-bar-artists {
+.gh-music-hp-artists {
   color: var(--gh-text-secondary);
-  font-size: var(--gh-text-xs);
+  font-size: var(--gh-type-caption-2, 11px);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.gh-music-bar-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--gh-space-1);
+.gh-music-hp-trial {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 4px;
+  border-radius: var(--gh-radius-xs);
+  background: var(--gh-warning-soft);
+  color: var(--gh-warning);
+  font-size: 9px;
+  font-weight: 700;
+  vertical-align: 1px;
 }
 
-.gh-music-bar-btn {
+.gh-music-hp-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.gh-music-hp-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: none;
   border-radius: var(--gh-radius-pill);
   background: none;
-  color: var(--gh-text);
+  color: var(--gh-text-secondary);
   cursor: pointer;
-  transition: background var(--gh-dur-1) var(--gh-ease-out);
+  transition: background var(--gh-dur-1) var(--gh-ease-out), color var(--gh-dur-1) var(--gh-ease-out);
 }
 
-.gh-music-bar-btn:hover {
+.gh-music-hp-btn:hover {
   background: var(--gh-btn-hover);
+  color: var(--gh-text);
 }
 
-.gh-music-bar-btn:disabled {
-  opacity: 0.5;
+.gh-music-hp-btn:disabled {
+  opacity: 0.55;
   cursor: default;
 }
 
-.gh-music-bar-btn--active {
+.gh-music-hp-btn--active {
   color: var(--gh-accent);
   background: var(--gh-accent-soft);
 }
 
-.gh-music-bar-btn--play {
+.gh-music-hp-btn--play {
+  width: 30px;
+  height: 30px;
   background: var(--gh-accent);
   color: var(--gh-on-accent);
 }
 
-.gh-music-bar-btn--play:hover {
+.gh-music-hp-btn--play:hover {
   background: var(--gh-accent-hover);
-  opacity: 1;
+  color: var(--gh-on-accent);
 }
 
-.gh-music-bar-progress {
+.gh-music-hp-progress {
   display: flex;
   align-items: center;
   gap: var(--gh-space-2);
-  flex: 2;
-  min-width: 140px;
+  flex: 1.4;
+  min-width: 120px;
+  max-width: 260px;
 }
 
-.gh-music-bar-time {
-  font-size: var(--gh-text-xs);
-  color: var(--gh-text-secondary);
+.gh-music-hp-time {
+  font-size: var(--gh-type-caption-2, 11px);
+  color: var(--gh-text-tertiary);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.gh-music-bar-extra {
+.gh-music-hp-track {
+  position: relative;
+  flex: 1;
+  height: 14px;
   display: flex;
   align-items: center;
-  gap: var(--gh-space-1);
 }
 
-/* 队列浮层 */
-.gh-music-bar-queue {
+.gh-music-hp-track::before {
+  content: '';
   position: absolute;
-  right: 10px;
-  bottom: calc(100% + 8px);
-  width: min(320px, 84vw);
+  inset-inline: 0;
+  height: 4px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-border-muted);
+}
+
+.gh-music-hp-track:hover::before {
+  background: var(--gh-border-strong);
+}
+
+.gh-music-hp-track-fill {
+  position: absolute;
+  left: 0;
+  height: 4px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-accent);
+  pointer-events: none;
+}
+
+.gh-music-hp-seek {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  margin: 0;
+  height: 14px;
+  background: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.gh-music-hp-seek::-webkit-slider-runnable-track {
+  height: 14px;
+  background: transparent;
+}
+
+.gh-music-hp-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-accent);
+  border: 2px solid var(--gh-canvas);
+  box-shadow: var(--gh-shadow-sm);
+}
+
+.gh-music-hp-seek::-moz-range-track {
+  height: 14px;
+  background: transparent;
+}
+
+.gh-music-hp-seek::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-accent);
+  border: 2px solid var(--gh-canvas);
+}
+
+.gh-music-hp-seek:focus-visible {
+  outline: none;
+  box-shadow: var(--gh-focus-ring);
+  border-radius: var(--gh-radius-pill);
+}
+
+.gh-music-hp-extra {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  padding-right: 2px;
+}
+
+/* 队列下拉（贴顶栏下方，右对齐） */
+.gh-music-hp-queue {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(320px, calc(100vw - 32px));
   max-height: 320px;
   display: flex;
   flex-direction: column;
@@ -1127,9 +1203,10 @@ body:has(.gh-music-bar) .gh-page {
   background: var(--gh-canvas);
   box-shadow: var(--gh-shadow-lg);
   overflow: hidden;
+  z-index: var(--gh-z-menu, 400);
 }
 
-.gh-music-bar-queue-head {
+.gh-music-hp-queue-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1139,14 +1216,14 @@ body:has(.gh-music-bar) .gh-page {
   font-weight: 600;
 }
 
-.gh-music-bar-queue-list {
+.gh-music-hp-queue-list {
   list-style: none;
   margin: 0;
   padding: var(--gh-space-1);
   overflow-y: auto;
 }
 
-.gh-music-bar-queue-item {
+.gh-music-hp-queue-item {
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -1158,16 +1235,16 @@ body:has(.gh-music-bar) .gh-page {
   cursor: pointer;
 }
 
-.gh-music-bar-queue-item:hover {
+.gh-music-hp-queue-item:hover {
   background: var(--gh-btn-hover);
 }
 
-.gh-music-bar-queue-item--active .gh-music-bar-queue-name {
+.gh-music-hp-queue-item--active .gh-music-hp-queue-name {
   color: var(--gh-accent);
   font-weight: 600;
 }
 
-.gh-music-bar-queue-name {
+.gh-music-hp-queue-name {
   font-size: var(--gh-text-sm);
   color: var(--gh-text);
   white-space: nowrap;
@@ -1175,7 +1252,7 @@ body:has(.gh-music-bar) .gh-page {
   text-overflow: ellipsis;
 }
 
-.gh-music-bar-queue-artists {
+.gh-music-hp-queue-artists {
   font-size: var(--gh-text-xs);
   color: var(--gh-text-secondary);
   white-space: nowrap;
@@ -1225,17 +1302,80 @@ body:has(.gh-music-bar) .gh-page {
   }
 }
 
+/* 顶栏播放器逐级收窄：先藏时间/进度，再藏模式键，最后只留封面 + 播放 + 下一首 */
+@media (max-width: 1180px) {
+  .gh-music-hp {
+    width: min(100%, 460px);
+  }
+
+  .gh-music-hp-time {
+    display: none;
+  }
+
+  .gh-music-hp-progress {
+    min-width: 90px;
+    flex: 1;
+  }
+}
+
+@media (max-width: 980px) {
+  .gh-music-hp {
+    width: min(100%, 360px);
+  }
+
+  .gh-music-hp-artists,
+  .gh-music-hp-mode {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  /* 顶栏空间有限：播放器收成定宽胶囊（封面 + 播放/暂停 + 队列），
+     定宽而不是 auto —— auto 在空间不足时会被压到只剩封面，按钮溢出胶囊 */
+  .gh-music-hp {
+    width: 106px;
+    gap: 0;
+    padding: 0 4px;
+  }
+
+  .gh-music-hp-meta,
+  .gh-music-hp-progress,
+  .gh-music-hp-btn--skip,
+  .gh-music-hp-mode {
+    display: none;
+  }
+
+  .gh-music-hp-info {
+    flex: 0 0 auto;
+    padding: 2px;
+  }
+
+  .gh-header-center {
+    padding: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  /* 更窄时只保留封面 + 播放/暂停（队列入口在音乐页仍有） */
+  .gh-music-hp {
+    width: 72px;
+    gap: 0;
+    padding: 0 2px;
+  }
+
+  .gh-music-hp-btn--queue {
+    display: none;
+  }
+}
+
+@media (max-width: 420px) {
+  /* 极窄屏让出品牌文字，保证播放器不被挤 */
+  .gh-header-brand-name {
+    display: none;
+  }
+}
+
 @media (max-width: 640px) {
-  .gh-music-bar {
-    flex-wrap: wrap;
-    padding: 8px 10px;
-  }
-
-  .gh-music-bar-progress {
-    order: 4;
-    flex-basis: 100%;
-  }
-
   .gh-music-song-index {
     display: none;
   }

@@ -39,6 +39,30 @@ describe('normalizeSong', () => {
     expect(normalizeSongList([null, { id: 4, name: 'ok' }, {}])).toHaveLength(1)
     expect(normalizeSongList('not-array')).toEqual([])
   })
+
+  it('已归一化的 SongView（localStorage 队列）可原样读回', () => {
+    // 排行榜播放过的队列会按 SongView 形态落到 localStorage，重载后必须能恢复，
+    // 否则 http 封面/歌手/时长都会丢（artists 是字符串时曾直接抛错导致队列被清空）
+    const song = normalizeSong({
+      id: 5,
+      name: '无意',
+      artists: '加木 / Demxntia',
+      albumName: '无意',
+      picUrl: 'http://p1.music.126.net/a==/1.jpg',
+      durationMs: 176767,
+      fee: 1,
+    })
+    expect(song).toEqual({
+      id: 5,
+      name: '无意',
+      artists: '加木 / Demxntia',
+      albumName: '无意',
+      // 持久化的 http 封面在这里也被升级为 https
+      picUrl: 'https://p1.music.126.net/a==/1.jpg',
+      durationMs: 176767,
+      fee: 1,
+    })
+  })
 })
 
 describe('formatSongDuration', () => {

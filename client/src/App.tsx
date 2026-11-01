@@ -16,7 +16,6 @@ import { ProtectedRoute, AdminRoute, RequireAuth, RequireFeature } from './compo
 import DownloadToast from './components/drive/DownloadToast'
 import GameInviteToast from './components/games/GameInviteToast'
 import ChatMessageToast from './components/chat/ChatMessageToast'
-import MusicPlayerBar from './components/music/MusicPlayerBar'
 
 // 路由级代码分割 — 所有页面和布局懒加载，减少首屏包体积
 const HomePage = lazy(() => import('./pages/HomePage'))
@@ -365,8 +364,7 @@ export default function App() {
               <GameInviteToast />
               {/* 新消息提示 — 任意页面（含游戏对局）都能收到聊天消息提醒 */}
               <ChatMessageToast />
-              {/* 全局音乐播放条 — 有播放中的歌曲时常驻底部，跨页持续播放 */}
-              <MusicPlayerBar />
+              {/* 音乐播放器已并入顶栏（Header），不再悬浮在页面底部遮挡内容 */}
             </MusicProvider>
             </DownloadProvider>
         </ThemeProvider>

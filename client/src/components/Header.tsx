@@ -5,6 +5,7 @@ import { useTheme } from '../contexts/ThemeContext'
 import { usePoints } from '../contexts/PointsContext'
 import UserAvatar from './UserAvatar'
 import UserTitleBadge from './UserTitleBadge'
+import MusicHeaderPlayer from './music/MusicHeaderPlayer'
 import Icon from './ui/Icon'
 
 interface Props {
@@ -60,7 +61,10 @@ export default memo(function Header({ onMenuToggle }: Props) {
           <span className="gh-header-brand-name">LineWeb</span>
         </Link>
 
-        <div className="gh-header-spacer" />
+        {/* 中间：音乐播放器（没有在播歌曲时是纯留白，顶栏布局不变） */}
+        <div className="gh-header-center">
+          <MusicHeaderPlayer />
+        </div>
 
         <div className="gh-header-actions">
           <button

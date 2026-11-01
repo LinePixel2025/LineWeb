@@ -76,7 +76,14 @@
 .gh-header-logo-mark { color: var(--gh-accent); flex-shrink: 0; }
 .gh-header-brand-name { white-space: nowrap; }
 
-.gh-header-spacer { flex: 1; }
+/* 顶栏中段：音乐播放器（无歌时即为留白，把右侧操作区推到边缘） */
+.gh-header-center {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  padding: 0 var(--gh-space-2);
+}
 
 .gh-header-actions {
   display: flex;

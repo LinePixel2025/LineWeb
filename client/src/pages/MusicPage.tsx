@@ -20,7 +20,7 @@ import type {
  *   - 未绑定：扫码登录卡（1.5s 轮询；含第三方接口登录的账号风控提示）
  *   - 已绑定：显示昵称 + 解绑
  *   - Tab：每日推荐（需绑定）/ 排行榜 / 搜索（单曲 + 歌单；未绑定匿名可搜可听免费歌）
- * 点歌即入队（playQueue），跨页播放由全局 MusicPlayerBar 承载。
+ * 点歌即入队（playQueue），跨页播放由顶栏内嵌播放器（MusicHeaderPlayer）承载。
  */
 
 type MainTab = 'recommend' | 'toplist' | 'search'
