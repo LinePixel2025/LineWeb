@@ -64,7 +64,10 @@ export default function LiarCardView({
     <>
       <span className="gh-liar-card-corner gh-liar-card-corner--tl">{faceDown ? '' : KIND_LABEL[kind ?? 'K']}</span>
       <span className="gh-liar-card-main">{faceDown ? '' : KIND_LABEL[kind ?? 'K']}</span>
-      <span className="gh-liar-card-corner gh-liar-card-corner--br">{faceDown ? '' : KIND_LABEL[kind ?? 'K']}</span>
+      {/* 真/假徽章占据底部中央；再有右下角标会挤在一起，因此有真假日志时只保留左上角标 */}
+      {!truthMark && (
+        <span className="gh-liar-card-corner gh-liar-card-corner--br">{faceDown ? '' : KIND_LABEL[kind ?? 'K']}</span>
+      )}
       {!faceDown && truthMark && (
         <span className={`gh-liar-card-truth gh-liar-card-truth--${truthClass}`}>{truthMark}</span>
       )}

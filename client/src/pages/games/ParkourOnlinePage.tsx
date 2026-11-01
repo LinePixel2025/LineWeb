@@ -582,6 +582,7 @@ export default function ParkourOnlinePage() {
                 onCancelInvite={cancelInvite}
                 onRespondInvite={respondInvite}
                 onRefresh={refreshLobby}
+                variant="embedded"
               />
             )}
           </section>

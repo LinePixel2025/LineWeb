@@ -38,7 +38,7 @@ export function LiarSeat({
       <div className="gh-l2-seat-copy">
         <p className="gh-l2-seat-name">
           <span className="gh-l2-seat-name-text">{name}</span>
-          {isMe && <span className="gh-l2-badge gh-l2-badge--me">你</span>}
+          {isMe && name !== '你' && <span className="gh-l2-badge gh-l2-badge--me">你</span>}
           {isHost && <span className="gh-l2-badge">房主</span>}
           {!alive && <span className="gh-l2-badge gh-l2-badge--dead">出局</span>}
         </p>

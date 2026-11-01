@@ -700,8 +700,7 @@
 .gh-chat-new-group,
 .gh-chat-head-icon,
 .gh-chat-head-icon--active,
-.gh-chat-thread-icon-btn,
-.gh-chat-thread-text-btn {
+.gh-chat-thread-icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -718,10 +717,36 @@
 }
 .gh-chat-new-group:hover,
 .gh-chat-head-icon:hover,
-.gh-chat-thread-icon-btn:hover,
-.gh-chat-thread-text-btn:hover { background: var(--gh-fill-2); color: var(--gh-text); }
+.gh-chat-thread-icon-btn:hover { background: var(--gh-fill-2); color: var(--gh-text); }
 .gh-chat-head-icon--active,
 .gh-chat-thread-icon-btn--active { background: var(--gh-fill-2); color: var(--gh-accent); }
+
+/* 「多选」是文字按钮，不能套用 30×30 图标按钮的尺寸（否则中文被压成两行） */
+.gh-chat-thread-actions .gh-chat-thread-text-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: 44px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-canvas);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  cursor: pointer;
+  transition: background var(--gh-transition), border-color var(--gh-transition), color var(--gh-transition);
+}
+.gh-chat-thread-actions .gh-chat-thread-text-btn:hover {
+  border-color: var(--gh-accent);
+  background: var(--gh-canvas);
+  color: var(--gh-accent);
+}
 
 /* 搜索框 */
 .gh-chat-search,
@@ -820,9 +845,19 @@
   padding: var(--gh-space-4) var(--gh-space-4) var(--gh-space-5);
   background: var(--gh-canvas);
 }
-.gh-chat-message-body { max-width: 68%; }
-.gh-chat-message-meta { padding: 0 4px; }
+.gh-chat-message-body { max-width: 72%; }
+.gh-chat-message-meta {
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  min-width: 0;
+  padding: 0 4px;
+  line-height: 1.4;
+}
 .gh-chat-message-sender { font-size: var(--gh-text-xs); font-weight: 600; }
+.gh-chat-message-time,
+.gh-chat-read-tag,
+.gh-chat-at-badge { flex: 0 0 auto; white-space: nowrap; }
 .gh-chat-message-time { color: var(--gh-text-tertiary); font-size: 11px; }
 
 .gh-chat-message-bubble {
@@ -854,6 +889,43 @@
 }
 .gh-chat-message-image-wrap { border-radius: var(--gh-radius-lg); }
 .gh-chat-message-sticker { filter: none; }
+
+/* 图片/表情加载失败：用紧凑占位块替代浏览器默认的 alt 文本 */
+.gh-chat-message-media-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(220px, 60vw);
+  padding: 8px 11px;
+  border: 1px dashed var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas-inset);
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.5;
+}
+
+.gh-chat-message-media-error-icon { font-size: 14px; line-height: 1; }
+
+/* 占位块直接落在消息画布上（不在蓝色气泡里），统一用浅灰底 + 次要文字色 */
+.gh-chat-message--own .gh-chat-message-media-error {
+  border-color: var(--gh-border);
+  background: var(--gh-canvas-inset);
+  color: var(--gh-text-secondary);
+}
+
+.gh-chat-sticker-broken {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--gh-radius-sm);
+  background: var(--gh-canvas-inset);
+  color: var(--gh-text-tertiary);
+  font-size: 11px;
+  line-height: 1;
+}
 
 .gh-chat-recall-line {
   align-self: center;
@@ -903,16 +975,22 @@
 }
 .gh-chat-poke--me { color: var(--gh-text-secondary); }
 
-/* 消息操作按钮 */
+/* 消息操作按钮：默认弱化，避免每条消息右侧都挂一颗灰圆点 */
 .gh-chat-message-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 24px;
   height: 24px;
+  flex: 0 0 auto;
+  padding: 0;
   border: 0;
   border-radius: var(--gh-radius-pill);
-  background: var(--gh-fill-2);
-  color: var(--gh-text-secondary);
+  background: transparent;
+  color: var(--gh-text-tertiary);
+  line-height: 1;
 }
-.gh-chat-message-more:hover { background: var(--gh-fill-3); color: var(--gh-text); }
+.gh-chat-message-more:hover { background: var(--gh-fill-2); color: var(--gh-text); }
 .gh-chat-action-menu {
   min-width: 160px;
   padding: 6px;
@@ -953,15 +1031,26 @@
   -webkit-backdrop-filter: var(--gh-blur-chrome);
   backdrop-filter: var(--gh-blur-chrome);
 }
+/* 工具按钮是文字胶囊：固定 32×32 会把「表情 / 图片 / 拍照」挤出按钮外 */
+.gh-chat-composer-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
 .gh-chat-composer-tool {
-  width: 32px;
-  height: 32px;
-  padding: 0;
+  width: auto;
+  min-width: 0;
+  height: 28px;
+  padding: 0 9px;
   border: 0;
   border-radius: var(--gh-radius-pill);
-  background: transparent;
+  background: var(--gh-canvas-inset);
   color: var(--gh-text-secondary);
-  font-size: var(--gh-text-base);
+  font-size: var(--gh-text-xs);
+  line-height: 1;
+  white-space: nowrap;
 }
 .gh-chat-composer-tool:hover:not(:disabled) { background: var(--gh-fill-2); color: var(--gh-accent); }
 .gh-chat-composer-tool--active { background: var(--gh-accent-soft); color: var(--gh-accent); }
@@ -979,9 +1068,17 @@
 }
 .gh-chat-composer-input:hover:not(:focus) { background: var(--gh-fill-2); }
 .gh-chat-composer-input:focus { background: var(--gh-canvas); box-shadow: var(--gh-focus-ring); }
-.gh-chat-composer-bar { gap: 8px; }
+.gh-chat-composer-bar {
+  gap: 8px;
+  row-gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
 .gh-chat-composer-count,
-.gh-chat-composer-tip { color: var(--gh-text-tertiary); font-size: 11px; }
+.gh-chat-composer-tip { color: var(--gh-text-tertiary); font-size: 11px; white-space: nowrap; }
+.gh-chat-composer-tip { margin-left: auto; }
+.gh-chat-composer-bar > .gh-btn { margin-left: auto; flex: 0 0 auto; white-space: nowrap; }
+.gh-chat-composer-bar > .gh-chat-composer-tip + .gh-btn { margin-left: 0; }
 .gh-chat-composer-hint { color: var(--gh-danger); font-size: var(--gh-text-xs); }
 
 /* ===== 弹层 / 面板 ===== */
@@ -1128,14 +1225,39 @@
 }
 .gh-chat-select-toggle--on { background: var(--gh-accent); color: var(--gh-on-accent); }
 
-/* 好友列表 */
+/* 好友列表：头像 + 名字占第一行，操作按钮独占第二行（避免 300px 侧栏里名字被挤成 “e…”） */
 .gh-chat-friend-row {
-  min-height: 52px;
-  padding: 8px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  min-height: 0;
+  padding: 9px 8px;
   border-radius: var(--gh-radius);
 }
 .gh-chat-friend-row:hover { background: var(--gh-canvas-inset); }
-.gh-chat-friend-name { font-size: var(--gh-text-sm); font-weight: 500; }
+.gh-chat-friend-row > :first-child { flex: 0 0 auto; }
+.gh-chat-friend-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--gh-text-sm);
+  font-weight: 500;
+}
+.gh-chat-friend-actions {
+  flex: 1 1 100%;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  padding-top: 1px;
+}
+.gh-chat-friend-actions .gh-btn {
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.gh-chat-friend-actions .gh-chat-game-btn { width: 24px; height: 24px; }
 .gh-chat-friend-section-title { color: var(--gh-text-tertiary); font-size: 11px; font-weight: 600; }
 .gh-chat-friend-empty { color: var(--gh-text-tertiary); font-size: var(--gh-text-sm); }
 

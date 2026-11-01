@@ -483,22 +483,25 @@
 .gh-uno-seat {
   display: flex;
   align-items: center;
-  gap: var(--gh-space-2);
-  padding: var(--gh-space-2) var(--gh-space-3);
-  background: var(--gh-bg);
-  border: 1px solid var(--gh-border);
-  border-radius: 10px;
+  gap: 10px;
+  min-height: 54px;
+  padding: 8px 10px;
+  background: var(--gh-canvas-subtle, var(--gh-bg));
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 14px;
 }
 
 .gh-uno-seat--empty {
+  min-height: 54px;
+  padding: 14px;
   color: var(--gh-text-tertiary);
   border-style: dashed;
-  font-size: var(--gh-text-sm);
+  font-size: var(--gh-text-xs);
 }
 
 .gh-uno-seat--me {
-  border-color: var(--gh-accent);
-  background: var(--gh-accent-soft);
+  border-color: color-mix(in srgb, var(--gh-accent) 55%, var(--gh-border));
+  background: color-mix(in srgb, var(--gh-accent) 7%, var(--gh-canvas));
 }
 
 .gh-uno-seat-order {
@@ -507,20 +510,34 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  background: var(--gh-canvas);
+  border-radius: 7px;
+  background: var(--gh-canvas-inset);
   color: var(--gh-text-secondary);
   font-family: var(--gh-font-mono);
-  font-size: var(--gh-text-xs);
+  font-size: 10px;
   flex-shrink: 0;
 }
 
 .gh-uno-seat-name {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  flex-wrap: nowrap;
   font-size: var(--gh-text-sm);
+  font-weight: 600;
+  line-height: 1.4;
   min-width: 0;
+}
+
+.gh-uno-seat-name > :first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-uno-seat-name .gh-game-room-badge {
+  flex: 0 0 auto;
 }
 
 .gh-uno-online-header {

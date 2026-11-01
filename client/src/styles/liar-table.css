@@ -115,8 +115,11 @@
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding-bottom: 2px;
+  /* 给回合金色高亮环与投影留出空间，避免顶部被裁成断边 */
+  margin: -4px -4px -6px;
+  padding: 4px 4px 6px;
   scrollbar-width: thin;
+  scroll-padding-inline: 4px;
 }
 
 .gh-l2-seat {
@@ -132,7 +135,7 @@
   border: 1px solid var(--gh-border);
   border-radius: 16px;
   background: var(--gh-canvas);
-  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
 .gh-l2-seat--me {
@@ -141,8 +144,12 @@
 
 .gh-l2-seat--turn {
   border-color: var(--l2-gold);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--l2-gold) 26%, transparent), 0 8px 24px rgba(60, 40, 15, 0.14);
-  transform: translateY(-1px);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--l2-gold) 11%, transparent), transparent 72%),
+    var(--gh-canvas);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--l2-gold) 24%, transparent),
+    0 10px 24px rgba(60, 40, 15, 0.12);
 }
 
 .gh-l2-seat--dead {
@@ -163,15 +170,22 @@
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
 }
 
-.gh-l2-seat-avatar > span,
-.gh-l2-seat-avatar img {
-  width: 38px;
-  height: 38px;
+/* 仅约束兜底头像；回合/离线圆点是独立 span，不能继承 38px 尺寸 */
+.gh-l2-seat-avatar > .gh-l2-seat-robot {
+  width: 100%;
+  height: 100%;
 }
 
 .gh-l2-seat-avatar img {
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   object-fit: cover;
+}
+
+.gh-l2-seat-avatar .gh-avatar-frame {
+  align-items: center;
+  justify-content: center;
 }
 
 .gh-l2-seat-robot {
@@ -185,12 +199,44 @@
   font-weight: 700;
 }
 
+.gh-l2-seat-robot--user {
+  position: relative;
+  color: transparent;
+  font-size: 0;
+}
+
+.gh-l2-seat-robot--user::before {
+  content: '';
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff4de;
+  transform: translateX(-50%);
+}
+
+.gh-l2-seat-robot--user::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  width: 20px;
+  height: 10px;
+  border-radius: 10px 10px 3px 3px;
+  background: #fff4de;
+  transform: translateX(-50%);
+}
+
 .gh-l2-seat-offline {
   position: absolute;
   right: -1px;
   bottom: -1px;
-  width: 10px;
-  height: 10px;
+  z-index: 2;
+  width: 9px;
+  height: 9px;
+  box-sizing: content-box;
   border-radius: 50%;
   border: 2px solid var(--gh-canvas);
   background: var(--gh-text-tertiary);
@@ -198,10 +244,12 @@
 
 .gh-l2-seat-turn-dot {
   position: absolute;
-  top: -3px;
-  right: -3px;
-  width: 12px;
-  height: 12px;
+  top: -1px;
+  right: -1px;
+  z-index: 2;
+  width: 10px;
+  height: 10px;
+  box-sizing: content-box;
   border-radius: 50%;
   border: 2px solid var(--gh-canvas);
   background: var(--l2-gold);
@@ -221,9 +269,14 @@
   gap: 5px;
   margin: 0;
   min-width: 0;
+  flex-wrap: nowrap;
   color: var(--gh-text);
   font-size: var(--gh-text-sm, 13px);
   font-weight: 600;
+}
+
+.gh-l2-seat-name .gh-l2-badge {
+  flex: 0 0 auto;
 }
 
 .gh-l2-seat-name-text {
@@ -235,8 +288,12 @@
 
 .gh-l2-seat-meta {
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
   color: var(--gh-text-tertiary);
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .gh-l2-seat-stack {
@@ -850,22 +907,23 @@
 .gh-liar-card-truth {
   position: absolute;
   left: 50%;
-  bottom: 5px;
+  bottom: 6px;
   z-index: 3;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 22px;
-  height: 16px;
-  padding: 0 5px;
+  min-width: 24px;
+  height: 17px;
+  padding: 0 6px;
   border-radius: 999px;
   transform: translateX(-50%);
   color: #fff;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0.02em;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
+  white-space: nowrap;
 }
 
 .gh-liar-card-truth--true {
@@ -1200,8 +1258,8 @@
 
   .gh-l2-seats {
     gap: 6px;
-    margin: 0 -2px;
-    padding: 2px 2px 4px;
+    margin: -4px -2px -6px;
+    padding: 4px 2px 6px;
   }
 
   .gh-l2-seat {
@@ -1210,8 +1268,11 @@
     gap: 6px;
   }
 
-  .gh-l2-seat-avatar,
-  .gh-l2-seat-avatar > span,
+  .gh-l2-seat-avatar {
+    width: 30px;
+    height: 30px;
+  }
+
   .gh-l2-seat-avatar img {
     width: 28px;
     height: 28px;

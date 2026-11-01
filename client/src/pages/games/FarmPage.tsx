@@ -307,6 +307,9 @@ export default function FarmPage() {
             <span className="gh-farm-sun" />
             <span className="gh-farm-cloud gh-farm-cloud--a" />
             <span className="gh-farm-cloud gh-farm-cloud--b" />
+            <span className="gh-farm-hills" />
+            <span className="gh-farm-barn" />
+            <span className="gh-farm-fence" />
           </div>
 
           <header className="gh-farm-scene-head">
@@ -357,14 +360,14 @@ export default function FarmPage() {
                     <span className="gh-farm-quota-icon" aria-hidden>🧺</span>
                     <div>
                       <strong>今日可偷 {view?.stealQuota.remaining ?? 0} / {view?.stealQuota.limit ?? 0} 次</strong>
-                      <span>偷菜有成功率，失败不扣次数（每日 0 点重置）</span>
+                      <span>失败不扣次数 · 每日 0 点重置</span>
                     </div>
                   </div>
                   <div className="gh-farm-quota">
                     <span className="gh-farm-quota-icon" aria-hidden>🛡️</span>
                     <div>
                       <strong>今日已被偷 {view?.victimQuota.used ?? 0} / {view?.victimQuota.limit ?? 0} 次</strong>
-                      <span>达到上限后今天没人能再偷你的菜</span>
+                      <span>达到上限后今天不可被偷</span>
                     </div>
                   </div>
                 </div>
@@ -740,7 +743,10 @@ function FarmPlotTile({
             </span>
           </>
         ) : (
-          <span className="gh-farm-tile-time">空地</span>
+          <>
+            <span className="gh-farm-tile-time">空地</span>
+            <span className="gh-farm-tile-hint">选一种种子，开始这一季</span>
+          </>
         )}
       </div>
 

@@ -234,6 +234,7 @@ export default function UnoOnlinePage() {
                   onCancelInvite={cancelInvite}
                   onRespondInvite={respondInvite}
                   onRefresh={refreshLobby}
+                  variant="embedded"
                 />
               )}
             </section>
@@ -474,7 +475,7 @@ function UnoOnlineStage({
                 isHost={player.userId === match.hostId}
                 online={player.online}
                 status={player.status === 'won' ? 'won' : player.status === 'lost' ? 'lost' : 'playing'}
-                avatar={<UserAvatar userId={player.userId} username={player.username} size="sm" />}
+                avatar={<UserAvatar userId={player.userId} username={player.username} size="md" />}
               />
             ))}
           </div>
@@ -603,3 +604,4 @@ function UnoOnlineStage({
     </>
   )
 }
+

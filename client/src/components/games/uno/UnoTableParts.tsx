@@ -62,7 +62,7 @@ export function UnoSeat({
       <div className="gh-u2-seat-copy">
         <p className="gh-u2-seat-name">
           <span className="gh-u2-seat-name-text">{name}</span>
-          {isMe && <span className="gh-u2-badge gh-u2-badge--me">你</span>}
+          {isMe && name !== '你' && <span className="gh-u2-badge gh-u2-badge--me">你</span>}
           {isHost && <span className="gh-u2-badge">房主</span>}
           {status === 'won' && <span className="gh-u2-badge gh-u2-badge--win">获胜</span>}
           {out && <span className="gh-u2-badge gh-u2-badge--out">出局</span>}

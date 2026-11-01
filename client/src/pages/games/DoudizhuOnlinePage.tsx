@@ -697,6 +697,7 @@ export default function DoudizhuOnlinePage() {
                   onCancelInvite={handleCancelInvite}
                   onRespondInvite={handleRespondInvite}
                   onRefresh={refreshLobby}
+                  variant="embedded"
                 />
               )}
             </section>

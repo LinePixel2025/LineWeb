@@ -95,8 +95,11 @@
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding-bottom: 2px;
+  /* 顶部留出 4px：回合座位的 2px 高亮环与投影不会被 overflow 裁掉 */
+  margin: -4px -4px -6px;
+  padding: 4px 4px 6px;
   scrollbar-width: thin;
+  scroll-padding-inline: 4px;
 }
 
 .gh-u2-seat {
@@ -112,7 +115,7 @@
   border: 1px solid var(--gh-border);
   border-radius: 16px;
   background: var(--gh-canvas);
-  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
 .gh-u2-seat--compact {
@@ -126,8 +129,12 @@
 
 .gh-u2-seat--turn {
   border-color: var(--u2-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--u2-accent) 30%, transparent), 0 8px 24px rgba(10, 40, 28, 0.18);
-  transform: translateY(-1px);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--u2-accent) 10%, transparent), transparent 72%),
+    var(--gh-canvas);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--u2-accent) 28%, transparent),
+    0 10px 24px rgba(10, 40, 28, 0.14);
 }
 
 .gh-u2-seat--out {
@@ -149,16 +156,22 @@
   overflow: visible;
 }
 
-.gh-u2-seat-avatar .gh-avatar-frame,
-.gh-u2-seat-avatar > span,
-.gh-u2-seat-avatar img {
-  width: 38px;
-  height: 38px;
+/* 只约束头像本体：回合圆点 / 离线圆点不参与尺寸继承（曾因选择器过宽被撑成 38px 绿块） */
+.gh-u2-seat-avatar > .gh-u2-seat-robot {
+  width: 100%;
+  height: 100%;
 }
 
 .gh-u2-seat-avatar img {
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   object-fit: cover;
+}
+
+.gh-u2-seat-avatar .gh-avatar-frame {
+  align-items: center;
+  justify-content: center;
 }
 
 .gh-u2-seat-robot {
@@ -173,12 +186,45 @@
   letter-spacing: 0.02em;
 }
 
+/* 单机“你”的座位用剪影，避免头像和名字各写一个“你” */
+.gh-u2-seat-robot--user {
+  position: relative;
+  color: transparent;
+  font-size: 0;
+}
+
+.gh-u2-seat-robot--user::before {
+  content: '';
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #eafff5;
+  transform: translateX(-50%);
+}
+
+.gh-u2-seat-robot--user::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  width: 20px;
+  height: 10px;
+  border-radius: 10px 10px 3px 3px;
+  background: #eafff5;
+  transform: translateX(-50%);
+}
+
 .gh-u2-seat-offline {
   position: absolute;
   right: -1px;
   bottom: -1px;
-  width: 10px;
-  height: 10px;
+  z-index: 2;
+  width: 9px;
+  height: 9px;
+  box-sizing: content-box;
   border-radius: 50%;
   border: 2px solid var(--gh-canvas);
   background: var(--gh-text-tertiary);
@@ -186,10 +232,12 @@
 
 .gh-u2-seat-turn-dot {
   position: absolute;
-  top: -3px;
-  right: -3px;
-  width: 12px;
-  height: 12px;
+  top: -1px;
+  right: -1px;
+  z-index: 2;
+  width: 10px;
+  height: 10px;
+  box-sizing: content-box;
   border-radius: 50%;
   border: 2px solid var(--gh-canvas);
   background: var(--u2-accent);
@@ -209,6 +257,7 @@
   gap: 5px;
   margin: 0;
   min-width: 0;
+  flex-wrap: nowrap;
   font-size: var(--gh-text-sm, 13px);
   font-weight: 600;
   color: var(--gh-text);
@@ -223,8 +272,16 @@
 
 .gh-u2-seat-meta {
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
   color: var(--gh-text-tertiary);
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-u2-seat-name .gh-u2-badge {
+  flex: 0 0 auto;
 }
 
 .gh-u2-seat-turn-text {
@@ -1089,8 +1146,8 @@
 
   .gh-u2-seats {
     gap: 6px;
-    margin: 0 -2px;
-    padding: 2px 2px 4px;
+    margin: -4px -2px -6px;
+    padding: 4px 2px 6px;
   }
 
   .gh-u2-seat {
@@ -1099,8 +1156,11 @@
     gap: 6px;
   }
 
-  .gh-u2-seat-avatar,
-  .gh-u2-seat-avatar > span,
+  .gh-u2-seat-avatar {
+    width: 30px;
+    height: 30px;
+  }
+
   .gh-u2-seat-avatar img {
     width: 28px;
     height: 28px;

@@ -1150,6 +1150,7 @@ export default function JumpOnlinePage() {
                   onCancelInvite={handleCancelInvite}
                   onRespondInvite={handleRespondInvite}
                   onRefresh={refreshLobby}
+                  variant="embedded"
                 />
               )}
             </section>

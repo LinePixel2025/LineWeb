@@ -286,7 +286,7 @@ export default function UnoPage() {
                 isTurn={myTurn}
                 isMe
                 status={me.alive ? 'playing' : 'lost'}
-                avatar={<span className="gh-u2-seat-robot">你</span>}
+                avatar={<span className="gh-u2-seat-robot gh-u2-seat-robot--user" />}
               />
             )}
           </div>
@@ -415,3 +415,4 @@ export default function UnoPage() {
     </div>
   )
 }
+

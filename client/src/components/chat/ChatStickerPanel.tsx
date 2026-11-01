@@ -27,6 +27,15 @@ type Tab = 'mine' | 'shop'
 /** 需要积分商店解锁的表情包（与服务端 emoji_* 商品 key 对应） */
 const LOCKED_PACKS = ['nailong', 'felyne', 'twemoji'] as const
 
+/** 表情缩略图：文件缺失时显示「失效」，而不是把 alt 文本铺在网格里 */
+function StickerImage({ src, alt }: { src: string; alt: string }) {
+  const [failed, setFailed] = useState(false)
+  if (failed) {
+    return <span className="gh-chat-sticker-broken" role="img" aria-label={`${alt}，加载失败`}>失效</span>
+  }
+  return <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} />
+}
+
 /**
  * 表情包面板：两页签
  *   - 我的表情：neko 的个人表情包（收藏的聊天图片）
@@ -170,7 +179,7 @@ export default function ChatStickerPanel({
                   title="发送表情"
                   onClick={() => onSend(sticker)}
                 >
-                  <img src={chatImageUrl(sticker.url)} alt="表情" loading="lazy" />
+                  <StickerImage src={chatImageUrl(sticker.url)} alt="表情" />
                 </button>
                 <button
                   type="button"
@@ -220,7 +229,7 @@ export default function ChatStickerPanel({
               const locked = !isPackUnlocked(sticker.pack)
               return (
                 <div key={sticker.id} className={`gh-chat-sticker-shop-item ${locked ? 'gh-chat-sticker-shop-item--locked' : ''}`}>
-                  <img src={sticker.src} alt={sticker.name} loading="lazy" />
+                  <StickerImage src={sticker.src} alt={sticker.name} />
                   <span className="gh-chat-sticker-shop-name">{sticker.name}</span>
                   {locked ? (
                     <Link className="gh-chat-sticker-shop-save gh-chat-sticker-shop-save--lock" to="/points">

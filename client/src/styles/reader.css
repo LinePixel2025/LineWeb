@@ -2003,7 +2003,7 @@
   }
 
   .gh-reader-grid {
-    grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
     gap: var(--gh-space-5) var(--gh-space-3);
   }
 

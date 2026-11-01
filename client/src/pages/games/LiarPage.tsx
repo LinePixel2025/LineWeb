@@ -274,7 +274,7 @@ export default function LiarPage() {
                 isTurn={myTurn}
                 isMe
                 alive={me.alive}
-                avatar={<span className="gh-l2-seat-robot">你</span>}
+                avatar={<span className="gh-l2-seat-robot gh-l2-seat-robot--user" />}
               />
             )}
           </div>
@@ -373,3 +373,4 @@ export default function LiarPage() {
     </div>
   )
 }
+

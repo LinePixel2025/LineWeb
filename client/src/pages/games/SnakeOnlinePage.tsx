@@ -1069,6 +1069,7 @@ export default function SnakeOnlinePage() {
                   onCancelInvite={handleCancelInvite}
                   onRespondInvite={handleRespondInvite}
                   onRefresh={refreshLobby}
+                  variant="embedded"
                 />
               )}
             </section>

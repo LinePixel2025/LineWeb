@@ -227,6 +227,7 @@ export default function XiangqiOnlinePage() {
                   onCancelInvite={cancelInvite}
                   onRespondInvite={respondInvite}
                   onRefresh={refreshLobby}
+                  variant="embedded"
                 />
               )}
             </section>

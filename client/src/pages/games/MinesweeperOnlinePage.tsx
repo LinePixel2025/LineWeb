@@ -894,6 +894,7 @@ export default function MinesweeperOnlinePage() {
                   onCancelInvite={handleCancelInvite}
                   onRespondInvite={handleRespondInvite}
                   onRefresh={refreshLobby}
+                  variant="embedded"
                 />
               )}
             </section>

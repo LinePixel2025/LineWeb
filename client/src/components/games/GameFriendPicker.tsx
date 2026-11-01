@@ -23,6 +23,11 @@ export interface GameFriendPickerProps {
   onCancelInvite: (inviteId: number) => void | Promise<void>
   onRespondInvite: (inviteId: number, action: 'accept' | 'decline') => void | Promise<void>
   onRefresh?: () => void
+  /**
+   * standalone：联机大厅首页使用，自带卡片外壳与内边距；
+   * embedded：等待房间内部使用，外层房间卡已经提供留白。
+   */
+  variant?: 'standalone' | 'embedded'
 }
 
 interface FriendRowProps {
@@ -118,6 +123,7 @@ export default function GameFriendPicker({
   onCancelInvite,
   onRespondInvite,
   onRefresh,
+  variant = 'standalone',
 }: GameFriendPickerProps) {
   const outgoingByFriendId = new Map<number, GameInvite>()
   for (const invite of outgoingInvites) outgoingByFriendId.set(invite.to.id, invite)
@@ -151,7 +157,7 @@ export default function GameFriendPicker({
   const sortByName = (list: GameFriend[]) => [...list].sort((a, b) => a.username.localeCompare(b.username, 'zh-CN'))
 
   return (
-    <div className="gh-game-friend-picker">
+    <div className={`gh-game-friend-picker${variant === 'standalone' ? ' gh-game-friend-picker--panel' : ''}`}>
       <div className="gh-game-friend-flow" aria-label="联机开桌流程">
         <span className="gh-game-friend-flow-step"><b>1</b> 邀请在线好友</span>
         <span className="gh-game-friend-flow-arrow" aria-hidden="true">→</span>

@@ -882,6 +882,7 @@ export default function GomokuOnlinePage() {
                   onCancelInvite={handleCancelInvite}
                   onRespondInvite={handleRespondInvite}
                   onRefresh={refreshLobby}
+                  variant="embedded"
                 />
               )}
             </section>

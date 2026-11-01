@@ -312,7 +312,7 @@
 .gh-stocks-chart-tabs {
   display: inline-flex;
   gap: 2px;
-  padding: 2px;
+  padding: 3px;
   border: 1px solid var(--gh-border-muted);
   border-radius: 999px;
   background: var(--gh-canvas-inset);

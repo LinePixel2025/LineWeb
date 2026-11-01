@@ -166,6 +166,7 @@ export default function GameRoomPanel({
             onCancelInvite={onCancelInvite}
             onRespondInvite={onRespondInvite}
             onRefresh={onRefresh}
+            variant="embedded"
           />
         )}
       </section>

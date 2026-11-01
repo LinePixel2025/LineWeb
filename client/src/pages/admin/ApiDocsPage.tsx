@@ -117,7 +117,9 @@ export default function ApiDocsPage() {
     fontFamily: 'var(--gh-font-mono)',
     fontSize: 'var(--gh-text-xs)',
     lineHeight: 1.6,
-    whiteSpace: 'pre',
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
     overflowX: 'auto',
     margin: 0,
   }

@@ -416,6 +416,7 @@
   gap: var(--gh-space-2);
   margin-top: var(--gh-space-7);
   padding-top: var(--gh-space-5);
+  padding-bottom: var(--gh-space-4);
   border-top: 1px solid var(--gh-border);
   text-align: center;
 }

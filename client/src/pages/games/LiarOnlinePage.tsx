@@ -260,6 +260,7 @@ export default function LiarOnlinePage() {
                   onCancelInvite={cancelInvite}
                   onRespondInvite={respondInvite}
                   onRefresh={refreshLobby}
+                  variant="embedded"
                 />
               )}
             </section>
@@ -486,7 +487,7 @@ function LiarOnlineStage({
                 isHost={player.userId === match.hostId}
                 online={player.online}
                 alive={player.status === 'playing' || player.status === 'won'}
-                avatar={<UserAvatar userId={player.userId} username={player.username} size="sm" />}
+                avatar={<UserAvatar userId={player.userId} username={player.username} size="md" />}
               />
             ))}
           </div>
@@ -577,3 +578,4 @@ function LiarOnlineStage({
     </>
   )
 }
+

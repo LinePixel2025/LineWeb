@@ -209,21 +209,7 @@ select.gh-input {
 .gh-pet-dock-group-title { color: var(--gh-text-tertiary); font-size: 11px; font-weight: 600; }
 .gh-pet-warn { border-radius: var(--gh-radius-lg); background: var(--gh-warning-soft); color: var(--gh-warning); }
 
-.gh-farm-scene-head,
-.gh-farm-toolbar,
-.gh-farm-aside > .gh-box,
-.gh-farm-create,
-.gh-farm-neighbors {
-  border-radius: var(--gh-radius-lg);
-  background: var(--gh-canvas);
-  box-shadow: var(--gh-shadow-card);
-}
-.gh-farm-tabs {
-  gap: 2px;
-  padding: 3px;
-  border-radius: var(--gh-radius);
-  background: var(--gh-canvas-inset);
-}
+/* 农场是独立的手账式场景，视觉由 farm.css 接管（不再套用通用白卡）。 */
 
 .gh-stocks-list,
 .gh-stocks-detail,

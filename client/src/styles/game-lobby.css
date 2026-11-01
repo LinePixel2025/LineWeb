@@ -2,31 +2,57 @@
    LineWeb — 联机大厅好友选择器 v2
    目标：把「邀请 → 接受 → 入座开始」的流程写在最上面，
    在线好友优先，离线好友收进折叠区。
+   大厅首页使用自带留白的 panel；等待房间内使用 embedded。
    ============================================================= */
 
 .gh-game-friend-picker {
   display: flex;
   flex-direction: column;
   gap: var(--gh-space-3, 12px);
+  min-width: 0;
 }
+
+.gh-game-friend-picker--panel {
+  padding: 18px;
+  border: 1px solid var(--gh-border);
+  border-radius: 20px;
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-sm);
+}
+
+/* 等待房间内由房间卡提供外壳，选择器本身不再套一层边框 */
+.gh-game-friend-picker:not(.gh-game-friend-picker--panel) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* ===== 流程条 ===== */
 
 .gh-game-friend-flow {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  padding: 10px 14px;
-  border: 1px solid var(--gh-border);
+  padding: 11px 15px;
+  border: 1px solid color-mix(in srgb, var(--gh-accent) 18%, var(--gh-border));
   border-radius: 14px;
-  background: var(--gh-canvas-subtle, var(--gh-canvas));
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--gh-accent) 7%, var(--gh-canvas-subtle)),
+    var(--gh-canvas-subtle) 55%
+  );
   color: var(--gh-text-secondary);
   font-size: var(--gh-text-xs);
+  line-height: 1.5;
 }
 
 .gh-game-friend-flow-step {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-height: 20px;
   white-space: nowrap;
 }
 
@@ -34,28 +60,34 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--gh-accent) 14%, transparent);
-  color: var(--gh-accent);
-  font-size: 10px;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  background: var(--gh-accent);
+  color: var(--gh-on-accent, #fff);
+  font-size: 11px;
   font-weight: 800;
+  line-height: 1;
 }
 
 .gh-game-friend-flow-arrow {
   color: var(--gh-text-tertiary);
   font-size: 12px;
+  opacity: 0.7;
 }
+
+/* ===== 分区 ===== */
 
 .gh-game-friend-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  min-width: 0;
 }
 
 .gh-game-friend-section--incoming {
-  padding: 12px;
+  padding: 14px;
   border: 1px solid color-mix(in srgb, var(--gh-accent) 28%, var(--gh-border));
   border-radius: 16px;
   background: color-mix(in srgb, var(--gh-accent) 5%, var(--gh-canvas));
@@ -65,10 +97,15 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
   margin: 0;
+  padding: 0;
+  border: 0;
   color: var(--gh-text);
   font-size: var(--gh-text-sm, 13px);
   font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.5;
 }
 
 .gh-game-friend-count {
@@ -83,6 +120,7 @@
   color: var(--gh-text-secondary);
   font-size: 10px;
   font-weight: 700;
+  line-height: 1;
 }
 
 .gh-game-friend-count--online {
@@ -91,13 +129,15 @@
 }
 
 .gh-game-friend-section--offline {
-  padding: 12px;
-  border: 1px solid var(--gh-border);
-  border-radius: 16px;
-  background: var(--gh-canvas);
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--gh-border-muted);
 }
 
 .gh-game-friend-section--offline > summary {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
   cursor: pointer;
   list-style: none;
 }
@@ -108,20 +148,75 @@
 
 .gh-game-friend-section--offline > summary::after {
   content: '展开';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  height: 24px;
   margin-left: auto;
-  color: var(--gh-text-tertiary);
+  padding: 0 10px;
+  border: 1px solid var(--gh-border);
+  border-radius: 999px;
+  background: var(--gh-canvas);
+  color: var(--gh-text-secondary);
   font-size: 11px;
-  font-weight: 400;
+  font-weight: 500;
+  line-height: 1;
 }
 
 .gh-game-friend-section--offline[open] > summary::after {
   content: '收起';
 }
 
+.gh-game-friend-section--offline > ul,
+.gh-game-friend-section--offline > .gh-game-friend-list {
+  margin-top: 4px;
+}
+
 .gh-game-friend-summary-hint {
   color: var(--gh-text-tertiary);
   font-size: 10px;
   font-weight: 400;
+}
+
+/* ===== 好友行 ===== */
+
+.gh-game-friend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gh-game-friend-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  min-height: 56px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  transition: background var(--gh-transition), border-color var(--gh-transition);
+}
+
+.gh-game-friend-row:hover {
+  background: var(--gh-canvas-inset);
+}
+
+.gh-game-friend-row--highlight {
+  border-color: var(--gh-accent);
+  background: var(--gh-accent-soft);
+}
+
+.gh-game-friend-row--invite {
+  background: var(--gh-canvas);
+  border-color: var(--gh-border-muted);
+}
+
+.gh-game-friend-row--busy .gh-game-friend-name {
+  color: var(--gh-text-secondary);
 }
 
 .gh-game-friend-row--offline {
@@ -131,6 +226,86 @@
 .gh-game-friend-row--offline .gh-game-friend-actions .gh-btn {
   font-size: 11px;
 }
+
+.gh-game-friend-avatar {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.gh-game-online-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--gh-canvas);
+  background: var(--gh-text-disabled);
+  box-sizing: content-box;
+}
+
+.gh-game-online-dot--online {
+  background: var(--gh-success-emphasis);
+}
+
+.gh-game-friend-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.gh-game-friend-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.gh-game-friend-name > :first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-game-friend-hint {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.gh-game-friend-meta {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.45;
+}
+
+.gh-game-friend-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-1);
+  flex-shrink: 0;
+}
+
+.gh-game-friend-actions .gh-btn {
+  min-width: 68px;
+  white-space: nowrap;
+}
+
+/* ===== 空状态 ===== */
 
 .gh-game-list-state--compact {
   align-items: flex-start;
@@ -150,9 +325,15 @@
 }
 
 @media (max-width: 720px) {
+  .gh-game-friend-picker--panel {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
   .gh-game-friend-flow {
+    gap: 6px;
+    padding: 10px 12px;
     font-size: 11px;
-    padding: 8px 10px;
   }
 
   .gh-game-friend-flow-arrow {
@@ -160,11 +341,13 @@
   }
 
   .gh-game-friend-row {
+    gap: 10px;
     align-items: center;
+    padding: 8px;
   }
 
   .gh-game-friend-actions .gh-btn {
-    min-width: 72px;
+    min-width: 64px;
     padding: 6px 10px;
   }
 }
