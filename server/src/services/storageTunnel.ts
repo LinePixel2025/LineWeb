@@ -610,6 +610,11 @@ export function initStorageTunnel(server: HttpServer) {
     ws.on('error', (err) => {
       console.error('Storage WebSocket error:', err)
     })
+
+    // 心跳应答：ws 把 pong 作为独立事件抛出（不会进 'message'），
+    // 空闲连接只有 pong 这一种存活信号，漏掉它会把健康连接误判为半开而断开。
+    ws.on('pong', () => liveness.set(ws, true))
+    ws.on('ping', () => liveness.set(ws, true))
   })
 
   // 心跳：每 30 秒 ping；连续一个周期没收到任何入站数据（pong 或消息）就判定链路已死。
