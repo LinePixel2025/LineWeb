@@ -133,16 +133,19 @@ async function callNcmRaw(
   query: Record<string, unknown> = {},
   retried = false,
 ): Promise<NcmResponse> {
-  try {
+  // 整个调用（含首次懒加载与运行时初始化）都纳入超时：初始化在弱网/出站受限时
+  // 也可能卡住，此前只包住 fn()，会让前端一直停在「加载中」。
+  const invoke = async (): Promise<NcmResponse> => {
     const api = await getNcmApi()
     const fn = api[fnName]
     if (typeof fn !== 'function') {
       throw new AppError(`网易云音乐接口 ${fnName} 不可用`, 502)
     }
-    return await Promise.race([
-      fn({ ...query, timestamp: Date.now() }),
-      ncmTimeout(),
-    ])
+    return fn({ ...query, timestamp: Date.now() })
+  }
+
+  try {
+    return await Promise.race([invoke(), ncmTimeout()])
   } catch (err) {
     if (err instanceof AppError) throw err
     if (!retried && isNcmInitError(err)) {

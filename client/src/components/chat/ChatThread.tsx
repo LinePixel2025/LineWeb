@@ -7,7 +7,7 @@ import ChatBundleDialog from './ChatBundleDialog'
 import ChatRedPacketDialog from './ChatRedPacketDialog'
 import ChatRedPacketCreateDialog, { type ChatRedPacketTarget } from './ChatRedPacketCreateDialog'
 import ChatForwardDialog from './ChatForwardDialog'
-import ChatMessageRow from './ChatMessageRow'
+import ChatMessageRow, { type ChatMessageSender } from './ChatMessageRow'
 import MessageActionMenu, { type MessageActionItem } from './MessageActionMenu'
 import UserTitleBadge from '../UserTitleBadge'
 import Icon from '../ui/Icon'
@@ -160,6 +160,26 @@ function avatarOf(
   }
 }
 
+/** 称号值比较：轮询会重建同名同色的 title 对象，按字段比才能复用旧引用 */
+function sameTitleValue(a: UserTitleDto | null, b: UserTitleDto | null): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return a.id === b.id
+    && a.name === b.name
+    && a.color === b.color
+    && a.icon === b.icon
+    && a.rarity === b.rarity
+    && a.effect === b.effect
+}
+
+function sameSender(a: ChatMessageSender, b: ChatMessageSender): boolean {
+  return a.id === b.id
+    && a.nekoId === b.nekoId
+    && a.avatarVersion === b.avatarVersion
+    && a.name === b.name
+    && sameTitleValue(a.title, b.title)
+}
+
 export default function ChatThread({
   conversation,
   selfNekoId,
@@ -203,6 +223,12 @@ export default function ChatThread({
   const previousScrollHeightRef = useRef(0)
   const previousLastIdRef = useRef<number | null>(null)
   const previousCountRef = useRef(0)
+  /**
+   * 发送者信息按「会话 + 用户名」缓存：轮询刷新会重建 conversation / contact 对象，
+   * 若每轮都生成新的 sender 对象，消息行的 memo 全部失效（几十行一起重渲染）。
+   * 值没变时复用旧对象，行就真的可以跳过渲染。
+   */
+  const senderCacheRef = useRef(new Map<string, ChatMessageSender>())
 
   const [membersOpen, setMembersOpen] = useState(false)
   const [memberQuery, setMemberQuery] = useState('')
@@ -665,6 +691,18 @@ export default function ChatThread({
     : false
   const showAnnouncementBanner = !!roomInfo?.announcement && !announcementDismissed
 
+  /** 复用值没变的 sender 对象（轮询刷新 / 选中切换时保住消息行的 memo） */
+  const stableSenderOf = (target: NekoConversation, message: NekoMessage): ChatMessageSender => {
+    const key = `${target.key}:${message.fromUsername}`
+    const next = avatarOf(target, message)
+    const cache = senderCacheRef.current
+    const cached = cache.get(key)
+    if (cached && sameSender(cached, next)) return cached
+    if (cache.size > 400) cache.clear()
+    cache.set(key, next)
+    return next
+  }
+
   // 预计算每行的日期/分组合并/sender，消息行本身是 memo：切换选中、回到底部时
   // 只有真正变化的行重渲染。
   const messageRows = useMemo(() => {
@@ -688,7 +726,7 @@ export default function ChatThread({
         own: message.mine,
         grouped,
         dayLabel: showDay ? formatDaySeparator(message.ts) : null,
-        sender: avatarOf(conversation, message),
+        sender: stableSenderOf(conversation, message),
         selected: selectedIds.has(message.id),
         flash: flashId === message.id,
         active: actionMenu?.message.id === message.id,
@@ -957,7 +995,7 @@ export default function ChatThread({
                     />
                     <span className="gh-chat-member-name">
                       <span className="gh-chat-name-text">{member.displayName || member.username}</span>
-                      <UserTitleBadge title={member.title} />
+                      <UserTitleBadge title={member.title} variant="compact" />
                         {member.online && <span className="gh-chat-member-online" title="在线" />}
                     </span>
                     {member.role === 'owner' && <span className="gh-chat-member-role">群主</span>}

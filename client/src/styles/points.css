@@ -1551,3 +1551,22 @@
   .gh-header-points-value { display: none; }
   .gh-points-hero-value { font-size: 2rem; }
 }
+
+/* ===== 聊天内紧凑称号徽章（variant="compact"） =====
+   会话列表 / 消息行 / 群成员列表同屏可能出现几十个称号。完整传说特效每个徽章要跑
+   7~13 个合成层动画（旋转光晕 + 扫光 + 8 颗粒子 + 呼吸阴影），老旧设备上会明显掉帧。
+   compact 保留同一套静态渐变配色 + 图标文字（辨识度不变），但不渲染动画层，
+   并强制关闭徽章自身的流光 / 呼吸动画。 */
+.gh-title-badge--compact { animation: none; }
+.gh-title-badge--compact.gh-title-badge--legendary { animation: none; }
+.gh-title-badge--compact::before { display: none; }
+/* fx 变体的 animation 声明是双类特异性，必须逐个显式关闭（本条位于文件末尾，后写覆盖） */
+.gh-title-badge--compact.gh-title-badge--fx-stardust,
+.gh-title-badge--compact.gh-title-badge--fx-flame,
+.gh-title-badge--compact.gh-title-badge--fx-aurora,
+.gh-title-badge--compact.gh-title-badge--fx-thunder,
+.gh-title-badge--compact.gh-title-badge--fx-nova,
+.gh-title-badge--compact.gh-title-badge--fx-prism,
+.gh-title-badge--compact.gh-title-badge--fx-void {
+  animation: none;
+}

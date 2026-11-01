@@ -23,6 +23,96 @@ const MODES: MusicPlayMode[] = ['order', 'repeat', 'shuffle']
 const SILENT_CLIP =
   'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA='
 
+/** 首选音质播不了时（网络/版权/上游降级）兜底的标准音质 */
+const FALLBACK_LEVEL = 'standard'
+/** 设置 src 后等待真正出声的上限：超过即判定音频源不可达，避免加载态无限转圈 */
+const PLAY_WATCHDOG_MS = 20_000
+
+/**
+ * 媒体层播放失败（与浏览器拒绝自动播放的 NotAllowedError 区分开）：
+ * 前者说明音频地址拿不到/加载不出来，可以降级音质重试；后者要等下一次用户手势。
+ */
+export class MediaPlaybackError extends Error {
+  reason: 'timeout' | 'media'
+  constructor(reason: 'timeout' | 'media', message: string) {
+    super(message)
+    this.name = 'MediaPlaybackError'
+    this.reason = reason
+  }
+}
+
+/** 读取偏好音质（localStorage 已被别处破坏时回退 exhigh） */
+function readPreferredLevel(): string {
+  try {
+    const stored = localStorage.getItem(LEVEL_KEY) ?? 'exhigh'
+    return (SONG_LEVELS as readonly string[]).includes(stored) ? stored : 'exhigh'
+  } catch {
+    return 'exhigh'
+  }
+}
+
+/**
+ * 播放地址请求失败是否值得降级重试：401/403（登录或权限）与 429（限流）重试无意义。
+ */
+function isRetryableSongUrlError(err: unknown): boolean {
+  const status = (err as { status?: number } | null)?.status
+  return !(status === 401 || status === 403 || status === 429)
+}
+
+/**
+ * 真正让 <audio> 出声：设置 src 后同时等 play() 与媒体事件。
+ *
+ * 老设备/受限网络里，音频 CDN 不可达时 play() 可能永远不 resolve（浏览器媒体栈
+ * 不报错也不超时），表现为「点歌后一直转圈、没声音」。这里用看门狗兜底，
+ * 超时或 error 事件都立刻失败，交给上层降级音质/给出可操作提示。
+ */
+export function playAudioSource(
+  audio: HTMLAudioElement,
+  url: string,
+  timeoutMs: number = PLAY_WATCHDOG_MS,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    let timer: number | null = null
+
+    const cleanup = () => {
+      if (timer !== null) {
+        window.clearTimeout(timer)
+        timer = null
+      }
+      audio.removeEventListener('error', onError)
+      audio.removeEventListener('abort', onAbort)
+    }
+    const finish = (action: () => void) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      action()
+    }
+    const onError = () => finish(() => reject(new MediaPlaybackError('media', '音频源加载失败')))
+    const onAbort = () => finish(() => reject(new DOMException('播放已取消', 'AbortError')))
+
+    audio.addEventListener('error', onError)
+    audio.addEventListener('abort', onAbort)
+    timer = window.setTimeout(
+      () => finish(() => reject(new MediaPlaybackError('timeout', '音频加载超时'))),
+      timeoutMs,
+    )
+
+    audio.src = url
+    // 部分老浏览器替换 src 后不会自动发起请求，必须显式 load()
+    try {
+      audio.load()
+    } catch {
+      // 某些 WebView 上 load() 可能抛异常，继续尝试 play()
+    }
+    audio.play().then(
+      () => finish(() => resolve()),
+      (err) => finish(() => reject(err)),
+    )
+  })
+}
+
 interface PersistedState {
   queue: SongView[]
   index: number
@@ -100,6 +190,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [trialEndSec, setTrialEndSec] = useState<number | null>(null)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  /** 正在走「取地址 → 出声」流程：此刻媒体 error 由播放流程自己降级处理，不要弹全局错误 */
+  const startingRef = useRef(false)
+  /** 播放请求令牌：连点切歌时丢弃过期流程的状态写入 */
+  const playTokenRef = useRef(0)
   const indexRef = useRef(index)
   const modeRef = useRef(mode)
   const queueRef = useRef(queue)
@@ -129,6 +223,15 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       const audio = new Audio()
       audio.preload = 'metadata'
       audio.volume = initial.volume
+      // 挂进文档：老浏览器 / 老 WebView 里游离的 Audio 对象可能不真正播放
+      // （表现为 play() 不报错也没声音）。隐藏后不影响布局。
+      try {
+        audio.setAttribute('playsinline', '')
+        audio.style.display = 'none'
+        document.body.appendChild(audio)
+      } catch {
+        // 极端环境（无 document.body）下退回游离元素
+      }
       audioRef.current = audio
     }
     return audioRef.current
@@ -146,33 +249,84 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     setPositionSec(0)
     setDurationSec(target.durationMs > 0 ? target.durationMs / 1000 : 0)
 
+    // 连点切歌时旧请求可能后返回：用递增令牌让过期流程不再改动播放器状态
+    const token = (playTokenRef.current += 1)
+
     void (async () => {
+      startingRef.current = true
+      const audio = getAudio()
+      const preferred = readPreferredLevel()
+      // 首选音质失败后降到标准音质再试一次：老设备/弱网对高码率更敏感
+      const levels = preferred === FALLBACK_LEVEL ? [preferred] : [preferred, FALLBACK_LEVEL]
+      let lastError: unknown = null
+      let noSource = false
+
       try {
-        const storedLevel = localStorage.getItem(LEVEL_KEY) ?? 'exhigh'
-        const level = (SONG_LEVELS as readonly string[]).includes(storedLevel) ? storedLevel : 'exhigh'
-        const data = await api.get<MusicSongUrlResponse>(`/music/song/url?id=${target.id}&level=${level}`)
-        const entry = data.data?.[0]
-        // 服务端已把网易 CDN 地址升级为 https，这里再兜一层（旧缓存 / 上游变化）
-        const url = upgradeMediaUrl(entry?.url)
-        if (!url) {
-          setLoading(false)
-          setPlaying(false)
+        for (const level of levels) {
+          let url = ''
+          try {
+            const data = await api.get<MusicSongUrlResponse>(`/music/song/url?id=${target.id}&level=${level}`)
+            // 已经切到别的歌：本次请求的后续动作全部作废
+            if (token !== playTokenRef.current) return
+            const entry = data.data?.[0]
+            // 服务端已把网易 CDN 地址升级为 https，这里再兜一层（旧缓存 / 上游变化）
+            url = upgradeMediaUrl(entry?.url) ?? ''
+            if (!url) {
+              // 版权限制/需要付费时上游会返回空地址：换音质也没用，直接收尾
+              noSource = true
+              continue
+            }
+            // VIP 试听片段：上游会在 freeTrialInfo 里给出截断区间（只用于 UI 提示，时长以音频元数据为准）
+            const trial = entry?.freeTrialInfo
+            setTrialEndSec(trial && typeof trial.end === 'number' && trial.end > 0 ? trial.end : null)
+          } catch (err) {
+            lastError = err
+            if (!isRetryableSongUrlError(err)) throw err
+            continue
+          }
+
+          try {
+            await playAudioSource(audio, url)
+            if (token !== playTokenRef.current) return
+            setLoading(false)
+            setPlaying(true)
+            // 起播即落盘一次：刷新后顶栏仍能显示这首歌（不自动播放）
+            persist()
+            return
+          } catch (err) {
+            if (token !== playTokenRef.current) return
+            // 浏览器拒绝播放 / 用户取消：不降级，交给外层统一提示
+            if (err instanceof DOMException && (err.name === 'AbortError' || err.name === 'NotAllowedError')) throw err
+            lastError = err
+            // 加载不出来就继续尝试下一个音质
+          }
+        }
+
+        if (token !== playTokenRef.current) return
+        // 所有音质都失败：清掉坏地址，下次点击重新取地址（而不是重复播放同一个坏链接）
+        try {
+          audio.removeAttribute('src')
+          audio.load()
+        } catch {
+          // ignore
+        }
+        setLoading(false)
+        setPlaying(false)
+        if (lastError instanceof MediaPlaybackError) {
+          setError('音频加载失败：这台设备的网络可能无法直连网易云音乐 CDN，请检查网络后重试')
+          return
+        }
+        if (lastError instanceof Error && lastError.message) {
+          setError(lastError.message)
+          return
+        }
+        if (noSource) {
           setError(`《${target.name}》暂无可播放的音频源（版权限制）`)
           return
         }
-        // VIP 试听片段：上游会在 freeTrialInfo 里给出截断区间（只用于 UI 提示，时长以音频元数据为准）
-        const trial = entry?.freeTrialInfo
-        const trialEnd = trial && typeof trial.end === 'number' && trial.end > 0 ? trial.end : null
-        setTrialEndSec(trialEnd)
-
-        const audio = getAudio()
-        audio.src = url
-        await audio.play()
-        setLoading(false)
-        setPlaying(true)
-        // 起播即落盘一次：刷新后顶栏仍能显示这首歌（不自动播放）
-        persist()
+        setError('播放失败，请稍后再试')
       } catch (err) {
+        if (token !== playTokenRef.current) return
         setLoading(false)
         setPlaying(false)
         if (err instanceof DOMException && err.name === 'AbortError') return
@@ -182,6 +336,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
           return
         }
         setError(err instanceof Error && err.message ? err.message : '播放失败，请稍后再试')
+      } finally {
+        // 只有最新的流程才有资格结束「启动中」标记（旧流程可能在新的流程开始后才返回）
+        if (token === playTokenRef.current) startingRef.current = false
       }
     })()
   }, [getAudio, persist])
@@ -217,7 +374,13 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       return
     }
     if (audio.paused) {
-      void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false))
+      void audio.play().then(() => setPlaying(true)).catch((err) => {
+        setPlaying(false)
+        // 多半是浏览器要求「用户手势」：给出可操作提示而不是静默失败
+        if (err instanceof DOMException && err.name === 'NotAllowedError') {
+          setError('浏览器阻止了播放，请在页面上点一下后再试')
+        }
+      })
     } else {
       audio.pause()
       setPlaying(false)
@@ -282,6 +445,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       const current = audio.currentSrc || audio.src
       // 静音解锁片段 / 已清空 src 的中间态不算错误
       if (!current || current.startsWith('data:')) return
+      // 正在取地址/降级重试：交给 playAt 的看门狗与兜底流程收尾，避免抢先弹错
+      if (startingRef.current) {
+        setPlaying(false)
+        return
+      }
       setError('音频加载失败，请尝试切换曲目')
       setPlaying(false)
       setLoading(false)
@@ -338,11 +506,16 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       }
       void audio.play().then(cleanup, cleanup)
     }
-    document.addEventListener('pointerdown', unlock, { capture: true, once: true })
-    document.addEventListener('keydown', unlock, { capture: true, once: true })
+    // 老 iOS Safari 没有 Pointer Events，只监听 pointerdown 会让音频永远无法解锁；
+    // touchstart / mousedown / click 都要接上（都只触发一次，重复触发由 unlocked 兜底）。
+    const unlockEvents = ['pointerdown', 'touchstart', 'mousedown', 'click', 'keydown'] as const
+    for (const name of unlockEvents) {
+      document.addEventListener(name, unlock, { capture: true, once: true })
+    }
     return () => {
-      document.removeEventListener('pointerdown', unlock, true)
-      document.removeEventListener('keydown', unlock, true)
+      for (const name of unlockEvents) {
+        document.removeEventListener(name, unlock, true)
+      }
     }
   }, [getAudio])
 
@@ -359,10 +532,20 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         })
       } catch { /* 旧浏览器忽略 */ }
     }
-    navigator.mediaSession.setActionHandler('play', () => toggle())
-    navigator.mediaSession.setActionHandler('pause', () => toggle())
-    navigator.mediaSession.setActionHandler('previoustrack', () => prev())
-    navigator.mediaSession.setActionHandler('nexttrack', () => next())
+    // 部分浏览器只支持部分 action，遇到不支持的会抛 NotSupportedError（不能让整个 Provider 崩掉）
+    const handlers: [MediaSessionAction, () => void][] = [
+      ['play', () => toggle()],
+      ['pause', () => toggle()],
+      ['previoustrack', () => prev()],
+      ['nexttrack', () => next()],
+    ]
+    for (const [action, handler] of handlers) {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler)
+      } catch {
+        // 该浏览器不支持这个媒体键，忽略
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [song])
 

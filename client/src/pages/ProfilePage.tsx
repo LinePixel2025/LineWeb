@@ -10,6 +10,7 @@ import { Button, Badge, Alert, SegmentedControl, Input, Icon } from '../componen
 import api from '../lib/api'
 import { appScopeLabel, isHighRiskScope } from '../lib/appScopes'
 import { roleLabel } from '../lib/permissions'
+import { useLowPerformanceMode } from '../lib/performanceMode'
 
 interface UserGrant {
   id: number
@@ -26,6 +27,7 @@ interface UserGrant {
 export default function ProfilePage() {
   const { user, logout, updateProfile } = useAuth()
   const { profile: pointsProfile, refresh: refreshPoints } = usePoints()
+  const [lowPerformanceMode, setLowPerformanceMode] = useLowPerformanceMode()
   const navigate = useNavigate()
   const location = useLocation()
   const [activeTab, setActiveTab] = useState(() => location.hash === '#digital-health' ? 'digital-health' : 'overview')
@@ -362,6 +364,37 @@ export default function ProfilePage() {
                 </form>
                 {passwordSuccess && <Alert variant="success">密码已修改，其他设备已退出登录</Alert>}
                 {passwordError && <Alert variant="danger">{passwordError}</Alert>}
+              </section>
+
+              <section className="gh-settings-group" aria-labelledby="profile-perf-title">
+                <div className="gh-settings-head">
+                  <span className="gh-settings-icon" aria-hidden="true"><Icon name="sparkles" size={16} /></span>
+                  <div>
+                    <h2 className="gh-settings-title" id="profile-perf-title">性能与动效</h2>
+                    <p className="gh-settings-desc">老旧设备、集成显卡或开启省电模式时，可以削弱界面上的动态特效。</p>
+                  </div>
+                </div>
+                <div className="gh-settings-list">
+                  <label className="gh-settings-row gh-perf-row">
+                    <span className="gh-settings-label">
+                      <span className="gh-perf-row-title">低性能模式</span>
+                      <span className="gh-perf-row-hint">
+                        称号保留配色但关闭粒子、旋转光晕与扫光，头像框粒子与聊天装饰动画一并减弱
+                        （不是完全关闭）。设置只保存在这台设备，不影响其他设备。
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={lowPerformanceMode}
+                      aria-label={`低性能模式：${lowPerformanceMode ? '已开启' : '已关闭'}`}
+                      className={`gh-feature-switch ${lowPerformanceMode ? 'gh-feature-switch--on' : ''}`}
+                      onClick={() => setLowPerformanceMode(!lowPerformanceMode)}
+                    >
+                      <span className="gh-feature-switch-knob" />
+                    </button>
+                  </label>
+                </div>
               </section>
 
               <section className="gh-settings-group">

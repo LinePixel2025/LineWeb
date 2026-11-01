@@ -116,7 +116,9 @@ export default memo(function ChatConversationList({
                           </span>
                         )}
                         <span className="gh-chat-name-text">{conversation.title}</span>
-                        {conversation.kind === 'direct' && <UserTitleBadge title={conversation.contact?.title} />}
+                        {conversation.kind === 'direct' && (
+                          <UserTitleBadge title={conversation.contact?.title} variant="compact" />
+                        )}
                         {conversation.kind === 'direct' && conversation.online && (
                           <span className="gh-chat-online-dot" aria-label="在线" title="在线" />
                         )}

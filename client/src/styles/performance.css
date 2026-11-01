@@ -1,0 +1,78 @@
+/* 低性能模式（个人资料 → 性能与动效）
+ *
+ * 面向老设备 / 集显 / 省电模式：不做「一刀切关掉全部效果」，只削弱最费的合成层——
+ * 称号的旋转光晕、扫光、8 颗粒子、爆裂层全部去掉，保留静态渐变底色；
+ * 再用一个很轻的 opacity 呼吸（走合成器，不触发重绘）保留一点「活」的感觉。
+ * 与 prefers-reduced-motion 的区别：后者是完全静止，这里是「弱化」。
+ *
+ * 开关状态写在 <html data-perf="low">，由 lib/performanceMode.ts 维护，
+ * 因此聊天里已有实例（消息行 / 会话列表）会立刻跟着降级，不需要重新渲染。
+ */
+
+/* ---- 个人资料页开关行 ---- */
+.gh-perf-row { cursor: pointer; }
+.gh-perf-row .gh-settings-label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 46rem;
+}
+.gh-perf-row-title { color: var(--gh-text); font-size: var(--gh-text-sm); font-weight: 600; }
+.gh-perf-row-hint { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); line-height: 1.55; }
+.gh-perf-row .gh-feature-switch { flex-shrink: 0; }
+
+/* ---- 称号：粒子 / 光环 / 旋转伪元素全部隐藏，保留静态底 + 一次慢速柔光 ---- */
+html[data-perf='low'] .gh-title-badge--legendary,
+html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-stardust,
+html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-flame,
+html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-aurora,
+html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-thunder,
+html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-nova,
+html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-prism,
+html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-void {
+  animation: none;
+}
+html[data-perf='low'] .gh-title-badge--legendary::before { display: none; }
+html[data-perf='low'] .gh-title-badge-sparks,
+html[data-perf='low'] .gh-title-badge-burst { display: none; }
+/* 内层扫光只保留 opacity 呼吸：合成器动画，代价远低于背景位移 / 阴影脉冲。
+   各 fx 变体的 aura 动画是「双类 + 后代类」特异性，这里用 !important 统一压成呼吸，
+   但保留各自的扫光配色渐变（辨识度不变）。 */
+html[data-perf='low'] .gh-title-badge--legendary .gh-title-badge-aura {
+  animation: gh-title-badge-lowfade 6s ease-in-out infinite !important;
+}
+/* 聊天内的 compact 徽章本来就是静态的，低性能模式下保持完全静止 */
+html[data-perf='low'] .gh-title-badge--compact,
+html[data-perf='low'] .gh-title-badge--compact .gh-title-badge-aura {
+  animation: none;
+}
+
+@keyframes gh-title-badge-lowfade {
+  0%, 100% { opacity: .16; }
+  50% { opacity: .5; }
+}
+
+/* ---- 头像框：静态外圈保留，粒子与脉冲环隐藏、旋转动画停止 ---- */
+html[data-perf='low'] .gh-avatar-frame-fx { display: none; }
+html[data-perf='low'] .gh-avatar-frame::after,
+html[data-perf='low'] .gh-avatar-frame--inferno::before,
+html[data-perf='low'] .gh-avatar-frame--inferno::after,
+html[data-perf='low'] .gh-avatar-frame--storm::before,
+html[data-perf='low'] .gh-avatar-frame--storm::after,
+html[data-perf='low'] .gh-avatar-frame--supernova::before,
+html[data-perf='low'] .gh-avatar-frame--supernova::after {
+  animation: none;
+}
+
+/* ---- 聊天：装饰性抖动 / 高亮闪烁降级（消息行数量多时最费重绘） ---- */
+html[data-perf='low'] .gh-chat-message--flash,
+html[data-perf='low'] .gh-chat-poke,
+html[data-perf='low'] .gh-chat-forward-modes,
+html[data-perf='low'] .gh-msg-toast {
+  animation: none;
+}
+
+/* ---- 称号商品卡等处的流光文字 ---- */
+html[data-perf='low'] .gh-points-shop-name--legendary {
+  animation: none;
+}

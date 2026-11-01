@@ -209,7 +209,8 @@ export default memo(function ChatMessageRow({
             {!own && !grouped && (
               <span className="gh-chat-message-sender">
                 {sender.name}
-                <UserTitleBadge title={sender.title} />
+                {/* 消息行数量多：称号用静态紧凑版，避免每行都跑粒子/光晕动画 */}
+                <UserTitleBadge title={sender.title} variant="compact" />
               </span>
             )}
             <time className="gh-chat-message-time" dateTime={new Date(message.ts).toISOString()}>

@@ -241,7 +241,7 @@ export default function FriendPanel({
                   />
                   <span className="gh-chat-friend-name">
                     <span className="gh-chat-name-text">{contactLabel(friend)}</span>
-                    <UserTitleBadge title={friend.title} />
+                    <UserTitleBadge title={friend.title} variant="compact" />
                   </span>
                   <span className="gh-chat-friend-actions">
                     {onInviteGame && linewebId !== null && (

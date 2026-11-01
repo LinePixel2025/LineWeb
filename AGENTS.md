@@ -532,3 +532,14 @@ cd storage-node && python main.py     # 存储节点，config.json 指向 ws://1
 - **前端**：`ChatRedPacketCreateDialog`（单聊只填金额，群聊多一份数；客户端预校验 1≤金额≤50000、群聊金额≥份数、≤余额；记录 `createdId`——创建成功但消息发送失败时重试只重发消息不重复扣款）、`ChatRedPacketDialog`（拉详情 → 大「開」按钮领取 → 结果态 + `applyLocalDelta` + `refresh()`；明细列表标手气最佳）、`ChatRedPacketCard`（静态卡片，点击才拉状态，不做实时推送）。开关经 `ChatPage` 以 prop 下传而非组件内读 context（`ChatThread.test.tsx` 无 Provider 渲染，内置 hook 会抛错）。
 - **自检**：`cd server && npm run verify:redpacket`（3864 断言：拆分不变量/上下界/退化区间/greeting 清洗/入参校验）；`verify:chat`（98）回归通过；双端 `tsc --noEmit` + client `npm run build` + `npm run test`（575 用例）全绿；PORT=3002 双账号 API 冒烟 43 断言（创建/领取/409/404/过期退款/开关 403）+ 浏览器双账号 UI 全链路（发送→领取→余额实时变化→群拼手气）截图验收通过。
 - **数据库**：`RedPacket` / `RedPacketClaim` 均为 additive，`prisma db push` 即可（本地撞 FTS 影子表先 DROP 虚拟表）；生产走 docker-entrypoint.sh 自动 push，仍走本地产物链，不要在 ECS 上 `docker compose up --build`。
+
+---
+
+## 2026-11-01 聊天称号动效降级 / 低性能模式 / 音乐播放健壮性（实现口径）
+
+- **称号徽章 compact 模式**：`UserTitleBadge` 新增 `variant="compact"`（默认 `full`）。聊天内的消息行、会话列表、群成员列表、好友面板改用 compact——保留传说静态渐变配色 + 图标文字，但**不渲染 aura / sparks / burst 节点、不跑任何动画**（同屏几十个徽章时，完整特效每个要跑 7~13 个合成层动画）；聊天窗口头部与顶栏仍是 full（单实例，保留特效）。组件本身 `memo`，按称号字段（name/color/icon/rarity/effect/gameName）比较。
+- **低性能模式**：`client/src/lib/performanceMode.ts`（localStorage `lineweb_low_perf_mode`，`<html data-perf="low">`，`useSyncExternalStore` 订阅、跨标签 `storage` 同步），入口在个人资料页「性能与动效」开关；`styles/performance.css`（在 `points.css` 之后引入）统一降级：称号粒子 / 旋转光晕 / 爆裂层隐藏，徽章自身动画关闭，扫光降为一个 6s opacity 呼吸（合成器动画，不触发重绘）；头像框粒子隐藏、旋转停止；聊天装饰动画（flash / poke / toast）关闭。**减弱而非完全删除**，与 `prefers-reduced-motion`（完全静止）各自独立。
+- **聊天 sender 引用复用**：`ChatThread` 用 `senderCacheRef` 按 `会话:用户名` 缓存 sender，值不变时复用旧对象（称号按字段比较），轮询刷新 / 选中切换不再让全部消息行的 `memo` 失效。
+- **音乐播放健壮性**（`MusicPlayerContext`）：① `<audio>` 挂进 `document.body`（老 WebView 里游离 Audio 可能不出声）；② 首次手势解锁同时监听 `pointerdown/touchstart/mousedown/click/keydown`（老 iOS Safari 没有 Pointer Events）；③ 新增 `playAudioSource()`：设置 src 后同时等 `play()`、`error` 事件与 **20s 看门狗**，杜绝「点歌后无限转圈」；④ 首选音质失败自动降 `standard` 重试一次，全部失败给出「网络可能无法直连网易云 CDN」的可操作提示（并清掉坏地址，下次点击重新取址）；⑤ `mediaSession.setActionHandler` 逐个 try/catch（个别浏览器只支持部分 action，抛错会打崩整个 Provider）；⑥ 服务端 `callNcmRaw` 把首次懒加载/运行时初始化也纳入 15s 超时（此前只包住 `fn()`，初始化卡住时前端会一直加载）。
+- **自检**：`cd client && npx tsc --noEmit` + `npm run test`（56 文件 / 585 用例，新增 `performanceMode` / `UserTitleBadge` / `playAudioSource` 三组测试）+ `npm run build`；`cd server && npx tsc --noEmit`；本地浏览器实测：音乐可播放（`<audio>` 在 DOM、currentTime 递增、src 为网易 CDN）、聊天 compact 徽章 `animation: none` 且 0 个粒子节点、低性能模式开关即时生效（`html[data-perf=low]`）。
+- **部署**：纯前端 + 服务端单文件改动，无数据库变更；照旧本地 build → `client-dist` 上传 → 服务器 `docker build -f Dockerfile.prebuilt` + `docker compose up -d`（不要在 ECS 上 `--build`）。
