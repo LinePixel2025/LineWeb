@@ -21,6 +21,8 @@ export const FEATURE_KEYS = [
   'webProxy',
   'calculator',
   'stock',
+  'reader',
+  'music',
   'oauthApps',
   'registration',
 ] as const
@@ -50,6 +52,8 @@ export const FEATURE_DEFINITIONS: readonly FeatureDefinition[] = [
   { key: 'webProxy', label: '网页反代', description: '网页代理浏览与站点管理', group: '系统' },
   { key: 'calculator', label: '科学计算器', description: '纯前端科学计算器页面', group: '系统' },
   { key: 'stock', label: '模拟股市', description: '实时模拟行情（3 秒一跳）+ 积分投资：买入虚构股票，玩家交易会小幅推动价格，择机卖出赚取积分', group: '工具' },
+  { key: 'reader', label: '小说阅读器', description: '上传 EPUB/TXT 在线阅读，书架与阅读进度多端同步', group: '内容' },
+  { key: 'music', label: '网易云音乐', description: '搜索并播放网易云音乐（扫码绑定个人账号，仅不解灰的接口代理）', group: '工具' },
   { key: 'oauthApps', label: '第三方应用授权', description: '授权第三方应用访问账号（已签发令牌不受影响）', group: '系统' },
   { key: 'registration', label: '新用户注册', description: '允许提交新注册申请（登录不受影响）', group: '系统' },
 ]

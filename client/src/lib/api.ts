@@ -140,6 +140,21 @@ async function requestText(path: string): Promise<string> {
   return res.text()
 }
 
+/** 请求二进制（阅读器读取 TXT 原始字节后自行做编码检测，api.text 的 UTF-8 假设不适用） */
+async function requestArrayBuffer(path: string): Promise<ArrayBuffer> {
+  const token = getToken()
+  const headers: Record<string, string> = token
+    ? { Authorization: `Bearer ${token}`, 'Cache-Control': 'no-cache' }
+    : {}
+  const res = await fetch(`${API_BASE}${path}`, { headers })
+  if (!res.ok) {
+    if (res.status === 401) handleUnauthorized(false)
+    const data = await res.json().catch(() => ({}))
+    throw new ApiError(data.error || `请求失败 (${res.status})`, res.status, data.code)
+  }
+  return res.arrayBuffer()
+}
+
 export const api = {
   get: <T>(path: string, opts?: { signal?: AbortSignal; noRedirect?: boolean; timeoutMs?: number }) =>
     request<T>(path, { signal: opts?.signal, noRedirect: opts?.noRedirect, timeoutMs: opts?.timeoutMs }),
@@ -176,6 +191,8 @@ export const api = {
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PATCH', body }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
   text: (path: string) => requestText(path),
+  /** 请求原始二进制（TXT 编码检测用） */
+  arrayBuffer: (path: string) => requestArrayBuffer(path),
 }
 
 export { ApiError }

@@ -1,0 +1,574 @@
+/* ============================================================
+   网易云音乐（/music 页 + 全局迷你播放条）
+   命名空间 .gh-music-*；颜色用全局 --gh-* 令牌（自动适配暗色）。
+   ============================================================ */
+
+.gh-music-page {
+  max-width: 880px;
+}
+
+.gh-music-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--gh-space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--gh-space-4);
+}
+
+.gh-music-title {
+  font-size: var(--gh-type-title, 28px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.gh-music-subtitle {
+  margin: var(--gh-space-1) 0 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-music-account {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+}
+
+.gh-music-account-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--gh-radius-pill);
+  object-fit: cover;
+}
+
+.gh-music-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-3) var(--gh-space-4);
+  border-radius: var(--gh-radius-md);
+  background: var(--gh-border);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  margin-bottom: var(--gh-space-4);
+}
+
+.gh-music-notice--error {
+  background: var(--gh-danger-soft, rgba(255, 59, 48, 0.1));
+  color: var(--gh-danger, #ff3b30);
+}
+
+.gh-music-notice button {
+  margin-left: auto;
+}
+
+/* === 扫码卡 === */
+
+.gh-music-qr-card {
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  margin-bottom: var(--gh-space-4);
+  overflow: hidden;
+}
+
+.gh-music-qr-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--gh-space-3) var(--gh-space-4);
+  border-bottom: 1px solid var(--gh-border);
+  font-weight: 600;
+}
+
+.gh-music-qr-body {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-5);
+  padding: var(--gh-space-4);
+  flex-wrap: wrap;
+}
+
+.gh-music-qr-img {
+  width: 160px;
+  height: 160px;
+  border-radius: var(--gh-radius-md);
+  background: #fff;
+  padding: 6px;
+}
+
+.gh-music-qr-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--gh-space-2);
+  color: var(--gh-text-secondary);
+}
+
+/* === Tabs === */
+
+.gh-music-tabs {
+  display: flex;
+  gap: var(--gh-space-1);
+  margin-bottom: var(--gh-space-4);
+}
+
+.gh-music-tab {
+  border: 1px solid transparent;
+  background: none;
+  padding: 6px 14px;
+  border-radius: var(--gh-radius-pill);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  cursor: pointer;
+}
+
+.gh-music-tab:hover {
+  color: var(--gh-text);
+}
+
+.gh-music-tab--active {
+  background: var(--gh-border);
+  color: var(--gh-text);
+  font-weight: 600;
+}
+
+/* === 歌曲列表 === */
+
+.gh-music-song-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.gh-music-song-main {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  width: 100%;
+  padding: var(--gh-space-2) var(--gh-space-3);
+  border: none;
+  border-radius: var(--gh-radius-md);
+  background: none;
+  color: var(--gh-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.gh-music-song-main:hover {
+  background: var(--gh-border);
+}
+
+.gh-music-song--active .gh-music-song-name {
+  color: var(--gh-accent);
+  font-weight: 600;
+}
+
+.gh-music-song-cover {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--gh-radius-sm);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.gh-music-song-cover--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gh-border);
+  color: var(--gh-text-secondary);
+}
+
+.gh-music-song-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gh-music-song-name {
+  font-size: var(--gh-text-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gh-music-song-vip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--gh-warning-soft, rgba(255, 159, 10, 0.16));
+  color: var(--gh-warning, #ff9f0a);
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+
+.gh-music-song-artists {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gh-music-song-duration {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary, var(--gh-text-secondary));
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-music-empty {
+  padding: var(--gh-space-8) 0;
+  text-align: center;
+  color: var(--gh-text-secondary);
+}
+
+/* === 榜单 / 歌单卡片 === */
+
+.gh-music-toplist-grid,
+.gh-music-playlist-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--gh-space-4);
+}
+
+.gh-music-toplist-card,
+.gh-music-playlist-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  width: 100%;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-md);
+  background: var(--gh-canvas);
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  transition: transform var(--gh-dur-1) ease;
+}
+
+.gh-music-toplist-card:hover,
+.gh-music-playlist-card:hover {
+  transform: translateY(-2px);
+}
+
+.gh-music-toplist-card img,
+.gh-music-playlist-card img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  display: block;
+}
+
+.gh-music-playlist-card-fallback {
+  width: 100%;
+  aspect-ratio: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gh-border);
+  color: var(--gh-text-secondary);
+}
+
+.gh-music-toplist-card-name,
+.gh-music-playlist-card-name {
+  padding: 0 var(--gh-space-3);
+  font-size: var(--gh-text-sm);
+  font-weight: 500;
+  color: var(--gh-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gh-music-toplist-card-freq {
+  padding: 0 var(--gh-space-3) var(--gh-space-2);
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-secondary);
+}
+
+.gh-music-playlist-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  margin-bottom: var(--gh-space-3);
+}
+
+.gh-music-playlist-name {
+  font-weight: 600;
+}
+
+/* === 搜索 === */
+
+.gh-music-search-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--gh-space-4);
+}
+
+.gh-music-search-input {
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-pill);
+  padding: 6px 14px;
+  background: var(--gh-canvas);
+  color: var(--gh-text-secondary);
+}
+
+.gh-music-search-input input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: none;
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-music-search-type {
+  display: flex;
+  gap: 2px;
+}
+
+/* ============================================================
+   全局迷你播放条（fixed 底部，跨页持续）
+   ============================================================ */
+
+.gh-music-bar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: max(12px, env(safe-area-inset-bottom));
+  width: min(880px, calc(100vw - 24px));
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  padding: 8px 14px;
+  border-radius: var(--gh-radius-lg);
+  border: 1px solid var(--gh-border);
+  background: var(--gh-material-chrome, rgba(255, 255, 255, 0.72));
+  backdrop-filter: blur(20px);
+  box-shadow: var(--gh-shadow-card, 0 8px 24px rgba(0, 0, 0, 0.16));
+  z-index: 1050;
+}
+
+.gh-music-bar-info {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  min-width: 0;
+  flex: 1;
+  text-decoration: none;
+}
+
+.gh-music-bar-cover {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--gh-radius-sm);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.gh-music-bar-cover--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gh-border);
+  color: var(--gh-text-secondary);
+}
+
+.gh-music-bar-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.gh-music-bar-name {
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gh-music-bar-artists {
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gh-music-bar-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-1);
+}
+
+.gh-music-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--gh-radius-pill);
+  background: none;
+  color: var(--gh-text);
+  cursor: pointer;
+}
+
+.gh-music-bar-btn:hover {
+  background: var(--gh-border);
+}
+
+.gh-music-bar-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.gh-music-bar-btn--play {
+  background: var(--gh-accent);
+  color: #fff;
+}
+
+.gh-music-bar-btn--play:hover {
+  background: var(--gh-accent);
+  opacity: 0.9;
+}
+
+.gh-music-bar-mode {
+  font-size: var(--gh-text-xs);
+  font-weight: 700;
+}
+
+.gh-music-bar-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex: 2;
+  min-width: 140px;
+}
+
+.gh-music-bar-time {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.gh-music-bar-seek {
+  flex: 1;
+  accent-color: var(--gh-accent);
+  min-width: 60px;
+}
+
+.gh-music-bar-extra {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-1);
+}
+
+/* 队列浮层 */
+.gh-music-bar-queue {
+  position: absolute;
+  right: 10px;
+  bottom: calc(100% + 8px);
+  width: min(320px, 84vw);
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-md);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card, 0 8px 24px rgba(0, 0, 0, 0.16));
+  overflow: hidden;
+}
+
+.gh-music-bar-queue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--gh-space-2) var(--gh-space-3);
+  border-bottom: 1px solid var(--gh-border);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+}
+
+.gh-music-bar-queue-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--gh-space-1);
+  overflow-y: auto;
+}
+
+.gh-music-bar-queue-item {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border: none;
+  background: none;
+  text-align: left;
+  padding: var(--gh-space-2) var(--gh-space-3);
+  border-radius: var(--gh-radius-sm);
+  cursor: pointer;
+}
+
+.gh-music-bar-queue-item:hover {
+  background: var(--gh-border);
+}
+
+.gh-music-bar-queue-item--active .gh-music-bar-queue-name {
+  color: var(--gh-accent);
+}
+
+.gh-music-bar-queue-name {
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gh-music-bar-queue-artists {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 给页面底部留出播放条空间（有播放条时才生效：用 body 类或按需由组件加 padding） */
+.gh-music-bar ~ .gh-music-bar-spacer {
+  height: 72px;
+}
+
+@media (max-width: 640px) {
+  .gh-music-bar {
+    flex-wrap: wrap;
+    padding: 8px 10px;
+  }
+
+  .gh-music-bar-progress {
+    order: 4;
+    flex-basis: 100%;
+  }
+}

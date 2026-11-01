@@ -739,7 +739,7 @@ router.post('/upload', async (req: Request, res: Response) => {
         const safeName = originalName.replace(/[<>:"/\\|?*]/g, '_')
         // 根级上传不可占用系统保留名（同建夹校验，防同步器误删）
         if (parentId === null && isReservedRootName(safeName)) {
-          throw new Error('文件名「_public」「_avatars」「_chat」「_ai」为系统保留，请重命名后上传')
+          throw new Error('文件名「_public」「_avatars」「_chat」「_ai」「_books」为系统保留，请重命名后上传')
         }
         let storagePath = `${parentPath}${safeName}`
         let finalName = originalName  // 显示名保留原始文件名

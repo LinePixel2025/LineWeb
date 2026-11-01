@@ -27,12 +27,14 @@
     "verify:points": "tsx scripts/verify-points.ts",
     "verify:pet": "tsx scripts/verify-pet.ts",
     "verify:stocks": "tsx scripts/verify-stocks.ts",
-    "verify:chat": "tsx scripts/verify-chat.ts"
+    "verify:chat": "tsx scripts/verify-chat.ts",
+    "verify:reader": "tsx scripts/verify-reader.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@neteasecloudmusicapienhanced/api": "^4.41.1",
     "@prisma/client": "^6.0.0",
     "@types/compression": "^1.8.1",
     "bcryptjs": "^2.4.3",
@@ -43,6 +45,7 @@
     "express-rate-limit": "^8.5.2",
     "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.2",
+    "jszip": "^3.10.2",
     "openai": "^6.48.0",
     "prisma": "^6.0.0",
     "sharp": "^0.33.5",

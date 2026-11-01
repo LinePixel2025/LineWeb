@@ -31,6 +31,10 @@ export default defineConfig({
           if (id.includes('node_modules/three')) {
             return 'three'
           }
+          // foliate-js（EPUB 阅读引擎，vendored 在 src 下）：只在打开 EPUB 时动态加载
+          if (id.includes('lib/reader/foliate/')) {
+            return 'foliate'
+          }
         },
       },
     },

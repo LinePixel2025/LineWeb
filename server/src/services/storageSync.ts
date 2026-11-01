@@ -10,9 +10,9 @@ export interface SyncReport {
   durationMs: number
 }
 
-/** 存储节点上的系统目录（不进入网盘）：头像 / 聊天图片 / AI 对话图片 / 公共网盘（公共文件由 drive 路由直接落库，同步器跳过防止建成私有记录） */
+/** 存储节点上的系统目录（不进入网盘）：头像 / 聊天图片 / AI 对话图片 / 公共网盘（公共文件由 drive 路由直接落库，同步器跳过防止建成私有记录）/ 小说阅读器的书籍与封面 */
 // 导出供 drive.ts 做根级保留名校验（防止私有盘条目占用系统目录名后被同步器误判孤儿删除）
-export const SYSTEM_DIRECTORIES = ['_avatars', '_chat', '_ai', '_public']
+export const SYSTEM_DIRECTORIES = ['_avatars', '_chat', '_ai', '_public', '_books']
 
 /** 路径是否属于系统目录（目录本身或其下的任意层级） */
 function isSystemPath(path: string): boolean {

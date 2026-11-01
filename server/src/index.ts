@@ -30,6 +30,8 @@ import pointsRoutes from './routes/points.js'
 import farmRoutes from './routes/farm.js'
 import petsRoutes from './routes/pets.js'
 import personalSpaceRoutes from './routes/personalSpace.js'
+import readerRoutes from './routes/reader.js'
+import musicRoutes from './routes/music.js'
 import stockRoutes from './routes/stocks.js'
 import adminPointsRoutes from './routes/adminPoints.js'
 import { featuresRouter, adminFeaturesRouter } from './routes/features.js'
@@ -74,6 +76,8 @@ app.use(helmet({
         : ["'self'", "'unsafe-inline'", "'unsafe-eval'", "'blob:'"],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+      // mediaSrc 允许外链音视频：网易云音乐播放地址为网易 CDN 直连（音频流量不经服务器）
+      mediaSrc: ["'self'", 'https:', 'http:'],
       // connectSrc 需允许 ws/wss：聊天实时推送走 /ws/chat
       connectSrc: ["'self'", 'https:', 'http:', 'ws:', 'wss:'],
       fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com', 'https://fonts.googleapis.com'],
@@ -114,7 +118,9 @@ app.use(compression({
     && !req.originalUrl.includes('/chat/avatars')
     && !req.originalUrl.includes('/chat/xmpp/http-poll')
     && !/\/chat\/messages\/\d+\/image(\?|$)/.test(req.originalUrl)
-    && !/\/ai-chat\/images\/\d+\/image(\?|$)/.test(req.originalUrl),
+    && !/\/ai-chat\/images\/\d+\/image(\?|$)/.test(req.originalUrl)
+    // 阅读器书籍/封面（二进制 + WebP 不可变内容，且书籍可能很大）
+    && !/\/reader\/books\/\d+\/(file|cover)(\?|$)/.test(req.originalUrl),
 }))
 
 app.set('trust proxy', 1)  // 信任反向代理，用于 rate-limiter 正确获取客户端 IP
@@ -198,6 +204,10 @@ app.use('/api/points', pointsRoutes)
 app.use('/api/farm', requireFeature('farm'), farmRoutes)
 // 宠物（召唤 / 照顾 / 换装 / 升级），受 pet 功能开关控制
 app.use('/api/pets', requireFeature('pet'), petsRoutes)
+// 小说阅读器（上传 EPUB/TXT 在线阅读 + 进度同步），受 reader 功能开关控制
+app.use('/api/reader', requireFeature('reader'), readerRoutes)
+// 网易云音乐（搜索 / 播放 / 扫码绑定个人账号），受 music 功能开关控制
+app.use('/api/music', requireFeature('music'), musicRoutes)
 // 个人空间（管理员私人服务：空间名 + RustDesk 远程桌面配置，每管理员数据互相隔离，需 personal:manage 能力）
 app.use('/api/personal-space', personalSpaceRoutes)
 // 模拟股市（行情只读 + 积分交易），受 stock 功能开关控制
@@ -372,6 +382,27 @@ app.get('/api', (_req, res) => {
       outfitBuy: { method: 'POST', path: '/api/pets/outfits/buy', auth: true, description: '购买装扮 { outfitKey }（永久拥有，写积分流水）' },
       outfitEquip: { method: 'POST', path: '/api/pets/outfits/equip', auth: true, description: '佩戴/取下装扮 { outfitKey, equip:boolean }（同 slot 自动替换）' },
       rename: { method: 'POST', path: '/api/pets/rename', auth: true, description: '改名 { name }（1–12 字）' },
+    },
+    reader: {
+      note: '小说阅读器：上传 EPUB/TXT 在线阅读（EPUB 由前端 foliate-js 渲染、TXT 前端正则分章），书籍与封面存存储节点 _books/（不进网盘），文件计入网盘配额，进度多端同步。需 reader 功能开关。',
+      list: { method: 'GET', path: '/api/reader/books', auth: true, description: '书架（含阅读进度，最近在读在前）' },
+      upload: { method: 'POST', path: '/api/reader/books', auth: true, description: '上传书籍（multipart/form-data，字段名 file，单本 ≤50MiB，EPUB 自动解析标题/作者/封面）；封面 GET /api/reader/books/:id/cover' },
+      progress: { method: 'PUT', path: '/api/reader/books/:id/progress', auth: true, description: '保存阅读进度 { location, percent }（epub 为 CFI，txt 为 {chapter,offset} JSON）' },
+      file: { method: 'GET', path: '/api/reader/books/:id/file', auth: true, description: '读取书籍文件（仅属主，支持 ?token= 直链，immutable 缓存）' },
+      delete: { method: 'DELETE', path: '/api/reader/books/:id', auth: true, description: '删除书籍（行 + 进度级联 + 节点文件）' },
+    },
+    music: {
+      note: '网易云音乐：服务端代理网易云开放接口（@neteasecloudmusicapienhanced/api，已关闭解灰）；每用户扫码绑定自己的账号（cookie 仅存服务端，不回传）；匿名可搜索与播放免费歌曲。需 music 功能开关。',
+      status: { method: 'GET', path: '/api/music/status', auth: true, description: '绑定状态（nickname/avatarUrl，不返回 cookie）' },
+      loginQrPrepare: { method: 'GET', path: '/api/music/login/qr/prepare', auth: true, description: '生成登录二维码 { key, qrimg }（10 次/5min）' },
+      loginQrCheck: { method: 'GET', path: '/api/music/login/qr/check?key=', auth: true, description: '轮询扫码状态 { code: 800 过期 / 801 待扫 / 802 待确认 / 803 成功 }；成功即绑定（240 次/5min）' },
+      logout: { method: 'POST', path: '/api/music/logout', auth: true, description: '解绑网易云账号' },
+      search: { method: 'GET', path: '/api/music/search?keywords=&type=&limit=&offset=', auth: true, description: '搜索（歌曲/专辑/歌单）（60 次/5min）' },
+      songUrl: { method: 'GET', path: '/api/music/song/url?id=&level=', auth: true, description: '取播放地址（level 默认 exhigh；浏览器直连网易 CDN 播放）' },
+      lyric: { method: 'GET', path: '/api/music/lyric?id=', auth: true, description: '歌词（含翻译/罗马音）' },
+      recommend: { method: 'GET', path: '/api/music/recommend/songs', auth: true, description: '每日推荐（需已绑定账号）' },
+      toplist: { method: 'GET', path: '/api/music/toplist', auth: true, description: '官方排行榜列表' },
+      playlistTracks: { method: 'GET', path: '/api/music/playlist/:id/tracks?limit=&offset=', auth: true, description: '歌单/榜单曲目' },
     },
     personalSpace: {
       note: '个人空间：仅管理员可进（personal:manage 能力），每个管理员的数据互相隔离；首个私人服务为 RustDesk 远程桌面配置。无功能开关（管理员天然绕过）。',

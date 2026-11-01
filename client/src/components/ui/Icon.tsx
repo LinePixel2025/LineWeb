@@ -20,6 +20,7 @@ export type IconName =
   | 'pdf' | 'archive' | 'heart' | 'link' | 'mail' | 'lock' | 'logout'
   | 'arrow-up' | 'arrow-down' | 'arrow-left' | 'folder-plus' | 'cloud' | 'users' | 'message' | 'ai'
   | 'api' | 'trophy' | 'calendar' | 'tag' | 'bell' | 'eye' | 'database' | 'wallet' | 'send' | 'megaphone'
+  | 'bookOpen' | 'music'
 
 interface IconProps {
   name: IconName
@@ -302,6 +303,21 @@ const glyphs: Record<IconName, ReactNode> = {
       <path d="M6.15 3.1h7.3L19 8.7v12.2H6.15V3.1Z" {...TINT} />
       <path d="M6.15 3.1h7.3L19 8.7v12.2H6.15V3.1Z" />
       <path d="M13.25 3.3v5.55H19" />
+    </>
+  ),
+  bookOpen: (
+    <>
+      <path d="M12 6.6C10.4 5 8.1 4.35 4.4 4.3a1 1 0 0 0-1.05 1v11.4a1 1 0 0 0 1.05 1c3.4.05 5.55.65 7.05 2.05 1.5-1.4 3.65-2 7.05-2.05a1 1 0 0 0 1.05-1V5.3a1 1 0 0 0-1.05-1c-3.7.05-6 .7-7.6 2.3Z" {...TINT} />
+      <path d="M12 6.6C10.4 5 8.1 4.35 4.4 4.3a1 1 0 0 0-1.05 1v11.4a1 1 0 0 0 1.05 1c3.4.05 5.55.65 7.05 2.05 1.5-1.4 3.65-2 7.05-2.05a1 1 0 0 0 1.05-1V5.3a1 1 0 0 0-1.05-1c-3.7.05-6 .7-7.6 2.3Z" />
+      <path d="M12 6.6v13.15" opacity=".45" />
+    </>
+  ),
+  music: (
+    <>
+      <path d="M9.4 18.35V6.05a1 1 0 0 1 .78-.98l8-1.75a1 1 0 0 1 1.22.98v11.4" {...TINT} />
+      <path d="M9.4 18.35V6.05a1 1 0 0 1 .78-.98l8-1.75a1 1 0 0 1 1.22.98v11.4" />
+      <ellipse cx="6.7" cy="18.55" rx="2.7" ry="2.45" />
+      <ellipse cx="16.7" cy="16.25" rx="2.7" ry="2.45" />
     </>
   ),
   image: (

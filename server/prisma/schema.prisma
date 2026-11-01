@@ -61,6 +61,8 @@ model User {
   chatBan                ChatBan?
   pet                    Pet?
   personalSpace          PersonalSpace? // 个人空间（管理员私人服务，每管理员一份）
+  books                  Book[]               // 小说阅读器的书架（上传的书）
+  musicAccount           MusicAccount?        // 网易云音乐扫码绑定的账号（cookie 仅存服务端）
   farm                   Farm?
   farmStealsMade         FarmSteal[]          @relation("FarmStealThief")
   farmStealsReceived     FarmSteal[]          @relation("FarmStealVictim")
@@ -976,4 +978,63 @@ model PersonalSpace {
   updatedAt           DateTime @updatedAt @map("updated_at")
 
   @@map("personal_spaces")
+}
+
+// === 小说阅读器 ===
+
+/**
+ * 用户上传的书籍（EPUB/TXT）。文件本体与封面存在储节点系统目录 _books/<userId>/ 下
+ * （storageSync 已把 _books 列为系统目录，不进网盘；封面体积小不计网盘配额）。
+ */
+model Book {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String // epub 取 OPF 元数据；txt 取文件名（去扩展名）
+  author      String   @default("")
+  format      String // epub | txt
+  size        Int // 文件字节数（计入网盘已用空间）
+  storagePath String   @unique @map("storage_path") // 存储节点路径 _books/<userId>/<uuid>.<ext>
+  coverPath   String?  @map("cover_path") // 封面节点路径（epub 内嵌封面缩略图，可空）
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  progress    BookProgress[] // 每个读者一行进度（BookProgress 按 [bookId, userId] 唯一）
+
+  @@index([userId])
+  @@map("books")
+}
+
+/**
+ * 阅读进度（每本书每人一行）。location 对 epub 为 foliate CFI、对 txt 为 {chapter,offset} JSON 字符串；
+ * percent 为 0–1 全书进度（列表页「继续阅读」展示用）。
+ */
+model BookProgress {
+  id        Int      @id @default(autoincrement())
+  bookId    Int      @map("book_id")
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  userId    Int      @map("user_id")
+  location  String   @default("")
+  percent   Float    @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([bookId, userId])
+  @@map("book_progress")
+}
+
+// === 网易云音乐 ===
+
+/**
+ * 每用户一条网易云扫码登录态（userId 唯一）。cookie（含 MUSIC_U）仅存服务端，
+ * 永不出服务端、任何 API 响应不回传；解绑（logout）即删行。
+ */
+model MusicAccount {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cookie    String // 网易云登录 cookie 串（敏感，不回传前端）
+  nickname  String   @default("") // 绑定时缓存的昵称（展示用）
+  avatarUrl String   @default("") @map("avatar_url") // 绑定时缓存的头像 URL（展示用）
+  loggedInAt DateTime @default(now()) @map("logged_in_at")
+
+  @@map("music_accounts")
 }

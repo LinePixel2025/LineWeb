@@ -10,11 +10,13 @@ import { XmppChatProvider } from './contexts/XmppChatContext'
 import { GameProvider } from './contexts/GameContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { DownloadProvider } from './contexts/DownloadContext'
+import { MusicProvider } from './contexts/MusicPlayerContext'
 import Layout from './components/Layout'
 import { ProtectedRoute, AdminRoute, RequireAuth, RequireFeature } from './components/Guards'
 import DownloadToast from './components/drive/DownloadToast'
 import GameInviteToast from './components/games/GameInviteToast'
 import ChatMessageToast from './components/chat/ChatMessageToast'
+import MusicPlayerBar from './components/music/MusicPlayerBar'
 
 // 路由级代码分割 — 所有页面和布局懒加载，减少首屏包体积
 const HomePage = lazy(() => import('./pages/HomePage'))
@@ -74,6 +76,9 @@ const PointsAdminPage = lazy(() => import('./pages/admin/PointsAdminPage'))
 const ChatAdminPage = lazy(() => import('./pages/admin/ChatAdminPage'))
 const PersonalSpacePage = lazy(() => import('./pages/PersonalSpacePage'))
 const AuthorizePage = lazy(() => import('./pages/AuthorizePage'))
+const ReaderPage = lazy(() => import('./pages/ReaderPage'))
+const ReaderBookPage = lazy(() => import('./pages/ReaderBookPage'))
+const MusicPage = lazy(() => import('./pages/MusicPage'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -146,6 +151,7 @@ export default function App() {
         <GameProvider>
         <ThemeProvider>
           <DownloadProvider>
+              <MusicProvider>
               <RouteErrorBoundary>
                 <Suspense fallback={<RouteLoading />}>
                   <Routes>
@@ -175,6 +181,21 @@ export default function App() {
                       {/* 宠物：花积分召唤并照顾一只 2D 小宠物（需登录） */}
                       <Route element={<RequireFeature feature="pet" />}>
                         <Route path="/pets" element={<PetsPage />} />
+                      </Route>
+                      {/* 小说阅读器：上传 EPUB/TXT 在线阅读，进度多端同步（需登录） */}
+                      <Route element={<RequireFeature feature="reader" />}>
+                        <Route path="/reader" element={
+                          <ProtectedRoute><ReaderPage /></ProtectedRoute>
+                        } />
+                        <Route path="/reader/:bookId" element={
+                          <ProtectedRoute><ReaderBookPage /></ProtectedRoute>
+                        } />
+                      </Route>
+                      {/* 网易云音乐：扫码绑定个人账号，搜索与播放（需登录） */}
+                      <Route element={<RequireFeature feature="music" />}>
+                        <Route path="/music" element={
+                          <ProtectedRoute><MusicPage /></ProtectedRoute>
+                        } />
                       </Route>
                       <Route element={<RequireFeature feature="games" />}>
                         <Route path="/games" element={<GamesPage />} />
@@ -344,6 +365,9 @@ export default function App() {
               <GameInviteToast />
               {/* 新消息提示 — 任意页面（含游戏对局）都能收到聊天消息提醒 */}
               <ChatMessageToast />
+              {/* 全局音乐播放条 — 有播放中的歌曲时常驻底部，跨页持续播放 */}
+              <MusicPlayerBar />
+            </MusicProvider>
             </DownloadProvider>
         </ThemeProvider>
         </GameProvider>

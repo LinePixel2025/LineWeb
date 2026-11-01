@@ -39,6 +39,8 @@ const sections: { title: string; requireAuth?: boolean; items: SidebarItem[] }[]
       { path: '/games', label: '游戏', icon: 'gamepad' },
       { path: '/pets', label: '宠物', icon: 'paw' },
       { path: '/stocks', label: '模拟股市', icon: 'chart' },
+      { path: '/reader', label: '小说', icon: 'bookOpen' },
+      { path: '/music', label: '音乐', icon: 'music' },
     ],
   },
   {
@@ -100,6 +102,8 @@ export default memo(function Sidebar({ collapsed, mobileOpen, onClose, onToggleC
               if (item.path === '/games' && !isEnabled('games')) return false
               if (item.path === '/stocks' && (!user || !isEnabled('stock'))) return false
               if (item.path === '/pets' && (!user || !isEnabled('pet'))) return false
+              if (item.path === '/reader' && (!user || !isEnabled('reader'))) return false
+              if (item.path === '/music' && (!user || !isEnabled('music'))) return false
               return true
             })
             if (visibleItems.length === 0) return null

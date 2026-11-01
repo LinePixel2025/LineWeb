@@ -64,6 +64,9 @@ services:
       NEKO_LINEWEB_GROUP_ENABLED: ${NEKO_LINEWEB_GROUP_ENABLED:-true}
       NEKO_LINEWEB_GROUP_NAME: ${NEKO_LINEWEB_GROUP_NAME:-LineWeb 用户群}
       NEKO_LINEWEB_GROUP_SYNC_INTERVAL: ${NEKO_LINEWEB_GROUP_SYNC_INTERVAL:-600000}
+      # 网易云音乐（库挂载进 Express）：显式关闭解灰（法律高风险，仅做不解灰的接口代理）
+      ENABLE_GENERAL_UNBLOCK: "false"
+      ENABLE_PROXY: "false"
     networks:
       - default
       - 1panel
