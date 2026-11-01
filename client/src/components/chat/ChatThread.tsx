@@ -1,15 +1,15 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import NekoAvatar from './NekoAvatar'
 import ChatComposer, { type ComposerReply } from './ChatComposer'
 import ChatImageLightbox from './ChatImageLightbox'
 import ChatStickerPanel from './ChatStickerPanel'
 import ChatBundleDialog from './ChatBundleDialog'
 import ChatForwardDialog from './ChatForwardDialog'
+import ChatMessageRow from './ChatMessageRow'
 import MessageActionMenu, { type MessageActionItem } from './MessageActionMenu'
 import UserTitleBadge from '../UserTitleBadge'
 import Icon from '../ui/Icon'
 import { canRecall, chatImageUrl, contactLabel, senderLabel } from '../../lib/chat'
-import { useLongPress } from '../../hooks/useLongPress'
 import { extractImageSrc } from '../../lib/xmpp/protocol'
 import type {
   NekoBundleItem,
@@ -124,33 +124,6 @@ interface Props {
   dndEnabled?: boolean
 }
 
-function formatMessageTime(value: number): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-/** 群聊正文里的 @昵称 高亮（纯文本切分，不渲染 HTML） */
-function renderMentionText(body: string, members: NekoConversation['members']): ReactNode {
-  if (!body || members.length === 0) return body
-  const names = [...new Set([
-    ...members.map((member) => member.displayName || member.username),
-    '所有人',
-  ])].filter(Boolean).sort((a, b) => b.length - a.length)
-  if (names.length === 0) return body
-  const regex = new RegExp(`(@(?:${names.map(escapeRegExp).join('|')}))`, 'g')
-  const parts = body.split(regex)
-  return parts.map((part, index) =>
-    part.startsWith('@') && names.includes(part.slice(1))
-      ? <span key={index} className="gh-chat-mention">{part}</span>
-      : <span key={index}>{part}</span>
-  )
-}
-
 function avatarOf(
   conversation: NekoConversation,
   message: NekoMessage,
@@ -220,11 +193,6 @@ export default function ChatThread({
   const lastAvatarTapRef = useRef<{ id: number; at: number } | null>(null)
   const lastPokeSentRef = useRef(0)
   const [actionMenu, setActionMenu] = useState<{ message: NekoMessage; x: number; y: number } | null>(null)
-  const pressedMessageRef = useRef<NekoMessage | null>(null)
-  const longPress = useLongPress((x, y) => {
-    const message = pressedMessageRef.current
-    if (message) setActionMenu({ message, x, y })
-  })
   const stickToBottomRef = useRef(true)
   const pendingPrependRef = useRef(false)
   const previousScrollHeightRef = useRef(0)
@@ -260,8 +228,6 @@ export default function ChatThread({
   const [bundlePreview, setBundlePreview] = useState<NekoBundleItem[] | null>(null)
   const [flashId, setFlashId] = useState<number | null>(null)
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // 「撤回」按钮的 5 分钟窗口需要自动消失：低频 tick 触发重渲染
-  const [now, setNow] = useState(() => Date.now())
   const menuRef = useRef<HTMLDivElement | null>(null)
 
   const conversationKey = conversation?.key ?? null
@@ -271,6 +237,17 @@ export default function ChatThread({
   const isGroup = conversation?.kind === 'room'
   const isBigGroup = !!roomInfo?.isBigGroup
   const canEditAnnouncement = isGroup && isOwner
+  const contact = conversation?.kind === 'direct' ? conversation.contact : null
+
+  // 会话对象在每次 presence / 轮询后都会重建，但成员内容通常不变：
+  // 用内容签名稳定引用，避免传给 memo 消息行的 members 每次都是新数组。
+  const membersSignature = conversation?.members
+    .map((member) => `${member.nekoId}:${member.username}:${member.displayName ?? ''}:${member.online ? 1 : 0}`)
+    .join('|') ?? ''
+  const stableMembers = useMemo(
+    () => conversation?.members ?? [],
+    [membersSignature],
+  )
 
   // 切换会话时回到最新消息
   useEffect(() => {
@@ -340,17 +317,6 @@ export default function ChatThread({
     }
   }, [menuOpen])
 
-  // 低频刷新当前时间，让超过 5 分钟的「撤回」按钮自动消失（卸载时清理）
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 15_000)
-    return () => window.clearInterval(timer)
-  }, [])
-
-  // 消息变化时同步一次时间，避免刚加载的消息用的是旧时间导致按钮不出现
-  useEffect(() => {
-    setNow(Date.now())
-  }, [messages])
-
   // 维护滚动位置：追加新消息时贴底，加载历史时保持视口不跳
   useLayoutEffect(() => {
     const element = listRef.current
@@ -400,23 +366,19 @@ export default function ChatThread({
   }
 
   /** 用户名 → 当前会话里的显示名（引用 / 聊天记录的发送者都只有用户名） */
-  const displayNameOf = (username: string): string => {
-    if (!conversation) return username
-    const member = conversation.members.find((item) => item.username === username)
+  const displayNameOf = useCallback((username: string): string => {
+    const member = stableMembers.find((item) => item.username === username)
     if (member) {
       if (selfNekoId !== null && member.nekoId === selfNekoId) return '你'
       return member.displayName || member.username
     }
-    if (conversation.kind === 'direct') {
-      if (conversation.contact && username === conversation.contact.username) {
-        return contactLabel(conversation.contact)
-      }
-      return '你'
+    if (contact) {
+      return username === contact.username ? contactLabel(contact) : '你'
     }
     return username || '未知用户'
-  }
+  }, [contact, selfNekoId, stableMembers])
 
-  const handlePoke = (targetNekoId: number): void => {
+  const handlePokeTap = useCallback((targetNekoId: number): void => {
     if (!onPoke) return
     const now = Date.now()
     const last = lastAvatarTapRef.current
@@ -427,15 +389,65 @@ export default function ChatThread({
       return
     }
     lastAvatarTapRef.current = { id: targetNekoId, at: now }
-  }
+  }, [onPoke])
 
-  const nameOfNekoId = (nekoId: number): string => {
+  const handlePokeDouble = useCallback((targetNekoId: number): void => {
+    if (!onPoke) return
+    // 触屏双击路径已经发过时跳过浏览器补发的 dblclick
+    if (Date.now() - lastPokeSentRef.current < 500) return
+    lastPokeSentRef.current = Date.now()
+    void onPoke(targetNekoId)
+  }, [onPoke])
+
+  const handlePokeAvatar = useCallback((targetNekoId: number, mode: 'double' | 'touch') => {
+    if (mode === 'touch') handlePokeTap(targetNekoId)
+    else handlePokeDouble(targetNekoId)
+  }, [handlePokeDouble, handlePokeTap])
+
+  const nameOfNekoId = useCallback((nekoId: number): string => {
     if (selfNekoId !== null && nekoId === selfNekoId) return '你'
-    const member = conversation?.members.find((item) => item.nekoId === nekoId)
+    const member = stableMembers.find((item) => item.nekoId === nekoId)
     if (member) return member.displayName || member.username
-    if (conversation?.contact?.nekoId === nekoId) return contactLabel(conversation.contact)
+    if (contact?.nekoId === nekoId) return contactLabel(contact)
     return '对方'
-  }
+  }, [contact, selfNekoId, stableMembers])
+
+  const handleLongPress = useCallback((message: NekoMessage, x: number, y: number) => {
+    setActionMenu({ message, x, y })
+  }, [])
+
+  const handleContextMenu = useCallback((message: NekoMessage, x: number, y: number) => {
+    setActionMenu({ message, x, y })
+  }, [])
+
+  const handleOpenMenu = useCallback((message: NekoMessage, x: number, y: number) => {
+    setActionMenu({ message, x, y })
+  }, [])
+
+  const handlePreviewImage = useCallback((image: string) => {
+    setPreviewImage(image)
+  }, [])
+
+  const handleOpenBundle = useCallback((bundle: NekoBundleItem[]) => {
+    setBundlePreview(bundle)
+  }, [])
+
+  const jumpToMessage = useCallback((messageId: number) => {
+    const element = listRef.current?.querySelector<HTMLElement>(
+      `[data-message-id="${messageId}"]`,
+    )
+    if (!element) {
+      window.alert('被引用的消息不在当前已加载的记录里，可向上滚动加载更早消息后再试。')
+      return
+    }
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setFlashId(messageId)
+    if (flashTimerRef.current !== null) clearTimeout(flashTimerRef.current)
+    flashTimerRef.current = setTimeout(() => {
+      flashTimerRef.current = null
+      setFlashId((current) => (current === messageId ? null : current))
+    }, 1_600)
+  }, [])
 
   /** 消息的引用预览文本 */
   const previewOf = (message: NekoMessage): string => {
@@ -453,24 +465,6 @@ export default function ChatThread({
       name: senderLabel(message, conversation),
       text: previewOf(message),
     })
-  }
-
-  /** 跳到被引用的消息；不在已加载范围内时给出提示 */
-  const jumpToMessage = (messageId: number) => {
-    const element = listRef.current?.querySelector<HTMLElement>(
-      `[data-message-id="${messageId}"]`,
-    )
-    if (!element) {
-      window.alert('被引用的消息不在当前已加载的记录里，可向上滚动加载更早消息后再试。')
-      return
-    }
-    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    setFlashId(messageId)
-    if (flashTimerRef.current !== null) clearTimeout(flashTimerRef.current)
-    flashTimerRef.current = setTimeout(() => {
-      flashTimerRef.current = null
-      setFlashId((current) => (current === messageId ? null : current))
-    }, 1_600)
   }
 
   const enterSelectMode = () => {
@@ -496,7 +490,7 @@ export default function ChatThread({
     setForwardError(null)
   }
 
-  const toggleSelect = (messageId: number) => {
+  const toggleSelect = useCallback((messageId: number) => {
     setSelectedIds((prev) => {
       const next = new Set(prev)
       if (next.has(messageId)) {
@@ -506,7 +500,7 @@ export default function ChatThread({
       }
       return next
     })
-  }
+  }, [])
 
   const submitForward = async (
     targetKeys: string[],
@@ -638,6 +632,34 @@ export default function ChatThread({
     ? dismissedAnnouncements[String(roomInfo.id)] === (roomInfo.announcementUpdatedAt || 0)
     : false
   const showAnnouncementBanner = !!roomInfo?.announcement && !announcementDismissed
+
+  // 预计算每行的日期/分组合并/sender，消息行本身是 memo：切换选中、回到底部时
+  // 只有真正变化的行重渲染。
+  const messageRows = useMemo(() => {
+    if (!conversation) return []
+    return messages.map((message, index) => {
+      const prev = index > 0 ? messages[index - 1] : null
+      const showDay = !prev || dayKey(prev.ts) !== dayKey(message.ts)
+      const grouped = !!prev
+        && !prev.recalled
+        && !message.recalled
+        && !prev.poke
+        && !message.poke
+        && prev.fromUsername === message.fromUsername
+        && message.ts - prev.ts >= 0
+        && message.ts - prev.ts < MESSAGE_GROUP_WINDOW_MS
+      return {
+        message,
+        own: message.mine,
+        grouped,
+        dayLabel: showDay ? formatDaySeparator(message.ts) : null,
+        sender: avatarOf(conversation, message),
+        selected: selectedIds.has(message.id),
+        flash: flashId === message.id,
+        active: actionMenu?.message.id === message.id,
+      }
+    })
+  }, [actionMenu?.message.id, conversation, flashId, messages, selectedIds])
 
   if (!conversation) {
     return (
@@ -1013,210 +1035,35 @@ export default function ChatThread({
           </div>
         )}
 
-        {!loading &&
-          messages.map((message, index) => {
-            const own = message.mine
-            const prev = index > 0 ? messages[index - 1] : null
-            const showDay = !prev || dayKey(prev.ts) !== dayKey(message.ts)
-            const grouped = !!prev
-              && !prev.recalled
-              && !message.recalled
-              && !prev.poke
-              && !message.poke
-              && prev.fromUsername === message.fromUsername
-              && message.ts - prev.ts >= 0
-              && message.ts - prev.ts < MESSAGE_GROUP_WINDOW_MS
-
-            // 已撤回：不渲染气泡，改为居中系统行
-            if (message.recalled) {
-              const who = own ? '你' : senderLabel(message, conversation)
-              return (
-                <Fragment key={message.id}>
-                  {showDay && <div className="gh-chat-day-sep">{formatDaySeparator(message.ts)}</div>}
-                  <div className="gh-chat-recall-line" role="status">
-                    {`${who}撤回了一条消息`}
-                    {message.byAdmin && !own ? '（管理员）' : ''}
-                  </div>
-                </Fragment>
-              )
-            }
-
-            const recallable = own && onRecall !== undefined && canRecall(message, now)
-            // neko 的表情消息 = body 固定 [表情] + XHTML 图片；渲染成无气泡贴纸
-            const isSticker = Boolean(message.image) && message.body === '[表情]'
-            const isImage = Boolean(message.image) && !isSticker
-            const sender = avatarOf(conversation, message)
-            const selected = selectedIds.has(message.id)
-
-            return (
-              <Fragment key={message.id}>
-              {showDay && <div className="gh-chat-day-sep">{formatDaySeparator(message.ts)}</div>}
-              <div
-                data-message-id={message.id}
-                className={`gh-chat-message ${own ? 'gh-chat-message--own' : ''} ${
-                  grouped ? 'gh-chat-message--grouped' : ''
-                } ${
-                  selecting ? 'gh-chat-message--selectable' : ''
-                } ${selected ? 'gh-chat-message--selected' : ''} ${
-                  flashId === message.id ? 'gh-chat-message--flash' : ''
-                } ${actionMenu?.message.id === message.id ? 'gh-chat-message--active' : ''}`}
-                onPointerDown={(event) => {
-                  if (selecting) return
-                  pressedMessageRef.current = message
-                  longPress.begin(event)
-                }}
-                onPointerMove={longPress.move}
-                onPointerUp={longPress.end}
-                onPointerCancel={longPress.end}
-                onContextMenu={(event) => {
-                  if (selecting) return
-                  event.preventDefault()
-                  setActionMenu({ message, x: event.clientX, y: event.clientY })
-                }}
-              >
-                {selecting && (
-                  <button
-                    type="button"
-                    className={`gh-chat-select-toggle ${selected ? 'gh-chat-select-toggle--on' : ''}`}
-                    aria-label={selected ? '取消选择该消息' : '选择该消息'}
-                    aria-pressed={selected}
-                    onClick={() => toggleSelect(message.id)}
-                  >
-                    {selected ? '✓' : ''}
-                  </button>
-                )}
-                {!own && grouped && <span className="gh-chat-avatar-spacer" aria-hidden="true" />}
-                {!own && !grouped && (
-                  <span
-                    className="gh-chat-avatar-poke"
-                    title="双击拍一拍"
-                    onDoubleClick={() => {
-                      if (!sender.nekoId) return
-                      // 触屏双击路径已经发过时跳过浏览器补发的 dblclick
-                      if (Date.now() - lastPokeSentRef.current < 500) return
-                      lastPokeSentRef.current = Date.now()
-                      void onPoke?.(sender.nekoId)
-                    }}
-                    onTouchEnd={() => {
-                      if (sender.nekoId) handlePoke(sender.nekoId)
-                    }}
-                  >
-                    <NekoAvatar
-                      nekoId={sender.nekoId}
-                      avatarVersion={sender.avatarVersion}
-                      fallbackId={sender.id}
-                      name={sender.name}
-                      size="sm"
-                    />
-                  </span>
-                )}
-                <div className="gh-chat-message-body">
-                  <div className={`gh-chat-message-meta ${grouped ? 'gh-chat-message-meta--grouped' : ''}`}>
-                    {!own && !grouped && (
-                      <span className="gh-chat-message-sender">
-                        {sender.name}
-                        <UserTitleBadge title={sender.title} />
-                      </span>
-                    )}
-                    <time className="gh-chat-message-time" dateTime={new Date(message.ts).toISOString()}>
-                      {formatMessageTime(message.ts)}
-                    </time>
-                    {own && conversation?.kind === 'direct' && !message.recalled && (
-                      <span className="gh-chat-read-tag" title="对方是否已读">
-                        {message.id <= peerRead ? '已读' : '未读'}
-                      </span>
-                    )}
-                    {message.mentionedMe && <span className="gh-chat-at-badge">@我</span>}
-                    {!selecting && (
-                      <button
-                        type="button"
-                        className="gh-chat-message-more"
-                        aria-label="消息操作"
-                        title="消息操作"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          const rect = event.currentTarget.getBoundingClientRect()
-                          setActionMenu({ message, x: rect.left, y: rect.bottom + 4 })
-                        }}
-                      >
-                        ···
-                      </button>
-                    )}
-                  </div>
-                  {message.quote && (
-                    <button
-                      type="button"
-                      className="gh-chat-quote"
-                      title="跳到被引用的消息"
-                      onClick={() => jumpToMessage(message.quote!.id)}
-                    >
-                      <span className="gh-chat-quote-name">{displayNameOf(message.quote.from)}</span>
-                      <span className="gh-chat-quote-text">{message.quote.text}</span>
-                    </button>
-                  )}
-                  {message.poke ? (
-                    <div className={`gh-chat-poke ${message.poke.toNekoId === selfNekoId ? 'gh-chat-poke--me' : ''}`} role="note">
-                      {message.mine ? '你' : sender.name} 拍了拍 {nameOfNekoId(message.poke.toNekoId)}
-                    </div>
-                  ) : message.bundle ? (
-                    <button
-                      type="button"
-                      className="gh-chat-bundle"
-                      aria-label="查看聊天记录"
-                      onClick={() => {
-                        if (longPress.wasLongPress()) return
-                        setBundlePreview(message.bundle)
-                      }}
-                    >
-                      <span className="gh-chat-bundle-title">聊天记录</span>
-                      <span className="gh-chat-bundle-lines">
-                        {message.bundle.slice(0, 3).map((item, index) => (
-                          <span key={`${item.t}-${index}`} className="gh-chat-bundle-line">
-                            {`${displayNameOf(item.n)}：${item.r ? '消息已撤回' : item.b || '[图片]'}`}
-                          </span>
-                        ))}
-                      </span>
-                      <span className="gh-chat-bundle-more">
-                        共 {message.bundle.length} 条 · 点击查看
-                      </span>
-                    </button>
-                  ) : isSticker ? (
-                    <img
-                      className="gh-chat-message-sticker"
-                      src={chatImageUrl(message.image)}
-                      alt="表情"
-                      loading="lazy"
-                    />
-                  ) : isImage ? (
-                    <button
-                      type="button"
-                      className="gh-chat-message-image-wrap"
-                      aria-label="查看大图"
-                      onClick={() => {
-                        if (longPress.wasLongPress()) return
-                        setPreviewImage(message.image)
-                      }}
-                    >
-                      <img
-                        className="gh-chat-message-image"
-                        src={chatImageUrl(message.image)}
-                        alt="图片消息"
-                        loading="lazy"
-                      />
-                    </button>
-                  ) : (
-                    <div className={`gh-chat-message-bubble ${message.mentionedMe ? 'gh-chat-message-bubble--mention' : ''}`}>
-                      {conversation?.kind === 'room'
-                        ? renderMentionText(message.body, conversation.members)
-                        : message.body}
-                    </div>
-                  )}
-                </div>
-              </div>
-              </Fragment>
-            )
-          })}
-      </div>
+        {!loading && messageRows.map((row) => (
+          <ChatMessageRow
+            key={row.message.id}
+            message={row.message}
+            own={row.own}
+            grouped={row.grouped}
+            dayLabel={row.dayLabel}
+            selecting={selecting}
+            selected={row.selected}
+            flash={row.flash}
+            active={row.active}
+            peerRead={peerRead}
+            isDirect={conversation.kind === 'direct'}
+            isRoom={conversation.kind === 'room'}
+            selfNekoId={selfNekoId}
+            sender={row.sender}
+            members={stableMembers}
+            displayNameOf={displayNameOf}
+            nameOfNekoId={nameOfNekoId}
+            onLongPress={handleLongPress}
+            onContextMenu={handleContextMenu}
+            onOpenMenu={handleOpenMenu}
+            onToggleSelect={toggleSelect}
+            onPokeAvatar={handlePokeAvatar}
+            onPreviewImage={handlePreviewImage}
+            onOpenBundle={handleOpenBundle}
+            onJumpQuote={jumpToMessage}
+          />
+        ))}      </div>
 
       {!atBottom && !loading && messages.length > 0 && (
         <button type="button" className="gh-chat-jump-latest" onClick={scrollToLatest}>

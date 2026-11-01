@@ -389,8 +389,14 @@ export function XmppChatProvider({ children }: { children: ReactNode }) {
 
   const commitMessages = useCallback(
     (key: string, updater: (prev: NekoMessage[]) => NekoMessage[]) => {
-      const next = mergeNekoMessages(updater(messagesRef.current[key] ?? []), [])
+      const previous = messagesRef.current[key] ?? []
+      const next = mergeNekoMessages(updater(previous), [])
       messagesRef.current = { ...messagesRef.current, [key]: next }
+      // 轮询 refreshLatest 每 15s 都会拉回同一批消息；内容未变时不要 setState，
+      // 否则整个 ChatThread 会无谓重渲染（低端设备上尤其明显）。
+      if (next.length === previous.length && next.every((message, index) => message === previous[index])) {
+        return
+      }
       setMessagesByKey(messagesRef.current)
     },
     [],

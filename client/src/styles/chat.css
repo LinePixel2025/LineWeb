@@ -752,6 +752,9 @@
   align-items: flex-start;
   gap: var(--gh-space-2);
   max-width: 100%;
+  /* 消息行数量可能上百：让浏览器把布局/绘制限制在行内，
+     减少整段消息列表的 layout/paint 开销。 */
+  contain: layout paint style;
 }
 
 .gh-chat-message--own {

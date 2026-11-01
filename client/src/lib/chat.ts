@@ -86,7 +86,33 @@ function messageTime(message: NekoMessage): number {
 }
 
 /**
+ * 两条消息在界面上的内容是否等价（用于轮询合并时保留旧对象引用）。
+ * 不做深比较 bundle：合并转发记录很少变化，引用不同时替换即可。
+ */
+function sameNekoMessageContent(a: NekoMessage, b: NekoMessage): boolean {
+  return a === b
+    || (
+      a.id === b.id
+      && a.ts === b.ts
+      && a.body === b.body
+      && a.mine === b.mine
+      && a.recalled === b.recalled
+      && a.byAdmin === b.byAdmin
+      && a.fromUsername === b.fromUsername
+      && a.fromNekoId === b.fromNekoId
+      && a.roomId === b.roomId
+      && a.mentionedMe === b.mentionedMe
+      && a.image === b.image
+      && (a.poke?.toNekoId ?? null) === (b.poke?.toNekoId ?? null)
+      && (a.quote?.id ?? null) === (b.quote?.id ?? null)
+      && (a.quote?.text ?? null) === (b.quote?.text ?? null)
+      && (a.bundle?.length ?? 0) === (b.bundle?.length ?? 0)
+    )
+}
+
+/**
  * 合并消息：按 id 去重（后到的覆盖先到的），并按时间 + id 正序排序。
+ * 内容未变时保留已有对象引用，让 React 的 memo 能跳过未变化的行。
  */
 export function mergeNekoMessages(
   existing: NekoMessage[],
@@ -98,7 +124,12 @@ export function mergeNekoMessages(
   }
   const additions = Array.isArray(incoming) ? incoming : [incoming]
   for (const message of additions) {
-    if (message.id > 0) merged.set(message.id, message)
+    if (message.id <= 0) continue
+    const previous = merged.get(message.id)
+    merged.set(
+      message.id,
+      previous && sameNekoMessageContent(previous, message) ? previous : message,
+    )
   }
   return Array.from(merged.values()).sort((a, b) => {
     const diff = messageTime(a) - messageTime(b)

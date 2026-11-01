@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import api, { setToken, ApiError } from '../lib/api'
+import { clearAvatarCache } from '../lib/avatarCache'
 import { hasCapability, hasAnyCapability, type Capability } from '../lib/permissions'
 
 const TOKEN_KEY = 'lineweb_token'
@@ -54,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // 只在 token 无效（401）时清除；速率限制等其他错误保留 token
         if (err instanceof ApiError && err.status === 401) {
           setToken(null)
+          clearAvatarCache()
         }
       })
       .finally(() => setLoading(false))
@@ -61,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (identifier: string, password: string) => {
     const data = await api.post<{ token: string; user: User }>('/auth/login', { identifier, password })
+    clearAvatarCache()
     setToken(data.token)
     setUser(data.user)
   }, [])
@@ -78,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // 本地会话必须在服务端失败时也能退出
     } finally {
       setToken(null)
+      clearAvatarCache()
       setUser(null)
     }
   }, [])

@@ -1,6 +1,7 @@
 import { memo, useState, useEffect, type CSSProperties } from 'react'
 import { useOptionalPoints } from '../contexts/PointsContext'
 import { PREMIUM_AVATAR_FRAMES, type AvatarFrameStyle } from '../types/points'
+import { loadAvatar, peekAvatar } from '../lib/avatarCache'
 
 interface UserAvatarProps {
   userId: number
@@ -30,7 +31,8 @@ function getColor(userId: number): string {
 
 export default memo(function UserAvatar({ userId, username, size = 'md', frame }: UserAvatarProps) {
   const px = SIZE_MAP[size]
-  const [imgSrc, setImgSrc] = useState<string | null>(null)
+  // 头像按 userId 做模块级缓存：同一发送者只请求一次，避免聊天列表里几十个并发 fetch
+  const [imgSrc, setImgSrc] = useState<string | null>(() => peekAvatar(userId) ?? null)
   const [failed, setFailed] = useState(false)
   // 未显式传入时，本人头像自动套用积分中心里佩戴的头像框（他人头像由调用方传 frame）
   const points = useOptionalPoints()
@@ -41,44 +43,30 @@ export default memo(function UserAvatar({ userId, username, size = 'md', frame }
   const frameStyle = frame ?? selfFrame
 
   useEffect(() => {
-    setImgSrc(null)
     setFailed(false)
     // 负数 id 是原生 neko 账号 / 群聊的合成标识，不存在 LineWeb 头像，直接用首字母兜底
     if (userId <= 0) {
+      setImgSrc(null)
       setFailed(true)
       return
     }
-    const controller = new AbortController()
 
-    const token = localStorage.getItem('lineweb_token')
-    const headers: Record<string, string> = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
-
-    fetch(`/api/auth/avatar/${userId}`, {
-      headers,
-      cache: 'no-store',
-      signal: controller.signal,
-    })
-      .then(res => {
-        if (res.ok && res.status !== 204) {
-          return res.blob().then(blob => {
-            setImgSrc(URL.createObjectURL(blob))
-          })
-        }
-        setFailed(true)
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setFailed(true)
-      })
-
-    return () => controller.abort()
-  }, [userId])
-
-  useEffect(() => {
-    return () => {
-      if (imgSrc) URL.revokeObjectURL(imgSrc)
+    const cached = peekAvatar(userId)
+    if (cached !== undefined) {
+      setImgSrc(cached)
+      return
     }
-  }, [imgSrc])
+
+    let cancelled = false
+    void loadAvatar(userId).then((url) => {
+      if (cancelled) return
+      setImgSrc(url)
+      if (!url) setFailed(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
 
   let content
   if (imgSrc && !failed) {
@@ -87,6 +75,7 @@ export default memo(function UserAvatar({ userId, username, size = 'md', frame }
         src={imgSrc}
         alt={username}
         loading="lazy"
+        decoding="async"
         style={{
           width: px,
           height: px,
