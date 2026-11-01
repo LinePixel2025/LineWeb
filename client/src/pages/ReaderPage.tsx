@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Icon from '../components/ui/Icon'
 import { api, getToken } from '../lib/api'
@@ -178,7 +178,7 @@ export default function ReaderPage() {
     xhr.send(form)
   }, [finishUpload, load, showToast])
 
-  const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = '' // 允许重复选择同一文件
     if (file) uploadFile(file)
@@ -216,20 +216,54 @@ export default function ReaderPage() {
 
   const readingCount = useMemo(() => books.filter(book => book.progress).length, [books])
 
+  /** 继续阅读大卡：优先最近在读，否则最近加入 */
+  const featuredBook = useMemo<BookDto | null>(() => {
+    if (books.length === 0) return null
+    const inProgress = books.filter(book => book.progress)
+    if (inProgress.length === 0) return books[0]
+    return inProgress.reduce((latest, book) => {
+      const latestTime = new Date(latest.progress?.updatedAt ?? 0).getTime()
+      const bookTime = new Date(book.progress?.updatedAt ?? 0).getTime()
+      return bookTime > latestTime ? book : latest
+    })
+  }, [books])
+
+  const openBook = useCallback((book: BookDto) => {
+    navigate(`/reader/${book.id}`)
+  }, [navigate])
+
+  const openFilePicker = useCallback(() => {
+    if (!uploading) fileInputRef.current?.click()
+  }, [uploading])
+
+  const featuredPercentValue = Math.min(Math.max(featuredBook?.progress?.percent ?? 0, 0), 1)
+  const featuredPercentText = formatProgressPercent(featuredPercentValue)
+
+  const renderCoverFallback = (book: BookDto) => (
+    <span className="gh-reader-card-cover-fallback">
+      <span className="gh-reader-card-spine" aria-hidden="true" />
+      <span className="gh-reader-card-initial" aria-hidden="true">
+        {(book.title.trim() || '书').slice(0, 1)}
+      </span>
+      <span className="gh-reader-card-format">{book.format.toUpperCase()}</span>
+    </span>
+  )
+
   return (
     <div className="gh-page gh-reader-page" {...dragProps}>
       <header className="gh-reader-header">
-        <div>
-          <h1 className="gh-reader-title">小说阅读器</h1>
+        <div className="gh-reader-header-copy">
+          <span className="gh-reader-eyebrow"><Icon name="bookOpen" size={14} /> 小说阅读器</span>
+          <h1 className="gh-reader-title">书架</h1>
           <p className="gh-reader-subtitle">
-            EPUB / TXT 在线阅读 · 书架与进度自动同步
+            EPUB / TXT 在线阅读 · 进度自动同步
             {books.length > 0 && ` · 共 ${books.length} 本${readingCount > 0 ? `（在读 ${readingCount}）` : ''}`}
           </p>
         </div>
         <div className="gh-reader-header-actions">
           <button
             className="gh-btn gh-btn--primary"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={openFilePicker}
             disabled={uploading}
           >
             <Icon name="plus" size={16} />
@@ -278,15 +312,27 @@ export default function ReaderPage() {
       )}
 
       {loading ? (
-        <div className="gh-reader-grid" aria-hidden="true">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div key={index} className="gh-reader-card gh-reader-card--skeleton">
-              <span className="gh-reader-skeleton-cover" />
-              <span className="gh-reader-skeleton-line" />
-              <span className="gh-reader-skeleton-line gh-reader-skeleton-line--short" />
+        <>
+          <div className="gh-reader-hero gh-reader-hero--skeleton" aria-hidden="true">
+            <div className="gh-reader-hero-card">
+              <span className="gh-reader-hero-skeleton-cover" />
+              <div className="gh-reader-hero-skeleton-body">
+                <span className="gh-reader-skeleton-line" />
+                <span className="gh-reader-skeleton-line gh-reader-skeleton-line--short" />
+                <span className="gh-reader-skeleton-line" />
+              </div>
             </div>
-          ))}
-        </div>
+          </div>
+          <div className="gh-reader-grid" aria-hidden="true">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="gh-reader-card gh-reader-card--skeleton">
+                <span className="gh-reader-skeleton-cover" />
+                <span className="gh-reader-skeleton-line" />
+                <span className="gh-reader-skeleton-line gh-reader-skeleton-line--short" />
+              </div>
+            ))}
+          </div>
+        </>
       ) : loadError ? (
         <div className="gh-reader-alert gh-reader-alert--error">
           {loadError}
@@ -296,79 +342,146 @@ export default function ReaderPage() {
         <div className="gh-reader-empty">
           <span className="gh-reader-empty-icon"><Icon name="bookOpen" size={34} /></span>
           <p className="gh-reader-empty-title">书架还是空的</p>
-          <p className="gh-reader-empty-hint">把 EPUB 或 TXT 拖到页面任意位置，或点右上角「上传书籍」</p>
-          <p className="gh-reader-empty-hint">单本 ≤ 50 MiB · EPUB 自动抓封面与作者 · 计入网盘空间</p>
+          <p className="gh-reader-empty-hint">把 EPUB 或 TXT 拖到页面任意位置，或点上方「上传书籍」</p>
+          <button className="gh-btn gh-btn--primary" onClick={openFilePicker}>
+            <Icon name="upload" size={16} />
+            上传第一本书
+          </button>
+          <p className="gh-reader-empty-hint gh-reader-empty-hint--muted">单本 ≤ 50 MiB · EPUB 自动抓封面与作者 · 计入网盘空间</p>
         </div>
       ) : (
-        <div className="gh-reader-grid">
-          {books.map((book) => {
-            const percentText = formatProgressPercent(book.progress?.percent ?? 0)
-            const percentValue = Math.min(Math.max(book.progress?.percent ?? 0, 0), 1)
-            return (
-              <article key={book.id} className="gh-reader-card" role="listitem">
+        <>
+          {featuredBook && (
+            <section className="gh-reader-hero" aria-label="继续阅读">
+              <div className="gh-reader-hero-card">
                 <button
-                  className="gh-reader-card-cover"
-                  onClick={() => navigate(`/reader/${book.id}`)}
-                  aria-label={`阅读《${book.title}》`}
+                  className="gh-reader-hero-cover"
+                  onClick={() => openBook(featuredBook)}
+                  aria-label={`${featuredBook.progress ? '继续阅读' : '开始阅读'}《${featuredBook.title}》`}
                 >
-                  {book.hasCover ? (
-                    <img src={coverUrl(book)} alt="" loading="lazy" />
-                  ) : (
-                    <span className="gh-reader-card-cover-fallback">
-                      <span className="gh-reader-card-spine" aria-hidden="true" />
-                      <span className="gh-reader-card-initial" aria-hidden="true">
-                        {(book.title.trim() || '书').slice(0, 1)}
-                      </span>
-                      <span className="gh-reader-card-format">{book.format.toUpperCase()}</span>
-                    </span>
-                  )}
-                  <span className="gh-reader-card-hover">
-                    <Icon name="play" size={15} />
-                    <span>{book.progress ? '继续阅读' : '开始阅读'}</span>
-                  </span>
-                  {percentValue > 0 && (
-                    <span className="gh-reader-card-progress-track" aria-hidden="true">
-                      <span className="gh-reader-card-progress-fill" style={{ width: `${percentValue * 100}%` }} />
-                    </span>
-                  )}
-                  {percentText && <span className="gh-reader-card-progress">{percentText}</span>}
+                  {featuredBook.hasCover ? (
+                    <img src={coverUrl(featuredBook)} alt="" />
+                  ) : renderCoverFallback(featuredBook)}
+                  <span className="gh-reader-hero-sheen" aria-hidden="true" />
                 </button>
-                <div className="gh-reader-card-meta">
-                  <button
-                    className="gh-reader-card-title"
-                    onClick={() => navigate(`/reader/${book.id}`)}
-                    title={book.title}
-                  >
-                    {book.title}
+                <div className="gh-reader-hero-body">
+                  <span className="gh-reader-hero-eyebrow">
+                    {featuredBook.progress ? '继续阅读' : '刚刚加入'}
+                  </span>
+                  <button className="gh-reader-hero-title" onClick={() => openBook(featuredBook)} title={featuredBook.title}>
+                    {featuredBook.title}
                   </button>
-                  <span className="gh-reader-card-sub">
-                    {book.author || '佚名'} · {book.format.toUpperCase()} · {formatStorageSize(book.size)}
-                  </span>
-                  <span className="gh-reader-card-last">
-                    {book.progress
-                      ? `${formatRelativeTime(book.progress.updatedAt)}读到 ${percentText}`
-                      : `${formatRelativeTime(book.createdAt)}加入`}
-                  </span>
+                  <p className="gh-reader-hero-meta">
+                    {featuredBook.author || '佚名'} · {featuredBook.format.toUpperCase()} · {formatStorageSize(featuredBook.size)}
+                  </p>
+                  <div className="gh-reader-hero-progress">
+                    <div className="gh-reader-hero-progress-head">
+                      <span>{featuredBook.progress ? `上次读到 ${featuredPercentText || '0%'}` : '还没有阅读进度'}</span>
+                      <span>
+                        {featuredBook.progress
+                          ? formatRelativeTime(featuredBook.progress.updatedAt)
+                          : formatRelativeTime(featuredBook.createdAt)}
+                      </span>
+                    </div>
+                    <div className="gh-reader-hero-track" aria-hidden="true">
+                      <span style={{ width: `${featuredPercentValue * 100}%` }} />
+                    </div>
+                  </div>
+                  <div className="gh-reader-hero-actions">
+                    <button className="gh-btn gh-btn--primary" onClick={() => openBook(featuredBook)}>
+                      <Icon name="play" size={15} />
+                      {featuredBook.progress ? '继续阅读' : '开始阅读'}
+                    </button>
+                    <span className="gh-reader-hero-stat">
+                      共 {books.length} 本{readingCount > 0 ? ` · ${readingCount} 本在读` : ''}
+                    </span>
+                  </div>
                 </div>
-                <button
-                  className="gh-reader-card-delete"
-                  onClick={() => void handleDelete(book)}
-                  disabled={deletingId === book.id}
-                  aria-label={`删除《${book.title}》`}
-                  title="删除"
-                >
-                  <Icon name="trash" size={14} />
-                </button>
-              </article>
-            )
-          })}
-        </div>
+              </div>
+            </section>
+          )}
+
+          <section className="gh-reader-shelf" aria-label="全部书籍">
+            <div className="gh-reader-shelf-head">
+              <h2 className="gh-reader-shelf-title">全部书籍</h2>
+              <span className="gh-reader-shelf-count">{books.length} 本</span>
+            </div>
+            <div className="gh-reader-grid">
+              {books.map((book) => {
+                const percentText = formatProgressPercent(book.progress?.percent ?? 0)
+                const percentValue = Math.min(Math.max(book.progress?.percent ?? 0, 0), 1)
+                return (
+                  <article key={book.id} className="gh-reader-card" role="listitem">
+                    <button
+                      className="gh-reader-card-cover"
+                      onClick={() => openBook(book)}
+                      aria-label={`阅读《${book.title}》`}
+                    >
+                      {book.hasCover ? (
+                        <img src={coverUrl(book)} alt="" loading="lazy" />
+                      ) : renderCoverFallback(book)}
+                      <span className="gh-reader-card-hover">
+                        <Icon name="play" size={15} />
+                        <span>{book.progress ? '继续阅读' : '开始阅读'}</span>
+                      </span>
+                      {percentValue > 0 && (
+                        <span className="gh-reader-card-progress-track" aria-hidden="true">
+                          <span className="gh-reader-card-progress-fill" style={{ width: `${percentValue * 100}%` }} />
+                        </span>
+                      )}
+                      {percentText && <span className="gh-reader-card-progress">{percentText}</span>}
+                    </button>
+                    <div className="gh-reader-card-meta">
+                      <button
+                        className="gh-reader-card-title"
+                        onClick={() => openBook(book)}
+                        title={book.title}
+                      >
+                        {book.title}
+                      </button>
+                      <span className="gh-reader-card-sub">
+                        {book.author || '佚名'} · {book.format.toUpperCase()} · {formatStorageSize(book.size)}
+                      </span>
+                      <span className="gh-reader-card-last">
+                        {book.progress
+                          ? `${formatRelativeTime(book.progress.updatedAt)}读到 ${percentText || '0%'}`
+                          : `${formatRelativeTime(book.createdAt)}加入`}
+                      </span>
+                    </div>
+                    <button
+                      className="gh-reader-card-delete"
+                      onClick={() => void handleDelete(book)}
+                      disabled={deletingId === book.id}
+                      aria-label={`删除《${book.title}》`}
+                      title="删除"
+                    >
+                      <Icon name="trash" size={14} />
+                    </button>
+                  </article>
+                )
+              })}
+
+              <button
+                type="button"
+                className="gh-reader-upload-tile"
+                onClick={openFilePicker}
+                disabled={uploading}
+                aria-label="上传书籍"
+              >
+                <span className="gh-reader-upload-tile-icon"><Icon name="plus" size={20} /></span>
+                <span className="gh-reader-upload-tile-title">上传书籍</span>
+                <span className="gh-reader-upload-tile-hint">EPUB / TXT · 拖拽也行</span>
+              </button>
+            </div>
+          </section>
+        </>
       )}
 
       {isDragging && (
         <div className="gh-reader-dropzone">
           <Icon name="upload" size={30} />
           <p>松开即可上传 EPUB / TXT</p>
+          <span>单本 ≤ 50 MiB</span>
         </div>
       )}
 
