@@ -31,6 +31,21 @@ interface RawSong {
   fee?: number
 }
 
+/**
+ * 网易云媒体 CDN 域名（封面 / 音频 / 头像）。
+ *
+ * 上游接口大多返回明文 http 地址，而页面 CSP 的 img-src 只放行 https：
+ * 搜索结果里的封面此前被 CSP 直接拦掉（表现为「大多数封面无法显示」）。
+ * 服务端已统一升级为 https，这里是前端兜底（例如 localStorage 里持久化的旧队列）。
+ */
+const NCM_MEDIA_HTTP_RE = /^http:\/\/((?:[a-z0-9-]+\.)*(?:music\.126\.net|126\.net|127\.net|netease\.com))([/?#].*)?$/i
+
+/** http 网易 CDN 地址 → https；其它地址原样返回 */
+export function upgradeMediaUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  return url.replace(NCM_MEDIA_HTTP_RE, (_, host: string, rest = '') => `https://${host}${rest}`)
+}
+
 export function normalizeSong(raw: RawSong): SongView | null {
   if (raw?.id == null || !raw.name) return null
   const artistList = raw.ar ?? raw.artists ?? []
@@ -40,7 +55,7 @@ export function normalizeSong(raw: RawSong): SongView | null {
     name: raw.name,
     artists: artistList.map(a => a?.name).filter(Boolean).join(' / '),
     albumName: album?.name ?? '',
-    picUrl: album?.picUrl ?? null,
+    picUrl: upgradeMediaUrl(album?.picUrl),
     durationMs: raw.dt ?? raw.duration ?? 0,
     fee: raw.fee ?? 0,
   }

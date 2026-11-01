@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Icon from '../components/ui/Icon'
+import NowPlayingCard from '../components/music/NowPlayingCard'
 import { useMusicPlayer } from '../contexts/MusicPlayerContext'
 import { api } from '../lib/api'
-import { formatSongDuration, normalizeSongList, type SongView } from '../lib/music/song'
+import { formatSongDuration, normalizeSongList, upgradeMediaUrl, type SongView } from '../lib/music/song'
 import type {
   MusicQrCheck,
   MusicQrPrepare,
@@ -15,15 +16,16 @@ import type {
 
 /**
  * 网易云音乐页（/music）：
+ *   - 顶部「正在播放」卡：大封面 + 控制 + 歌词（NowPlayingCard）
  *   - 未绑定：扫码登录卡（1.5s 轮询；含第三方接口登录的账号风控提示）
  *   - 已绑定：显示昵称 + 解绑
  *   - Tab：每日推荐（需绑定）/ 排行榜 / 搜索（单曲 + 歌单；未绑定匿名可搜可听免费歌）
- * 点歌即入队（playQueue），实际播放由全局 MusicPlayerBar 承载。
+ * 点歌即入队（playQueue），跨页播放由全局 MusicPlayerBar 承载。
  */
 
 type MainTab = 'recommend' | 'toplist' | 'search'
 type SearchType = 1 | 1000
-interface PlaylistBrief { id: number; name: string; coverImgUrl?: string }
+interface PlaylistBrief { id: number; name: string; coverImgUrl?: string; trackCount?: number }
 
 const QR_POLL_INTERVAL_MS = 1500
 
@@ -31,8 +33,13 @@ function errMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback
 }
 
-function songArtistsText(song: SongView): string {
-  return song.artists || '未知歌手'
+/** 行内「正在播放」动画条 */
+function PlayingBars() {
+  return (
+    <span className="gh-music-eq" aria-hidden="true">
+      <span /><span /><span />
+    </span>
+  )
 }
 
 export default function MusicPage() {
@@ -220,48 +227,97 @@ export default function MusicPage() {
 
   // === 渲染辅助 ===
   const renderSongList = (songs: SongView[], emptyText: string) => {
-    if (songs.length === 0) return <div className="gh-music-empty">{emptyText}</div>
+    if (songs.length === 0) {
+      return (
+        <div className="gh-music-empty">
+          <Icon name="music" size={26} />
+          <p>{emptyText}</p>
+        </div>
+      )
+    }
     return (
       <ul className="gh-music-song-list">
-        {songs.map((song, songIndex) => (
-          <li
-            key={`${song.id}-${songIndex}`}
-            className={`gh-music-song ${player.song?.id === song.id ? 'gh-music-song--active' : ''}`}
-          >
-            <button
-              className="gh-music-song-main"
-              onClick={() => player.playQueue(songs, songIndex)}
-              disabled={player.loading && player.song?.id === song.id}
+        {songs.map((song, songIndex) => {
+          const active = player.song?.id === song.id
+          const isPlaying = active && player.playing
+          return (
+            <li
+              key={`${song.id}-${songIndex}`}
+              className={`gh-music-song ${active ? 'gh-music-song--active' : ''}`}
             >
-              {song.picUrl
-                ? <img className="gh-music-song-cover" src={song.picUrl} alt="" loading="lazy" />
-                : <span className="gh-music-song-cover gh-music-song-cover--fallback"><Icon name="music" size={14} /></span>}
-              <span className="gh-music-song-meta">
-                <span className="gh-music-song-name">
-                  {song.name}
-                  {song.fee === 1 && <span className="gh-music-song-vip">VIP</span>}
+              <button
+                className="gh-music-song-main"
+                onClick={() => player.playQueue(songs, songIndex)}
+                disabled={player.loading && active}
+                aria-label={`播放《${song.name}》`}
+              >
+                <span className="gh-music-song-index">
+                  {isPlaying ? <PlayingBars /> : String(songIndex + 1).padStart(2, '0')}
                 </span>
-                <span className="gh-music-song-artists">{songArtistsText(song)}{song.albumName ? ` · ${song.albumName}` : ''}</span>
-              </span>
-              <span className="gh-music-song-duration">{formatSongDuration(song.durationMs)}</span>
-            </button>
-          </li>
-        ))}
+                <span className="gh-music-song-cover-wrap">
+                  {song.picUrl
+                    ? <img className="gh-music-song-cover" src={upgradeMediaUrl(song.picUrl) ?? undefined} alt="" loading="lazy" />
+                    : <span className="gh-music-song-cover gh-music-song-cover--fallback"><Icon name="music" size={14} /></span>}
+                  <span className="gh-music-song-play"><Icon name="play" size={13} /></span>
+                </span>
+                <span className="gh-music-song-meta">
+                  <span className="gh-music-song-name">
+                    {song.name}
+                    {song.fee === 1 && <span className="gh-music-song-vip">VIP</span>}
+                  </span>
+                  <span className="gh-music-song-artists">
+                    {song.artists || '未知歌手'}{song.albumName ? ` · ${song.albumName}` : ''}
+                  </span>
+                </span>
+                <span className="gh-music-song-duration">{formatSongDuration(song.durationMs)}</span>
+              </button>
+            </li>
+          )
+        })}
       </ul>
     )
   }
 
+  const renderSkeletons = (count: number) => (
+    <ul className="gh-music-song-list" aria-hidden="true">
+      {Array.from({ length: count }).map((_, index) => (
+        <li key={index} className="gh-music-song">
+          <span className="gh-music-skeleton-row">
+            <span className="gh-music-skeleton gh-music-skeleton--cover" />
+            <span className="gh-music-skeleton-lines">
+              <span className="gh-music-skeleton gh-music-skeleton--title" />
+              <span className="gh-music-skeleton gh-music-skeleton--sub" />
+            </span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+
   const renderPlaylists = () => {
     const lists = searchPlaylists ?? []
-    if (lists.length === 0) return <div className="gh-music-empty">没有找到相关歌单</div>
+    if (lists.length === 0) {
+      return (
+        <div className="gh-music-empty">
+          <Icon name="list" size={26} />
+          <p>没有找到相关歌单</p>
+        </div>
+      )
+    }
     return (
       <ul className="gh-music-playlist-grid">
         {lists.map(item => (
           <li key={item.id}>
             <button className="gh-music-playlist-card" onClick={() => void openPlaylist(item.id, item.name)}>
-              {item.coverImgUrl
-                ? <img src={item.coverImgUrl} alt="" loading="lazy" />
-                : <span className="gh-music-playlist-card-fallback"><Icon name="music" size={18} /></span>}
+              <span className="gh-music-card-art">
+                {item.coverImgUrl
+                  ? <img src={upgradeMediaUrl(item.coverImgUrl) ?? undefined} alt="" loading="lazy" />
+                  : <span className="gh-music-playlist-card-fallback"><Icon name="music" size={20} /></span>}
+                <span className="gh-music-card-play"><Icon name="play" size={16} /></span>
+                {typeof item.trackCount === 'number' && item.trackCount > 0 && (
+                  <span className="gh-music-card-count">{item.trackCount} 首</span>
+                )}
+              </span>
               <span className="gh-music-playlist-card-name">{item.name}</span>
             </button>
           </li>
@@ -275,27 +331,47 @@ export default function MusicPage() {
       <header className="gh-music-header">
         <div>
           <h1 className="gh-music-title">网易云音乐</h1>
-          <p className="gh-music-subtitle">站内搜索与播放（不解灰的接口代理；VIP 歌曲需本人黑胶账号，仅 30 秒试听）</p>
+          <p className="gh-music-subtitle">
+            站内搜索与播放 · 不解灰的接口代理 · 会员歌曲需绑定自己的黑胶账号
+          </p>
         </div>
         {statusLoading ? (
           <span className="gh-music-subtitle">状态加载中…</span>
         ) : status?.bound ? (
           <div className="gh-music-account">
-            {status.avatarUrl && <img className="gh-music-account-avatar" src={status.avatarUrl} alt="" />}
-            <span>{status.nickname || '已绑定'}</span>
-            <button className="gh-btn gh-btn--ghost" onClick={() => void unbind()} disabled={unbinding}>解绑</button>
+            {status.avatarUrl && (
+              <img className="gh-music-account-avatar" src={upgradeMediaUrl(status.avatarUrl) ?? undefined} alt="" />
+            )}
+            <span className="gh-music-account-name">{status.nickname || '已绑定'}</span>
+            <button className="gh-btn gh-btn--ghost gh-btn--sm" onClick={() => void unbind()} disabled={unbinding}>
+              解绑
+            </button>
           </div>
         ) : (
           <button className="gh-btn gh-btn--primary" onClick={() => void createQr()} disabled={qrCreating}>
-            扫码绑定网易云
+            {qrCreating ? '生成二维码…' : '扫码绑定网易云'}
           </button>
         )}
       </header>
 
+      <NowPlayingCard />
+
+      {player.error && (
+        <div className="gh-music-notice gh-music-notice--error">
+          <span>{player.error}</span>
+          <button className="gh-reader-icon-btn" onClick={player.clearError} aria-label="关闭提示">
+            <Icon name="close" size={12} />
+          </button>
+        </div>
+      )}
+
       {!statusLoading && !status?.bound && qr === null && (
         <div className="gh-music-notice">
           <Icon name="shield" size={14} />
-          未绑定账号也能搜索和听免费歌曲；绑定自己的账号可听 VIP 试听、每日推荐与更高音质。二维码登录使用第三方开源接口，存在极低的账号风控风险。
+          <span>
+            未绑定也能搜索并播放免费歌曲；绑定自己的账号可听会员歌曲、每日推荐与更高音质。
+            二维码登录使用第三方开源接口，存在极低的账号风控风险。
+          </span>
         </div>
       )}
 
@@ -323,77 +399,85 @@ export default function MusicPage() {
         </div>
       )}
 
-      <nav className="gh-music-tabs" role="tablist">
-        <button
-          className={`gh-music-tab ${tab === 'recommend' ? 'gh-music-tab--active' : ''}`}
-          onClick={() => setTab('recommend')}
-          role="tab"
-          aria-selected={tab === 'recommend'}
-        >
-          每日推荐
-        </button>
-        <button
-          className={`gh-music-tab ${tab === 'toplist' ? 'gh-music-tab--active' : ''}`}
-          onClick={() => { setTab('toplist'); setPlaylist(null) }}
-          role="tab"
-          aria-selected={tab === 'toplist'}
-        >
-          排行榜
-        </button>
-        <button
-          className={`gh-music-tab ${tab === 'search' ? 'gh-music-tab--active' : ''}`}
-          onClick={() => { setTab('search'); setPlaylist(null) }}
-          role="tab"
-          aria-selected={tab === 'search'}
-        >
-          搜索
-        </button>
-      </nav>
-
-      {player.error && (
-        <div className="gh-music-notice gh-music-notice--error">
-          {player.error}
-          <button className="gh-reader-icon-btn" onClick={player.clearError} aria-label="关闭提示">
-            <Icon name="close" size={12} />
+      <nav className="gh-music-tabs" role="tablist" aria-label="音乐分区">
+        {([
+          ['recommend', '每日推荐'],
+          ['toplist', '排行榜'],
+          ['search', '搜索'],
+        ] as const).map(([key, label]) => (
+          <button
+            key={key}
+            className={`gh-music-tab ${tab === key ? 'gh-music-tab--active' : ''}`}
+            onClick={() => {
+              setTab(key)
+              if (key !== 'recommend') setPlaylist(null)
+            }}
+            role="tab"
+            aria-selected={tab === key}
+          >
+            {label}
           </button>
-        </div>
-      )}
+        ))}
+      </nav>
 
       {tab === 'recommend' && (
         status?.bound
-          ? (recommendLoading ? <div className="gh-music-empty">推荐加载中…</div> : renderSongList(recommendSongs, '今天还没有推荐，稍后再来看看'))
-          : <div className="gh-music-empty">绑定网易云账号后可查看每日推荐</div>
+          ? (recommendLoading
+            ? renderSkeletons(6)
+            : renderSongList(recommendSongs, '今天还没有推荐，稍后再来看看'))
+          : (
+            <div className="gh-music-empty">
+              <Icon name="lock" size={26} />
+              <p>绑定网易云账号后可查看每日推荐</p>
+              <button className="gh-btn gh-btn--primary gh-btn--sm" onClick={() => void createQr()} disabled={qrCreating}>
+                扫码绑定
+              </button>
+            </div>
+          )
       )}
 
       {tab === 'toplist' && (
         playlist ? (
           <div>
             <div className="gh-music-playlist-head">
-              <button className="gh-btn gh-btn--ghost" onClick={() => setPlaylist(null)}>
+              <button className="gh-btn gh-btn--ghost gh-btn--sm" onClick={() => setPlaylist(null)}>
                 <Icon name="arrow-left" size={14} /> 返回榜单
               </button>
               <span className="gh-music-playlist-name">{playlist.name}</span>
+              {playlistSongs.length > 0 && (
+                <button
+                  className="gh-btn gh-btn--primary gh-btn--sm gh-music-playlist-play"
+                  onClick={() => player.playQueue(playlistSongs, 0)}
+                >
+                  <Icon name="play" size={13} /> 播放全部
+                </button>
+              )}
             </div>
-            {playlistLoading ? <div className="gh-music-empty">加载中…</div> : renderSongList(playlistSongs, '这个榜单暂时是空的')}
+            {playlistLoading ? renderSkeletons(8) : renderSongList(playlistSongs, '这个榜单暂时是空的')}
           </div>
         ) : (
-          toplists.length === 0
-            ? <div className="gh-music-empty">{toplistLoading ? '榜单加载中…' : '榜单加载失败'}</div>
-            : (
-              <ul className="gh-music-toplist-grid">
-                {toplists.map(item => (
-                  <li key={item.id}>
-                    <button className="gh-music-toplist-card" onClick={() => void openPlaylist(item.id, item.name)}>
-                      {item.coverImgUrl
-                        ? <img src={item.coverImgUrl} alt="" loading="lazy" />
-                        : <span className="gh-music-playlist-card-fallback"><Icon name="trophy" size={18} /></span>}
-                      <span className="gh-music-toplist-card-name">{item.name}</span>
-                      {item.updateFrequency && <span className="gh-music-toplist-card-freq">{item.updateFrequency}</span>}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )
+          toplistLoading
+            ? renderSkeletons(6)
+            : toplists.length === 0
+              ? renderSongList([], '榜单加载失败，稍后重试')
+              : (
+                <ul className="gh-music-toplist-grid">
+                  {toplists.map(item => (
+                    <li key={item.id}>
+                      <button className="gh-music-toplist-card" onClick={() => void openPlaylist(item.id, item.name)}>
+                        <span className="gh-music-card-art">
+                          {item.coverImgUrl
+                            ? <img src={upgradeMediaUrl(item.coverImgUrl) ?? undefined} alt="" loading="lazy" />
+                            : <span className="gh-music-playlist-card-fallback"><Icon name="trophy" size={20} /></span>}
+                          <span className="gh-music-card-play"><Icon name="play" size={16} /></span>
+                        </span>
+                        <span className="gh-music-toplist-card-name">{item.name}</span>
+                        {item.updateFrequency && <span className="gh-music-toplist-card-freq">{item.updateFrequency}</span>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )
         )
       )}
 
@@ -403,21 +487,26 @@ export default function MusicPage() {
             <div className="gh-music-search-input">
               <Icon name="search" size={15} />
               <input
-                type="text"
+                type="search"
                 value={keywords}
                 placeholder="搜索歌曲或歌单…"
                 onChange={event => setKeywords(event.target.value)}
                 onKeyDown={event => { if (event.key === 'Enter') doSearch() }}
+                aria-label="搜索关键词"
               />
             </div>
-            <div className="gh-music-search-type">
+            <div className="gh-music-segment" role="tablist" aria-label="搜索类型">
               <button
-                className={`gh-music-tab ${searchType === 1 ? 'gh-music-tab--active' : ''}`}
+                className={`gh-music-segment-btn ${searchType === 1 ? 'gh-music-segment-btn--active' : ''}`}
                 onClick={() => setSearchType(1)}
+                role="tab"
+                aria-selected={searchType === 1}
               >单曲</button>
               <button
-                className={`gh-music-tab ${searchType === 1000 ? 'gh-music-tab--active' : ''}`}
+                className={`gh-music-segment-btn ${searchType === 1000 ? 'gh-music-segment-btn--active' : ''}`}
                 onClick={() => setSearchType(1000)}
+                role="tab"
+                aria-selected={searchType === 1000}
               >歌单</button>
             </div>
             <button className="gh-btn gh-btn--primary" onClick={doSearch} disabled={searching || !keywords.trim()}>
@@ -425,10 +514,17 @@ export default function MusicPage() {
             </button>
           </div>
           {searchType === 1
-            ? (searchSongs.length > 0 || searching
-                ? renderSongList(searchSongs, searching ? '搜索中…' : '输入关键词开始搜索')
-                : <div className="gh-music-empty">输入关键词开始搜索（未绑定账号可听免费歌曲）</div>)
-            : renderPlaylists()}
+            ? (searching
+              ? renderSkeletons(6)
+              : searchSongs.length > 0
+                ? renderSongList(searchSongs, '没有找到相关歌曲')
+                : (
+                  <div className="gh-music-empty">
+                    <Icon name="search" size={26} />
+                    <p>输入关键词开始搜索（未绑定账号也能听免费歌曲）</p>
+                  </div>
+                ))
+            : (searching ? renderSkeletons(3) : renderPlaylists())}
         </div>
       )}
 

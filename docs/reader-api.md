@@ -6,6 +6,8 @@
 ## 概览
 
 - 用户上传 **EPUB / TXT**（单本 ≤ 50 MiB），服务端解析 EPUB 元数据（标题/作者/内嵌封面）后存入存储节点系统目录 `_books/<userId>/`（`storageSync` 已排除，不进网盘），文件本体**计入网盘配额**（`driveQuota.getDriveUsage` 的 `Book` 聚合；封面体积小不计）。
+- **上传分两段耗时**：① 浏览器 → 服务器（XHR `upload.onprogress` 的 0–100%）；② 服务器写存储节点 + 解析 EPUB 元数据（客户端看不到进度）。前端把 ② 显示为「服务器正在写入存储」阶段并带计时，避免看起来「卡在 100%」；`XHR.timeout = 5min` 兜底。服务端 busboy 按 `content-length` 预分配缓冲（`lib/multipartImage.ts`），避免「chunks 数组 + concat」的 2 倍内存峰值（512MB 容器下 50MiB 的书原本要占 100MB+）。
+- 写入节点走 `storageTunnel.streamWriteBinary`，背压用轮询 `bufferedAmount`（`ws` 不会发出 `drain` 事件，早期实现会在这里死等，表现为上传 100% 后请求永不返回）。
 - EPUB 由前端 vendored **foliate-js**（MIT，快照见 `client/src/lib/reader/foliate/VENDORED.md`）渲染，进度以 foliate CFI 保存；TXT 前端自行做编码检测（UTF-8 → GB18030）与正则分章，进度按 `{chapter, offset}` JSON 保存。
 - 全部端点需登录令牌（应用令牌不在 appScopes 白名单 → 403）。
 

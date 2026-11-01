@@ -10,7 +10,10 @@
 - **登录只做扫码**（`login_qr_key` → `login_qr_create` → `login_qr_check`）：账密登录风控最严，扫码是社区公认最稳路径。**不做签到/刷歌等自动化**。
 - **cookie 只存服务端**（`MusicAccount.cookie`，含 MUSIC_U），任何响应不回传；上游返回 `code 301`（登录过期）时清除绑定并抛 `401 MUSIC_SESSION_EXPIRED`，前端引导重新扫码。
 - 未绑定为**匿名态**（包内自动注入匿名 token）：可搜索、可播免费歌曲；VIP 歌只有 30 秒试听或无源（黑胶账号登录后可取完整/高音质）。
-- **音频不经服务器**：`song/url/v1` 返回网易 CDN 直链，浏览器直连播放（helmet CSP 已加 `mediaSrc 'self' https: http:`）；封面外链由 `imgSrc https:` 覆盖。
+- **媒体地址统一升级为 https（重要）**：上游返回的封面 / 音频 / 头像地址大多是明文 `http://…music.126.net/…`。页面 CSP 的 `img-src` 只放行 `https:`，`http` 封面会被浏览器直接拦掉（线上现象：搜索结果「大多数封面无法显示」）。因此 `callNcmForUser` 返回前会把响应中所有网易 CDN（`*.music.126.net` / `*.126.net` / `*.127.net` / `*.netease.com`）的 http 地址递归升级为 https（`upgradeNcmMediaUrlsIn`），前端 `lib/music/song.ts` 的 `upgradeMediaUrl` 再做一层兜底（含 localStorage 里的旧队列）。
+- **运行时自愈**：容器冷启动时启动例程里的匿名 token 注册可能失败并连带 xeapi 公钥缺失（`xeapi public key is missing`），此后 `song/url` 会一直 502（线上「无法听歌」的成因之一）。现在识别到这类初始化错误会重置并重跑一次启动例程再重试；匿名 token 过期（上游 `code 301` 且未绑定）同样重新注册后重试一次，只有**已绑定**账号的 301 才清绑定并抛 401。
+- **音频不经服务器**：`song/url/v1` 返回网易 CDN 直链，浏览器直连播放（helmet CSP 已加 `mediaSrc 'self' https: http:`）；封面由 `imgSrc https:` 覆盖（配合上面的 https 升级）。
+- **VIP 试听**：非黑胶账号请求会员歌曲时，上游返回的是 30–45 秒试听片段，并带 `freeTrialInfo: { start, end }`；前端据此显示「试听片段」标记与提示，而不是把它当成播放失败。
 - 全部端点需登录令牌（应用令牌 403）。NCM 资源 ID 为纯数字长串，一律以字符串传递。
 
 ## 表
@@ -26,7 +29,7 @@
 | GET | `/api/music/login/qr/check?key=` | 240 | 轮询扫码状态：`code` 800 过期 / 801 待扫 / 802 已扫待确认 / **803 成功（此时完成绑定，响应含 `account`）**。建议前端 1.5s 一次 |
 | POST | `/api/music/logout` | 120 | 解绑（删行） |
 | GET | `/api/music/search?keywords=&type=&limit=&offset=` | 60 | 搜索（keywords 1–80 字；type：1 单曲（默认）/ 10 专辑 / 1000 歌单；limit ≤30） |
-| GET | `/api/music/song/url?id=&level=` | 120 | 播放地址 `{ data: [{ url, level, type, fee }] }`；level 白名单 `standard/higher/exhigh/lossless/hires`（默认 exhigh；非黑胶由上游自动降级） |
+| GET | `/api/music/song/url?id=&level=` | 120 | 播放地址 `{ data: [{ url, level, type, fee, time, freeTrialInfo }] }`；level 白名单 `standard/higher/exhigh/lossless/hires`（默认 exhigh；非黑胶由上游自动降级）。`freeTrialInfo` 非 null 表示这是 VIP 试听片段 |
 | GET | `/api/music/lyric?id=` | 120 | 歌词 `{ lrc, tlyric }`（`lyric_new`，含翻译） |
 | GET | `/api/music/recommend/songs` | 120 | 每日推荐（**需绑定**，否则 400 `MUSIC_NOT_BOUND`） |
 | GET | `/api/music/toplist` | 120 | 官方排行榜列表 `{ list: [{ id, name, updateFrequency, coverImgUrl }] }` |

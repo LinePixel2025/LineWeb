@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { api } from '../lib/api'
-import { normalizeSongList, type SongView } from '../lib/music/song'
+import { normalizeSongList, upgradeMediaUrl, type SongView } from '../lib/music/song'
 import type { MusicSongUrlResponse } from '../types/music'
 
 /**
@@ -18,6 +18,10 @@ const STORAGE_KEY = 'lineweb_music_player_v1'
 const LEVEL_KEY = 'lineweb_music_level'
 const SONG_LEVELS = ['standard', 'higher', 'exhigh', 'lossless', 'hires'] as const
 const MODES: MusicPlayMode[] = ['order', 'repeat', 'shuffle']
+
+/** 静音 WAV（约 0.1s 的空音频）：用于首次用户手势解锁 <audio>，iOS Safari 需要它 */
+const SILENT_CLIP =
+  'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA='
 
 interface PersistedState {
   queue: SongView[]
@@ -67,6 +71,8 @@ export interface MusicPlayerContextValue {
   mode: MusicPlayMode
   volume: number
   error: string
+  /** 当前音频是 VIP 试听片段时给出可播放上限（秒）；完整歌曲为 null */
+  trialEndSec: number | null
   playQueue: (songs: SongView[], startIndex?: number) => void
   playAt: (index: number) => void
   toggle: () => void
@@ -91,6 +97,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<MusicPlayMode>(initial.mode)
   const [volume, setVolumeState] = useState(initial.volume)
   const [error, setError] = useState('')
+  const [trialEndSec, setTrialEndSec] = useState<number | null>(null)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const indexRef = useRef(index)
@@ -135,6 +142,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     indexRef.current = targetIndex
     setError('')
     setLoading(true)
+    setTrialEndSec(null)
     setPositionSec(0)
     setDurationSec(target.durationMs > 0 ? target.durationMs / 1000 : 0)
 
@@ -143,13 +151,20 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         const storedLevel = localStorage.getItem(LEVEL_KEY) ?? 'exhigh'
         const level = (SONG_LEVELS as readonly string[]).includes(storedLevel) ? storedLevel : 'exhigh'
         const data = await api.get<MusicSongUrlResponse>(`/music/song/url?id=${target.id}&level=${level}`)
-        const url = data.data?.[0]?.url
+        const entry = data.data?.[0]
+        // 服务端已把网易 CDN 地址升级为 https，这里再兜一层（旧缓存 / 上游变化）
+        const url = upgradeMediaUrl(entry?.url)
         if (!url) {
           setLoading(false)
           setPlaying(false)
           setError(`《${target.name}》暂无可播放的音频源（版权限制）`)
           return
         }
+        // VIP 试听片段：上游会在 freeTrialInfo 里给出截断区间（只用于 UI 提示，时长以音频元数据为准）
+        const trial = entry?.freeTrialInfo
+        const trialEnd = trial && typeof trial.end === 'number' && trial.end > 0 ? trial.end : null
+        setTrialEndSec(trialEnd)
+
         const audio = getAudio()
         audio.src = url
         await audio.play()
@@ -159,6 +174,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         setLoading(false)
         setPlaying(false)
         if (err instanceof DOMException && err.name === 'AbortError') return
+        // iOS Safari：play() 不在用户手势的同一任务里会被拒绝（NotAllowedError）
+        if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'NotSupportedError')) {
+          setError('浏览器阻止了自动播放，请再点一次播放按钮')
+          return
+        }
         setError(err instanceof Error && err.message ? err.message : '播放失败，请稍后再试')
       }
     })()
@@ -250,7 +270,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     const onPause = () => setPlaying(false)
     const onPlay = () => setPlaying(true)
     const onError = () => {
-      if (audio.src) setError('音频加载失败，请尝试切换曲目')
+      const current = audio.currentSrc || audio.src
+      // 静音解锁片段 / 已清空 src 的中间态不算错误
+      if (!current || current.startsWith('data:')) return
+      setError('音频加载失败，请尝试切换曲目')
       setPlaying(false)
       setLoading(false)
     }
@@ -284,6 +307,34 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       return () => audio.removeEventListener('canplay', onCanPlay)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getAudio])
+
+  // === 首次用户手势解锁 <audio>（iOS Safari 只在手势的同一任务里允许 play()） ===
+  // 点歌后要等 /song/url 返回再 play()，那时已不是手势任务 → iOS 会以 NotAllowedError 拒绝。
+  // 标准做法：在第一次 pointerdown/keydown 里播一个极短的静音片段，把这个元素「解锁」。
+  useEffect(() => {
+    const audio = getAudio()
+    if (audio.src) return
+    let unlocked = false
+    const unlock = () => {
+      if (unlocked || audio.src) return
+      unlocked = true
+      audio.src = SILENT_CLIP
+      const cleanup = () => {
+        if (audio.src !== SILENT_CLIP) return
+        audio.pause()
+        audio.removeAttribute('src')
+        audio.load()
+        audio.currentTime = 0
+      }
+      void audio.play().then(cleanup, cleanup)
+    }
+    document.addEventListener('pointerdown', unlock, { capture: true, once: true })
+    document.addEventListener('keydown', unlock, { capture: true, once: true })
+    return () => {
+      document.removeEventListener('pointerdown', unlock, true)
+      document.removeEventListener('keydown', unlock, true)
+    }
   }, [getAudio])
 
   // === MediaSession（锁屏/系统媒体控制） ===
@@ -331,6 +382,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     mode,
     volume,
     error,
+    trialEndSec,
     playQueue,
     playAt,
     toggle,
@@ -340,7 +392,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     setVolume,
     cycleMode,
     clearError,
-  }), [song, queue, index, playing, loading, positionSec, durationSec, mode, volume, error,
+  }), [song, queue, index, playing, loading, positionSec, durationSec, mode, volume, error, trialEndSec,
     playQueue, playAt, toggle, next, prev, seek, setVolume, cycleMode, clearError])
 
   return <MusicPlayerContext.Provider value={value}>{children}</MusicPlayerContext.Provider>

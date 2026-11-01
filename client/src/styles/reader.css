@@ -8,10 +8,12 @@
   --reader-accent: var(--gh-accent);
   --reader-card-bg: var(--gh-canvas);
   --reader-muted: var(--gh-text-secondary);
+  position: relative;
+  max-width: 1080px;
 }
 
 [data-theme='dark'] .gh-reader-page {
-  --reader-card-bg: #1c1c1e;
+  --reader-card-bg: var(--gh-canvas-subtle);
 }
 
 /* === 书架 === */
@@ -25,10 +27,16 @@
   margin-bottom: var(--gh-space-5);
 }
 
+.gh-reader-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+}
+
 .gh-reader-title {
-  font-size: var(--gh-type-title, 28px);
+  font-size: var(--gh-type-title-1);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: var(--gh-tracking-tight);
   margin: 0;
 }
 
@@ -42,18 +50,68 @@
   display: none;
 }
 
-.gh-reader-upload-bar {
-  height: 4px;
-  border-radius: var(--gh-radius-pill);
-  background: var(--gh-border);
-  overflow: hidden;
+/* === 上传进度（两阶段） === */
+
+.gh-reader-upload-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-2);
+  padding: var(--gh-space-3) var(--gh-space-4);
   margin-bottom: var(--gh-space-4);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-sm);
+}
+
+.gh-reader-upload-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+}
+
+.gh-reader-upload-label {
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-reader-upload-hint {
+  margin: 0;
+  font-size: var(--gh-text-xs);
+  color: var(--reader-muted);
+}
+
+.gh-reader-upload-bar {
+  height: 6px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-border-muted);
+  overflow: hidden;
 }
 
 .gh-reader-upload-bar-fill {
   height: 100%;
+  border-radius: var(--gh-radius-pill);
   background: var(--reader-accent);
-  transition: width var(--gh-dur-2) ease;
+  transition: width var(--gh-dur-2) var(--gh-ease-out);
+}
+
+/* 处理阶段：进度条已满，用流动条纹表示「服务器还在写」而不是卡死 */
+.gh-reader-upload-bar-fill--processing {
+  background-image: linear-gradient(
+    100deg,
+    var(--reader-accent) 30%,
+    var(--gh-accent-hover) 50%,
+    var(--reader-accent) 70%
+  );
+  background-size: 200% 100%;
+  animation: gh-reader-stripes 1.1s linear infinite;
+}
+
+@keyframes gh-reader-stripes {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
 }
 
 .gh-reader-loading {
@@ -67,35 +125,64 @@
   align-items: center;
   justify-content: center;
   gap: var(--gh-space-3);
-  padding: var(--gh-space-4);
+  padding: var(--gh-space-3) var(--gh-space-4);
   border-radius: var(--gh-radius-md);
   margin-bottom: var(--gh-space-4);
 }
 
 .gh-reader-alert--error {
-  background: var(--gh-danger-soft, rgba(255, 59, 48, 0.1));
-  color: var(--gh-danger, #ff3b30);
+  background: var(--gh-danger-soft);
+  color: var(--gh-danger);
 }
+
+.gh-reader-alert button {
+  margin-left: auto;
+}
+
+/* === 空态 === */
 
 .gh-reader-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--gh-space-2);
-  padding: var(--gh-space-9) var(--gh-space-4);
+  padding: var(--gh-space-8) var(--gh-space-4);
   color: var(--reader-muted);
   text-align: center;
 }
 
-.gh-reader-empty-hint {
-  font-size: var(--gh-text-sm);
-  color: var(--gh-text-tertiary, var(--reader-muted));
+.gh-reader-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 68px;
+  height: 68px;
+  margin-bottom: var(--gh-space-2);
+  border-radius: var(--gh-radius-xl);
+  background: var(--gh-canvas-subtle);
+  border: 1px solid var(--gh-border);
+  color: var(--gh-text-tertiary);
 }
+
+.gh-reader-empty-title {
+  margin: 0;
+  font-size: var(--gh-text-lg);
+  font-weight: 600;
+  color: var(--gh-text);
+}
+
+.gh-reader-empty-hint {
+  margin: 0;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-tertiary);
+}
+
+/* === 书架网格 === */
 
 .gh-reader-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: var(--gh-space-5);
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--gh-space-5) var(--gh-space-4);
 }
 
 .gh-reader-card {
@@ -114,11 +201,13 @@
   background: var(--reader-card-bg);
   padding: 0;
   cursor: pointer;
-  transition: transform var(--gh-dur-1) var(--gh-ease, ease);
+  box-shadow: var(--gh-shadow-sm);
+  transition: transform var(--gh-dur-2) var(--gh-ease-spring), box-shadow var(--gh-dur-2) var(--gh-ease-out);
 }
 
 .gh-reader-card-cover:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow: var(--gh-shadow-md);
 }
 
 .gh-reader-card-cover img {
@@ -129,6 +218,7 @@
 }
 
 .gh-reader-card-cover-fallback {
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
@@ -137,6 +227,78 @@
   justify-content: center;
   gap: var(--gh-space-2);
   color: var(--reader-muted);
+  background-image: linear-gradient(165deg, var(--gh-canvas-subtle) 0%, var(--gh-canvas) 62%);
+  overflow: hidden;
+}
+
+/* 书脊：左侧一道强调色竖条 + 内阴影，纯色占位封面不至于像空白页 */
+.gh-reader-card-spine {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  background: linear-gradient(180deg, var(--gh-accent-soft), var(--gh-accent));
+  opacity: 0.75;
+}
+
+.gh-reader-card-initial {
+  font-family: var(--gh-font-display);
+  font-size: 44px;
+  line-height: 1;
+  font-weight: 600;
+  color: var(--gh-text-secondary);
+  letter-spacing: var(--gh-tracking-tight);
+}
+
+.gh-reader-card-format {
+  padding: 1px 8px;
+  border-radius: var(--gh-radius-pill);
+  border: 1px solid var(--gh-border);
+  background: var(--gh-canvas);
+  font-size: var(--gh-type-caption-2, 11px);
+  font-weight: 700;
+  letter-spacing: var(--gh-tracking-wide);
+  color: var(--gh-text-tertiary);
+}
+
+/* 悬浮「继续阅读」蒙层 */
+.gh-reader-card-hover {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--gh-scrim);
+  color: var(--gh-on-accent);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity var(--gh-dur-1) var(--gh-ease-out);
+}
+
+.gh-reader-card-cover:hover .gh-reader-card-hover,
+.gh-reader-card-cover:focus-visible .gh-reader-card-hover {
+  opacity: 1;
+}
+
+/* 封面底部的进度细条 */
+.gh-reader-card-progress-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--gh-scrim);
+}
+
+.gh-reader-card-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-accent);
 }
 
 .gh-reader-card-progress {
@@ -145,9 +307,10 @@
   bottom: var(--gh-space-2);
   padding: 2px 8px;
   border-radius: var(--gh-radius-pill);
-  background: rgba(0, 0, 0, 0.62);
-  color: #fff;
+  background: var(--gh-scrim);
+  color: var(--gh-on-accent);
   font-size: var(--gh-text-xs);
+  font-variant-numeric: tabular-nums;
   backdrop-filter: blur(8px);
 }
 
@@ -173,6 +336,10 @@
   cursor: pointer;
 }
 
+.gh-reader-card-title:hover {
+  color: var(--gh-accent);
+}
+
 .gh-reader-card-sub,
 .gh-reader-card-last {
   font-size: var(--gh-text-xs);
@@ -180,6 +347,10 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.gh-reader-card-last {
+  color: var(--gh-text-tertiary);
 }
 
 .gh-reader-card-delete {
@@ -193,19 +364,78 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
-  color: #fff;
+  background: var(--gh-scrim);
+  color: var(--gh-on-accent);
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--gh-dur-1) ease;
+  backdrop-filter: blur(6px);
+  transition: opacity var(--gh-dur-1) var(--gh-ease-out), background var(--gh-dur-1) var(--gh-ease-out);
 }
 
-.gh-reader-card:hover .gh-reader-card-delete {
+.gh-reader-card:hover .gh-reader-card-delete,
+.gh-reader-card-delete:focus-visible {
   opacity: 1;
 }
 
 .gh-reader-card-delete:hover {
-  background: var(--gh-danger, #ff3b30);
+  background: var(--gh-danger);
+}
+
+/* 骨架屏 */
+.gh-reader-card--skeleton {
+  pointer-events: none;
+}
+
+.gh-reader-skeleton-cover,
+.gh-reader-skeleton-line {
+  display: block;
+  border-radius: var(--gh-radius-sm);
+  background: linear-gradient(90deg, var(--gh-canvas-subtle) 25%, var(--gh-fill-2) 50%, var(--gh-canvas-subtle) 75%);
+  background-size: 200% 100%;
+  animation: gh-reader-shimmer 1.4s linear infinite;
+}
+
+.gh-reader-skeleton-cover {
+  aspect-ratio: 3 / 4;
+  border-radius: var(--gh-radius-md);
+}
+
+.gh-reader-skeleton-line {
+  height: 11px;
+  width: 78%;
+}
+
+.gh-reader-skeleton-line--short {
+  width: 46%;
+  height: 9px;
+}
+
+@keyframes gh-reader-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* 拖拽上传蒙层 */
+.gh-reader-dropzone {
+  position: fixed;
+  inset: 12px;
+  z-index: var(--gh-z-scrim, 900);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gh-space-3);
+  border: 2px dashed var(--gh-accent);
+  border-radius: var(--gh-radius-xl);
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+  font-weight: 600;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+}
+
+.gh-reader-dropzone p {
+  margin: 0;
 }
 
 .gh-reader-toast {
@@ -217,7 +447,7 @@
   border-radius: var(--gh-radius-pill);
   background: var(--gh-canvas);
   color: var(--gh-text);
-  box-shadow: var(--gh-shadow-card, 0 8px 24px rgba(0, 0, 0, 0.16));
+  box-shadow: var(--gh-shadow-lg);
   font-size: var(--gh-text-sm);
   z-index: var(--gh-z-toast, 1090);
 }
@@ -227,20 +457,26 @@
 }
 
 .gh-reader-toast--error {
-  background: var(--gh-danger, #ff3b30);
-  color: #fff;
+  background: var(--gh-danger);
+  color: var(--gh-on-accent);
 }
 
 /* === 阅读视图 === */
 
 .gh-reader-book-page {
-  --reader-page-bg: #f5f1e8;
-  --reader-stage-bg: #ffffff;
-  --reader-stage-text: var(--gh-text);
+  /* 纸张配色独立于站点主题：亮色纸固定用深色墨水，否则暗色主题下会白底白字不可读 */
+  --reader-page-bg: var(--gh-canvas-subtle);
+  --reader-stage-bg: #fffefb;
+  --reader-stage-text: #2c2b28;
   display: flex;
   flex-direction: column;
   gap: var(--gh-space-3);
   min-height: 100%;
+}
+
+.gh-reader-book-page--light {
+  --reader-stage-bg: #fffefb;
+  --reader-stage-text: #2c2b28;
 }
 
 .gh-reader-book-page--sepia {
@@ -249,8 +485,8 @@
 }
 
 .gh-reader-book-page--dark {
-  --reader-stage-bg: #1a1a1c;
-  --reader-stage-text: #d6d6d8;
+  --reader-stage-bg: #16161a;
+  --reader-stage-text: #d8d8dc;
 }
 
 .gh-reader-book-header {

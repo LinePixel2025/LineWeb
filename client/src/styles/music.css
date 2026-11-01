@@ -1,10 +1,16 @@
 /* ============================================================
-   网易云音乐（/music 页 + 全局迷你播放条）
-   命名空间 .gh-music-*；颜色用全局 --gh-* 令牌（自动适配暗色）。
+   网易云音乐（/music 页 + 正在播放卡 + 全局迷你播放条）
+   命名空间 .gh-music-*；颜色只用全局 --gh-* 令牌（自动适配暗色）。
    ============================================================ */
 
 .gh-music-page {
-  max-width: 880px;
+  max-width: 1020px;
+  padding-bottom: var(--gh-space-8);
+}
+
+/* 有迷你播放条时给页面留出底部空间，避免最后一行被挡住 */
+body:has(.gh-music-bar) .gh-page {
+  padding-bottom: 96px;
 }
 
 .gh-music-header {
@@ -13,13 +19,13 @@
   justify-content: space-between;
   gap: var(--gh-space-4);
   flex-wrap: wrap;
-  margin-bottom: var(--gh-space-4);
+  margin-bottom: var(--gh-space-5);
 }
 
 .gh-music-title {
-  font-size: var(--gh-type-title, 28px);
+  font-size: var(--gh-type-title-1);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: var(--gh-tracking-tight);
   margin: 0;
 }
 
@@ -33,13 +39,27 @@
   display: flex;
   align-items: center;
   gap: var(--gh-space-2);
+  padding: 4px 4px 4px 4px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
 }
 
 .gh-music-account-avatar {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
+  margin-left: 4px;
   border-radius: var(--gh-radius-pill);
   object-fit: cover;
+}
+
+.gh-music-account-name {
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .gh-music-notice {
@@ -48,80 +68,478 @@
   gap: var(--gh-space-2);
   padding: var(--gh-space-3) var(--gh-space-4);
   border-radius: var(--gh-radius-md);
-  background: var(--gh-border);
+  background: var(--gh-canvas-subtle);
   color: var(--gh-text-secondary);
   font-size: var(--gh-text-sm);
+  line-height: 1.55;
   margin-bottom: var(--gh-space-4);
 }
 
 .gh-music-notice--error {
-  background: var(--gh-danger-soft, rgba(255, 59, 48, 0.1));
-  color: var(--gh-danger, #ff3b30);
+  background: var(--gh-danger-soft);
+  color: var(--gh-danger);
 }
 
 .gh-music-notice button {
   margin-left: auto;
+  flex-shrink: 0;
 }
 
-/* === 扫码卡 === */
+/* ============================================================
+   正在播放卡
+   ============================================================ */
 
-.gh-music-qr-card {
+.gh-music-now {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-4);
+  padding: var(--gh-space-5);
+  margin-bottom: var(--gh-space-5);
   border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius-lg);
-  background: var(--gh-canvas);
-  margin-bottom: var(--gh-space-4);
+  border-radius: var(--gh-radius-xl);
+  background:
+    radial-gradient(120% 140% at 0% 0%, var(--gh-accent-soft) 0%, transparent 58%),
+    var(--gh-canvas);
+  box-shadow: var(--gh-shadow-sm);
   overflow: hidden;
 }
 
-.gh-music-qr-head {
-  display: flex;
+.gh-music-now--idle {
+  flex-direction: row;
   align-items: center;
-  justify-content: space-between;
-  padding: var(--gh-space-3) var(--gh-space-4);
-  border-bottom: 1px solid var(--gh-border);
-  font-weight: 600;
+  gap: var(--gh-space-4);
+  background: var(--gh-canvas-subtle);
+  box-shadow: none;
 }
 
-.gh-music-qr-body {
-  display: flex;
+.gh-music-now-idle-icon {
+  display: inline-flex;
   align-items: center;
-  gap: var(--gh-space-5);
-  padding: var(--gh-space-4);
-  flex-wrap: wrap;
-}
-
-.gh-music-qr-img {
-  width: 160px;
-  height: 160px;
-  border-radius: var(--gh-radius-md);
-  background: #fff;
-  padding: 6px;
-}
-
-.gh-music-qr-state {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--gh-space-2);
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border);
   color: var(--gh-text-secondary);
 }
 
-/* === Tabs === */
+.gh-music-now-idle-title {
+  margin: 0;
+  font-size: var(--gh-text-base);
+  font-weight: 600;
+  color: var(--gh-text);
+}
+
+.gh-music-now-idle-hint {
+  margin: 2px 0 0;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-music-now-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-4);
+  min-width: 0;
+}
+
+.gh-music-now-cover {
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: var(--gh-radius-lg);
+  box-shadow: var(--gh-shadow-md);
+  background: var(--gh-canvas-subtle);
+}
+
+.gh-music-now-cover--lg {
+  width: 120px;
+  height: 120px;
+}
+
+.gh-music-now-cover--sm {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--gh-radius-sm);
+  box-shadow: none;
+}
+
+.gh-music-now-cover--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gh-text-secondary);
+}
+
+.gh-music-now-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gh-music-now-kicker {
+  font-size: var(--gh-type-caption-2, 11px);
+  font-weight: 700;
+  letter-spacing: var(--gh-tracking-wide);
+  color: var(--gh-accent);
+}
+
+.gh-music-now-title {
+  margin: 0;
+  font-size: var(--gh-type-title-2);
+  font-weight: 700;
+  letter-spacing: var(--gh-tracking-snug);
+  color: var(--gh-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gh-music-now-sub {
+  margin: 0;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gh-music-now-album {
+  color: var(--gh-text-tertiary);
+}
+
+.gh-music-now-badges {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+
+.gh-music-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-canvas-subtle);
+  border: 1px solid var(--gh-border);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-type-caption-2, 11px);
+  font-weight: 600;
+}
+
+.gh-music-badge--warn {
+  background: var(--gh-warning-soft);
+  border-color: transparent;
+  color: var(--gh-warning);
+}
+
+.gh-music-badge--live {
+  background: var(--gh-success-soft);
+  border-color: transparent;
+  color: var(--gh-success);
+}
+
+.gh-music-now-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-shrink: 0;
+}
+
+.gh-music-now-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  cursor: pointer;
+  transition: background var(--gh-dur-1) var(--gh-ease-out), transform var(--gh-dur-1) var(--gh-ease-out);
+}
+
+.gh-music-now-btn:hover:not(:disabled) {
+  background: var(--gh-btn-hover);
+}
+
+.gh-music-now-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.gh-music-now-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.gh-music-now-btn--play {
+  width: 48px;
+  height: 48px;
+  border-color: transparent;
+  background: var(--gh-accent);
+  color: var(--gh-on-accent);
+  box-shadow: var(--gh-shadow-md);
+}
+
+.gh-music-now-btn--play:hover:not(:disabled) {
+  background: var(--gh-accent-hover);
+}
+
+/* === 进度条 === */
+
+.gh-music-now-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+}
+
+.gh-music-now-time {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-secondary);
+  font-variant-numeric: tabular-nums;
+  min-width: 38px;
+  text-align: center;
+}
+
+.gh-music-now-track,
+.gh-music-bar-track {
+  position: relative;
+  flex: 1;
+  height: 18px;
+  display: flex;
+  align-items: center;
+}
+
+.gh-music-now-track::before,
+.gh-music-bar-track::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  height: 5px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-border-muted);
+}
+
+.gh-music-now-track-fill,
+.gh-music-bar-track-fill {
+  position: absolute;
+  left: 0;
+  height: 5px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-accent);
+  pointer-events: none;
+}
+
+.gh-music-now-seek,
+.gh-music-bar-seek {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  margin: 0;
+  height: 18px;
+  background: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  opacity: 1;
+}
+
+/* 轨道透明（下面自绘进度条），只显示可抓的圆形滑块 */
+.gh-music-now-seek::-webkit-slider-runnable-track,
+.gh-music-bar-seek::-webkit-slider-runnable-track {
+  height: 18px;
+  background: transparent;
+}
+
+.gh-music-now-seek::-webkit-slider-thumb,
+.gh-music-bar-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-accent);
+  border: 2px solid var(--gh-canvas);
+  box-shadow: var(--gh-shadow-sm);
+}
+
+.gh-music-now-seek::-moz-range-track,
+.gh-music-bar-seek::-moz-range-track {
+  height: 18px;
+  background: transparent;
+}
+
+.gh-music-now-seek::-moz-range-thumb,
+.gh-music-bar-seek::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-accent);
+  border: 2px solid var(--gh-canvas);
+}
+
+.gh-music-now-seek:focus-visible,
+.gh-music-bar-seek:focus-visible {
+  outline: none;
+  box-shadow: var(--gh-focus-ring);
+  border-radius: var(--gh-radius-pill);
+}
+
+.gh-music-now-track:hover::before,
+.gh-music-bar-track:hover::before {
+  background: var(--gh-border-strong);
+}
+
+/* === 工具行（模式 / 音量 / 歌词开关） === */
+
+.gh-music-now-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+.gh-music-now-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-canvas);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  cursor: pointer;
+  transition: color var(--gh-dur-1) var(--gh-ease-out), background var(--gh-dur-1) var(--gh-ease-out);
+}
+
+.gh-music-now-tool:hover {
+  color: var(--gh-text);
+  background: var(--gh-btn-hover);
+}
+
+.gh-music-now-tool--active {
+  color: var(--gh-accent);
+  border-color: var(--gh-accent-soft);
+  background: var(--gh-accent-soft);
+}
+
+.gh-music-now-volume {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  padding: 5px 12px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-canvas);
+  color: var(--gh-text-secondary);
+}
+
+.gh-music-now-volume input {
+  width: 90px;
+  accent-color: var(--gh-accent);
+}
+
+.gh-music-now-tip {
+  margin: 0;
+  padding: var(--gh-space-2) var(--gh-space-3);
+  border-radius: var(--gh-radius-md);
+  background: var(--gh-warning-soft);
+  color: var(--gh-text);
+  font-size: var(--gh-text-xs);
+  line-height: 1.6;
+}
+
+/* === 歌词 === */
+
+.gh-music-lyrics {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: var(--gh-space-3) var(--gh-space-2);
+  border-radius: var(--gh-radius-md);
+  background: var(--gh-canvas-subtle);
+  scrollbar-width: thin;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 12%, black 88%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 12%, black 88%, transparent);
+}
+
+.gh-music-lyric {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--gh-space-2);
+  border: none;
+  border-radius: var(--gh-radius-sm);
+  background: none;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-sm);
+  text-align: center;
+  cursor: pointer;
+  transition: color var(--gh-dur-1) var(--gh-ease-out), transform var(--gh-dur-1) var(--gh-ease-out);
+}
+
+.gh-music-lyric:hover {
+  color: var(--gh-text);
+}
+
+.gh-music-lyric--active {
+  color: var(--gh-text);
+  font-weight: 700;
+  font-size: var(--gh-text-md);
+  transform: scale(1.02);
+}
+
+.gh-music-lyric--active .gh-music-lyric-text {
+  color: var(--gh-accent);
+}
+
+.gh-music-lyric-sub {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-secondary);
+  opacity: 0.85;
+}
+
+.gh-music-lyrics-empty {
+  margin: 0;
+  padding: var(--gh-space-6) 0;
+  text-align: center;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-sm);
+}
+
+/* ============================================================
+   分段控件 / Tabs
+   ============================================================ */
 
 .gh-music-tabs {
-  display: flex;
-  gap: var(--gh-space-1);
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
   margin-bottom: var(--gh-space-4);
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-canvas-subtle);
+  border: 1px solid var(--gh-border);
 }
 
 .gh-music-tab {
   border: 1px solid transparent;
   background: none;
-  padding: 6px 14px;
+  padding: 6px 18px;
   border-radius: var(--gh-radius-pill);
   color: var(--gh-text-secondary);
   font-size: var(--gh-text-sm);
+  font-weight: 500;
   cursor: pointer;
+  transition: color var(--gh-dur-1) var(--gh-ease-out), background var(--gh-dur-1) var(--gh-ease-out);
 }
 
 .gh-music-tab:hover {
@@ -129,12 +547,42 @@
 }
 
 .gh-music-tab--active {
-  background: var(--gh-border);
+  background: var(--gh-canvas);
   color: var(--gh-text);
   font-weight: 600;
+  box-shadow: var(--gh-shadow-sm);
 }
 
-/* === 歌曲列表 === */
+.gh-music-segment {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-canvas-subtle);
+  border: 1px solid var(--gh-border);
+}
+
+.gh-music-segment-btn {
+  border: none;
+  background: none;
+  padding: 5px 14px;
+  border-radius: var(--gh-radius-pill);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.gh-music-segment-btn--active {
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  font-weight: 600;
+  box-shadow: var(--gh-shadow-sm);
+}
+
+/* ============================================================
+   歌曲列表
+   ============================================================ */
 
 .gh-music-song-list {
   list-style: none;
@@ -142,6 +590,7 @@
   padding: 0;
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 
 .gh-music-song-main {
@@ -156,15 +605,41 @@
   color: var(--gh-text);
   text-align: left;
   cursor: pointer;
+  transition: background var(--gh-dur-1) var(--gh-ease-out);
 }
 
 .gh-music-song-main:hover {
-  background: var(--gh-border);
+  background: var(--gh-btn-hover);
+}
+
+.gh-music-song-main:disabled {
+  cursor: default;
+}
+
+.gh-music-song--active .gh-music-song-main {
+  background: var(--gh-accent-soft);
 }
 
 .gh-music-song--active .gh-music-song-name {
   color: var(--gh-accent);
   font-weight: 600;
+}
+
+.gh-music-song-index {
+  width: 22px;
+  flex-shrink: 0;
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.gh-music-song-cover-wrap {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+  border-radius: var(--gh-radius-sm);
+  overflow: hidden;
 }
 
 .gh-music-song-cover {
@@ -173,14 +648,35 @@
   border-radius: var(--gh-radius-sm);
   object-fit: cover;
   flex-shrink: 0;
+  background: var(--gh-canvas-subtle);
 }
 
 .gh-music-song-cover--fallback {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--gh-border);
+  background: var(--gh-canvas-subtle);
   color: var(--gh-text-secondary);
+}
+
+.gh-music-song-play {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gh-scrim);
+  color: var(--gh-on-accent);
+  opacity: 0;
+  transition: opacity var(--gh-dur-1) var(--gh-ease-out);
+}
+
+.gh-music-song-main:hover .gh-music-song-play {
+  opacity: 1;
+}
+
+.gh-music-song--active .gh-music-song-play {
+  opacity: 0;
 }
 
 .gh-music-song-meta {
@@ -203,9 +699,9 @@
   display: inline-block;
   margin-left: 6px;
   padding: 0 5px;
-  border-radius: 4px;
-  background: var(--gh-warning-soft, rgba(255, 159, 10, 0.16));
-  color: var(--gh-warning, #ff9f0a);
+  border-radius: var(--gh-radius-xs);
+  background: var(--gh-warning-soft);
+  color: var(--gh-warning);
   font-size: 10px;
   font-weight: 700;
   vertical-align: 1px;
@@ -221,14 +717,87 @@
 
 .gh-music-song-duration {
   font-size: var(--gh-text-xs);
-  color: var(--gh-text-tertiary, var(--gh-text-secondary));
+  color: var(--gh-text-tertiary);
   font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 
+/* 播放中的三根跳动脉冲条 */
+.gh-music-eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.gh-music-eq span {
+  width: 2.5px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-accent);
+  animation: gh-music-eq 1s var(--gh-ease-standard) infinite;
+}
+
+.gh-music-eq span:nth-child(1) { height: 60%; animation-delay: -0.2s; }
+.gh-music-eq span:nth-child(2) { height: 100%; animation-delay: -0.55s; }
+.gh-music-eq span:nth-child(3) { height: 45%; animation-delay: -0.35s; }
+
+@keyframes gh-music-eq {
+  0%, 100% { transform: scaleY(0.45); }
+  50% { transform: scaleY(1); }
+}
+
+/* === 空态 === */
+
 .gh-music-empty {
-  padding: var(--gh-space-8) 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-8) var(--gh-space-4);
   text-align: center;
   color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-music-empty p {
+  margin: 0;
+}
+
+.gh-music-empty svg {
+  color: var(--gh-text-tertiary);
+}
+
+/* === 骨架屏 === */
+
+.gh-music-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-2) var(--gh-space-3);
+}
+
+.gh-music-skeleton-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gh-music-skeleton {
+  display: block;
+  border-radius: var(--gh-radius-sm);
+  background: linear-gradient(90deg, var(--gh-canvas-subtle) 25%, var(--gh-fill-2) 50%, var(--gh-canvas-subtle) 75%);
+  background-size: 200% 100%;
+  animation: gh-music-shimmer 1.4s linear infinite;
+}
+
+.gh-music-skeleton--cover { width: 42px; height: 42px; }
+.gh-music-skeleton--title { width: 42%; height: 12px; }
+.gh-music-skeleton--sub { width: 26%; height: 10px; }
+
+@keyframes gh-music-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
 }
 
 /* === 榜单 / 歌单卡片 === */
@@ -239,7 +808,7 @@
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
   gap: var(--gh-space-4);
 }
 
@@ -252,33 +821,71 @@
   border: 1px solid var(--gh-border);
   border-radius: var(--gh-radius-md);
   background: var(--gh-canvas);
-  padding: 0;
+  padding: 0 0 var(--gh-space-2);
   overflow: hidden;
   cursor: pointer;
   text-align: left;
-  transition: transform var(--gh-dur-1) ease;
+  transition: transform var(--gh-dur-2) var(--gh-ease-spring), box-shadow var(--gh-dur-2) var(--gh-ease-out);
 }
 
 .gh-music-toplist-card:hover,
 .gh-music-playlist-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow: var(--gh-shadow-md);
 }
 
-.gh-music-toplist-card img,
-.gh-music-playlist-card img {
+.gh-music-card-art {
+  position: relative;
+  display: block;
   width: 100%;
   aspect-ratio: 1;
+  overflow: hidden;
+  background: var(--gh-canvas-subtle);
+}
+
+.gh-music-card-art img {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   display: block;
 }
 
-.gh-music-playlist-card-fallback {
-  width: 100%;
-  aspect-ratio: 1;
+.gh-music-card-play {
+  position: absolute;
+  inset: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--gh-border);
+  background: var(--gh-scrim);
+  color: var(--gh-on-accent);
+  opacity: 0;
+  transition: opacity var(--gh-dur-1) var(--gh-ease-out);
+}
+
+.gh-music-toplist-card:hover .gh-music-card-play,
+.gh-music-playlist-card:hover .gh-music-card-play {
+  opacity: 1;
+}
+
+.gh-music-card-count {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 1px 7px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-scrim);
+  color: var(--gh-on-accent);
+  font-size: var(--gh-type-caption-2, 11px);
+  backdrop-filter: blur(6px);
+}
+
+.gh-music-playlist-card-fallback {
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gh-canvas-subtle);
   color: var(--gh-text-secondary);
 }
 
@@ -286,7 +893,7 @@
 .gh-music-playlist-card-name {
   padding: 0 var(--gh-space-3);
   font-size: var(--gh-text-sm);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--gh-text);
   white-space: nowrap;
   overflow: hidden;
@@ -294,7 +901,7 @@
 }
 
 .gh-music-toplist-card-freq {
-  padding: 0 var(--gh-space-3) var(--gh-space-2);
+  padding: 0 var(--gh-space-3);
   font-size: var(--gh-text-xs);
   color: var(--gh-text-secondary);
 }
@@ -304,10 +911,16 @@
   align-items: center;
   gap: var(--gh-space-3);
   margin-bottom: var(--gh-space-3);
+  flex-wrap: wrap;
 }
 
 .gh-music-playlist-name {
   font-weight: 600;
+  font-size: var(--gh-text-base);
+}
+
+.gh-music-playlist-play {
+  margin-left: auto;
 }
 
 /* === 搜索 === */
@@ -322,15 +935,21 @@
 
 .gh-music-search-input {
   flex: 1;
-  min-width: 220px;
+  min-width: 200px;
   display: flex;
   align-items: center;
   gap: var(--gh-space-2);
   border: 1px solid var(--gh-border);
   border-radius: var(--gh-radius-pill);
-  padding: 6px 14px;
+  padding: 7px 14px;
   background: var(--gh-canvas);
   color: var(--gh-text-secondary);
+  transition: border-color var(--gh-dur-1) var(--gh-ease-out), box-shadow var(--gh-dur-1) var(--gh-ease-out);
+}
+
+.gh-music-search-input:focus-within {
+  border-color: var(--gh-accent);
+  box-shadow: var(--gh-focus-ring);
 }
 
 .gh-music-search-input input {
@@ -342,9 +961,8 @@
   font-size: var(--gh-text-sm);
 }
 
-.gh-music-search-type {
-  display: flex;
-  gap: 2px;
+.gh-music-search-input input::placeholder {
+  color: var(--gh-text-placeholder);
 }
 
 /* ============================================================
@@ -363,10 +981,10 @@
   padding: 8px 14px;
   border-radius: var(--gh-radius-lg);
   border: 1px solid var(--gh-border);
-  background: var(--gh-material-chrome, rgba(255, 255, 255, 0.72));
-  backdrop-filter: blur(20px);
-  box-shadow: var(--gh-shadow-card, 0 8px 24px rgba(0, 0, 0, 0.16));
-  z-index: 1050;
+  background: var(--gh-material-chrome);
+  backdrop-filter: blur(var(--gh-blur-chrome));
+  box-shadow: var(--gh-shadow-lg);
+  z-index: var(--gh-z-header, 1000);
 }
 
 .gh-music-bar-info {
@@ -384,13 +1002,14 @@
   border-radius: var(--gh-radius-sm);
   object-fit: cover;
   flex-shrink: 0;
+  background: var(--gh-canvas-subtle);
 }
 
 .gh-music-bar-cover--fallback {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--gh-border);
+  background: var(--gh-canvas-subtle);
   color: var(--gh-text-secondary);
 }
 
@@ -407,6 +1026,18 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.gh-music-bar-trial {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: var(--gh-radius-xs);
+  background: var(--gh-warning-soft);
+  color: var(--gh-warning);
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: 1px;
 }
 
 .gh-music-bar-artists {
@@ -434,10 +1065,11 @@
   background: none;
   color: var(--gh-text);
   cursor: pointer;
+  transition: background var(--gh-dur-1) var(--gh-ease-out);
 }
 
 .gh-music-bar-btn:hover {
-  background: var(--gh-border);
+  background: var(--gh-btn-hover);
 }
 
 .gh-music-bar-btn:disabled {
@@ -445,19 +1077,19 @@
   cursor: default;
 }
 
+.gh-music-bar-btn--active {
+  color: var(--gh-accent);
+  background: var(--gh-accent-soft);
+}
+
 .gh-music-bar-btn--play {
   background: var(--gh-accent);
-  color: #fff;
+  color: var(--gh-on-accent);
 }
 
 .gh-music-bar-btn--play:hover {
-  background: var(--gh-accent);
-  opacity: 0.9;
-}
-
-.gh-music-bar-mode {
-  font-size: var(--gh-text-xs);
-  font-weight: 700;
+  background: var(--gh-accent-hover);
+  opacity: 1;
 }
 
 .gh-music-bar-progress {
@@ -473,12 +1105,6 @@
   color: var(--gh-text-secondary);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.gh-music-bar-seek {
-  flex: 1;
-  accent-color: var(--gh-accent);
-  min-width: 60px;
 }
 
 .gh-music-bar-extra {
@@ -499,7 +1125,7 @@
   border: 1px solid var(--gh-border);
   border-radius: var(--gh-radius-md);
   background: var(--gh-canvas);
-  box-shadow: var(--gh-shadow-card, 0 8px 24px rgba(0, 0, 0, 0.16));
+  box-shadow: var(--gh-shadow-lg);
   overflow: hidden;
 }
 
@@ -533,11 +1159,12 @@
 }
 
 .gh-music-bar-queue-item:hover {
-  background: var(--gh-border);
+  background: var(--gh-btn-hover);
 }
 
 .gh-music-bar-queue-item--active .gh-music-bar-queue-name {
   color: var(--gh-accent);
+  font-weight: 600;
 }
 
 .gh-music-bar-queue-name {
@@ -556,9 +1183,46 @@
   text-overflow: ellipsis;
 }
 
-/* 给页面底部留出播放条空间（有播放条时才生效：用 body 类或按需由组件加 padding） */
-.gh-music-bar ~ .gh-music-bar-spacer {
-  height: 72px;
+/* ============================================================
+   响应式
+   ============================================================ */
+
+@media (max-width: 720px) {
+  .gh-music-now {
+    padding: var(--gh-space-4);
+  }
+
+  .gh-music-now-head {
+    flex-wrap: wrap;
+  }
+
+  .gh-music-now-cover--lg {
+    width: 88px;
+    height: 88px;
+  }
+
+  .gh-music-now-title {
+    font-size: var(--gh-text-xl);
+  }
+
+  .gh-music-now-controls {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .gh-music-now-volume input {
+    width: 64px;
+  }
+
+  .gh-music-lyrics {
+    max-height: 170px;
+  }
+
+  .gh-music-toplist-grid,
+  .gh-music-playlist-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: var(--gh-space-3);
+  }
 }
 
 @media (max-width: 640px) {
@@ -570,5 +1234,27 @@
   .gh-music-bar-progress {
     order: 4;
     flex-basis: 100%;
+  }
+
+  .gh-music-song-index {
+    display: none;
+  }
+
+  .gh-music-song-artists {
+    max-width: 58vw;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-music-eq span,
+  .gh-music-skeleton {
+    animation: none;
+  }
+
+  .gh-music-toplist-card,
+  .gh-music-playlist-card,
+  .gh-music-lyric--active {
+    transition: none;
+    transform: none;
   }
 }

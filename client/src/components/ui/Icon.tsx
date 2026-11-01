@@ -21,6 +21,7 @@ export type IconName =
   | 'arrow-up' | 'arrow-down' | 'arrow-left' | 'folder-plus' | 'cloud' | 'users' | 'message' | 'ai'
   | 'api' | 'trophy' | 'calendar' | 'tag' | 'bell' | 'eye' | 'database' | 'wallet' | 'send' | 'megaphone'
   | 'bookOpen' | 'music'
+  | 'play' | 'pause' | 'volume' | 'repeat' | 'shuffle' | 'skip-back' | 'skip-forward'
 
 interface IconProps {
   name: IconName
@@ -491,6 +492,50 @@ const glyphs: Record<IconName, ReactNode> = {
       <path d="M3.4 9.4v3.1c0 .5.36.93.85 1.02L6 14V7.6l-1.75.78A1.04 1.04 0 0 0 3.4 9.4Z" {...TINT} />
       <path d="M6 7.6 18.3 3.1a.7.7 0 0 1 .95.66v14.48a.7.7 0 0 1-.95.66L6 14V7.6ZM6 7.6v6.4" />
       <path d="M7.2 14.3v3.2a1.5 1.5 0 0 0 1.5 1.5h.55a1.5 1.5 0 0 0 1.5-1.5v-2.2M21.5 9.2v3.6" />
+    </>
+  ),
+  play: <path d="M8.4 4.9a.9.9 0 0 1 1.35-.78l9.2 5.9a1.15 1.15 0 0 1 0 1.96l-9.2 5.9a.9.9 0 0 1-1.35-.78V4.9Z" fill="currentColor" />,
+  pause: (
+    <>
+      <rect x="6.6" y="4.6" width="3.9" height="14.8" rx="1.5" fill="currentColor" />
+      <rect x="13.5" y="4.6" width="3.9" height="14.8" rx="1.5" fill="currentColor" />
+    </>
+  ),
+  volume: (
+    <>
+      <path d="M4 9.4h3.1L11.4 6v12L7.1 14.6H4a.8.8 0 0 1-.8-.8v-3.6a.8.8 0 0 1 .8-.8Z" {...TINT} />
+      <path d="M4 9.4h3.1L11.4 6v12L7.1 14.6H4a.8.8 0 0 1-.8-.8v-3.6a.8.8 0 0 1 .8-.8Z" />
+      <path d="M14.6 9.1a4.1 4.1 0 0 1 0 5.8M17.3 6.4a7.9 7.9 0 0 1 0 11.2" />
+    </>
+  ),
+  repeat: (
+    <>
+      <path d="M5.4 9.3a3.9 3.9 0 0 1 3.9-3.9h7.6" />
+      <path d="m14.4 2.9 3 2.5-3 2.5" />
+      <path d="M18.6 14.7a3.9 3.9 0 0 1-3.9 3.9H7.1" />
+      <path d="m9.6 16.1-3 2.5 3 2.5" />
+    </>
+  ),
+  shuffle: (
+    <>
+      <path d="M4.2 6.6h2.9c1.05 0 2.03.5 2.64 1.35l4.52 6.3a3.3 3.3 0 0 0 2.64 1.35h2.9" />
+      <path d="m17.4 12.9 3.4 2.7-3.4 2.7" />
+      <path d="M4.2 17.4h2.9c1.05 0 2.03-.5 2.64-1.35l.9-1.25M13.4 9.2l.86-1.25A3.3 3.3 0 0 1 16.9 6.6h2.9" />
+      <path d="m17.4 3.9 3.4 2.7-3.4 2.7" />
+    </>
+  ),
+  'skip-back': (
+    <>
+      <path d="M18.6 5.6v12.8L9.4 12l9.2-6.4Z" fill="currentColor" fillOpacity=".13" />
+      <path d="M18.6 5.6v12.8L9.4 12l9.2-6.4Z" />
+      <path d="M5.9 5.4v13.2" />
+    </>
+  ),
+  'skip-forward': (
+    <>
+      <path d="M5.4 5.6v12.8L14.6 12 5.4 5.6Z" fill="currentColor" fillOpacity=".13" />
+      <path d="M5.4 5.6v12.8L14.6 12 5.4 5.6Z" />
+      <path d="M18.1 5.4v13.2" />
     </>
   ),
 }

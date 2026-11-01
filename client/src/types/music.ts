@@ -71,6 +71,10 @@ export interface MusicSongUrlResponse {
     level?: string
     type?: string
     fee?: number
+    /** 音频实际时长（毫秒）。VIP 试听片段会明显短于歌曲本身 */
+    time?: number
+    /** 非 null 表示这是 VIP 试听片段（start/end 单位秒） */
+    freeTrialInfo?: { start?: number; end?: number; fragmentType?: number } | null
   }[]
 }
 
