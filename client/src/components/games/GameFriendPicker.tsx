@@ -207,9 +207,9 @@ export default function GameFriendPicker({
         </h2>
         {online.length === 0 ? (
           <div className="gh-game-list-state gh-game-list-state--compact">
-            <p className="gh-game-list-state-title">当前没有在线好友</p>
+            <p className="gh-game-list-state-title">当前没有可邀请的在线好友</p>
             <p className="gh-game-list-state-hint">
-              离线好友收不到邀请；可以先去聊天页约人，或让对方打开 LineWeb 后再刷新列表。
+              可能对方已在房间中；离线好友收不到邀请，可以先去聊天页约人，或让对方打开 LineWeb 后刷新列表。
             </p>
           </div>
         ) : (
