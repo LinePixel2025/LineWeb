@@ -4,18 +4,32 @@ import { Link } from 'react-router-dom'
 import api from '../lib/api'
 import { usePoints } from '../contexts/PointsContext'
 import Icon from '../components/ui/Icon'
+import SegmentedControl from '../components/ui/SegmentedControl'
+import UserAvatar from '../components/UserAvatar'
 import type {
+  StockAlert,
+  StockAlertHit,
   StockBuyResult,
   StockHolding,
+  StockLeaderboard,
   StockMarket,
+  StockNewsItem,
   StockPortfolio,
   StockQuote,
   StockSellResult,
+  StockTrade,
+  StockTradeList,
   StockTrend,
 } from '../types/stock'
 
 /** 只在本次浏览器会话内记住「不再提示」，刷新页面仍会再次提示 */
 const NOTICE_KEY = 'lineweb_stocks_notice_ack'
+/** 自选股（本机）：字符串数组的股票代码 */
+const WATCHLIST_KEY = 'lineweb_stock_watchlist_v1'
+/** 价格提醒（本机）：{ id, code, target, direction }[] */
+const ALERTS_KEY = 'lineweb_stock_alerts_v1'
+/** 已触发的提醒记录（本机）：命中后从待触发列表移除，但留一条历史可回看 */
+const ALERT_LOG_KEY = 'lineweb_stock_alert_log_v1'
 
 /** 行情轮询间隔（与服务端 3 秒 tick 对齐） */
 const MARKET_POLL_MS = 3_000
@@ -25,10 +39,17 @@ const MARKET_BACKOFF_MS = 10_000
 const TREND_POLL_MS = 30_000
 /** 价格闪烁动画时长（与 stocks.css 的 keyframes 对齐） */
 const FLASH_CLEAR_MS = 900
+/** 页面内轻提示（价格提醒命中）的停留时长 */
+const TOAST_MS = 6_000
 /** 一天的毫秒数（分时图 x 轴：t = 当日 00:00 起的毫秒） */
 const DAY_MS = 86_400_000
 /** trend.tickMs 异常时的兜底 tick 间隔 */
 const FALLBACK_TICK_MS = 3_000
+
+const MOOD_TEXT: Record<string, string> = { bull: '牛市', flat: '震荡', bear: '熊市' }
+
+/** 稳定的空数组：避免 PriceChart 的 useMemo 因每次渲染新建 [] 而重复计算 */
+const EMPTY_NEWS: StockNewsItem[] = []
 
 function formatPrice(value: number): string {
   return value.toFixed(2)
@@ -67,6 +88,133 @@ function trendClass(value: number): string {
   return 'gh-stock-flat'
 }
 
+/** 分红收益率小数 → 百分比文案（0.008 → 0.8%） */
+function formatYield(value: number): string {
+  return `${(value * 100).toFixed(value * 100 >= 1 ? 1 : 2).replace(/\.?0+$/, '')}%`
+}
+
+/** 事件冲击小数 → 带符号百分比（0.032 → +3.20%） */
+function formatImpact(value: number): string {
+  return `${value > 0 ? '+' : ''}${(value * 100).toFixed(2)}%`
+}
+
+/**
+ * 按半衰期估算「强度衰减到 5%（视为基本结束）」还需要多久。
+ * ratio = 当前强度 / 初始强度 = 2^(-elapsed/halfLife)，因此剩余时间可由两边反推：
+ * remaining = halfLife × log2(ratio / 0.05)。前端不做本地时钟推算，直接用服务端下发的
+ * impact / halfLifeMs / currentImpact，避免玩家改系统时间作弊或与服务端 tick 不同步。
+ */
+function formatNewsCountdown(ratio: number, halfLifeMs: number): string {
+  if (!(ratio > 0.05)) return '强度已基本衰减'
+  const minutes = (halfLifeMs / 60_000) * Math.log2(ratio / 0.05)
+  if (minutes < 60) return `约 ${Math.max(1, Math.round(minutes))} 分钟后衰减到 5%`
+  const hours = minutes / 60
+  return `约 ${hours >= 10 ? Math.round(hours) : hours.toFixed(1)} 小时后衰减到 5%`
+}
+
+/** 统一按 Asia/Shanghai 显示时间：分时图横轴与快讯触发时刻同为上海日界，避免跨时区错位 */
+function formatShanghaiTime(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return '--:--'
+  try {
+    return new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(date)
+  } catch {
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+  }
+}
+
+/** 成交记录时间：MM-DD HH:mm（Asia/Shanghai） */
+function formatTradeTime(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  try {
+    return new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(date)
+  } catch {
+    return date.toISOString().slice(5, 16).replace('T', ' ')
+  }
+}
+
+function readWatchlist(): string[] {
+  try {
+    const raw = localStorage.getItem(WATCHLIST_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is string => typeof item === 'string').slice(0, 50)
+  } catch {
+    return []
+  }
+}
+
+function readAlerts(): StockAlert[] {
+  try {
+    const raw = localStorage.getItem(ALERTS_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    const alerts: StockAlert[] = []
+    for (const item of parsed) {
+      if (!item || typeof item !== 'object') continue
+      const record = item as Record<string, unknown>
+      const code = typeof record.code === 'string' ? record.code : ''
+      const target = typeof record.target === 'number' ? record.target : Number.NaN
+      const direction = record.direction === 'above' || record.direction === 'below' ? record.direction : null
+      const id = typeof record.id === 'string' ? record.id : ''
+      if (!code || !direction || !Number.isFinite(target) || target <= 0 || !id) continue
+      alerts.push({ id, code, target: Math.round(target * 100) / 100, direction })
+    }
+    return alerts.slice(0, 50)
+  } catch {
+    return []
+  }
+}
+
+/** 本地数据落盘：隐私模式 / 配额满时静默失败，不阻塞行情与交易 */
+function persistLocal(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // 忽略：本地记忆丢失不影响账户数据（后端为准）
+  }
+}
+
+function readAlertLog(): StockAlertHit[] {
+  try {
+    const raw = localStorage.getItem(ALERT_LOG_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    const hits: StockAlertHit[] = []
+    for (const item of parsed) {
+      if (!item || typeof item !== 'object') continue
+      const record = item as Record<string, unknown>
+      const code = typeof record.code === 'string' ? record.code : ''
+      const target = typeof record.target === 'number' ? record.target : Number.NaN
+      const price = typeof record.price === 'number' ? record.price : Number.NaN
+      const at = typeof record.at === 'number' ? record.at : Number.NaN
+      const direction = record.direction === 'above' || record.direction === 'below' ? record.direction : null
+      const id = typeof record.id === 'string' ? record.id : ''
+      if (!code || !direction || !id || !Number.isFinite(target) || !Number.isFinite(price) || !Number.isFinite(at)) continue
+      hits.push({ id, code, target, direction, price, at })
+    }
+    return hits.slice(0, 30)
+  } catch {
+    return []
+  }
+}
+
 /** |changePct| ≥ 5 异动、≥ 9 强烈异动（交易未设涨跌停，不用「涨停/跌停」字样） */
 function swingBadge(changePct: number): { text: string; className: string } | null {
   const abs = Math.abs(changePct)
@@ -80,22 +228,45 @@ function swingBadge(changePct: number): { text: string; className: string } | nu
 
 type FlashDirection = 'up' | 'down'
 type ChartMode = 'intraday' | 'daily'
+type LowerTab = 'holdings' | 'trades' | 'rank'
+type ToastTone = 'info' | 'success' | 'danger'
+
+interface ToastItem {
+  id: number
+  tone: ToastTone
+  text: string
+}
 
 const CHART_WIDTH = 720
 const CHART_HEIGHT = 260
 const CHART_PAD_X = 18
 const CHART_PAD_Y = 22
 
+interface IntradayMarker {
+  id: string
+  x: number
+  y: number | null
+  active: boolean
+  sentiment: 'good' | 'bad'
+  title: string
+  currentImpact: number
+  time: string
+}
+
 function PriceChart({
   stock,
   trend,
   loading,
   liveT,
+  news,
+  tickMs,
 }: {
   stock: StockQuote
   trend: StockTrend | null
   loading: boolean
   liveT: number | null
+  news: StockNewsItem[]
+  tickMs: number
 }) {
   const [mode, setMode] = useState<ChartMode>('intraday')
 
@@ -103,10 +274,10 @@ function PriceChart({
   const intradayPoints = useMemo(() => {
     const points = (trend?.intraday ?? []).map((point) => ({ t: point.t, price: point.price }))
     if (liveT === null) return points
-    const tickMs = trend && trend.tickMs > 0 ? trend.tickMs : FALLBACK_TICK_MS
+    const stepMs = trend && trend.tickMs > 0 ? trend.tickMs : FALLBACK_TICK_MS
     const livePoint = { t: liveT, price: stock.price }
     const last = points[points.length - 1]
-    if (last && Math.floor(last.t / tickMs) === Math.floor(liveT / tickMs)) {
+    if (last && Math.floor(last.t / stepMs) === Math.floor(liveT / stepMs)) {
       points[points.length - 1] = livePoint
     } else {
       points.push(livePoint)
@@ -131,8 +302,26 @@ function PriceChart({
       .join(' ')
     const lastPoint = intradayPoints[intradayPoints.length - 1]
     const area = `${line} L${x(lastPoint.t).toFixed(1)},${CHART_HEIGHT - CHART_PAD_Y} L${x(intradayPoints[0].t).toFixed(1)},${CHART_HEIGHT - CHART_PAD_Y} Z`
-    return { min, max, x, y, line, area, lastPoint }
-  }, [intradayPoints, stock.prevClose])
+    // 新闻事件标记：横坐标由 startTick × tickMs 定位，已触发的事件在曲线上打点
+    const markers: IntradayMarker[] = news.map((item) => {
+      const eventT = item.startTick * (tickMs > 0 ? tickMs : FALLBACK_TICK_MS)
+      let nearest = intradayPoints[0]
+      for (const point of intradayPoints) {
+        if (Math.abs(point.t - eventT) < Math.abs(nearest.t - eventT)) nearest = point
+      }
+      return {
+        id: item.id,
+        x: Math.min(CHART_WIDTH - CHART_PAD_X, Math.max(CHART_PAD_X, x(eventT))),
+        y: item.active ? y(nearest.price) : null,
+        active: item.active,
+        sentiment: item.sentiment,
+        title: item.title,
+        currentImpact: item.currentImpact,
+        time: formatShanghaiTime(item.startAt),
+      }
+    })
+    return { min, max, x, y, line, area, lastPoint, markers }
+  }, [intradayPoints, stock.prevClose, news, tickMs])
 
   const daily = useMemo(() => {
     if (dailyCandles.length < 2) return null
@@ -178,6 +367,34 @@ function PriceChart({
       )
     })
 
+  const renderMarkers = (markers: IntradayMarker[]) =>
+    markers.map((marker) => {
+      const color = marker.sentiment === 'good' ? 'var(--gh-danger)' : 'var(--gh-success)'
+      return (
+        <g key={marker.id}>
+          <line
+            x1={marker.x}
+            x2={marker.x}
+            y1={CHART_PAD_Y - 4}
+            y2={CHART_HEIGHT - CHART_PAD_Y}
+            stroke={marker.active ? color : 'var(--gh-text-tertiary)'}
+            strokeWidth="1"
+            strokeDasharray="3 3"
+            opacity={marker.active ? 0.55 : 0.3}
+          />
+          {marker.y !== null && <circle cx={marker.x} cy={marker.y} r="3" fill={color} />}
+          <text x={marker.x} y={CHART_PAD_Y - 8} fontSize="9" textAnchor="middle" fill="var(--gh-text-tertiary)">
+            {marker.time}
+          </text>
+          <title>
+            {marker.active
+              ? `${marker.title}（${marker.sentiment === 'good' ? '利好' : '利空'} ${formatImpact(marker.currentImpact)}）`
+              : `${marker.time} 有重要公告待公布`}
+          </title>
+        </g>
+      )
+    })
+
   let body: ReactNode
   if (showIntraday) {
     if (!intraday) {
@@ -196,6 +413,7 @@ function PriceChart({
             </linearGradient>
           </defs>
           {renderGrid(intraday.min, intraday.max, intraday.y)}
+          {renderMarkers(intraday.markers)}
           {stock.prevClose > 0 && (
             <g>
               <line
@@ -276,19 +494,19 @@ function PriceChart({
             日线
           </button>
         </div>
+        {showIntraday && news.length > 0 && (
+          <span className="gh-stocks-chart-legend">
+            <i className="gh-stocks-chart-legend-line" aria-hidden />
+            新闻事件标记
+          </span>
+        )}
       </div>
       {body}
     </div>
   )
 }
 
-function HoldingRow({
-  holding,
-  onSelect,
-}: {
-  holding: StockHolding
-  onSelect: () => void
-}) {
+function HoldingRow({ holding, onSelect }: { holding: StockHolding; onSelect: () => void }) {
   return (
     <button type="button" className="gh-stocks-holding" onClick={onSelect}>
       <span className="gh-stocks-holding-main">
@@ -296,6 +514,14 @@ function HoldingRow({
         <span>
           <strong>{holding.name}</strong>
           <small>{holding.code} · {holding.sector}</small>
+          <span className="gh-stocks-holding-tags">
+            <span className="gh-stocks-tag gh-stocks-tag--yield">日息 {formatYield(holding.dividendYield)}</span>
+            {holding.overnight ? (
+              <span className="gh-stocks-tag">今日分红 +{formatPoints(holding.todayDividend)}</span>
+            ) : (
+              <span className="gh-stocks-tag gh-stocks-tag--muted">今日不计息</span>
+            )}
+          </span>
         </span>
       </span>
       <span className="gh-stocks-holding-num">
@@ -310,6 +536,60 @@ function HoldingRow({
         <small>浮动盈亏</small>
         <strong>{holding.profit > 0 ? '+' : ''}{formatPoints(holding.profit)}（{formatPct(holding.profitPct)}）</strong>
       </span>
+    </button>
+  )
+}
+
+/** 快讯卡片：未触发只显示「有时间、有公告」；已触发才展示标题 / 摘要 / 幅度 / 剩余强度 */
+function NewsCard({
+  item,
+  stock,
+  onSelect,
+}: {
+  item: StockNewsItem
+  stock: StockQuote
+  onSelect: () => void
+}) {
+  const good = item.sentiment === 'good'
+  const remaining = item.impact !== 0 ? Math.min(1, Math.max(0, item.currentImpact / item.impact)) : 0
+  return (
+    <button
+      type="button"
+      className={`gh-stocks-news-card gh-stocks-news-card--${good ? 'good' : 'bad'}${item.active ? '' : ' gh-stocks-news-card--pending'}`}
+      onClick={onSelect}
+      aria-label={`${stock.name}快讯`}
+    >
+      <span className="gh-stocks-news-head">
+        <i className="gh-stocks-dot" style={{ background: stock.color }} aria-hidden />
+        <strong>{stock.name}</strong>
+        <span className="gh-stocks-news-time">{formatShanghaiTime(item.startAt)}</span>
+        {item.active ? (
+          <span className="gh-stocks-news-state">{good ? '利好' : '利空'}</span>
+        ) : (
+          <span className="gh-stocks-news-state gh-stocks-news-state--pending">待公布</span>
+        )}
+      </span>
+      {item.active ? (
+        <>
+          <span className="gh-stocks-news-title">{item.title}</span>
+          <span className="gh-stocks-news-summary">{item.summary}</span>
+          <span className="gh-stocks-news-foot">
+            <span className={`gh-stocks-news-impact ${good ? 'gh-stock-up' : 'gh-stock-down'}`}>
+              {formatImpact(item.currentImpact)}
+            </span>
+            <span className="gh-stocks-news-bar" aria-hidden>
+              <i style={{ width: `${Math.round(remaining * 100)}%` }} />
+            </span>
+            <span className="gh-text-tertiary" title="按半衰期估算，强度衰减到 5% 视为基本结束">
+              强度 {Math.round(remaining * 100)}% · {formatNewsCountdown(remaining, item.halfLifeMs)}
+            </span>
+          </span>
+        </>
+      ) : (
+        <span className="gh-stocks-news-title gh-stocks-news-title--pending">
+          {formatShanghaiTime(item.startAt)} 有重要公告待公布
+        </span>
+      )}
     </button>
   )
 }
@@ -341,18 +621,79 @@ export default function StocksPage() {
   const [sellAll, setSellAll] = useState(false)
   const [sellError, setSellError] = useState<string | null>(null)
 
+  // 账户 / 交易记录 / 排行榜
+  const [tab, setTab] = useState<LowerTab>('holdings')
+  const [trades, setTrades] = useState<StockTrade[] | null>(null)
+  const [tradesLoading, setTradesLoading] = useState(false)
+  const [tradesError, setTradesError] = useState<string | null>(null)
+  const [leaderboard, setLeaderboard] = useState<StockLeaderboard | null>(null)
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false)
+  const [leaderboardError, setLeaderboardError] = useState<string | null>(null)
+
+  // 自选股 / 价格提醒 / 页面内轻提示（本地记忆，刷新不丢）
+  const [watchlist, setWatchlist] = useState<string[]>(() => readWatchlist())
+  const [onlyWatch, setOnlyWatch] = useState(false)
+  const [alerts, setAlerts] = useState<StockAlert[]>(() => readAlerts())
+  const [alertLog, setAlertLog] = useState<StockAlertHit[]>(() => readAlertLog())
+  const [alertTarget, setAlertTarget] = useState('')
+  const [alertDirection, setAlertDirection] = useState<'above' | 'below'>('above')
+  const [toasts, setToasts] = useState<ToastItem[]>([])
+
   const prevPricesRef = useRef<Record<string, number>>({})
   const flashTimersRef = useRef<Partial<Record<string, number>>>({})
+  const toastTimersRef = useRef<number[]>([])
+  const toastSeqRef = useRef(0)
   const marketBackoffUntilRef = useRef(0)
   const portfolioLoadedRef = useRef(false)
   const marketRequestRef = useRef(0)
   const trendRequestRef = useRef(0)
+
+  const pushToast = useCallback((tone: ToastTone, text: string) => {
+    toastSeqRef.current += 1
+    const id = toastSeqRef.current
+    setToasts((prev) => [...prev.slice(-2), { id, tone, text }])
+    const timer = window.setTimeout(() => {
+      setToasts((prev) => prev.filter((item) => item.id !== id))
+      toastTimersRef.current = toastTimersRef.current.filter((value) => value !== timer)
+    }, TOAST_MS)
+    toastTimersRef.current.push(timer)
+  }, [])
+
+  useEffect(() => () => {
+    for (const timer of toastTimersRef.current) window.clearTimeout(timer)
+  }, [])
 
   const loadPortfolio = useCallback(async () => {
     const data = await api.get<StockPortfolio>('/stocks/portfolio')
     portfolioLoadedRef.current = true
     setPortfolio(data)
     return data
+  }, [])
+
+  const loadTrades = useCallback(async () => {
+    setTradesLoading(true)
+    try {
+      const data = await api.get<StockTradeList>('/stocks/trades?limit=50')
+      setTrades(data.trades)
+      setTradesError(null)
+    } catch (err) {
+      setTradesError(err instanceof Error ? err.message : '成交记录加载失败')
+    } finally {
+      setTradesLoading(false)
+    }
+  }, [])
+
+  const loadLeaderboard = useCallback(async () => {
+    setLeaderboardLoading(true)
+    try {
+      const data = await api.get<StockLeaderboard>('/stocks/leaderboard?limit=20')
+      setLeaderboard(data)
+      setLeaderboardError(null)
+    } catch (err) {
+      setLeaderboardError(err instanceof Error ? err.message : '排行榜加载失败')
+    } finally {
+      setLeaderboardLoading(false)
+    }
   }, [])
 
   /** 给价格变化的股票设置约 900ms 的闪烁方向，到期自动清除 */
@@ -472,6 +813,12 @@ export default function StocksPage() {
     return () => window.clearInterval(timer)
   }, [selectedCode, loadTrend])
 
+  // 切到「成交记录 / 排行榜」时才拉数据（每次进入都刷新，数据量小且有限流兜底）
+  useEffect(() => {
+    if (tab === 'trades') void loadTrades()
+    if (tab === 'rank') void loadLeaderboard()
+  }, [tab, loadTrades, loadLeaderboard])
+
   const selected = market?.stocks.find((stock) => stock.code === selectedCode) ?? market?.stocks[0] ?? null
   const detailBadge = selected ? swingBadge(selected.changePct) : null
   const holding = portfolio?.holdings.find((row) => row.code === selected?.code) ?? null
@@ -485,6 +832,60 @@ export default function StocksPage() {
     : null
   const upCount = market?.stocks.filter((stock) => stock.changePct > 0).length ?? 0
   const downCount = market?.stocks.filter((stock) => stock.changePct < 0).length ?? 0
+
+  const account = portfolio?.account
+  const totalAssets = account?.totalAssets ?? (portfolio?.summary.marketValue ?? 0) + balance
+  const realizedProfit = account?.realizedPoints ?? portfolio?.summary.realizedProfit ?? 0
+  const totalDividends = account?.totalDividends ?? 0
+  const todayDividend = account?.todayDividend ?? 0
+
+  // 全市场快讯（按触发时间排序）：列表展示所有股票的事件，点击跳到对应股票
+  const newsFeed = useMemo(() => {
+    if (!market) return [] as Array<{ item: StockNewsItem; stock: StockQuote }>
+    return market.stocks
+      .flatMap((stock) => (stock.news ?? []).map((item) => ({ item, stock })))
+      .sort((a, b) => a.item.startTick - b.item.startTick)
+  }, [market])
+  const pendingNews = newsFeed.filter((entry) => !entry.item.active).length
+  const goodNews = newsFeed.filter((entry) => entry.item.active && entry.item.sentiment === 'good').length
+  const badNews = newsFeed.filter((entry) => entry.item.active && entry.item.sentiment === 'bad').length
+
+  const visibleStocks = useMemo(() => {
+    if (!market) return [] as StockQuote[]
+    if (!onlyWatch) return market.stocks
+    return market.stocks.filter((stock) => watchlist.includes(stock.code))
+  }, [market, onlyWatch, watchlist])
+
+  const alertsForSelected = selected ? alerts.filter((alert) => alert.code === selected.code) : []
+  const recentAlertHits = selected ? alertLog.filter((hit) => hit.code === selected.code).slice(0, 3) : []
+
+  // 价格提醒命中：行情轮询每次刷新都检查，命中即弹页面内提示并自动移除（避免重复骚扰）
+  useEffect(() => {
+    if (!market || alerts.length === 0) return
+    const hits = alerts.filter((alert) => {
+      const stock = market.stocks.find((item) => item.code === alert.code)
+      if (!stock) return false
+      return alert.direction === 'above' ? stock.price >= alert.target : stock.price <= alert.target
+    })
+    if (hits.length === 0) return
+    const remaining = alerts.filter((alert) => !hits.includes(alert))
+    setAlerts(remaining)
+    persistLocal(ALERTS_KEY, remaining)
+    const triggered: StockAlertHit[] = []
+    for (const hit of hits) {
+      const stock = market.stocks.find((item) => item.code === hit.code)
+      const price = stock ? stock.price : hit.target
+      triggered.push({ ...hit, price, at: Date.now() })
+      pushToast(
+        'info',
+        `${stock?.name ?? hit.code} ${hit.direction === 'above' ? '涨到' : '跌到'} ${formatPrice(hit.target)}（现价 ${formatPrice(price)}）`,
+      )
+    }
+    // 已在待触发列表移除，但保留一条本地历史（刷新后仍能看到最近触发过什么）
+    const nextLog = [...triggered, ...alertLog].slice(0, 30)
+    setAlertLog(nextLog)
+    persistLocal(ALERT_LOG_KEY, nextLog)
+  }, [market, alerts, alertLog, pushToast])
 
   let monthChangePct: number | null = null
   if (selected && activeTrend && activeTrend.daily.length > 0 && activeTrend.daily[0].close > 0) {
@@ -518,6 +919,42 @@ export default function StocksPage() {
     setNoticeOpen(false)
   }
 
+  const toggleWatch = (code: string) => {
+    setWatchlist((prev) => {
+      const next = prev.includes(code) ? prev.filter((item) => item !== code) : [...prev, code]
+      persistLocal(WATCHLIST_KEY, next)
+      return next
+    })
+  }
+
+  const addAlert = () => {
+    if (!selected) return
+    const target = Number(alertTarget)
+    if (!Number.isFinite(target) || target <= 0) {
+      setTradeNotice({ tone: 'danger', text: '请输入大于 0 的目标价' })
+      return
+    }
+    const rounded = Math.round(target * 100) / 100
+    if (alerts.some((alert) => alert.code === selected.code && alert.direction === alertDirection && alert.target === rounded)) {
+      setTradeNotice({ tone: 'danger', text: '同样的提醒已存在' })
+      return
+    }
+    const next: StockAlert[] = [
+      ...alerts,
+      { id: `${selected.code}-${alertDirection}-${rounded}-${Date.now()}`, code: selected.code, target: rounded, direction: alertDirection },
+    ]
+    setAlerts(next)
+    persistLocal(ALERTS_KEY, next)
+    setAlertTarget('')
+    setTradeNotice({ tone: 'success', text: `已设置提醒：${selected.name} ${alertDirection === 'above' ? '高于' : '低于'} ${formatPrice(rounded)}` })
+  }
+
+  const removeAlert = (id: string) => {
+    const next = alerts.filter((alert) => alert.id !== id)
+    setAlerts(next)
+    persistLocal(ALERTS_KEY, next)
+  }
+
   const buy = async () => {
     if (busy || !selected || !rule) return
     if (!Number.isInteger(investAmount) || investAmount <= 0) {
@@ -545,9 +982,11 @@ export default function StocksPage() {
       })
       setTradeNotice({
         tone: 'success',
-        text: `买入 ${result.trade.name} ${formatShares(result.trade.shares)} 份，花费 ${formatPoints(result.trade.points)} 积分（手续费 ${result.trade.fee}）`,
+        text: `买入 ${result.trade.name} ${formatShares(result.trade.shares)} 份，花费 ${formatPoints(result.trade.points)} 积分（手续费 ${result.trade.fee}）· 隔夜持仓每日分红 ${formatYield(result.dividendYield)}`,
       })
       await Promise.all([loadPortfolio(), refreshPoints()])
+      if (tab === 'trades') void loadTrades()
+      if (tab === 'rank') void loadLeaderboard()
     } catch (err) {
       setTradeNotice({ tone: 'danger', text: err instanceof Error ? err.message : '买入失败' })
     } finally {
@@ -610,8 +1049,10 @@ export default function StocksPage() {
         text: `卖出 ${result.name} ${formatShares(result.shares)} 份，到账 ${formatPoints(result.proceeds)} 积分（手续费 ${result.fee}），${profitText}${result.closed ? '，已清仓' : ''}`,
       })
       setSellOpen(false)
-      // 卖出会推动价格：持仓、积分、行情与走势一起刷新
+      // 卖出会推动价格：持仓、积分、行情、走势与榜单一起刷新
       await Promise.all([loadPortfolio(), refreshPoints(), loadMarket(), loadTrend(selected.code)])
+      if (tab === 'trades') void loadTrades()
+      if (tab === 'rank') void loadLeaderboard()
     } catch (err) {
       setTradeNotice({ tone: 'danger', text: err instanceof Error ? err.message : '卖出失败' })
     } finally {
@@ -635,6 +1076,9 @@ export default function StocksPage() {
     return { gross, fee, proceeds: Math.round(gross - fee) }
   }, [rule, selected, holding, sellSharesInput, sellAll])
 
+  const marketIndex = market?.index ?? null
+  const marketMood = market?.marketMood ?? null
+
   return (
     <div className="gh-page-container gh-stocks-page">
       <header className="gh-stocks-header">
@@ -642,15 +1086,21 @@ export default function StocksPage() {
           <p className="gh-stocks-eyebrow"><Link to="/">← 返回首页</Link></p>
           <h1 className="gh-page-title">模拟股市</h1>
           <p className="gh-text-secondary">
-            行情每 3 秒刷新的虚构股票（模拟数据，不可兑换真实货币）。用积分买入，玩家的交易会小幅影响价格，择机卖出结算收益。
+            行情每 3 秒刷新的虚构股票（模拟数据，不可兑换真实货币）。隔夜持仓每天领分红，新闻事件会带来短时冲击；
+            用积分买入、择机卖出结算收益，玩家交易也会小幅影响价格。
           </p>
         </div>
         <div className="gh-stocks-header-meta">
           {market && (
             <>
               <span className={`gh-stocks-chip ${trendClass(market.marketChangePct)}`}>
-                大盘 {formatPct(market.marketChangePct)}
+                大盘 {marketIndex === null ? '—' : marketIndex.toFixed(2)} {formatPct(market.marketChangePct)}
               </span>
+              {marketMood && (
+                <span className={`gh-stocks-mood gh-stocks-mood--${marketMood}`}>
+                  {MOOD_TEXT[marketMood] ?? '震荡'}
+                </span>
+              )}
               <span className="gh-text-tertiary gh-stocks-date">行情日 {market.dateKey}</span>
             </>
           )}
@@ -668,6 +1118,16 @@ export default function StocksPage() {
       {tradeNotice && (
         <div className={`gh-alert gh-alert--${tradeNotice.tone}`} role="status">{tradeNotice.text}</div>
       )}
+      {toasts.length > 0 && (
+        <div className="gh-stocks-toasts" role="status" aria-live="polite">
+          {toasts.map((toast) => (
+            <div key={toast.id} className={`gh-stocks-toast gh-stocks-toast--${toast.tone}`}>
+              <Icon name="bell" size={14} />
+              <span>{toast.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {loading && !market ? (
         <div className="gh-stocks-loading">
@@ -675,84 +1135,134 @@ export default function StocksPage() {
         </div>
       ) : market && (
         <>
-          {portfolio && (
-            <section className="gh-box gh-stocks-portfolio" aria-label="我的持仓">
-              <div className="gh-stocks-portfolio-head">
-                <div>
-                  <h2>我的持仓</h2>
-                  <p className="gh-text-tertiary">
-                    {portfolio.summary.positions > 0
-                      ? `共 ${portfolio.summary.positions} 只 · 投入 ${formatPoints(portfolio.summary.costPoints)} 积分`
-                      : '还没有持仓，在下方选择股票买入'}
-                  </p>
-                </div>
-                <div className="gh-stocks-portfolio-summary">
-                  <div>
-                    <span>总市值</span>
-                    <strong>{formatPoints(portfolio.summary.marketValue)}</strong>
-                  </div>
-                  <div className={trendClass(portfolio.summary.profit)}>
-                    <span>浮动盈亏</span>
-                    <strong>
-                      {portfolio.summary.profit > 0 ? '+' : ''}{formatPoints(portfolio.summary.profit)}
-                      （{formatPct(portfolio.summary.profitPct)}）
-                    </strong>
-                  </div>
-                </div>
+          <section className="gh-stocks-account" aria-label="账户概览">
+            <div className="gh-stocks-account-item">
+              <span>总资产</span>
+              <strong>{formatPoints(totalAssets)}</strong>
+              <small>积分 + 持仓市值</small>
+            </div>
+            <div className="gh-stocks-account-item">
+              <span>积分余额</span>
+              <strong>{formatPoints(balance)}</strong>
+              <small>可用于买入</small>
+            </div>
+            <div className={`gh-stocks-account-item ${trendClass(portfolio?.summary.profit ?? 0)}`}>
+              <span>浮动盈亏</span>
+              <strong>
+                {(portfolio?.summary.profit ?? 0) > 0 ? '+' : ''}{formatPoints(portfolio?.summary.profit ?? 0)}
+                （{formatPct(portfolio?.summary.profitPct ?? 0)}）
+              </strong>
+              <small>{portfolio ? `${portfolio.summary.positions} 只持仓` : '暂无持仓'}</small>
+            </div>
+            <div className={`gh-stocks-account-item ${trendClass(realizedProfit)}`}>
+              <span>已实现盈亏</span>
+              <strong>{realizedProfit > 0 ? '+' : ''}{formatPoints(realizedProfit)}</strong>
+              <small>卖出结算累计</small>
+            </div>
+            <div className="gh-stocks-account-item">
+              <span>累计分红</span>
+              <strong className="gh-stock-up">+{formatPoints(totalDividends)}</strong>
+              <small>今日预计 +{formatPoints(todayDividend)}</small>
+            </div>
+          </section>
+
+          <section className="gh-box gh-stocks-news" aria-label="今日快讯">
+            <div className="gh-stocks-news-head-row">
+              <div>
+                <h2>今日快讯</h2>
+                <p className="gh-text-tertiary">
+                  {newsFeed.length === 0
+                    ? '今天没有新闻事件，行情按趋势运行'
+                    : `已公布 利好 ${goodNews} · 利空 ${badNews} · 待公布 ${pendingNews}`}
+                </p>
               </div>
-              {portfolio.holdings.length > 0 && (
-                <div className="gh-stocks-holdings">
-                  {portfolio.holdings.map((row) => (
-                    <HoldingRow
-                      key={row.code}
-                      holding={row}
-                      onSelect={() => setSelectedCode(row.code)}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
+              <span className="gh-text-tertiary gh-stocks-news-hint">事件会带来短时冲击，按半衰期衰减</span>
+            </div>
+            {newsFeed.length > 0 ? (
+              <div className="gh-stocks-news-list">
+                {newsFeed.map(({ item, stock }) => (
+                  <NewsCard
+                    key={item.id}
+                    item={item}
+                    stock={stock}
+                    onSelect={() => setSelectedCode(stock.code)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="gh-stocks-empty">今日暂无快讯</p>
+            )}
+          </section>
 
           <div className="gh-stocks-layout">
             <aside className="gh-box gh-stocks-list" aria-label="股票列表">
               <div className="gh-stocks-list-head">
-                <strong>{market.stocks.length} 只股票</strong>
+                <strong>{visibleStocks.length} 只股票</strong>
                 <span className="gh-text-tertiary">涨 {upCount} · 跌 {downCount}</span>
               </div>
-              <ul>
-                {market.stocks.map((stock) => {
-                  const owned = portfolio?.holdings.some((row) => row.code === stock.code) ?? false
-                  const badge = swingBadge(stock.changePct)
-                  return (
-                    <li key={stock.code}>
-                      <button
-                        type="button"
-                        className={`gh-stocks-row ${stock.code === selected?.code ? 'gh-stocks-row--active' : ''}`}
-                        onClick={() => setSelectedCode(stock.code)}
-                      >
-                        <span className="gh-stocks-row-main">
-                          <span className="gh-stocks-row-name">
-                            <i className="gh-stocks-dot" style={{ background: stock.color }} aria-hidden />
-                            {stock.name}
-                            {owned && <span className="gh-badge gh-badge--success gh-stocks-owned">持仓</span>}
-                            {badge && <span className={badge.className}>{badge.text}</span>}
+              <div className="gh-stocks-list-tools">
+                <button
+                  type="button"
+                  className={`gh-stocks-watch-toggle ${onlyWatch ? 'gh-stocks-watch-toggle--active' : ''}`}
+                  aria-pressed={onlyWatch}
+                  onClick={() => setOnlyWatch((prev) => !prev)}
+                >
+                  <Icon name="star" size={13} filled={onlyWatch} />
+                  只看自选（{watchlist.length}）
+                </button>
+              </div>
+              {visibleStocks.length === 0 ? (
+                <p className="gh-stocks-empty">
+                  {onlyWatch ? '还没有自选股，点击列表左侧星标添加' : '暂无股票'}
+                </p>
+              ) : (
+                <ul>
+                  {visibleStocks.map((stock) => {
+                    const owned = portfolio?.holdings.some((row) => row.code === stock.code) ?? false
+                    const badge = swingBadge(stock.changePct)
+                    const watched = watchlist.includes(stock.code)
+                    return (
+                      <li key={stock.code} className="gh-stocks-row-item">
+                        <button
+                          type="button"
+                          className={`gh-stocks-star ${watched ? 'gh-stocks-star--active' : ''}`}
+                          aria-pressed={watched}
+                          aria-label={watched ? `取消自选 ${stock.name}` : `加入自选 ${stock.name}`}
+                          title={watched ? '取消自选' : '加入自选'}
+                          onClick={() => toggleWatch(stock.code)}
+                        >
+                          <Icon name="star" size={14} filled={watched} />
+                        </button>
+                        <button
+                          type="button"
+                          className={`gh-stocks-row ${stock.code === selected?.code ? 'gh-stocks-row--active' : ''}`}
+                          onClick={() => setSelectedCode(stock.code)}
+                        >
+                          <span className="gh-stocks-row-main">
+                            <span className="gh-stocks-row-name">
+                              <i className="gh-stocks-dot" style={{ background: stock.color }} aria-hidden />
+                              {stock.name}
+                              {owned && <span className="gh-badge gh-badge--success gh-stocks-owned">持仓</span>}
+                              {badge && <span className={badge.className}>{badge.text}</span>}
+                            </span>
+                            <span className="gh-stocks-row-code">
+                              {stock.code} · {stock.sector} · 日息 {formatYield(stock.dividendYield)}
+                            </span>
                           </span>
-                          <span className="gh-stocks-row-code">{stock.code} · {stock.sector}</span>
-                        </span>
-                        <span className="gh-stocks-row-quote">
-                          <span key={stock.price} className={`gh-stocks-row-price${flashClass(stock.code)}`}>
-                            {formatPrice(stock.price)}
+                          <span className="gh-stocks-row-quote">
+                            <span key={stock.price} className={`gh-stocks-row-price${flashClass(stock.code)}`}>
+                              {formatPrice(stock.price)}
+                            </span>
+                            <span className={`gh-stocks-row-pct ${trendClass(stock.changePct)}`}>
+                              {formatPct(stock.changePct)}
+                            </span>
                           </span>
-                          <span className={`gh-stocks-row-pct ${trendClass(stock.changePct)}`}>
-                            {formatPct(stock.changePct)}
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
             </aside>
 
             {selected && (
@@ -765,6 +1275,16 @@ export default function StocksPage() {
                       <span className="gh-stocks-detail-code">{selected.code}</span>
                       <span className="gh-badge">{selected.sector}</span>
                       {detailBadge && <span className={detailBadge.className}>{detailBadge.text}</span>}
+                      <button
+                        type="button"
+                        className={`gh-stocks-star gh-stocks-star--inline ${watchlist.includes(selected.code) ? 'gh-stocks-star--active' : ''}`}
+                        aria-pressed={watchlist.includes(selected.code)}
+                        aria-label={watchlist.includes(selected.code) ? '取消自选' : '加入自选'}
+                        title={watchlist.includes(selected.code) ? '取消自选' : '加入自选'}
+                        onClick={() => toggleWatch(selected.code)}
+                      >
+                        <Icon name="star" size={15} filled={watchlist.includes(selected.code)} />
+                      </button>
                     </h2>
                     <p className="gh-text-tertiary gh-stocks-detail-price-line">
                       <strong
@@ -790,6 +1310,10 @@ export default function StocksPage() {
                         {monthChangePct === null ? '—' : formatPct(monthChangePct)}
                       </strong>
                     </div>
+                    <div>
+                      <span>日分红</span>
+                      <strong className="gh-stock-up">{formatYield(selected.dividendYield)}</strong>
+                    </div>
                   </div>
                 </div>
 
@@ -798,6 +1322,8 @@ export default function StocksPage() {
                   trend={activeTrend}
                   loading={trendLoading}
                   liveT={liveT}
+                  news={activeTrend?.news ?? selected.news ?? EMPTY_NEWS}
+                  tickMs={market.tickMs}
                 />
 
                 {rule && (
@@ -806,7 +1332,7 @@ export default function StocksPage() {
                       <div>
                         <strong>积分投资</strong>
                         <p className="gh-text-tertiary">
-                          单笔 {formatPoints(rule.minInvest)}–{formatPoints(rule.maxInvest)} 积分 · 买卖各收 {Math.round(rule.feeRate * 100)}% 手续费 · 行情每 3 秒刷新
+                          单笔 {formatPoints(rule.minInvest)}–{formatPoints(rule.maxInvest)} 积分 · 买卖各收 {Math.round(rule.feeRate * 1000) / 10}% 手续费 · 行情每 3 秒刷新 · 隔夜持仓每日分红
                         </p>
                       </div>
                       {holding && (
@@ -821,6 +1347,11 @@ export default function StocksPage() {
                         <span className={trendClass(holding.profit)}>
                           浮动盈亏 <strong>{holding.profit > 0 ? '+' : ''}{formatPoints(holding.profit)}（{formatPct(holding.profitPct)}）</strong>
                         </span>
+                        <span>
+                          今日分红 <strong className="gh-stock-up">+{formatPoints(holding.todayDividend)}</strong>
+                          {' '}（日息 {formatYield(holding.dividendYield)}）
+                        </span>
+                        {!holding.overnight && <span className="gh-stocks-warn">今日变动过，今日不计息</span>}
                       </div>
                     )}
                     <div className="gh-stocks-buy-row">
@@ -874,9 +1405,69 @@ export default function StocksPage() {
                     </div>
                     {preview && (
                       <p className="gh-text-tertiary gh-stocks-preview">
-                        {formatPoints(investAmount)} 积分 → 预计买入 {formatShares(preview.shares)} 份（手续费 {preview.fee} 积分，按现价 {formatPrice(selected.price)}）
+                        {formatPoints(investAmount)} 积分 → 预计买入 {formatShares(preview.shares)} 份（手续费 {preview.fee} 积分，按现价 {formatPrice(selected.price)}）· 隔夜后每日约 +{formatPoints(Math.round((investAmount - preview.fee) * selected.dividendYield))} 分红
                       </p>
                     )}
+
+                    <div className="gh-stocks-alert">
+                      <div className="gh-stocks-alert-head">
+                        <strong>价格提醒</strong>
+                        <span className="gh-text-tertiary">只保存在本机，命中后自动移除</span>
+                      </div>
+                      <div className="gh-stocks-alert-form">
+                        <select
+                          className="gh-input gh-stocks-alert-select"
+                          value={alertDirection}
+                          onChange={(event) => setAlertDirection(event.target.value === 'below' ? 'below' : 'above')}
+                          aria-label="提醒方向"
+                        >
+                          <option value="above">价格高于</option>
+                          <option value="below">价格低于</option>
+                        </select>
+                        <input
+                          className="gh-input gh-stocks-alert-input"
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={alertTarget}
+                          placeholder={`目标价（现价 ${formatPrice(selected.price)}）`}
+                          onChange={(event) => setAlertTarget(event.target.value)}
+                          aria-label="目标价"
+                        />
+                        <button type="button" className="gh-btn gh-btn--ghost gh-btn--sm" onClick={addAlert}>
+                          添加提醒
+                        </button>
+                      </div>
+                      {alertsForSelected.length > 0 && (
+                        <ul className="gh-stocks-alert-list">
+                          {alertsForSelected.map((alert) => (
+                            <li key={alert.id}>
+                              <span>
+                                {alert.direction === 'above' ? '高于' : '低于'} <strong>{formatPrice(alert.target)}</strong>
+                              </span>
+                              <button
+                                type="button"
+                                className="gh-stocks-alert-remove"
+                                aria-label="删除提醒"
+                                onClick={() => removeAlert(alert.id)}
+                              >
+                                <Icon name="close" size={13} />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {recentAlertHits.length > 0 && (
+                        <ul className="gh-stocks-alert-log">
+                          {recentAlertHits.map((hit) => (
+                            <li key={hit.id}>
+                              已提醒 · {hit.direction === 'above' ? '高于' : '低于'} {formatPrice(hit.target)} ·{' '}
+                              {formatTradeTime(new Date(hit.at).toISOString())}（触发价 {formatPrice(hit.price)}）
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -887,6 +1478,159 @@ export default function StocksPage() {
               </section>
             )}
           </div>
+
+          <section className="gh-box gh-stocks-lower" aria-label="持仓与记录">
+            <div className="gh-stocks-tabs">
+              <SegmentedControl
+                tabs={[
+                  { value: 'holdings', label: '持仓', count: portfolio?.holdings.length ?? 0 },
+                  { value: 'trades', label: '成交记录' },
+                  { value: 'rank', label: '排行榜' },
+                ]}
+                active={tab}
+                onChange={(value) => setTab(value === 'trades' ? 'trades' : value === 'rank' ? 'rank' : 'holdings')}
+              />
+              <span className="gh-text-tertiary gh-stocks-lower-hint">
+                {tab === 'holdings' && `今日预计分红 +${formatPoints(todayDividend)} 积分`}
+                {tab === 'trades' && '最近 50 笔买卖（含手续费与已实现盈亏）'}
+                {tab === 'rank' && '总资产 = 积分余额 + 持仓实时市值'}
+              </span>
+            </div>
+
+            {tab === 'holdings' && (
+              !portfolio ? (
+                <p className="gh-stocks-empty">持仓加载中…</p>
+              ) : portfolio.holdings.length > 0 ? (
+                <div className="gh-stocks-holdings">
+                  {portfolio.holdings.map((row) => (
+                    <HoldingRow
+                      key={row.code}
+                      holding={row}
+                      onSelect={() => setSelectedCode(row.code)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="gh-stocks-empty">还没有持仓，在上方选择股票买入；隔夜持仓每天可领分红</p>
+              )
+            )}
+
+            {tab === 'trades' && (
+              <>
+                {tradesLoading && !trades && <div className="gh-stocks-inline-loading"><div className="gh-spinner" /></div>}
+                {tradesError && (
+                  <div className="gh-alert gh-alert--danger" role="status">
+                    {tradesError}
+                    <button type="button" className="gh-btn gh-btn--ghost gh-btn--sm" onClick={() => void loadTrades()}>
+                      重试
+                    </button>
+                  </div>
+                )}
+                {trades && trades.length === 0 && <p className="gh-stocks-empty">还没有成交记录，买入或卖出后会出现在这里</p>}
+                {trades && trades.length > 0 && (
+                  <ul className="gh-stocks-trades">
+                    {trades.map((trade) => (
+                      <li key={trade.id} className="gh-stocks-trade-row">
+                        <span className={`gh-stocks-side gh-stocks-side--${trade.side}`}>
+                          {trade.side === 'buy' ? '买入' : '卖出'}
+                        </span>
+                        <span className="gh-stocks-trade-name">
+                          <i className="gh-stocks-dot" style={{ background: trade.color }} aria-hidden />
+                          <span>
+                            <strong>{trade.name}</strong>
+                            <small>{trade.code} · {formatTradeTime(trade.createdAt)}</small>
+                          </span>
+                        </span>
+                        <span className="gh-stocks-trade-cell">
+                          <small>数量 / 价格</small>
+                          <strong>{formatShares(trade.shares)} 份 @ {formatPrice(trade.price)}</strong>
+                        </span>
+                        <span
+                          className="gh-stocks-trade-cell"
+                          title={`手续费 ${formatPoints(trade.fee)} 积分`}
+                        >
+                          <small>{trade.side === 'buy' ? '投入（含费）' : '到账'}</small>
+                          <strong>{trade.side === 'buy' ? '-' : '+'}{formatPoints(trade.points)}</strong>
+                        </span>
+                        <span className={`gh-stocks-trade-cell ${trade.profit === null ? '' : trendClass(trade.profit)}`}>
+                          <small>已实现盈亏</small>
+                          <strong>
+                            {trade.profit === null
+                              ? '—'
+                              : `${trade.profit > 0 ? '+' : ''}${formatPoints(trade.profit)}`}
+                          </strong>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+
+            {tab === 'rank' && (
+              <>
+                {leaderboardLoading && !leaderboard && <div className="gh-stocks-inline-loading"><div className="gh-spinner" /></div>}
+                {leaderboardError && (
+                  <div className="gh-alert gh-alert--danger" role="status">
+                    {leaderboardError}
+                    <button type="button" className="gh-btn gh-btn--ghost gh-btn--sm" onClick={() => void loadLeaderboard()}>
+                      重试
+                    </button>
+                  </div>
+                )}
+                {leaderboard && leaderboard.entries.length === 0 && (
+                  <p className="gh-stocks-empty">还没有人持有资产，成为第一个上榜的人吧</p>
+                )}
+                {leaderboard && leaderboard.entries.length > 0 && (
+                  <ol className="gh-stocks-rank">
+                    {leaderboard.entries.map((entry) => (
+                      <li key={entry.userId} className={`gh-stocks-rank-row ${entry.isMe ? 'gh-stocks-rank-row--me' : ''}`}>
+                        <span className={`gh-stocks-rank-no gh-stocks-rank-no--${entry.rank <= 3 ? entry.rank : 'plain'}`}>
+                          {entry.rank}
+                        </span>
+                        <UserAvatar userId={entry.userId} username={entry.username} size="sm" />
+                        <span className="gh-stocks-rank-name">
+                          {entry.username}
+                          {entry.isMe && <span className="gh-badge gh-badge--success">我</span>}
+                        </span>
+                        <span className="gh-stocks-rank-cell">
+                          <small>总资产</small>
+                          <strong>{formatPoints(entry.totalAssets)}</strong>
+                        </span>
+                        <span className="gh-stocks-rank-cell">
+                          <small>持仓市值</small>
+                          <strong>{formatPoints(entry.marketValue)}</strong>
+                        </span>
+                        <span className={`gh-stocks-rank-cell ${trendClass(entry.profit)}`}>
+                          <small>浮动盈亏</small>
+                          <strong>{entry.profit > 0 ? '+' : ''}{formatPoints(entry.profit)}</strong>
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                {leaderboard?.me && !leaderboard.entries.some((entry) => entry.isMe) && (
+                  <div className="gh-stocks-rank-me">
+                    <span className="gh-text-tertiary">我的排名</span>
+                    <span className="gh-stocks-rank-no gh-stocks-rank-no--plain">{leaderboard.me.rank}</span>
+                    <span className="gh-stocks-rank-name">{leaderboard.me.username}</span>
+                    <span className="gh-stocks-rank-cell">
+                      <small>总资产</small>
+                      <strong>{formatPoints(leaderboard.me.totalAssets)}</strong>
+                    </span>
+                    <span className="gh-stocks-rank-cell">
+                      <small>持仓市值</small>
+                      <strong>{formatPoints(leaderboard.me.marketValue)}</strong>
+                    </span>
+                    <span className={`gh-stocks-rank-cell ${trendClass(leaderboard.me.profit)}`}>
+                      <small>浮动盈亏</small>
+                      <strong>{leaderboard.me.profit > 0 ? '+' : ''}{formatPoints(leaderboard.me.profit)}</strong>
+                    </span>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
         </>
       )}
 
@@ -902,7 +1646,8 @@ export default function StocksPage() {
             <h2 className="gh-dialog-title">这是模拟行情</h2>
             <p className="gh-text-secondary">
               本页面展示的股票与价格全部是虚构的模拟行情，每 3 秒跳动一次，玩家的买入卖出会小幅推动价格，与真实证券市场无关。
-              页面支持用站内积分投资：买入后按实时行情计算市值，择机卖出结算盈亏（买卖各收 1% 手续费）。
+              页面支持用站内积分投资：买入后按实时行情计算市值，择机卖出结算盈亏（买卖各收 0.3% 手续费）。
+              隔夜未变动的持仓每天按市值发放分红，当天随机出现的新闻快讯会带来有时效的价格冲击。
               收益仅限站内积分，不能兑换成真实货币。
             </p>
             <label className="gh-stocks-notice-check">
@@ -971,7 +1716,7 @@ export default function StocksPage() {
                   <strong>{formatPoints(Math.round(sellPreview.gross))} 积分</strong>
                 </div>
                 <div>
-                  <span>手续费（{Math.round((rule?.feeRate ?? 0) * 100)}%）</span>
+                  <span>手续费（{Math.round((rule?.feeRate ?? 0) * 1000) / 10}%）</span>
                   <strong>{formatPoints(sellPreview.fee)} 积分</strong>
                 </div>
                 <div>

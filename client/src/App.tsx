@@ -53,6 +53,9 @@ const ParkourPage = lazy(() => import('./pages/games/ParkourPage'))
 const ParkourOnlinePage = lazy(() => import('./pages/games/ParkourOnlinePage'))
 const FarmPage = lazy(() => import('./pages/games/FarmPage'))
 const PetsPage = lazy(() => import('./pages/PetsPage'))
+const PetHomePage = lazy(() => import('./pages/PetHomePage'))
+const LotteryPage = lazy(() => import('./pages/LotteryPage'))
+const ThemesPage = lazy(() => import('./pages/ThemesPage'))
 const PointsPage = lazy(() => import('./pages/PointsPage'))
 const DeepSeekChatPage = lazy(() => import('./pages/DeepSeekChatPage'))
 const WebProxyPage = lazy(() => import('./pages/WebProxyPage'))
@@ -179,7 +182,24 @@ export default function App() {
                       </Route>
                       {/* 宠物：花积分召唤并照顾一只 2D 小宠物（需登录） */}
                       <Route element={<RequireFeature feature="pet" />}>
-                        <Route path="/pets" element={<PetsPage />} />
+                        <Route path="/pets" element={
+                          <ProtectedRoute><PetsPage /></ProtectedRoute>
+                        } />
+                        <Route path="/pets/home/:userId" element={
+                          <ProtectedRoute><PetHomePage /></ProtectedRoute>
+                        } />
+                      </Route>
+                      {/* 积分抽奖：花积分抽种子 / 积分 / 稀有装扮（需登录） */}
+                      <Route element={<RequireFeature feature="lottery" />}>
+                        <Route path="/lottery" element={
+                          <ProtectedRoute><LotteryPage /></ProtectedRoute>
+                        } />
+                      </Route>
+                      {/* LineWeb 主题：积分兑换全站主题，支持试穿与佩戴（需登录） */}
+                      <Route element={<RequireFeature feature="theme" />}>
+                        <Route path="/themes" element={
+                          <ProtectedRoute><ThemesPage /></ProtectedRoute>
+                        } />
                       </Route>
                       {/* 小说阅读器：上传 EPUB/TXT 在线阅读，进度多端同步（需登录） */}
                       <Route element={<RequireFeature feature="reader" />}>

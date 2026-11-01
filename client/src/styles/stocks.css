@@ -59,26 +59,60 @@
   font-size: var(--gh-text-sm);
 }
 .gh-stocks-list ul { list-style: none; margin: 0; padding: 0; }
+/* 列表行 = 星标按钮 + 行情按钮（两个独立按钮，避免 button 嵌套） */
+.gh-stocks-row-item {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--gh-border-muted);
+}
+.gh-stocks-list li:last-child .gh-stocks-row-item { border-bottom: none; }
 .gh-stocks-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
   width: 100%;
-  padding: 10px 14px;
+  padding: 10px 14px 10px 4px;
   border: none;
-  border-bottom: 1px solid var(--gh-border-muted);
   background: none;
   font-family: var(--gh-font);
   text-align: left;
   cursor: pointer;
   transition: background var(--gh-transition);
 }
-.gh-stocks-list li:last-child .gh-stocks-row { border-bottom: none; }
 .gh-stocks-row:hover { background: var(--gh-btn-hover); }
 .gh-stocks-row--active {
   background: var(--gh-accent-soft);
   box-shadow: inset 3px 0 0 var(--gh-accent);
+}
+/* 自选星标：列表行左侧 / 详情标题内联都用同一套样式 */
+.gh-stocks-star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--gh-text-tertiary);
+  cursor: pointer;
+  transition: color var(--gh-transition), transform var(--gh-transition);
+}
+.gh-stocks-star:hover { color: var(--gh-warning); transform: scale(1.08); }
+.gh-stocks-star--active { color: var(--gh-warning); }
+.gh-stocks-star--inline {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--gh-radius-pill);
+}
+.gh-stocks-star--inline:hover { background: var(--gh-btn-hover); }
+.gh-stocks-star:focus-visible {
+  outline: none;
+  box-shadow: var(--gh-focus-ring);
+  border-radius: var(--gh-radius-pill);
 }
 .gh-stocks-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .gh-stocks-row-name {
@@ -438,7 +472,520 @@
   color: var(--gh-text);
 }
 
+/* ============================================================
+   账户概览（总资产 / 余额 / 浮动 / 已实现 / 累计分红）
+   ============================================================ */
+.gh-stocks-account {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.gh-stocks-account-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-subtle);
+}
+.gh-stocks-account-item > span {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+}
+.gh-stocks-account-item > strong {
+  overflow: hidden;
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-base);
+  font-weight: 700;
+  color: var(--gh-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gh-stocks-account-item > small {
+  overflow: hidden;
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   今日快讯（新闻事件卡片）
+   ============================================================ */
+.gh-stocks-news { margin-bottom: 16px; padding: 14px 16px; }
+.gh-stocks-news-head-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.gh-stocks-news-head-row h2 { margin: 0 0 2px; font-size: var(--gh-text-base); }
+.gh-stocks-news-head-row p { margin: 0; font-size: var(--gh-text-xs); }
+.gh-stocks-news-hint { font-size: var(--gh-text-xs); }
+.gh-stocks-news-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.gh-stocks-news-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-inset);
+  font-family: var(--gh-font);
+  color: var(--gh-text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--gh-transition), background var(--gh-transition);
+}
+.gh-stocks-news-card:hover { border-color: var(--gh-accent); background: var(--gh-accent-soft); }
+.gh-stocks-news-card--good { border-left: 3px solid var(--gh-danger); }
+.gh-stocks-news-card--bad { border-left: 3px solid var(--gh-success); }
+.gh-stocks-news-card--pending { border-left: 3px dashed var(--gh-text-tertiary); }
+.gh-stocks-news-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--gh-text-xs);
+}
+.gh-stocks-news-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gh-stocks-news-time {
+  margin-left: auto;
+  font-family: var(--gh-font-mono);
+  color: var(--gh-text-tertiary);
+}
+.gh-stocks-news-state {
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: var(--gh-radius-pill);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.gh-stocks-news-card--good .gh-stocks-news-state { color: var(--gh-danger); }
+.gh-stocks-news-card--bad .gh-stocks-news-state { color: var(--gh-success); }
+.gh-stocks-news-state--pending { color: var(--gh-text-tertiary); }
+.gh-stocks-news-title {
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  line-height: 1.4;
+}
+.gh-stocks-news-title--pending { font-weight: 500; color: var(--gh-text-secondary); }
+.gh-stocks-news-summary {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-secondary);
+  line-height: 1.5;
+}
+.gh-stocks-news-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px 8px;
+  flex-wrap: wrap;
+  font-size: var(--gh-text-xs);
+}
+.gh-stocks-news-impact { font-family: var(--gh-font-mono); font-weight: 700; }
+.gh-stocks-news-bar {
+  flex: 1 1 60px;
+  min-width: 50px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-fill-2);
+}
+.gh-stocks-news-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-accent);
+  transition: width 300ms ease-out;
+}
+.gh-stocks-news-card--good .gh-stocks-news-bar > i { background: var(--gh-danger); }
+.gh-stocks-news-card--bad .gh-stocks-news-bar > i { background: var(--gh-success); }
+
+/* 大盘情绪标签 */
+.gh-stocks-mood {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: var(--gh-radius-pill);
+  font-size: var(--gh-text-xs);
+  font-weight: 700;
+}
+.gh-stocks-mood--bull {
+  color: var(--gh-danger);
+  background: color-mix(in srgb, var(--gh-danger) 14%, transparent);
+}
+.gh-stocks-mood--bear {
+  color: var(--gh-success);
+  background: color-mix(in srgb, var(--gh-success) 14%, transparent);
+}
+.gh-stocks-mood--flat {
+  color: var(--gh-text-secondary);
+  background: var(--gh-fill-2);
+}
+
+/* 列表工具条（只看自选） */
+.gh-stocks-list-tools {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--gh-border-muted);
+}
+.gh-stocks-watch-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-canvas-inset);
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-secondary);
+  cursor: pointer;
+  transition: background var(--gh-transition), color var(--gh-transition), border-color var(--gh-transition);
+}
+.gh-stocks-watch-toggle:hover { color: var(--gh-text); border-color: var(--gh-accent); }
+.gh-stocks-watch-toggle--active {
+  color: var(--gh-warning);
+  border-color: currentColor;
+  background: var(--gh-warning-soft);
+}
+
+/* 空态 / 内联加载 */
+.gh-stocks-empty {
+  margin: 12px 0;
+  padding: 18px 12px;
+  border: 1px dashed var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-tertiary);
+  text-align: center;
+}
+.gh-stocks-inline-loading { display: flex; justify-content: center; padding: 24px; }
+
+/* ============================================================
+   持仓卡片：分红徽标 / 今日不计息
+   ============================================================ */
+.gh-stocks-holding-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.gh-stocks-tag {
+  padding: 0 6px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-canvas-inset);
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--gh-text-secondary);
+  white-space: nowrap;
+}
+.gh-stocks-tag--yield {
+  color: var(--gh-danger);
+  border-color: currentColor;
+  background: color-mix(in srgb, var(--gh-danger) 10%, transparent);
+}
+.gh-stocks-tag--muted { color: var(--gh-text-tertiary); }
+.gh-stocks-warn {
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  color: var(--gh-warning);
+}
+
+/* ============================================================
+   价格提醒（详情面板内，localStorage 本地记忆）
+   ============================================================ */
+.gh-stocks-alert {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--gh-border-muted);
+}
+.gh-stocks-alert-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.gh-stocks-alert-head strong { font-size: var(--gh-text-sm); }
+.gh-stocks-alert-head span { font-size: var(--gh-text-xs); }
+.gh-stocks-alert-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gh-stocks-alert-select { width: auto; min-width: 112px; }
+.gh-stocks-alert-input { width: 180px; }
+.gh-stocks-alert-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.gh-stocks-alert-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 10px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-canvas-inset);
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-secondary);
+}
+.gh-stocks-alert-remove {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--gh-radius-pill);
+  background: none;
+  color: var(--gh-text-tertiary);
+  cursor: pointer;
+}
+.gh-stocks-alert-remove:hover { color: var(--gh-danger); background: var(--gh-btn-hover); }
+.gh-stocks-alert-log {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+}
+
+/* ============================================================
+   底部 Tab：持仓 / 成交记录 / 排行榜
+   ============================================================ */
+.gh-stocks-lower { margin-top: 16px; padding: 14px 16px; }
+.gh-stocks-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.gh-stocks-tabs .gh-tabnav { margin-bottom: 0; }
+.gh-stocks-lower-hint { font-size: var(--gh-text-xs); }
+.gh-stocks-lower .gh-stocks-holdings { margin-top: 10px; }
+
+/* 成交记录 */
+.gh-stocks-trades {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.gh-stocks-trade-row {
+  display: flex;
+  align-items: center;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-subtle);
+}
+.gh-stocks-side {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  border: 1px solid currentColor;
+  border-radius: var(--gh-radius-pill);
+  font-size: var(--gh-text-xs);
+  font-weight: 700;
+  line-height: 1.6;
+}
+.gh-stocks-side--buy { color: var(--gh-danger); background: color-mix(in srgb, var(--gh-danger) 10%, transparent); }
+.gh-stocks-side--sell { color: var(--gh-success); background: color-mix(in srgb, var(--gh-success) 10%, transparent); }
+.gh-stocks-trade-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 130px;
+  min-width: 0;
+}
+.gh-stocks-trade-name strong { display: block; font-size: var(--gh-text-sm); }
+.gh-stocks-trade-name small { display: block; font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
+.gh-stocks-trade-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 0 0 auto;
+  min-width: 92px;
+  text-align: right;
+}
+.gh-stocks-trade-cell small { font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
+.gh-stocks-trade-cell strong { font-family: var(--gh-font-mono); font-size: var(--gh-text-xs); font-weight: 600; }
+
+/* 排行榜 */
+.gh-stocks-rank {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.gh-stocks-rank-row,
+.gh-stocks-rank-me {
+  display: flex;
+  align-items: center;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-subtle);
+}
+.gh-stocks-rank-row--me,
+.gh-stocks-rank-me {
+  border-color: var(--gh-accent);
+  background: var(--gh-accent-soft);
+}
+.gh-stocks-rank-me { margin-top: 8px; }
+.gh-stocks-rank-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-fill-2);
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-xs);
+  font-weight: 700;
+  color: var(--gh-text-secondary);
+}
+.gh-stocks-rank-no--1 { color: #ffffff; background: #d4a017; }
+.gh-stocks-rank-no--2 { color: #ffffff; background: #8e9096; }
+.gh-stocks-rank-no--3 { color: #ffffff; background: #b0653b; }
+.gh-stocks-rank-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 110px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gh-stocks-rank-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 0 0 auto;
+  min-width: 88px;
+  text-align: right;
+}
+.gh-stocks-rank-cell small { font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
+.gh-stocks-rank-cell strong { font-family: var(--gh-font-mono); font-size: var(--gh-text-xs); font-weight: 600; }
+
+/* 分时图事件标记图例 */
+.gh-stocks-chart-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+}
+.gh-stocks-chart-legend-line {
+  display: inline-block;
+  width: 14px;
+  height: 0;
+  border-top: 1px dashed var(--gh-text-tertiary);
+}
+
+/* ============================================================
+   页面内轻提示（价格提醒命中）
+   ============================================================ */
+.gh-stocks-toasts {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(92vw, 420px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.gh-stocks-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text);
+  animation: gh-stocks-toast-in 180ms ease-out;
+}
+.gh-stocks-toast--info { border-left: 3px solid var(--gh-accent); }
+.gh-stocks-toast--success { border-left: 3px solid var(--gh-success); }
+.gh-stocks-toast--danger { border-left: 3px solid var(--gh-danger); }
+
+@keyframes gh-stocks-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-stocks-toast { animation: none; }
+  .gh-stocks-star { transition: none; }
+  .gh-stocks-news-bar > i { transition: none; }
+}
+
+/* ============================================================
+   响应式：平板 / 手机
+   ============================================================ */
+@media (max-width: 1023px) {
+  .gh-stocks-account { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 @media (max-width: 860px) {
   .gh-stocks-layout { grid-template-columns: minmax(0, 1fr); }
   .gh-stocks-detail-stats { grid-template-columns: repeat(2, minmax(80px, auto)); }
+  .gh-stocks-news-list { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 640px) {
+  /* 账户条横向滚动：5 个指标挤在一行会截断数字，滚动比换行更好读 */
+  .gh-stocks-account {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .gh-stocks-account::-webkit-scrollbar { display: none; }
+  .gh-stocks-account-item { flex: 0 0 auto; min-width: 148px; }
+  .gh-stocks-holding { flex-wrap: wrap; gap: 8px 12px; }
+  .gh-stocks-holding-main { flex: 1 1 100%; }
+  .gh-stocks-holding-num { flex: 1 1 auto; text-align: left; }
+  .gh-stocks-trade-cell,
+  .gh-stocks-rank-cell { min-width: 76px; text-align: left; }
+  .gh-stocks-alert-input { width: 100%; }
+  .gh-stocks-alert-select { flex: 1 1 auto; }
+  .gh-stocks-toasts { bottom: 16px; }
 }

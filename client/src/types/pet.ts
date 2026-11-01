@@ -1,10 +1,14 @@
 /**
- * 宠物系统类型（与服务端 `/api/pets` 契约保持一致，服务端由并行代理实现）。
+ * 宠物系统类型（与服务端 `/api/pets` 契约保持一致）。
  * 数值（hunger/cleanliness/mood 0..100、积分扣减）全部由服务端结算，前端只做展示与乐观扣分。
+ *
+ * 注意：新增的可选字段（palette / personality / speciesName / pats / switchCost 等）标成 `?`
+ * 是为了兼容既有测试夹具与「前端先上线、服务端后上线」的滚动发布窗口，
+ * 渲染侧一律用 `?? 兜底值`，不要假设字段一定存在。
  */
 
-/** 宠物种类 */
-export type PetSpecies = 'cat' | 'dog' | 'bird'
+/** 宠物种类（cat/dog/bird 为历史数据，key 不可变） */
+export type PetSpecies = 'cat' | 'dog' | 'bird' | 'rabbit' | 'fox' | 'panda'
 
 /** 状态：alive 在世 / gone 离家出走 */
 export type PetStatus = 'alive' | 'gone'
@@ -19,10 +23,22 @@ export interface PetEquipped {
   face: string | null
 }
 
+/** 物种配色（主色 / 辅色 / 点缀色），用于贴图与主题卡 */
+export interface PetPalette {
+  primary: string
+  secondary: string
+  accent: string
+}
+
 /** 宠物实例（服务端已结算状态） */
 export interface PetDto {
   id: number
+  /** 主人 userId（用于跳转自己的宠物之家；旧数据缺失时前端隐藏入口） */
+  ownerId?: number
   species: PetSpecies
+  /** 物种显示名（服务端下发；缺失时前端按 species 兜底） */
+  speciesName?: string
+  speciesEmoji?: string
   name: string
   level: number
   status: PetStatus
@@ -45,6 +61,10 @@ export interface PetDto {
   nextLevelCost: number | null
   /** 抚摸是否已过冷却 */
   touchReady: boolean
+  /** 被别人撸的累计次数（宠物之家人气） */
+  pats?: number
+  /** 换物种花费（服务端下发，前端不硬编码） */
+  switchCost?: number
 }
 
 /** 种类静态配置 */
@@ -54,6 +74,9 @@ export interface PetSpeciesInfo {
   defaultName: string
   emoji: string
   description: string
+  /** 一句性格描述（换宠物卡片展示） */
+  personality?: string
+  palette?: PetPalette
 }
 
 /** 装扮静态配置 */
@@ -90,13 +113,21 @@ export interface PetTrickInfo {
 export interface PetCatalog {
   species: PetSpeciesInfo[]
   outfits: PetOutfitInfo[]
-  costs: { summon: number; feed: number; bathe: number; play: number }
+  costs: { summon: number; feed: number; bathe: number; play: number; switch?: number }
   careActions: PetCareActionInfo[]
   tricks: PetTrickInfo[]
   maxLevel: number
   levelCostBase: number
   decayPerHour: { hunger: number; cleanliness: number; mood: number }
   graceHours: number
+  /** 换物种花费（与 costs.switch 同值） */
+  switchCost?: number
+  /** 串门每日撸宠上限 */
+  patDailyLimit?: number
+  /** 留言每日条数上限 */
+  guestbookDailyLimit?: number
+  /** 留言长度上限 */
+  guestbookMaxLength?: number
 }
 
 /** GET /api/pets */
@@ -113,7 +144,7 @@ export interface PetSummonResult {
   points: number
 }
 
-/** POST /api/pets/feed | bathe | play | upgrade */
+/** POST /api/pets/feed | bathe | play | upgrade | switch */
 export interface PetCareResult {
   pet: PetDto
   points: number
@@ -141,4 +172,104 @@ export interface PetOutfitBuyResult {
 /** POST /api/pets/outfits/equip | rename */
 export interface PetUpdateResult {
   pet: PetDto
+}
+
+/* ============================================================
+   宠物之家（公共串门）
+   ============================================================ */
+
+/** 列表卡片里的宠物摘要（服务端只暴露 mood） */
+export interface PetHomePetSummary {
+  species: PetSpecies
+  speciesName: string
+  name: string
+  level: number
+  mood: number
+  pats: number
+  equipped: PetEquipped
+}
+
+/** GET /api/pets/homes 的单条 */
+export interface PetHomeSummary {
+  userId: number
+  username: string
+  avatarVersion: number | null
+  pet: PetHomePetSummary
+  isSelf: boolean
+}
+
+/** GET /api/pets/homes?query= */
+export interface PetHomesResult {
+  homes: PetHomeSummary[]
+  query: string
+}
+
+/** 留言作者 */
+export interface PetGuestbookAuthor {
+  userId: number
+  username: string
+}
+
+/** 一条留言 */
+export interface PetGuestbookEntry {
+  id: number
+  content: string
+  author: PetGuestbookAuthor
+  /** ISO 字符串 */
+  createdAt: string
+  isMine: boolean
+}
+
+/** 宠物之家主人 */
+export interface PetHomeOwner {
+  userId: number
+  username: string
+  avatarVersion: number | null
+}
+
+/** GET /api/pets/homes/:userId */
+export interface PetHomeDetail {
+  owner: PetHomeOwner
+  publicPet: {
+    species: PetSpecies
+    speciesName: string
+    name: string
+    level: number
+    mood: number
+    equipped: PetEquipped
+    pats: number
+    status: PetStatus
+  }
+  guestbook: PetGuestbookEntry[]
+  viewer: {
+    patsToday: number
+    patsRemaining: number
+    canGuestbook: boolean
+  }
+  /** 人气排名（按 pats 降序，1 = 人气最高） */
+  rank: number
+  isSelf: boolean
+}
+
+/** POST /api/pets/homes/:userId/pat */
+export interface PetPatResult {
+  /** 今天我在它家已撸次数 */
+  pats: number
+  /** 宠物累计人气 */
+  popularity: number
+  mood: number
+  /** 今天还剩几次 */
+  remaining: number
+  animation: 'pat'
+}
+
+/** POST /api/pets/homes/:userId/guestbook */
+export interface PetGuestbookAddResult {
+  entry: PetGuestbookEntry
+  guestbook: PetGuestbookEntry[]
+}
+
+/** DELETE /api/pets/guestbook/:id */
+export interface PetGuestbookDeleteResult {
+  id: number
 }

@@ -2,6 +2,9 @@ import prisma from '../lib/prisma.js'
 import type { Pet, Prisma } from '@prisma/client'
 import { AppError } from '../middleware/errorHandler.js'
 import {
+  GUESTBOOK_DAILY_LIMIT,
+  GUESTBOOK_MAX_LENGTH,
+  PAT_DAILY_LIMIT,
   PET_CARE_ACTIONS,
   PET_COSTS,
   PET_DECAY_PER_HOUR,
@@ -10,6 +13,7 @@ import {
   PET_NAME_MAX_LENGTH,
   PET_OUTFITS,
   PET_OUTFIT_SLOTS,
+  PET_PAT_MOOD_BONUS,
   PET_SPECIES,
   PET_TOUCH_COOLDOWN_MS,
   PET_TOUCH_MOOD_BONUS,
@@ -18,10 +22,13 @@ import {
   emptyPetEquipped,
   getPetOutfit,
   getPetSpecies,
+  nextNameAfterSwitch,
+  normalizePetName,
   petUnlockedActions,
   petUpgradeCost,
   recomputeCriticalSince,
   roundStat,
+  sanitizeGuestbookContent,
   serializeEquipped,
   settlePetStats,
   type PetCareActionDef,
@@ -34,8 +41,16 @@ import {
   type PetTrickDef,
 } from '../lib/petCatalog.js'
 import { getPointsProfile, spendPointsTx } from './pointsService.js'
+import { getTodayDateKey, getTodayDayStart } from '../lib/pointsRules.js'
 
 type Db = Prisma.TransactionClient
+
+/** 宠物之家列表一次最多返回多少位（避免榜单接口变成全表扫描） */
+const PET_HOMES_LIMIT = 60
+
+/** 宠物之家最近留言条数 */
+const GUESTBOOK_PAGE_SIZE = 30
+
 
 /* ============================================================
    DTO（前端契约，字段名保持稳定）
@@ -43,7 +58,12 @@ type Db = Prisma.TransactionClient
 
 export interface PetDto {
   id: number
+  /** 主人 userId（前端「去我的宠物之家」需要它拼路由） */
+  ownerId: number
   species: string
+  /** 物种显示名（catalog 里查不到时回退「宠物」） */
+  speciesName: string
+  speciesEmoji: string
   name: string
   level: number
   status: 'alive' | 'gone'
@@ -62,6 +82,10 @@ export interface PetDto {
   nextLevelCost: number | null
   /** true = 现在抚摸可获得心情加成 */
   touchReady: boolean
+  /** 被别人撸的累计次数（宠物之家人气） */
+  pats: number
+  /** 换物种花费，前端直接取用避免硬编码 */
+  switchCost: number
 }
 
 export interface PetCatalogDto {
@@ -74,6 +98,11 @@ export interface PetCatalogDto {
   levelCostBase: number
   decayPerHour: { hunger: number; cleanliness: number; mood: number }
   graceHours: number
+  /** 换物种花费（与 costs.switch 同值，单独下发便于前端独立展示） */
+  switchCost: number
+  patDailyLimit: number
+  guestbookDailyLimit: number
+  guestbookMaxLength: number
 }
 
 export interface PetView {
@@ -97,6 +126,98 @@ export interface PetTrickResult extends PetMutationResult {
   animation: string
 }
 
+/* ---------- 宠物之家（公共 DTO 只暴露 mood，不暴露 hunger/cleanliness 精确值） ---------- */
+
+/** 列表卡片用的宠物摘要 */
+export interface PetHomePetSummary {
+  species: string
+  speciesName: string
+  name: string
+  level: number
+  mood: number
+  pats: number
+  equipped: PetEquipped
+}
+
+export interface PetHomeSummary {
+  userId: number
+  username: string
+  /** 头像缓存击穿版本号（null = 从未上传过头像） */
+  avatarVersion: number | null
+  pet: PetHomePetSummary
+  isSelf: boolean
+}
+
+export interface PetHomesResult {
+  homes: PetHomeSummary[]
+  /** 实际生效的搜索词（trim + 截断后） */
+  query: string
+}
+
+export interface PetGuestbookAuthor {
+  userId: number
+  username: string
+}
+
+export interface PetGuestbookEntryDto {
+  id: number
+  content: string
+  author: PetGuestbookAuthor
+  createdAt: string
+  isMine: boolean
+}
+
+export interface PetHomeOwner {
+  userId: number
+  username: string
+  avatarVersion: number | null
+}
+
+export interface PetHomeDetail {
+  owner: PetHomeOwner
+  publicPet: {
+    species: string
+    speciesName: string
+    name: string
+    level: number
+    mood: number
+    equipped: PetEquipped
+    pats: number
+    status: string
+  }
+  guestbook: PetGuestbookEntryDto[]
+  viewer: {
+    patsToday: number
+    patsRemaining: number
+    canGuestbook: boolean
+  }
+  /** 人气排名（按 pats 降序；1 = 人气最高） */
+  rank: number
+  isSelf: boolean
+}
+
+export interface PetPatResult {
+  /** 当天（Asia/Shanghai）我在它家已撸的次数 */
+  pats: number
+  /** 宠物累计被撸次数（人气） */
+  popularity: number
+  mood: number
+  /** 今天还剩几次 */
+  remaining: number
+  animation: 'pat'
+}
+
+export interface PetGuestbookResult {
+  entry: PetGuestbookEntryDto
+  guestbook: PetGuestbookEntryDto[]
+}
+
+export interface PetGuestbookDeleteResult {
+  id: number
+}
+
+const PET_HOME_EMPTY_MESSAGE = '这个宠物之家暂时没有小宠物'
+
 function petCatalogDto(): PetCatalogDto {
   return {
     species: PET_SPECIES,
@@ -108,6 +229,10 @@ function petCatalogDto(): PetCatalogDto {
     levelCostBase: petUpgradeCost(1),
     decayPerHour: { ...PET_DECAY_PER_HOUR },
     graceHours: PET_GRACE_HOURS,
+    switchCost: PET_COSTS.switch,
+    patDailyLimit: PAT_DAILY_LIMIT,
+    guestbookDailyLimit: GUESTBOOK_DAILY_LIMIT,
+    guestbookMaxLength: GUESTBOOK_MAX_LENGTH,
   }
 }
 
@@ -128,9 +253,13 @@ function petDto(row: Pet, ownedOutfits: string[], now: number): PetDto {
     ? filterEquippedByOwned(cleanEquipped(row.equipped), owned)
     : emptyPetEquipped() // 出走的宠物展示时摘下全部装扮（库里仍保留）
   const lastTouch = row.lastTouchAt ? row.lastTouchAt.getTime() : null
+  const species = getPetSpecies(row.species)
   return {
     id: row.id,
+    ownerId: row.userId,
     species: row.species,
+    speciesName: species?.name ?? '宠物',
+    speciesEmoji: species?.emoji ?? '🐾',
     name: row.name,
     level: row.level,
     status: alive ? 'alive' : 'gone',
@@ -145,6 +274,8 @@ function petDto(row: Pet, ownedOutfits: string[], now: number): PetDto {
     unlockedActions: petUnlockedActions(row.level),
     nextLevelCost: row.level < PET_MAX_LEVEL ? petUpgradeCost(row.level) : null,
     touchReady: alive && (lastTouch === null || now - lastTouch >= PET_TOUCH_COOLDOWN_MS),
+    pats: Math.max(0, row.pats ?? 0),
+    switchCost: PET_COSTS.switch,
   }
 }
 
@@ -278,12 +409,6 @@ function throwIfGone(outcome: PetTxOutcome): void {
   if (outcome.gone) throw new AppError(PET_GONE_MESSAGE, 409, 'PET_GONE')
 }
 
-function normalizePetName(raw: string | null | undefined): string | null {
-  const clean = (raw ?? '').trim()
-  if (!clean) return null
-  return clean.slice(0, PET_NAME_MAX_LENGTH)
-}
-
 /** 召唤宠物（出走后可重新召唤：复用同一行重置，已购装扮保留） */
 export async function summonPet(
   userId: number,
@@ -291,7 +416,7 @@ export async function summonPet(
 ): Promise<PetMutationResult> {
   const species = getPetSpecies(input.species)
   if (!species) throw new AppError('请选择一种宠物', 400)
-  const name = normalizePetName(input.name) ?? species.defaultName
+  const name = normalizePetName(input.name, species.defaultName)
 
   await prisma.$transaction(async (tx) => {
     const existing = await tx.pet.findUnique({ where: { userId } })
@@ -508,3 +633,355 @@ export async function renamePet(userId: number, name: string): Promise<PetMutati
   throwIfGone(outcome)
   return toMutationResult(await getPetView(userId))
 }
+
+/**
+ * 换物种：保留等级 / 数值 / 已购装扮，只改 species（默认名同步，自定义名保留）。
+ * 与召唤区分开：召唤是「重新开始」，换物种是「同一个伙伴换了个模样」。
+ */
+export async function switchPetSpecies(userId: number, speciesKey: string): Promise<PetMutationResult> {
+  const species = getPetSpecies(speciesKey)
+  if (!species) throw new AppError('请选择一种宠物', 400)
+
+  const now = Date.now()
+  const outcome = await prisma.$transaction(async (tx): Promise<PetTxOutcome> => {
+    const state = await loadSettledPetTx(tx, userId, now)
+    if (state.gone) return { gone: true }
+    const { pet } = state
+    if (pet.species === species.key) throw new AppError(`它已经是${species.name}啦`, 400)
+
+    const name = nextNameAfterSwitch(pet.name, pet.species, species)
+    await spendPointsTx(tx, userId, PET_COSTS.switch, {
+      reason: 'pet_switch',
+      note: `换成${species.name}`,
+      game: null,
+    })
+    await tx.pet.update({ where: { id: pet.id }, data: { species: species.key, name } })
+    return { gone: false }
+  })
+  throwIfGone(outcome)
+  return toMutationResult(await getPetView(userId))
+}
+
+/* ============================================================
+   宠物之家（公开串门）
+   ============================================================ */
+
+type TargetPetState =
+  | { kind: 'missing' }
+  | { kind: 'gone'; pet: Pet }
+  | { kind: 'alive'; pet: Pet; settled: PetStatsSettled }
+
+/**
+ * 事务内读取「目标用户」的宠物并完成惰性结算（与自己的宠物走同一套衰减口径）。
+ *
+ * 只有「数值漂移 ≥ 0.2 / 危机时刻变化 / 判定出走」才写库：
+ * 宠物之家会被反复轮询，没必要每个访客每次读取都写一行；
+ * 不写库时返回值仍用本次结算出的数值，展示结果一致。
+ */
+async function settleTargetPetTx(tx: Db, targetUserId: number, now: number): Promise<TargetPetState> {
+  const pet = await tx.pet.findUnique({
+    where: { userId: targetUserId },
+    include: { user: { select: { status: true } } },
+  })
+  if (!pet) return { kind: 'missing' }
+  // 待审核 / 已拒绝账号的宠物不对外开放（列表里也不出现，这里兜住直接构造 userId 的请求）
+  if (pet.user.status !== 'active') return { kind: 'missing' }
+  if (pet.status !== 'alive') return { kind: 'gone', pet }
+
+  const settled = settlePetStats(toStatsInput(pet), now)
+  const criticalChanged = (settled.criticalSince ?? null)
+    !== (pet.criticalSince ? pet.criticalSince.getTime() : null)
+  const drifted = Math.abs(settled.hunger - pet.hunger) >= 0.2
+    || Math.abs(settled.cleanliness - pet.cleanliness) >= 0.2
+    || Math.abs(settled.mood - pet.mood) >= 0.2
+
+  if (!settled.gone && !criticalChanged && !drifted) {
+    return { kind: 'alive', pet, settled }
+  }
+
+  const updated = await tx.pet.update({
+    where: { id: pet.id },
+    data: {
+      status: settled.gone ? 'gone' : 'alive',
+      hunger: settled.hunger,
+      cleanliness: settled.cleanliness,
+      mood: settled.mood,
+      decayedAt: new Date(settled.decayedAt),
+      criticalSince: settled.gone
+        ? null
+        : settled.criticalSince === null ? null : new Date(settled.criticalSince),
+    },
+  })
+  return settled.gone ? { kind: 'gone', pet: updated } : { kind: 'alive', pet: updated, settled }
+}
+
+/** 列表卡片用的宠物摘要（只暴露 mood，不暴露 hunger / cleanliness 精确值） */
+function petHomeSummaryDto(
+  row: Pet,
+  owner: { id: number; username: string; avatarVersion: number },
+  viewerId: number,
+  mood: number,
+): PetHomeSummary {
+  const species = getPetSpecies(row.species)
+  return {
+    userId: owner.id,
+    username: owner.username,
+    avatarVersion: owner.avatarVersion,
+    pet: {
+      species: row.species,
+      speciesName: species?.name ?? '宠物',
+      name: row.name,
+      level: row.level,
+      mood: roundStat(mood),
+      pats: Math.max(0, row.pats ?? 0),
+      equipped: cleanEquipped(row.equipped),
+    },
+    isSelf: owner.id === viewerId,
+  }
+}
+
+function petGuestbookDto(
+  row: {
+    id: number
+    content: string
+    createdAt: Date
+    authorId: number
+    author: { id: number; username: string }
+  },
+  viewerId: number,
+): PetGuestbookEntryDto {
+  return {
+    id: row.id,
+    content: row.content,
+    author: { userId: row.author.id, username: row.author.username },
+    createdAt: row.createdAt.toISOString(),
+    isMine: row.authorId === viewerId,
+  }
+}
+
+async function loadGuestbook(petId: number, viewerId: number): Promise<PetGuestbookEntryDto[]> {
+  const rows = await prisma.petGuestbook.findMany({
+    where: { petId },
+    orderBy: { createdAt: 'desc' },
+    take: GUESTBOOK_PAGE_SIZE,
+    select: {
+      id: true,
+      content: true,
+      createdAt: true,
+      authorId: true,
+      author: { select: { id: true, username: true } },
+    },
+  })
+  return rows.map((row) => petGuestbookDto(row, viewerId))
+}
+
+/**
+ * 宠物之家列表：所有在世宠物（最多 60 条），按人气 / 等级排序。
+ * 搜索同时匹配用户名与宠物名（Prisma contains；SQLite 下 ASCII 天然不区分大小写）。
+ */
+export async function listPetHomes(viewerId: number, rawQuery?: string): Promise<PetHomesResult> {
+  const query = (rawQuery ?? '').trim().slice(0, 30)
+  const where: Prisma.PetWhereInput = {
+    status: 'alive',
+    user: { status: 'active' },
+  }
+  if (query) {
+    where.OR = [
+      { name: { contains: query } },
+      { user: { username: { contains: query } } },
+    ]
+  }
+
+  const rows = await prisma.pet.findMany({
+    where,
+    orderBy: [{ pats: 'desc' }, { level: 'desc' }, { createdAt: 'asc' }],
+    take: PET_HOMES_LIMIT,
+    include: { user: { select: { id: true, username: true, avatarVersion: true } } },
+  })
+
+  // 列表是「读」而不是「写」：只做内存结算，不为了展示去批量更新 60 行；
+  // 已经过了宽限期但状态还没落库的宠物直接从列表剔除，避免把「实际已出走」的宠物展示出来。
+  const now = Date.now()
+  const homes: PetHomeSummary[] = []
+  for (const row of rows) {
+    const settled = row.status === 'alive' ? settlePetStats(toStatsInput(row), now) : null
+    if (!settled || settled.gone) continue
+    homes.push(petHomeSummaryDto(row, row.user, viewerId, settled.mood))
+  }
+
+  return { homes, query }
+}
+
+/** 宠物之家详情：目标宠物 + 最近留言 + 我的今日剩余次数 + 人气排名 */
+export async function getPetHome(viewerId: number, targetUserId: number): Promise<PetHomeDetail> {
+  const now = Date.now()
+  const owner = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    select: { id: true, username: true, avatarVersion: true, status: true },
+  })
+  if (!owner || owner.status !== 'active') throw new AppError(PET_HOME_EMPTY_MESSAGE, 404)
+
+  const state = await prisma.$transaction((tx) => settleTargetPetTx(tx, targetUserId, now))
+  if (state.kind !== 'alive') throw new AppError(PET_HOME_EMPTY_MESSAGE, 404)
+  const { pet, settled } = state
+
+  const dateKey = getTodayDateKey(now)
+  const dayStart = getTodayDayStart(now)
+  const [guestbook, visit, ownedOutfits, higherPats, guestbookToday] = await Promise.all([
+    loadGuestbook(pet.id, viewerId),
+    prisma.petVisit.findUnique({
+      where: { petId_visitorId_dateKey: { petId: pet.id, visitorId: viewerId, dateKey } },
+      select: { pats: true },
+    }),
+    prisma.petOutfit.findMany({ where: { petId: pet.id }, select: { outfitKey: true } }),
+    prisma.pet.count({
+      where: { status: 'alive', pats: { gt: pet.pats }, user: { status: 'active' } },
+    }),
+    prisma.petGuestbook.count({
+      where: { petId: pet.id, authorId: viewerId, createdAt: { gte: dayStart } },
+    }),
+  ])
+
+  const patsToday = Math.max(0, visit?.pats ?? 0)
+  const isSelf = viewerId === targetUserId
+  const species = getPetSpecies(pet.species)
+  const owned = new Set(ownedOutfits.map((row) => row.outfitKey))
+
+  return {
+    owner: { userId: owner.id, username: owner.username, avatarVersion: owner.avatarVersion },
+    publicPet: {
+      species: pet.species,
+      speciesName: species?.name ?? '宠物',
+      name: pet.name,
+      level: pet.level,
+      mood: roundStat(settled.mood),
+      equipped: filterEquippedByOwned(cleanEquipped(pet.equipped), owned),
+      pats: Math.max(0, pet.pats ?? 0),
+      status: pet.status,
+    },
+    guestbook,
+    viewer: {
+      patsToday,
+      patsRemaining: Math.max(0, PAT_DAILY_LIMIT - patsToday),
+      canGuestbook: !isSelf && guestbookToday < GUESTBOOK_DAILY_LIMIT,
+    },
+    rank: higherPats + 1,
+    isSelf,
+  }
+}
+
+/**
+ * 撸一撸别人的宠物：每天同一只最多 PAT_DAILY_LIMIT 次。
+ * 只回补目标宠物的 mood（不动主人的积分 / 喂养状态），累计 pats 作为人气。
+ */
+export async function patPet(viewerId: number, targetUserId: number): Promise<PetPatResult> {
+  if (viewerId === targetUserId) throw new AppError('不能撸自己的宠物哦', 400)
+
+  const now = Date.now()
+  const dateKey = getTodayDateKey(now)
+  const outcome = await prisma.$transaction(async (tx) => {
+    const state = await settleTargetPetTx(tx, targetUserId, now)
+    if (state.kind === 'missing') return { kind: 'missing' as const }
+    if (state.kind === 'gone') return { kind: 'gone' as const }
+
+    const { pet, settled } = state
+    // 先原子自增当天计数再判上限：并发下两个请求不会都按「旧值」放行
+    const visit = await tx.petVisit.upsert({
+      where: { petId_visitorId_dateKey: { petId: pet.id, visitorId: viewerId, dateKey } },
+      create: { petId: pet.id, visitorId: viewerId, dateKey, pats: 1 },
+      update: { pats: { increment: 1 } },
+      select: { pats: true },
+    })
+    if (visit.pats > PAT_DAILY_LIMIT) {
+      // 抛错会回滚本次自增，计数器保持在上限值
+      throw new AppError('今天已经撸够啦，明天再来吧', 409, 'PET_PAT_LIMIT')
+    }
+
+    const mood = Math.min(100, settled.mood + PET_PAT_MOOD_BONUS)
+    const criticalSince = recomputeCriticalSince(settled.hunger, settled.cleanliness, mood, settled.criticalSince)
+    const updated = await tx.pet.update({
+      where: { id: pet.id },
+      data: {
+        pats: { increment: 1 },
+        mood,
+        criticalSince: criticalSince === null ? null : new Date(criticalSince),
+        decayedAt: new Date(now),
+      },
+    })
+    return { kind: 'ok' as const, popularity: Math.max(0, updated.pats), mood, used: visit.pats }
+  })
+
+  if (outcome.kind === 'missing' || outcome.kind === 'gone') {
+    throw new AppError(PET_HOME_EMPTY_MESSAGE, 404)
+  }
+  return {
+    pats: outcome.used,
+    popularity: outcome.popularity,
+    mood: roundStat(outcome.mood),
+    remaining: Math.max(0, PAT_DAILY_LIMIT - outcome.used),
+    animation: 'pat',
+  }
+}
+
+/** 留言：同一访客对同一宠物每天最多 GUESTBOOK_DAILY_LIMIT 条 */
+export async function addGuestbookEntry(
+  viewerId: number,
+  targetUserId: number,
+  rawContent: string,
+): Promise<PetGuestbookResult> {
+  const content = sanitizeGuestbookContent(rawContent)
+  if (!content) throw new AppError('留言内容不能为空', 400)
+  if (viewerId === targetUserId) throw new AppError('不能在自己的宠物之家留言', 400)
+
+  const now = Date.now()
+  const dayStart = getTodayDayStart(now)
+  const outcome = await prisma.$transaction(async (tx) => {
+    const state = await settleTargetPetTx(tx, targetUserId, now)
+    if (state.kind !== 'alive') return { kind: 'empty' as const }
+
+    const usedToday = await tx.petGuestbook.count({
+      where: { petId: state.pet.id, authorId: viewerId, createdAt: { gte: dayStart } },
+    })
+    if (usedToday >= GUESTBOOK_DAILY_LIMIT) return { kind: 'limited' as const }
+
+    const entry = await tx.petGuestbook.create({
+      data: { petId: state.pet.id, authorId: viewerId, content },
+      select: {
+        id: true,
+        content: true,
+        createdAt: true,
+        authorId: true,
+        author: { select: { id: true, username: true } },
+      },
+    })
+    return { kind: 'ok' as const, petId: state.pet.id, entry }
+  })
+
+  if (outcome.kind === 'empty') throw new AppError(PET_HOME_EMPTY_MESSAGE, 404)
+  if (outcome.kind === 'limited') {
+    throw new AppError(`今天留言次数用完了（每天 ${GUESTBOOK_DAILY_LIMIT} 条）`, 409, 'PET_GUESTBOOK_LIMIT')
+  }
+  return {
+    entry: petGuestbookDto(outcome.entry, viewerId),
+    guestbook: await loadGuestbook(outcome.petId, viewerId),
+  }
+}
+
+/** 删除留言：只有作者本人能删（宠物主人也不行） */
+export async function deleteGuestbookEntry(
+  userId: number,
+  entryId: number,
+): Promise<PetGuestbookDeleteResult> {
+  const entry = await prisma.petGuestbook.findUnique({
+    where: { id: entryId },
+    select: { id: true, authorId: true },
+  })
+  if (!entry) throw new AppError('留言不存在或已被删除', 404)
+  if (entry.authorId !== userId) throw new AppError('只能删除自己的留言', 403)
+  await prisma.petGuestbook.delete({ where: { id: entryId } })
+  return { id: entryId }
+}
+
+
+
+

@@ -1,0 +1,2167 @@
+/* =============================================================
+   LineWeb 主题系统 — 全站主题变量与商店页面样式
+   -------------------------------------------------------------
+   1. 每个主题写两套变量：
+        html[data-lw-theme="<key>"]                     → 浅色
+        html[data-lw-theme="<key>"][data-theme="dark"]  → 深色
+      选择器带 html 前缀 + 属性选择器，特异性高于 variables.css 的
+      `:root` / `[data-theme="dark"]`，配合 globals.css 最后导入即可稳定覆盖。
+   2. 只覆盖设计令牌，不写具体组件选择器：全站组件本来就只读 --gh-*，
+      因此「背景 / 卡片 / 侧边栏 / 按钮 / 强调色 / 文字 / 阴影」一次性换掉。
+   3. 对比度口径：深色主题正文 ≥ 近白（#e8e8ed 一档），浅色主题正文 ≤ #1d1d1f 一档；
+      强调色按钮上的文字用 --gh-on-accent 保证 4.5:1 以上（verify 脚本做过 WCAG 计算）。
+   4. 装饰层只用 CSS 渐变，全部 pointer-events:none + position:fixed + 低透明度，
+      不拦截点击、不影响滚动；#root 抬到 z-index:1 保证内容始终在上层。
+   5. 默认主题（default）不写任何块：移除 data-lw-theme 属性即回到 variables.css 的原生配色。
+   ============================================================= */
+
+/* ------------------------------------------------------------
+   主题装饰层底座
+   —— 每个主题只需给 --lw-deco-1 / --lw-deco-2 与（可选）一条 body::after 图案
+   ------------------------------------------------------------ */
+html[data-lw-theme] #root {
+  position: relative;
+  z-index: 1;
+}
+
+html[data-lw-theme] body::before {
+  content: '';
+  position: fixed;
+  inset: -10%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(70% 55% at 8% -6%, var(--lw-deco-1, transparent), transparent 62%),
+    radial-gradient(65% 50% at 94% 0%, var(--lw-deco-2, transparent), transparent 66%);
+}
+
+html[data-lw-theme] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--lw-deco-pattern, none);
+}
+
+/* ------------------------------------------------------------
+   1. aurora 极光 —— 冷青紫渐变、极光光带（epic / 8000）
+   ------------------------------------------------------------ */
+html[data-lw-theme="aurora"] {
+  color-scheme: light;
+  --lw-deco-1: rgba(79, 227, 193, 0.16);
+  --lw-deco-2: rgba(112, 94, 255, 0.12);
+
+  --gh-bg: #eaf2fb;
+  --gh-canvas: #ffffff;
+  --gh-canvas-subtle: #f4f9ff;
+  --gh-canvas-inset: rgba(32, 92, 140, 0.08);
+  --gh-fill-2: rgba(32, 92, 140, 0.12);
+  --gh-fill-3: rgba(32, 92, 140, 0.20);
+  --gh-scrim: rgba(6, 26, 44, 0.34);
+
+  --gh-border: rgba(24, 78, 118, 0.12);
+  --gh-border-muted: rgba(24, 78, 118, 0.07);
+  --gh-border-strong: rgba(24, 78, 118, 0.22);
+
+  --gh-text: #0c2136;
+  --gh-text-secondary: #36566f;
+  --gh-text-tertiary: #55738c;
+  --gh-text-placeholder: #66859c;
+  --gh-text-disabled: rgba(12, 33, 54, 0.32);
+
+  --gh-accent: #0a6d86;
+  --gh-accent-hover: #085a6f;
+  --gh-accent-emphasis: #0b7f9b;
+  --gh-accent-soft: rgba(10, 109, 134, 0.12);
+  --gh-on-accent: #ffffff;
+  --gh-accent-button: #0a6d86;
+  --gh-accent-button-hover: #085a6f;
+
+  --gh-success: #12704a;
+  --gh-success-emphasis: #12704a;
+  --gh-success-soft: rgba(18, 112, 74, 0.12);
+  --gh-danger: #b81f3b;
+  --gh-danger-soft: rgba(184, 31, 59, 0.10);
+  --gh-warning: #82500a;
+  --gh-warning-soft: rgba(130, 80, 10, 0.12);
+
+  --gh-btn-hover: rgba(12, 33, 54, 0.05);
+  --gh-btn-active: rgba(12, 33, 54, 0.09);
+
+  --gh-material-chrome: rgba(255, 255, 255, 0.74);
+  --gh-material-sidebar: rgba(236, 245, 255, 0.76);
+
+  --gh-shadow-sm: 0 1px 2px rgba(18, 56, 86, 0.06);
+  --gh-shadow-md: 0 6px 18px -8px rgba(18, 56, 86, 0.18);
+  --gh-shadow-lg: 0 16px 38px -12px rgba(18, 56, 86, 0.22);
+  --gh-shadow-xl: 0 28px 64px -22px rgba(18, 56, 86, 0.28);
+  --gh-shadow-card: 0 1px 2px rgba(18, 56, 86, 0.05), 0 12px 30px -18px rgba(18, 56, 86, 0.24);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(11, 127, 155, 0.28);
+}
+
+html[data-lw-theme="aurora"][data-theme="dark"] {
+  color-scheme: dark;
+  --lw-deco-1: rgba(79, 227, 193, 0.18);
+  --lw-deco-2: rgba(120, 96, 255, 0.20);
+
+  --gh-bg: #050b16;
+  --gh-canvas: #0c1728;
+  --gh-canvas-subtle: #101f34;
+  --gh-canvas-inset: rgba(120, 180, 235, 0.14);
+  --gh-fill-2: rgba(120, 180, 235, 0.20);
+  --gh-fill-3: rgba(120, 180, 235, 0.30);
+  --gh-scrim: rgba(0, 0, 0, 0.60);
+
+  --gh-border: rgba(150, 200, 255, 0.14);
+  --gh-border-muted: rgba(150, 200, 255, 0.08);
+  --gh-border-strong: rgba(150, 200, 255, 0.24);
+
+  --gh-text: #eaf4ff;
+  --gh-text-secondary: #a9c2da;
+  --gh-text-tertiary: #93b0c9;
+  --gh-text-placeholder: #8ba6c2;
+  --gh-text-disabled: rgba(234, 244, 255, 0.30);
+
+  --gh-accent: #4fe3c1;
+  --gh-accent-hover: #7bf0d6;
+  --gh-accent-emphasis: #3dd6b4;
+  --gh-accent-soft: rgba(79, 227, 193, 0.16);
+  --gh-on-accent: #04211c;
+  --gh-accent-button: #2bbfa5;
+  --gh-accent-button-hover: #37d6b9;
+
+  --gh-success: #45d97f;
+  --gh-success-emphasis: #45d97f;
+  --gh-success-soft: rgba(69, 217, 127, 0.16);
+  --gh-danger: #ff6b6b;
+  --gh-danger-soft: rgba(255, 107, 107, 0.16);
+  --gh-warning: #ffcf5c;
+  --gh-warning-soft: rgba(255, 207, 92, 0.16);
+
+  --gh-btn-hover: rgba(255, 255, 255, 0.06);
+  --gh-btn-active: rgba(255, 255, 255, 0.10);
+
+  --gh-material-chrome: rgba(9, 20, 35, 0.74);
+  --gh-material-sidebar: rgba(7, 16, 28, 0.78);
+
+  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --gh-shadow-md: 0 6px 20px -8px rgba(0, 0, 0, 0.60);
+  --gh-shadow-lg: 0 16px 40px -12px rgba(0, 0, 0, 0.70);
+  --gh-shadow-xl: 0 28px 72px -24px rgba(0, 0, 0, 0.80);
+  --gh-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.38), 0 14px 36px -20px rgba(0, 0, 0, 0.72);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(61, 214, 180, 0.32);
+}
+
+/* 极光光带缓慢呼吸（只动 transform，避免整屏重绘） */
+html[data-lw-theme="aurora"] body::before {
+  animation: gh-lw-aurora-drift 32s var(--gh-ease-standard) infinite alternate;
+}
+@keyframes gh-lw-aurora-drift {
+  from { transform: translate3d(-2%, -1%, 0) scale(1.02); }
+  to { transform: translate3d(2%, 2%, 0) scale(1.08); }
+}
+
+/* ------------------------------------------------------------
+   2. sakura 樱花 —— 粉白纸面、花瓣点缀（rare / 5000）
+   ------------------------------------------------------------ */
+html[data-lw-theme="sakura"] {
+  color-scheme: light;
+  --lw-deco-1: rgba(194, 24, 91, 0.10);
+  --lw-deco-2: rgba(255, 158, 190, 0.24);
+  /* 静态花瓣：几个错位的粉色圆点，避免动效干扰阅读 */
+  --lw-deco-pattern:
+    radial-gradient(circle at 14% 22%, rgba(194, 24, 91, 0.10) 0 5px, transparent 6px),
+    radial-gradient(circle at 82% 12%, rgba(194, 24, 91, 0.08) 0 4px, transparent 5px),
+    radial-gradient(circle at 68% 64%, rgba(194, 24, 91, 0.07) 0 6px, transparent 7px),
+    radial-gradient(circle at 32% 82%, rgba(194, 24, 91, 0.06) 0 4px, transparent 5px);
+
+  --gh-bg: #fdf2f5;
+  --gh-canvas: #ffffff;
+  --gh-canvas-subtle: #fff7fa;
+  --gh-canvas-inset: rgba(190, 96, 132, 0.08);
+  --gh-fill-2: rgba(190, 96, 132, 0.12);
+  --gh-fill-3: rgba(190, 96, 132, 0.22);
+  --gh-scrim: rgba(54, 16, 32, 0.32);
+
+  --gh-border: rgba(158, 74, 106, 0.16);
+  --gh-border-muted: rgba(158, 74, 106, 0.09);
+  --gh-border-strong: rgba(158, 74, 106, 0.28);
+
+  --gh-text: #2b1620;
+  --gh-text-secondary: #6b4552;
+  --gh-text-tertiary: #835e6c;
+  --gh-text-placeholder: #96707f;
+  --gh-text-disabled: rgba(43, 22, 32, 0.32);
+
+  --gh-accent: #b0185a;
+  --gh-accent-hover: #94134b;
+  --gh-accent-emphasis: #c2185b;
+  --gh-accent-soft: rgba(176, 24, 90, 0.10);
+  --gh-on-accent: #ffffff;
+  --gh-accent-button: #ad1455;
+  --gh-accent-button-hover: #94134b;
+
+  --gh-success: #1c6f4a;
+  --gh-success-emphasis: #1c6f4a;
+  --gh-success-soft: rgba(28, 111, 74, 0.12);
+  --gh-danger: #c01a3d;
+  --gh-danger-soft: rgba(192, 26, 61, 0.10);
+  --gh-warning: #8a4b00;
+  --gh-warning-soft: rgba(138, 75, 0, 0.12);
+
+  --gh-btn-hover: rgba(43, 22, 32, 0.05);
+  --gh-btn-active: rgba(43, 22, 32, 0.09);
+
+  --gh-material-chrome: rgba(255, 255, 255, 0.76);
+  --gh-material-sidebar: rgba(255, 244, 248, 0.78);
+
+  --gh-shadow-sm: 0 1px 2px rgba(120, 40, 70, 0.06);
+  --gh-shadow-md: 0 6px 18px -8px rgba(120, 40, 70, 0.16);
+  --gh-shadow-lg: 0 16px 38px -12px rgba(120, 40, 70, 0.20);
+  --gh-shadow-xl: 0 28px 64px -22px rgba(120, 40, 70, 0.26);
+  --gh-shadow-card: 0 1px 2px rgba(120, 40, 70, 0.05), 0 12px 30px -18px rgba(120, 40, 70, 0.22);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(194, 24, 91, 0.26);
+}
+
+html[data-lw-theme="sakura"][data-theme="dark"] {
+  color-scheme: dark;
+  --lw-deco-1: rgba(255, 143, 192, 0.16);
+  --lw-deco-2: rgba(194, 24, 91, 0.20);
+  --lw-deco-pattern:
+    radial-gradient(circle at 14% 22%, rgba(255, 143, 192, 0.14) 0 5px, transparent 6px),
+    radial-gradient(circle at 82% 12%, rgba(255, 143, 192, 0.12) 0 4px, transparent 5px),
+    radial-gradient(circle at 68% 64%, rgba(255, 143, 192, 0.10) 0 6px, transparent 7px),
+    radial-gradient(circle at 32% 82%, rgba(255, 143, 192, 0.10) 0 4px, transparent 5px);
+
+  --gh-bg: #140a10;
+  --gh-canvas: #20121a;
+  --gh-canvas-subtle: #281722;
+  --gh-canvas-inset: rgba(255, 176, 208, 0.14);
+  --gh-fill-2: rgba(255, 176, 208, 0.20);
+  --gh-fill-3: rgba(255, 176, 208, 0.30);
+  --gh-scrim: rgba(0, 0, 0, 0.62);
+
+  --gh-border: rgba(255, 176, 208, 0.16);
+  --gh-border-muted: rgba(255, 176, 208, 0.09);
+  --gh-border-strong: rgba(255, 176, 208, 0.26);
+
+  --gh-text: #ffeaf3;
+  --gh-text-secondary: #d9b3c4;
+  --gh-text-tertiary: #c39dad;
+  --gh-text-placeholder: #bfa0af;
+  --gh-text-disabled: rgba(255, 234, 243, 0.30);
+
+  --gh-accent: #ff8fc0;
+  --gh-accent-hover: #ffb0d3;
+  --gh-accent-emphasis: #ff7ab4;
+  --gh-accent-soft: rgba(255, 143, 192, 0.16);
+  --gh-on-accent: #300b1c;
+  --gh-accent-button: #ff8fc0;
+  --gh-accent-button-hover: #ffa8d0;
+
+  --gh-success: #5fdc9a;
+  --gh-success-emphasis: #5fdc9a;
+  --gh-success-soft: rgba(95, 220, 154, 0.16);
+  --gh-danger: #ff7a8a;
+  --gh-danger-soft: rgba(255, 122, 138, 0.16);
+  --gh-warning: #ffd27a;
+  --gh-warning-soft: rgba(255, 210, 122, 0.16);
+
+  --gh-btn-hover: rgba(255, 255, 255, 0.06);
+  --gh-btn-active: rgba(255, 255, 255, 0.10);
+
+  --gh-material-chrome: rgba(28, 14, 22, 0.76);
+  --gh-material-sidebar: rgba(22, 10, 17, 0.80);
+
+  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --gh-shadow-md: 0 6px 20px -8px rgba(0, 0, 0, 0.60);
+  --gh-shadow-lg: 0 16px 40px -12px rgba(0, 0, 0, 0.70);
+  --gh-shadow-xl: 0 28px 72px -24px rgba(0, 0, 0, 0.80);
+  --gh-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.38), 0 14px 36px -20px rgba(0, 0, 0, 0.72);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(255, 143, 192, 0.32);
+}
+
+/* ------------------------------------------------------------
+   3. forest 森林 —— 苔绿木色、自然（rare / 6000）
+   ------------------------------------------------------------ */
+html[data-lw-theme="forest"] {
+  color-scheme: light;
+  --lw-deco-1: rgba(47, 107, 58, 0.12);
+  --lw-deco-2: rgba(150, 120, 70, 0.14);
+
+  --gh-bg: #f1f5ec;
+  --gh-canvas: #ffffff;
+  --gh-canvas-subtle: #f8fbf4;
+  --gh-canvas-inset: rgba(70, 110, 60, 0.08);
+  --gh-fill-2: rgba(70, 110, 60, 0.12);
+  --gh-fill-3: rgba(70, 110, 60, 0.20);
+  --gh-scrim: rgba(18, 30, 14, 0.32);
+
+  --gh-border: rgba(64, 98, 56, 0.14);
+  --gh-border-muted: rgba(64, 98, 56, 0.08);
+  --gh-border-strong: rgba(64, 98, 56, 0.24);
+
+  --gh-text: #1b2a18;
+  --gh-text-secondary: #45573e;
+  --gh-text-tertiary: #5d7055;
+  --gh-text-placeholder: #6c7f64;
+  --gh-text-disabled: rgba(27, 42, 24, 0.32);
+
+  --gh-accent: #2c6a37;
+  --gh-accent-hover: #245a2e;
+  --gh-accent-emphasis: #2f7440;
+  --gh-accent-soft: rgba(44, 106, 55, 0.12);
+  --gh-on-accent: #ffffff;
+  --gh-accent-button: #2a6234;
+  --gh-accent-button-hover: #245430;
+
+  --gh-success: #1f6b3f;
+  --gh-success-emphasis: #1f6b3f;
+  --gh-success-soft: rgba(31, 107, 63, 0.12);
+  --gh-danger: #b02a24;
+  --gh-danger-soft: rgba(176, 42, 36, 0.10);
+  --gh-warning: #7d5300;
+  --gh-warning-soft: rgba(125, 83, 0, 0.12);
+
+  --gh-btn-hover: rgba(27, 42, 24, 0.05);
+  --gh-btn-active: rgba(27, 42, 24, 0.09);
+
+  --gh-material-chrome: rgba(255, 255, 255, 0.76);
+  --gh-material-sidebar: rgba(240, 246, 234, 0.78);
+
+  --gh-shadow-sm: 0 1px 2px rgba(40, 62, 32, 0.06);
+  --gh-shadow-md: 0 6px 18px -8px rgba(40, 62, 32, 0.18);
+  --gh-shadow-lg: 0 16px 38px -12px rgba(40, 62, 32, 0.22);
+  --gh-shadow-xl: 0 28px 64px -22px rgba(40, 62, 32, 0.28);
+  --gh-shadow-card: 0 1px 2px rgba(40, 62, 32, 0.05), 0 12px 30px -18px rgba(40, 62, 32, 0.22);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(47, 116, 64, 0.28);
+}
+
+html[data-lw-theme="forest"][data-theme="dark"] {
+  color-scheme: dark;
+  --lw-deco-1: rgba(126, 208, 139, 0.14);
+  --lw-deco-2: rgba(150, 120, 70, 0.18);
+
+  --gh-bg: #080f0a;
+  --gh-canvas: #101b12;
+  --gh-canvas-subtle: #152216;
+  --gh-canvas-inset: rgba(140, 200, 150, 0.14);
+  --gh-fill-2: rgba(140, 200, 150, 0.20);
+  --gh-fill-3: rgba(140, 200, 150, 0.30);
+  --gh-scrim: rgba(0, 0, 0, 0.60);
+
+  --gh-border: rgba(150, 200, 150, 0.16);
+  --gh-border-muted: rgba(150, 200, 150, 0.08);
+  --gh-border-strong: rgba(150, 200, 150, 0.26);
+
+  --gh-text: #e9f3e5;
+  --gh-text-secondary: #b3c8ac;
+  --gh-text-tertiary: #9dba96;
+  --gh-text-placeholder: #9db896;
+  --gh-text-disabled: rgba(233, 243, 229, 0.30);
+
+  --gh-accent: #7ed08b;
+  --gh-accent-hover: #9ce0a7;
+  --gh-accent-emphasis: #6ec57c;
+  --gh-accent-soft: rgba(126, 208, 139, 0.16);
+  --gh-on-accent: #08210c;
+  --gh-accent-button: #6cc47c;
+  --gh-accent-button-hover: #82d992;
+
+  --gh-success: #6fe08f;
+  --gh-success-emphasis: #6fe08f;
+  --gh-success-soft: rgba(111, 224, 143, 0.16);
+  --gh-danger: #ff7a6a;
+  --gh-danger-soft: rgba(255, 122, 106, 0.16);
+  --gh-warning: #ffd27a;
+  --gh-warning-soft: rgba(255, 210, 122, 0.16);
+
+  --gh-btn-hover: rgba(255, 255, 255, 0.06);
+  --gh-btn-active: rgba(255, 255, 255, 0.10);
+
+  --gh-material-chrome: rgba(12, 22, 14, 0.76);
+  --gh-material-sidebar: rgba(9, 17, 11, 0.80);
+
+  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --gh-shadow-md: 0 6px 20px -8px rgba(0, 0, 0, 0.60);
+  --gh-shadow-lg: 0 16px 40px -12px rgba(0, 0, 0, 0.70);
+  --gh-shadow-xl: 0 28px 72px -24px rgba(0, 0, 0, 0.80);
+  --gh-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.38), 0 14px 36px -20px rgba(0, 0, 0, 0.72);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(126, 208, 139, 0.30);
+}
+
+/* ------------------------------------------------------------
+   4. ocean 海洋 —— 深蓝青、水面浮光（epic / 7000）
+   ------------------------------------------------------------ */
+html[data-lw-theme="ocean"] {
+  color-scheme: light;
+  --lw-deco-1: rgba(12, 125, 153, 0.14);
+  --lw-deco-2: rgba(56, 214, 224, 0.18);
+
+  --gh-bg: #eaf4f8;
+  --gh-canvas: #ffffff;
+  --gh-canvas-subtle: #f3fafd;
+  --gh-canvas-inset: rgba(20, 100, 130, 0.08);
+  --gh-fill-2: rgba(20, 100, 130, 0.12);
+  --gh-fill-3: rgba(20, 100, 130, 0.20);
+  --gh-scrim: rgba(4, 26, 36, 0.32);
+
+  --gh-border: rgba(16, 88, 116, 0.14);
+  --gh-border-muted: rgba(16, 88, 116, 0.08);
+  --gh-border-strong: rgba(16, 88, 116, 0.24);
+
+  --gh-text: #0b2430;
+  --gh-text-secondary: #335a68;
+  --gh-text-tertiary: #4a707e;
+  --gh-text-placeholder: #5b7f8c;
+  --gh-text-disabled: rgba(11, 36, 48, 0.32);
+
+  --gh-accent: #0a6b84;
+  --gh-accent-hover: #085a6f;
+  --gh-accent-emphasis: #0c7d99;
+  --gh-accent-soft: rgba(10, 107, 132, 0.12);
+  --gh-on-accent: #ffffff;
+  --gh-accent-button: #0a6b84;
+  --gh-accent-button-hover: #085a6f;
+
+  --gh-success: #146b52;
+  --gh-success-emphasis: #146b52;
+  --gh-success-soft: rgba(20, 107, 82, 0.12);
+  --gh-danger: #b3233d;
+  --gh-danger-soft: rgba(179, 35, 61, 0.10);
+  --gh-warning: #855200;
+  --gh-warning-soft: rgba(133, 82, 0, 0.12);
+
+  --gh-btn-hover: rgba(11, 36, 48, 0.05);
+  --gh-btn-active: rgba(11, 36, 48, 0.09);
+
+  --gh-material-chrome: rgba(255, 255, 255, 0.76);
+  --gh-material-sidebar: rgba(236, 246, 250, 0.78);
+
+  --gh-shadow-sm: 0 1px 2px rgba(10, 44, 58, 0.06);
+  --gh-shadow-md: 0 6px 18px -8px rgba(10, 44, 58, 0.18);
+  --gh-shadow-lg: 0 16px 38px -12px rgba(10, 44, 58, 0.22);
+  --gh-shadow-xl: 0 28px 64px -22px rgba(10, 44, 58, 0.28);
+  --gh-shadow-card: 0 1px 2px rgba(10, 44, 58, 0.05), 0 12px 30px -18px rgba(10, 44, 58, 0.24);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(12, 125, 153, 0.28);
+}
+
+html[data-lw-theme="ocean"][data-theme="dark"] {
+  color-scheme: dark;
+  --lw-deco-1: rgba(56, 214, 224, 0.16);
+  --lw-deco-2: rgba(46, 118, 220, 0.20);
+
+  --gh-bg: #04121c;
+  --gh-canvas: #08202e;
+  --gh-canvas-subtle: #0b2634;
+  --gh-canvas-inset: rgba(110, 200, 225, 0.14);
+  --gh-fill-2: rgba(110, 200, 225, 0.20);
+  --gh-fill-3: rgba(110, 200, 225, 0.30);
+  --gh-scrim: rgba(0, 0, 0, 0.62);
+
+  --gh-border: rgba(120, 210, 230, 0.16);
+  --gh-border-muted: rgba(120, 210, 230, 0.08);
+  --gh-border-strong: rgba(120, 210, 230, 0.26);
+
+  --gh-text: #e2f4ff;
+  --gh-text-secondary: #a6c8d8;
+  --gh-text-tertiary: #8fb4c6;
+  --gh-text-placeholder: #8fb4c6;
+  --gh-text-disabled: rgba(226, 244, 255, 0.30);
+
+  --gh-accent: #38d6e0;
+  --gh-accent-hover: #6ce7ee;
+  --gh-accent-emphasis: #2cc7d2;
+  --gh-accent-soft: rgba(56, 214, 224, 0.16);
+  --gh-on-accent: #04252b;
+  --gh-accent-button: #2fc4cf;
+  --gh-accent-button-hover: #48dbe4;
+
+  --gh-success: #4fe0a7;
+  --gh-success-emphasis: #4fe0a7;
+  --gh-success-soft: rgba(79, 224, 167, 0.16);
+  --gh-danger: #ff7a7a;
+  --gh-danger-soft: rgba(255, 122, 122, 0.16);
+  --gh-warning: #ffd166;
+  --gh-warning-soft: rgba(255, 209, 102, 0.16);
+
+  --gh-btn-hover: rgba(255, 255, 255, 0.06);
+  --gh-btn-active: rgba(255, 255, 255, 0.10);
+
+  --gh-material-chrome: rgba(6, 24, 34, 0.76);
+  --gh-material-sidebar: rgba(4, 18, 28, 0.80);
+
+  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --gh-shadow-md: 0 6px 20px -8px rgba(0, 0, 0, 0.60);
+  --gh-shadow-lg: 0 16px 40px -12px rgba(0, 0, 0, 0.70);
+  --gh-shadow-xl: 0 28px 72px -24px rgba(0, 0, 0, 0.80);
+  --gh-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.38), 0 14px 36px -20px rgba(0, 0, 0, 0.72);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(56, 214, 224, 0.32);
+}
+
+/* ------------------------------------------------------------
+   5. cyberpunk 赛博朋克 —— 洋红霓虹、暗底、扫描线（legendary / 25000）
+   ------------------------------------------------------------ */
+html[data-lw-theme="cyberpunk"] {
+  color-scheme: light;
+  --lw-deco-1: rgba(255, 43, 209, 0.14);
+  --lw-deco-2: rgba(34, 240, 255, 0.16);
+  --lw-deco-pattern: repeating-linear-gradient(
+    0deg,
+    rgba(176, 0, 143, 0.06) 0 1px,
+    transparent 1px 4px
+  );
+
+  --gh-bg: #f7f2ff;
+  --gh-canvas: #ffffff;
+  --gh-canvas-subtle: #fbf7ff;
+  --gh-canvas-inset: rgba(140, 20, 120, 0.08);
+  --gh-fill-2: rgba(140, 20, 120, 0.12);
+  --gh-fill-3: rgba(140, 20, 120, 0.20);
+  --gh-scrim: rgba(24, 2, 20, 0.38);
+
+  --gh-border: rgba(176, 0, 143, 0.20);
+  --gh-border-muted: rgba(176, 0, 143, 0.10);
+  --gh-border-strong: rgba(0, 150, 170, 0.34);
+
+  --gh-text: #1c0a2b;
+  --gh-text-secondary: #533a66;
+  --gh-text-tertiary: #6e5582;
+  --gh-text-placeholder: #7d6492;
+  --gh-text-disabled: rgba(28, 10, 43, 0.32);
+
+  --gh-accent: #b0008f;
+  --gh-accent-hover: #97007a;
+  --gh-accent-emphasis: #c400a1;
+  --gh-accent-soft: rgba(176, 0, 143, 0.10);
+  --gh-on-accent: #ffffff;
+  --gh-accent-button: #ad0091;
+  --gh-accent-button-hover: #94007b;
+
+  --gh-success: #0a7a4a;
+  --gh-success-emphasis: #0a7a4a;
+  --gh-success-soft: rgba(10, 122, 74, 0.12);
+  --gh-danger: #c2183c;
+  --gh-danger-soft: rgba(194, 24, 60, 0.10);
+  --gh-warning: #7a4c00;
+  --gh-warning-soft: rgba(122, 76, 0, 0.12);
+
+  --gh-btn-hover: rgba(28, 10, 43, 0.05);
+  --gh-btn-active: rgba(28, 10, 43, 0.10);
+
+  --gh-material-chrome: rgba(255, 255, 255, 0.78);
+  --gh-material-sidebar: rgba(249, 244, 255, 0.80);
+
+  --gh-shadow-sm: 0 1px 2px rgba(80, 0, 70, 0.08);
+  --gh-shadow-md: 0 6px 18px -8px rgba(140, 0, 120, 0.20);
+  --gh-shadow-lg: 0 16px 38px -12px rgba(140, 0, 120, 0.24);
+  --gh-shadow-xl: 0 28px 64px -22px rgba(140, 0, 120, 0.30);
+  --gh-shadow-card: 0 1px 2px rgba(80, 0, 70, 0.06), 0 12px 30px -18px rgba(140, 0, 120, 0.24);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(196, 0, 161, 0.26);
+}
+
+html[data-lw-theme="cyberpunk"][data-theme="dark"] {
+  color-scheme: dark;
+  --lw-deco-1: rgba(255, 43, 209, 0.22);
+  --lw-deco-2: rgba(34, 240, 255, 0.18);
+  --lw-deco-pattern: repeating-linear-gradient(
+    0deg,
+    rgba(255, 43, 209, 0.07) 0 1px,
+    transparent 1px 4px
+  );
+
+  --gh-bg: #05010c;
+  --gh-canvas: #0d0318;
+  --gh-canvas-subtle: #14062a;
+  --gh-canvas-inset: rgba(255, 43, 209, 0.12);
+  --gh-fill-2: rgba(34, 240, 255, 0.16);
+  --gh-fill-3: rgba(34, 240, 255, 0.26);
+  --gh-scrim: rgba(0, 0, 0, 0.72);
+
+  --gh-border: rgba(255, 43, 209, 0.26);
+  --gh-border-muted: rgba(255, 43, 209, 0.14);
+  --gh-border-strong: rgba(34, 240, 255, 0.42);
+
+  --gh-text: #f7e9ff;
+  --gh-text-secondary: #d7b9ea;
+  --gh-text-tertiary: #bda0d4;
+  --gh-text-placeholder: #bda0d4;
+  --gh-text-disabled: rgba(247, 233, 255, 0.30);
+
+  --gh-accent: #ff5ad9;
+  --gh-accent-hover: #ff8ae5;
+  --gh-accent-emphasis: #ff2bd1;
+  --gh-accent-soft: rgba(255, 43, 209, 0.18);
+  --gh-on-accent: #1a0014;
+  --gh-accent-button: #ff2bd1;
+  --gh-accent-button-hover: #ff5ad9;
+
+  --gh-success: #39ff88;
+  --gh-success-emphasis: #39ff88;
+  --gh-success-soft: rgba(57, 255, 136, 0.16);
+  --gh-danger: #ff4d6d;
+  --gh-danger-soft: rgba(255, 77, 109, 0.18);
+  --gh-warning: #ffe066;
+  --gh-warning-soft: rgba(255, 224, 102, 0.16);
+
+  --gh-btn-hover: rgba(255, 43, 209, 0.10);
+  --gh-btn-active: rgba(255, 43, 209, 0.18);
+
+  --gh-material-chrome: rgba(10, 1, 20, 0.78);
+  --gh-material-sidebar: rgba(8, 1, 16, 0.82);
+
+  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.50);
+  --gh-shadow-md: 0 6px 22px -8px rgba(255, 43, 209, 0.24);
+  --gh-shadow-lg: 0 16px 44px -12px rgba(255, 43, 209, 0.28);
+  --gh-shadow-xl: 0 28px 72px -24px rgba(255, 43, 209, 0.34);
+  --gh-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45), 0 14px 36px -20px rgba(255, 43, 209, 0.30);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(255, 43, 209, 0.34);
+}
+
+/* ------------------------------------------------------------
+   6. terminal 终端 —— 近黑绿字、网格、荧光绿强调（epic / 12000）
+   ------------------------------------------------------------ */
+html[data-lw-theme="terminal"] {
+  color-scheme: light;
+  --lw-deco-1: rgba(13, 122, 53, 0.12);
+  --lw-deco-2: rgba(120, 150, 120, 0.14);
+  --lw-deco-pattern:
+    repeating-linear-gradient(0deg, rgba(13, 122, 53, 0.05) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(90deg, rgba(13, 122, 53, 0.05) 0 1px, transparent 1px 34px);
+
+  --gh-bg: #f3f6f1;
+  --gh-canvas: #ffffff;
+  --gh-canvas-subtle: #f8fbf6;
+  --gh-canvas-inset: rgba(60, 100, 60, 0.08);
+  --gh-fill-2: rgba(60, 100, 60, 0.12);
+  --gh-fill-3: rgba(60, 100, 60, 0.20);
+  --gh-scrim: rgba(10, 24, 12, 0.34);
+
+  --gh-border: rgba(50, 92, 50, 0.16);
+  --gh-border-muted: rgba(50, 92, 50, 0.09);
+  --gh-border-strong: rgba(50, 92, 50, 0.28);
+
+  --gh-text: #0f2412;
+  --gh-text-secondary: #3c5540;
+  --gh-text-tertiary: #53705a;
+  --gh-text-placeholder: #627d68;
+  --gh-text-disabled: rgba(15, 36, 18, 0.32);
+
+  --gh-accent: #0d7a35;
+  --gh-accent-hover: #0a6229;
+  --gh-accent-emphasis: #0f8c3d;
+  --gh-accent-soft: rgba(13, 122, 53, 0.12);
+  --gh-on-accent: #ffffff;
+  --gh-accent-button: #0b6b2e;
+  --gh-accent-button-hover: #095a26;
+
+  --gh-success: #0f7a3a;
+  --gh-success-emphasis: #0f7a3a;
+  --gh-success-soft: rgba(15, 122, 58, 0.12);
+  --gh-danger: #b3262b;
+  --gh-danger-soft: rgba(179, 38, 43, 0.10);
+  --gh-warning: #7d5300;
+  --gh-warning-soft: rgba(125, 83, 0, 0.12);
+
+  --gh-btn-hover: rgba(15, 36, 18, 0.05);
+  --gh-btn-active: rgba(15, 36, 18, 0.09);
+
+  --gh-material-chrome: rgba(255, 255, 255, 0.78);
+  --gh-material-sidebar: rgba(242, 247, 240, 0.80);
+
+  --gh-shadow-sm: 0 1px 2px rgba(18, 44, 22, 0.06);
+  --gh-shadow-md: 0 6px 18px -8px rgba(18, 44, 22, 0.18);
+  --gh-shadow-lg: 0 16px 38px -12px rgba(18, 44, 22, 0.22);
+  --gh-shadow-xl: 0 28px 64px -22px rgba(18, 44, 22, 0.28);
+  --gh-shadow-card: 0 1px 2px rgba(18, 44, 22, 0.05), 0 12px 30px -18px rgba(18, 44, 22, 0.22);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(15, 140, 61, 0.26);
+}
+
+html[data-lw-theme="terminal"][data-theme="dark"] {
+  color-scheme: dark;
+  --lw-deco-1: rgba(61, 255, 122, 0.14);
+  --lw-deco-2: rgba(61, 255, 122, 0.08);
+  --lw-deco-pattern:
+    repeating-linear-gradient(0deg, rgba(61, 255, 122, 0.07) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(90deg, rgba(61, 255, 122, 0.07) 0 1px, transparent 1px 34px);
+
+  --gh-bg: #030803;
+  --gh-canvas: #07120a;
+  --gh-canvas-subtle: #0a170c;
+  --gh-canvas-inset: rgba(61, 255, 122, 0.12);
+  --gh-fill-2: rgba(61, 255, 122, 0.16);
+  --gh-fill-3: rgba(61, 255, 122, 0.26);
+  --gh-scrim: rgba(0, 0, 0, 0.74);
+
+  --gh-border: rgba(61, 255, 122, 0.22);
+  --gh-border-muted: rgba(61, 255, 122, 0.12);
+  --gh-border-strong: rgba(61, 255, 122, 0.38);
+
+  --gh-text: #e6ffe9;
+  --gh-text-secondary: #a9e4b4;
+  --gh-text-tertiary: #8ed49c;
+  --gh-text-placeholder: #8ed49c;
+  --gh-text-disabled: rgba(230, 255, 233, 0.30);
+
+  --gh-accent: #56ff8f;
+  --gh-accent-hover: #86ffae;
+  --gh-accent-emphasis: #3dff7a;
+  --gh-accent-soft: rgba(61, 255, 122, 0.14);
+  --gh-on-accent: #02180a;
+  --gh-accent-button: #3fe07c;
+  --gh-accent-button-hover: #57f092;
+
+  --gh-success: #57f09a;
+  --gh-success-emphasis: #57f09a;
+  --gh-success-soft: rgba(87, 240, 154, 0.16);
+  --gh-danger: #ff6b6b;
+  --gh-danger-soft: rgba(255, 107, 107, 0.16);
+  --gh-warning: #ffd166;
+  --gh-warning-soft: rgba(255, 209, 102, 0.16);
+
+  --gh-btn-hover: rgba(61, 255, 122, 0.08);
+  --gh-btn-active: rgba(61, 255, 122, 0.14);
+
+  --gh-material-chrome: rgba(4, 12, 5, 0.78);
+  --gh-material-sidebar: rgba(3, 9, 4, 0.82);
+
+  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.50);
+  --gh-shadow-md: 0 6px 22px -8px rgba(0, 0, 0, 0.65);
+  --gh-shadow-lg: 0 16px 44px -12px rgba(0, 0, 0, 0.72);
+  --gh-shadow-xl: 0 28px 72px -24px rgba(0, 0, 0, 0.82);
+  --gh-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45), 0 14px 36px -20px rgba(61, 255, 122, 0.16);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(61, 255, 122, 0.30);
+}
+
+/* ------------------------------------------------------------
+   7. sunset 日落 —— 橙粉紫渐变（epic / 9000）
+   ------------------------------------------------------------ */
+html[data-lw-theme="sunset"] {
+  color-scheme: light;
+  --lw-deco-1: rgba(181, 58, 10, 0.14);
+  --lw-deco-2: rgba(150, 60, 160, 0.14);
+
+  --gh-bg: #fff2e8;
+  --gh-canvas: #fffdfb;
+  --gh-canvas-subtle: #fff8f2;
+  --gh-canvas-inset: rgba(190, 90, 30, 0.08);
+  --gh-fill-2: rgba(190, 90, 30, 0.12);
+  --gh-fill-3: rgba(190, 90, 30, 0.20);
+  --gh-scrim: rgba(48, 20, 8, 0.32);
+
+  --gh-border: rgba(170, 76, 24, 0.14);
+  --gh-border-muted: rgba(170, 76, 24, 0.08);
+  --gh-border-strong: rgba(170, 76, 24, 0.24);
+
+  --gh-text: #33180f;
+  --gh-text-secondary: #6b4535;
+  --gh-text-tertiary: #85604d;
+  --gh-text-placeholder: #94705c;
+  --gh-text-disabled: rgba(51, 24, 15, 0.32);
+
+  --gh-accent: #b53a0a;
+  --gh-accent-hover: #983008;
+  --gh-accent-emphasis: #c74412;
+  --gh-accent-soft: rgba(181, 58, 10, 0.12);
+  --gh-on-accent: #ffffff;
+  --gh-accent-button: #a8340b;
+  --gh-accent-button-hover: #8f2c09;
+
+  --gh-success: #1a6b45;
+  --gh-success-emphasis: #1a6b45;
+  --gh-success-soft: rgba(26, 107, 69, 0.12);
+  --gh-danger: #b3243c;
+  --gh-danger-soft: rgba(179, 36, 60, 0.10);
+  --gh-warning: #7d4f00;
+  --gh-warning-soft: rgba(125, 79, 0, 0.12);
+
+  --gh-btn-hover: rgba(51, 24, 15, 0.05);
+  --gh-btn-active: rgba(51, 24, 15, 0.09);
+
+  --gh-material-chrome: rgba(255, 255, 255, 0.76);
+  --gh-material-sidebar: rgba(255, 246, 238, 0.80);
+
+  --gh-shadow-sm: 0 1px 2px rgba(96, 44, 18, 0.07);
+  --gh-shadow-md: 0 6px 18px -8px rgba(96, 44, 18, 0.18);
+  --gh-shadow-lg: 0 16px 38px -12px rgba(96, 44, 18, 0.22);
+  --gh-shadow-xl: 0 28px 64px -22px rgba(96, 44, 18, 0.28);
+  --gh-shadow-card: 0 1px 2px rgba(96, 44, 18, 0.06), 0 12px 30px -18px rgba(96, 44, 18, 0.24);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(199, 68, 18, 0.26);
+}
+
+html[data-lw-theme="sunset"][data-theme="dark"] {
+  color-scheme: dark;
+  --lw-deco-1: rgba(255, 158, 107, 0.18);
+  --lw-deco-2: rgba(180, 80, 180, 0.18);
+
+  --gh-bg: #1a0b12;
+  --gh-canvas: #26101a;
+  --gh-canvas-subtle: #2e1420;
+  --gh-canvas-inset: rgba(255, 160, 120, 0.14);
+  --gh-fill-2: rgba(255, 160, 120, 0.20);
+  --gh-fill-3: rgba(255, 160, 120, 0.30);
+  --gh-scrim: rgba(0, 0, 0, 0.62);
+
+  --gh-border: rgba(255, 170, 130, 0.18);
+  --gh-border-muted: rgba(255, 170, 130, 0.09);
+  --gh-border-strong: rgba(255, 170, 130, 0.30);
+
+  --gh-text: #ffede4;
+  --gh-text-secondary: #e0b4a4;
+  --gh-text-tertiary: #cfa192;
+  --gh-text-placeholder: #cfa192;
+  --gh-text-disabled: rgba(255, 237, 228, 0.30);
+
+  --gh-accent: #ff9e6b;
+  --gh-accent-hover: #ffbb94;
+  --gh-accent-emphasis: #ff8b52;
+  --gh-accent-soft: rgba(255, 158, 107, 0.16);
+  --gh-on-accent: #2a0f08;
+  --gh-accent-button: #ff8b52;
+  --gh-accent-button-hover: #ffa273;
+
+  --gh-success: #6fdc9e;
+  --gh-success-emphasis: #6fdc9e;
+  --gh-success-soft: rgba(111, 220, 158, 0.16);
+  --gh-danger: #ff7a8a;
+  --gh-danger-soft: rgba(255, 122, 138, 0.16);
+  --gh-warning: #ffd27a;
+  --gh-warning-soft: rgba(255, 210, 122, 0.16);
+
+  --gh-btn-hover: rgba(255, 255, 255, 0.06);
+  --gh-btn-active: rgba(255, 255, 255, 0.10);
+
+  --gh-material-chrome: rgba(30, 12, 20, 0.78);
+  --gh-material-sidebar: rgba(24, 9, 16, 0.82);
+
+  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.42);
+  --gh-shadow-md: 0 6px 20px -8px rgba(0, 0, 0, 0.62);
+  --gh-shadow-lg: 0 16px 40px -12px rgba(0, 0, 0, 0.70);
+  --gh-shadow-xl: 0 28px 72px -24px rgba(0, 0, 0, 0.80);
+  --gh-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.40), 0 14px 36px -20px rgba(0, 0, 0, 0.72);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(255, 158, 107, 0.30);
+}
+
+/* ------------------------------------------------------------
+   8. ink 水墨 —— 宣纸米白、墨黑、朱红点睛（epic / 15000）
+   ------------------------------------------------------------ */
+html[data-lw-theme="ink"] {
+  color-scheme: light;
+  --lw-deco-1: rgba(120, 100, 70, 0.14);
+  --lw-deco-2: rgba(179, 56, 44, 0.10);
+  /* 极淡的斜向纸纹：模拟宣纸纤维，不能压过正文 */
+  --lw-deco-pattern: repeating-linear-gradient(
+    112deg,
+    rgba(120, 100, 70, 0.045) 0 2px,
+    transparent 2px 7px
+  );
+
+  --gh-bg: #f5f0e6;
+  --gh-canvas: #fbf7ee;
+  --gh-canvas-subtle: #f8f2e6;
+  --gh-canvas-inset: rgba(90, 72, 50, 0.08);
+  --gh-fill-2: rgba(90, 72, 50, 0.12);
+  --gh-fill-3: rgba(90, 72, 50, 0.20);
+  --gh-scrim: rgba(30, 26, 20, 0.34);
+
+  --gh-border: rgba(74, 60, 42, 0.16);
+  --gh-border-muted: rgba(74, 60, 42, 0.09);
+  --gh-border-strong: rgba(74, 60, 42, 0.28);
+
+  --gh-text: #1c1a17;
+  --gh-text-secondary: #4a4438;
+  --gh-text-tertiary: #625a4a;
+  --gh-text-placeholder: #746a58;
+  --gh-text-disabled: rgba(28, 26, 23, 0.32);
+
+  --gh-accent: #a8322a;
+  --gh-accent-hover: #8d2822;
+  --gh-accent-emphasis: #b3382c;
+  --gh-accent-soft: rgba(168, 50, 42, 0.10);
+  --gh-on-accent: #ffffff;
+  --gh-accent-button: #a32b22;
+  --gh-accent-button-hover: #8a231c;
+
+  --gh-success: #276b45;
+  --gh-success-emphasis: #276b45;
+  --gh-success-soft: rgba(39, 107, 69, 0.12);
+  --gh-danger: #9e1b1b;
+  --gh-danger-soft: rgba(158, 27, 27, 0.10);
+  --gh-warning: #7a5200;
+  --gh-warning-soft: rgba(122, 82, 0, 0.12);
+
+  --gh-btn-hover: rgba(28, 26, 23, 0.05);
+  --gh-btn-active: rgba(28, 26, 23, 0.09);
+
+  --gh-material-chrome: rgba(251, 247, 238, 0.80);
+  --gh-material-sidebar: rgba(246, 240, 229, 0.82);
+
+  --gh-shadow-sm: 0 1px 2px rgba(60, 48, 30, 0.08);
+  --gh-shadow-md: 0 6px 18px -8px rgba(60, 48, 30, 0.20);
+  --gh-shadow-lg: 0 16px 38px -12px rgba(60, 48, 30, 0.24);
+  --gh-shadow-xl: 0 28px 64px -22px rgba(60, 48, 30, 0.30);
+  --gh-shadow-card: 0 1px 2px rgba(60, 48, 30, 0.07), 0 12px 30px -18px rgba(60, 48, 30, 0.24);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(179, 56, 44, 0.26);
+}
+
+html[data-lw-theme="ink"][data-theme="dark"] {
+  color-scheme: dark;
+  --lw-deco-1: rgba(232, 115, 95, 0.14);
+  --lw-deco-2: rgba(200, 180, 150, 0.12);
+  --lw-deco-pattern: repeating-linear-gradient(
+    112deg,
+    rgba(200, 180, 150, 0.05) 0 2px,
+    transparent 2px 7px
+  );
+
+  --gh-bg: #121110;
+  --gh-canvas: #1b1917;
+  --gh-canvas-subtle: #221f1c;
+  --gh-canvas-inset: rgba(200, 180, 150, 0.12);
+  --gh-fill-2: rgba(200, 180, 150, 0.18);
+  --gh-fill-3: rgba(200, 180, 150, 0.28);
+  --gh-scrim: rgba(0, 0, 0, 0.62);
+
+  --gh-border: rgba(200, 180, 150, 0.16);
+  --gh-border-muted: rgba(200, 180, 150, 0.09);
+  --gh-border-strong: rgba(200, 180, 150, 0.26);
+
+  --gh-text: #ece5d8;
+  --gh-text-secondary: #c7bda9;
+  --gh-text-tertiary: #b3a894;
+  --gh-text-placeholder: #b3a894;
+  --gh-text-disabled: rgba(236, 229, 216, 0.30);
+
+  --gh-accent: #e8735f;
+  --gh-accent-hover: #ff917d;
+  --gh-accent-emphasis: #e0674f;
+  --gh-accent-soft: rgba(232, 115, 95, 0.16);
+  --gh-on-accent: #241009;
+  --gh-accent-button: #e0674f;
+  --gh-accent-button-hover: #f17d66;
+
+  --gh-success: #74c79a;
+  --gh-success-emphasis: #74c79a;
+  --gh-success-soft: rgba(116, 199, 154, 0.16);
+  --gh-danger: #ff7a7a;
+  --gh-danger-soft: rgba(255, 122, 122, 0.16);
+  --gh-warning: #e0b25a;
+  --gh-warning-soft: rgba(224, 178, 90, 0.16);
+
+  --gh-btn-hover: rgba(255, 255, 255, 0.06);
+  --gh-btn-active: rgba(255, 255, 255, 0.10);
+
+  --gh-material-chrome: rgba(20, 18, 16, 0.78);
+  --gh-material-sidebar: rgba(16, 15, 14, 0.82);
+
+  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.42);
+  --gh-shadow-md: 0 6px 20px -8px rgba(0, 0, 0, 0.62);
+  --gh-shadow-lg: 0 16px 40px -12px rgba(0, 0, 0, 0.70);
+  --gh-shadow-xl: 0 28px 72px -24px rgba(0, 0, 0, 0.80);
+  --gh-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.40), 0 14px 36px -20px rgba(0, 0, 0, 0.72);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(232, 115, 95, 0.30);
+}
+
+/* ------------------------------------------------------------
+   9. candy 糖果 —— 高饱和糖果色、圆润（legendary / 18000）
+   ------------------------------------------------------------ */
+html[data-lw-theme="candy"] {
+  color-scheme: light;
+  --lw-deco-1: rgba(216, 27, 140, 0.12);
+  --lw-deco-2: rgba(120, 60, 220, 0.12);
+  --lw-deco-pattern: radial-gradient(circle, rgba(216, 27, 140, 0.10) 0 2px, transparent 2.5px);
+  --lw-deco-pattern-size: 22px 22px;
+
+  --gh-bg: #fff0f8;
+  --gh-canvas: #ffffff;
+  --gh-canvas-subtle: #fff7fc;
+  --gh-canvas-inset: rgba(216, 27, 140, 0.08);
+  --gh-fill-2: rgba(216, 27, 140, 0.12);
+  --gh-fill-3: rgba(216, 27, 140, 0.20);
+  --gh-scrim: rgba(60, 10, 40, 0.30);
+
+  --gh-border: rgba(200, 60, 140, 0.16);
+  --gh-border-muted: rgba(200, 60, 140, 0.09);
+  --gh-border-strong: rgba(200, 60, 140, 0.28);
+
+  --gh-text: #2a1230;
+  --gh-text-secondary: #66406f;
+  --gh-text-tertiary: #7d5787;
+  --gh-text-placeholder: #8d6696;
+  --gh-text-disabled: rgba(42, 18, 48, 0.32);
+
+  --gh-accent: #c2187d;
+  --gh-accent-hover: #a5136a;
+  --gh-accent-emphasis: #d81b8c;
+  --gh-accent-soft: rgba(194, 24, 125, 0.12);
+  --gh-on-accent: #ffffff;
+  --gh-accent-button: #c2187d;
+  --gh-accent-button-hover: #a5136a;
+
+  --gh-success: #0b8a5c;
+  --gh-success-emphasis: #0b8a5c;
+  --gh-success-soft: rgba(11, 138, 92, 0.12);
+  --gh-danger: #d81b3c;
+  --gh-danger-soft: rgba(216, 27, 60, 0.10);
+  --gh-warning: #8a4b00;
+  --gh-warning-soft: rgba(138, 75, 0, 0.12);
+
+  --gh-btn-hover: rgba(42, 18, 48, 0.05);
+  --gh-btn-active: rgba(42, 18, 48, 0.09);
+
+  --gh-material-chrome: rgba(255, 255, 255, 0.78);
+  --gh-material-sidebar: rgba(255, 243, 251, 0.80);
+
+  --gh-shadow-sm: 0 1px 2px rgba(120, 20, 90, 0.08);
+  --gh-shadow-md: 0 6px 18px -8px rgba(120, 20, 90, 0.20);
+  --gh-shadow-lg: 0 16px 38px -12px rgba(120, 20, 90, 0.24);
+  --gh-shadow-xl: 0 28px 64px -22px rgba(120, 20, 90, 0.30);
+  --gh-shadow-card: 0 1px 2px rgba(120, 20, 90, 0.06), 0 12px 30px -18px rgba(120, 20, 90, 0.24);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(216, 27, 140, 0.26);
+}
+
+html[data-lw-theme="candy"][data-theme="dark"] {
+  color-scheme: dark;
+  --lw-deco-1: rgba(255, 138, 212, 0.18);
+  --lw-deco-2: rgba(140, 90, 255, 0.16);
+  --lw-deco-pattern: radial-gradient(circle, rgba(255, 138, 212, 0.12) 0 2px, transparent 2.5px);
+  --lw-deco-pattern-size: 22px 22px;
+
+  --gh-bg: #1a0a1e;
+  --gh-canvas: #24102b;
+  --gh-canvas-subtle: #2c1434;
+  --gh-canvas-inset: rgba(255, 138, 212, 0.14);
+  --gh-fill-2: rgba(255, 138, 212, 0.20);
+  --gh-fill-3: rgba(255, 138, 212, 0.30);
+  --gh-scrim: rgba(0, 0, 0, 0.62);
+
+  --gh-border: rgba(255, 150, 220, 0.18);
+  --gh-border-muted: rgba(255, 150, 220, 0.09);
+  --gh-border-strong: rgba(255, 150, 220, 0.30);
+
+  --gh-text: #ffeafb;
+  --gh-text-secondary: #e0b5d8;
+  --gh-text-tertiary: #cba0c4;
+  --gh-text-placeholder: #cba0c4;
+  --gh-text-disabled: rgba(255, 234, 251, 0.30);
+
+  --gh-accent: #ff8ad4;
+  --gh-accent-hover: #ffaee2;
+  --gh-accent-emphasis: #ff74c9;
+  --gh-accent-soft: rgba(255, 138, 212, 0.16);
+  --gh-on-accent: #2b0722;
+  --gh-accent-button: #ff8ad4;
+  --gh-accent-button-hover: #ffa4df;
+
+  --gh-success: #57e0a5;
+  --gh-success-emphasis: #57e0a5;
+  --gh-success-soft: rgba(87, 224, 165, 0.16);
+  --gh-danger: #ff7a8a;
+  --gh-danger-soft: rgba(255, 122, 138, 0.16);
+  --gh-warning: #ffd166;
+  --gh-warning-soft: rgba(255, 209, 102, 0.16);
+
+  --gh-btn-hover: rgba(255, 255, 255, 0.06);
+  --gh-btn-active: rgba(255, 255, 255, 0.10);
+
+  --gh-material-chrome: rgba(30, 12, 34, 0.78);
+  --gh-material-sidebar: rgba(24, 9, 28, 0.82);
+
+  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.42);
+  --gh-shadow-md: 0 6px 20px -8px rgba(0, 0, 0, 0.62);
+  --gh-shadow-lg: 0 16px 40px -12px rgba(0, 0, 0, 0.70);
+  --gh-shadow-xl: 0 28px 72px -24px rgba(0, 0, 0, 0.80);
+  --gh-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.40), 0 14px 36px -20px rgba(0, 0, 0, 0.72);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(255, 138, 212, 0.30);
+}
+
+/* 糖果主题的圆点图案需要 background-size（单独规则，避免和通用 body::after 冲突） */
+html[data-lw-theme="candy"] body::after {
+  background-size: var(--lw-deco-pattern-size);
+}
+
+/* ------------------------------------------------------------
+   10. royal 皇家 —— 深紫金、华丽（legendary / 38000）
+   ------------------------------------------------------------ */
+html[data-lw-theme="royal"] {
+  color-scheme: light;
+  --lw-deco-1: rgba(90, 47, 145, 0.14);
+  --lw-deco-2: rgba(184, 148, 62, 0.16);
+
+  --gh-bg: #f6f1ff;
+  --gh-canvas: #ffffff;
+  --gh-canvas-subtle: #faf7ff;
+  --gh-canvas-inset: rgba(90, 47, 145, 0.08);
+  --gh-fill-2: rgba(90, 47, 145, 0.12);
+  --gh-fill-3: rgba(90, 47, 145, 0.20);
+  --gh-scrim: rgba(24, 10, 44, 0.34);
+
+  --gh-border: rgba(90, 47, 145, 0.14);
+  --gh-border-muted: rgba(90, 47, 145, 0.08);
+  --gh-border-strong: rgba(90, 47, 145, 0.24);
+
+  --gh-text: #1e1036;
+  --gh-text-secondary: #4c3a68;
+  --gh-text-tertiary: #66527f;
+  --gh-text-placeholder: #77648f;
+  --gh-text-disabled: rgba(30, 16, 54, 0.32);
+
+  --gh-accent: #5a2f91;
+  --gh-accent-hover: #4a2579;
+  --gh-accent-emphasis: #6a3aa8;
+  --gh-accent-soft: rgba(90, 47, 145, 0.12);
+  --gh-on-accent: #ffffff;
+  --gh-accent-button: #552b8a;
+  --gh-accent-button-hover: #452271;
+
+  --gh-success: #1c6b45;
+  --gh-success-emphasis: #1c6b45;
+  --gh-success-soft: rgba(28, 107, 69, 0.12);
+  --gh-danger: #b31f3f;
+  --gh-danger-soft: rgba(179, 31, 63, 0.10);
+  --gh-warning: #7d5300;
+  --gh-warning-soft: rgba(125, 83, 0, 0.12);
+
+  --gh-btn-hover: rgba(30, 16, 54, 0.05);
+  --gh-btn-active: rgba(30, 16, 54, 0.09);
+
+  --gh-material-chrome: rgba(255, 255, 255, 0.78);
+  --gh-material-sidebar: rgba(248, 244, 255, 0.82);
+
+  --gh-shadow-sm: 0 1px 2px rgba(48, 24, 80, 0.07);
+  --gh-shadow-md: 0 6px 18px -8px rgba(48, 24, 80, 0.18);
+  --gh-shadow-lg: 0 16px 38px -12px rgba(48, 24, 80, 0.22);
+  --gh-shadow-xl: 0 28px 64px -22px rgba(48, 24, 80, 0.28);
+  --gh-shadow-card: 0 1px 2px rgba(48, 24, 80, 0.06), 0 12px 30px -18px rgba(48, 24, 80, 0.24);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(106, 58, 168, 0.28);
+}
+
+html[data-lw-theme="royal"][data-theme="dark"] {
+  color-scheme: dark;
+  --lw-deco-1: rgba(217, 180, 90, 0.16);
+  --lw-deco-2: rgba(120, 70, 200, 0.20);
+  /* 金线斜格：极低透明度，像织物暗纹 */
+  --lw-deco-pattern:
+    repeating-linear-gradient(45deg, rgba(217, 180, 90, 0.06) 0 1px, transparent 1px 16px),
+    repeating-linear-gradient(-45deg, rgba(217, 180, 90, 0.05) 0 1px, transparent 1px 16px);
+
+  --gh-bg: #0d0718;
+  --gh-canvas: #170d29;
+  --gh-canvas-subtle: #1e1236;
+  --gh-canvas-inset: rgba(217, 180, 90, 0.12);
+  --gh-fill-2: rgba(217, 180, 90, 0.16);
+  --gh-fill-3: rgba(217, 180, 90, 0.26);
+  --gh-scrim: rgba(0, 0, 0, 0.68);
+
+  --gh-border: rgba(217, 180, 90, 0.24);
+  --gh-border-muted: rgba(217, 180, 90, 0.12);
+  --gh-border-strong: rgba(217, 180, 90, 0.40);
+
+  --gh-text: #f3ebff;
+  --gh-text-secondary: #cdbde6;
+  --gh-text-tertiary: #b7a4d6;
+  --gh-text-placeholder: #b7a4d6;
+  --gh-text-disabled: rgba(243, 235, 255, 0.30);
+
+  --gh-accent: #e8c877;
+  --gh-accent-hover: #f5da9a;
+  --gh-accent-emphasis: #d9b45a;
+  --gh-accent-soft: rgba(217, 180, 90, 0.16);
+  --gh-on-accent: #1d1206;
+  --gh-accent-button: #d9b45a;
+  --gh-accent-button-hover: #e8c877;
+
+  --gh-success: #6fd6a0;
+  --gh-success-emphasis: #6fd6a0;
+  --gh-success-soft: rgba(111, 214, 160, 0.16);
+  --gh-danger: #ff7a8a;
+  --gh-danger-soft: rgba(255, 122, 138, 0.16);
+  --gh-warning: #ffd166;
+  --gh-warning-soft: rgba(255, 209, 102, 0.16);
+
+  --gh-btn-hover: rgba(255, 255, 255, 0.06);
+  --gh-btn-active: rgba(255, 255, 255, 0.10);
+
+  --gh-material-chrome: rgba(16, 9, 26, 0.78);
+  --gh-material-sidebar: rgba(12, 6, 22, 0.82);
+
+  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --gh-shadow-md: 0 6px 22px -8px rgba(0, 0, 0, 0.65);
+  --gh-shadow-lg: 0 16px 44px -12px rgba(0, 0, 0, 0.72);
+  --gh-shadow-xl: 0 28px 72px -24px rgba(0, 0, 0, 0.82);
+  --gh-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.42), 0 14px 36px -20px rgba(217, 180, 90, 0.16);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(217, 180, 90, 0.30);
+}
+
+/* =============================================================
+   商店页面（/themes）— .gh-themes-*
+   ============================================================= */
+
+.gh-themes-page {
+  /* 给底部试穿浮条留出空间，滚到最底时最后一张卡不会被浮条盖住 */
+  padding-bottom: calc(96px + var(--gh-safe-bottom));
+}
+
+/* ---------- Hero ---------- */
+.gh-themes-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--gh-space-5);
+  align-items: stretch;
+  margin-bottom: var(--gh-space-5);
+  padding: var(--gh-space-6);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-xl);
+  background:
+    radial-gradient(120% 140% at 0% 0%, var(--gh-accent-soft), transparent 62%),
+    var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+}
+
+.gh-themes-hero-main {
+  min-width: 0;
+}
+
+.gh-themes-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 var(--gh-space-2);
+  color: var(--gh-accent);
+  font-size: var(--gh-type-caption-2);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.gh-themes-title {
+  margin: 0 0 var(--gh-space-2);
+  color: var(--gh-text);
+  font-family: var(--gh-font-display);
+  font-size: var(--gh-type-title-1);
+  font-weight: 700;
+  letter-spacing: var(--gh-tracking-tight);
+}
+
+.gh-themes-sub {
+  margin: 0 0 var(--gh-space-4);
+  max-width: 56ch;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.6;
+}
+
+.gh-themes-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gh-space-2);
+}
+
+.gh-themes-hero-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--gh-space-4);
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas-subtle);
+  min-width: 0;
+}
+
+.gh-themes-hero-label {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  letter-spacing: var(--gh-tracking-wide);
+}
+
+.gh-themes-hero-value {
+  color: var(--gh-text);
+  font-size: 2.25rem;
+  font-weight: 700;
+  letter-spacing: var(--gh-tracking-tight);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-themes-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+  margin-top: auto;
+  padding-top: var(--gh-space-3);
+  border-top: 1px solid var(--gh-border-muted);
+}
+
+.gh-themes-current-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  min-width: 0;
+}
+
+.gh-themes-current-name strong {
+  color: var(--gh-text);
+  font-size: var(--gh-text-base);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-themes-chips {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.gh-themes-chip {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  /* 用描边而不是内阴影：深色主题的深色色板也要能看出边界 */
+  box-shadow: 0 0 0 1px var(--gh-border-strong);
+}
+
+.gh-themes-alert {
+  margin-bottom: var(--gh-space-3);
+}
+
+/* ---------- 区块标题 ---------- */
+.gh-themes-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gh-space-2);
+  margin-bottom: var(--gh-space-3);
+}
+
+.gh-themes-section-head h2 {
+  margin: 0;
+  color: var(--gh-text);
+  font-size: var(--gh-type-title-3);
+  font-weight: 600;
+  letter-spacing: var(--gh-tracking-snug);
+}
+
+.gh-themes-section-head p {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+/* ---------- 我的主题 ---------- */
+.gh-themes-owned {
+  margin-bottom: var(--gh-space-6);
+}
+
+.gh-themes-owned-row {
+  display: flex;
+  gap: var(--gh-space-3);
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+
+.gh-themes-owned-row::-webkit-scrollbar { display: none; }
+
+.gh-themes-owned-card {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  flex: 0 0 auto;
+  min-width: 190px;
+  padding: 10px 14px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  font-family: var(--gh-font);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--gh-transition), background var(--gh-transition),
+    box-shadow var(--gh-transition), transform var(--gh-dur-1) var(--gh-ease-standard);
+}
+
+.gh-themes-owned-card:hover:not(:disabled) {
+  border-color: var(--gh-border-strong);
+  box-shadow: var(--gh-shadow-sm);
+  transform: translateY(-1px);
+}
+
+.gh-themes-owned-card:disabled {
+  cursor: default;
+}
+
+.gh-themes-owned-card--active {
+  border-color: var(--gh-accent);
+  background: var(--gh-accent-soft);
+  color: var(--gh-text);
+}
+
+.gh-themes-owned-swatch {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--gh-border);
+}
+
+.gh-themes-owned-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.gh-themes-owned-text strong {
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.gh-themes-owned-text span {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-themes-owned-card--active .gh-themes-owned-text span {
+  color: var(--gh-accent);
+}
+
+.gh-themes-owned-card > svg {
+  color: var(--gh-accent);
+  margin-left: auto;
+}
+
+/* ---------- 工具栏 ---------- */
+.gh-themes-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+  margin-bottom: var(--gh-space-4);
+}
+
+.gh-themes-filters {
+  display: flex;
+  gap: 4px;
+  max-width: 100%;
+  padding: 3px;
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-inset);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.gh-themes-filters::-webkit-scrollbar { display: none; }
+
+.gh-themes-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: calc(var(--gh-radius) - 3px);
+  background: transparent;
+  color: var(--gh-text-secondary);
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--gh-transition), color var(--gh-transition);
+}
+
+.gh-themes-filter:hover {
+  background: var(--gh-btn-hover);
+  color: var(--gh-text);
+}
+
+.gh-themes-filter--active,
+.gh-themes-filter--active:hover {
+  background: var(--gh-accent-button);
+  color: var(--gh-on-accent);
+}
+
+.gh-themes-filter-count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.68;
+  font-size: var(--gh-type-caption-2);
+}
+
+.gh-themes-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gh-space-2);
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-themes-select {
+  width: auto;
+  min-width: 140px;
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: var(--gh-text-xs);
+}
+
+/* ---------- 商店网格 ---------- */
+.gh-themes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--gh-space-4);
+  align-items: stretch;
+}
+
+.gh-themes-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-xl);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+  overflow: hidden;
+  transition: transform var(--gh-dur-2) var(--gh-ease-standard),
+    box-shadow var(--gh-dur-2) var(--gh-ease-standard), border-color var(--gh-transition);
+}
+
+.gh-themes-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--gh-shadow-lg);
+}
+
+.gh-themes-card--equipped {
+  border-color: var(--gh-accent);
+  box-shadow: 0 0 0 1px var(--gh-accent-soft), var(--gh-shadow-md);
+}
+
+/* 传说主题的流光：只在卡片表面扫过，pointer-events:none 不挡按钮 */
+.gh-themes-card--legendary {
+  border-color: var(--gh-border-strong);
+}
+
+.gh-themes-card--legendary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 32%,
+    var(--gh-warning-soft) 46%,
+    transparent 60%
+  );
+  transform: translateX(-120%);
+  animation: gh-themes-shine 7s ease-in-out infinite;
+}
+
+@keyframes gh-themes-shine {
+  0%, 55% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+
+.gh-themes-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  padding: var(--gh-space-4);
+  min-width: 0;
+}
+
+.gh-themes-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-2);
+}
+
+.gh-themes-card-name {
+  margin: 0;
+  color: var(--gh-text);
+  font-family: var(--gh-font-display);
+  font-size: var(--gh-text-lg);
+  font-weight: 600;
+  letter-spacing: var(--gh-tracking-snug);
+}
+
+.gh-themes-badge {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: var(--gh-radius-pill);
+  font-size: var(--gh-type-caption-2);
+  font-weight: 600;
+  letter-spacing: var(--gh-tracking-wide);
+  background: var(--gh-fill-2);
+  color: var(--gh-text-secondary);
+}
+
+.gh-themes-badge--epic {
+  background: var(--gh-accent-soft);
+  color: var(--gh-accent);
+}
+
+.gh-themes-badge--legendary {
+  background: var(--gh-warning-soft);
+  color: var(--gh-warning);
+}
+
+.gh-themes-card-tagline {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.gh-themes-card-desc {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.gh-themes-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-2);
+  margin-top: auto;
+  padding-top: var(--gh-space-2);
+}
+
+.gh-themes-price {
+  color: var(--gh-text);
+  font-size: var(--gh-text-base);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-themes-state {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+}
+
+.gh-themes-state--owned {
+  color: var(--gh-success);
+}
+
+.gh-themes-state--equipped {
+  color: var(--gh-accent);
+  font-weight: 600;
+}
+
+.gh-themes-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gh-space-2);
+  margin-top: var(--gh-space-2);
+}
+
+.gh-themes-card-actions .gh-btn {
+  flex: 1 1 auto;
+}
+
+.gh-themes-card-hint {
+  margin: 2px 0 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-themes-card-hint a {
+  color: var(--gh-accent);
+}
+
+/* ---------- 迷你站点预览 ---------- */
+.gh-themes-mini {
+  position: relative;
+  height: 168px;
+  padding: 26px 18px 0;
+  overflow: hidden;
+}
+
+.gh-themes-mini--large {
+  height: 190px;
+  padding-top: 30px;
+}
+
+.gh-themes-mini-window {
+  display: grid;
+  grid-template-columns: 26% minmax(0, 1fr);
+  height: 100%;
+  border-radius: 10px 10px 0 0;
+  overflow: hidden;
+  box-shadow: 0 14px 34px -16px rgba(0, 0, 0, 0.55);
+}
+
+.gh-themes-mini-side {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 9px;
+}
+
+.gh-themes-mini-logo {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+}
+
+.gh-themes-mini-nav {
+  height: 5px;
+  border-radius: 3px;
+  opacity: 0.55;
+}
+
+.gh-themes-mini-nav--dim { opacity: 0.36; }
+.gh-themes-mini-nav--dimmer { opacity: 0.22; }
+
+.gh-themes-mini-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.gh-themes-mini-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.gh-themes-mini-pill {
+  width: 44%;
+  height: 6px;
+  border-radius: 3px;
+  opacity: 0.32;
+}
+
+.gh-themes-mini-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+}
+
+.gh-themes-mini-content {
+  display: grid;
+  grid-template-columns: 1.35fr minmax(0, 1fr);
+  gap: 8px;
+  flex: 1;
+  padding: 8px 10px 0;
+}
+
+.gh-themes-mini-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.18);
+}
+
+.gh-themes-mini-card--ghost {
+  opacity: 0.72;
+}
+
+.gh-themes-mini-line {
+  width: 84%;
+  height: 5px;
+  border-radius: 3px;
+  opacity: 0.48;
+}
+
+.gh-themes-mini-line--short { width: 56%; }
+.gh-themes-mini-line--tiny { width: 70%; height: 4px; opacity: 0.32; }
+
+.gh-themes-mini-btn {
+  margin-top: auto;
+  width: 46px;
+  height: 12px;
+  border-radius: var(--gh-radius-pill);
+}
+
+/* ---------- 骨架 / 空态 ---------- */
+.gh-themes-card--skeleton {
+  pointer-events: none;
+}
+
+.gh-themes-skeleton-cover {
+  display: block;
+  height: 168px;
+  border-radius: 0;
+}
+
+.gh-themes-skeleton-title {
+  display: block;
+  width: 40%;
+  height: 16px;
+}
+
+.gh-themes-skeleton-line {
+  display: block;
+  width: 78%;
+  height: 10px;
+}
+
+.gh-themes-skeleton-line--short { width: 52%; }
+
+.gh-themes-skeleton-btn {
+  display: block;
+  width: 100%;
+  height: 30px;
+  margin-top: var(--gh-space-3);
+  border-radius: var(--gh-radius-pill);
+}
+
+.gh-themes-owned-card--skeleton {
+  pointer-events: none;
+}
+
+.gh-themes-owned-card--skeleton .gh-themes-owned-swatch {
+  display: block;
+}
+
+.gh-themes-owned-card--skeleton .gh-themes-skeleton-line {
+  width: 96px;
+  height: 12px;
+}
+
+.gh-themes-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--gh-space-3);
+  text-align: left;
+}
+
+.gh-themes-empty p {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+
+/* ---------- 试穿浮条 ---------- */
+.gh-themes-trial {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + var(--gh-safe-bottom));
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  width: min(720px, calc(100vw - 32px));
+  padding: 10px 12px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-xl);
+  background: var(--gh-material-chrome);
+  box-shadow: var(--gh-shadow-lg);
+  backdrop-filter: var(--gh-blur-chrome);
+  -webkit-backdrop-filter: var(--gh-blur-chrome);
+  transform: translateX(-50%);
+  animation: gh-themes-rise var(--gh-dur-3) var(--gh-ease-out);
+}
+
+@keyframes gh-themes-rise {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.gh-themes-trial-swatch {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px var(--gh-border);
+}
+
+.gh-themes-trial-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.gh-themes-trial-text strong {
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-themes-trial-text > span {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-themes-trial-track {
+  display: block;
+  height: 3px;
+  margin-top: 5px;
+  border-radius: 2px;
+  background: var(--gh-fill-2);
+  overflow: hidden;
+}
+
+.gh-themes-trial-bar {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--gh-accent-emphasis);
+  transition: width 1s linear;
+}
+
+.gh-themes-trial-actions {
+  display: flex;
+  gap: var(--gh-space-2);
+  flex-shrink: 0;
+}
+
+/* ---------- 购买对话框 ---------- */
+.gh-themes-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--gh-z-dialog);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gh-space-4);
+  background: var(--gh-scrim);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: gh-themes-fade var(--gh-dur-2) var(--gh-ease-standard);
+  overscroll-behavior: contain;
+}
+
+@keyframes gh-themes-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.gh-themes-dialog {
+  width: min(460px, 100%);
+  max-height: min(86vh, 760px);
+  overflow: auto;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-xl);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-xl);
+}
+
+.gh-themes-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-5);
+}
+
+.gh-themes-dialog-body h2 {
+  margin: 0;
+  color: var(--gh-text);
+  font-family: var(--gh-font-display);
+  font-size: var(--gh-type-title-3);
+  font-weight: 700;
+  letter-spacing: var(--gh-tracking-snug);
+}
+
+.gh-themes-dialog-desc {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.65;
+}
+
+.gh-themes-dialog-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 4px 0;
+  border-top: 1px solid var(--gh-border-muted);
+  border-bottom: 1px solid var(--gh-border-muted);
+}
+
+.gh-themes-dialog-rows > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+  padding: 8px 0;
+}
+
+.gh-themes-dialog-rows dt {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-themes-dialog-rows dd {
+  margin: 0;
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-themes-dialog-short {
+  color: var(--gh-danger);
+}
+
+.gh-themes-dialog-hint {
+  margin: 0;
+  color: var(--gh-danger);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-themes-dialog-hint a {
+  color: var(--gh-accent);
+  font-weight: 600;
+}
+
+.gh-themes-dialog-note {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.6;
+}
+
+.gh-themes-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--gh-space-2);
+  margin-top: var(--gh-space-1);
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 900px) {
+  .gh-themes-hero {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--gh-space-5);
+  }
+  .gh-themes-hero-card {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--gh-space-3);
+  }
+  .gh-themes-hero-value {
+    font-size: 1.75rem;
+    margin-right: auto;
+  }
+  .gh-themes-current {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 560px) {
+  .gh-themes-page {
+    padding-bottom: calc(140px + var(--gh-safe-bottom));
+  }
+  .gh-themes-hero {
+    padding: var(--gh-space-4);
+    border-radius: var(--gh-radius-lg);
+  }
+  .gh-themes-title {
+    font-size: var(--gh-type-title-2);
+  }
+  .gh-themes-hero-card {
+    padding: var(--gh-space-3);
+  }
+  .gh-themes-section-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .gh-themes-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .gh-themes-toolbar {
+    align-items: stretch;
+  }
+  .gh-themes-filters {
+    order: 2;
+    width: 100%;
+    /* 窄屏没有滚动条提示，改为换行展示，6 个筛选一屏内全部可见 */
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+  .gh-themes-sort {
+    justify-content: space-between;
+  }
+  .gh-themes-select {
+    flex: 1;
+  }
+  .gh-themes-trial {
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + var(--gh-safe-bottom));
+    width: auto;
+    transform: none;
+    flex-wrap: wrap;
+    animation: gh-themes-rise-mobile var(--gh-dur-3) var(--gh-ease-out);
+  }
+  .gh-themes-trial-actions {
+    width: 100%;
+  }
+  .gh-themes-trial-actions .gh-btn {
+    flex: 1;
+  }
+  .gh-themes-dialog-body {
+    padding: var(--gh-space-4);
+  }
+  .gh-themes-mini {
+    height: 148px;
+    padding: 20px 14px 0;
+  }
+}
+
+@keyframes gh-themes-rise-mobile {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- 动效降级 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html[data-lw-theme="aurora"] body::before {
+    animation: none;
+  }
+  .gh-themes-card--legendary::before {
+    animation: none;
+    opacity: 0;
+  }
+  .gh-themes-trial,
+  .gh-themes-modal {
+    animation: none;
+  }
+  .gh-themes-trial-bar {
+    transition: none;
+  }
+  .gh-themes-card:hover {
+    transform: none;
+  }
+  .gh-themes-owned-card:hover:not(:disabled) {
+    transform: none;
+  }
+}

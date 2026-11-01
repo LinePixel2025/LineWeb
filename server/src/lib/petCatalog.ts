@@ -8,6 +8,13 @@
  *   - 出走后可花积分重新召唤：重置数值与等级，已购装扮保留
  */
 
+/** 物种配色（主色 / 辅色 / 点缀色），前端据此画贴图与主题卡 */
+export interface PetSpeciesPalette {
+  primary: string
+  secondary: string
+  accent: string
+}
+
 export interface PetSpeciesDef {
   key: string
   name: string
@@ -15,12 +22,71 @@ export interface PetSpeciesDef {
   defaultName: string
   emoji: string
   description: string
+  /** 一句性格描述（换宠物卡片上展示，帮助玩家做选择） */
+  personality: string
+  palette: PetSpeciesPalette
 }
 
+/**
+ * 物种目录。
+ * 前三个（cat/dog/bird）是历史数据兼容项，key 永久不可变；
+ * 新增物种只能追加，否则库里已有的宠物会变成未知物种。
+ */
 export const PET_SPECIES: readonly PetSpeciesDef[] = [
-  { key: 'cat', name: '小猫', defaultName: '咪咪', emoji: '🐱', description: '软乎乎的猫主子，最爱晒太阳' },
-  { key: 'dog', name: '小狗', defaultName: '旺旺', emoji: '🐶', description: '热情的小狗，见到你就摇尾巴' },
-  { key: 'bird', name: '小鸟', defaultName: '啾啾', emoji: '🐦', description: '叽叽喳喳的小家伙，歌声清脆' },
+  {
+    key: 'cat',
+    name: '小猫',
+    defaultName: '咪咪',
+    emoji: '🐱',
+    description: '软乎乎的猫主子，最爱晒太阳',
+    personality: '高冷又黏人，尾巴一甩就是它的心事',
+    palette: { primary: '#f2a55c', secondary: '#ffe6c2', accent: '#e8837f' },
+  },
+  {
+    key: 'dog',
+    name: '小狗',
+    defaultName: '旺旺',
+    emoji: '🐶',
+    description: '热情的小狗，见到你就摇尾巴',
+    personality: '永远相信你，摇尾巴就是全部的情绪',
+    palette: { primary: '#cf9a63', secondary: '#f8e6c8', accent: '#e8877a' },
+  },
+  {
+    key: 'bird',
+    name: '小鸟',
+    defaultName: '啾啾',
+    emoji: '🐦',
+    description: '叽叽喳喳的小家伙，歌声清脆',
+    personality: '话很多的小歌手，一有风就想飞',
+    palette: { primary: '#5cc6e8', secondary: '#e2f8ff', accent: '#f7c948' },
+  },
+  {
+    key: 'rabbit',
+    name: '小兔',
+    defaultName: '糯糯',
+    emoji: '🐰',
+    description: '竖着长耳朵的软糖，胆子小但很黏人',
+    personality: '一惊一乍的软糖，跳一下要回头看你一眼',
+    palette: { primary: '#ecd8ef', secondary: '#fff7fb', accent: '#f28fa8' },
+  },
+  {
+    key: 'fox',
+    name: '小狐狸',
+    defaultName: '阿狸',
+    emoji: '🦊',
+    description: '机灵的小狐狸，尾巴蓬松得像围巾',
+    personality: '聪明的小机灵鬼，尾巴一摇就有新点子',
+    palette: { primary: '#ef8b4c', secondary: '#fff1e1', accent: '#c95c33' },
+  },
+  {
+    key: 'panda',
+    name: '小熊猫',
+    defaultName: '圆圆',
+    emoji: '🐼',
+    description: '圆滚滚的小熊猫，抱着竹子就能睡着',
+    personality: '慢半拍的抱抱熊，吃饱就开始犯困',
+    palette: { primary: '#f2f0ec', secondary: '#33333c', accent: '#f0a6b5' },
+  },
 ]
 
 export const PET_SPECIES_MAP: ReadonlyMap<string, PetSpeciesDef> = new Map(
@@ -35,9 +101,10 @@ export function getPetSpecies(key: string | null | undefined): PetSpeciesDef | n
   return PET_SPECIES_MAP.get(key) ?? null
 }
 
-/** 积分价格表（召唤 / 照顾动作） */
+/** 积分价格表（召唤 / 换物种 / 照顾动作） */
 export const PET_COSTS = {
   summon: 300,
+  switch: 100,
   feed: 10,
   bathe: 15,
   play: 20,
@@ -156,6 +223,73 @@ export const PET_TOUCH_MOOD_BONUS = 2
 
 /** 宠物名字长度上限 */
 export const PET_NAME_MAX_LENGTH = 12
+
+/** 串门每天最多撸同一只宠物几次（按 Asia/Shanghai 自然日） */
+export const PAT_DAILY_LIMIT = 3
+
+/** 同一访客在同一宠物之家每天最多留言条数 */
+export const GUESTBOOK_DAILY_LIMIT = 5
+
+/** 留言内容长度上限（按字符计，emoji 算 1 个） */
+export const GUESTBOOK_MAX_LENGTH = 60
+
+/** 撸一次让目标宠物心情上涨的幅度（公共接口只回补 mood，不动主人其它数值） */
+export const PET_PAT_MOOD_BONUS = 1.5
+
+/* ============================================================
+   入参清洗（纯函数，service / 路由 / 自检脚本共用）
+   ============================================================ */
+
+/**
+ * 宠物名清洗：trim 后截断到 PET_NAME_MAX_LENGTH；空串回退到 fallback。
+ * 名字只是展示文本，不做字符集限制（中文 / emoji 都允许）。
+ */
+export function normalizePetName(raw: string | null | undefined, fallback: string): string {
+  const clean = (raw ?? '').trim()
+  if (!clean) return fallback
+  return clean.slice(0, PET_NAME_MAX_LENGTH)
+}
+
+/** 当天撸宠次数是否还没到上限（limit 允许覆盖，便于测试边界） */
+export function canPatToday(count: number, limit: number = PAT_DAILY_LIMIT): boolean {
+  if (!Number.isFinite(count) || count < 0) return true
+  return count < Math.max(0, Math.trunc(limit))
+}
+
+/**
+ * 留言清洗：
+ *   - 去掉 C0/C1 控制字符（保留换行→空格，避免多行留言把列表撑开）
+ *   - 连续空白压成一个空格、trim
+ *   - 超过 GUESTBOOK_MAX_LENGTH 截断
+ *   - 清洗后为空返回 null（调用方据此报 400）
+ *
+ * 用 Array.from 按 code point 遍历，保证 emoji（代理对）不会被截断成半个字符。
+ */
+export function sanitizeGuestbookContent(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const normalized = raw.replace(/\r\n?/g, '\n')
+  // eslint-disable-next-line no-control-regex
+  const stripped = normalized.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '')
+  const singleLine = stripped.replace(/\s+/g, ' ').trim()
+  if (!singleLine) return null
+  const chars = Array.from(singleLine)
+  if (chars.length > GUESTBOOK_MAX_LENGTH) return chars.slice(0, GUESTBOOK_MAX_LENGTH).join('').trim()
+  return singleLine || null
+}
+
+/**
+ * 换物种后的名字：玩家自定义名保留；名字仍是旧物种默认名时同步换成新物种默认名。
+ * 只看「是否等于默认名」，避免把玩家自己起的名字悄悄覆盖。
+ */
+export function nextNameAfterSwitch(
+  currentName: string,
+  currentSpeciesKey: string | null | undefined,
+  nextSpecies: PetSpeciesDef,
+): string {
+  const currentSpecies = getPetSpecies(currentSpeciesKey)
+  const isDefaultName = !!currentSpecies && currentName.trim() === currentSpecies.defaultName
+  return isDefaultName ? nextSpecies.defaultName : currentName
+}
 
 /* ============================================================
    衰减结算（纯函数，自检脚本直接调用）

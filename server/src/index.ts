@@ -33,6 +33,8 @@ import personalSpaceRoutes from './routes/personalSpace.js'
 import readerRoutes from './routes/reader.js'
 import musicRoutes from './routes/music.js'
 import stockRoutes from './routes/stocks.js'
+import lotteryRoutes from './routes/lottery.js'
+import themeRoutes from './routes/themes.js'
 import adminPointsRoutes from './routes/adminPoints.js'
 import { featuresRouter, adminFeaturesRouter } from './routes/features.js'
 import { announcementsRouter, adminAnnouncementsRouter } from './routes/announcements.js'
@@ -215,8 +217,12 @@ app.use('/api/reader', requireFeature('reader'), readerRoutes)
 app.use('/api/music', requireFeature('music'), musicRoutes)
 // 个人空间（管理员私人服务：空间名 + RustDesk 远程桌面配置，每管理员数据互相隔离，需 personal:manage 能力）
 app.use('/api/personal-space', personalSpaceRoutes)
-// 模拟股市（行情只读 + 积分交易），受 stock 功能开关控制
+// 模拟股市（行情只读 + 积分交易 + 分红 / 新闻事件 / 成交记录），受 stock 功能开关控制
 app.use('/api/stocks', requireFeature('stock'), stockRoutes)
+// 积分抽奖（种子 / 肥料 / 积分 / 稀有装扮，10 抽保底），受 lottery 功能开关控制
+app.use('/api/lottery', requireFeature('lottery'), lotteryRoutes)
+// LineWeb 主题（积分兑换 / 佩戴 / 全站生效），受 theme 功能开关控制
+app.use('/api/themes', requireFeature('theme'), themeRoutes)
 // 积分体系管理（规则 / 商店 / 用户调分，需 points:manage 能力）
 app.use('/api/admin/points', adminPointsRoutes)
 // 网页反代：站点管理（需登录令牌）

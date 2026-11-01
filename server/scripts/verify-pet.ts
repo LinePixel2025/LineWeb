@@ -6,6 +6,9 @@
  */
 
 import {
+  GUESTBOOK_DAILY_LIMIT,
+  GUESTBOOK_MAX_LENGTH,
+  PAT_DAILY_LIMIT,
   PET_CARE_ACTIONS,
   PET_COSTS,
   PET_DECAY_PER_HOUR,
@@ -16,12 +19,17 @@ import {
   PET_SPECIES,
   PET_TOUCH_COOLDOWN_MS,
   PET_TRICKS,
+  canPatToday,
   cleanEquipped,
   emptyPetEquipped,
+  getPetSpecies,
+  nextNameAfterSwitch,
+  normalizePetName,
   petUnlockedActions,
   petUpgradeCost,
   recomputeCriticalSince,
   roundStat,
+  sanitizeGuestbookContent,
   serializeEquipped,
   settlePetStats,
   type PetStatsInput,
@@ -253,13 +261,30 @@ assertEqual(cleanEquipped('{"face":"glasses_round","neck":"bowtie"}'), { hat: nu
 {
   const keys = PET_SPECIES.map((species) => species.key)
   assertEqual(new Set(keys).size, keys.length, '物种 key 唯一')
-  assertEqual(keys.length, 3, '共 3 个物种')
+  assertEqual(keys.length, 6, '共 6 个物种')
+  // 前三个历史 key 必须保留，否则库里已有宠物的 species 会失效
+  assertEqual(keys.slice(0, 3), ['cat', 'dog', 'bird'], '历史物种 key 保持兼容（cat/dog/bird）')
+  assertEqual(keys, ['cat', 'dog', 'bird', 'rabbit', 'fox', 'panda'], '物种 key 顺序与目录一致')
+  const HEX = /^#[0-9a-fA-F]{6}$/
   for (const species of PET_SPECIES) {
     assert(species.name.length > 0, `物种 ${species.key} 有名字`)
     assert(species.defaultName.length > 0, `物种 ${species.key} 有默认名`)
+    assert(species.defaultName.length <= 12, `物种 ${species.key} 默认名不超过 12 字`)
     assert(species.emoji.length > 0, `物种 ${species.key} 有 emoji`)
     assert(species.description.length > 0, `物种 ${species.key} 有描述`)
+    assert(species.personality.length > 0, `物种 ${species.key} 有性格描述`)
+    assert(HEX.test(species.palette.primary), `物种 ${species.key} 主色为 6 位十六进制`)
+    assert(HEX.test(species.palette.secondary), `物种 ${species.key} 辅色为 6 位十六进制`)
+    assert(HEX.test(species.palette.accent), `物种 ${species.key} 点缀色为 6 位十六进制`)
+    const colors = new Set(Object.values(species.palette))
+    assertEqual(colors.size, 3, `物种 ${species.key} 三色互不相同`)
+    assert(species.personality !== species.description, `物种 ${species.key} 性格描述不与简介重复`)
   }
+  // 默认名不重复（换物种时按默认名同步名字，重名会让玩家困惑）
+  const defaultNames = PET_SPECIES.map((species) => species.defaultName)
+  assertEqual(new Set(defaultNames).size, defaultNames.length, '物种默认名互不重复')
+  assert(getPetSpecies('fox')?.name === '小狐狸', 'getPetSpecies 能取到新增物种')
+  assertEqual(getPetSpecies('unicorn'), null, '未知物种返回 null')
 }
 
 // outfits
@@ -324,5 +349,106 @@ assertEqual(roundStat(87.333333), 87.3, 'roundStat 保留 1 位小数')
 assertEqual(roundStat(0), 0, 'roundStat 0')
 assertEqual(roundStat(99.96), 100, 'roundStat 进位到 100')
 assertEqual(roundStat(100), 100, 'roundStat 整数不变')
+
+/* ============================================================
+   换物种：价格与默认名同步规则
+   ============================================================ */
+
+assertEqual(PET_COSTS.switch, 100, '换物种花 100 积分')
+assertEqual(PET_COSTS.summon, 300, '召唤花 300 积分')
+assertEqual(PET_COSTS.feed, 10, '喂食花 10 积分')
+assertEqual(PET_COSTS.bathe, 15, '洗澡花 15 积分')
+assertEqual(PET_COSTS.play, 20, '玩耍花 20 积分')
+
+{
+  const nextSpecies = getPetSpecies('fox')
+  assert(nextSpecies !== null, '狐狸物种存在')
+  if (nextSpecies) {
+    // 名字仍是旧物种默认名 → 同步换成新物种默认名
+    assertEqual(
+      nextNameAfterSwitch('咪咪', 'cat', nextSpecies),
+      '阿狸',
+      '旧默认名同步为新物种默认名',
+    )
+    // 玩家自定义名保留
+    assertEqual(
+      nextNameAfterSwitch('小橘', 'cat', nextSpecies),
+      '小橘',
+      '玩家自定义名保留',
+    )
+    // 默认名带首尾空格也算默认名（trim 后比较）
+    assertEqual(
+      nextNameAfterSwitch('  咪咪 ', 'cat', nextSpecies),
+      '阿狸',
+      '默认名比较忽略首尾空格',
+    )
+    // 未知旧物种 → 无法判断是否默认名，保守保留原名
+    assertEqual(
+      nextNameAfterSwitch('咪咪', 'unicorn', nextSpecies),
+      '咪咪',
+      '未知旧物种时保留原名',
+    )
+    // 旧物种 key 为空 → 保留原名
+    assertEqual(nextNameAfterSwitch('咪咪', null, nextSpecies), '咪咪', '空物种 key 保留原名')
+  }
+}
+
+/* ============================================================
+   normalizePetName：名字清洗
+   ============================================================ */
+
+assertEqual(normalizePetName(null, '咪咪'), '咪咪', '空值回退默认名')
+assertEqual(normalizePetName(undefined, '咪咪'), '咪咪', 'undefined 回退默认名')
+assertEqual(normalizePetName('   ', '咪咪'), '咪咪', '全空白回退默认名')
+assertEqual(normalizePetName('  小橘  ', '咪咪'), '小橘', 'trim 首尾空格')
+assertEqual(normalizePetName('这是一个特别特别长的宠物名字', '咪咪'), '这是一个特别特别长的宠物', '超长名字截断到 12 字')
+assertEqual(normalizePetName('这是一个特别特别长的宠物名字', '咪咪').length, 12, '截断后长度为 12')
+assertEqual(normalizePetName('🐱🐱🐱', '咪咪'), '🐱🐱🐱', 'emoji 名字可用')
+
+/* ============================================================
+   canPatToday / PAT_DAILY_LIMIT：每日撸宠上限
+   ============================================================ */
+
+assertEqual(PAT_DAILY_LIMIT, 3, '每天最多撸 3 次')
+assertEqual(canPatToday(0), true, '今天还没撸过 → 可以撸')
+assertEqual(canPatToday(1), true, '撸过 1 次 → 还可以')
+assertEqual(canPatToday(2), true, '撸过 2 次 → 还剩最后一次')
+assertEqual(canPatToday(3), false, '撸满 3 次 → 不能再撸')
+assertEqual(canPatToday(4), false, '超过上限 → 不能再撸')
+assertEqual(canPatToday(0, 0), false, '上限为 0 时永远不能撸')
+assertEqual(canPatToday(2, 5), true, '可覆盖上限（2 < 5）')
+assertEqual(canPatToday(-1), true, '脏数据（负数）按 0 次处理')
+assertEqual(canPatToday(Number.NaN), true, 'NaN 按 0 次处理')
+
+/* ============================================================
+   sanitizeGuestbookContent：留言清洗
+   ============================================================ */
+
+assertEqual(GUESTBOOK_DAILY_LIMIT, 5, '每天最多留言 5 条')
+assertEqual(GUESTBOOK_MAX_LENGTH, 60, '留言上限 60 字')
+
+assertEqual(sanitizeGuestbookContent(null), null, 'null 回 null')
+assertEqual(sanitizeGuestbookContent(undefined), null, 'undefined 回 null')
+assertEqual(sanitizeGuestbookContent(''), null, '空串回 null')
+assertEqual(sanitizeGuestbookContent('   \n\t  '), null, '全空白回 null')
+assertEqual(sanitizeGuestbookContent('  你好呀  '), '你好呀', 'trim 首尾空白')
+assertEqual(sanitizeGuestbookContent('第一行\n第二行'), '第一行 第二行', '换行压成空格（单行展示）')
+assertEqual(sanitizeGuestbookContent('多个    空格'), '多个 空格', '连续空白压成一个空格')
+assertEqual(sanitizeGuestbookContent('坏\u0000字符\u0007'), '坏字符', '去掉控制字符')
+assertEqual(sanitizeGuestbookContent('\u0000\u0001\u0002'), null, '只有控制字符回 null')
+assertEqual(
+  sanitizeGuestbookContent('a'.repeat(80)),
+  'a'.repeat(60),
+  '超长留言截断到 60 字',
+)
+assertEqual(
+  sanitizeGuestbookContent('a'.repeat(80))?.length,
+  GUESTBOOK_MAX_LENGTH,
+  '截断后长度等于上限',
+)
+// 注意 JS 字符串 length 是 UTF-16 码元数，emoji 占 2，这里按 code point 复核
+assertEqual(Array.from(sanitizeGuestbookContent('🐱'.repeat(70)) ?? '').length, 60, 'emoji 按字符计（不截断半个代理对）')
+assertEqual(sanitizeGuestbookContent('  超长留言  '.concat('长'.repeat(80)))?.length, 60, 'trim 后再截断')
+assertEqual(sanitizeGuestbookContent('你好，来串门啦～'), '你好，来串门啦～', '正常留言原样保留')
 
 console.log(`✅ 宠物系统纯函数自检：${passed} 个断言`)

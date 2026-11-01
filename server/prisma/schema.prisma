@@ -60,6 +60,14 @@ model User {
   leaderTitles           GameLeaderTitle[]
   chatBan                ChatBan?
   pet                    Pet?
+  equippedThemeKey       String?              @map("equipped_theme_key") // 当前佩戴的 LineWeb 主题 key（目录见 server/src/lib/themes.ts）
+  stockAccount           StockAccount? // 股市账户（分红水位 / 累计分红 / 已实现盈亏）
+  stockTrades            StockTrade[] // 股市成交记录
+  lotteryAccount         LotteryAccount? // 抽奖账户（保底计数 / 累计抽数）
+  lotteryDraws           LotteryDraw[] // 抽奖记录
+  themeUnlocks           ThemeUnlock[] // 已解锁的 LineWeb 主题
+  petGuestbook           PetGuestbook[]       @relation("PetGuestbookAuthor") // 我在别人宠物之家留的言
+  petVisits              PetVisit[]           @relation("PetVisitVisitor") // 我串门撸宠的记录
   personalSpace          PersonalSpace? // 个人空间（管理员私人服务，每管理员一份）
   books                  Book[]               // 小说阅读器的书架（上传的书）
   musicAccount           MusicAccount?        // 网易云音乐扫码绑定的账号（cookie 仅存服务端）
@@ -981,11 +989,51 @@ model Pet {
   decayedAt     DateTime  @default(now()) @map("decayed_at") // 上次衰减结算基准时刻
   criticalSince DateTime? @map("critical_since") // 最早一项数值归零的时刻（判定离家出走）
   lastTouchAt   DateTime? @map("last_touch_at") // 抚摸心情加成冷却
+  pats          Int       @default(0) // 被其它用户撸的总次数（宠物之家人气）
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
   outfits       PetOutfit[]
+  guestbook     PetGuestbook[]
+  visits        PetVisit[]
 
   @@map("pets")
+}
+
+/**
+ * 宠物之家留言板：访客在宠物之家留下的短留言（≤60 字），列表按宠物聚合。
+ */
+model PetGuestbook {
+  id        Int      @id @default(autoincrement())
+  petId     Int      @map("pet_id")
+  pet       Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  authorId  Int      @map("author_id")
+  author    User     @relation("PetGuestbookAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([petId, createdAt])
+  @@index([authorId, createdAt])
+  @@map("pet_guestbook")
+}
+
+/**
+ * 宠物之家每日串门记录（每访客每宠物每天一行）：pats 为当天撸宠次数（限流 / 每日上限），
+ * 宠物行的 pats 为累计人气。
+ */
+model PetVisit {
+  id        Int      @id @default(autoincrement())
+  petId     Int      @map("pet_id")
+  pet       Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  visitorId Int      @map("visitor_id")
+  visitor   User     @relation("PetVisitVisitor", fields: [visitorId], references: [id], onDelete: Cascade)
+  dateKey   String   @map("date_key") // Asia/Shanghai YYYY-MM-DD
+  pats      Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([petId, visitorId, dateKey])
+  @@index([visitorId, dateKey])
+  @@map("pet_visits")
 }
 
 /**
@@ -1080,4 +1128,105 @@ model MusicAccount {
   loggedInAt DateTime @default(now()) @map("logged_in_at")
 
   @@map("music_accounts")
+}
+
+// === 模拟股市（2026-11 大完善：分红 / 新闻事件 / 成交记录 / 账户统计） ===
+
+/**
+ * 每用户一条股市账户（userId 唯一）：
+ * - lastDividendDate：分红结算水位（Asia/Shanghai YYYY-MM-DD），首个交易日读时惰性结算；
+ * - totalDividends：累计分红所得积分（展示用）；
+ * - realizedPoints：累计已实现盈亏（卖出到账 - 分摊成本，展示用）。
+ */
+model StockAccount {
+  id               Int      @id @default(autoincrement())
+  userId           Int      @unique @map("user_id")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastDividendDate String?  @map("last_dividend_date")
+  totalDividends   Int      @default(0) @map("total_dividends")
+  realizedPoints   Int      @default(0) @map("realized_points")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("stock_accounts")
+}
+
+/**
+ * 股市成交记录（买卖各一行，append-only）。
+ * points：买入为投入积分（含手续费），卖出为到账积分；profit：仅卖出行有值（已实现盈亏）。
+ */
+model StockTrade {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code      String
+  side      String // buy | sell
+  shares    Float
+  price     Float
+  points    Int      @default(0)
+  fee       Int      @default(0)
+  profit    Int? // 卖出已实现盈亏（到账 - 分摊成本）
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@index([code, createdAt])
+  @@map("stock_trades")
+}
+
+// === 积分抽奖 ===
+
+/**
+ * 每用户一条抽奖账户（userId 唯一）：pity 为距上次稀有奖励的抽数（保底计数），
+ * lastFreeDate 为每日免费抽使用日期（Asia/Shanghai YYYY-MM-DD）。
+ */
+model LotteryAccount {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @unique @map("user_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pity         Int      @default(0)
+  totalDraws   Int      @default(0) @map("total_draws")
+  lastFreeDate String?  @map("last_free_date")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("lottery_accounts")
+}
+
+/**
+ * 抽奖记录（append-only）。amount 为积分 / 种子数量等数值奖励，payload 为 JSON（种子 key、装扮等）。
+ */
+model LotteryDraw {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prizeKey  String   @map("prize_key")
+  prizeType String   @map("prize_type") // points | seed | fertilizer | outfit | theme | nothing
+  prizeName String   @map("prize_name")
+  rarity    String   @default("common") // common | rare | epic | legendary
+  amount    Int      @default(0)
+  payload   String?
+  cost      Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("lottery_draws")
+}
+
+// === LineWeb 主题系统 ===
+
+/**
+ * 用户已解锁的主题（永久拥有，userId + themeKey 唯一）。
+ * 主题目录与价格在 server/src/lib/themes.ts（代码内静态目录，不入库）。
+ */
+model ThemeUnlock {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  themeKey  String   @map("theme_key")
+  price     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, themeKey])
+  @@index([userId])
+  @@map("theme_unlocks")
 }

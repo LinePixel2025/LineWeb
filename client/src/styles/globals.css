@@ -28,6 +28,8 @@
 @import './points.css';
 @import './farm.css';
 @import './pet.css';
+@import './pet-home.css';
+@import './lottery.css';
 @import './personalSpace.css';
 @import './deepseek.css';
 @import './proxy.css';
@@ -40,3 +42,5 @@
 @import './utilities.css';
 @import './performance.css';
 @import './responsive.css';
+/* 主题变量覆盖必须最后导入：html[data-lw-theme] 需要压过 :root / [data-theme="dark"] */
+@import './themes.css';

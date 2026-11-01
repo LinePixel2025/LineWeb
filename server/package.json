@@ -29,7 +29,9 @@
     "verify:stocks": "tsx scripts/verify-stocks.ts",
     "verify:chat": "tsx scripts/verify-chat.ts",
     "verify:reader": "tsx scripts/verify-reader.ts",
-    "verify:redpacket": "tsx scripts/verify-redpacket.ts"
+    "verify:redpacket": "tsx scripts/verify-redpacket.ts",
+    "verify:lottery": "tsx scripts/verify-lottery.ts",
+    "verify:themes": "tsx scripts/verify-themes.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -20,6 +20,7 @@ export type IconName =
   | 'pdf' | 'archive' | 'heart' | 'link' | 'mail' | 'lock' | 'logout'
   | 'arrow-up' | 'arrow-down' | 'arrow-left' | 'folder-plus' | 'cloud' | 'users' | 'message' | 'ai'
   | 'api' | 'trophy' | 'calendar' | 'tag' | 'bell' | 'eye' | 'database' | 'wallet' | 'send' | 'megaphone'
+  | 'gift' | 'palette'
   | 'bookOpen' | 'music'
   | 'play' | 'pause' | 'volume' | 'repeat' | 'shuffle' | 'skip-back' | 'skip-forward' | 'queue'
 
@@ -437,6 +438,24 @@ const glyphs: Record<IconName, ReactNode> = {
       <path d="M8 4.4h8v4.25a4 4 0 0 1-8 0V4.4Z" {...TINT} />
       <path d="M8 4.4h8v4.25a4 4 0 0 1-8 0V4.4ZM8 5.9H5.4v1.35a3 3 0 0 0 3 3M16 5.9h2.6v1.35a3 3 0 0 1-3 3" />
       <path d="M12 12.65v4.1M8.75 19.6h6.5M9.75 16.75h4.5" />
+    </>
+  ),
+  gift: (
+    <>
+      <rect x="3.35" y="8.6" width="17.3" height="11.9" rx="2.4" {...TINT} />
+      <rect x="3.35" y="8.6" width="17.3" height="11.9" rx="2.4" />
+      <path d="M3.35 12.2h17.3M12 8.6v11.9" />
+      <path d="M12 8.6C10.4 4.9 6.6 4.4 6.6 6.9c0 1.7 2.6 1.9 5.4 1.7ZM12 8.6c1.6-3.7 5.4-4.2 5.4-1.7 0 1.7-2.6 1.9-5.4 1.7Z" />
+    </>
+  ),
+  palette: (
+    <>
+      <path d="M12 3.4a8.6 8.6 0 1 0 0 17.2c1.25 0 1.9-.7 1.9-1.55 0-.85-.7-1.45-.7-2.35 0-.9.75-1.6 1.7-1.6h1.5a4.2 4.2 0 0 0 4.2-4.2c0-4.2-3.85-7.5-8.6-7.5Z" {...TINT} />
+      <path d="M12 3.4a8.6 8.6 0 1 0 0 17.2c1.25 0 1.9-.7 1.9-1.55 0-.85-.7-1.45-.7-2.35 0-.9.75-1.6 1.7-1.6h1.5a4.2 4.2 0 0 0 4.2-4.2c0-4.2-3.85-7.5-8.6-7.5Z" />
+      <circle cx="7.9" cy="10.4" r="1.15" fill="currentColor" stroke="none" />
+      <circle cx="10.6" cy="6.9" r="1.15" fill="currentColor" stroke="none" />
+      <circle cx="15.1" cy="7.3" r="1.15" fill="currentColor" stroke="none" />
+      <circle cx="7.6" cy="15" r="1.15" fill="currentColor" stroke="none" />
     </>
   ),
   calendar: (

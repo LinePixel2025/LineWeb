@@ -7,10 +7,17 @@ import { AppError } from '../middleware/errorHandler.js'
 import { STOCK_DEFINITIONS } from '../lib/stockMarket.js'
 import { buildLiveMarket, buildStockTrend } from '../lib/stockTicks.js'
 import { getTodayDateKey } from '../lib/pointsRules.js'
-import { buyStock, getStockPortfolio, sellStock } from '../services/stockService.js'
+import {
+  buyStock,
+  getStockLeaderboard,
+  getStockPortfolio,
+  getStockTrades,
+  sellStock,
+} from '../services/stockService.js'
 
 /**
- * 模拟股市：行情只读（3 秒一 tick 实时刷新），交易用统一积分按实时价成交。
+ * 模拟股市：行情只读（3 秒一 tick 实时刷新），交易用统一积分按实时价成交；
+ * 另有每日分红结算、新闻快讯（随行情下发）、成交记录与总资产排行榜。
  * 全部需登录；开关关闭时由 /api/stocks 外层 requireFeature('stock') 拦截。
  */
 const router = Router()
@@ -49,6 +56,28 @@ const trendLimiter = rateLimit({
   skip: (req) => req.user?.role === 'admin',
 })
 
+/** 成交记录查询按用户限流（切 Tab 才拉一次；管理员豁免） */
+const tradesLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => String(req.user?.userId ?? ipKeyGenerator(req.ip ?? '')),
+  message: { error: '成交记录请求过于频繁，请稍后再试' },
+  skip: (req) => req.user?.role === 'admin',
+})
+
+/** 排行榜查询按用户限流（要读候选池的持仓，比行情略重；管理员豁免） */
+const leaderboardLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => String(req.user?.userId ?? ipKeyGenerator(req.ip ?? '')),
+  message: { error: '排行榜请求过于频繁，请稍后再试' },
+  skip: (req) => req.user?.role === 'admin',
+})
+
 function currentUserId(req: Request): number {
   const userId = req.user?.userId
   if (!userId) throw new AppError('未登录', 401)
@@ -68,6 +97,16 @@ const sellSchema = z.object({
 
 const trendSchema = z.object({
   code: z.string().trim().min(1).max(12),
+})
+
+const tradesSchema = z.object({
+  /** 返回条数（默认 50，最多 100） */
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+})
+
+const leaderboardSchema = z.object({
+  /** 榜单条数（默认 20，最多 50 —— 与候选池一致） */
+  limit: z.coerce.number().int().min(1).max(50).optional(),
 })
 
 function parseInput<S extends z.ZodTypeAny>(schema: S, data: unknown): z.infer<S> {
@@ -108,6 +147,18 @@ router.post('/buy', tradeLimiter, asyncHandler(async (req: Request, res: Respons
 router.post('/sell', tradeLimiter, asyncHandler(async (req: Request, res: Response) => {
   const input = parseInput(sellSchema, req.body)
   res.json(await sellStock(currentUserId(req), input.code, input.shares))
+}))
+
+// GET /api/stocks/trades?limit= — 我的最近成交记录（按时间倒序，含已实现盈亏）
+router.get('/trades', tradesLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(tradesSchema, req.query)
+  res.json({ trades: await getStockTrades(currentUserId(req), input.limit ?? 50) })
+}))
+
+// GET /api/stocks/leaderboard?limit= — 总资产榜（积分 + 持仓实时市值），含我自己的排名
+router.get('/leaderboard', leaderboardLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(leaderboardSchema, req.query)
+  res.json(await getStockLeaderboard(currentUserId(req), input.limit ?? 20))
 }))
 
 export default router

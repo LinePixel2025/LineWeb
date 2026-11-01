@@ -6,12 +6,18 @@ import { AppError } from '../middleware/errorHandler.js'
 import { authenticate } from '../middleware/auth.js'
 import { PET_CARE_KEYS, PET_SPECIES_KEYS, PET_TRICK_KEYS } from '../lib/petCatalog.js'
 import {
+  addGuestbookEntry,
   buyOutfit,
   carePet,
+  deleteGuestbookEntry,
   equipOutfit,
+  getPetHome,
   getPetView,
+  listPetHomes,
+  patPet,
   renamePet,
   summonPet,
+  switchPetSpecies,
   touchPet,
   trickPet,
   upgradePet,
@@ -33,6 +39,9 @@ function limitFor(max: number, message: string) {
 }
 
 const actionLimiter = limitFor(120, '操作太频繁啦，和宠物玩慢一点～')
+
+/** 串门类操作（撸宠 / 留言）比照顾自己的宠物更「公共」，限流更紧一些 */
+const socialLimiter = limitFor(60, '在宠物之家里待太久啦，先歇一会儿再来～')
 
 function currentUserId(req: Request): number {
   const userId = req.user?.userId
@@ -61,10 +70,56 @@ const outfitEquipSchema = z.object({
   equip: z.boolean(),
 })
 const renameSchema = z.object({ name: z.string().trim().min(1).max(12) })
+const switchSchema = z.object({ species: z.enum(PET_SPECIES_KEYS) })
+const homesQuerySchema = z.object({ query: z.string().max(30).optional() })
+const userIdParamSchema = z.object({ userId: z.coerce.number().int().positive() })
+const guestbookIdParamSchema = z.object({ id: z.coerce.number().int().positive() })
+const guestbookSchema = z.object({ content: z.string().max(200) })
 
 // GET /api/pets — 我的宠物（未召唤时 pet 为 null，仍返回目录与积分）
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   res.json(await getPetView(currentUserId(req)))
+}))
+
+/* ---------- 宠物之家（公共串门） ----------
+   路由顺序：/homes 与 /homes/:userId 放在任何 /:id 风格路由之前，
+   避免未来新增动态段路由时把 homes 吞掉。 */
+
+// GET /api/pets/homes?query= — 所有在世宠物（列表卡片）
+router.get('/homes', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(homesQuerySchema, req.query ?? {})
+  res.json(await listPetHomes(currentUserId(req), input.query))
+}))
+
+// GET /api/pets/homes/:userId — 某人的宠物之家详情（含留言与今日剩余撸宠次数）
+router.get('/homes/:userId', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { userId } = parseInput(userIdParamSchema, req.params)
+  res.json(await getPetHome(currentUserId(req), userId))
+}))
+
+// POST /api/pets/homes/:userId/pat — 撸一撸（每天 3 次）
+router.post('/homes/:userId/pat', socialLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { userId } = parseInput(userIdParamSchema, req.params)
+  res.json(await patPet(currentUserId(req), userId))
+}))
+
+// POST /api/pets/homes/:userId/guestbook — 留言 { content }（≤60 字，每天 5 条）
+router.post('/homes/:userId/guestbook', socialLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { userId } = parseInput(userIdParamSchema, req.params)
+  const input = parseInput(guestbookSchema, req.body ?? {})
+  res.status(201).json(await addGuestbookEntry(currentUserId(req), userId, input.content))
+}))
+
+// DELETE /api/pets/guestbook/:id — 删除自己的留言
+router.delete('/guestbook/:id', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = parseInput(guestbookIdParamSchema, req.params)
+  res.json(await deleteGuestbookEntry(currentUserId(req), id))
+}))
+
+// POST /api/pets/switch — 换物种 { species }（保留等级 / 数值 / 已购装扮，花 100 积分）
+router.post('/switch', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(switchSchema, req.body ?? {})
+  res.json(await switchPetSpecies(currentUserId(req), input.species))
 }))
 
 // POST /api/pets/summon — 花积分召唤（出走后可重新召唤）

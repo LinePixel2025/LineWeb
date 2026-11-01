@@ -38,6 +38,7 @@ const sections: { title: string; requireAuth?: boolean; items: SidebarItem[] }[]
       { path: '/features', label: '关于', icon: 'compass' },
       { path: '/games', label: '游戏', icon: 'gamepad' },
       { path: '/pets', label: '宠物', icon: 'paw' },
+      { path: '/lottery', label: '积分抽奖', icon: 'gift' },
       { path: '/stocks', label: '模拟股市', icon: 'chart' },
       { path: '/reader', label: '小说', icon: 'bookOpen' },
       { path: '/music', label: '音乐', icon: 'music' },
@@ -48,6 +49,7 @@ const sections: { title: string; requireAuth?: boolean; items: SidebarItem[] }[]
     items: [
       { path: '/chat', label: '聊天', icon: 'chat' },
       { path: '/points', label: '积分中心', icon: 'coin' },
+      { path: '/themes', label: 'LineWeb 主题', icon: 'palette' },
       { path: '/deepseek', label: 'AI 对话', icon: 'sparkles' },
       { path: '/webproxy', label: '网页反代', icon: 'globe' },
       { path: '/profile', label: '个人资料', icon: 'user' },
@@ -102,6 +104,8 @@ export default memo(function Sidebar({ collapsed, mobileOpen, onClose, onToggleC
               if (item.path === '/games' && !isEnabled('games')) return false
               if (item.path === '/stocks' && (!user || !isEnabled('stock'))) return false
               if (item.path === '/pets' && (!user || !isEnabled('pet'))) return false
+              if (item.path === '/lottery' && (!user || !isEnabled('lottery'))) return false
+              if (item.path === '/themes' && (!user || !isEnabled('theme'))) return false
               if (item.path === '/reader' && (!user || !isEnabled('reader'))) return false
               if (item.path === '/music' && (!user || !isEnabled('music'))) return false
               return true

@@ -1,1055 +1,957 @@
 import type { ReactNode } from 'react'
-import type { PetEquipped, PetSpecies } from '../../types/pet'
+import type { PetEquipped, PetPalette, PetSpecies } from '../../types/pet'
+import { normalizePetSpecies, resolveSpeciesMeta, resolveSpeciesPalette } from './petTheme'
 
 /**
- * 2D 宠物立绘（纯 inline SVG，无外部图片资源）—— 高完成度 2.5D 贴纸 / 手办质感。
+ * 宠物立绘（纯 inline SVG，无外部图片）：240×240 统一坐标，Q 版比例（头约占 60%）。
  *
  * 设计口径：
- * - 统一 200x200 viewBox，Q 版大头（头高约占整体 58%）+ 小身体 + 短腿，坐姿/站姿自然；
- * - 深棕柔和描边（非纯黑）+ 径向渐变体色 + 顶部高光 + 底部环境遮蔽（AO 月牙），无硬阴影；
- * - 大眼：深色眼窝、虹膜渐变、双高光、上眼睑线、睫毛、眉毛；`gh-pet-eye` 负责眨眼；
- * - 三种体型：橘猫（额纹 / 白吻 / 胡须 / 环纹尾）、小狗（垂耳 / 白吻 / 舌头 / 摇尾）、
- *   小鸟（羽冠 / 喙 / 双层羽翅 / 尾羽 / 三趾爪）；
- * - idle 循环：呼吸（`gh-pet-breathe`）+ 猫尾摇摆 / 狗尾摇摆 / 鸟尾 + 猫耳抽动 / 鸟翼扇动 + 眨眼；
- * - sad：耳朵下垂、眉毛内压、嘴角下撇、暗淡高光 + 汗滴，idle 放慢；
- * - 装扮按 equipped 的 hat/neck/face 槽位渲染，未知 key 静默跳过；披风画在身体之后；
- * - 动作动画全部由 pet.css 的 `gh-pet-anim-{action}` 容器类驱动，特效元素默认隐藏、按类显示；
- * - 所有动画在 `prefers-reduced-motion: reduce` 下静音。
+ * - 六个物种各自一套轮廓：猫尖耳 / 狗垂耳 / 鸟喙与翅 / 兔长耳 / 狐大尾与白面罩 / 熊猫黑眼圈圆耳；
+ * - 体色由物种 palette 派生（顶部提亮 + 底部压暗），所以换色不用改任何路径；
+ * - 分层顺序：地面投影 → 披风 → 尾巴 → 身体 → 头 → 面部 → 颈部装扮 → 帽子 → 面部装扮 → 特效；
+ * - 动画全部由 CSS class 驱动（`.gh-pet-anim-*` + `prefers-reduced-motion` 静音），组件自身零定时器；
+ * - 心情（mood）只决定表情与姿态：≥70 眯眼笑 + 星星、<30 垂眼 + 汗滴，不参与任何数值计算。
  */
 
-interface PetSpriteProps {
+export interface PetSpriteProps {
   species: PetSpecies
-  /** 当前动画 key：idle/eat/bath/play/happy/dance/roll/sing/flip/spin/magic/firework
-   *  + stretch/beg/highfive/moonwalk/playdead/cheer（未知值回退静态） */
-  action?: string
   equipped?: PetEquipped | null
+  /** 心情 0–100：驱动表情与活力（缺省按 70 处理） */
+  mood?: number
+  /** 当前播放的动画 key（idle / feed / bathe / play / touch / pat / 13 个特技） */
+  animation?: string
+  /** 兼容旧调用：animation 的别名 */
+  action?: string
+  /** @deprecated 用 mood < 20 表达低落；保留仅为兼容旧调用点 */
+  sad?: boolean
   /** 显示边长（px），默认 200 */
   size?: number
-  /** 任一状态值过低：耳朵下垂 + 汗滴 + 动作变慢 */
-  sad?: boolean
+  className?: string
+  /** 可点击（hover 有轻微放大与指针样式） */
+  interactive?: boolean
 }
 
-/** 动画 key 白名单：防止服务端返回异常字符串拼进 className */
-const ACTION_RE = /^[a-z][a-z0-9_-]*$/
+/** 动画 key 白名单：防止服务端异常字符串拼进 className */
+const ANIMATION_RE = /^[a-z][a-z0-9_-]*$/
+const KNOWN_ANIMATIONS = new Set([
+  'idle',
+  'happy',
+  'feed', 'eat',
+  'bathe', 'bath',
+  'play',
+  'touch', 'pat',
+  'stretch', 'beg', 'dance', 'roll', 'highfive', 'sing', 'flip',
+  'moonwalk', 'spin', 'playdead', 'magic', 'cheer', 'firework',
+])
 
-const SPECIES_LABELS: Record<PetSpecies, string> = {
-  cat: '小猫',
-  dog: '小狗',
-  bird: '小鸟',
+/** 虹膜基色（每种动物眼睛的气质不同，熊猫单独走「白眼球 + 黑瞳」） */
+const IRIS_COLORS: Record<PetSpecies, string> = {
+  cat: '#8a5316',
+  dog: '#6b4423',
+  bird: '#1f6f9c',
+  rabbit: '#a4586f',
+  fox: '#9a5626',
+  panda: '#3a3a44',
+}
+
+const MOUTH_STROKE = '#5c3a28'
+
+/* ============================================================
+   颜色工具：从 palette 派生渐变，避免为 6 个物种手写 30 个色值
+   ============================================================ */
+
+function hexToRgb(hex: string): [number, number, number] {
+  const clean = hex.replace('#', '')
+  const full = clean.length === 3
+    ? clean.split('').map((ch) => ch + ch).join('')
+    : clean.padEnd(6, '0').slice(0, 6)
+  return [
+    parseInt(full.slice(0, 2), 16),
+    parseInt(full.slice(2, 4), 16),
+    parseInt(full.slice(4, 6), 16),
+  ]
+}
+
+function rgbToHex(rgb: [number, number, number]): string {
+  return `#${rgb.map((value) => Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, '0')).join('')}`
+}
+
+/** ratio > 0 提亮（向白混），ratio < 0 压暗（向黑混） */
+function shade(hex: string, ratio: number): string {
+  const target: [number, number, number] = ratio >= 0 ? [255, 255, 255] : [0, 0, 0]
+  const amount = Math.abs(ratio)
+  const [r, g, b] = hexToRgb(hex)
+  return rgbToHex([
+    r + (target[0] - r) * amount,
+    g + (target[1] - g) * amount,
+    b + (target[2] - b) * amount,
+  ])
 }
 
 /* ============================================================
-   渐变 / 描边定义（同一页面多实例重复定义相同 id 是安全的）
+   几何常量（所有物种共用头部 / 身体骨架，靠耳朵与尾巴区分）
    ============================================================ */
 
-function PetDefs() {
+const BODY_PATH = 'M120 128 C 92 128 74 152 74 178 C 74 198 94 207 120 207 C 146 207 166 198 166 178 C 166 152 148 128 120 128 Z'
+const HEAD_PATH = 'M120 46 C 154 46 178 70 178 102 C 178 134 156 154 120 154 C 84 154 62 134 62 102 C 62 70 86 46 120 46 Z'
+/** 胸前浅色毛（猫 / 狗 / 狐 / 兔共用，鸟与熊猫另有画法） */
+const CHEST_PATH = 'M120 142 C 108 142 98 156 98 174 C 98 190 108 200 120 200 C 132 200 142 190 142 174 C 142 156 132 142 120 142 Z'
+
+/** 2D 心形（以原点为中心，向上约 -16、向下约 +10） */
+const HEART_PATH = 'M0 10 C -6 3 -16 -3 -16 -10 C -16 -16 -9 -18 -5 -14 L 0 -9 L 5 -14 C 9 -18 16 -16 16 -10 C 16 -3 6 3 0 10 Z'
+/** 四角星光 */
+const SPARK_PATH = 'M0 -13 L3.2 -3.2 L13 0 L3.2 3.2 L0 13 L-3.2 3.2 L-13 0 L-3.2 -3.2 Z'
+
+function heart(transform: string, key: string, opacity = 1): ReactNode {
+  return (
+    <path
+      key={key}
+      d={HEART_PATH}
+      transform={transform}
+      fill="#ff6f91"
+      opacity={opacity}
+    />
+  )
+}
+
+function sparkle(transform: string, key: string, color = '#ffd76e'): ReactNode {
+  return <path key={key} d={SPARK_PATH} transform={transform} fill={color} />
+}
+
+/* ============================================================
+   渐变定义（同页多实例重复 id 是安全的：内容完全一致）
+   ============================================================ */
+
+function PetDefs({ species, palette }: { species: PetSpecies; palette: PetPalette }) {
+  const dark = species === 'panda' ? palette.secondary : shade(palette.primary, -0.32)
+  const earInner = species === 'panda' ? palette.accent : shade(palette.accent, 0.45)
   return (
     <defs>
-      {/* ---------- 通用：投影 / 腮红 / 汗滴 ---------- */}
       <radialGradient id="lw-pet-shadow" cx="0.5" cy="0.5" r="0.5">
-        <stop offset="0" stopColor="#5a3e22" stopOpacity="0.3" />
-        <stop offset="0.62" stopColor="#5a3e22" stopOpacity="0.14" />
-        <stop offset="1" stopColor="#5a3e22" stopOpacity="0" />
+        <stop offset="0" stopColor="#3c2a18" stopOpacity="0.26" />
+        <stop offset="0.65" stopColor="#3c2a18" stopOpacity="0.1" />
+        <stop offset="1" stopColor="#3c2a18" stopOpacity="0" />
       </radialGradient>
+
       <radialGradient id="lw-pet-blush" cx="0.5" cy="0.5" r="0.5">
-        <stop offset="0" stopColor="#f37f96" stopOpacity="0.8" />
-        <stop offset="0.55" stopColor="#f79bad" stopOpacity="0.42" />
-        <stop offset="1" stopColor="#f9b3c1" stopOpacity="0" />
+        <stop offset="0" stopColor="#f4737f" stopOpacity="0.62" />
+        <stop offset="0.6" stopColor="#f79aab" stopOpacity="0.34" />
+        <stop offset="1" stopColor="#ffc9d3" stopOpacity="0" />
       </radialGradient>
-      <linearGradient id="lw-pet-sweat" x1="0" y1="0" x2="0.3" y2="1">
-        <stop offset="0" stopColor="#dff7ff" />
-        <stop offset="1" stopColor="#6cc5ee" />
+
+      <radialGradient
+        id={`lw-pet-body-${species}`}
+        gradientUnits="userSpaceOnUse"
+        cx="92"
+        cy="68"
+        r="146"
+      >
+        <stop offset="0" stopColor={shade(palette.primary, 0.62)} />
+        <stop offset="0.34" stopColor={shade(palette.primary, 0.3)} />
+        <stop offset="0.7" stopColor={palette.primary} />
+        <stop offset="0.92" stopColor={shade(palette.primary, -0.16)} />
+        <stop offset="1" stopColor={shade(palette.primary, -0.3)} />
+      </radialGradient>
+
+      <linearGradient id={`lw-pet-belly-${species}`} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor={shade(palette.secondary, 0.5)} />
+        <stop offset="0.7" stopColor={palette.secondary} />
+        <stop offset="1" stopColor={shade(palette.secondary, -0.12)} />
       </linearGradient>
 
-      {/* ---------- 眼睛虹膜（三物种各自色系） ---------- */}
-      <linearGradient id="lw-pet-iris-cat" x1="0" y1="0" x2="0.2" y2="1">
-        <stop offset="0" stopColor="#3b2412" />
-        <stop offset="0.42" stopColor="#8e5318" />
-        <stop offset="0.82" stopColor="#c98a2e" />
-        <stop offset="1" stopColor="#7a4a15" />
-      </linearGradient>
-      <linearGradient id="lw-pet-iris-dog" x1="0" y1="0" x2="0.2" y2="1">
-        <stop offset="0" stopColor="#2e1d12" />
-        <stop offset="0.5" stopColor="#6b3f22" />
-        <stop offset="0.86" stopColor="#a86f3f" />
-        <stop offset="1" stopColor="#5f371c" />
-      </linearGradient>
-      <linearGradient id="lw-pet-iris-bird" x1="0" y1="0" x2="0.2" y2="1">
-        <stop offset="0" stopColor="#10283f" />
-        <stop offset="0.45" stopColor="#1d5f92" />
-        <stop offset="0.84" stopColor="#4fb4de" />
-        <stop offset="1" stopColor="#17466b" />
+      <radialGradient id={`lw-pet-ear-${species}`} cx="0.5" cy="0.36" r="0.72">
+        <stop offset="0" stopColor={shade(earInner, 0.32)} />
+        <stop offset="1" stopColor={shade(earInner, -0.08)} />
+      </radialGradient>
+
+      <linearGradient id={`lw-pet-iris-${species}`} x1="0" y1="0" x2="0.2" y2="1">
+        <stop offset="0" stopColor={shade(IRIS_COLORS[species], -0.45)} />
+        <stop offset="0.5" stopColor={IRIS_COLORS[species]} />
+        <stop offset="1" stopColor={shade(IRIS_COLORS[species], 0.28)} />
       </linearGradient>
 
-      {/* ---------- 小猫：橘色虎斑 ---------- */}
-      <radialGradient id="lw-pet-cat-body" gradientUnits="userSpaceOnUse" cx="72" cy="46" r="132">
-        <stop offset="0" stopColor="#ffe9bf" />
-        <stop offset="0.34" stopColor="#fbd28c" />
-        <stop offset="0.68" stopColor="#f4b160" />
-        <stop offset="0.9" stopColor="#e29440" />
-        <stop offset="1" stopColor="#c97a2e" />
-      </radialGradient>
-      <linearGradient id="lw-pet-cat-leg" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#fbd18b" />
-        <stop offset="0.6" stopColor="#f0ad58" />
-        <stop offset="1" stopColor="#d98c38" />
+      <linearGradient id={`lw-pet-dark-${species}`} x1="0" y1="0" x2="0.3" y2="1">
+        <stop offset="0" stopColor={shade(dark, 0.22)} />
+        <stop offset="1" stopColor={shade(dark, -0.16)} />
       </linearGradient>
-      <linearGradient id="lw-pet-cat-belly" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#fffaf0" />
-        <stop offset="0.66" stopColor="#fdeecd" />
-        <stop offset="1" stopColor="#f5ddb0" />
-      </linearGradient>
-      <linearGradient id="lw-pet-cat-tail" x1="0" y1="1" x2="0.9" y2="0">
-        <stop offset="0" stopColor="#e59a46" />
-        <stop offset="0.55" stopColor="#f7c377" />
-        <stop offset="1" stopColor="#ffe0a8" />
-      </linearGradient>
-      <radialGradient id="lw-pet-ear-pink" cx="0.5" cy="0.42" r="0.7">
-        <stop offset="0" stopColor="#ffd4dc" />
-        <stop offset="1" stopColor="#f2a0b1" />
-      </radialGradient>
+
       <linearGradient id="lw-pet-nose" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#f9b3c4" />
-        <stop offset="1" stopColor="#e97f9b" />
+        <stop offset="0" stopColor="#ffb0c0" />
+        <stop offset="1" stopColor="#e2768f" />
       </linearGradient>
 
-      {/* ---------- 小狗：奶咖色垂耳 ---------- */}
-      <radialGradient id="lw-pet-dog-body" gradientUnits="userSpaceOnUse" cx="70" cy="45" r="135">
-        <stop offset="0" stopColor="#fff4e0" />
-        <stop offset="0.36" stopColor="#f6dcb6" />
-        <stop offset="0.7" stopColor="#e8c18d" />
-        <stop offset="1" stopColor="#c99662" />
-      </radialGradient>
-      <linearGradient id="lw-pet-dog-leg" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#f7ddb6" />
-        <stop offset="0.6" stopColor="#e3b98a" />
-        <stop offset="1" stopColor="#c99a63" />
-      </linearGradient>
-      <linearGradient id="lw-pet-dog-ear" x1="0.15" y1="0" x2="0.85" y2="1">
-        <stop offset="0" stopColor="#d7a672" />
-        <stop offset="0.55" stopColor="#bb8655" />
-        <stop offset="1" stopColor="#9b693c" />
-      </linearGradient>
-      <linearGradient id="lw-pet-dog-belly" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#fffcf5" />
-        <stop offset="0.7" stopColor="#faeed9" />
-        <stop offset="1" stopColor="#f0dcbc" />
-      </linearGradient>
       <linearGradient id="lw-pet-tongue" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#fba6b8" />
-        <stop offset="1" stopColor="#e66685" />
+        <stop offset="0" stopColor="#ffa9bb" />
+        <stop offset="1" stopColor="#e2647f" />
       </linearGradient>
 
-      {/* ---------- 小鸟：薄荷蓝 ---------- */}
-      <radialGradient id="lw-pet-bird-body" gradientUnits="userSpaceOnUse" cx="72" cy="45" r="132">
-        <stop offset="0" stopColor="#e6fbff" />
-        <stop offset="0.34" stopColor="#b9effc" />
-        <stop offset="0.68" stopColor="#7ed7f1" />
-        <stop offset="0.9" stopColor="#4db6dc" />
-        <stop offset="1" stopColor="#2e8fb8" />
-      </radialGradient>
-      <linearGradient id="lw-pet-bird-belly" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#f8feff" />
-        <stop offset="0.7" stopColor="#e0f8ff" />
-        <stop offset="1" stopColor="#c3ecf8" />
-      </linearGradient>
-      <linearGradient id="lw-pet-bird-wing" x1="0.1" y1="0" x2="0.9" y2="1">
-        <stop offset="0" stopColor="#9ee6fa" />
-        <stop offset="0.55" stopColor="#5ec6e8" />
-        <stop offset="1" stopColor="#2f95bf" />
-      </linearGradient>
-      <linearGradient id="lw-pet-bird-crest" x1="0" y1="1" x2="0.6" y2="0">
-        <stop offset="0" stopColor="#7dd6f2" />
-        <stop offset="1" stopColor="#c8f5ff" />
-      </linearGradient>
-      <linearGradient id="lw-pet-bird-beak" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#ffd469" />
-        <stop offset="0.55" stopColor="#f9b23c" />
+      <linearGradient id="lw-pet-beak" x1="0" y1="0" x2="0.1" y2="1">
+        <stop offset="0" stopColor="#ffe08a" />
+        <stop offset="0.55" stopColor="#f9bb45" />
         <stop offset="1" stopColor="#e08f14" />
       </linearGradient>
 
-      {/* ---------- 装扮：毛线帽 ---------- */}
-      <linearGradient id="lw-pet-hat-red" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#ff8578" />
-        <stop offset="0.55" stopColor="#ef5f55" />
-        <stop offset="1" stopColor="#c93c37" />
+      <linearGradient id="lw-pet-sweat" x1="0" y1="0" x2="0.3" y2="1">
+        <stop offset="0" stopColor="#e8fbff" />
+        <stop offset="1" stopColor="#6cc5ee" />
       </linearGradient>
-      <radialGradient id="lw-pet-pom" cx="0.36" cy="0.3" r="0.82">
+
+      {/* ---------- 装扮：红色小帽 ---------- */}
+      <linearGradient id="lw-pet-hat-red" x1="0" y1="0" x2="0.2" y2="1">
+        <stop offset="0" stopColor="#ff8f83" />
+        <stop offset="0.55" stopColor="#ef5f55" />
+        <stop offset="1" stopColor="#c43a34" />
+      </linearGradient>
+      <linearGradient id="lw-pet-hat-brim" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor="#ffd0c6" />
+        <stop offset="0.5" stopColor="#ff9a8c" />
+        <stop offset="1" stopColor="#e2665a" />
+      </linearGradient>
+      <radialGradient id="lw-pet-pom" cx="0.34" cy="0.28" r="0.84">
         <stop offset="0" stopColor="#fffdf6" />
-        <stop offset="0.62" stopColor="#f2e6cd" />
-        <stop offset="1" stopColor="#dcc9a4" />
+        <stop offset="0.6" stopColor="#f4e8d2" />
+        <stop offset="1" stopColor="#ddc9a5" />
       </radialGradient>
 
-      {/* ---------- 装扮：皇冠 ---------- */}
+      {/* ---------- 装扮：黄金皇冠 ---------- */}
       <linearGradient id="lw-pet-crown" x1="0" y1="0" x2="0.2" y2="1">
-        <stop offset="0" stopColor="#fff0ae" />
-        <stop offset="0.42" stopColor="#f8d05f" />
-        <stop offset="1" stopColor="#dda01f" />
+        <stop offset="0" stopColor="#fff3b4" />
+        <stop offset="0.45" stopColor="#f8cf5c" />
+        <stop offset="1" stopColor="#d99b1c" />
       </linearGradient>
       <linearGradient id="lw-pet-crown-band" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#f5c94e" />
-        <stop offset="1" stopColor="#c98c14" />
+        <stop offset="0" stopColor="#f7d066" />
+        <stop offset="1" stopColor="#c88a13" />
       </linearGradient>
 
-      {/* ---------- 装扮：围巾 / 领结 / 披风 ---------- */}
+      {/* ---------- 装扮：围巾 / 蝴蝶结 / 披风 ---------- */}
       <linearGradient id="lw-pet-scarf" x1="0" y1="0" x2="0.25" y2="1">
-        <stop offset="0" stopColor="#77bcff" />
+        <stop offset="0" stopColor="#86c7ff" />
         <stop offset="0.55" stopColor="#3f8cf0" />
-        <stop offset="1" stopColor="#2464c4" />
+        <stop offset="1" stopColor="#2159b8" />
       </linearGradient>
-      <linearGradient id="lw-pet-bowtie" x1="0" y1="0" x2="0.4" y2="1">
-        <stop offset="0" stopColor="#f6796f" />
-        <stop offset="0.6" stopColor="#dd4c45" />
-        <stop offset="1" stopColor="#b8312f" />
+      <linearGradient id="lw-pet-bowtie" x1="0" y1="0" x2="0.3" y2="1">
+        <stop offset="0" stopColor="#ff8d93" />
+        <stop offset="1" stopColor="#c93a45" />
       </linearGradient>
-      <linearGradient id="lw-pet-cape" x1="0" y1="0" x2="0.2" y2="1">
-        <stop offset="0" stopColor="#e85a51" />
-        <stop offset="0.55" stopColor="#cf3f3a" />
-        <stop offset="1" stopColor="#9d2926" />
+      <linearGradient id="lw-pet-cape" x1="0" y1="0" x2="0.4" y2="1">
+        <stop offset="0" stopColor="#5b8dff" />
+        <stop offset="0.55" stopColor="#3a5fd6" />
+        <stop offset="1" stopColor="#22307f" />
       </linearGradient>
-
-      {/* ---------- 装扮：镜片 ---------- */}
-      <radialGradient id="lw-pet-glasses-lens" cx="0.32" cy="0.26" r="0.85">
+      <linearGradient id="lw-pet-glass" x1="0" y1="0" x2="0.4" y2="1">
         <stop offset="0" stopColor="#ffffff" stopOpacity="0.5" />
-        <stop offset="0.55" stopColor="#dff3ff" stopOpacity="0.18" />
-        <stop offset="1" stopColor="#b8def5" stopOpacity="0.1" />
-      </radialGradient>
-      <linearGradient id="lw-pet-sun-lens" x1="0" y1="0" x2="0.35" y2="1">
-        <stop offset="0" stopColor="#5b6272" />
-        <stop offset="0.45" stopColor="#2c303c" />
-        <stop offset="1" stopColor="#14161f" />
+        <stop offset="1" stopColor="#cfe6ff" stopOpacity="0.18" />
+      </linearGradient>
+      <linearGradient id="lw-pet-shades" x1="0" y1="0" x2="0.4" y2="1">
+        <stop offset="0" stopColor="#4c4f5c" />
+        <stop offset="0.55" stopColor="#1e2028" />
+        <stop offset="1" stopColor="#0d0e13" />
       </linearGradient>
     </defs>
   )
 }
 
 /* ============================================================
-   共用部件：大眼睛（渐变瞳 + 双高光 + 眼睑 + 睫毛） / 眉毛 / 腮红 / 汗滴
+   共用面部零件
    ============================================================ */
 
-function PetEyes({ cy, iris }: { cy: number; iris: string }) {
+function Eyes({ species, mood }: { species: PetSpecies; mood: number }) {
+  const happy = mood >= 70
   return (
-    <>
-      <g className="gh-pet-eyes">
-        {[80, 120].map((cx) => {
-          const outer = cx < 100 ? -1 : 1
-          return (
-            <g key={cx} className="gh-pet-eye">
-              {/* 眼窝 / 睫毛底色 */}
-              <ellipse cx={cx} cy={cy} rx="13.2" ry="15" fill="#3a2a25" />
-              {/* 虹膜渐变 + 下半反光 */}
-              <ellipse cx={cx} cy={cy + 1.2} rx="11.2" ry="12.6" fill={`url(#${iris})`} />
-              <ellipse cx={cx} cy={cy + 6} rx="7.2" ry="5.4" fill="#fff3cf" opacity="0.28" />
-              {/* 主高光 / 次高光 */}
-              <circle className="gh-pet-eye-shine" cx={cx - 4.2} cy={cy - 5} r="4.6" fill="#ffffff" />
-              <circle className="gh-pet-eye-shine" cx={cx + 4.8} cy={cy + 5.2} r="2" fill="#ffffff" opacity="0.92" />
-              {/* 上眼睑线 + 外眼角睫毛 */}
-              <path
-                d={`M ${cx - 12} ${cy - 13.2} Q ${cx} ${cy - 21.5} ${cx + 12} ${cy - 13.2}`}
-                fill="none"
-                stroke="#3a2a25"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                opacity="0.78"
+    <g className="gh-pet-eyes">
+      {[101, 139].map((cx) => (
+        <g className="gh-pet-eye" key={cx}>
+          {species === 'panda' ? (
+            <>
+              <ellipse cx={cx} cy={110} rx={6.4} ry={7.8} fill="#fbf8f3" />
+              <ellipse cx={cx} cy={110} rx={4.4} ry={5.6} fill="#26262d" />
+              <circle cx={cx - 1.8} cy={106.6} r={2} fill="#fff" />
+            </>
+          ) : (
+            <>
+              <ellipse
+                cx={cx}
+                cy={110}
+                rx={10.6}
+                ry={12.8}
+                fill={`url(#lw-pet-iris-${species})`}
+                stroke="#3a2a20"
+                strokeOpacity="0.22"
+                strokeWidth={1}
               />
-              <path
-                d={`M ${cx + outer * 12} ${cy - 11} l ${outer * 2.8} -2.4`}
-                fill="none"
-                stroke="#3a2a25"
-                strokeWidth="2"
-                strokeLinecap="round"
-                opacity="0.55"
-              />
-            </g>
-          )
-        })}
-      </g>
-      {/* 装死时的 × 眼（默认隐藏，容器类 gh-pet-anim-playdead 打开） */}
-      <g className="gh-pet-xeyes">
-        {[80, 120].map((cx) => (
-          <g key={cx} stroke="#3a2a25" strokeWidth="3.4" strokeLinecap="round">
-            <path d={`M ${cx - 7} ${cy - 7} L ${cx + 7} ${cy + 7}`} />
-            <path d={`M ${cx + 7} ${cy - 7} L ${cx - 7} ${cy + 7}`} />
-          </g>
-        ))}
-      </g>
-    </>
-  )
-}
-
-function PetBrows({
-  y,
-  stroke,
-  opacity = 0.7,
-  width = 3,
-}: {
-  y: number
-  stroke: string
-  opacity?: number
-  width?: number
-}) {
-  return (
-    <g
-      className="gh-pet-brows"
-      fill="none"
-      stroke={stroke}
-      strokeWidth={width}
-      strokeLinecap="round"
-      opacity={opacity}
-    >
-      <g className="gh-pet-brow gh-pet-brow--l">
-        <path d={`M 68 ${y + 4} Q 78 ${y - 2} 89 ${y + 2}`} />
-      </g>
-      <g className="gh-pet-brow gh-pet-brow--r">
-        <path d={`M 132 ${y + 4} Q 122 ${y - 2} 111 ${y + 2}`} />
-      </g>
-    </g>
-  )
-}
-
-function PetBlush({ cy }: { cy: number }) {
-  return (
-    <g className="gh-pet-blush">
-      <ellipse cx="63" cy={cy} rx="11" ry="6.2" fill="url(#lw-pet-blush)" />
-      <ellipse cx="137" cy={cy} rx="11" ry="6.2" fill="url(#lw-pet-blush)" />
-    </g>
-  )
-}
-
-function PetSweat() {
-  return (
-    <g className="gh-pet-sweat">
-      <path
-        d="M 146 47 C 140 56 137 62 139 67 C 141 71 147 72 150 68 C 153 64 152 57 146 47 Z"
-        fill="url(#lw-pet-sweat)"
-        stroke="#5aa9ce"
-        strokeWidth="1.1"
-        strokeOpacity="0.55"
-      />
-      <ellipse cx="144.5" cy="61" rx="1.9" ry="2.8" fill="#ffffff" opacity="0.85" transform="rotate(16 144.5 61)" />
-    </g>
-  )
-}
-
-/* ============================================================
-   小猫：橘色虎斑
-   ============================================================ */
-
-function CatBody() {
-  return (
-    <g>
-      {/* 环纹大弯尾（画在身体之后） */}
-      <g className="gh-pet-tail gh-pet-tail--cat">
+              <ellipse cx={cx - 3.6} cy={105.2} rx={3.7} ry={4.4} fill="#fff" opacity="0.95" />
+              <circle cx={cx + 3.8} cy={115} r={2} fill="#fff" opacity="0.78" />
+            </>
+          )}
+        </g>
+      ))}
+      {happy && (
         <path
-          d="M126 163 C 152 167 171 150 172 127 C 173 111 170 99 165 92"
-          fill="none"
-          stroke="url(#lw-pet-cat-tail)"
-          strokeWidth="17"
-          strokeLinecap="round"
+          className="gh-pet-eye-star"
+          d={SPARK_PATH}
+          transform="translate(148 96) scale(0.32)"
+          fill="#fff7c9"
+          opacity="0.95"
         />
-        <g stroke="#c17a33" strokeWidth="5.4" strokeLinecap="round" opacity="0.9">
-          <path d="M152 160 L 163 148" />
-          <path d="M168 140 L 177 130" />
-          <path d="M170 118 L 177 107" />
+      )}
+      {mood < 30 && (
+        <g className="gh-pet-brows" stroke={MOUTH_STROKE} strokeWidth={2.4} strokeLinecap="round" fill="none" opacity="0.6">
+          <path d="M91 99 Q101 94 111 99" />
+          <path d="M129 99 Q139 94 149 99" />
         </g>
-        <circle cx="165" cy="92" r="8.6" fill="#fff3da" />
-        <path d="M161 88 Q 164 85 168 87" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" opacity="0.7" />
+      )}
+    </g>
+  )
+}
+
+function Blush({ muted }: { muted: boolean }) {
+  return (
+    <g className="gh-pet-blush" opacity={muted ? 0.45 : 1}>
+      <ellipse cx={76} cy={132} rx={15} ry={9} fill="url(#lw-pet-blush)" />
+      <ellipse cx={164} cy={132} rx={15} ry={9} fill="url(#lw-pet-blush)" />
+    </g>
+  )
+}
+
+/* ---------- 猫脸 ---------- */
+function CatFace({ mood }: { mood: number }) {
+  return (
+    <g className="gh-pet-face">
+      <ellipse cx={120} cy={133} rx={24} ry={15} fill="#fff8ee" opacity="0.94" />
+      <path d="M112 125 H128 L120 134 Z" fill="url(#lw-pet-nose)" />
+      <circle cx={117} cy={128} r={1.6} fill="#fff" opacity="0.55" />
+      <path d="M120 133 Q120 140 112 140" stroke={MOUTH_STROKE} strokeWidth={2.2} strokeLinecap="round" fill="none" />
+      <path d="M120 133 Q120 140 128 140" stroke={MOUTH_STROKE} strokeWidth={2.2} strokeLinecap="round" fill="none" />
+      <g stroke="#c98c5a" strokeWidth={1.9} strokeLinecap="round" opacity="0.5">
+        <path d="M92 128 C 82 125 74 124 66 124" />
+        <path d="M92 134 C 82 134 74 136 67 138" />
+        <path d="M148 128 C 158 125 166 124 174 124" />
+        <path d="M148 134 C 158 134 166 136 173 138" />
       </g>
+      <Blush muted={mood < 30} />
+    </g>
+  )
+}
 
-      <g className="gh-pet-breathe">
-        <g className="gh-pet-body">
-          {/* 坐姿身体 */}
-          <ellipse
-            cx="100"
-            cy="151"
-            rx="37"
-            ry="33"
-            fill="url(#lw-pet-cat-body)"
-            stroke="#8a5423"
-            strokeWidth="1.6"
-            strokeOpacity="0.5"
-          />
-          <ellipse cx="88" cy="134" rx="14" ry="8" fill="#ffffff" opacity="0.16" transform="rotate(-20 88 134)" />
-          {/* 奶白胸腹 */}
-          <path
-            d="M100 121 C 85 121 74 135 73 151 C 72 168 84 179 100 179 C 116 179 128 168 127 151 C 126 135 115 121 100 121 Z"
-            fill="url(#lw-pet-cat-belly)"
-          />
-          <g fill="#fff9ec">
-            <circle cx="87" cy="125" r="5.4" />
-            <circle cx="100" cy="122" r="6" />
-            <circle cx="113" cy="125" r="5.4" />
-          </g>
-          {/* 头部投在胸口的柔和阴影 */}
-          <ellipse cx="100" cy="133" rx="31" ry="8.5" fill="#8a5423" opacity="0.13" />
-          {/* 后爪 */}
-          <ellipse cx="69" cy="173" rx="13.5" ry="10.5" fill="url(#lw-pet-cat-leg)" stroke="#a96726" strokeWidth="1.2" strokeOpacity="0.4" />
-          <ellipse cx="131" cy="173" rx="13.5" ry="10.5" fill="url(#lw-pet-cat-leg)" stroke="#a96726" strokeWidth="1.2" strokeOpacity="0.4" />
-          <g stroke="#b97431" strokeWidth="1.4" strokeLinecap="round" opacity="0.5">
-            <path d="M64 170 v 4" />
-            <path d="M69 169 v 4" />
-            <path d="M136 170 v 4" />
-            <path d="M131 169 v 4" />
-          </g>
-          {/* 前爪（可作揖 / 击掌） */}
-          <g className="gh-pet-arm gh-pet-arm--l">
-            <path
-              d="M80 143 C 75 155 74 169 79 179 C 82 185 91 184 93 177 C 95 168 94 154 95 143 Z"
-              fill="url(#lw-pet-cat-leg)"
-              stroke="#b97431"
-              strokeWidth="1.2"
-              strokeOpacity="0.4"
-            />
-            <ellipse cx="85.5" cy="178.5" rx="8.2" ry="5.6" fill="#fff6e3" opacity="0.96" />
-            <path d="M85 177 v 4 M90 177 v 4" fill="none" stroke="#c98a3f" strokeWidth="1.3" strokeLinecap="round" opacity="0.55" />
-          </g>
-          <g className="gh-pet-arm gh-pet-arm--r">
-            <path
-              d="M120 143 C 125 155 126 169 121 179 C 118 185 109 184 107 177 C 105 168 106 154 105 143 Z"
-              fill="url(#lw-pet-cat-leg)"
-              stroke="#b97431"
-              strokeWidth="1.2"
-              strokeOpacity="0.4"
-            />
-            <ellipse cx="114.5" cy="178.5" rx="8.2" ry="5.6" fill="#fff6e3" opacity="0.96" />
-            <path d="M115 177 v 4 M110 177 v 4" fill="none" stroke="#c98a3f" strokeWidth="1.3" strokeLinecap="round" opacity="0.55" />
-          </g>
-          {/* 底部环境遮蔽 */}
-          <path
-            d="M68 168 C 78 180 88 184 100 184 C 112 184 122 180 132 168 C 127 180 116 186 100 186 C 84 186 73 180 68 168 Z"
-            fill="#b26b26"
-            opacity="0.16"
-          />
-        </g>
+/* ---------- 狗脸 ---------- */
+function DogFace({ mood }: { mood: number }) {
+  return (
+    <g className="gh-pet-face">
+      <ellipse cx={120} cy={134} rx={27} ry={18} fill="#fffaf2" opacity="0.96" />
+      <ellipse cx={92} cy={88} rx={6.4} ry={4.2} transform="rotate(-14 92 88)" fill="#8a5f3c" opacity="0.4" />
+      <ellipse cx={148} cy={88} rx={6.4} ry={4.2} transform="rotate(14 148 88)" fill="#8a5f3c" opacity="0.4" />
+      <ellipse cx={120} cy={125} rx={8.6} ry={6.4} fill="#4a3328" />
+      <path d="M120 131 V 135" stroke="#6b4a36" strokeWidth={2.2} strokeLinecap="round" />
+      <path d="M107 138 Q120 149 133 138" stroke={MOUTH_STROKE} strokeWidth={2.4} strokeLinecap="round" fill="none" />
+      <path
+        d="M111 142 Q120 158 129 142 Q120 147 111 142 Z"
+        fill="url(#lw-pet-tongue)"
+        stroke="#d05d78"
+        strokeWidth={1}
+        opacity={mood >= 40 ? 1 : 0.55}
+      />
+      <Blush muted={mood < 30} />
+    </g>
+  )
+}
 
-        {/* 圆角三角耳 */}
-        <g className="gh-pet-ear gh-pet-ear--l gh-pet-ear--cat">
-          <path
-            d="M64 52 C 55 41 48 27 46 15 C 45 9 50 6 55 10 C 68 21 81 32 94 40 C 84 45 74 49 64 52 Z"
-            fill="url(#lw-pet-cat-body)"
-            stroke="#8a5423"
-            strokeWidth="1.6"
-            strokeOpacity="0.5"
-            strokeLinejoin="round"
-          />
-          <path d="M63 46 C 57 37 53 27 52 19 C 61 28 71 35 81 40 C 75 42 69 44 63 46 Z" fill="url(#lw-pet-ear-pink)" />
-          <path d="M47 14 C 49 10 52 9 55 9" fill="none" stroke="#fff3da" strokeWidth="2" strokeLinecap="round" opacity="0.75" />
-        </g>
-        <g className="gh-pet-ear gh-pet-ear--r gh-pet-ear--cat">
-          <path
-            d="M136 52 C 145 41 152 27 154 15 C 155 9 150 6 145 10 C 132 21 119 32 106 40 C 116 45 126 49 136 52 Z"
-            fill="url(#lw-pet-cat-body)"
-            stroke="#8a5423"
-            strokeWidth="1.6"
-            strokeOpacity="0.5"
-            strokeLinejoin="round"
-          />
-          <path d="M137 46 C 143 37 147 27 148 19 C 139 28 129 35 119 40 C 125 42 131 44 137 46 Z" fill="url(#lw-pet-ear-pink)" />
-          <path d="M153 14 C 151 10 148 9 145 9" fill="none" stroke="#fff3da" strokeWidth="2" strokeLinecap="round" opacity="0.75" />
-        </g>
+/* ---------- 鸟脸 ---------- */
+function BirdFace({ mood }: { mood: number }) {
+  return (
+    <g className="gh-pet-face">
+      <path d="M108 122 Q120 113 132 122 Q120 132 108 122 Z" fill="url(#lw-pet-beak)" stroke="#d08a17" strokeWidth={1} />
+      <path d="M110 129 Q120 136 130 129" fill="#eda42c" opacity="0.9" />
+      <path d="M114 130 Q120 134 126 130" fill="#c97a13" opacity="0.55" />
+      <Blush muted={mood < 30} />
+    </g>
+  )
+}
 
-        {/* 头 */}
-        <g className="gh-pet-head">
-          <path
-            d="M100 27 C 126 27 147 40 153 62 C 159 83 155 103 143 116 C 131 128 116 132 100 132 C 84 132 69 128 57 116 C 45 103 41 83 47 62 C 53 40 74 27 100 27 Z"
-            fill="url(#lw-pet-cat-body)"
-            stroke="#8a5423"
-            strokeWidth="1.7"
-            strokeOpacity="0.5"
-          />
-          <path d="M61 65 C 67 47 81 36 98 33" fill="none" stroke="#fff3d6" strokeWidth="3" strokeLinecap="round" opacity="0.32" />
-          {/* 脸颊绒毛 */}
-          <g fill="url(#lw-pet-cat-body)">
-            <path d="M54 86 C 47 87 42 91 38 97 C 45 97 51 95 56 92 Z" />
-            <path d="M56 100 C 49 102 44 106 41 112 C 48 111 54 108 59 105 Z" />
-            <path d="M146 86 C 153 87 158 91 162 97 C 155 97 149 95 144 92 Z" />
-            <path d="M144 100 C 151 102 156 106 159 112 C 152 111 146 108 141 105 Z" />
-          </g>
-          {/* 顶部高光 + 底部 AO */}
-          <ellipse cx="80" cy="46" rx="25" ry="11" fill="#fff6de" opacity="0.32" transform="rotate(-20 80 46)" />
-          <circle cx="62" cy="57" r="4" fill="#ffffff" opacity="0.16" />
-          <path
-            d="M56 108 C 70 126 86 132 100 132 C 114 132 130 126 144 108 C 136 123 120 130 100 130 C 80 130 64 123 56 108 Z"
-            fill="#b26b26"
-            opacity="0.18"
-          />
-          {/* 额纹 */}
-          <g stroke="#c17a33" strokeWidth="4" strokeLinecap="round" opacity="0.8">
-            <path d="M100 36 v 10" />
-            <path d="M88 39 q 2 5 0 9" />
-            <path d="M112 39 q -2 5 0 9" />
-          </g>
-          <PetBlush cy={99} />
-          {/* 白吻部 */}
-          <path
-            d="M100 87 C 87 87 76 93 74 102 C 72 111 83 119 100 119 C 117 119 128 111 126 102 C 124 93 113 87 100 87 Z"
-            fill="url(#lw-pet-cat-belly)"
-            stroke="#e2c493"
-            strokeWidth="1.1"
-            strokeOpacity="0.5"
-          />
-          <g fill="#fffdf6">
-            <circle cx="84" cy="91" r="4.4" />
-            <circle cx="100" cy="89" r="4.8" />
-            <circle cx="116" cy="91" r="4.4" />
-          </g>
-          {/* 粉鼻 + ω 嘴 + sad 嘴 */}
-          <path
-            d="M94 92 h12 q2.6 0 1.6 2.4 l-5.4 6.4 q-2.2 2.6 -4.4 0 l-5.4 -6.4 q-1 -2.4 1.6 -2.4 Z"
-            fill="url(#lw-pet-nose)"
-          />
-          <ellipse cx="97" cy="94.4" rx="1.8" ry="1.2" fill="#ffffff" opacity="0.8" />
-          <g fill="none" stroke="#8a6440" strokeWidth="2.1" strokeLinecap="round">
-            <path className="gh-pet-mouth-happy" d="M100 101.5 V 104" />
-            <path className="gh-pet-mouth-happy" d="M100 104 q -5 6 -10 1.5 M 100 104 q 5 6 10 1.5" />
-            <path className="gh-pet-mouth-sad" d="M92 111 q 8 -6 16 0" />
-          </g>
-          <PetBrows y={58} stroke="#b97431" opacity={0.55} width={2.8} />
-          <PetEyes cy={81} iris="lw-pet-iris-cat" />
-          {/* 胡须 + 须点 */}
-          <g fill="none" stroke="#a9764a" strokeWidth="1.6" strokeLinecap="round" opacity="0.7">
-            <path d="M75 96 C 61 93 50 91 39 90" />
-            <path d="M75 101 C 61 101 50 102 38 104" />
-            <path d="M76 106 C 63 108 53 112 44 117" />
-            <path d="M125 96 C 139 93 150 91 161 90" />
-            <path d="M125 101 C 139 101 150 102 162 104" />
-            <path d="M124 106 C 137 108 147 112 156 117" />
-          </g>
-          <g fill="#b97431" opacity="0.35">
-            <circle cx="70" cy="96" r="1.2" />
-            <circle cx="68" cy="102" r="1.2" />
-            <circle cx="70" cy="108" r="1.2" />
-            <circle cx="130" cy="96" r="1.2" />
-            <circle cx="132" cy="102" r="1.2" />
-            <circle cx="130" cy="108" r="1.2" />
-          </g>
-        </g>
-      </g>
+/* ---------- 兔脸 ---------- */
+function RabbitFace({ mood }: { mood: number }) {
+  return (
+    <g className="gh-pet-face">
+      <circle cx={110} cy={133} r={9} fill="#fffafc" />
+      <circle cx={130} cy={133} r={9} fill="#fffafc" />
+      <path d="M116 124 H124 L120 129 Z" fill="url(#lw-pet-nose)" />
+      <path d="M120 129 V 133" stroke={MOUTH_STROKE} strokeWidth={2} strokeLinecap="round" />
+      <path d="M120 133 Q115 139 110 135" stroke={MOUTH_STROKE} strokeWidth={2} strokeLinecap="round" fill="none" />
+      <path d="M120 133 Q125 139 130 135" stroke={MOUTH_STROKE} strokeWidth={2} strokeLinecap="round" fill="none" />
+      <rect x={115.2} y={134} width={4.4} height={7.2} rx={1.8} fill="#fffefc" stroke="#e6d2d8" strokeWidth={0.8} />
+      <rect x={120.4} y={134} width={4.4} height={7.2} rx={1.8} fill="#fffefc" stroke="#e6d2d8" strokeWidth={0.8} />
+      <Blush muted={mood < 30} />
+    </g>
+  )
+}
+
+/* ---------- 狐脸（白面罩在头层画，这里只画五官） ---------- */
+function FoxFace({ mood }: { mood: number }) {
+  return (
+    <g className="gh-pet-face">
+      <ellipse cx={120} cy={136} rx={23} ry={14} fill="#fffaf4" />
+      <path d="M112 128 H128 L120 135 Z" fill="#4a3330" />
+      <path d="M120 135 Q120 141 111 141" stroke={MOUTH_STROKE} strokeWidth={2.2} strokeLinecap="round" fill="none" />
+      <path d="M120 135 Q120 141 129 141" stroke={MOUTH_STROKE} strokeWidth={2.2} strokeLinecap="round" fill="none" />
+      <path d="M132 138 Q138 140 141 136" stroke={MOUTH_STROKE} strokeWidth={1.8} strokeLinecap="round" fill="none" opacity="0.65" />
+      <Blush muted={mood < 30} />
+    </g>
+  )
+}
+
+/* ---------- 熊猫脸 ---------- */
+function PandaFace({ mood }: { mood: number }) {
+  return (
+    <g className="gh-pet-face">
+      <ellipse cx={120} cy={137} rx={21} ry={13} fill="#fbf8f3" opacity="0.85" />
+      <path d="M114 128 H126 L120 134 Z" fill="#2c2c34" />
+      <path d="M120 134 Q120 140 112 140" stroke="#5d5d68" strokeWidth={2.2} strokeLinecap="round" fill="none" />
+      <path d="M120 134 Q120 140 128 140" stroke="#5d5d68" strokeWidth={2.2} strokeLinecap="round" fill="none" />
+      <Blush muted={mood < 30} />
     </g>
   )
 }
 
 /* ============================================================
-   小狗：奶咖垂耳
+   物种身体（每种一套轮廓：耳朵 / 尾巴 / 花纹各不相同）
    ============================================================ */
 
-function DogBody() {
+type ArtProps = { palette: PetPalette; mood: number }
+
+/** 猫：尖耳 + 额纹 + 胡须 + 环纹长尾 */
+function CatArt({ palette, mood }: ArtProps) {
+  const bodyFill = 'url(#lw-pet-body-cat)'
   return (
-    <g>
-      {/* 蓬松摇尾 */}
-      <g className="gh-pet-tail gh-pet-tail--dog">
-        <path
-          d="M130 163 C 151 167 166 153 169 134"
-          fill="none"
-          stroke="url(#lw-pet-dog-body)"
-          strokeWidth="19"
-          strokeLinecap="round"
-        />
-        <circle cx="169" cy="134" r="10.5" fill="#f9ead0" />
-        <path d="M178 132 C 184 129 188 124 190 118 C 184 122 179 127 176 131 Z" fill="#f9ead0" />
-        <path d="M164 128 q 3 -4 7 -4" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" opacity="0.7" />
+    <g className="gh-pet-creature gh-pet-creature--cat">
+      <g className="gh-pet-tail">
+        <path d="M154 194 C 186 198 204 178 200 150" stroke={palette.primary} strokeWidth={16} strokeLinecap="round" fill="none" />
+        <path d="M197 152 C 199 172 188 187 170 191" stroke={shade(palette.primary, -0.22)} strokeWidth={7} strokeLinecap="round" fill="none" opacity="0.5" />
       </g>
-
-      <g className="gh-pet-breathe">
-        <g className="gh-pet-body">
-          <ellipse
-            cx="100"
-            cy="151"
-            rx="37"
-            ry="33"
-            fill="url(#lw-pet-dog-body)"
-            stroke="#6b4a33"
-            strokeWidth="1.6"
-            strokeOpacity="0.45"
-          />
-          <ellipse cx="88" cy="134" rx="14" ry="8" fill="#ffffff" opacity="0.2" transform="rotate(-20 88 134)" />
-          {/* 侧腹斑块 */}
-          <ellipse cx="67" cy="148" rx="12" ry="17" fill="#c58f58" opacity="0.4" transform="rotate(-14 67 148)" />
-          {/* 奶白胸腹 */}
-          <path
-            d="M100 121 C 85 121 74 135 73 151 C 72 168 84 179 100 179 C 116 179 128 168 127 151 C 126 135 115 121 100 121 Z"
-            fill="url(#lw-pet-dog-belly)"
-          />
-          <g fill="#fffcf5">
-            <circle cx="87" cy="125" r="5.4" />
-            <circle cx="100" cy="122" r="6" />
-            <circle cx="113" cy="125" r="5.4" />
-          </g>
-          <ellipse cx="100" cy="133" rx="31" ry="8.5" fill="#8a5c34" opacity="0.13" />
-          {/* 后爪 */}
-          <ellipse cx="69" cy="173" rx="13.5" ry="10.5" fill="url(#lw-pet-dog-leg)" stroke="#a9784a" strokeWidth="1.2" strokeOpacity="0.4" />
-          <ellipse cx="131" cy="173" rx="13.5" ry="10.5" fill="url(#lw-pet-dog-leg)" stroke="#a9784a" strokeWidth="1.2" strokeOpacity="0.4" />
-          <g stroke="#b48252" strokeWidth="1.4" strokeLinecap="round" opacity="0.5">
-            <path d="M64 170 v 4" />
-            <path d="M69 169 v 4" />
-            <path d="M136 170 v 4" />
-            <path d="M131 169 v 4" />
-          </g>
-          <g className="gh-pet-arm gh-pet-arm--l">
-            <path
-              d="M80 143 C 75 155 74 169 79 179 C 82 185 91 184 93 177 C 95 168 94 154 95 143 Z"
-              fill="url(#lw-pet-dog-leg)"
-              stroke="#b48252"
-              strokeWidth="1.2"
-              strokeOpacity="0.4"
-            />
-            <ellipse cx="85.5" cy="178.5" rx="8.2" ry="5.6" fill="#fffaf0" opacity="0.96" />
-            <path d="M85 177 v 4 M90 177 v 4" fill="none" stroke="#c09060" strokeWidth="1.3" strokeLinecap="round" opacity="0.55" />
-          </g>
-          <g className="gh-pet-arm gh-pet-arm--r">
-            <path
-              d="M120 143 C 125 155 126 169 121 179 C 118 185 109 184 107 177 C 105 168 106 154 105 143 Z"
-              fill="url(#lw-pet-dog-leg)"
-              stroke="#b48252"
-              strokeWidth="1.2"
-              strokeOpacity="0.4"
-            />
-            <ellipse cx="114.5" cy="178.5" rx="8.2" ry="5.6" fill="#fffaf0" opacity="0.96" />
-            <path d="M115 177 v 4 M110 177 v 4" fill="none" stroke="#c09060" strokeWidth="1.3" strokeLinecap="round" opacity="0.55" />
-          </g>
-          {/* 底部环境遮蔽 */}
-          <path
-            d="M68 168 C 78 180 88 184 100 184 C 112 184 122 180 132 168 C 127 180 116 186 100 186 C 84 186 73 180 68 168 Z"
-            fill="#9c6a3d"
-            opacity="0.16"
-          />
-        </g>
-
-        {/* 垂耳（头后，外侧深 / 内侧浅） */}
-        <g className="gh-pet-ear gh-pet-ear--l gh-pet-ear--dog">
-          <path
-            d="M70 40 C 50 42 33 58 30 80 C 27 102 36 124 52 137 C 63 146 73 137 74 118 C 75 94 74 62 84 48 Z"
-            fill="url(#lw-pet-dog-ear)"
-            stroke="#6b4a33"
-            strokeWidth="1.5"
-            strokeOpacity="0.45"
-          />
-          <path d="M66 52 C 52 57 41 70 40 85 C 39 101 46 117 55 125 C 60 129 64 124 64 114 C 64 92 66 66 71 54 Z" fill="#a9784a" opacity="0.5" />
-          <path d="M57 58 C 48 76 47 104 53 124" fill="none" stroke="#8a5c34" strokeWidth="2" strokeLinecap="round" opacity="0.32" />
-          <path d="M38 82 C 36 98 40 114 48 126" fill="none" stroke="#e0b383" strokeWidth="2" strokeLinecap="round" opacity="0.35" />
-          <path d="M44 132 C 42 138 41 142 42 146 C 46 142 50 138 52 133 Z" fill="#b98552" />
-        </g>
-        <g className="gh-pet-ear gh-pet-ear--r gh-pet-ear--dog">
-          <path
-            d="M130 40 C 150 42 167 58 170 80 C 173 102 164 124 148 137 C 137 146 127 137 126 118 C 125 94 126 62 116 48 Z"
-            fill="url(#lw-pet-dog-ear)"
-            stroke="#6b4a33"
-            strokeWidth="1.5"
-            strokeOpacity="0.45"
-          />
-          <path d="M134 52 C 148 57 159 70 160 85 C 161 101 154 117 145 125 C 140 129 136 124 136 114 C 136 92 134 66 129 54 Z" fill="#a9784a" opacity="0.5" />
-          <path d="M143 58 C 152 76 153 104 147 124" fill="none" stroke="#8a5c34" strokeWidth="2" strokeLinecap="round" opacity="0.32" />
-          <path d="M162 82 C 164 98 160 114 152 126" fill="none" stroke="#e0b383" strokeWidth="2" strokeLinecap="round" opacity="0.35" />
-          <path d="M156 132 C 158 138 159 142 158 146 C 154 142 150 138 148 133 Z" fill="#b98552" />
-        </g>
-
-        {/* 头 */}
-        <g className="gh-pet-head">
-          <path
-            d="M100 28 C 128 28 149 41 155 63 C 161 85 156 106 142 119 C 129 130 115 134 100 134 C 85 134 71 130 58 119 C 44 106 39 85 45 63 C 51 41 72 28 100 28 Z"
-            fill="url(#lw-pet-dog-body)"
-            stroke="#6b4a33"
-            strokeWidth="1.7"
-            strokeOpacity="0.45"
-          />
-          <path d="M60 65 C 66 47 81 36 99 33" fill="none" stroke="#fff6e6" strokeWidth="3" strokeLinecap="round" opacity="0.32" />
-          {/* 左眼奶白斑 + 顶部高光 + AO */}
-          <ellipse cx="78" cy="80" rx="21" ry="24" fill="#faecd6" opacity="0.9" />
-          <ellipse cx="80" cy="47" rx="25" ry="11" fill="#fffaf0" opacity="0.34" transform="rotate(-20 80 47)" />
-          <circle cx="62" cy="58" r="4" fill="#ffffff" opacity="0.16" />
-          <path
-            d="M58 108 C 72 126 87 134 100 134 C 113 134 128 126 142 108 C 134 124 119 132 100 132 C 81 132 66 124 58 108 Z"
-            fill="#b98b5e"
-            opacity="0.18"
-          />
-          <PetBlush cy={100} />
-          {/* 奶白吻部 */}
-          <ellipse
-            cx="100"
-            cy="104"
-            rx="29"
-            ry="18.5"
-            fill="url(#lw-pet-dog-belly)"
-            stroke="#e6cda8"
-            strokeWidth="1.1"
-            strokeOpacity="0.55"
-          />
-          {/* 黑鼻 + 高光 + Y 形嘴 */}
-          <ellipse cx="100" cy="93.5" rx="8.4" ry="6.4" fill="#3b2e29" />
-          <ellipse cx="97.4" cy="91.4" rx="2.8" ry="1.8" fill="#ffffff" opacity="0.72" transform="rotate(-18 97.4 91.4)" />
-          <path className="gh-pet-mouth-happy" d="M100 99 V 105" fill="none" stroke="#8a6b45" strokeWidth="2.2" strokeLinecap="round" />
-          <path
-            className="gh-pet-mouth-happy"
-            d="M100 105 q -6 6 -12 1 M 100 105 q 6 6 12 1"
-            fill="none"
-            stroke="#8a6b45"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-          />
-          <g className="gh-pet-mouth-sad">
-            <path d="M90 112 q 10 -6 20 0" fill="none" stroke="#8a6b45" strokeWidth="2.1" strokeLinecap="round" />
-          </g>
-          {/* 舌头（默认藏起，play/happy/beg/cheer/playdead 露出） */}
-          <g className="gh-pet-tongue">
-            <path d="M94 107 C 93 120 107 120 106 107 Q 100 110 94 107 Z" fill="url(#lw-pet-tongue)" />
-            <path d="M100 109 v 4" fill="none" stroke="#d95f7e" strokeWidth="1.4" strokeLinecap="round" opacity="0.8" />
-          </g>
-          <PetBrows y={58} stroke="#b07c4c" opacity={0.7} width={3.4} />
-          <PetEyes cy={81} iris="lw-pet-iris-dog" />
-        </g>
+      <path d={BODY_PATH} fill={bodyFill} />
+      <path d={CHEST_PATH} fill="url(#lw-pet-belly-cat)" opacity="0.96" />
+      <ellipse cx={86} cy={199} rx={18} ry={11} fill={shade(palette.primary, 0.14)} />
+      <ellipse cx={154} cy={199} rx={18} ry={11} fill={shade(palette.primary, 0.14)} />
+      <g stroke={shade(palette.primary, -0.34)} strokeWidth={1.6} strokeLinecap="round" opacity="0.4">
+        <path d="M80 203 V 207" /><path d="M88 204 V 208" /><path d="M148 204 V 208" /><path d="M156 203 V 207" />
       </g>
+      <g className="gh-pet-ear gh-pet-ear--l">
+        <path d="M72 68 C 66 46 72 26 84 18 C 94 28 102 42 109 55 C 96 64 84 69 72 68 Z" fill={bodyFill} />
+        <path d="M80 62 C 77 47 81 34 86 27 C 92 34 97 45 101 55 C 94 60 87 63 80 62 Z" fill="url(#lw-pet-ear-cat)" />
+      </g>
+      <g className="gh-pet-ear gh-pet-ear--r">
+        <path d="M168 68 C 174 46 168 26 156 18 C 146 28 138 42 131 55 C 144 64 156 69 168 68 Z" fill={bodyFill} />
+        <path d="M160 62 C 163 47 159 34 154 27 C 148 34 143 45 139 55 C 146 60 153 63 160 62 Z" fill="url(#lw-pet-ear-cat)" />
+      </g>
+      <path d={HEAD_PATH} fill={bodyFill} />
+      <g stroke={shade(palette.primary, -0.3)} strokeWidth={3.4} strokeLinecap="round" opacity="0.34">
+        <path d="M110 58 L113 70" /><path d="M120 54 V 68" /><path d="M130 58 L127 70" />
+      </g>
+      <path d="M86 72 C 96 56 110 49 126 48" stroke="#fff" strokeOpacity="0.42" strokeWidth={6} strokeLinecap="round" fill="none" />
+      <Eyes species="cat" mood={mood} />
+      <CatFace mood={mood} />
     </g>
   )
+}
+
+/** 狗：垂耳 + 眉毛斑点 + 舌头 + 短翘尾 */
+function DogArt({ palette, mood }: ArtProps) {
+  const bodyFill = 'url(#lw-pet-body-dog)'
+  return (
+    <g className="gh-pet-creature gh-pet-creature--dog">
+      <g className="gh-pet-tail">
+        <path d="M158 188 C 178 184 188 168 184 150" stroke={palette.primary} strokeWidth={13} strokeLinecap="round" fill="none" />
+        <path d="M180 154 C 184 168 178 178 168 182" stroke={shade(palette.primary, -0.2)} strokeWidth={6} strokeLinecap="round" fill="none" opacity="0.45" />
+      </g>
+      <path d={BODY_PATH} fill={bodyFill} />
+      <path d={CHEST_PATH} fill="url(#lw-pet-belly-dog)" opacity="0.96" />
+      <ellipse cx={86} cy={199} rx={18} ry={11} fill={shade(palette.primary, 0.16)} />
+      <ellipse cx={154} cy={199} rx={18} ry={11} fill={shade(palette.primary, 0.16)} />
+      <g stroke={shade(palette.primary, -0.34)} strokeWidth={1.6} strokeLinecap="round" opacity="0.4">
+        <path d="M80 203 V 207" /><path d="M88 204 V 208" /><path d="M148 204 V 208" /><path d="M156 203 V 207" />
+      </g>
+      <path d={HEAD_PATH} fill={bodyFill} />
+      <g className="gh-pet-ear gh-pet-ear--l">
+        <path d="M74 82 C 54 92 46 124 58 148 C 70 158 86 150 90 130 C 94 110 86 92 74 82 Z" fill={shade(palette.primary, -0.14)} />
+        <path d="M80 98 C 70 108 68 126 74 138 C 80 143 85 137 86 126 C 87 114 84 104 80 98 Z" fill="url(#lw-pet-ear-dog)" opacity="0.55" />
+      </g>
+      <g className="gh-pet-ear gh-pet-ear--r">
+        <path d="M166 82 C 186 92 194 124 182 148 C 170 158 154 150 150 130 C 146 110 154 92 166 82 Z" fill={shade(palette.primary, -0.14)} />
+        <path d="M160 98 C 170 108 172 126 166 138 C 160 143 155 137 154 126 C 153 114 156 104 160 98 Z" fill="url(#lw-pet-ear-dog)" opacity="0.55" />
+      </g>
+      <path d="M88 72 C 98 57 112 50 128 49" stroke="#fff" strokeOpacity="0.4" strokeWidth={6} strokeLinecap="round" fill="none" />
+      <Eyes species="dog" mood={mood} />
+      <DogFace mood={mood} />
+    </g>
+  )
+}
+
+/** 小鸟：羽冠 + 喙 + 双层羽翅 + 尾羽 + 三趾爪 */
+function BirdArt({ palette, mood }: ArtProps) {
+  const bodyFill = 'url(#lw-pet-body-bird)'
+  return (
+    <g className="gh-pet-creature gh-pet-creature--bird">
+      <path d="M150 188 L198 204 L190 184 L202 174 L152 174 Z" fill={shade(palette.primary, -0.14)} />
+      <path d="M150 184 L188 196 L184 182 L194 176 L150 176 Z" fill={shade(palette.primary, 0.2)} opacity="0.55" />
+      <path d="M120 120 C 92 120 78 146 78 172 C 78 196 96 206 120 206 C 144 206 162 196 162 172 C 162 146 148 120 120 120 Z" fill={bodyFill} />
+      <ellipse cx={120} cy={178} rx={30} ry={24} fill="url(#lw-pet-belly-bird)" opacity="0.95" />
+      <g className="gh-pet-wing gh-pet-wing--l">
+        <path d="M86 146 C 62 152 54 176 66 196 C 82 190 94 168 96 148 Z" fill={shade(palette.primary, -0.16)} stroke={shade(palette.primary, -0.34)} strokeWidth={1.6} strokeOpacity="0.4" />
+        <path d="M82 156 C 70 164 66 178 68 188" stroke={shade(palette.primary, -0.34)} strokeWidth={2} strokeLinecap="round" fill="none" opacity="0.45" />
+      </g>
+      <g className="gh-pet-wing gh-pet-wing--r">
+        <path d="M154 146 C 178 152 186 176 174 196 C 158 190 146 168 144 148 Z" fill={shade(palette.primary, -0.16)} stroke={shade(palette.primary, -0.34)} strokeWidth={1.6} strokeOpacity="0.4" />
+        <path d="M158 156 C 170 164 174 178 172 188" stroke={shade(palette.primary, -0.34)} strokeWidth={2} strokeLinecap="round" fill="none" opacity="0.45" />
+      </g>
+      <g stroke="#e79a2c" strokeWidth={3.4} strokeLinecap="round" fill="none">
+        <path d="M108 204 V 218" /><path d="M104 219 L 98 223" /><path d="M108 219 L 108 224" /><path d="M112 219 L 118 223" />
+        <path d="M132 204 V 218" /><path d="M128 219 L 122 223" /><path d="M132 219 L 132 224" /><path d="M136 219 L 142 223" />
+      </g>
+      <g className="gh-pet-crest">
+        <ellipse cx={120} cy={40} rx={8.4} ry={23} transform="rotate(-7 120 40)" fill={bodyFill} />
+        <ellipse cx={104} cy={46} rx={7.2} ry={19} transform="rotate(-28 104 46)" fill={bodyFill} opacity="0.9" />
+        <ellipse cx={136} cy={46} rx={7.2} ry={19} transform="rotate(28 136 46)" fill={bodyFill} opacity="0.9" />
+        <path d="M118 30 C 117 22 118 16 120 12" stroke={shade(palette.primary, 0.42)} strokeWidth={2.4} strokeLinecap="round" fill="none" opacity="0.55" />
+      </g>
+      <path d={HEAD_PATH} fill={bodyFill} />
+      <path d="M88 72 C 98 57 112 50 128 49" stroke="#fff" strokeOpacity="0.45" strokeWidth={6} strokeLinecap="round" fill="none" />
+      <Eyes species="bird" mood={mood} />
+      <BirdFace mood={mood} />
+    </g>
+  )
+}
+
+/** 兔：长耳（内粉）+ 圆绒球尾 + 门牙 */
+function RabbitArt({ palette, mood }: ArtProps) {
+  const bodyFill = 'url(#lw-pet-body-rabbit)'
+  return (
+    <g className="gh-pet-creature gh-pet-creature--rabbit">
+      <circle cx={170} cy={184} r={14} fill={shade(palette.secondary, 0.55)} />
+      <circle cx={174} cy={180} r={5} fill="#fff" opacity="0.7" />
+      <g className="gh-pet-ear gh-pet-ear--l">
+        <ellipse cx={98} cy={48} rx={14} ry={41} transform="rotate(-9 98 48)" fill={bodyFill} />
+        <ellipse cx={98} cy={50} rx={7.5} ry={31} transform="rotate(-9 98 50)" fill="url(#lw-pet-ear-rabbit)" />
+      </g>
+      <g className="gh-pet-ear gh-pet-ear--r">
+        <ellipse cx={142} cy={48} rx={14} ry={41} transform="rotate(9 142 48)" fill={bodyFill} />
+        <ellipse cx={142} cy={50} rx={7.5} ry={31} transform="rotate(9 142 50)" fill="url(#lw-pet-ear-rabbit)" />
+      </g>
+      <path d={BODY_PATH} fill={bodyFill} />
+      <path d={CHEST_PATH} fill="url(#lw-pet-belly-rabbit)" opacity="0.96" />
+      <ellipse cx={86} cy={199} rx={18} ry={11} fill={shade(palette.primary, 0.2)} />
+      <ellipse cx={154} cy={199} rx={18} ry={11} fill={shade(palette.primary, 0.2)} />
+      <g stroke="#c9aebb" strokeWidth={1.6} strokeLinecap="round" opacity="0.5">
+        <path d="M80 203 V 207" /><path d="M88 204 V 208" /><path d="M148 204 V 208" /><path d="M156 203 V 207" />
+      </g>
+      <path d={HEAD_PATH} fill={bodyFill} />
+      <path d="M88 72 C 98 57 112 50 128 49" stroke="#fff" strokeOpacity="0.55" strokeWidth={6} strokeLinecap="round" fill="none" />
+      <Eyes species="rabbit" mood={mood} />
+      <RabbitFace mood={mood} />
+    </g>
+  )
+}
+
+/** 狐：大尖耳（深色耳尖）+ 白面罩 + 蓬松大尾 */
+function FoxArt({ palette, mood }: ArtProps) {
+  const bodyFill = 'url(#lw-pet-body-fox)'
+  const dark = shade(palette.primary, -0.4)
+  return (
+    <g className="gh-pet-creature gh-pet-creature--fox">
+      <g className="gh-pet-tail">
+        <path d="M148 196 C 186 208 218 188 212 152 C 208 128 188 118 170 128 C 190 138 198 158 188 174 C 178 188 160 190 146 178 Z" fill={shade(palette.primary, -0.04)} stroke={shade(palette.primary, -0.3)} strokeWidth={1.6} strokeOpacity="0.35" />
+        <path d="M201 134 C 216 146 218 172 204 186 C 195 194 183 196 172 191 C 194 180 203 158 201 134 Z" fill={palette.secondary} />
+      </g>
+      <path d={BODY_PATH} fill={bodyFill} />
+      <path d={CHEST_PATH} fill="url(#lw-pet-belly-fox)" opacity="0.97" />
+      <ellipse cx={86} cy={199} rx={18} ry={11} fill={dark} opacity="0.9" />
+      <ellipse cx={154} cy={199} rx={18} ry={11} fill={dark} opacity="0.9" />
+      <g className="gh-pet-ear gh-pet-ear--l">
+        <path d="M70 66 C 62 40 68 20 82 10 C 90 24 100 40 108 54 C 94 64 82 68 70 66 Z" fill={bodyFill} />
+        <path d="M76 20 C 82 24 92 38 100 52 L 84 58 C 80 42 78 30 76 20 Z" fill={dark} opacity="0.9" />
+        <path d="M80 56 C 78 44 81 32 85 26 C 90 34 95 44 98 53 C 92 57 86 58 80 56 Z" fill="url(#lw-pet-ear-fox)" />
+      </g>
+      <g className="gh-pet-ear gh-pet-ear--r">
+        <path d="M170 66 C 178 40 172 20 158 10 C 150 24 140 40 132 54 C 146 64 158 68 170 66 Z" fill={bodyFill} />
+        <path d="M164 20 C 158 24 148 38 140 52 L 156 58 C 160 42 162 30 164 20 Z" fill={dark} opacity="0.9" />
+        <path d="M160 56 C 162 44 159 32 155 26 C 150 34 145 44 142 53 C 148 57 154 58 160 56 Z" fill="url(#lw-pet-ear-fox)" />
+      </g>
+      <path d={HEAD_PATH} fill={bodyFill} />
+      <path
+        d="M64 102 C 70 136 92 151 120 152 C 148 151 170 136 176 102 C 158 116 140 121 120 121 C 100 121 82 116 64 102 Z"
+        fill="#fffaf2"
+      />
+      <path
+        d="M64 102 C 74 126 96 141 120 142 C 144 141 166 126 176 102"
+        stroke={shade(palette.secondary, -0.06)}
+        strokeWidth={1.5}
+        fill="none"
+        opacity="0.5"
+      />
+      <path d="M86 74 C 96 57 110 50 126 49" stroke="#fff" strokeOpacity="0.4" strokeWidth={6} strokeLinecap="round" fill="none" />
+      <Eyes species="fox" mood={mood} />
+      <FoxFace mood={mood} />
+    </g>
+  )
+}
+
+/** 熊猫：圆耳 + 黑眼圈 + 黑肩黑腿 + 圆滚滚白肚 */
+function PandaArt({ palette, mood }: ArtProps) {
+  const bodyFill = 'url(#lw-pet-body-panda)'
+  const dark = `url(#lw-pet-dark-panda)`
+  return (
+    <g className="gh-pet-creature gh-pet-creature--panda">
+      <circle cx={166} cy={188} r={10} fill={palette.secondary} opacity="0.9" />
+      <g className="gh-pet-ear gh-pet-ear--l">
+        <circle cx={74} cy={58} r={21} fill={dark} />
+      </g>
+      <g className="gh-pet-ear gh-pet-ear--r">
+        <circle cx={166} cy={58} r={21} fill={dark} />
+      </g>
+      <path d={BODY_PATH} fill={bodyFill} />
+      <path d="M120 148 C 110 148 102 160 102 176 C 102 192 110 202 120 202 C 130 202 138 192 138 176 C 138 160 130 148 120 148 Z" fill="#fffdf9" />
+      <ellipse cx={86} cy={200} rx={19} ry={11} fill={palette.secondary} />
+      <ellipse cx={154} cy={200} rx={19} ry={11} fill={palette.secondary} />
+      <path d="M86 148 C 72 160 68 178 72 194 C 84 197 94 189 97 176 C 100 163 95 152 86 148 Z" fill={dark} opacity="0.95" />
+      <path d="M154 148 C 168 160 172 178 168 194 C 156 197 146 189 143 176 C 140 163 145 152 154 148 Z" fill={dark} opacity="0.95" />
+      <path d={HEAD_PATH} fill={bodyFill} />
+      <ellipse cx={100} cy={108} rx={17} ry={20} transform="rotate(-14 100 108)" fill={dark} />
+      <ellipse cx={140} cy={108} rx={17} ry={20} transform="rotate(14 140 108)" fill={dark} />
+      <path d="M88 72 C 98 57 112 50 128 49" stroke="#fff" strokeOpacity="0.75" strokeWidth={7} strokeLinecap="round" fill="none" />
+      <Eyes species="panda" mood={mood} />
+      <PandaFace mood={mood} />
+    </g>
+  )
+}
+
+function renderCreature(species: PetSpecies, palette: PetPalette, mood: number): ReactNode {
+  switch (species) {
+    case 'dog': return <DogArt palette={palette} mood={mood} />
+    case 'bird': return <BirdArt palette={palette} mood={mood} />
+    case 'rabbit': return <RabbitArt palette={palette} mood={mood} />
+    case 'fox': return <FoxArt palette={palette} mood={mood} />
+    case 'panda': return <PandaArt palette={palette} mood={mood} />
+    default: return <CatArt palette={palette} mood={mood} />
+  }
 }
 
 /* ============================================================
-   小鸟：薄荷蓝
+   装扮（7 件，各自独立 SVG 造型；坐标以槽位锚点为原点）
    ============================================================ */
 
-function BirdBody() {
-  return (
-    <g>
-      {/* 尾羽 */}
-      <g className="gh-pet-tail gh-pet-tail--bird">
-        <path d="M112 158 C 134 158 155 169 168 184 C 150 186 128 176 112 166 Z" fill="url(#lw-pet-bird-wing)" />
-        <path d="M108 168 C 128 170 146 180 156 192 C 138 192 118 182 106 172 Z" fill="#7acbea" opacity="0.92" />
-        <path d="M116 160 C 134 164 148 172 156 182" fill="none" stroke="#2f7e9f" strokeWidth="1.6" strokeLinecap="round" opacity="0.45" />
-      </g>
+interface SlotAnchor { x: number; y: number; s: number }
 
-      {/* 三趾爪 */}
-      <g fill="none" stroke="#efa233" strokeWidth="4.2" strokeLinecap="round">
-        <path d="M87 170 V 186" />
-        <path d="M113 170 V 186" />
-        <path d="M87 186 L 81 191 M 87 186 V 192 M 87 186 L 93 191" />
-        <path d="M113 186 L 107 191 M 113 186 V 192 M 113 186 L 119 191" />
-      </g>
-
-      <g className="gh-pet-breathe">
-        <g className="gh-pet-body">
-          <ellipse
-            cx="100"
-            cy="152"
-            rx="37"
-            ry="33"
-            fill="url(#lw-pet-bird-body)"
-            stroke="#2f7e9f"
-            strokeWidth="1.6"
-            strokeOpacity="0.45"
-          />
-          <ellipse cx="88" cy="134" rx="14" ry="8" fill="#ffffff" opacity="0.22" transform="rotate(-22 88 134)" />
-          <ellipse cx="100" cy="157" rx="24" ry="24" fill="url(#lw-pet-bird-belly)" />
-          <g fill="url(#lw-pet-bird-belly)">
-            <circle cx="88" cy="132" r="7" />
-            <circle cx="100" cy="129" r="8" />
-            <circle cx="112" cy="132" r="7" />
-          </g>
-          <ellipse cx="100" cy="132" rx="30" ry="8" fill="#2f7e9f" opacity="0.12" />
-          <path
-            d="M68 168 C 78 180 88 184 100 184 C 112 184 122 180 132 168 C 127 180 116 186 100 186 C 84 186 73 180 68 168 Z"
-            fill="#2f7e9f"
-            opacity="0.14"
-          />
-        </g>
-
-        {/* 双层羽翅（同时作为 “手臂” 参与作揖 / 击掌 / 欢呼） */}
-        <g className="gh-pet-wing gh-pet-wing--l gh-pet-arm gh-pet-arm--l">
-          <path
-            d="M72 126 C 56 132 46 148 45 164 C 44 173 51 180 59 177 C 66 174 70 165 74 160 C 77 167 85 169 89 162 C 93 154 91 136 86 128 C 82 123 76 123 72 126 Z"
-            fill="url(#lw-pet-bird-wing)"
-            stroke="#2f7e9f"
-            strokeWidth="1.5"
-            strokeOpacity="0.4"
-          />
-          <path d="M56 156 C 62 164 70 168 78 167" fill="none" stroke="#d8f7ff" strokeWidth="2.4" strokeLinecap="round" opacity="0.65" />
-          <path d="M60 148 C 65 154 71 157 76 157" fill="none" stroke="#d8f7ff" strokeWidth="2.2" strokeLinecap="round" opacity="0.5" />
-          <path d="M48 168 C 54 174 60 177 66 177" fill="none" stroke="#d8f7ff" strokeWidth="2" strokeLinecap="round" opacity="0.45" />
-        </g>
-        <g className="gh-pet-wing gh-pet-wing--r gh-pet-arm gh-pet-arm--r">
-          <path
-            d="M128 126 C 144 132 154 148 155 164 C 156 173 149 180 141 177 C 134 174 130 165 126 160 C 123 167 115 169 111 162 C 107 154 109 136 114 128 C 118 123 124 123 128 126 Z"
-            fill="url(#lw-pet-bird-wing)"
-            stroke="#2f7e9f"
-            strokeWidth="1.5"
-            strokeOpacity="0.4"
-          />
-          <path d="M144 156 C 138 164 130 168 122 167" fill="none" stroke="#d8f7ff" strokeWidth="2.4" strokeLinecap="round" opacity="0.65" />
-          <path d="M140 148 C 135 154 129 157 124 157" fill="none" stroke="#d8f7ff" strokeWidth="2.2" strokeLinecap="round" opacity="0.5" />
-          <path d="M152 168 C 146 174 140 177 134 177" fill="none" stroke="#d8f7ff" strokeWidth="2" strokeLinecap="round" opacity="0.45" />
-        </g>
-
-        {/* 羽冠（头后，头会盖住根部） */}
-        <g className="gh-pet-tuft">
-          <path d="M96 34 C 89 25 86 15 90 6 C 97 13 101 23 102 33 Z" fill="url(#lw-pet-bird-crest)" stroke="#2f7e9f" strokeWidth="1.3" strokeOpacity="0.45" />
-          <path d="M104 33 C 106 21 113 11 121 6 C 117 16 112 26 108 34 Z" fill="url(#lw-pet-bird-crest)" stroke="#2f7e9f" strokeWidth="1.3" strokeOpacity="0.45" />
-          <path d="M100 32 C 96 20 98 10 104 2 C 108 11 106 23 104 33 Z" fill="#8bd9f2" stroke="#2f7e9f" strokeWidth="1.3" strokeOpacity="0.45" />
-        </g>
-
-        {/* 头 */}
-        <g className="gh-pet-head">
-          <ellipse
-            cx="100"
-            cy="79"
-            rx="52"
-            ry="50"
-            fill="url(#lw-pet-bird-body)"
-            stroke="#2f7e9f"
-            strokeWidth="1.7"
-            strokeOpacity="0.45"
-          />
-          <path d="M58 66 C 64 46 79 34 98 31" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" opacity="0.4" />
-          <ellipse cx="78" cy="47" rx="24" ry="11" fill="#ffffff" opacity="0.32" transform="rotate(-20 78 47)" />
-          <circle cx="60" cy="58" r="4" fill="#ffffff" opacity="0.18" />
-          <path
-            d="M56 108 C 70 126 86 129 100 129 C 114 129 130 126 144 108 C 136 123 120 128 100 128 C 80 128 64 123 56 108 Z"
-            fill="#2f7e9f"
-            opacity="0.16"
-          />
-          <PetBrows y={58} stroke="#3e8fb4" opacity={0.5} width={3} />
-          <PetEyes cy={81} iris="lw-pet-iris-bird" />
-          <PetBlush cy={98} />
-          {/* 双层喙 */}
-          <path
-            d="M88 92 Q 100 83 112 92 Q 106 99 100 100 Q 94 99 88 92 Z"
-            fill="url(#lw-pet-bird-beak)"
-            stroke="#c9821a"
-            strokeWidth="1.3"
-            strokeOpacity="0.6"
-          />
-          <path d="M92 100 Q 100 98 108 100 Q 104 109 100 110 Q 96 109 92 100 Z" fill="#e89116" stroke="#c9821a" strokeWidth="1.1" strokeOpacity="0.5" />
-          <path d="M95 92 Q 100 89 105 92" fill="none" stroke="#fff1c9" strokeWidth="1.6" strokeLinecap="round" opacity="0.8" />
-          <g fill="#a9670c" opacity="0.6">
-            <circle cx="96" cy="90.5" r="1" />
-            <circle cx="104" cy="90.5" r="1" />
-          </g>
-        </g>
-      </g>
-    </g>
-  )
+/**
+ * 每个物种的头部/颈部尺寸不同，装备锚点必须逐个微调，
+ * 否则帽子会飘在空中、围巾会盖住下巴。
+ */
+const OUTFIT_ANCHORS: Record<
+  PetSpecies,
+  { hat: SlotAnchor; neck: SlotAnchor; face: SlotAnchor; cape: number }
+> = {
+  cat: {
+    hat: { x: 120, y: 48, s: 1 },
+    neck: { x: 120, y: 150, s: 1 },
+    face: { x: 120, y: 110, s: 1 },
+    cape: 1,
+  },
+  dog: {
+    hat: { x: 120, y: 45, s: 1.03 },
+    neck: { x: 120, y: 152, s: 1.05 },
+    face: { x: 120, y: 110, s: 1 },
+    cape: 1.03,
+  },
+  bird: {
+    hat: { x: 120, y: 58, s: 0.88 },
+    neck: { x: 120, y: 150, s: 0.84 },
+    face: { x: 120, y: 112, s: 0.94 },
+    cape: 0.94,
+  },
+  rabbit: {
+    hat: { x: 120, y: 43, s: 0.98 },
+    neck: { x: 120, y: 150, s: 0.98 },
+    face: { x: 120, y: 110, s: 1 },
+    cape: 1,
+  },
+  fox: {
+    hat: { x: 120, y: 42, s: 1.02 },
+    neck: { x: 120, y: 150, s: 1.02 },
+    face: { x: 120, y: 110, s: 1.02 },
+    cape: 1.02,
+  },
+  panda: {
+    hat: { x: 120, y: 39, s: 1.03 },
+    neck: { x: 120, y: 152, s: 1.06 },
+    face: { x: 120, y: 110, s: 1.04 },
+    cape: 1.05,
+  },
 }
 
-const SPECIES_BODIES: Record<PetSpecies, () => ReactNode> = {
-  cat: CatBody,
-  dog: DogBody,
-  bird: BirdBody,
-}
-
-/* ============================================================
-   装扮覆盖层（三种体型共用同一套面部 / 颈部锚点）
-   ============================================================ */
-
-/** 英雄披风：画在身体之后，只从两侧与下摆露出 */
-function CapeHero() {
-  return (
-    <g className="gh-pet-outfit gh-pet-outfit--back">
-      <path
-        d="M73 116 C 45 124 34 152 39 184 L 161 184 C 166 152 155 124 127 116 C 116 111 84 111 73 116 Z"
-        fill="url(#lw-pet-cape)"
-        stroke="#7e211e"
-        strokeWidth="1.6"
-        strokeOpacity="0.5"
-      />
-      <path d="M40 177 L 160 177 L 158 184 L 42 184 Z" fill="#8e2621" opacity="0.6" />
-      <path d="M73 116 C 84 111 116 111 127 116" fill="none" stroke="#ffb27a" strokeWidth="2.4" strokeLinecap="round" opacity="0.6" />
-      <circle cx="76" cy="117" r="4.2" fill="#f5c542" stroke="#b98210" strokeWidth="1.2" />
-      <circle cx="124" cy="117" r="4.2" fill="#f5c542" stroke="#b98210" strokeWidth="1.2" />
-    </g>
-  )
-}
-
-/** 英雄披风：正面肩甲与星形搭扣（与背后披风同组渲染） */
-function CapeHeroFront() {
-  return (
-    <g className="gh-pet-outfit">
-      <path
-        d="M78 134 C 86 130 114 130 122 134 C 126 137 127 141 126 145 C 115 141 108 142 100 147 C 92 142 85 141 74 145 C 73 141 74 137 78 134 Z"
-        fill="url(#lw-pet-cape)"
-        stroke="#7e211e"
-        strokeWidth="1.5"
-        strokeOpacity="0.5"
-      />
-      <circle cx="100" cy="140" r="4.8" fill="#f5c542" stroke="#b98210" strokeWidth="1.2" />
-      <path
-        d="M100 137 l1 2.2 2.4 .3 -1.8 1.7 .4 2.4 -2 -1.1 -2 1.1 .4 -2.4 -1.8 -1.7 2.4 -.3 Z"
-        fill="#fff3c4"
-        opacity="0.95"
-      />
-    </g>
-  )
-}
-
-/** 蓝色针织围巾：围带 + 罗纹 + 垂下的尾端与流苏 */
-function ScarfBlue() {
-  return (
-    <g className="gh-pet-outfit">
-      <path
-        d="M64 123 C 80 136 120 136 136 123 L 139 141 C 122 154 78 154 61 141 Z"
-        fill="url(#lw-pet-scarf)"
-        stroke="#245fae"
-        strokeWidth="1.5"
-        strokeOpacity="0.45"
-      />
-      <path d="M64 123 C 80 136 120 136 136 123 L 137 130 C 120 143 80 143 63 130 Z" fill="#ffffff" opacity="0.14" />
-      <g stroke="#2c74d4" strokeWidth="2" strokeLinecap="round" opacity="0.6">
-        <path d="M72 130 v 15" />
-        <path d="M83 134 v 15" />
-        <path d="M94 136 v 15" />
-        <path d="M106 136 v 15" />
-        <path d="M117 134 v 15" />
-        <path d="M128 130 v 15" />
-      </g>
-      <path
-        d="M120 142 C 129 149 135 160 134 173 L 121 167 C 122 157 119 148 114 143 Z"
-        fill="#2f7ce0"
-        stroke="#245fae"
-        strokeWidth="1.4"
-        strokeOpacity="0.45"
-      />
-      <path d="M123 146 C 129 153 132 161 132 168" fill="none" stroke="#77bcff" strokeWidth="2" strokeLinecap="round" opacity="0.6" />
-      <g stroke="#1f5cba" strokeWidth="1.6" strokeLinecap="round" opacity="0.7">
-        <path d="M122 169 v 5" />
-        <path d="M126 170 v 5" />
-        <path d="M130 171 v 5" />
-        <path d="M134 171 v 4" />
-      </g>
-    </g>
-  )
-}
-
-/** 红色蝴蝶结：缎面双翼 + 中心结 + 高光 */
-function Bowtie() {
-  return (
-    <g className="gh-pet-outfit">
-      <path
-        d="M98 136 C 88 128 78 123 72 122 C 69 121 67 123 68 127 L 71 143 C 72 146 74 148 77 146 C 84 143 92 139 98 136 Z"
-        fill="url(#lw-pet-bowtie)"
-        stroke="#96262a"
-        strokeWidth="1.4"
-        strokeOpacity="0.45"
-      />
-      <path
-        d="M102 136 C 112 128 122 123 128 122 C 131 121 133 123 132 127 L 129 143 C 128 146 126 148 123 146 C 116 143 108 139 102 136 Z"
-        fill="url(#lw-pet-bowtie)"
-        stroke="#96262a"
-        strokeWidth="1.4"
-        strokeOpacity="0.45"
-      />
-      <path d="M76 128 C 82 132 88 134 94 137" fill="none" stroke="#ffb1a9" strokeWidth="2.2" strokeLinecap="round" opacity="0.6" />
-      <path d="M124 128 C 118 132 112 134 106 137" fill="none" stroke="#ffb1a9" strokeWidth="2.2" strokeLinecap="round" opacity="0.6" />
-      <rect x="94" y="128" width="12" height="17" rx="5" fill="#b93a34" stroke="#96262a" strokeWidth="1.3" strokeOpacity="0.5" />
-      <rect x="96.5" y="130.5" width="3.4" height="10" rx="1.7" fill="#ffffff" opacity="0.35" />
-    </g>
-  )
-}
-
-/** 红色针织小帽：帽筒 + 折边 + 手工绒球 */
 function HatRed() {
   return (
-    <g className="gh-pet-outfit gh-pet-outfit--hat">
-      <path
-        d="M76 48 C 76 26 124 26 124 48 Z"
-        fill="url(#lw-pet-hat-red)"
-        stroke="#8e2a26"
-        strokeWidth="1.5"
-        strokeOpacity="0.45"
-      />
-      <path d="M82 33 Q 90 27 100 26 Q 110 27 118 33" fill="none" stroke="#ff9e93" strokeWidth="3" strokeLinecap="round" opacity="0.55" />
-      <rect x="66" y="43" width="68" height="13" rx="6.5" fill="#c93c37" stroke="#8e2a26" strokeWidth="1.5" strokeOpacity="0.45" />
-      <g stroke="#a92f2a" strokeWidth="2" strokeLinecap="round" opacity="0.7">
-        <path d="M80 46 v 7" />
-        <path d="M100 46 v 7" />
-        <path d="M120 46 v 7" />
-      </g>
-      <circle cx="100" cy="24" r="9.5" fill="url(#lw-pet-pom)" stroke="#a98b62" strokeWidth="1.2" strokeOpacity="0.45" />
-      <path d="M95 20 Q 98 17 102 18" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" opacity="0.8" />
+    <g>
+      <path d="M-44 2 C -44 -30 -22 -48 0 -48 C 22 -48 44 -30 44 2 Z" fill="url(#lw-pet-hat-red)" />
+      <path d="M-46 0 Q0 -16 46 0 L 46 10 Q0 24 -46 10 Z" fill="url(#lw-pet-hat-brim)" />
+      <path d="M-38 -2 Q0 -14 38 -2" stroke="#ffd7cf" strokeWidth={3} opacity="0.45" fill="none" />
+      <circle cx={4} cy={-52} r={12} fill="url(#lw-pet-pom)" />
+      <circle cx={-2} cy={-56} r={4.4} fill="#fff" opacity="0.55" />
+      <path d="M-26 -30 C -18 -40 -6 -44 4 -44" stroke="#fff" strokeOpacity="0.3" strokeWidth={5} strokeLinecap="round" fill="none" />
     </g>
   )
 }
 
-/** 黄金皇冠：五尖 + 宝珠 + 底带宝石 */
 function CrownGold() {
   return (
-    <g className="gh-pet-outfit gh-pet-outfit--hat">
+    <g>
       <path
-        d="M66 46 L66 24 L82 37 L100 15 L118 37 L134 24 L134 46 Z"
+        d="M-38 8 L-38 -20 L-20 -6 L0 -30 L20 -6 L38 -20 L38 8 Z"
         fill="url(#lw-pet-crown)"
-        stroke="#a97813"
-        strokeWidth="1.6"
-        strokeOpacity="0.5"
+        stroke="#b88712"
+        strokeWidth={2}
         strokeLinejoin="round"
       />
-      <path d="M66 41 H 134 V 50 H 66 Z" fill="url(#lw-pet-crown-band)" stroke="#a97813" strokeWidth="1.4" strokeOpacity="0.45" />
-      <path d="M73 31 L 79 37" fill="none" stroke="#fff8d0" strokeWidth="2" strokeLinecap="round" opacity="0.7" />
-      <path d="M127 31 L 121 37" fill="none" stroke="#fff8d0" strokeWidth="2" strokeLinecap="round" opacity="0.6" />
-      <g fill="#fff3c4" stroke="#d9a92c" strokeWidth="1.2">
-        <circle cx="66" cy="24" r="3.6" />
-        <circle cx="100" cy="15" r="3.8" />
-        <circle cx="134" cy="24" r="3.6" />
-      </g>
-      <circle cx="100" cy="45.5" r="5.6" fill="#e5534b" stroke="#c93c37" strokeWidth="1.5" />
-      <circle cx="98.2" cy="43.6" r="1.7" fill="#ffffff" opacity="0.85" />
-      <circle cx="81" cy="46" r="3.4" fill="#5eb0ef" stroke="#3f8bd1" strokeWidth="1.1" />
-      <circle cx="80.2" cy="45" r="1.1" fill="#ffffff" opacity="0.85" />
-      <circle cx="119" cy="46" r="3.4" fill="#5eb0ef" stroke="#3f8bd1" strokeWidth="1.1" />
-      <circle cx="118.2" cy="45" r="1.1" fill="#ffffff" opacity="0.85" />
+      <rect x={-40} y={4} width={80} height={12} rx={5} fill="url(#lw-pet-crown-band)" stroke="#b88712" strokeWidth={1.5} />
+      <circle cx={-21} cy={10} r={3.2} fill="#ff6b81" />
+      <circle cx={0} cy={10} r={3.6} fill="#5fd0ff" />
+      <circle cx={21} cy={10} r={3.2} fill="#8bffb0" />
+      <circle cx={0} cy={-30} r={3.8} fill="#fff3b4" />
+      <path d="M-30 -8 L-24 -12" stroke="#fff8d0" strokeWidth={3} strokeLinecap="round" opacity="0.7" />
     </g>
   )
 }
 
-/** 圆框眼镜：金属细框 + 镜片反光 */
+function ScarfBlue() {
+  return (
+    <g>
+      <path d="M-40 -6 C -28 10 28 10 40 -6 C 40 8 26 18 0 18 C -26 18 -40 8 -40 -6 Z" fill="url(#lw-pet-scarf)" />
+      <path d="M22 8 C 32 22 33 38 24 48 L 8 42 C 18 34 18 20 12 10 Z" fill="url(#lw-pet-scarf)" />
+      <path d="M12 14 C 20 22 22 34 21 42" stroke="#1d4fa3" strokeWidth={2} opacity="0.45" fill="none" />
+      <path d="M-40 -4 C -24 -14 24 -14 40 -4" stroke="#a9d6ff" strokeWidth={3} opacity="0.55" fill="none" />
+      <path d="M8 40 L 24 46" stroke="#1d4fa3" strokeWidth={2} opacity="0.5" />
+    </g>
+  )
+}
+
+function Bowtie() {
+  return (
+    <g>
+      <path d="M-4 0 L-26 -12 Q-36 -14 -36 -2 Q-36 10 -26 12 Z" fill="url(#lw-pet-bowtie)" />
+      <path d="M4 0 L26 -12 Q36 -14 36 -2 Q36 10 26 12 Z" fill="url(#lw-pet-bowtie)" />
+      <circle cx={0} cy={0} r={8} fill="#e14b56" stroke="#b32d38" strokeWidth={1.5} />
+      <path d="M-24 -6 L-12 -2" stroke="#ffd0d6" strokeWidth={3} opacity="0.55" strokeLinecap="round" />
+      <path d="M24 -6 L12 -2" stroke="#ffd0d6" strokeWidth={3} opacity="0.45" strokeLinecap="round" />
+    </g>
+  )
+}
+
+function CapeHero({ scale }: { scale: number }) {
+  return (
+    <g className="gh-pet-outfit gh-pet-outfit--cape" transform={`translate(120 150) scale(${scale}) translate(-120 -150)`}>
+      <path
+        d="M88 144 C 66 160 58 186 64 208 C 76 215 92 212 104 206 C 112 202 128 202 136 206 C 148 212 164 215 176 208 C 182 186 174 160 152 144 Z"
+        fill="url(#lw-pet-cape)"
+      />
+      <path d="M120 150 C 120 176 118 196 116 207" stroke="#1b2568" strokeWidth={4} opacity="0.4" fill="none" />
+      <path d="M94 154 C 80 170 76 190 78 204" stroke="#8fb3ff" strokeWidth={3} opacity="0.35" fill="none" />
+      <path d="M146 154 C 160 170 164 190 162 204" stroke="#8fb3ff" strokeWidth={3} opacity="0.3" fill="none" />
+    </g>
+  )
+}
+
+function CapeCollar({ anchor }: { anchor: SlotAnchor }) {
+  return (
+    <g
+      className="gh-pet-outfit gh-pet-outfit--neck"
+      transform={`translate(${anchor.x} ${anchor.y - 4}) scale(${anchor.s})`}
+    >
+      <path d="M-30 -4 Q0 8 30 -4" stroke="#22307f" strokeWidth={7} strokeLinecap="round" fill="none" />
+      <circle cx={0} cy={4} r={6.4} fill="#f8cf5c" stroke="#b88712" strokeWidth={1.4} />
+    </g>
+  )
+}
+
 function GlassesRound() {
   return (
-    <g className="gh-pet-outfit">
-      <g fill="url(#lw-pet-glasses-lens)" stroke="#4b3a33" strokeWidth="3.2">
-        <circle cx="80" cy="81" r="16" />
-        <circle cx="120" cy="81" r="16" />
-      </g>
-      <path d="M96 81 h8" fill="none" stroke="#4b3a33" strokeWidth="3.2" strokeLinecap="round" />
-      <path d="M64 78 L 49 72" fill="none" stroke="#4b3a33" strokeWidth="3.2" strokeLinecap="round" />
-      <path d="M136 78 L 151 72" fill="none" stroke="#4b3a33" strokeWidth="3.2" strokeLinecap="round" />
-      <g fill="none" stroke="rgba(255,255,255,0.72)" strokeWidth="2.6" strokeLinecap="round">
-        <path d="M73 75 L 82 84.5" />
-        <path d="M77 72.5 L 85.5 81" />
-        <path d="M113 75 L 122 84.5" />
-        <path d="M117 72.5 L 125.5 81" />
-      </g>
+    <g
+      className="gh-pet-outfit gh-pet-outfit--face"
+      fill="url(#lw-pet-glass)"
+      fillOpacity={0.55}
+      stroke="#6b4a2f"
+      strokeWidth={2.6}
+      strokeLinejoin="round"
+    >
+      <circle cx={-19} cy={0} r={16} />
+      <circle cx={19} cy={0} r={16} />
+      <path d="M-3 0 Q0 -4 3 0" fill="none" />
+      <path d="M-35 -3 L-47 -9" fill="none" strokeLinecap="round" />
+      <path d="M35 -3 L47 -9" fill="none" strokeLinecap="round" />
+      <path d="M-25 -8 L-19 -11" stroke="#fff" strokeWidth={3} opacity="0.65" fill="none" strokeLinecap="round" />
+      <path d="M13 -8 L19 -11" stroke="#fff" strokeWidth={3} opacity="0.5" fill="none" strokeLinecap="round" />
     </g>
   )
 }
 
-/** 墨镜：宽幅深色镜片 + 斜向反光 */
 function Sunglasses() {
   return (
-    <g className="gh-pet-outfit">
-      <rect x="63" y="68" width="34" height="24" rx="10" fill="url(#lw-pet-sun-lens)" stroke="#22242e" strokeWidth="1.6" />
-      <rect x="103" y="68" width="34" height="24" rx="10" fill="url(#lw-pet-sun-lens)" stroke="#22242e" strokeWidth="1.6" />
-      <path d="M97 77 h6" fill="none" stroke="#22242e" strokeWidth="4" strokeLinecap="round" />
-      <path d="M63 74 L 48 68" fill="none" stroke="#22242e" strokeWidth="4" strokeLinecap="round" />
-      <path d="M137 74 L 152 68" fill="none" stroke="#22242e" strokeWidth="4" strokeLinecap="round" />
-      <path d="M70 73 L 81 83" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="3" strokeLinecap="round" />
-      <path d="M110 73 L 121 83" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="3" strokeLinecap="round" />
-      <path d="M69 90 Q 80 94 95 89" fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="2" strokeLinecap="round" />
-      <path d="M109 90 Q 120 94 135 89" fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="2" strokeLinecap="round" />
+    <g className="gh-pet-outfit gh-pet-outfit--face">
+      <rect x={-37} y={-13} width={32} height={26} rx={10} fill="url(#lw-pet-shades)" stroke="#16171c" strokeWidth={2} transform="rotate(-4 -21 0)" />
+      <rect x={5} y={-13} width={32} height={26} rx={10} fill="url(#lw-pet-shades)" stroke="#16171c" strokeWidth={2} transform="rotate(4 21 0)" />
+      <path d="M-5 -2 Q0 -6 5 -2" stroke="#16171c" strokeWidth={3} fill="none" />
+      <path d="M-33 -3 L-44 -8" stroke="#16171c" strokeWidth={3} fill="none" strokeLinecap="round" />
+      <path d="M33 -3 L44 -8" stroke="#16171c" strokeWidth={3} fill="none" strokeLinecap="round" />
+      <path d="M-30 -8 L-22 -10" stroke="#fff" strokeWidth={3} opacity="0.35" strokeLinecap="round" />
+      <path d="M12 -8 L20 -10" stroke="#fff" strokeWidth={3} opacity="0.3" strokeLinecap="round" />
     </g>
   )
 }
 
-/** 帽子槽位：key → SVG 组（未知 key 不渲染） */
-const HAT_OUTFITS: Record<string, () => ReactNode> = {
-  hat_red: HatRed,
-  crown_gold: CrownGold,
+function NeckOutfit({ outfitKey, anchor }: { outfitKey: string; anchor: SlotAnchor }) {
+  const node = outfitKey === 'scarf_blue'
+    ? <ScarfBlue />
+    : outfitKey === 'bowtie'
+      ? <Bowtie />
+      : null
+  if (!node) return null
+  return (
+    <g className="gh-pet-outfit gh-pet-outfit--neck" transform={`translate(${anchor.x} ${anchor.y}) scale(${anchor.s})`}>
+      {node}
+    </g>
+  )
 }
 
-/** 颈部槽位（cape_hero 背后披风 + 正面肩甲分两层画） */
-const NECK_FRONT_OUTFITS: Record<string, () => ReactNode> = {
-  scarf_blue: ScarfBlue,
-  bowtie: Bowtie,
-  cape_hero: CapeHeroFront,
+function HatOutfit({ outfitKey, anchor }: { outfitKey: string; anchor: SlotAnchor }) {
+  const node = outfitKey === 'hat_red'
+    ? <HatRed />
+    : outfitKey === 'crown_gold'
+      ? <CrownGold />
+      : null
+  if (!node) return null
+  return (
+    <g className="gh-pet-outfit gh-pet-outfit--hat" transform={`translate(${anchor.x} ${anchor.y}) scale(${anchor.s})`}>
+      {node}
+    </g>
+  )
 }
 
-/** 面部槽位 */
-const FACE_OUTFITS: Record<string, () => ReactNode> = {
-  glasses_round: GlassesRound,
-  sunglasses: Sunglasses,
+function FaceOutfit({ outfitKey, anchor }: { outfitKey: string; anchor: SlotAnchor }) {
+  const node = outfitKey === 'glasses_round'
+    ? <GlassesRound />
+    : outfitKey === 'sunglasses'
+      ? <Sunglasses />
+      : null
+  if (!node) return null
+  return (
+    <g className="gh-pet-outfit gh-pet-outfit--face" transform={`translate(${anchor.x} ${anchor.y}) scale(${anchor.s})`}>
+      {node}
+    </g>
+  )
+}
+
+/* ============================================================
+   动作特效（默认隐藏，由 `gh-pet-anim-*` 容器类在 CSS 里按 key 显示）
+   ============================================================ */
+
+function Note({ transform }: { transform: string }) {
+  return (
+    <g transform={transform}>
+      <ellipse cx={0} cy={0} rx={5.6} ry={4.1} transform="rotate(-18)" fill="#7b62e8" />
+      <path d="M4.6 -1.4 V -17" stroke="#7b62e8" strokeWidth={2.6} strokeLinecap="round" />
+      <path d="M4.6 -17 C 9.5 -15 11.5 -12 10.4 -8.6" stroke="#7b62e8" strokeWidth={2.6} strokeLinecap="round" fill="none" />
+    </g>
+  )
+}
+
+function Zzz({ transform }: { transform: string }) {
+  return (
+    <path
+      d="M0 0 H11 L0 13 H11"
+      transform={transform}
+      stroke="#6b7bd6"
+      strokeWidth={2.6}
+      fill="none"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  )
+}
+
+function PetEffects() {
+  return (
+    <g className="gh-pet-fx-layer" aria-hidden>
+      <g className="gh-pet-fx gh-pet-fx-hearts">
+        {heart('translate(56 98) scale(0.72) rotate(-14)', 'h1')}
+        {heart('translate(78 62) scale(0.5) rotate(10)', 'h2', 0.85)}
+        {heart('translate(184 102) scale(0.62) rotate(12)', 'h3', 0.9)}
+      </g>
+      <g className="gh-pet-fx gh-pet-fx-bubbles">
+        <circle cx={70} cy={86} r={11} fill="#eefbff" opacity={0.82} />
+        <circle cx={76} cy={82} r={3.4} fill="#fff" opacity={0.9} />
+        <circle cx={84} cy={62} r={7} fill="#eefbff" opacity={0.72} />
+        <circle cx={176} cy={78} r={9} fill="#eefbff" opacity={0.75} />
+        <circle cx={190} cy={112} r={6} fill="#eefbff" opacity={0.65} />
+        <circle cx={60} cy={128} r={5} fill="#eefbff" opacity={0.6} />
+      </g>
+      <g className="gh-pet-fx gh-pet-fx-notes">
+        <Note transform="translate(56 86)" />
+        <Note transform="translate(186 92) scale(0.86)" />
+        <Note transform="translate(70 52) scale(0.7)" />
+      </g>
+      <g className="gh-pet-fx gh-pet-fx-sparkles">
+        {sparkle('translate(64 74) scale(0.9)', 's1')}
+        {sparkle('translate(186 80) scale(0.7)', 's2', '#ffe9a3')}
+        {sparkle('translate(120 30) scale(0.62)', 's3', '#fff2bd')}
+        {sparkle('translate(50 140) scale(0.5)', 's4', '#bfe6ff')}
+        {sparkle('translate(198 138) scale(0.56)', 's5', '#ffd0e2')}
+      </g>
+      <g className="gh-pet-fx gh-pet-fx-ball">
+        <circle cx={190} cy={196} r={13} fill="#f6ee8a" stroke="#d7ca55" strokeWidth={2} />
+        <path d="M179 190 Q190 197 201 190" stroke="#fff" strokeWidth={2} fill="none" opacity={0.8} />
+        <path d="M179 201 Q190 194 201 201" stroke="#d7ca55" strokeWidth={1.6} fill="none" opacity={0.7} />
+      </g>
+      <g className="gh-pet-fx gh-pet-fx-confetti">
+        <rect x={54} y={70} width={7} height={12} rx={2} fill="#ff7b8a" transform="rotate(-18 57 76)" />
+        <rect x={86} y={48} width={6} height={11} rx={2} fill="#ffd76e" transform="rotate(22 89 53)" />
+        <rect x={150} y={46} width={7} height={12} rx={2} fill="#74d9ff" transform="rotate(-12 153 52)" />
+        <rect x={184} y={72} width={6} height={11} rx={2} fill="#a4f0a6" transform="rotate(32 187 77)" />
+        <rect x={70} y={110} width={6} height={10} rx={2} fill="#c9a6ff" transform="rotate(14 73 115)" />
+        <rect x={176} y={124} width={6} height={10} rx={2} fill="#ffb0c0" transform="rotate(-24 179 129)" />
+      </g>
+      <g className="gh-pet-fx gh-pet-fx-zzz">
+        <Zzz transform="translate(168 84) scale(0.9)" />
+        <Zzz transform="translate(184 62) scale(0.66)" />
+      </g>
+      <g className="gh-pet-fx gh-pet-fx-hand">
+        <g transform="translate(194 120) rotate(10)">
+          <rect x={-10} y={-4} width={20} height={22} rx={9} fill="#ffcf9a" stroke="#e0a86f" strokeWidth={1.6} />
+          <rect x={-10} y={-20} width={6.4} height={20} rx={3.2} fill="#ffd9ab" stroke="#e0a86f" strokeWidth={1.4} />
+          <rect x={-2.6} y={-24} width={6.4} height={24} rx={3.2} fill="#ffd9ab" stroke="#e0a86f" strokeWidth={1.4} />
+          <rect x={4.6} y={-21} width={6.4} height={21} rx={3.2} fill="#ffd9ab" stroke="#e0a86f" strokeWidth={1.4} />
+          <rect x={-20} y={0} width={12} height={7} rx={3.5} fill="#ffd9ab" stroke="#e0a86f" strokeWidth={1.4} transform="rotate(-24 -14 3)" />
+        </g>
+      </g>
+      <g className="gh-pet-fx gh-pet-fx-bowl">
+        <g transform="translate(120 216)">
+          <path d="M-24 0 Q-20 17 0 17 Q20 17 24 0 Z" fill="#dfe5ef" stroke="#b9c3d4" strokeWidth={1.4} />
+          <ellipse cx={0} cy={0} rx={24} ry={5} fill="#f6d9a5" />
+          <circle cx={-7} cy={-1} r={3.4} fill="#e2a05c" />
+          <circle cx={5} cy={1} r={2.8} fill="#d98d4b" />
+        </g>
+      </g>
+      <g className="gh-pet-fx gh-pet-fx-dust">
+        <circle cx={74} cy={214} r={7} fill="#d8c3a4" opacity={0.8} />
+        <circle cx={162} cy={214} r={7} fill="#d8c3a4" opacity={0.8} />
+        <circle cx={56} cy={202} r={5} fill="#e2d2b8" opacity={0.7} />
+      </g>
+    </g>
+  )
+}
+
+/** 低落状态的汗滴（不占动画层，随 mood 常驻） */
+function Sweat() {
+  return (
+    <g className="gh-pet-sweat" aria-hidden>
+      <path d="M172 74 C 166 84 164 90 168 94 C 172 98 180 96 181 90 C 182 84 176 80 172 74 Z" fill="url(#lw-pet-sweat)" />
+      <circle cx={172} cy={87} r={2.2} fill="#fff" opacity={0.7} />
+    </g>
+  )
 }
 
 /* ============================================================
@@ -1057,78 +959,58 @@ const FACE_OUTFITS: Record<string, () => ReactNode> = {
    ============================================================ */
 
 export default function PetSprite({
-  species,
-  action = 'idle',
+  species: rawSpecies,
   equipped = null,
+  mood = 70,
+  animation,
+  action,
   size = 200,
-  sad = false,
+  className,
+  interactive = false,
 }: PetSpriteProps) {
-  const Body = SPECIES_BODIES[species]
-  const safeAction = ACTION_RE.test(action) ? action : 'idle'
+  const species = normalizePetSpecies(rawSpecies)
+  const palette = resolveSpeciesPalette(species)
+  const meta = resolveSpeciesMeta(species)
+  const requested = animation ?? action ?? 'idle'
+  const safeAnimation = ANIMATION_RE.test(requested) && KNOWN_ANIMATIONS.has(requested)
+    ? requested
+    : 'idle'
+  const safeMood = Math.max(0, Math.min(100, Number.isFinite(mood) ? mood : 70))
+  const anchors = OUTFIT_ANCHORS[species]
 
-  const hat = equipped?.hat ?? null
-  const neck = equipped?.neck ?? null
-  const face = equipped?.face ?? null
-
-  // 披风画在身体之后，其余装扮画在身体之前
-  const cape = neck === 'cape_hero' ? <CapeHero /> : null
-  const neckFront = (neck && NECK_FRONT_OUTFITS[neck]?.()) ?? null
-  const hatNode = (hat && HAT_OUTFITS[hat]?.()) ?? null
-  const faceNode = (face && FACE_OUTFITS[face]?.()) ?? null
-
-  const classes = [
-    'gh-pet-sprite',
-    `gh-pet-anim-${safeAction}`,
-    sad ? 'gh-pet-sprite--sad' : '',
-  ].filter(Boolean).join(' ')
+  const classes = ['gh-pet-sprite', `gh-pet-anim-${safeAnimation}`]
+  if (safeMood >= 70) classes.push('gh-pet-sprite--happy')
+  if (safeMood < 30) classes.push('gh-pet-sprite--low')
+  if (interactive) classes.push('gh-pet-sprite--interactive')
+  if (className) classes.push(className)
 
   return (
-    <div className={classes} style={{ width: size, height: size }} data-species={species}>
-      <svg viewBox="0 0 200 200" role="img" aria-label={SPECIES_LABELS[species]}>
-        <PetDefs />
-        {/* 地面投影（柔和淡影） */}
-        <ellipse cx="100" cy="188" rx="46" ry="8" fill="url(#lw-pet-shadow)" />
-        {cape}
-        <Body />
-        {neckFront}
-        {hatNode}
-        {faceNode}
-        {sad && <PetSweat />}
+    <div
+      className={classes.join(' ')}
+      style={{ width: size, height: size }}
+      data-species={species}
+      data-animation={safeAnimation}
+    >
+      <svg viewBox="0 0 240 240" role="img" aria-label={meta.name}>
+        <PetDefs species={species} palette={palette} />
+        <ellipse cx={120} cy={214} rx={62} ry={11} fill="url(#lw-pet-shadow)" />
+        {equipped?.neck === 'cape_hero' && <CapeHero scale={anchors.cape} />}
+        <g className="gh-pet-motion">
+          <g className="gh-pet-breathe">
+            {renderCreature(species, palette, safeMood)}
+          </g>
+        </g>
+        {equipped?.neck && equipped.neck !== 'cape_hero' && (
+          <NeckOutfit outfitKey={equipped.neck} anchor={anchors.neck} />
+        )}
+        {equipped?.neck === 'cape_hero' && <CapeCollar anchor={anchors.neck} />}
+        {equipped?.hat && <HatOutfit outfitKey={equipped.hat} anchor={anchors.hat} />}
+        {equipped?.face && <FaceOutfit outfitKey={equipped.face} anchor={anchors.face} />}
+        <PetEffects />
+        {safeMood < 30 && <Sweat />}
       </svg>
-
-      {/* 动作特效（默认隐藏，按 gh-pet-anim-{action} 容器类在 CSS 中显示） */}
-      <span className="gh-pet-fx gh-pet-fx-bowl" aria-hidden>🥣</span>
-      <span className="gh-pet-fx gh-pet-fx-bubble gh-pet-fx-bubble--a" aria-hidden>🫧</span>
-      <span className="gh-pet-fx gh-pet-fx-bubble gh-pet-fx-bubble--b" aria-hidden>🫧</span>
-      <span className="gh-pet-fx gh-pet-fx-bubble gh-pet-fx-bubble--c" aria-hidden>🫧</span>
-      <span className="gh-pet-fx gh-pet-fx-ball" aria-hidden>🎾</span>
-      <span className="gh-pet-fx gh-pet-fx-heart gh-pet-fx-heart--a" aria-hidden>💛</span>
-      <span className="gh-pet-fx gh-pet-fx-heart gh-pet-fx-heart--b" aria-hidden>💗</span>
-      <span className="gh-pet-fx gh-pet-fx-note gh-pet-fx-note--a" aria-hidden>🎵</span>
-      <span className="gh-pet-fx gh-pet-fx-note gh-pet-fx-note--b" aria-hidden>🎶</span>
-      <span className="gh-pet-fx gh-pet-fx-star gh-pet-fx-star--a" aria-hidden>✨</span>
-      <span className="gh-pet-fx gh-pet-fx-star gh-pet-fx-star--b" aria-hidden>⭐</span>
-      <span className="gh-pet-fx gh-pet-fx-star gh-pet-fx-star--c" aria-hidden>✨</span>
-      <span className="gh-pet-fx gh-pet-fx-spark gh-pet-fx-spark--a" aria-hidden>✦</span>
-      <span className="gh-pet-fx gh-pet-fx-spark gh-pet-fx-spark--b" aria-hidden>✧</span>
-      <span className="gh-pet-fx gh-pet-fx-spark gh-pet-fx-spark--c" aria-hidden>✦</span>
-      <span className="gh-pet-fx gh-pet-fx-spark gh-pet-fx-spark--d" aria-hidden>✧</span>
-      <span className="gh-pet-fx gh-pet-fx-spark gh-pet-fx-spark--e" aria-hidden>✦</span>
-      {/* 新增动作特效 */}
-      <span className="gh-pet-fx gh-pet-fx-zzz gh-pet-fx-zzz--a" aria-hidden>💤</span>
-      <span className="gh-pet-fx gh-pet-fx-zzz gh-pet-fx-zzz--b" aria-hidden>💤</span>
-      <span className="gh-pet-fx gh-pet-fx-hand" aria-hidden>✋</span>
-      <span className="gh-pet-fx gh-pet-fx-dust gh-pet-fx-dust--a" aria-hidden />
-      <span className="gh-pet-fx gh-pet-fx-dust gh-pet-fx-dust--b" aria-hidden />
-      <span className="gh-pet-fx gh-pet-fx-dust gh-pet-fx-dust--c" aria-hidden />
-      <span className="gh-pet-fx gh-pet-fx-dizzy gh-pet-fx-dizzy--a" aria-hidden>💫</span>
-      <span className="gh-pet-fx gh-pet-fx-dizzy gh-pet-fx-dizzy--b" aria-hidden>💫</span>
-      <span className="gh-pet-fx gh-pet-fx-confetti gh-pet-fx-confetti--1" aria-hidden />
-      <span className="gh-pet-fx gh-pet-fx-confetti gh-pet-fx-confetti--2" aria-hidden />
-      <span className="gh-pet-fx gh-pet-fx-confetti gh-pet-fx-confetti--3" aria-hidden />
-      <span className="gh-pet-fx gh-pet-fx-confetti gh-pet-fx-confetti--4" aria-hidden />
-      <span className="gh-pet-fx gh-pet-fx-confetti gh-pet-fx-confetti--5" aria-hidden />
-      <span className="gh-pet-glow" aria-hidden />
     </div>
   )
 }
+
+
