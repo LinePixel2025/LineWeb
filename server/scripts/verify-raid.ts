@@ -97,16 +97,16 @@ function medkit(id = 'med-1'): RaidLootItem {
 }
 
 /* ---------- 地图 / 生成 ---------- */
-assertEqual(RAID_MAPS.length, 4, '共 4 张搜打撤地图')
+assertEqual(RAID_MAPS.length, 6, '共 6 张搜打撤地图')
 assertEqual(new Set(RAID_MAPS.map((map) => map.key)).size, RAID_MAPS.length, '地图 key 唯一')
 for (const map of RAID_MAPS) {
-  assert(map.size >= 7 && map.size <= 9, `${map.name} 地图尺寸合理`)
+  assert(map.size >= 7 && map.size <= 10, `${map.name} 地图尺寸合理`)
   assert(map.enemyCount > 0, `${map.name} 有敌人`)
   assert(map.lootCount > 0, `${map.name} 有物资`)
   assert(map.extractCount >= 1, `${map.name} 至少一个撤离点`)
   assert(map.maxTurns >= 30, `${map.name} 行动点足够`)
 }
-assert(RAID_LOOT_ENTRIES.length >= 12, '战利品目录足够丰富')
+assert(RAID_LOOT_ENTRIES.length >= 20, '战利品目录足够丰富')
 assertEqual(new Set(RAID_LOOT_ENTRIES.map((item) => item.key)).size, RAID_LOOT_ENTRIES.length, '战利品 key 唯一')
 
 const a = makeState(999)

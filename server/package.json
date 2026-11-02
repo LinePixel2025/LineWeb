@@ -27,6 +27,7 @@
     "verify:points": "tsx scripts/verify-points.ts",
     "verify:pet": "tsx scripts/verify-pet.ts",
     "verify:raid": "tsx scripts/verify-raid.ts",
+    "verify:raidstorage": "tsx scripts/verify-raid-storage.ts",
     "verify:stocks": "tsx scripts/verify-stocks.ts",
     "verify:chat": "tsx scripts/verify-chat.ts",
     "verify:reader": "tsx scripts/verify-reader.ts",

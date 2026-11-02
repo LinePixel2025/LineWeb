@@ -9,6 +9,7 @@ import type {
   FarmPlot,
   FarmProtectionPackage,
   FarmView,
+  FertilizeAllResult,
   HarvestAllResult,
   HarvestResult,
   MerchantOffer,
@@ -189,6 +190,9 @@ export default function FarmPage() {
   const readyPlots = plots.filter((plot) => plot.ready)
   const emptyPlots = plots.filter((plot) => !plot.crop).length
   const growingPlots = plots.length - readyPlots.length - emptyPlots
+  // 可施肥地块：有作物、未成熟、未达每茬施肥上限（上限由 economy 下发，前端不算数值）
+  const fertilizablePlots = plots.filter((plot) =>
+    !!plot.crop && !plot.ready && plot.fertilized < (view?.economy.fertilizerMaxPerCrop ?? 0))
 
   const handleCreate = async (name: string) => {
     await run('create', () => api.post<FarmView>('/farm/create', { name }), '开荒成功！赠送的种子与肥料已放进仓库')
@@ -270,6 +274,28 @@ export default function FarmPage() {
       await refreshPoints()
     } catch (err) {
       setError(err instanceof Error ? err.message : '一键收获失败，请稍后再试')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** 一键施肥所有可施肥地块：服务端一次事务结算，肥料不足时尽力而为（施完为止） */
+  const handleFertilizeAll = async () => {
+    if (busy || fertilizablePlots.length === 0) return
+    setBusy('fertilize-all')
+    setError('')
+    setNotice('')
+    try {
+      const result = await api.post<FertilizeAllResult>('/farm/fertilize-all')
+      setView(result.view)
+      setNotice(result.fertilizedCount > 0
+        ? `一键施肥完成，共施 ${result.fertilizedCount} 块地`
+        : result.skippedCount > 0
+          ? '肥料不足，去商店买一些吧'
+          : '没有可施肥的地块')
+      await refreshPoints()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '一键施肥失败，请稍后再试')
     } finally {
       setBusy(null)
     }
@@ -433,6 +459,14 @@ export default function FarmPage() {
                     onClick={() => void handleHarvestAll()}
                   >
                     {busy === 'harvest-all' ? '收获中…' : readyPlots.length > 0 ? `一键收获 ${readyPlots.length} 块` : '暂无成熟作物'}
+                  </button>
+                  <button
+                    type="button"
+                    className="gh-btn gh-btn--secondary gh-btn--sm"
+                    disabled={!!busy || fertilizablePlots.length === 0}
+                    onClick={() => void handleFertilizeAll()}
+                  >
+                    {busy === 'fertilize-all' ? '施肥中…' : fertilizablePlots.length > 0 ? `一键施肥 ${fertilizablePlots.length} 块` : '暂无可施肥作物'}
                   </button>
                   <button
                     type="button"

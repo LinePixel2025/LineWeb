@@ -77,6 +77,10 @@ model User {
   petRaid                PetRaid? // 进行中的宠物搜打撤对局（每人至多一局）
   petRaidRecords         PetRaidRecord[] // 搜打撤战绩
   petRaidContracts       PetRaidContract[] // 搜打撤每日契约
+  raidStorage            RaidStorage? // 搜打撤仓库（等级决定容量与保险箱格数）
+  raidInventoryItems     RaidInventoryItem[] // 搜打撤仓库物品（按物品聚合）
+  raidMarketListingsSold   RaidMarketListing[] @relation("RaidMarketListingSeller") // 我挂出的搜打撤交易行条目
+  raidMarketListingsBought RaidMarketListing[] @relation("RaidMarketListingBuyer") // 我买下的搜打撤交易行条目
   farmSeedListings       FarmSeedListing[]     @relation("FarmSeedSeller") // 我挂出的种子
   farmSeedPurchases      FarmSeedListing[]     @relation("FarmSeedBuyer") // 我买下的种子
   stockOrders            StockOrder[] // 股市限价委托
@@ -755,7 +759,7 @@ model PointsLedger {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   amount    Int // 正数=获得，负数=扣除
   balance   Int // 变动后余额
-  reason    String // game_result | farm_harvest | farm_steal | farm_welcome | farm_shop | farm_expand | farm_merchant | farm_protect | farm_seed_buy | farm_seed_sell | shop_purchase | checkin | leader_bonus | stock | stock_order_buy | stock_order_refund | stock_order_sell | pet_raid | pet_raid_entry | pet_raid_insurance | pet_raid_contract | redpacket_send | redpacket_receive | redpacket_refund | admin_adjust
+  reason    String // game_result | farm_harvest | farm_steal | farm_welcome | farm_shop | farm_expand | farm_merchant | farm_protect | farm_seed_buy | farm_seed_sell | shop_purchase | checkin | leader_bonus | stock | stock_order_buy | stock_order_refund | stock_order_sell | pet_raid | pet_raid_entry | pet_raid_insurance | pet_raid_contract | raid_recycle | raid_market_sell | raid_market_buy | raid_storage_upgrade | redpacket_send | redpacket_receive | redpacket_refund | admin_adjust
   game      String? // 来源游戏 id（2048 / doudizhu / ... / farm）
   note      String?
   createdAt DateTime @default(now()) @map("created_at")
@@ -1559,4 +1563,83 @@ model PetRaidContract {
   @@unique([userId, dateKey, contractKey])
   @@index([userId, dateKey])
   @@map("pet_raid_contracts")
+}
+
+// === 搜打撤仓库 / 交易行（撤离战利品入仓 + 玩家间材料交易） ===
+
+/**
+ * 搜打撤仓库（每用户一行）。等级 1–6，容量 / 保险箱格数由
+ * server/src/lib/raidStorage.ts 的 RAID_STORAGE_LEVELS 派生。
+ */
+model RaidStorage {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  level     Int      @default(1) // 仓库等级 1–6，容量/保险箱格数由 RAID_STORAGE_LEVELS 派生
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("raid_storage")
+}
+
+/**
+ * 搜打撤仓库物品（按 [userId, itemKey] 聚合数量）。
+ * listedAmount 为已被在售挂单预留的数量，恒有 amount >= listedAmount（写路径守卫保证）。
+ */
+model RaidInventoryItem {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemKey      String   @map("item_key") // RAID_LOOT_ENTRIES.key
+  amount       Int      @default(0)
+  listedAmount Int      @default(0) @map("listed_amount") // 已被在售挂单预留的数量，恒有 amount >= listedAmount
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, itemKey])
+  @@map("raid_inventory_items")
+}
+
+/**
+ * 搜打撤交易行挂单（整单出售，不支持部分购买）。
+ * itemName / rarity / value 为挂单时的目录快照，防目录调整影响历史挂单。
+ */
+model RaidMarketListing {
+  id        Int       @id @default(autoincrement())
+  sellerId  Int       @map("seller_id")
+  seller    User      @relation("RaidMarketListingSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+  itemKey   String    @map("item_key")
+  itemName  String    @map("item_name") // 目录名快照
+  rarity    String // 稀有度快照
+  value     Int // 单件目录价值快照（定价基准）
+  amount    Int
+  price     Int // 整单总价（积分）
+  status    String    @default("active") // active | sold | cancelled
+  buyerId   Int?      @map("buyer_id")
+  buyer     User?     @relation("RaidMarketListingBuyer", fields: [buyerId], references: [id], onDelete: SetNull)
+  soldAt    DateTime? @map("sold_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([status, createdAt])
+  @@index([sellerId, status])
+  @@map("raid_market_listings")
+}
+
+/**
+ * 搜打撤交易行成交记录（append-only）。fee 为卖家手续费（5% 向上取整，最低 1）。
+ */
+model RaidMarketTrade {
+  id        Int      @id @default(autoincrement())
+  listingId Int?     @map("listing_id")
+  sellerId  Int      @map("seller_id")
+  buyerId   Int      @map("buyer_id")
+  itemKey   String   @map("item_key")
+  itemName  String   @map("item_name")
+  amount    Int
+  price     Int // 整单成交总价
+  fee       Int // 卖家手续费
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("raid_market_trades")
 }

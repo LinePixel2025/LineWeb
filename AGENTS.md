@@ -286,7 +286,8 @@ cd server && npm run verify:parkour   # 3D 跑酷引擎/关卡生成/机器人 +
 cd server && npm run verify:aichat   # AI 对话纯函数（日期边界/配额/标题/DTO/联网搜索解析与上下文，82 断言）
 cd server && npm run verify:chat     # 自建聊天：XML 解析/身份映射/XMPP 握手状态机/长轮询/票据/视图（98 断言）
 cd server && npm run verify:pet      # 宠物系统纯函数：衰减结算/归零时刻/离家出走判定/等级与解锁/装扮清洗/目录不变量（721 断言）
-cd server && npm run verify:raid     # 搜打撤地图/搜索/战斗/撤离/保险 + 农场 30 块扩建/保护 + 股市限价（104 断言）
+cd server && npm run verify:raid     # 搜打撤地图/搜索/战斗/撤离/保险 + 农场 30 块扩建/保护 + 股市限价（114 断言）
+cd server && npm run verify:raidstorage  # 搜打撤仓库/交易行/升级 + 新地图新物品/非洲之心掉落（1260 断言）
 cd server && npm run verify:reader   # 小说阅读器纯函数：EPUB 元数据解析/zip 路径/实体解码/格式识别（32 断言）
 cd server && npm run verify:redpacket  # 红包纯函数：二倍均值拆分不变量/边界/greeting 清洗/入参校验（3864 断言）
 
@@ -576,3 +577,15 @@ cd storage-node && python main.py     # 存储节点，config.json 指向 ws://1
 - **股市限价委托**：`StockOrder` + `services/stockOrderService.ts` + `GET/POST/DELETE /api/stocks/orders*`。买入挂单立即冻结积分，卖出挂单立即冻结份额（成本等比保留）；行情/委托/资产/排行榜请求触发惰性撮合（全局最多 4 秒一次，无定时器），买入现价≤限价、卖出现价≥限价时按实时价成交并照常写入冲击与成交记录；撤单原路退回；每人最多 20 条 open；前端交易面板新增「限价买入/限价卖出」与「委托」Tab（10 秒静默刷新）。另新增行情刷新间隔本机设置（3/10/30 秒），降低老设备与服务器压力。
 - **性能优化**：`vite.config.ts` 把 marked/katex/dompurify/marked-katex-extension 拆为独立 `markdown` chunk（335KB 只在 AI/预览页加载）；`performance.css` 对长列表（委托/成交/排行/搜打撤战利品/种子市场/宠物之家/网盘卡片）加 `content-visibility:auto`，低性能模式关闭 header/sidebar/dialog 的毛玻璃；`PetSprite` memo；Reader/Drive/Music/DeepSeek 图片补 `loading=lazy`/`decoding=async`；StocksPage 行情轮询可调。
 - **自检**：`cd server && npx tsc --noEmit`；`npm run verify:raid`（104 断言）；`cd client && npx tsc --noEmit` + `npm run test`（57 文件 / 594 用例）+ `npm run build` 全绿；本地 3002 冒烟覆盖种子挂单/取消、一键种植、保护后偷菜 403、搜打撤开局/移动/战斗/放弃/战绩/契约、股市限价买入/卖出自动成交与撤单。数据库 `Farm.protectedUntil` + `FarmSeedListing` / `StockOrder` / `PetRaid` / `PetRaidRecord` / `PetRaidContract` 均 additive，`prisma db push` 即可；生产仍走本地产物链（不要在 ECS 上 `docker compose up --build`）。
+
+---
+
+## 2026-11-03 搜打撤仓库/交易行/升级/安全箱 + 新地图新物品 + 农田一键施肥（实现口径）
+
+- **仓库系统**：撤离结算不再把 material 类战利品直接折积分，改为入用户仓库 `raid_inventory_items`（按 `(userId,itemKey)` 堆叠，`listedAmount` 为挂单预留量，恒有 `amount >= listedAmount` 不变式）；容量与保险箱格数由 `raid_storage.level` 经 `RAID_STORAGE_LEVELS`（`lib/raidStorage.ts`，6 级：容量 60/100/150/210/280/360、保险箱 2/3/3/4/5/6）派生，超容量部分自动折积分（流水 note「仓库已满折算」）；medkit/种子/装备/技能结算口径不变。REST 前缀 `/api/pets/raid/storage*`（GET view / POST recycle `{itemKey,amount}` / POST upgrade），积分 reason `raid_recycle`、`raid_storage_upgrade`。
+- **搜打撤交易行**：`raid_market_listings` + `raid_market_trades`（append-only，无外键、视图批量查名），整单出售（amount + 总价 price，不支持部分购买），价格须落在「目录价值×0.5–1.5」含端点且 ≤100 万，卖家 5% 手续费（最低 1）；上架走 `listedAmount` 守卫预留 + 写后复核，购买 status 原子抢占 + **买家入库（受买家仓库容量约束，装不下整笔 400）**、不能买自己的、下架守卫递减释放预留；升级提交材料+积分（事务内守卫扣减 + 等级按 `where level=旧值` 守卫写，防并发双扣/回写）。积分 reason `raid_market_buy`、`raid_market_sell`。端点：`GET /raid/market`、`POST /raid/market/list`、`POST /raid/market/:id/buy`、`DELETE /raid/market/:id`（写挂 marketWriteLimiter、读挂 battlePollLimiter，均在 `/api/pets` 的 `requireFeature('pet')` 下）。
+- **安全箱（用户级）**：局内保险箱格数从常量 2 改为按仓库等级（`storeSafeRaid` 可选容量参数），对局 DTO、`GET /api/pets/raid` overview 下发 `safeCapacity` 与 `storage {level,capacity,used,safeCapacity}`（读时惰性建行）。
+- **新地图/新物品**：`RAID_MAPS` 4→6 张（新增 孢子雨林 `fungal` hard/entry 320/tier4、深渊实验室 `abyss` extreme/entry 900/tier5，撤离点候选 8 个按离出生点距离过滤 + 保底补齐、首领布点数据驱动支持多 boss）；`RAID_LOOT_ENTRIES` →24 种，新增 mythic 稀有度（`rarityWeight` tier1–4 恒 0、tier5 为 3，仅深渊实验室可掉），「非洲之心」💎 value 9999 为全游戏最高价值物品。`RaidMapKey`/`RaidLootRarity` 双端类型已同步。
+- **农田一键施肥**：`POST /api/farm/fertilize-all`（best-effort 单事务逐块，规则与单块 fertilizePlot 完全一致：有作物/未达 2 次上限/未成熟，肥料逐块扣 1 扣到 0 为止），返回 `{view, fertilizedCount, fertilizerLeft, skippedCount}`（0 块也 200，由前端区分「没有可施肥地块」与「肥料不足」）；纯函数 `fertilizablePlotIndexes` 在 `farmCrops.ts`；前端 FarmPage 工具栏「一键施肥」按钮。
+- **前端**：新页 `/pets/raid/storage`（`RaidStoragePage.tsx`：仓库/交易行双 Tab、等级卡+容量进度条、升级卡（材料 have/need + 积分）、物品卡（回收弹窗/上架弹窗带价格区间与手续费预览）、在售/我的挂单/最近成交、空状态）；`PetRaidPage` 头部「📦 仓库」入口、结算 loot 按 `outcome` 渲染（warehouse 条目同时显示溢出折分）、mythic 金红渐变样式（`raid.css`/`raid-storage.css`，均带 `prefers-reduced-motion` 降级）；`PointsPage` REASON_LABELS 补 4 个新 reason。
+- **自检**：`cd server && npm run verify:raid`（114 断言）、`npm run verify:raidstorage`（1260 断言，新脚本 `scripts/verify-raid-storage.ts`：等级表不变量/入仓规划/定价边界/新地图确定性/4000 seed 掉落统计/abyss 脚本化对局）、`npm run verify:points`（357）；`cd client && npx tsc --noEmit` + `npm run build` + `npm run test`（57 文件 / 594 用例）全绿；本地 3002 双账号冒烟覆盖回收/定价边界/预留累计/购买交割（含买家容量守卫）/升级/一键施肥/完整撤离入仓链路（含保险箱存放与撤离保留）。数据库 `raid_storage`/`raid_inventory_items`/`raid_market_listings`/`raid_market_trades` 均 additive，`prisma db push` 即可；生产仍走本地产物链（不要在 ECS 上 `docker compose up --build`）。

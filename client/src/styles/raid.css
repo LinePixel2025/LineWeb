@@ -491,6 +491,25 @@
 .gh-raid-loot--rare { border-color: rgba(10, 132, 255, 0.3); }
 .gh-raid-loot--epic { border-color: rgba(191, 90, 242, 0.35); }
 .gh-raid-loot--legendary { border-color: rgba(255, 159, 10, 0.5); background: color-mix(in srgb, #ff9f0a 7%, var(--gh-canvas-subtle)); }
+/* 神话（mythic）：金红渐变底 + 低调金色辉光；reduced-motion 时停掉发光动画 */
+.gh-raid-loot--mythic {
+  border-color: rgba(255, 214, 10, 0.55);
+  background: linear-gradient(
+    120deg,
+    color-mix(in srgb, #ffd60a 10%, var(--gh-canvas-subtle)),
+    color-mix(in srgb, #ff453a 9%, var(--gh-canvas-subtle)),
+    color-mix(in srgb, #bf5af2 8%, var(--gh-canvas-subtle))
+  );
+  box-shadow: 0 0 0 1px rgba(255, 214, 10, 0.28), 0 0 12px rgba(255, 159, 10, 0.18);
+  animation: gh-raid-mythic-glow 2.8s ease-in-out infinite;
+}
+@keyframes gh-raid-mythic-glow {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(255, 214, 10, 0.28), 0 0 10px rgba(255, 159, 10, 0.16); }
+  50% { box-shadow: 0 0 0 1px rgba(255, 214, 10, 0.5), 0 0 18px rgba(255, 69, 58, 0.3); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-raid-loot--mythic { animation: none; }
+}
 
 .gh-raid-log ul { display: grid; gap: 4px; max-height: 300px; margin: 0; padding: 0; overflow: auto; list-style: none; }
 .gh-raid-log li { position: relative; padding-left: 26px; color: var(--gh-text-secondary); font-size: 11px; line-height: 1.55; }

@@ -14,6 +14,7 @@ import type {
   RaidMapInfo,
   RaidOverview,
   RaidSettlement,
+  RaidSettlementLoot,
   RaidState,
 } from '../types/petRaid'
 
@@ -29,6 +30,7 @@ const RARITY_LABEL: Record<RaidLootItem['rarity'], string> = {
   rare: '稀有',
   epic: '史诗',
   legendary: '传说',
+  mythic: '神话',
 }
 
 const RESULT_LABEL: Record<string, string> = {
@@ -50,6 +52,28 @@ function formatTime(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+/** 结算条目右侧的去向文案（旧后端响应没有 outcome 字段时按折积分兜底） */
+function settlementLootText(item: RaidSettlementLoot): string {
+  if (item.outcome === 'warehouse' || (item.storedAmount != null && item.storedAmount > 0)) {
+    // 部分入仓、部分溢出时两个去向都要显示（否则溢出折分对不上账）
+    const parts = [`📦 入仓 ×${item.storedAmount ?? item.amount}`]
+    if (item.overflowPoints != null && item.overflowPoints > 0) {
+      parts.push(`溢出折 ${item.overflowPoints} 积分`)
+    }
+    return parts.join(' · ')
+  }
+  if (item.overflowPoints != null && item.overflowPoints > 0) {
+    return `折 ${item.overflowPoints} 积分`
+  }
+  switch (item.outcome) {
+    case 'farm': return '🌱 已种入农场'
+    case 'equipment': return '🎒 已入装备栏'
+    case 'skill': return '✨ 已学得技能'
+    case 'dupe': return '重复折价'
+    default: return `${item.value} 积分`
+  }
 }
 
 function cellIcon(cell: RaidCell): string {
@@ -259,6 +283,7 @@ export default function PetRaidPage() {
         <div className="gh-raid-header-actions">
           <span className="gh-raid-points" title="当前积分">🪙 {overview?.points ?? 0}</span>
           <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets">返回宠物</Link>
+          <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/raid/storage">📦 仓库</Link>
           <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/gear">🎒 装备</Link>
           <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/battle">⚔️ 对战</Link>
         </div>
@@ -626,7 +651,7 @@ export default function PetRaidPage() {
                 {settlement.loot.map((item) => (
                   <li key={item.id} className={`gh-raid-loot--${item.rarity}`}>
                     {item.emoji} {item.name}{item.amount > 1 ? ` ×${item.amount}` : ''}
-                    <span>{item.value}</span>
+                    <span>{settlementLootText(item)}</span>
                   </li>
                 ))}
               </ul>
@@ -637,6 +662,15 @@ export default function PetRaidPage() {
               </p>
             )}
             <div className="gh-dialog-actions">
+              {settlement.loot.some((item) => item.outcome === 'warehouse') && (
+                <Link
+                  className="gh-btn gh-btn--secondary"
+                  to="/pets/raid/storage"
+                  onClick={() => { setSettlement(null); setCombat(null) }}
+                >
+                  前往仓库
+                </Link>
+              )}
               <button
                 type="button"
                 className="gh-btn gh-btn--primary"

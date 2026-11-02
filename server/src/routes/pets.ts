@@ -48,6 +48,17 @@ import {
   performRaidAction,
   startRaid,
 } from '../services/petRaidService.js'
+import {
+  getRaidStorageView,
+  recycleRaidItems,
+  upgradeRaidStorage,
+} from '../services/raidStorageService.js'
+import {
+  buyRaidListing,
+  cancelRaidListing,
+  getRaidMarketView,
+  listRaidItem,
+} from '../services/raidMarketService.js'
 
 const router = Router()
 router.use(authenticate)
@@ -138,6 +149,16 @@ const raidActionSchema = z.object({
   version: z.coerce.number().int().min(0).optional(),
 })
 const raidContractParamSchema = z.object({ key: z.string().min(1).max(40) })
+const raidRecycleSchema = z.object({
+  itemKey: z.string().min(1).max(40),
+  amount: z.coerce.number().int().min(1).max(9999),
+})
+const raidStorageUpgradeSchema = z.object({}).strict()
+const raidMarketListSchema = z.object({
+  itemKey: z.string().min(1).max(40),
+  amount: z.coerce.number().int().min(1).max(9999),
+  price: z.coerce.number().int().min(1).max(1_000_000),
+})
 
 // GET /api/pets — 我的宠物（未召唤时 pet 为 null，仍返回目录与积分）
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
@@ -286,6 +307,49 @@ router.post('/raid/action', actionLimiter, asyncHandler(async (req: Request, res
 router.post('/raid/contracts/:key/claim', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
   const { key } = parseInput(raidContractParamSchema, req.params)
   res.json(await claimRaidContract(currentUserId(req), key))
+}))
+
+/* ---------- 搜打撤仓库 / 交易行 ---------- */
+
+// GET /api/pets/raid/storage — 仓库等级 / 容量 / 物品 / 升级预览
+router.get('/raid/storage', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await getRaidStorageView(currentUserId(req)))
+}))
+
+// POST /api/pets/raid/storage/recycle — { itemKey, amount } 回收材料折积分
+router.post('/raid/storage/recycle', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidRecycleSchema, req.body ?? {})
+  res.json(await recycleRaidItems(currentUserId(req), input.itemKey, input.amount))
+}))
+
+// POST /api/pets/raid/storage/upgrade — {} 花积分 + 消耗材料升级仓库
+router.post('/raid/storage/upgrade', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  parseInput(raidStorageUpgradeSchema, req.body ?? {})
+  res.json(await upgradeRaidStorage(currentUserId(req)))
+}))
+
+// GET /api/pets/raid/market — 在售挂单 + 我的挂单 + 最近成交
+router.get('/raid/market', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await getRaidMarketView(currentUserId(req)))
+}))
+
+// POST /api/pets/raid/market/list — { itemKey, amount, price } 整单上架
+router.post('/raid/market/list', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidMarketListSchema, req.body ?? {})
+  res.status(201).json(await listRaidItem(currentUserId(req), input.itemKey, input.amount, input.price))
+}))
+
+// POST /api/pets/raid/market/:id/buy — 购买挂单（整单）
+router.post('/raid/market/:id/buy', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = parseInput(marketIdParamSchema, req.params)
+  res.json(await buyRaidListing(currentUserId(req), id))
+}))
+
+// DELETE /api/pets/raid/market/:id — 下架自己的挂单
+router.delete('/raid/market/:id', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = parseInput(marketIdParamSchema, req.params)
+  await cancelRaidListing(currentUserId(req), id)
+  res.json({ ok: true })
 }))
 
 /* ---------- PvP 对战 ---------- */

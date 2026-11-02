@@ -15,6 +15,7 @@ import {
   PLOT_EXPANSION_COSTS,
   computeStealPoints,
   cropUnitsValue,
+  fertilizablePlotIndexes,
   fertilizeReadyAt,
   findProtectionPackage,
   getCrop,
@@ -833,6 +834,72 @@ export async function fertilizePlot(userId: number, index: number): Promise<Farm
     })
   })
   return getFarmView(userId)
+}
+
+export interface FertilizeAllResult {
+  view: FarmView
+  /** 实际施肥的地块数 */
+  fertilizedCount: number
+  /** 施肥后剩余的肥料份数 */
+  fertilizerLeft: number
+  /** 可施肥但因肥料耗尽而跳过的地块数（规则不满足的地块不计数） */
+  skippedCount: number
+}
+
+/**
+ * 一键施肥：对所有可施肥地块（有作物、未达上限、尚未成熟）逐块施肥，规则与单块施肥完全一致。
+ * 尽力而为（best-effort）：肥料够几块施几块，某块规则不满足直接跳过不计入；
+ * 一块都没施成也不报错（fertilizedCount=0），由前端根据返回字段给出提示。
+ */
+export async function fertilizeAllPlots(userId: number): Promise<FertilizeAllResult> {
+  const result = await prisma.$transaction(async (tx) => {
+    const farm = await tx.farm.findUnique({
+      where: { userId },
+      include: { plots: true, items: true },
+    })
+    if (!farm) throw new AppError('还没有农场，先开一块地吧', 404)
+
+    const fertilizer = farm.items.find((item) => item.kind === 'fertilizer')
+    let stock = fertilizer?.count ?? 0
+    const now = Date.now()
+    const candidateIndexes = new Set(fertilizablePlotIndexes(farm.plots, now))
+    const candidates = farm.plots
+      .filter((plot) => candidateIndexes.has(plot.index))
+      .sort((a, b) => a.index - b.index)
+
+    let fertilizedCount = 0
+    for (const plot of candidates) {
+      if (stock < 1) break
+      const readyAt = plot.readyAt
+      if (!readyAt) continue // 筛选已保证非空，防御并发窗口下的脏读
+      // 条件更新防并发（与一键种植/收获的 updateMany 守卫一致），撞上并发变化则跳过该块
+      const updated = await tx.farmPlot.updateMany({
+        where: { id: plot.id, crop: plot.crop, fertilized: plot.fertilized },
+        data: {
+          readyAt: fertilizeReadyAt(readyAt, now),
+          fertilized: { increment: 1 },
+        },
+      })
+      if (updated.count === 0) continue
+      // 扣 1 份肥料，与单块施肥一致：扣到 0 即删除行
+      if (fertilizer) {
+        if (stock === 1) {
+          await tx.farmItem.delete({ where: { id: fertilizer.id } })
+        } else {
+          await tx.farmItem.update({ where: { id: fertilizer.id }, data: { count: { decrement: 1 } } })
+        }
+      }
+      fertilizedCount += 1
+      stock -= 1
+    }
+
+    return {
+      fertilizedCount,
+      fertilizerLeft: stock,
+      skippedCount: candidates.length - fertilizedCount,
+    }
+  })
+  return { view: await getFarmView(userId), ...result }
 }
 
 export interface HarvestResult {

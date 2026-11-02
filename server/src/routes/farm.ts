@@ -11,6 +11,7 @@ import {
   clearPlot,
   createFarm,
   expandFarm,
+  fertilizeAllPlots,
   fertilizePlot,
   getFarmView,
   getNeighborFarm,
@@ -149,6 +150,11 @@ router.post('/plant-all', actionLimiter, asyncHandler(async (req: Request, res: 
 // POST /api/farm/harvest-all — 一键收获所有成熟作物
 router.post('/harvest-all', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
   res.json(await harvestAllPlots(currentUserId(req)))
+}))
+
+// POST /api/farm/fertilize-all — 一键施肥所有可施肥地块（肥料不足时尽力而为）
+router.post('/fertilize-all', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await fertilizeAllPlots(currentUserId(req)))
 }))
 
 // POST /api/farm/plots/:index/fertilize

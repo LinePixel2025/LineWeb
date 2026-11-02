@@ -41,6 +41,7 @@ import {
   PLOT_EXPANSION_COSTS,
   computeStealPoints,
   cropUnitsValue,
+  fertilizablePlotIndexes,
   fertilizeReadyAt,
   getCrop,
   growthProgress,
@@ -281,6 +282,41 @@ assertEqual(
   fertilizeReadyAt(new Date(now - 1_000), now).getTime() - now,
   FERTILIZER_MIN_REMAINING_MS,
   '已过成熟时间也按最短 10 秒处理',
+)
+
+// 一键施肥筛选：有作物、未达施肥上限、尚未成熟；返回 index 升序
+assertEqual(
+  fertilizablePlotIndexes([
+    { index: 3, crop: 'carrot', readyAt: new Date(now + 60_000), fertilized: 0 },
+    { index: 1, crop: null, readyAt: null, fertilized: 0 }, // 无作物排除
+    { index: 2, crop: 'carrot', readyAt: new Date(now - 1_000), fertilized: 0 }, // 已成熟排除
+    { index: 0, crop: 'corn', readyAt: new Date(now + 60_000), fertilized: FERTILIZER_MAX_PER_CROP }, // 已达上限排除
+    { index: 5, crop: 'corn', readyAt: new Date(now + 60_000), fertilized: 1 },
+  ], now),
+  [3, 5],
+  '一键施肥只选「有作物、未达上限、未成熟」的地块并按 index 升序',
+)
+assertEqual(
+  fertilizablePlotIndexes([
+    { index: 0, crop: 'carrot', readyAt: new Date(now + 60_000).toISOString(), fertilized: 0 },
+  ], now),
+  [0],
+  'readyAt 为 ISO 字符串时同样参与筛选',
+)
+assertEqual(
+  fertilizablePlotIndexes([
+    { index: 0, crop: 'carrot', readyAt: new Date(now), fertilized: 0 },
+  ], now),
+  [],
+  'readyAt 等于 now 视为已成熟并排除',
+)
+assertEqual(fertilizablePlotIndexes([], now), [], '空地块列表返回空')
+assertEqual(
+  fertilizablePlotIndexes([
+    { index: 0, crop: 'carrot', readyAt: new Date(Date.now() + 60_000), fertilized: 0 },
+  ]),
+  [0],
+  '缺省 now 时按当前时间筛选',
 )
 
 // 生长进度

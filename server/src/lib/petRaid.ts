@@ -25,10 +25,10 @@ import { PET_BASIC_SKILL_KEY, PET_SKILL_MAP, type PetSkillDef } from './petSkill
 import { PET_MAX_LEVEL } from './petCatalog.js'
 import { getCrop } from './farmCrops.js'
 
-export type RaidMapKey = 'wasteland' | 'dam' | 'valley' | 'space'
+export type RaidMapKey = 'wasteland' | 'dam' | 'valley' | 'space' | 'fungal' | 'abyss'
 export type RaidDifficulty = 'normal' | 'hard' | 'extreme'
 export type RaidStatus = 'active' | 'extracted' | 'died' | 'mia' | 'abandoned'
-export type RaidLootRarity = 'common' | 'rare' | 'epic' | 'legendary'
+export type RaidLootRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic'
 export type RaidLootKind = 'points' | 'material' | 'seed' | 'equipment' | 'skill' | 'medkit'
 export type RaidCellKind = 'empty' | 'spawn' | 'loot' | 'enemy' | 'boss' | 'extract' | 'hazard'
 
@@ -51,7 +51,7 @@ export interface RaidMapDef {
   maxTurns: number
   /** 建议等级 */
   recommendLevel: number
-  /** 战利品档次 1–4 */
+  /** 战利品档次 1–5（tier 5 才可能掉神话级物品） */
   lootTier: number
   color: string
   /** 敌人基础等级 */
@@ -141,6 +141,46 @@ export const RAID_MAPS: readonly RaidMapDef[] = [
     enemyLevel: 9,
     durationMs: 22 * 60_000,
   },
+  {
+    key: 'fungal',
+    name: '孢子雨林',
+    emoji: '🍄',
+    description: '被孢子云笼罩的原始雨林，双首领坐镇，物种样本与合金部件散落其间。',
+    difficulty: 'hard',
+    size: 9,
+    enemyCount: 10,
+    bossCount: 2,
+    lootCount: 14,
+    extractCount: 2,
+    hazardCount: 4,
+    entryCost: 320,
+    maxTurns: 52,
+    recommendLevel: 6,
+    lootTier: 4,
+    color: '#4a7c59',
+    enemyLevel: 7,
+    durationMs: 21 * 60_000,
+  },
+  {
+    key: 'abyss',
+    name: '深渊实验室',
+    emoji: '🧪',
+    description: '深埋地下的禁忌实验设施，重装守卫密布。全游戏最珍贵的「非洲之心」只在这里出现。',
+    difficulty: 'extreme',
+    size: 10,
+    enemyCount: 14,
+    bossCount: 2,
+    lootCount: 18,
+    extractCount: 3,
+    hazardCount: 6,
+    entryCost: 900,
+    maxTurns: 62,
+    recommendLevel: 10,
+    lootTier: 5,
+    color: '#2b3a67',
+    enemyLevel: 12,
+    durationMs: 26 * 60_000,
+  },
 ]
 
 export const RAID_MAP_MAP: ReadonlyMap<string, RaidMapDef> = new Map(
@@ -197,6 +237,16 @@ export const RAID_LOOT_ENTRIES: readonly RaidLootEntry[] = [
   { key: 'dragon_shard', name: '龙鳞碎片', emoji: '🐲', rarity: 'legendary', kind: 'material', value: 2400, weight: 1 },
   { key: 'relic_cache', name: '遗物箱', emoji: '🗃️', rarity: 'legendary', kind: 'equipment', value: 0, weight: 2 },
   { key: 'ancient_scroll', name: '远古卷轴', emoji: '📖', rarity: 'legendary', kind: 'skill', value: 0, weight: 1 },
+  // ↓ 深渊实验室（tier 5）新增材料；非洲之心（mythic）只有 tier 5 地图会掉
+  { key: 'scrap_metal', name: '废金属块', emoji: '⚙️', rarity: 'common', kind: 'material', value: 35, weight: 18 },
+  { key: 'duct_tape', name: '军用胶带', emoji: '🧵', rarity: 'common', kind: 'material', value: 55, weight: 16 },
+  { key: 'titanium_alloy', name: '钛合金部件', emoji: '🔩', rarity: 'rare', kind: 'material', value: 240, weight: 12 },
+  { key: 'laser_module', name: '激光模组', emoji: '🔦', rarity: 'rare', kind: 'material', value: 310, weight: 10 },
+  { key: 'plasma_core', name: '等离子核心', emoji: '🔮', rarity: 'epic', kind: 'material', value: 760, weight: 5 },
+  { key: 'ai_chip', name: '智能芯片', emoji: '🧠', rarity: 'epic', kind: 'material', value: 920, weight: 4 },
+  { key: 'quantum_battery', name: '量子电池', emoji: '🔋', rarity: 'legendary', kind: 'material', value: 2000, weight: 2 },
+  { key: 'gold_statue', name: '纯金神像', emoji: '🗿', rarity: 'legendary', kind: 'material', value: 2300, weight: 1 },
+  { key: 'heart_of_africa', name: '非洲之心', emoji: '💎', rarity: 'mythic', kind: 'material', value: 9999, weight: 1 },
 ]
 
 export const RAID_LOOT_MAP: ReadonlyMap<string, RaidLootEntry> = new Map(
@@ -344,16 +394,23 @@ const RARITY_WEIGHTS: Record<RaidLootRarity, number> = {
   rare: 1,
   epic: 1,
   legendary: 1,
+  mythic: 1,
 }
 
-function rarityWeight(rarity: RaidLootRarity, tier: number): number {
+/**
+ * 各档次稀有度权重（每行总权重 100）。
+ * mythic 只在 tier 5 > 0：老地图（tier 1–4）永远掉不出神话级物品。
+ * 导出供自检（verify:raid / verify:raidstorage）直接断言权重表。
+ */
+export function rarityWeight(rarity: RaidLootRarity, tier: number): number {
   const table: Record<number, Record<RaidLootRarity, number>> = {
-    1: { common: 65, rare: 25, epic: 9, legendary: 1 },
-    2: { common: 50, rare: 31, epic: 15, legendary: 4 },
-    3: { common: 34, rare: 32, epic: 25, legendary: 9 },
-    4: { common: 20, rare: 29, epic: 34, legendary: 17 },
+    1: { common: 65, rare: 25, epic: 9, legendary: 1, mythic: 0 },
+    2: { common: 50, rare: 31, epic: 15, legendary: 4, mythic: 0 },
+    3: { common: 34, rare: 32, epic: 25, legendary: 9, mythic: 0 },
+    4: { common: 20, rare: 29, epic: 34, legendary: 17, mythic: 0 },
+    5: { common: 16, rare: 28, epic: 32, legendary: 21, mythic: 3 },
   }
-  return (table[Math.max(1, Math.min(4, tier))] ?? table[1])[rarity] * RARITY_WEIGHTS[rarity]
+  return (table[Math.max(1, Math.min(5, tier))] ?? table[1])[rarity] * RARITY_WEIGHTS[rarity]
 }
 
 function idx(width: number, x: number, y: number): number {
@@ -444,15 +501,21 @@ export function createRaidState(options: CreateRaidOptions): RaidState {
     settled: false,
   }
 
-  // 撤离点：优先放远角
-  const corners = [
+  // 撤离点：优先放远角与边缘（按到出生点曼哈顿距离降序取），保证撤离点不全在出生点旁
+  const cornerCandidates = [
     { x: width - 1, y: height - 1 },
     { x: width - 1, y: 0 },
     { x: 0, y: height - 1 },
     { x: width - 1, y: Math.floor(height / 2) },
+    { x: 0, y: Math.floor(height / 2) },
+    { x: Math.floor(width / 2), y: height - 1 },
+    { x: Math.floor(width / 2), y: 0 },
+    { x: 0, y: 0 },
   ]
+    .filter((corner) => manhattan(corner, player) >= Math.floor((width + height) / 4))
+    .sort((a, b) => manhattan(b, player) - manhattan(a, player))
   let extractPlaced = 0
-  for (const corner of corners) {
+  for (const corner of cornerCandidates) {
     if (extractPlaced >= map.extractCount) break
     const cell = state.cells[idx(width, corner.x, corner.y)]
     if (cell && cell.kind === 'empty') {
@@ -464,16 +527,24 @@ export function createRaidState(options: CreateRaidOptions): RaidState {
     const fallback = state.cells.find((cell) => cell.kind === 'empty')
     if (fallback) fallback.kind = 'extract'
   }
-
-  // 首领放在离出生点最远的空地
-  if (map.bossCount > 0) {
+  // 候选角不够时（extractCount 大于可用候选），从剩余空地里挑离出生点最远的补齐
+  while (extractPlaced < map.extractCount) {
     const farthest = state.cells
       .filter((cell) => cell.kind === 'empty')
       .sort((a, b) => manhattan(b, player) - manhattan(a, player))[0]
-    if (farthest) {
-      farthest.kind = 'boss'
-      farthest.enemy = createEnemy('boss', map, farthest.index, rng)
-    }
+    if (!farthest) break
+    farthest.kind = 'extract'
+    extractPlaced += 1
+  }
+
+  // 首领：逐个放在当前离出生点最远的空地（数量完全由 map.bossCount 驱动）
+  for (let bossIndex = 0; bossIndex < map.bossCount; bossIndex += 1) {
+    const farthest = state.cells
+      .filter((cell) => cell.kind === 'empty')
+      .sort((a, b) => manhattan(b, player) - manhattan(a, player))[0]
+    if (!farthest) break
+    farthest.kind = 'boss'
+    farthest.enemy = createEnemy('boss', map, farthest.index + bossIndex, rng)
   }
 
   // 普通敌人
@@ -966,10 +1037,15 @@ export function useMedkitRaid(state: RaidState, lootId: string): RaidActionResul
   return { state: next, error: null }
 }
 
-export function storeSafeRaid(state: RaidState, lootId: string): RaidActionResult {
+/**
+ * 把随身战利品放进保险箱（阵亡也保留）。
+ * 容量由调用方传入（用户仓库等级派生），缺省回退全局默认值。
+ */
+export function storeSafeRaid(state: RaidState, lootId: string, safeCapacity: number = RAID_SAFE_CAPACITY): RaidActionResult {
   if (state.status !== 'active') return { state, error: '对局已经结束' }
   const next = cloneState(state)
-  if (next.safe.length >= RAID_SAFE_CAPACITY) return { state, error: '保险箱已经满了' }
+  const capacity = Math.max(0, Math.floor(safeCapacity))
+  if (next.safe.length >= capacity) return { state, error: '保险箱已经满了' }
   const item = next.loot.find((row) => row.id === lootId)
   if (!item) return { state, error: '没有这件战利品' }
   next.loot = next.loot.filter((row) => row.id !== lootId)

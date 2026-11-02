@@ -106,6 +106,21 @@ export function fertilizeReadyAt(readyAt: Date, now: number = Date.now()): Date 
   return new Date(now + next)
 }
 
+/** 一键施肥的地块筛选：有作物、未到施肥上限、且尚未成熟 */
+export function fertilizablePlotIndexes(
+  plots: Array<{ index: number; crop: string | null; readyAt: Date | string | null; fertilized: number }>,
+  now: number = Date.now(),
+): number[] {
+  return plots
+    .filter((plot) => {
+      if (!plot.crop || !plot.readyAt) return false
+      if (plot.fertilized >= FERTILIZER_MAX_PER_CROP) return false
+      return new Date(plot.readyAt).getTime() > now
+    })
+    .map((plot) => plot.index)
+    .sort((a, b) => a - b)
+}
+
 /* ============================================================
    偷菜保护（花积分买一段免偷时间）
    ============================================================ */

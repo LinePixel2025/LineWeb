@@ -213,6 +213,17 @@ export interface HarvestAllResult {
   crops: Array<{ key: string; name: string; emoji: string; units: number; points: number }>
 }
 
+/** POST /api/farm/fertilize-all */
+export interface FertilizeAllResult {
+  view: FarmView
+  /** 实际施肥的地块数 */
+  fertilizedCount: number
+  /** 施肥后剩余的肥料份数 */
+  fertilizerLeft: number
+  /** 可施肥但因肥料耗尽而跳过的地块数（规则不满足的地块不计数） */
+  skippedCount: number
+}
+
 /** POST /api/farm/protect */
 export interface ProtectionPurchaseResult {
   view: FarmView

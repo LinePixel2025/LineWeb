@@ -27,6 +27,7 @@ import {
   RAID_CONTRACT_MAP,
   RAID_GEAR_LOSS_CHANCE,
   RAID_INSURANCE_RATE,
+  RAID_LOOT_MAP,
   RAID_MAPS,
   RAID_SAFE_CAPACITY,
   abandonRaid,
@@ -53,8 +54,14 @@ import {
   type RaidState,
   type RaidStatus,
 } from '../lib/petRaid.js'
+import { planWarehouseInsert, type WarehouseStack } from '../lib/raidStorage.js'
 import { getTodayDateKey } from '../lib/pointsRules.js'
 import { awardPointsTx, getPointsProfile, spendPointsTx } from './pointsService.js'
+import {
+  getRaidStorageSummary,
+  getRaidStorageSummaryTx,
+  insertWarehouseStacksTx,
+} from './raidStorageService.js'
 
 type Db = Prisma.TransactionClient
 
@@ -72,6 +79,18 @@ export interface RaidLootDto {
   value: number
   amount: number
   payload: string | null
+}
+
+/** 结算条目的去向（material 入仓 / 折积分；seed 入农场；装备技能入栏或重复折价） */
+export type RaidLootOutcome = 'warehouse' | 'points' | 'farm' | 'equipment' | 'skill' | 'dupe'
+
+/** 结算弹层用的战利品条目（在基础 DTO 上追加去向字段，旧字段全部保留） */
+export interface RaidSettlementLootDto extends RaidLootDto {
+  outcome: RaidLootOutcome
+  /** outcome = warehouse 时：本条已入仓的数量 */
+  storedAmount?: number
+  /** 本条折算成积分的部分（仓库溢出 / 急救包 / 重复装备等折价） */
+  overflowPoints?: number
 }
 
 function lootDto(item: RaidLootItem): RaidLootDto {
@@ -122,7 +141,7 @@ export interface RaidStateDto {
   loadout: RaidState['loadout']
 }
 
-function raidStateDto(row: PetRaid, state: RaidState, now: number): RaidStateDto {
+function raidStateDto(row: PetRaid, state: RaidState, now: number, safeCapacity: number = RAID_SAFE_CAPACITY): RaidStateDto {
   const map = getRaidMap(state.mapKey)
   return {
     id: row.id,
@@ -145,7 +164,7 @@ function raidStateDto(row: PetRaid, state: RaidState, now: number): RaidStateDto
     cells: buildRaidCellDtos(state),
     loot: state.loot.map(lootDto),
     safe: state.safe.map(lootDto),
-    safeCapacity: RAID_SAFE_CAPACITY,
+    safeCapacity: Math.max(0, Math.floor(safeCapacity)),
     log: state.log,
     kills: state.kills,
     insured: state.insured,
@@ -249,6 +268,15 @@ export interface RaidOverviewDto {
   }
   points: number
   insuranceRate: number
+  /** 单局保险箱格数（随仓库等级提升） */
+  safeCapacity: number
+  /** 搜打撤仓库概要（读时惰性建行） */
+  storage: {
+    level: number
+    capacity: number
+    used: number
+    safeCapacity: number
+  }
 }
 
 /* ============================================================
@@ -378,7 +406,7 @@ export interface RaidSettlementDto {
   points: number
   balance: number
   gearLost: string[]
-  loot: RaidLootDto[]
+  loot: RaidSettlementLootDto[]
   record: RaidHistoryDto
   contracts: RaidContractDto[]
 }
@@ -418,48 +446,111 @@ async function finishRaid(
     let points = 0
     const seedGains = new Map<string, number>()
 
+    // —— material 先入仓库（容量不足的部分折积分），其余种类维持原口径 ——
+    // 结算条目去向（settlement 弹层用）：itemId → { outcome, storedAmount?, overflowPoints? }
+    const outcomeByItemId = new Map<string, RaidSettlementLootDto>()
+    const materialStacks: WarehouseStack[] = []
+    const materialPos = new Map<string, number>()
     for (const item of kept) {
-      if (item.kind === 'points' || item.kind === 'material') {
+      if (item.kind !== 'material') continue
+      const units = Math.max(1, item.amount)
+      const pos = materialPos.get(item.key)
+      if (pos === undefined) {
+        materialPos.set(item.key, materialStacks.length)
+        materialStacks.push({ itemKey: item.key, amount: units })
+      } else {
+        materialStacks[pos]!.amount += units
+      }
+    }
+    const storageSummary = await getRaidStorageSummaryTx(tx, row.userId)
+    const warehousePlan = planWarehouseInsert(storageSummary.capacity, storageSummary.used, materialStacks)
+    await insertWarehouseStacksTx(tx, row.userId, warehousePlan.accepted)
+    for (const stack of warehousePlan.overflow) {
+      const entry = RAID_LOOT_MAP.get(stack.itemKey)
+      points += (entry?.value ?? 0) * stack.amount
+    }
+    const overflowUnits = warehousePlan.overflow.reduce((sum, stack) => sum + stack.amount, 0)
+    // 把规划结果按 kept 顺序分摊回每一条 material 战利品（同 key 物品单价一致，分摊精确）
+    {
+      const acceptedLeft = new Map(warehousePlan.accepted.map((stack) => [stack.itemKey, stack.amount]))
+      const overflowLeft = new Map(warehousePlan.overflow.map((stack) => [stack.itemKey, stack.amount]))
+      for (const item of kept) {
+        if (item.kind !== 'material') continue
+        const stored = Math.min(item.amount, acceptedLeft.get(item.key) ?? 0)
+        if (stored > 0) acceptedLeft.set(item.key, (acceptedLeft.get(item.key) ?? 0) - stored)
+        const itemOverflow = Math.min(item.amount - stored, overflowLeft.get(item.key) ?? 0)
+        if (itemOverflow > 0) overflowLeft.set(item.key, (overflowLeft.get(item.key) ?? 0) - itemOverflow)
+        outcomeByItemId.set(item.id, {
+          ...lootDto(item),
+          outcome: stored > 0 ? 'warehouse' : 'points',
+          ...(stored > 0 ? { storedAmount: stored } : {}),
+          ...(itemOverflow > 0 ? { overflowPoints: itemOverflow * item.value } : {}),
+        })
+      }
+    }
+
+    for (const item of kept) {
+      if (item.kind === 'material') continue // 上面已按仓库容量入仓 / 折算
+      if (item.kind === 'points') {
         points += item.value * Math.max(1, item.amount)
+        outcomeByItemId.set(item.id, { ...lootDto(item), outcome: 'points', overflowPoints: item.value * Math.max(1, item.amount) })
         continue
       }
       if (item.kind === 'medkit') {
         points += item.value
+        outcomeByItemId.set(item.id, { ...lootDto(item), outcome: 'points', overflowPoints: item.value })
         continue
       }
       if (item.kind === 'seed') {
         const crop = getCrop(item.payload)
-        if (!crop) continue
+        if (!crop) {
+          outcomeByItemId.set(item.id, { ...lootDto(item), outcome: 'points', overflowPoints: 0 })
+          continue
+        }
         if (farm) {
           seedGains.set(crop.key, (seedGains.get(crop.key) ?? 0) + item.amount)
+          outcomeByItemId.set(item.id, { ...lootDto(item), outcome: 'farm' })
         } else {
           points += crop.seedCost * item.amount
+          outcomeByItemId.set(item.id, { ...lootDto(item), outcome: 'points', overflowPoints: crop.seedCost * item.amount })
         }
         continue
       }
       if (item.kind === 'equipment') {
         const def = PET_EQUIPMENT_MAP.get(item.payload ?? '')
-        if (!def) continue
+        if (!def) {
+          outcomeByItemId.set(item.id, { ...lootDto(item), outcome: 'points', overflowPoints: 0 })
+          continue
+        }
         if (pet && !ownedEquipment.has(def.key)) {
           await tx.petEquipment.create({
             data: { petId: pet.id, itemKey: def.key, acquiredVia: 'raid' },
           })
           ownedEquipment.add(def.key)
+          outcomeByItemId.set(item.id, { ...lootDto(item), outcome: 'equipment' })
         } else {
-          points += Math.max(1, Math.round(def.price * 0.4))
+          const folded = Math.max(1, Math.round(def.price * 0.4))
+          points += folded
+          outcomeByItemId.set(item.id, { ...lootDto(item), outcome: 'dupe', overflowPoints: folded })
         }
         continue
       }
       if (item.kind === 'skill') {
         const skill = PET_SKILL_MAP.get(item.payload ?? '')
-        if (!skill || skill.key === 'basic_attack') continue
+        if (!skill || skill.key === 'basic_attack') {
+          outcomeByItemId.set(item.id, { ...lootDto(item), outcome: 'points', overflowPoints: 0 })
+          continue
+        }
         if (pet && !ownedSkills.has(skill.key)) {
           await tx.petSkill.create({
             data: { petId: pet.id, skillKey: skill.key, acquiredVia: 'raid' },
           })
           ownedSkills.add(skill.key)
+          outcomeByItemId.set(item.id, { ...lootDto(item), outcome: 'skill' })
         } else {
-          points += Math.max(1, Math.round(skill.price * 0.4))
+          const folded = Math.max(1, Math.round(skill.price * 0.4))
+          points += folded
+          outcomeByItemId.set(item.id, { ...lootDto(item), outcome: 'dupe', overflowPoints: folded })
         }
       }
     }
@@ -478,7 +569,9 @@ async function finishRaid(
       ? await awardPointsTx(tx, row.userId, {
         amount: points,
         reason: 'pet_raid',
-        note: `搜打撤带出：${getRaidMap(state.mapKey)?.name ?? state.mapKey}`,
+        note: overflowUnits > 0
+          ? `搜打撤带出：${getRaidMap(state.mapKey)?.name ?? state.mapKey}（仓库已满，超出部分折算积分）`
+          : `搜打撤带出：${getRaidMap(state.mapKey)?.name ?? state.mapKey}`,
       })
       : { balance: (await tx.user.findUnique({ where: { id: row.userId }, select: { points: true } }))?.points ?? 0 }
 
@@ -539,7 +632,7 @@ async function finishRaid(
       points,
       balance: award.balance,
       gearLost,
-      loot: kept.map(lootDto),
+      loot: kept.map((item) => outcomeByItemId.get(item.id) ?? { ...lootDto(item), outcome: 'points' as const, overflowPoints: 0 }),
       record: historyDto(record),
       contracts: contractRows
         .map((contract) => contractDto(contract))
@@ -572,7 +665,7 @@ async function settleExpiredRaid(userId: number, now = Date.now()): Promise<Raid
 export async function getRaidOverview(userId: number): Promise<RaidOverviewDto> {
   const now = Date.now()
   await settleExpiredRaid(userId, now)
-  const [row, petInfo, profile, history, totalRaids, extracted, died, mia, killsSum, best] = await Promise.all([
+  const [row, petInfo, profile, history, totalRaids, extracted, died, mia, killsSum, best, storageSummary] = await Promise.all([
     prisma.petRaid.findUnique({ where: { userId } }),
     loadRaidPet(userId).catch(() => null),
     getPointsProfile(userId),
@@ -591,11 +684,12 @@ export async function getRaidOverview(userId: number): Promise<RaidOverviewDto> 
       orderBy: { points: 'desc' },
       select: { points: true },
     }),
+    getRaidStorageSummary(userId),
   ])
 
   const activeRow = row && row.status === 'active' ? row : null
   const state = activeRow ? parseState(activeRow.state) : null
-  const raid = activeRow && state ? raidStateDto(activeRow, state, now) : null
+  const raid = activeRow && state ? raidStateDto(activeRow, state, now, storageSummary.safeCapacity) : null
 
   const contracts = await prisma.$transaction((tx) =>
     ensureContractsTx(tx, userId, getTodayDateKey(now)))
@@ -636,6 +730,13 @@ export async function getRaidOverview(userId: number): Promise<RaidOverviewDto> 
     pet,
     points: profile.balance,
     insuranceRate: RAID_INSURANCE_RATE,
+    safeCapacity: storageSummary.safeCapacity,
+    storage: {
+      level: storageSummary.level,
+      capacity: storageSummary.capacity,
+      used: storageSummary.used,
+      safeCapacity: storageSummary.safeCapacity,
+    },
   }
 }
 
@@ -748,6 +849,8 @@ export async function performRaidAction(
   if (!row || row.status !== 'active') throw new AppError('没有进行中的行动', 404, 'RAID_NONE')
   const state = parseState(row.state)
   if (!state) throw new AppError('行动数据异常', 500)
+  // 保险箱格数随仓库等级提升（读时惰性建行）
+  const storageSummary = await getRaidStorageSummary(userId)
 
   if (state.expiresAt <= now) {
     const expired = expireRaid(state).state
@@ -777,7 +880,7 @@ export async function performRaidAction(
       break
     case 'safe':
       if (!input.lootId) throw new AppError('缺少物品编号', 400)
-      result = storeSafeRaid(state, input.lootId)
+      result = storeSafeRaid(state, input.lootId, storageSummary.safeCapacity)
       break
     case 'unsafe':
       if (!input.lootId) throw new AppError('缺少物品编号', 400)
@@ -811,7 +914,7 @@ export async function performRaidAction(
     throw new AppError('行动状态已更新，请刷新', 409, 'RAID_VERSION')
   }
   return {
-    raid: raidStateDto(row, next, now),
+    raid: raidStateDto(row, next, now, storageSummary.safeCapacity),
     gained: (result.gained ?? []).map(lootDto),
     combat: result.combat ?? null,
     settlement: null,
