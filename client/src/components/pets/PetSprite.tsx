@@ -42,6 +42,9 @@ const KNOWN_ANIMATIONS = new Set([
   'touch', 'pat',
   'stretch', 'beg', 'dance', 'roll', 'highfive', 'sing', 'flip',
   'moonwalk', 'spin', 'playdead', 'magic', 'cheer', 'firework',
+  // 战斗技能动画（PetBattleStage 直接传服务端 animation key）
+  'basic', 'fire', 'ice', 'thunder', 'heal', 'poison', 'shadow',
+  'roar', 'shield', 'drain', 'meteor', 'purify', 'stun', 'dot', 'faint',
 ])
 
 /** 虹膜基色（每种动物眼睛的气质不同，熊猫单独走「白眼球 + 黑瞳」） */

@@ -71,14 +71,53 @@ async function assertAiReady(): Promise<AiConfigData> {
 
 /**
  * 按配置创建 OpenAI 客户端（baseUrl 兼容各家 API 格式）
+ * 导出供股票 AI 事件等后台任务复用。
  */
-function createClient(config: AiConfigData, timeoutMs = 30_000): OpenAI {
+export function createClient(
+  config: Pick<AiConfigData, 'apiKey' | 'baseUrl'>,
+  timeoutMs = 30_000,
+): OpenAI {
   return new OpenAI({
     apiKey: config.apiKey,
     baseURL: config.baseUrl || undefined,
     timeout: timeoutMs,
     maxRetries: 1,
   })
+}
+
+export interface AiTaskConfig {
+  model: string
+  apiKey: string
+  baseUrl: string | null
+}
+
+/**
+ * 通用非流式补全（后台任务专用，不注入站点上下文）。
+ * json=true 时请求上游 JSON 输出模式；上游不支持会抛错，由调用方回退。
+ */
+export async function completeTask(
+  config: AiTaskConfig,
+  messages: ChatMessage[],
+  opts: {
+    maxTokens?: number
+    temperature?: number
+    timeoutMs?: number
+    json?: boolean
+  } = {},
+): Promise<string> {
+  const client = createClient(config, opts.timeoutMs ?? 25_000)
+  const completion = await client.chat.completions.create({
+    model: config.model,
+    messages,
+    max_tokens: opts.maxTokens ?? 1200,
+    temperature: opts.temperature ?? 0.9,
+    ...(opts.json ? { response_format: { type: 'json_object' as const } } : {}),
+  })
+  const content = completion.choices[0]?.message?.content
+  if (!content || typeof content !== 'string') {
+    throw new AppError('AI 未返回内容', 502)
+  }
+  return content
 }
 
 /**

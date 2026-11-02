@@ -68,6 +68,12 @@ model User {
   themeUnlocks           ThemeUnlock[] // 已解锁的 LineWeb 主题
   petGuestbook           PetGuestbook[]       @relation("PetGuestbookAuthor") // 我在别人宠物之家留的言
   petVisits              PetVisit[]           @relation("PetVisitVisitor") // 我串门撸宠的记录
+  petBattlesAsChallenger PetBattle[]          @relation("PetBattleChallenger") // 我发起的宠物对战
+  petBattlesAsOpponent   PetBattle[]          @relation("PetBattleOpponent") // 我应战的宠物对战
+  petMarketListings      PetMarketListing[]   @relation("PetMarketSeller") // 我挂出的交易行条目
+  petMarketPurchases     PetMarketListing[]   @relation("PetMarketBuyer") // 我在交易行买下的条目
+  petMarketTradesSold    PetMarketTrade[]     @relation("PetMarketTradeSeller") // 我作为卖家的成交记录
+  petMarketTradesBought  PetMarketTrade[]     @relation("PetMarketTradeBuyer") // 我作为买家的成交记录
   personalSpace          PersonalSpace? // 个人空间（管理员私人服务，每管理员一份）
   books                  Book[]               // 小说阅读器的书架（上传的书）
   musicAccount           MusicAccount?        // 网易云音乐扫码绑定的账号（cookie 仅存服务端）
@@ -990,11 +996,15 @@ model Pet {
   criticalSince DateTime? @map("critical_since") // 最早一项数值归零的时刻（判定离家出走）
   lastTouchAt   DateTime? @map("last_touch_at") // 抚摸心情加成冷却
   pats          Int       @default(0) // 被其它用户撸的总次数（宠物之家人气）
+  /** 最近一次被对战夺走装备的日期（Asia/Shanghai YYYY-MM-DD），用于每日掉落保护 */
+  lastDropDate  String?   @map("last_drop_date")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
   outfits       PetOutfit[]
   guestbook     PetGuestbook[]
   visits        PetVisit[]
+  equipments    PetEquipment[]
+  skills        PetSkill[]
 
   @@map("pets")
 }
@@ -1048,6 +1058,150 @@ model PetOutfit {
 
   @@unique([petId, outfitKey])
   @@map("pet_outfits")
+}
+
+/**
+ * 宠物战斗装备（永久拥有，petId + itemKey 唯一）。
+ * bound=true 为绑定新手装，不可掉落、不可交易；acquiredVia: starter | shop | drop | market。
+ * 穿戴状态存在 Pet.equipped JSON（weapon / armor / accessory），不在本表冗余。
+ */
+model PetEquipment {
+  id          Int                 @id @default(autoincrement())
+  petId       Int                 @map("pet_id")
+  pet         Pet                 @relation(fields: [petId], references: [id], onDelete: Cascade)
+  itemKey     String              @map("item_key")
+  bound       Boolean             @default(false)
+  /** 是否在交易行挂单中（同一物品最多一条 active 挂单） */
+  listed      Boolean             @default(false)
+  acquiredVia String              @default("shop") @map("acquired_via") // starter | shop | drop | market
+  createdAt   DateTime            @default(now()) @map("created_at")
+  listings    PetMarketListing[]
+
+  @@unique([petId, itemKey])
+  @@index([itemKey])
+  @@map("pet_equipments")
+}
+
+/**
+ * 宠物技能（永久拥有，petId + skillKey 唯一）。
+ * 装备槽位存在 Pet.equipped JSON 的 skills 数组（最多 3 个），技能效果目录见 lib/petSkills.ts。
+ */
+model PetSkill {
+  id          Int                 @id @default(autoincrement())
+  petId       Int                 @map("pet_id")
+  pet         Pet                 @relation(fields: [petId], references: [id], onDelete: Cascade)
+  skillKey    String              @map("skill_key")
+  /** 是否在交易行挂单中 */
+  listed      Boolean             @default(false)
+  acquiredVia String              @default("shop") @map("acquired_via") // shop | market
+  createdAt   DateTime            @default(now()) @map("created_at")
+  listings    PetMarketListing[]
+
+  @@unique([petId, skillKey])
+  @@index([skillKey])
+  @@map("pet_skills")
+}
+
+/**
+ * 宠物对战（邀请 + 对局 + 结算同一行）。
+ * status: pending（等待应战）| active（进行中）| finished | declined | expired。
+ * state 为完整战斗状态 JSON（双方快照 / HP / MP / buff / 日志），version 用于行动乐观锁。
+ */
+model PetBattle {
+  id               Int       @id @default(autoincrement())
+  challengerId     Int       @map("challenger_id")
+  challenger       User      @relation("PetBattleChallenger", fields: [challengerId], references: [id], onDelete: Cascade)
+  opponentId       Int       @map("opponent_id")
+  opponent         User      @relation("PetBattleOpponent", fields: [opponentId], references: [id], onDelete: Cascade)
+  status           String    @default("pending") // pending | active | finished | declined | expired
+  state            String    @default("{}") // JSON：BattleState
+  version          Int       @default(0)
+  turnUserId       Int?      @map("turn_user_id")
+  turnDeadline     DateTime? @map("turn_deadline")
+  challengerSeenAt DateTime? @map("challenger_seen_at")
+  opponentSeenAt   DateTime? @map("opponent_seen_at")
+  winnerId         Int?      @map("winner_id")
+  loserId          Int?      @map("loser_id")
+  rewardPoints     Int       @default(0) @map("reward_points")
+  dropJson         String?   @map("drop_json") // JSON：{ itemType, itemKey, name }
+  expiresAt        DateTime? @map("expires_at")
+  settledAt        DateTime? @map("settled_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([challengerId, status])
+  @@index([opponentId, status])
+  @@index([status, turnDeadline])
+  @@index([status, expiresAt])
+  @@map("pet_battles")
+}
+
+/**
+ * 宠物交易行挂单：一条挂单对应一个具体的 PetEquipment / PetSkill 行（equipmentId / skillId）。
+ * status: active | sold | cancelled。价格必须落在参考价 50%–150%。
+ */
+model PetMarketListing {
+  id          Int             @id @default(autoincrement())
+  sellerId    Int             @map("seller_id")
+  seller      User            @relation("PetMarketSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+  itemType    String          @map("item_type") // equipment | skill
+  itemKey     String          @map("item_key")
+  equipmentId Int?            @map("equipment_id")
+  equipment   PetEquipment?   @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  skillId     Int?            @map("skill_id")
+  skill       PetSkill?       @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  price       Int
+  status      String          @default("active") // active | sold | cancelled
+  buyerId     Int?            @map("buyer_id")
+  buyer       User?           @relation("PetMarketBuyer", fields: [buyerId], references: [id], onDelete: SetNull)
+  soldAt      DateTime?       @map("sold_at")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+  trades      PetMarketTrade[]
+
+  @@index([status, itemType, createdAt])
+  @@index([sellerId, status])
+  @@index([itemType, itemKey, status])
+  @@map("pet_market_listings")
+}
+
+/**
+ * 宠物交易行成交记录（append-only）：fee 为卖家支付的手续费（成交价 5%）。
+ */
+model PetMarketTrade {
+  id            Int              @id @default(autoincrement())
+  listingId     Int              @map("listing_id")
+  listing       PetMarketListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  sellerId      Int              @map("seller_id")
+  seller        User             @relation("PetMarketTradeSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+  buyerId       Int              @map("buyer_id")
+  buyer         User             @relation("PetMarketTradeBuyer", fields: [buyerId], references: [id], onDelete: Cascade)
+  itemType      String           @map("item_type")
+  itemKey       String           @map("item_key")
+  price         Int
+  fee           Int              @default(0)
+  refPriceAfter Int              @map("ref_price_after")
+  createdAt     DateTime         @default(now()) @map("created_at")
+
+  @@index([itemType, itemKey, createdAt])
+  @@index([sellerId, createdAt])
+  @@index([buyerId, createdAt])
+  @@map("pet_market_trades")
+}
+
+/**
+ * 宠物交易行参考价（按 itemType + itemKey 唯一）：成交后向成交价靠拢，读取时惰性回归基础价。
+ */
+model PetMarketPrice {
+  itemType  String   @map("item_type")
+  itemKey   String   @map("item_key")
+  refPrice  Int      @map("ref_price")
+  basePrice Int      @map("base_price")
+  trades    Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@id([itemType, itemKey])
+  @@map("pet_market_prices")
 }
 
 // === 个人空间（管理员私人服务，每个管理员的数据互相隔离） ===
@@ -1130,13 +1284,35 @@ model MusicAccount {
   @@map("music_accounts")
 }
 
-// === 模拟股市（2026-11 大完善：分红 / 新闻事件 / 成交记录 / 账户统计） ===
+// === 模拟股市（2026-11 重构：AI 事件驱动 / 玩家冲击 / 无分红） ===
 
 /**
- * 每用户一条股市账户（userId 唯一）：
- * - lastDividendDate：分红结算水位（Asia/Shanghai YYYY-MM-DD），首个交易日读时惰性结算；
- * - totalDividends：累计分红所得积分（展示用）；
- * - realizedPoints：累计已实现盈亏（卖出到账 - 分摊成本，展示用）。
+ * 股市 AI 事件（每 40 分钟一批，append-only）。
+ * source: ai（大模型生成）| template（模型不可用时的模板兜底）。
+ * startTick 为当日 3 秒 tick 序号（0–28799），startAt 为其对应时刻；impact 带符号（正=利好）。
+ */
+model StockEvent {
+  id         Int      @id @default(autoincrement())
+  dateKey    String   @map("date_key") // Asia/Shanghai YYYY-MM-DD
+  code       String
+  batchKey   String   @map("batch_key") // 例如 2026-11-02T14:00（40 分钟槽）
+  title      String
+  summary    String
+  sentiment  String   @default("good") // good | bad
+  impact     Float
+  halfLifeMs Int      @map("half_life_ms")
+  startAt    DateTime @map("start_at")
+  startTick  Int      @map("start_tick")
+  source     String   @default("ai") // ai | template
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([dateKey, startAt])
+  @@index([code, startAt])
+  @@map("stock_events")
+}
+
+/**
+ * 旧版股市账户（分红 / 已实现盈亏）。2026-11 起停止使用，仅保留历史数据，不参与任何计算。
  */
 model StockAccount {
   id               Int      @id @default(autoincrement())

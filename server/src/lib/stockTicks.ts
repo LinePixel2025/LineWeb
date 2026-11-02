@@ -1,25 +1,25 @@
 /**
  * 股市实时 tick 行情引擎（纯计算层，禁止 import prisma / 网络依赖）。
  *
- * 四层价格模型：
- * 1. 日线锚点（不动）：stockMarket.ts 的确定性日生成器给出每日 open/close，
- *   历史 K 线零变化；秒级基准路径在「今日 open → 今日 close」之间线性插值作为锚点；
- * 2. 秒级基准路径 basePath(tick) = anchor(tick) × (1 + noise(tick) + wave(tick))：
- *   - noise 为 OU 式均值回归随机游走（按 (code, dateKey) 播种，起点 0），负责秒级抖动；
- *   - wave 为确定性「盘中慢波」（3 个正弦叠加，周期 30–180 分钟，总幅度 ±0.6%~±1.2%，
- *     首尾用 sin 包络压到 0）—— 这是给趋势交易者的可交易波段，旧版只有纯噪声，
- *     分时图没有任何结构性起伏，玩家只能赌下一秒的随机数；
- *   两者都按 (code, dateKey) 播种，重启后从 tick 0 重算完全一致，重启价格零跳变；
- * 3. 新闻事件冲击 eventImpact：每只股票每天 0–2 条确定性利好 / 利空快讯，
- *   在指定 tick 触发后按 45–120 分钟半衰期指数衰减（同样无定时器，读时计算）；
- * 4. 玩家冲击 impact：买入推高 / 卖出压低价格，读时按 10 分钟半衰期指数衰减。
+ * 2026-11 重构后的价格模型（三层）：
+ * 1. 日线锚点：stockMarket.ts 的确定性日生成器给出每日 open/close，
+ *   秒级基准路径在「今日 open → 今日 close」之间线性插值作为锚点；
+ * 2. 秒级基准路径 basePath(tick) = anchor(tick) × (1 + noise(tick))：
+ *   noise 为 OU 式均值回归随机游走（按 (code, dateKey) 播种，起点 0），
+ *   负责秒级抖动；旧版的「盘中慢波」已整体删除（简化机制）。
+ *   按 (code, dateKey) 播种，重启后从 tick 0 重算完全一致，重启价格零跳变；
+ * 3. 外部事件冲击 eventImpact：由 stockEventService 每 40 分钟调用 AI（或模板兜底）
+ *   生成并持久化到 StockEvent 表，启动/生成后注入本模块的内存层；
+ *   触发后按 30–180 分钟半衰期指数衰减，同一时刻总事件冲击 clamp ±12%；
+ * 4. 玩家冲击 impact：买入推高 / 卖出压低价格，读时按 15 分钟半衰期指数衰减，
+ *   幅度上限 ±25%；成交价额外叠加「本笔冲击」滑点，避免自买自卖套利。
  *   状态通过 SiteSetting('stock.marketImpact') 持久化，prisma 读写放在 stockService.ts，
  *   本文件只提供序列化 / 恢复纯函数。
  *
  * 实时价 = basePath(当前 tick) × (1 + 玩家冲击 + 事件冲击)，每次报价实时计算
  * （不走物化缓存），因此成交与新闻触发都能在下一次报价立即反映。
  * 内存只保留当前日的 tick 缓存（每股 2 × Float64Array(28800) ≈ 460KB，
- * 12 只约 5.5MB），跨日整包重建；新闻 / 慢波参数按 (dateKey, code) 懒算并缓存当日。
+ * 12 只约 5.5MB），跨日整包重建。
  */
 
 import {
@@ -45,71 +45,64 @@ export const STOCK_TICK_MS = 3000
 export const STOCK_TICKS_PER_DAY = 86_400_000 / STOCK_TICK_MS
 
 /* ============================================================
-   玩家冲击参数
+   玩家冲击参数（2026-11 大幅提高）
    ============================================================ */
 
-/** 冲击系数：每 1 万积分买入 ≈ +0.2%（卖出按毛收入等量反向） */
-export const STOCK_IMPACT_PER_POINT = 2e-7
-/** 冲击幅度上下限（±5%） */
-export const STOCK_IMPACT_MAX = 0.05
-/** 冲击半衰期：10 分钟（读时惰性衰减，无定时器） */
-export const STOCK_IMPACT_HALF_LIFE_MS = 600_000
+/** 冲击系数：每 1 万积分买入 ≈ +1%（卖出按毛收入等量反向） */
+export const STOCK_IMPACT_PER_POINT = 1e-6
+/** 冲击幅度上下限（±25%） */
+export const STOCK_IMPACT_MAX = 0.25
+/** 冲击半衰期：15 分钟（读时惰性衰减，无定时器） */
+export const STOCK_IMPACT_HALF_LIFE_MS = 15 * 60_000
 /** 冲击状态在 SiteSetting 表中的持久化键 */
 export const IMPACT_STATE_SETTING_KEY = 'stock.marketImpact'
 
 /* ============================================================
-   噪声 / 慢波参数
+   噪声参数
    ============================================================ */
 
-/** 噪声每步衰减系数（0.993 → 相关时间约 143 tick ≈ 7 分钟） */
-const STOCK_NOISE_DECAY = 0.993
+/** 噪声每步衰减系数（0.99 → 相关时间约 100 tick ≈ 5 分钟） */
+const STOCK_NOISE_DECAY = 0.99
+/** 噪声 sigma 经验倍率：日波动率换算到 tick 后再放大，制造更明显的短线波动 */
+const STOCK_NOISE_SIGMA_MULTIPLIER = 4
 /** 价格下限（与日线生成器一致） */
 const STOCK_PRICE_FLOOR = 0.5
 /** 分时采样间隔：每 20 tick（60 秒）一点 */
 export const STOCK_INTRADAY_SAMPLE_TICKS = 20
 
-/** 慢波总幅度区间（±0.6%~±1.2%）：足够做出可交易的波段，又不至于盖过日线锚点 */
-export const STOCK_WAVE_MIN_AMPLITUDE = 0.006
-export const STOCK_WAVE_MAX_AMPLITUDE = 0.012
-/** 慢波周期区间（30–180 分钟），换成 tick 数即 600–3600 */
-const STOCK_WAVE_MIN_PERIOD_TICKS = 600
-const STOCK_WAVE_MAX_PERIOD_TICKS = 3_600
-/** 谐波权重：3 条正弦按 50/30/20 分配总幅度，叠加后形态不重复 */
-const STOCK_WAVE_WEIGHTS = [0.5, 0.3, 0.2] as const
-
 /* ============================================================
-   新闻事件参数
+   外部事件参数（AI 每 40 分钟一批）
    ============================================================ */
 
-/** 每只股票每天最多 2 条事件 */
-export const STOCK_NEWS_MAX_EVENTS = 2
-/** 事件冲击幅度区间（带符号前）1.5%–5% */
+/** AI 事件批次间隔（分钟） */
+export const STOCK_EVENT_BATCH_MINUTES = 40
+/** 单条事件冲击幅度区间（带符号前）1.5%–8% */
 export const STOCK_NEWS_MIN_IMPACT = 0.015
-export const STOCK_NEWS_MAX_IMPACT = 0.05
-/** 事件半衰期区间 45–120 分钟 */
-export const STOCK_NEWS_MIN_HALF_LIFE_MS = 45 * 60_000
-export const STOCK_NEWS_MAX_HALF_LIFE_MS = 120 * 60_000
-/**
- * 同日两条事件的最小间隔 = 首条半衰期 × 4。
- * 4 个半衰期后首条残余 ≤ 6.25%，再叠加第二条才不会出现「两条冲击互相放大」
- * 的失真区间，也保证 startTick 互不重叠。
- */
-const STOCK_NEWS_GAP_HALF_LIVES = 4
+export const STOCK_NEWS_MAX_IMPACT = 0.08
+/** 事件半衰期区间 30–180 分钟 */
+export const STOCK_NEWS_MIN_HALF_LIFE_MS = 30 * 60_000
+export const STOCK_NEWS_MAX_HALF_LIFE_MS = 180 * 60_000
+/** 同一时刻全部事件的合计冲击上限（防止多事件叠加把价格打飞） */
+export const STOCK_EVENT_IMPACT_CAP = 0.12
 
 export interface StockNewsEvent {
-  /** 稳定 id：`${code}-${dateKey}-${index}` */
+  /** 稳定 id：`${code}-${batchKey}-${index}` */
   id: string
   code: string
-  /** 中文快讯标题（按板块文案池挑选，含股票名） */
+  /** 中文快讯标题 */
   title: string
   summary: string
   sentiment: 'good' | 'bad'
-  /** 触发 tick（1..28799），同一只股票事件不重叠 */
+  /** 触发 tick（1..28799） */
   startTick: number
-  /** 冲击幅度（带符号，good 正 bad 负，绝对 1.5%–5%） */
+  /** 冲击幅度（带符号，good 正 bad 负，绝对 1.5%–8%） */
   impact: number
-  /** 半衰期（45–120 分钟） */
+  /** 半衰期（30–180 分钟） */
   halfLifeMs: number
+  /** 来源：ai = 大模型生成，template = 模板兜底 */
+  source: 'ai' | 'template'
+  /** 所属 40 分钟批次（如 2026-11-02T14:00），同批同股票最多 1 条 */
+  batchKey: string
 }
 
 interface NewsCopy {
@@ -328,7 +321,7 @@ export function eventImpactAt(
     const elapsedMs = (tick - event.startTick) * tickMs
     sum += event.impact * Math.pow(0.5, elapsedMs / event.halfLifeMs)
   }
-  return sum
+  return Math.max(-STOCK_EVENT_IMPACT_CAP, Math.min(STOCK_EVENT_IMPACT_CAP, sum))
 }
 
 function round4(value: number): number {
@@ -336,124 +329,126 @@ function round4(value: number): number {
 }
 
 /**
- * 为某只股票生成当日新闻事件（0–2 条，确定性）。
- *
- * 随机数取数顺序固定：事件条数 → 每条 [情绪, 幅度, 半衰期, 文案下标] → 首条起始 tick。
- * 因此同 (code, dateKey) 永远得到同一组事件，且事件会随日期变化。
- * 第一条事件留出「第二条所需间隔」的空间；放不下时只发一条（永远 ≤ 2）。
+ * 模板兜底事件：AI 不可用（未配置 / 调用失败 / 超时）时，每个 40 分钟批次生成
+ * 2–3 条利好/利空各半的虚构快讯，保证行情引擎永远有事件可消费。
+ * 文案来自板块池，股票随机不重复；startTick 由 startAt 换算。
  */
-export function buildDayNews(definition: StockDefinition, dateKey: string): StockNewsEvent[] {
-  const rng = mulberry32(seedFromString(`lineweb-stock-news:${definition.code}:${dateKey}`))
-  const roll = rng()
-  // 45% 无事件 / 37% 一条 / 18% 两条：平均约 0.73 条/股/日，全市场每天约 9 条快讯
-  const count = roll < 0.45 ? 0 : roll < 0.82 ? 1 : STOCK_NEWS_MAX_EVENTS
-  if (count === 0) return []
-
-  const drafts: Array<{
-    sentiment: 'good' | 'bad'
-    impact: number
-    halfLifeMs: number
-    copy: NewsCopy
-  }> = []
-  for (let index = 0; index < count; index += 1) {
-    // 轻微偏利好（56%）：整体牛市长趋势里，好消息比坏消息略多
-    const sentiment: 'good' | 'bad' = rng() < 0.56 ? 'good' : 'bad'
+export function buildFallbackNewsEvents(
+  dateKey: string,
+  batchKey: string,
+  startAtMs: number,
+  rng: () => number,
+  count = 2,
+): StockNewsEvent[] {
+  const total = Math.max(1, Math.min(3, Math.trunc(count)))
+  const pool = [...STOCK_DEFINITIONS]
+  const events: StockNewsEvent[] = []
+  const startTick = Math.max(
+    1,
+    Math.min(STOCK_TICKS_PER_DAY - 1, tickIndexOf(dateKey, startAtMs)),
+  )
+  for (let index = 0; index < total && pool.length > 0; index += 1) {
+    const pickIndex = Math.floor(rng() * pool.length) % pool.length
+    const definition = pool.splice(pickIndex, 1)[0]
+    // 第一批从利好开始，之后交替，避免整批全是同一个方向
+    const sentiment: 'good' | 'bad' = index % 2 === 0 ? 'good' : 'bad'
     const magnitude =
       STOCK_NEWS_MIN_IMPACT + rng() * (STOCK_NEWS_MAX_IMPACT - STOCK_NEWS_MIN_IMPACT)
     const halfLifeMs = Math.round(
       STOCK_NEWS_MIN_HALF_LIFE_MS + rng() * (STOCK_NEWS_MAX_HALF_LIFE_MS - STOCK_NEWS_MIN_HALF_LIFE_MS),
     )
-    const pool = newsPoolOf(definition.sector)[sentiment]
-    const picked = pool[Math.floor(rng() * pool.length) % pool.length]
-    drafts.push({
+    const copies = newsPoolOf(definition.sector)[sentiment]
+    const copy = copies[Math.floor(rng() * copies.length) % copies.length]
+    const filled = fillNewsCopy(copy, definition.name)
+    events.push({
+      id: `${definition.code}-${batchKey}-${index}`,
+      code: definition.code,
+      title: filled.title,
+      summary: filled.summary,
       sentiment,
+      startTick,
       impact: round4((sentiment === 'good' ? 1 : -1) * magnitude),
       halfLifeMs,
-      copy: fillNewsCopy(picked, definition.name),
+      source: 'template',
+      batchKey,
     })
   }
-
-  const lastTick = STOCK_TICKS_PER_DAY - 1
-  const gap0 = Math.ceil((drafts[0].halfLifeMs * STOCK_NEWS_GAP_HALF_LIVES) / STOCK_TICK_MS)
-  const reserve = drafts.length > 1 ? Math.min(gap0, lastTick - 2) : 0
-  // 首条落在 [1, lastTick − reserve − 1]，保证 tick 0 一定没有事件
-  const span = Math.max(1, lastTick - 1 - reserve)
-  const firstStart = 1 + Math.floor(rng() * span)
-  const starts = [firstStart]
-  if (drafts.length > 1) {
-    const secondStart = firstStart + gap0
-    // 放不下第二条（比如首条半衰期长 + 起始晚）就只保留一条
-    if (secondStart <= lastTick) starts.push(secondStart)
-  }
-
-  return drafts.slice(0, starts.length).map((draft, index) => ({
-    id: `${definition.code}-${dateKey}-${index}`,
-    code: definition.code,
-    title: draft.copy.title,
-    summary: draft.copy.summary,
-    sentiment: draft.sentiment,
-    startTick: starts[index],
-    impact: draft.impact,
-    halfLifeMs: draft.halfLifeMs,
-  }))
+  return events
 }
 
-interface WaveHarmonic {
-  amplitude: number
-  periodTicks: number
-  phase: number
-}
-
-function buildWaveHarmonics(code: string, dateKey: string): WaveHarmonic[] {
-  const rng = mulberry32(seedFromString(`lineweb-stock-wave:${code}:${dateKey}`))
-  const total =
-    STOCK_WAVE_MIN_AMPLITUDE + rng() * (STOCK_WAVE_MAX_AMPLITUDE - STOCK_WAVE_MIN_AMPLITUDE)
-  return STOCK_WAVE_WEIGHTS.map((weight) => ({
-    amplitude: total * weight,
-    periodTicks: Math.round(
-      STOCK_WAVE_MIN_PERIOD_TICKS + rng() * (STOCK_WAVE_MAX_PERIOD_TICKS - STOCK_WAVE_MIN_PERIOD_TICKS),
-    ),
-    phase: rng() * Math.PI * 2,
-  }))
-}
+/* ============================================================
+   外部事件（AI / 模板）内存层
+   ============================================================ */
 
 /**
- * 盘中慢波（确定性）：3 条正弦叠加后乘 sin 包络。
- * 包络在 tick 0 与最后一个 tick 都恰好为 0 —— 前者保证「次日 tick0 = 开盘价」的
- * 日界衔接不变量，后者保证收盘时价格回归日线锚点（不会出现日末偏离收盘价 1%+）。
+ * 当日外部事件（按股票分组）。
+ * 由 stockEventService 在启动时 loadExternalNews、每批生成后 injectExternalNews 维护。
+ * 本模块不主动访问 DB，保持纯计算。
  */
-function waveAt(harmonics: readonly WaveHarmonic[], tick: number): number {
-  if (tick <= 0) return 0
-  const t = Math.min(tick, STOCK_TICKS_PER_DAY - 1)
-  const envelope = Math.sin((Math.PI * t) / (STOCK_TICKS_PER_DAY - 1))
-  let value = 0
-  for (const harmonic of harmonics) {
-    value += harmonic.amplitude * Math.sin((2 * Math.PI * t) / harmonic.periodTicks + harmonic.phase)
-  }
-  return value * envelope
+const externalNews = new Map<string, StockNewsEvent[]>()
+
+function cloneNewsEvent(event: StockNewsEvent): StockNewsEvent {
+  return { ...event }
 }
 
-/** 慢波缓存：只保留当日 12 只的谐波参数（换日 / resetTicksForTest 时清空） */
-let waveCache: { dateKey: string; map: Map<string, WaveHarmonic[]> } | null = null
-
-function harmonicsOf(code: string, dateKey: string): WaveHarmonic[] {
-  if (!waveCache || waveCache.dateKey !== dateKey) {
-    waveCache = { dateKey, map: new Map() }
-  }
-  const cached = waveCache.map.get(code)
-  if (cached) return cached
-  const built = buildWaveHarmonics(code, dateKey)
-  waveCache.map.set(code, built)
-  return built
+/** 只取指定交易日的事件（batchKey 以 `YYYY-MM-DDT` 开头），避免跨日重放 */
+function eventsOfDay(code: string, dateKey: string): StockNewsEvent[] {
+  return (externalNews.get(code.toUpperCase()) ?? [])
+    .filter((event) => event.batchKey.startsWith(`${dateKey}T`))
+    .map(cloneNewsEvent)
 }
 
-/**
- * 盘中慢波（对外导出，供自检直接断言）：
- * 返回该 tick 相对日线锚点的比例偏移（如 0.008 = +0.8%）。
- * tick 0 与当日最后一个 tick 恒为 0。
- */
-export function dayWave(code: string, dateKey: string, tick: number): number {
-  return waveAt(harmonicsOf(code.trim().toUpperCase(), dateKey), tick)
+/** 整体替换当日外部事件（启动加载 / 自检重置用） */
+export function loadExternalNews(events: readonly StockNewsEvent[]): void {
+  externalNews.clear()
+  for (const event of events) {
+    const key = event.code.toUpperCase()
+    const list = externalNews.get(key) ?? []
+    list.push(cloneNewsEvent(event))
+    externalNews.set(key, list)
+  }
+  // 已有日缓存时同步刷新（否则新事件要等换日才生效）
+  if (dayCache) {
+    for (const [code, state] of dayCache.stocks) {
+      state.news = eventsOfDay(code, dayCache.dateKey)
+    }
+  }
+}
+
+/** 注入一条新事件（批次生成后调用），同时刷新当日缓存 */
+export function injectExternalNews(event: StockNewsEvent): void {
+  const key = event.code.toUpperCase()
+  const list = externalNews.get(key) ?? []
+  // 同一批次同一股票只保留一条（AI 输出校验失败时的兜底）
+  const exists = list.some(
+    (item) => item.batchKey === event.batchKey && item.code === key,
+  )
+  if (!exists) list.push(cloneNewsEvent(event))
+  externalNews.set(key, list)
+  if (dayCache) {
+    const state = dayCache.stocks.get(key)
+    if (state) state.news = eventsOfDay(key, dayCache.dateKey)
+  }
+}
+
+/** 清空外部事件（自检 / 换日可选调用） */
+export function clearExternalNews(): void {
+  externalNews.clear()
+  if (dayCache) {
+    for (const state of dayCache.stocks.values()) state.news = []
+  }
+}
+
+/** 某只股票当日外部事件（只读副本） */
+export function getExternalNews(code: string): StockNewsEvent[] {
+  return (externalNews.get(code.toUpperCase()) ?? []).map(cloneNewsEvent)
+}
+
+/** 当日全部外部事件（按 startTick 升序） */
+export function getAllExternalNews(): StockNewsEvent[] {
+  return [...externalNews.values()].flat().map(cloneNewsEvent).sort(
+    (a, b) => a.startTick - b.startTick || a.code.localeCompare(b.code),
+  )
 }
 
 /* ============================================================
@@ -553,7 +548,7 @@ export function markImpactPersisted(): void {
    ============================================================ */
 
 interface TickStockState {
-  /** 秒级基准路径（日线锚点 × (1 + 噪声 + 慢波)，不含玩家 / 事件冲击） */
+  /** 秒级基准路径（日线锚点 × (1 + 噪声)，不含玩家 / 事件冲击） */
   basePath: Float64Array
   /** 物化价快照：延展时逐 tick 记录 basePath × (1 + 当时冲击 + 事件冲击)，供分时图采样 */
   materialized: Float64Array
@@ -571,10 +566,8 @@ interface TickStockState {
   todayClose: number
   prevClose: number
   baseVolume: number
-  /** 当日新闻事件（确定性，最多 2 条） */
+  /** 当日外部事件（AI / 模板，内存层注入） */
   news: StockNewsEvent[]
-  /** 当日慢波谐波参数 */
-  wave: WaveHarmonic[]
   /** 盘中跟踪的最高 / 最低（物化价并入最新实时价） */
   high: number
   low: number
@@ -587,8 +580,6 @@ let dayCache: { dateKey: string; stocks: Map<string, TickStockState> } | null = 
 
 function ensureDay(dateKey: string): Map<string, TickStockState> {
   if (dayCache && dayCache.dateKey === dateKey) return dayCache.stocks
-  // 换日时慢波缓存一并丢弃，避免旧日谐波常驻内存
-  if (waveCache && waveCache.dateKey !== dateKey) waveCache = null
   const stocks = new Map<string, TickStockState>()
   for (const definition of STOCK_DEFINITIONS) {
     const series = getStockDailySeries(definition, dateKey)
@@ -600,15 +591,17 @@ function ensureDay(dateKey: string): Map<string, TickStockState> {
       filled: -1,
       noise: 0,
       rng: mulberry32(seedFromString(`lineweb-stock-tick:${definition.code}:${dateKey}`)),
-      // σ_tick = 日波动率 × √(tick 占全日比例) × 2（经验系数，噪声日内幅度约 ±0.5%）
-      sigmaTick: definition.volatility * Math.sqrt(STOCK_TICK_MS / 86_400_000) * 2,
+      // σ_tick = 日波动率 × √(tick 占全日比例) × 4（经验系数，放大短线波动）
+      sigmaTick:
+        definition.volatility *
+        Math.sqrt(STOCK_TICK_MS / 86_400_000) *
+        STOCK_NOISE_SIGMA_MULTIPLIER,
       prevBase: today.open,
       todayOpen: today.open,
       todayClose: today.close,
       prevClose: yesterday.close,
       baseVolume: definition.baseVolume,
-      news: buildDayNews(definition, dateKey),
-      wave: harmonicsOf(definition.code, dateKey),
+      news: eventsOfDay(definition.code, dateKey),
       high: -Infinity,
       low: Infinity,
       volumeAcc: 0,
@@ -635,7 +628,7 @@ function extendTo(state: TickStockState, tick: number, impact: number): void {
       // OU 式均值回归：三角分布增量（rng() + rng() − 1 ∈ [−1, 1]）
       state.noise = state.noise * STOCK_NOISE_DECAY + state.sigmaTick * (state.rng() + state.rng() - 1)
     }
-    const shaped = anchorAt(state, t) * (1 + state.noise + waveAt(state.wave, t))
+    const shaped = anchorAt(state, t) * (1 + state.noise)
     const base = Math.max(STOCK_PRICE_FLOOR, round2(shaped))
     state.basePath[t] = base
     const eventImpact = eventImpactAt(state.news, t)
@@ -677,15 +670,17 @@ function newsItemsOf(events: readonly StockNewsEvent[], dateKey: string, tick: n
       id: event.id,
       title: event.title,
       summary: event.summary,
-      sentiment: event.sentiment,
+      // 未触发：不暴露方向与幅度，避免提前知道涨跌
+      sentiment: active ? event.sentiment : undefined,
       startTick: event.startTick,
       startAt: new Date(dayStartMs + event.startTick * STOCK_TICK_MS).toISOString(),
-      impact: event.impact,
+      impact: active ? event.impact : 0,
       halfLifeMs: event.halfLifeMs,
       currentImpact: active
         ? round4(event.impact * Math.pow(0.5, ((tick - event.startTick) * STOCK_TICK_MS) / event.halfLifeMs))
         : 0,
       active,
+      source: event.source,
     }
   })
 }
@@ -719,9 +714,32 @@ export function getLiveQuote(definition: StockDefinition, dateKey: string, nowMs
     change,
     changePct,
     volume: Math.round(state.volumeAcc),
-    dividendYield: definition.dividendYield,
     news: newsItemsOf(state.news, dateKey, tick),
   }
+}
+
+/**
+ * 含「本笔冲击」的执行价（成交滑点，防自买自卖）。
+ * delta 为本笔交易将写入的冲击变化（买入为正、卖出为负），返回按该冲击成交的价格。
+ * 业务层使用：买入先按 +delta 的成交价买入，再写入 impact；卖出先按 -delta 的成交价卖出。
+ */
+export function getLiveExecutionPrice(
+  code: string,
+  impactDelta: number,
+  nowMs: number = Date.now(),
+): number | null {
+  const normalized = code.trim().toUpperCase()
+  const definition = STOCK_DEFINITIONS.find((item) => item.code === normalized)
+  if (!definition) return null
+  const dateKey = getTodayDateKey(nowMs)
+  const state = ensureDay(dateKey).get(normalized)
+  if (!state) return null
+  const tick = tickIndexOf(dateKey, nowMs)
+  const impact = getImpact(normalized, nowMs)
+  extendTo(state, tick, impact)
+  const eventImpact = eventImpactAt(state.news, tick)
+  const projected = clampImpact(impact + impactDelta)
+  return Math.max(STOCK_PRICE_FLOOR, round2(state.basePath[tick] * (1 + projected + eventImpact)))
 }
 
 /** 按代码取实时报价（code 大写归一，未知代码返回 null） */
@@ -845,16 +863,16 @@ export function getBasePathAt(
   return state.basePath[Math.max(0, Math.min(STOCK_TICKS_PER_DAY - 1, tick))]
 }
 
-/** 某只股票当日新闻事件（自检 / 内部复用；不改变缓存状态） */
+/** 某只股票当日外部事件（AI / 模板；不改变缓存状态） */
 export function getDayNews(definition: StockDefinition, dateKey: string): StockNewsEvent[] {
   const state = ensureDay(dateKey).get(definition.code)
-  return state ? state.news : buildDayNews(definition, dateKey)
+  return state ? state.news : (externalNews.get(definition.code) ?? []).map(cloneNewsEvent)
 }
 
-/** 清空日缓存、慢波缓存与冲击状态（自检脚本跨用例隔离用，生产代码不得调用） */
+/** 清空日缓存、外部事件与冲击状态（自检脚本跨用例隔离用，生产代码不得调用） */
 export function resetTicksForTest(): void {
   dayCache = null
-  waveCache = null
+  externalNews.clear()
   impactStates.clear()
   impactDirty = false
 }

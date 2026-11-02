@@ -32,35 +32,28 @@ export interface StockDefinition {
   volatility: number
   /**
    * 日漂移（可正可负）。
-   * 2026-11 起整体改为「牛市长趋势」：11 只正漂移（+0.16% ~ +0.45%/日），
-   * 只保留 AURS 一只负漂移作为高风险标的 —— 旧版 8 只里有 5 只漂移 ≤ 0，
-   * 再叠加 1% 双向手续费，玩家长期持有几乎必亏（用户反馈的核心问题）。
+   * 2026-11 重构：全部归零 —— 涨跌完全由对称随机冲击决定，不再有「只涨不跌」的股票。
+   * 旧的牛市长趋势已删除（用户反馈：正漂移让长期持有几乎稳赚，失去模拟交易的意义）。
    */
   drift: number
-  /**
-   * 每日分红收益率（按持仓市值发放，0.003–0.016）。
-   * 隔夜未变动的持仓每天结算一次，直接进积分 —— 这是「长期持有也能赚」的第二条腿：
-   * 高股息股（GRNA / MINT / BWHL / SPRU）漂移低但分红高，成长股（CRMS / ORCA）漂移高但分红低。
-   */
-  dividendYield: number
   baseVolume: number
   /** 前端主色（图例 / 折线） */
   color: string
 }
 
 export const STOCK_DEFINITIONS: readonly StockDefinition[] = [
-  { code: 'LWST', name: '星尘科技', sector: '科技', basePrice: 128.4, volatility: 0.028, drift: 0.0026, dividendYield: 0.004, baseVolume: 860_000, color: '#1f6feb' },
-  { code: 'SPRU', name: '云杉能源', sector: '能源', basePrice: 46.7, volatility: 0.018, drift: 0.0022, dividendYield: 0.010, baseVolume: 540_000, color: '#1a7f37' },
-  { code: 'BWHL', name: '蓝鲸航运', sector: '物流', basePrice: 72.1, volatility: 0.022, drift: 0.0018, dividendYield: 0.011, baseVolume: 420_000, color: '#0969da' },
-  { code: 'QILN', name: '麒麟药业', sector: '医药', basePrice: 189.9, volatility: 0.024, drift: 0.0024, dividendYield: 0.007, baseVolume: 310_000, color: '#bf3989' },
-  { code: 'CRMS', name: '赤霄半导体', sector: '半导体', basePrice: 264.5, volatility: 0.036, drift: 0.0031, dividendYield: 0.003, baseVolume: 275_000, color: '#8250df' },
-  { code: 'GRNA', name: '青禾农业', sector: '农业', basePrice: 18.6, volatility: 0.016, drift: 0.0019, dividendYield: 0.014, baseVolume: 960_000, color: '#9a6700' },
-  { code: 'AURS', name: '极光传媒', sector: '传媒', basePrice: 33.2, volatility: 0.031, drift: -0.0008, dividendYield: 0.008, baseVolume: 610_000, color: '#cf222e' },
-  { code: 'IRNW', name: '玄铁重工', sector: '制造', basePrice: 57.8, volatility: 0.02, drift: 0.0020, dividendYield: 0.009, baseVolume: 380_000, color: '#57606a' },
-  { code: 'NOVA', name: '新星航天', sector: '航天', basePrice: 96.5, volatility: 0.030, drift: 0.0034, dividendYield: 0.004, baseVolume: 350_000, color: '#0550ae' },
-  { code: 'MINT', name: '薄荷饮料', sector: '消费', basePrice: 24.8, volatility: 0.014, drift: 0.0016, dividendYield: 0.013, baseVolume: 1_020_000, color: '#2da44e' },
-  { code: 'VOLT', name: '伏特电池', sector: '新能源', basePrice: 142.3, volatility: 0.033, drift: 0.0028, dividendYield: 0.005, baseVolume: 480_000, color: '#bc4c00' },
-  { code: 'ORCA', name: '虎鲸互娱', sector: '游戏', basePrice: 41.6, volatility: 0.038, drift: 0.0042, dividendYield: 0.003, baseVolume: 730_000, color: '#6e40c9' },
+  { code: 'LWST', name: '星尘科技', sector: '科技', basePrice: 128.4, volatility: 0.042, drift: 0, baseVolume: 860_000, color: '#1f6feb' },
+  { code: 'SPRU', name: '云杉能源', sector: '能源', basePrice: 46.7, volatility: 0.030, drift: 0, baseVolume: 540_000, color: '#1a7f37' },
+  { code: 'BWHL', name: '蓝鲸航运', sector: '物流', basePrice: 72.1, volatility: 0.034, drift: 0, baseVolume: 420_000, color: '#0969da' },
+  { code: 'QILN', name: '麒麟药业', sector: '医药', basePrice: 189.9, volatility: 0.036, drift: 0, baseVolume: 310_000, color: '#bf3989' },
+  { code: 'CRMS', name: '赤霄半导体', sector: '半导体', basePrice: 264.5, volatility: 0.052, drift: 0, baseVolume: 275_000, color: '#8250df' },
+  { code: 'GRNA', name: '青禾农业', sector: '农业', basePrice: 18.6, volatility: 0.026, drift: 0, baseVolume: 960_000, color: '#9a6700' },
+  { code: 'AURS', name: '极光传媒', sector: '传媒', basePrice: 33.2, volatility: 0.046, drift: 0, baseVolume: 610_000, color: '#cf222e' },
+  { code: 'IRNW', name: '玄铁重工', sector: '制造', basePrice: 57.8, volatility: 0.032, drift: 0, baseVolume: 380_000, color: '#57606a' },
+  { code: 'NOVA', name: '新星航天', sector: '航天', basePrice: 96.5, volatility: 0.044, drift: 0, baseVolume: 350_000, color: '#0550ae' },
+  { code: 'MINT', name: '薄荷饮料', sector: '消费', basePrice: 24.8, volatility: 0.024, drift: 0, baseVolume: 1_020_000, color: '#2da44e' },
+  { code: 'VOLT', name: '伏特电池', sector: '新能源', basePrice: 142.3, volatility: 0.048, drift: 0, baseVolume: 480_000, color: '#bc4c00' },
+  { code: 'ORCA', name: '虎鲸互娱', sector: '游戏', basePrice: 41.6, volatility: 0.055, drift: 0, baseVolume: 730_000, color: '#6e40c9' },
 ]
 
 export interface StockCandle {
@@ -89,10 +82,8 @@ export interface StockQuoteDto {
   /** 涨跌幅（百分比数值，如 1.23 表示 +1.23%） */
   changePct: number
   volume: number
-  /** 每日分红收益率（0.008 = 0.8%/日，隔夜持仓按市值发放） */
-  dividendYield: number
   /**
-   * 当日新闻事件（仅实时行情 getLiveQuote / buildLiveMarket 填写；
+   * 当日 AI 快讯（仅实时行情 getLiveQuote / buildLiveMarket 填写；
    * 日线构建器 buildStockMarket 没有「当前时刻」概念，因此不产生该字段）
    */
   news?: StockNewsItemDto[]
@@ -100,16 +91,17 @@ export interface StockQuoteDto {
 
 /** 新闻事件对外的展示形态（未触发的未来事件同样下发，但不透露冲击幅度） */
 export interface StockNewsItemDto {
-  /** 稳定 id：`${code}-${dateKey}-${index}` */
+  /** 稳定 id：`${code}-${batchKey}-${index}` */
   id: string
   title: string
   summary: string
-  sentiment: 'good' | 'bad'
+  /** 未触发事件不返回方向，避免提前泄露涨跌 */
+  sentiment?: 'good' | 'bad'
   /** 触发 tick（1..28799），前端画分时标记用 startTick × tickMs */
   startTick: number
   /** 触发时刻 ISO（真实时间轴上的一刻） */
   startAt: string
-  /** 初始冲击幅度（带符号，good 正 bad 负；未触发时前端不用它渲染幅度） */
+  /** 初始冲击幅度（带符号，good 正 bad 负；未触发时为 0） */
   impact: number
   /** 冲击半衰期（毫秒），前端算「剩余强度」进度条 */
   halfLifeMs: number
@@ -117,6 +109,8 @@ export interface StockNewsItemDto {
   currentImpact: number
   /** 是否已触发 */
   active: boolean
+  /** 事件来源：ai = 大模型生成，template = 模型不可用时的模板兜底 */
+  source?: 'ai' | 'template'
 }
 
 export interface StockMarketDto {
@@ -275,7 +269,6 @@ function quoteOf(definition: StockDefinition, series: SimulatedDay[]): StockQuot
     change,
     changePct,
     volume: today.volume,
-    dividendYield: definition.dividendYield,
   }
 }
 
@@ -286,7 +279,7 @@ export function getStockDailySeries(definition: StockDefinition, dateKey: string
 
 /** 行情免责声明（日线构建器与实时 tick 引擎共用同一文案） */
 export const STOCK_MARKET_DISCLAIMER =
-  '模拟行情，全部数据虚构；可用积分投资，行情每 3 秒刷新（买卖各收 0.3% 手续费）；隔夜持仓享每日分红，新闻事件会带来短时冲击；玩家交易会小幅影响价格。'
+  '模拟行情，全部数据虚构；可用积分投资，行情每 3 秒刷新（买卖各收 0.3% 手续费）；AI 每 40 分钟生成一批事件，玩家大额交易会明显推动价格并产生成交滑点。'
 
 /**
  * 构建某一天的全市场「日线行情」（纯函数，同参数同结果）。

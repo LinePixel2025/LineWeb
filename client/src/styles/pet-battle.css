@@ -1,0 +1,576 @@
+/* ============================================================
+   宠物 PvP 对战（竞技场 / 战斗舞台 / 技能特效）
+   ============================================================ */
+
+.gh-pet-battle-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.gh-pet-battle-hero,
+.gh-pet-market-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 24px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background:
+    radial-gradient(circle at 12% 20%, color-mix(in srgb, var(--gh-accent) 16%, transparent), transparent 45%),
+    var(--gh-canvas);
+}
+
+.gh-pet-battle-hero h1,
+.gh-pet-market-hero h1 {
+  margin: 0 0 6px;
+  font-size: var(--gh-text-2xl);
+}
+
+.gh-pet-battle-hero p,
+.gh-pet-market-hero p {
+  margin: 4px 0;
+  color: var(--gh-text-secondary);
+  line-height: 1.6;
+}
+
+.gh-pet-battle-record {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 12px 18px;
+  border-radius: var(--gh-radius-md);
+  background: var(--gh-canvas-inset);
+  border: 1px solid var(--gh-border-muted);
+}
+
+.gh-pet-battle-record strong {
+  font-size: var(--gh-text-2xl);
+  color: var(--gh-accent);
+}
+
+.gh-pet-battle-record small {
+  margin-right: 10px;
+  color: var(--gh-text-tertiary);
+}
+
+.gh-pet-battle-panel {
+  padding: 18px 20px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+}
+
+.gh-pet-battle-panel h2 {
+  margin: 0 0 12px;
+  font-size: var(--gh-text-lg);
+}
+
+.gh-pet-battle-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.gh-pet-battle-panel-head h2 { margin: 0; }
+
+.gh-pet-battle-invites,
+.gh-pet-battle-opponents,
+.gh-pet-battle-history {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gh-pet-battle-invite,
+.gh-pet-battle-opponent,
+.gh-pet-battle-history-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius-md);
+  background: var(--gh-canvas-inset);
+}
+
+.gh-pet-battle-invite > div:first-child,
+.gh-pet-battle-opponent-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.gh-pet-battle-invite span,
+.gh-pet-battle-opponent span,
+.gh-pet-battle-history-row span {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-pet-battle-invite-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.gh-pet-battle-remain {
+  white-space: nowrap;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-pet-battle-history-row strong { min-width: 80px; }
+
+/* ---------- 对战头部 / 等待 ---------- */
+
+.gh-pet-battle-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.gh-pet-battle-head h1 { margin: 0; }
+
+.gh-pet-battle-waiting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 42px 20px;
+  border: 1px dashed var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  text-align: center;
+}
+
+.gh-pet-battle-waiting > span { font-size: 44px; }
+.gh-pet-battle-waiting h3 { margin: 0; }
+
+/* ---------- 战斗舞台 ---------- */
+
+.gh-pb-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px minmax(0, 1fr);
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background:
+    radial-gradient(circle at 20% 25%, color-mix(in srgb, var(--pb-me) 18%, transparent), transparent 42%),
+    radial-gradient(circle at 80% 25%, color-mix(in srgb, var(--pb-opp) 18%, transparent), transparent 42%),
+    linear-gradient(180deg, var(--gh-canvas-inset), var(--gh-canvas));
+  overflow: hidden;
+}
+
+.gh-pb-stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(90deg, transparent 0 38px, color-mix(in srgb, var(--gh-border-muted) 55%, transparent) 38px 39px);
+  opacity: 0.35;
+}
+
+.gh-pb-side {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--gh-radius-md);
+  transition: transform 200ms ease, background 200ms ease;
+}
+
+.gh-pb-side--me { flex-direction: column-reverse; }
+
+.gh-pb-side--acting {
+  background: color-mix(in srgb, var(--gh-accent) 8%, transparent);
+}
+
+.gh-pb-avatar-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 200px;
+}
+
+.gh-pb-sprite--opponent { transform: scaleX(-1); }
+
+.gh-pb-sprite--attack { animation: gh-pb-lunge 520ms ease-out; }
+.gh-pb-sprite--opponent.gh-pb-sprite--attack { animation-name: gh-pb-lunge-left; }
+.gh-pb-sprite--hit { animation: gh-pb-hit 420ms ease-out; filter: brightness(1.4) saturate(1.2); }
+
+.gh-pb-info {
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius-md);
+  background: color-mix(in srgb, var(--gh-canvas) 82%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.gh-pb-name-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.gh-pb-name-row span {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-pb-bar {
+  position: relative;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--gh-canvas-inset);
+  border: 1px solid var(--gh-border-muted);
+  overflow: hidden;
+}
+
+.gh-pb-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 460ms ease;
+}
+
+.gh-pb-bar--hp i { background: linear-gradient(90deg, #f87171, #ef4444); }
+.gh-pb-bar--mp i { background: linear-gradient(90deg, #60a5fa, #3b82f6); }
+
+.gh-pb-bar span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+.gh-pb-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gh-pb-tag {
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--gh-border-muted);
+  background: var(--gh-canvas-inset);
+  font-size: 10px;
+  color: var(--gh-text-secondary);
+  white-space: nowrap;
+}
+
+.gh-pb-tag--shield { color: #2563eb; border-color: currentColor; }
+.gh-pb-tag--buff { color: #16a34a; border-color: currentColor; }
+.gh-pb-tag--debuff { color: #dc2626; border-color: currentColor; }
+.gh-pb-tag--muted { opacity: 0.55; }
+
+.gh-pb-center {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.gh-pb-round { font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
+
+.gh-pb-turn {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--gh-border);
+  background: var(--gh-canvas);
+  font-size: var(--gh-text-xs);
+  font-weight: 700;
+}
+
+.gh-pb-turn--me {
+  color: #fff;
+  background: var(--gh-accent);
+  border-color: transparent;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--gh-accent) 18%, transparent);
+}
+
+.gh-pb-clock {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--gh-text-lg);
+  font-weight: 800;
+  color: var(--gh-text-secondary);
+}
+
+.gh-pb-clock--urgent { color: var(--gh-danger); animation: gh-pb-pulse 800ms ease-in-out infinite; }
+
+.gh-pb-vs {
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: -1px;
+  color: color-mix(in srgb, var(--gh-text-tertiary) 55%, transparent);
+}
+
+.gh-pb-skills {
+  position: relative;
+  z-index: 1;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.gh-pb-skill {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-md);
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.gh-pb-skill:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--gh-accent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--gh-accent) 18%, transparent);
+}
+
+.gh-pb-skill:disabled { cursor: not-allowed; opacity: 0.55; }
+.gh-pb-skill--disabled { opacity: 0.45; }
+
+.gh-pb-skill-emoji { font-size: 20px; }
+.gh-pb-skill-name { font-weight: 700; }
+.gh-pb-skill-meta { font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
+
+.gh-pb-result {
+  position: relative;
+  z-index: 1;
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px;
+  border-radius: var(--gh-radius-md);
+  border: 1px solid color-mix(in srgb, var(--gh-accent) 40%, var(--gh-border));
+  background: color-mix(in srgb, var(--gh-accent) 10%, var(--gh-canvas));
+  text-align: center;
+}
+
+.gh-pb-result strong { font-size: var(--gh-text-xl); }
+.gh-pb-result span { color: var(--gh-text-secondary); }
+
+.gh-pb-log-line {
+  position: relative;
+  z-index: 1;
+  grid-column: 1 / -1;
+  padding: 8px 12px;
+  border-left: 3px solid var(--gh-accent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--gh-accent) 8%, transparent);
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+  animation: gh-pb-log-in 220ms ease-out;
+}
+
+/* ---------- 伤害飘字 / 技能特效 ---------- */
+
+.gh-pb-float {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--gh-danger);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+  animation: gh-pb-float 900ms ease-out forwards;
+  pointer-events: none;
+}
+
+.gh-pb-float--crit { color: #f59e0b; font-size: 34px; }
+.gh-pb-float--heal { color: #16a34a; }
+
+.gh-pb-fx {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  width: 150px;
+  height: 150px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  border-radius: 50%;
+}
+
+.gh-pb-fx--basic { background: radial-gradient(circle, rgba(255, 255, 255, 0.75), transparent 62%); animation: gh-pb-fx-pop 420ms ease-out; }
+.gh-pb-fx--fire { background: radial-gradient(circle, #fb923c, #ef4444 45%, transparent 70%); animation: gh-pb-fx-burst 620ms ease-out; }
+.gh-pb-fx--ice { background: radial-gradient(circle, #bae6fd, #3b82f6 50%, transparent 72%); animation: gh-pb-fx-freeze 700ms ease-out; }
+.gh-pb-fx--thunder { background: radial-gradient(circle, #fef08a, #facc15 40%, transparent 70%); animation: gh-pb-fx-flash 520ms steps(2, end); }
+.gh-pb-fx--heal { background: radial-gradient(circle, #bbf7d0, #22c55e 45%, transparent 70%); animation: gh-pb-fx-rise 900ms ease-out; }
+.gh-pb-fx--poison { background: radial-gradient(circle, #d9f99d, #65a30d 45%, transparent 70%); animation: gh-pb-fx-bubble 900ms ease-out; }
+.gh-pb-fx--shadow { background: radial-gradient(circle, #c4b5fd, #4c1d95 50%, transparent 72%); animation: gh-pb-fx-slash 600ms ease-out; }
+.gh-pb-fx--roar { background: radial-gradient(circle, #fed7aa, #f97316 45%, transparent 70%); animation: gh-pb-fx-pulse 700ms ease-out; }
+.gh-pb-fx--shield { background: radial-gradient(circle, #bfdbfe, #2563eb 45%, transparent 70%); animation: gh-pb-fx-freeze 760ms ease-out; }
+.gh-pb-fx--drain { background: radial-gradient(circle, #fecdd3, #be123c 45%, transparent 70%); animation: gh-pb-fx-burst 700ms ease-out; }
+.gh-pb-fx--meteor { background: radial-gradient(circle, #fed7aa, #dc2626 42%, transparent 72%); animation: gh-pb-fx-meteor 780ms ease-in; }
+.gh-pb-fx--purify { background: radial-gradient(circle, #fef9c3, #fde68a 45%, transparent 70%); animation: gh-pb-fx-rise 900ms ease-out; }
+.gh-pb-fx--stun { background: radial-gradient(circle, #fef08a, transparent 65%); animation: gh-pb-fx-pulse 600ms ease-out; }
+.gh-pb-fx--dot { background: radial-gradient(circle, #fecaca, transparent 65%); animation: gh-pb-fx-pulse 500ms ease-out; }
+
+/* ---------- 战斗记录 ---------- */
+
+.gh-pet-battle-log {
+  padding: 18px 20px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+}
+
+.gh-pet-battle-log h2 { margin: 0 0 10px; font-size: var(--gh-text-lg); }
+
+.gh-pet-battle-log ol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.gh-pet-battle-log-item {
+  display: flex;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--gh-canvas-inset);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-pet-battle-log-item > span {
+  color: var(--gh-text-tertiary);
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 34px;
+}
+
+.gh-pet-battle-log-item p { margin: 0; }
+.gh-pet-battle-log-item--end { background: color-mix(in srgb, var(--gh-accent) 12%, transparent); font-weight: 700; }
+
+/* ---------- PetSprite 技能动作 ---------- */
+
+.gh-pet-anim-basic .gh-pet-motion { animation: gh-pb-lunge 520ms ease-out; }
+.gh-pet-anim-fire .gh-pet-motion { animation: gh-pb-skill-bounce 600ms ease-out; }
+.gh-pet-anim-ice .gh-pet-motion { animation: gh-pb-skill-shiver 620ms ease-out; }
+.gh-pet-anim-thunder .gh-pet-motion { animation: gh-pb-skill-jolt 520ms steps(3, end); }
+.gh-pet-anim-heal .gh-pet-motion { animation: gh-pb-skill-rise 800ms ease-out; }
+.gh-pet-anim-poison .gh-pet-motion { animation: gh-pb-skill-bounce 700ms ease-out; }
+.gh-pet-anim-shadow .gh-pet-motion { animation: gh-pb-skill-dash 560ms ease-out; }
+.gh-pet-anim-roar .gh-pet-motion { animation: gh-pb-skill-roar 620ms ease-out; }
+.gh-pet-anim-shield .gh-pet-motion { animation: gh-pb-skill-shiver 700ms ease-out; }
+.gh-pet-anim-drain .gh-pet-motion { animation: gh-pb-skill-bounce 640ms ease-out; }
+.gh-pet-anim-meteor .gh-pet-motion { animation: gh-pb-skill-jolt 680ms ease-out; }
+.gh-pet-anim-purify .gh-pet-motion { animation: gh-pb-skill-rise 760ms ease-out; }
+.gh-pet-anim-stun .gh-pet-motion { animation: gh-pb-skill-shiver 520ms linear; }
+.gh-pet-anim-faint .gh-pet-motion { animation: gh-pb-skill-faint 900ms ease-out forwards; }
+
+@keyframes gh-pb-lunge {
+  0% { transform: translateX(0); }
+  35% { transform: translateX(18px) rotate(4deg); }
+  100% { transform: translateX(0); }
+}
+@keyframes gh-pb-lunge-left {
+  0% { transform: translateX(0); }
+  35% { transform: translateX(-18px) rotate(-4deg); }
+  100% { transform: translateX(0); }
+}
+@keyframes gh-pb-hit {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px) rotate(-3deg); }
+  45% { transform: translateX(6px); }
+  70% { transform: translateX(-4px); }
+}
+@keyframes gh-pb-float {
+  0% { opacity: 0; transform: translate(-50%, 8px) scale(0.8); }
+  25% { opacity: 1; transform: translate(-50%, -8px) scale(1.05); }
+  100% { opacity: 0; transform: translate(-50%, -46px) scale(1); }
+}
+@keyframes gh-pb-fx-pop { 0% { opacity: 0.9; transform: translate(-50%, -50%) scale(0.4); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.25); } }
+@keyframes gh-pb-fx-burst { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.35); } }
+@keyframes gh-pb-fx-freeze { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); } 40% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.15); } }
+@keyframes gh-pb-fx-flash { 0%, 40%, 80% { opacity: 1; } 20%, 60%, 100% { opacity: 0.15; } }
+@keyframes gh-pb-fx-rise { 0% { opacity: 0; transform: translate(-50%, -30%) scale(0.6); } 35% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -90%) scale(1.1); } }
+@keyframes gh-pb-fx-bubble { 0% { opacity: 0; transform: translate(-50%, -30%) scale(0.7); } 50% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -60%) scale(1.2); } }
+@keyframes gh-pb-fx-slash { 0% { opacity: 0; transform: translate(-50%, -50%) rotate(-30deg) scale(0.4); } 40% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) rotate(25deg) scale(1.3); } }
+@keyframes gh-pb-fx-pulse { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); } 50% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.4); } }
+@keyframes gh-pb-fx-meteor { 0% { opacity: 0; transform: translate(-50%, -140%) scale(0.5); } 60% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, 20%) scale(1.4); } }
+@keyframes gh-pb-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+@keyframes gh-pb-log-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes gh-pb-skill-bounce { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-10px); } 70% { transform: translateY(3px); } }
+@keyframes gh-pb-skill-shiver { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 50% { transform: translateX(4px); } 75% { transform: translateX(-2px); } }
+@keyframes gh-pb-skill-jolt { 0%, 100% { transform: translateY(0); } 20% { transform: translateY(-12px); } 40% { transform: translateY(2px); } 60% { transform: translateY(-6px); } }
+@keyframes gh-pb-skill-rise { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes gh-pb-skill-dash { 0% { transform: translateX(0); opacity: 1; } 40% { transform: translateX(-22px); opacity: 0.35; } 100% { transform: translateX(0); opacity: 1; } }
+@keyframes gh-pb-skill-roar { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12) rotate(-2deg); } }
+@keyframes gh-pb-skill-faint { 0% { transform: rotate(0); } 100% { transform: rotate(90deg) translateY(18px); opacity: 0.6; } }
+
+@media (max-width: 900px) {
+  .gh-pb-stage { grid-template-columns: 1fr; }
+  .gh-pb-center { order: -1; flex-direction: row; justify-content: center; gap: 14px; }
+  .gh-pb-vs { font-size: 20px; }
+  .gh-pb-side--me { flex-direction: column; }
+  .gh-pb-avatar-wrap { min-height: 160px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-pb-sprite--attack,
+  .gh-pb-sprite--hit,
+  .gh-pb-float,
+  .gh-pb-fx,
+  .gh-pb-clock--urgent,
+  .gh-pb-log-line,
+  .gh-pet-anim-basic .gh-pet-motion,
+  .gh-pet-anim-fire .gh-pet-motion,
+  .gh-pet-anim-ice .gh-pet-motion,
+  .gh-pet-anim-thunder .gh-pet-motion,
+  .gh-pet-anim-heal .gh-pet-motion,
+  .gh-pet-anim-poison .gh-pet-motion,
+  .gh-pet-anim-shadow .gh-pet-motion,
+  .gh-pet-anim-roar .gh-pet-motion,
+  .gh-pet-anim-shield .gh-pet-motion,
+  .gh-pet-anim-drain .gh-pet-motion,
+  .gh-pet-anim-meteor .gh-pet-motion,
+  .gh-pet-anim-purify .gh-pet-motion,
+  .gh-pet-anim-stun .gh-pet-motion,
+  .gh-pet-anim-faint .gh-pet-motion {
+    animation: none !important;
+  }
+}

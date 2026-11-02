@@ -7,10 +7,14 @@ import { authenticate } from '../middleware/auth.js'
 import { PET_CARE_KEYS, PET_SPECIES_KEYS, PET_TRICK_KEYS } from '../lib/petCatalog.js'
 import {
   addGuestbookEntry,
+  buyEquipment,
   buyOutfit,
+  buySkill,
   carePet,
   deleteGuestbookEntry,
+  equipGear,
   equipOutfit,
+  getPetGearView,
   getPetHome,
   getPetView,
   listPetHomes,
@@ -22,6 +26,22 @@ import {
   trickPet,
   upgradePet,
 } from '../services/petService.js'
+import {
+  cancelBattle,
+  forfeitBattleByUser,
+  getBattle,
+  getBattleOverview,
+  heartbeatBattle,
+  inviteBattle,
+  performBattleAction,
+  respondBattle,
+} from '../services/petBattleService.js'
+import {
+  buyListing,
+  cancelListing,
+  createListing,
+  getPetMarketView,
+} from '../services/petMarketService.js'
 
 const router = Router()
 router.use(authenticate)
@@ -42,6 +62,13 @@ const actionLimiter = limitFor(120, '操作太频繁啦，和宠物玩慢一点�
 
 /** 串门类操作（撸宠 / 留言）比照顾自己的宠物更「公共」，限流更紧一些 */
 const socialLimiter = limitFor(60, '在宠物之家里待太久啦，先歇一会儿再来～')
+
+/** 对战轮询 / 心跳：前端 1.5 秒轮询一次对局，额度需要比普通操作高 */
+const battlePollLimiter = limitFor(600, '对战请求过于频繁，请稍后再试')
+
+/** 邀请 / 挂单等写操作 */
+const battleInviteLimiter = limitFor(30, '邀请太频繁啦，先等对方回应吧')
+const marketWriteLimiter = limitFor(60, '交易行操作太频繁，请稍后再试')
 
 function currentUserId(req: Request): number {
   const userId = req.user?.userId
@@ -75,6 +102,25 @@ const homesQuerySchema = z.object({ query: z.string().max(30).optional() })
 const userIdParamSchema = z.object({ userId: z.coerce.number().int().positive() })
 const guestbookIdParamSchema = z.object({ id: z.coerce.number().int().positive() })
 const guestbookSchema = z.object({ content: z.string().max(200) })
+const gearEquipSchema = z.object({
+  itemType: z.enum(['equipment', 'skill']),
+  key: z.string().min(1).max(40),
+  equip: z.boolean(),
+})
+const shopBuySchema = z.object({ key: z.string().min(1).max(40) })
+const battleInviteSchema = z.object({ targetUserId: z.coerce.number().int().positive() })
+const battleIdParamSchema = z.object({ id: z.coerce.number().int().positive() })
+const battleRespondSchema = z.object({ accept: z.boolean() })
+const battleActionSchema = z.object({
+  skillKey: z.string().min(1).max(40),
+  version: z.coerce.number().int().min(0),
+})
+const marketListSchema = z.object({
+  itemType: z.enum(['equipment', 'skill']),
+  key: z.string().min(1).max(40),
+  price: z.coerce.number().int().min(1).max(1_000_000),
+})
+const marketIdParamSchema = z.object({ id: z.coerce.number().int().positive() })
 
 // GET /api/pets — 我的宠物（未召唤时 pet 为 null，仍返回目录与积分）
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
@@ -173,6 +219,110 @@ router.post('/outfits/equip', actionLimiter, asyncHandler(async (req: Request, r
 router.post('/rename', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
   const input = parseInput(renameSchema, req.body ?? {})
   res.json(await renamePet(currentUserId(req), input.name))
+}))
+
+/* ---------- 战斗装备 / 技能 ---------- */
+
+// GET /api/pets/gear — 装备与技能目录 + 我的拥有 / 穿戴 + 属性对比
+router.get('/gear', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await getPetGearView(currentUserId(req)))
+}))
+
+// POST /api/pets/gear/equip — { itemType, key, equip }
+router.post('/gear/equip', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(gearEquipSchema, req.body ?? {})
+  res.json(await equipGear(currentUserId(req), input))
+}))
+
+// POST /api/pets/shop/equipment/:key/buy — 系统装备商店购买
+router.post('/shop/equipment/:key/buy', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { key } = parseInput(shopBuySchema, req.params)
+  res.json(await buyEquipment(currentUserId(req), key))
+}))
+
+// POST /api/pets/shop/skills/:key/buy — 技能商店购买
+router.post('/shop/skills/:key/buy', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { key } = parseInput(shopBuySchema, req.params)
+  res.json(await buySkill(currentUserId(req), key))
+}))
+
+/* ---------- PvP 对战 ---------- */
+
+// GET /api/pets/battle/overview — 进行中 / 邀请 / 历史 / 战绩 / 可挑战对手
+router.get('/battle/overview', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await getBattleOverview(currentUserId(req)))
+}))
+
+// POST /api/pets/battle/invite — { targetUserId }
+router.post('/battle/invite', battleInviteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(battleInviteSchema, req.body ?? {})
+  res.status(201).json(await inviteBattle(currentUserId(req), input.targetUserId))
+}))
+
+// GET /api/pets/battle/:id — 对战详情（1.5 秒轮询）
+router.get('/battle/:id', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = parseInput(battleIdParamSchema, req.params)
+  res.json(await getBattle(currentUserId(req), id))
+}))
+
+// POST /api/pets/battle/:id/respond — { accept }
+router.post('/battle/:id/respond', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = parseInput(battleIdParamSchema, req.params)
+  const input = parseInput(battleRespondSchema, req.body ?? {})
+  res.json(await respondBattle(currentUserId(req), id, input.accept))
+}))
+
+// POST /api/pets/battle/:id/cancel — 取消自己发出的邀请
+router.post('/battle/:id/cancel', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = parseInput(battleIdParamSchema, req.params)
+  await cancelBattle(currentUserId(req), id)
+  res.json({ ok: true })
+}))
+
+// POST /api/pets/battle/:id/action — { skillKey, version }
+router.post('/battle/:id/action', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = parseInput(battleIdParamSchema, req.params)
+  const input = parseInput(battleActionSchema, req.body ?? {})
+  res.json(await performBattleAction(currentUserId(req), id, input.skillKey, input.version))
+}))
+
+// POST /api/pets/battle/:id/presence — 心跳（10 秒一次）
+router.post('/battle/:id/presence', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = parseInput(battleIdParamSchema, req.params)
+  await heartbeatBattle(currentUserId(req), id)
+  res.json({ ok: true })
+}))
+
+// POST /api/pets/battle/:id/forfeit — 认输
+router.post('/battle/:id/forfeit', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = parseInput(battleIdParamSchema, req.params)
+  res.json(await forfeitBattleByUser(currentUserId(req), id))
+}))
+
+/* ---------- 玩家交易行 ---------- */
+
+// GET /api/pets/market — 在售挂单 + 我的挂单 + 最近成交 + 参考价
+router.get('/market', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await getPetMarketView(currentUserId(req)))
+}))
+
+// POST /api/pets/market/list — { itemType, key, price }
+router.post('/market/list', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(marketListSchema, req.body ?? {})
+  res.status(201).json(await createListing(currentUserId(req), input.itemType, input.key, input.price))
+}))
+
+// POST /api/pets/market/:id/buy — 购买挂单
+router.post('/market/:id/buy', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = parseInput(marketIdParamSchema, req.params)
+  res.json(await buyListing(currentUserId(req), id))
+}))
+
+// DELETE /api/pets/market/:id — 下架自己的挂单
+router.delete('/market/:id', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = parseInput(marketIdParamSchema, req.params)
+  await cancelListing(currentUserId(req), id)
+  res.json({ ok: true })
 }))
 
 export default router

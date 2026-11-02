@@ -54,6 +54,9 @@ const ParkourOnlinePage = lazy(() => import('./pages/games/ParkourOnlinePage'))
 const FarmPage = lazy(() => import('./pages/games/FarmPage'))
 const PetsPage = lazy(() => import('./pages/PetsPage'))
 const PetHomePage = lazy(() => import('./pages/PetHomePage'))
+const PetGearPage = lazy(() => import('./pages/PetGearPage'))
+const PetBattlePage = lazy(() => import('./pages/PetBattlePage'))
+const PetMarketPage = lazy(() => import('./pages/PetMarketPage'))
 const LotteryPage = lazy(() => import('./pages/LotteryPage'))
 const ThemesPage = lazy(() => import('./pages/ThemesPage'))
 const PointsPage = lazy(() => import('./pages/PointsPage'))
@@ -187,6 +190,15 @@ export default function App() {
                         } />
                         <Route path="/pets/home/:userId" element={
                           <ProtectedRoute><PetHomePage /></ProtectedRoute>
+                        } />
+                        <Route path="/pets/gear" element={
+                          <ProtectedRoute><PetGearPage /></ProtectedRoute>
+                        } />
+                        <Route path="/pets/battle" element={
+                          <ProtectedRoute><PetBattlePage /></ProtectedRoute>
+                        } />
+                        <Route path="/pets/market" element={
+                          <ProtectedRoute><PetMarketPage /></ProtectedRoute>
                         } />
                       </Route>
                       {/* 积分抽奖：花积分抽种子 / 积分 / 稀有装扮（需登录） */}

@@ -9,15 +9,17 @@ import { buildLiveMarket, buildStockTrend } from '../lib/stockTicks.js'
 import { getTodayDateKey } from '../lib/pointsRules.js'
 import {
   buyStock,
+  ensureImpactLoaded,
   getStockLeaderboard,
   getStockPortfolio,
   getStockTrades,
   sellStock,
 } from '../services/stockService.js'
+import { listTodayStockEvents } from '../services/stockEventService.js'
 
 /**
  * 模拟股市：行情只读（3 秒一 tick 实时刷新），交易用统一积分按实时价成交；
- * 另有每日分红结算、新闻快讯（随行情下发）、成交记录与总资产排行榜。
+ * AI 每 40 分钟生成一批事件（随行情下发，也可单独 GET /events）；保留成交记录与总资产排行榜。
  * 全部需登录；开关关闭时由 /api/stocks 外层 requireFeature('stock') 拦截。
  */
 const router = Router()
@@ -109,6 +111,10 @@ const leaderboardSchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).optional(),
 })
 
+const eventsSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(60).optional(),
+})
+
 function parseInput<S extends z.ZodTypeAny>(schema: S, data: unknown): z.infer<S> {
   const parsed = schema.safeParse(data)
   if (!parsed.success) {
@@ -120,6 +126,7 @@ function parseInput<S extends z.ZodTypeAny>(schema: S, data: unknown): z.infer<S
 
 // GET /api/stocks/market — 全市场实时报价（每 3 秒推进一个 tick，价格实时计算）
 router.get('/market', marketLimiter, asyncHandler(async (_req: Request, res: Response) => {
+  await ensureImpactLoaded()
   res.json(buildLiveMarket(getTodayDateKey()))
 }))
 
@@ -129,7 +136,14 @@ router.get('/market/trend', trendLimiter, asyncHandler(async (req: Request, res:
   const normalized = input.code.toUpperCase()
   const definition = STOCK_DEFINITIONS.find((item) => item.code === normalized)
   if (!definition) throw new AppError('没有这只股票', 404)
+  await ensureImpactLoaded()
   res.json(buildStockTrend(definition, getTodayDateKey()))
+}))
+
+// GET /api/stocks/events?limit= — 当日 AI 事件（按时间倒序，最多 60 条）
+router.get('/events', marketLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(eventsSchema, req.query)
+  res.json({ events: await listTodayStockEvents(input.limit ?? 20) })
 }))
 
 // GET /api/stocks/portfolio — 我的持仓与汇总收益

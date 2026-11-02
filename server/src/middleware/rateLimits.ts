@@ -46,6 +46,10 @@ export const apiLimiterSkipPaths = [
   // 股市行情轮询（3 秒/次）由路由内按用户限流接管
   /^\/stocks\/market\/?$/,
   /^\/stocks\/market\/trend\/?$/,
+  // 宠物对战轮询 / 心跳（1.5 秒与 10 秒）由路由内 battlePollLimiter 接管
+  /^\/pets\/battle\/overview\/?$/,
+  /^\/pets\/battle\/\d+\/?$/,
+  /^\/pets\/battle\/\d+\/presence\/?$/,
   // 音乐中转：<audio> 的 Range 请求与封面图批量加载，由路由内 600/5min 按用户限流接管
   /^\/music\/(stream|image)\/?$/,
 ]

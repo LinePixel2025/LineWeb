@@ -19,9 +19,12 @@ import {
   PET_TOUCH_MOOD_BONUS,
   PET_TRICKS,
   cleanEquipped,
+  cleanLoadout,
   emptyPetEquipped,
+  emptyPetLoadout,
   getPetOutfit,
   getPetSpecies,
+  loadoutEquipmentKeys,
   nextNameAfterSwitch,
   normalizePetName,
   petUnlockedActions,
@@ -30,16 +33,32 @@ import {
   roundStat,
   sanitizeGuestbookContent,
   serializeEquipped,
+  serializeLoadout,
   settlePetStats,
   type PetCareActionDef,
   type PetCareKind,
   type PetEquipped,
+  type PetLoadout,
   type PetOutfitDef,
   type PetSpeciesDef,
   type PetStatsInput,
   type PetStatsSettled,
   type PetTrickDef,
 } from '../lib/petCatalog.js'
+import {
+  PET_EQUIPMENT_MAP,
+  PET_SHOP_EQUIPMENTS,
+  PET_STARTER_EQUIPMENT_KEYS,
+  type PetEquipmentDef,
+} from '../lib/petEquipment.js'
+import {
+  PET_SHOP_SKILLS,
+  PET_SKILLS,
+  PET_SKILL_MAP,
+  PET_SKILL_MAX_EQUIPPED,
+  type PetSkillDef,
+} from '../lib/petSkills.js'
+import { deriveCombatStats, type PetCombatStats } from '../lib/petBattle.js'
 import { getPointsProfile, spendPointsTx } from './pointsService.js'
 import { getTodayDateKey, getTodayDayStart } from '../lib/pointsRules.js'
 
@@ -77,6 +96,12 @@ export interface PetDto {
   graceHours: number
   equipped: PetEquipped
   ownedOutfits: string[]
+  /** 战斗装备 / 技能装配（与装扮共用 Pet.equipped JSON） */
+  loadout: PetLoadout
+  ownedEquipment: string[]
+  ownedSkills: string[]
+  /** 由等级 + 物种 + 已穿戴装备派生的战斗属性 */
+  battleStats: PetCombatStats
   unlockedActions: string[]
   /** 升到下一级的花费；满级为 null */
   nextLevelCost: number | null
@@ -91,6 +116,11 @@ export interface PetDto {
 export interface PetCatalogDto {
   species: readonly PetSpeciesDef[]
   outfits: readonly PetOutfitDef[]
+  equipment: readonly PetEquipmentDef[]
+  skills: readonly PetSkillDef[]
+  shopEquipment: readonly PetEquipmentDef[]
+  shopSkills: readonly PetSkillDef[]
+  maxEquippedSkills: number
   costs: typeof PET_COSTS
   careActions: readonly PetCareActionDef[]
   tricks: readonly PetTrickDef[]
@@ -222,6 +252,11 @@ function petCatalogDto(): PetCatalogDto {
   return {
     species: PET_SPECIES,
     outfits: PET_OUTFITS,
+    equipment: [...PET_EQUIPMENT_MAP.values()],
+    skills: PET_SKILLS,
+    shopEquipment: PET_SHOP_EQUIPMENTS,
+    shopSkills: PET_SHOP_SKILLS,
+    maxEquippedSkills: PET_SKILL_MAX_EQUIPPED,
     costs: PET_COSTS,
     careActions: PET_CARE_ACTIONS,
     tricks: PET_TRICKS,
@@ -246,14 +281,28 @@ function filterEquippedByOwned(raw: PetEquipped, owned: ReadonlySet<string>): Pe
   return result
 }
 
-function petDto(row: Pet, ownedOutfits: string[], now: number): PetDto {
+function petDto(
+  row: Pet,
+  ownedOutfits: string[],
+  ownedEquipment: string[],
+  ownedSkills: string[],
+  now: number,
+): PetDto {
   const alive = row.status === 'alive'
   const owned = new Set(ownedOutfits)
   const equipped = alive
     ? filterEquippedByOwned(cleanEquipped(row.equipped), owned)
     : emptyPetEquipped() // 出走的宠物展示时摘下全部装扮（库里仍保留）
+  const loadout = alive
+    ? cleanLoadout(row.equipped, ownedEquipment, ownedSkills)
+    : emptyPetLoadout()
   const lastTouch = row.lastTouchAt ? row.lastTouchAt.getTime() : null
   const species = getPetSpecies(row.species)
+  const battleStats = deriveCombatStats({
+    species: row.species,
+    level: row.level,
+    equipmentKeys: loadoutEquipmentKeys(loadout),
+  })
   return {
     id: row.id,
     ownerId: row.userId,
@@ -271,6 +320,10 @@ function petDto(row: Pet, ownedOutfits: string[], now: number): PetDto {
     graceHours: PET_GRACE_HOURS,
     equipped,
     ownedOutfits,
+    loadout,
+    ownedEquipment,
+    ownedSkills,
+    battleStats,
     unlockedActions: petUnlockedActions(row.level),
     nextLevelCost: row.level < PET_MAX_LEVEL ? petUpgradeCost(row.level) : null,
     touchReady: alive && (lastTouch === null || now - lastTouch >= PET_TOUCH_COOLDOWN_MS),
@@ -302,7 +355,14 @@ function toStatsInput(row: Pet): PetStatsInput {
 export async function getPetView(userId: number): Promise<PetView> {
   const now = Date.now()
   const [row, profile] = await Promise.all([
-    prisma.pet.findUnique({ where: { userId }, include: { outfits: { select: { outfitKey: true } } } }),
+    prisma.pet.findUnique({
+      where: { userId },
+      include: {
+        outfits: { select: { outfitKey: true } },
+        equipments: { select: { itemKey: true } },
+        skills: { select: { skillKey: true } },
+      },
+    }),
     getPointsProfile(userId),
   ])
 
@@ -311,6 +371,8 @@ export async function getPetView(userId: number): Promise<PetView> {
   }
 
   const ownedOutfits = row.outfits.map((outfit) => outfit.outfitKey)
+  const ownedEquipment = row.equipments.map((item) => item.itemKey)
+  const ownedSkills = row.skills.map((item) => item.skillKey)
   let current: Pet = row
 
   if (row.status === 'alive') {
@@ -351,7 +413,11 @@ export async function getPetView(userId: number): Promise<PetView> {
     }
   }
 
-  return { pet: petDto(current, ownedOutfits, now), catalog: petCatalogDto(), points: profile.balance }
+  return {
+    pet: petDto(current, ownedOutfits, ownedEquipment, ownedSkills, now),
+    catalog: petCatalogDto(),
+    points: profile.balance,
+  }
 }
 
 /* ============================================================
@@ -409,6 +475,242 @@ function throwIfGone(outcome: PetTxOutcome): void {
   if (outcome.gone) throw new AppError(PET_GONE_MESSAGE, 409, 'PET_GONE')
 }
 
+/* ============================================================
+   战斗装备 / 技能（与装扮共用 Pet.equipped JSON）
+   ============================================================ */
+
+/** 确保三件绑定新手装存在（召唤 / 首次进入装备页时调用） */
+async function grantStarterEquipmentTx(tx: Db, petId: number): Promise<void> {
+  for (const key of PET_STARTER_EQUIPMENT_KEYS) {
+    await tx.petEquipment.upsert({
+      where: { petId_itemKey: { petId, itemKey: key } },
+      update: {},
+      create: { petId, itemKey: key, bound: true, acquiredVia: 'starter' },
+    })
+  }
+}
+
+/** 对外：给已有宠物补发绑定新手装（战斗快照前调用，兼容旧数据） */
+export async function ensureStarterEquipment(userId: number): Promise<void> {
+  const pet = await prisma.pet.findUnique({ where: { userId }, select: { id: true } })
+  if (!pet) return
+  await prisma.$transaction(async (tx) => {
+    await grantStarterEquipmentTx(tx, pet.id)
+  })
+}
+
+function starterLoadout(): PetLoadout {
+  const loadout = emptyPetLoadout()
+  for (const key of PET_STARTER_EQUIPMENT_KEYS) {
+    const item = PET_EQUIPMENT_MAP.get(key)
+    if (item) loadout[item.slot] = item.key
+  }
+  return loadout
+}
+
+/** 装备 / 技能目录 + 我的拥有与穿戴（前端装备页） */
+export interface PetGearView {
+  pet: PetDto
+  catalog: PetCatalogDto
+  points: number
+  stats: {
+    current: PetCombatStats
+    /** 若把某件装备换上后的属性（前端悬停对比用） */
+    equipment: Array<{
+      key: string
+      stats: PetCombatStats
+      delta: PetCombatStats
+    }>
+  }
+}
+
+function statsDelta(next: PetCombatStats, base: PetCombatStats): PetCombatStats {
+  return {
+    maxHp: next.maxHp - base.maxHp,
+    maxMp: next.maxMp - base.maxMp,
+    atk: next.atk - base.atk,
+    def: next.def - base.def,
+    spd: next.spd - base.spd,
+    crit: next.crit - base.crit,
+  }
+}
+
+/** 读取装备页数据（首次访问补发绑定新手装） */
+export async function getPetGearView(userId: number): Promise<PetGearView> {
+  const existing = await prisma.pet.findUnique({ where: { userId }, select: { id: true } })
+  if (!existing) throw new AppError('还没有宠物', 404)
+  await prisma.$transaction(async (tx) => {
+    await grantStarterEquipmentTx(tx, existing.id)
+  })
+  const view = await getPetView(userId)
+  if (!view.pet) throw new AppError('还没有宠物', 404)
+  const base = deriveCombatStats({
+    species: view.pet.species,
+    level: view.pet.level,
+    equipmentKeys: loadoutEquipmentKeys(view.pet.loadout),
+  })
+  const equipment = view.pet.ownedEquipment
+    .map((key) => PET_EQUIPMENT_MAP.get(key))
+    .filter((item): item is PetEquipmentDef => !!item)
+    .map((item) => {
+      const nextKeys = loadoutEquipmentKeys(view.pet!.loadout).filter((key) => {
+        const current = PET_EQUIPMENT_MAP.get(key)
+        return current?.slot !== item.slot
+      })
+      nextKeys.push(item.key)
+      const stats = deriveCombatStats({
+        species: view.pet!.species,
+        level: view.pet!.level,
+        equipmentKeys: nextKeys,
+      })
+      return { key: item.key, stats, delta: statsDelta(stats, base) }
+    })
+  return { pet: view.pet, catalog: view.catalog, points: view.points, stats: { current: base, equipment } }
+}
+
+/** 购买装备（系统商店，只卖 shopable 的普通/稀有装备） */
+export async function buyEquipment(userId: number, key: string): Promise<PetMutationResult> {
+  const item = PET_EQUIPMENT_MAP.get(key)
+  if (!item || !item.shopable) throw new AppError('商店里没有这件装备', 404)
+  const now = Date.now()
+  const outcome = await prisma.$transaction(async (tx): Promise<PetTxOutcome> => {
+    const state = await loadSettledPetTx(tx, userId, now)
+    if (state.gone) return { gone: true }
+    const { pet } = state
+    if (pet.level < item.minLevel) throw new AppError(`需要宠物等级 ${item.minLevel}`, 400)
+    const owned = await tx.petEquipment.findUnique({
+      where: { petId_itemKey: { petId: pet.id, itemKey: item.key } },
+    })
+    if (owned) throw new AppError('已经拥有这件装备了', 409)
+    await spendPointsTx(tx, userId, item.price, {
+      reason: 'pet_equipment_buy',
+      note: `购买${item.name}`,
+      game: null,
+    })
+    await tx.petEquipment.create({
+      data: { petId: pet.id, itemKey: item.key, bound: false, acquiredVia: 'shop' },
+    })
+    await grantStarterEquipmentTx(tx, pet.id)
+    return { gone: false }
+  })
+  throwIfGone(outcome)
+  return toMutationResult(await getPetView(userId))
+}
+
+/** 购买技能（技能商店） */
+export async function buySkill(userId: number, key: string): Promise<PetMutationResult> {
+  const skill = PET_SKILL_MAP.get(key)
+  if (!skill || skill.key === 'basic_attack') throw new AppError('商店里没有这个技能', 404)
+  const now = Date.now()
+  const outcome = await prisma.$transaction(async (tx): Promise<PetTxOutcome> => {
+    const state = await loadSettledPetTx(tx, userId, now)
+    if (state.gone) return { gone: true }
+    const { pet } = state
+    if (pet.level < skill.minLevel) throw new AppError(`需要宠物等级 ${skill.minLevel}`, 400)
+    const owned = await tx.petSkill.findUnique({
+      where: { petId_skillKey: { petId: pet.id, skillKey: skill.key } },
+    })
+    if (owned) throw new AppError('已经学会这个技能了', 409)
+    await spendPointsTx(tx, userId, skill.price, {
+      reason: 'pet_skill_buy',
+      note: `学习${skill.name}`,
+      game: null,
+    })
+    await tx.petSkill.create({
+      data: { petId: pet.id, skillKey: skill.key, acquiredVia: 'shop' },
+    })
+    return { gone: false }
+  })
+  throwIfGone(outcome)
+  return toMutationResult(await getPetView(userId))
+}
+
+/**
+ * 穿戴 / 卸下装备或技能。
+ * itemType='equipment' 时 key 为装备 key（同槽位自动替换）；'skill' 时最多装 3 个。
+ * 战斗进行中禁止换装（避免快照与实际装备不一致）。
+ */
+export async function equipGear(
+  userId: number,
+  input: { itemType: 'equipment' | 'skill'; key: string; equip: boolean },
+): Promise<PetMutationResult> {
+  const now = Date.now()
+  const outcome = await prisma.$transaction(async (tx): Promise<PetTxOutcome> => {
+    const state = await loadSettledPetTx(tx, userId, now)
+    if (state.gone) return { gone: true }
+    const { pet } = state
+
+    const active = await tx.petBattle.count({
+      where: {
+        status: 'active',
+        OR: [{ challengerId: userId }, { opponentId: userId }],
+      },
+    })
+    if (active > 0) throw new AppError('对战进行中不能更换装备或技能', 409)
+
+    const ownedEquipment = await tx.petEquipment.findMany({
+      where: { petId: pet.id },
+      select: { itemKey: true },
+    })
+    const ownedSkills = await tx.petSkill.findMany({
+      where: { petId: pet.id },
+      select: { skillKey: true },
+    })
+    const loadout = cleanLoadout(
+      pet.equipped,
+      ownedEquipment.map((item) => item.itemKey),
+      ownedSkills.map((item) => item.skillKey),
+    )
+
+    if (input.itemType === 'equipment') {
+      const item = PET_EQUIPMENT_MAP.get(input.key)
+      if (!item) throw new AppError('装备不存在', 404)
+      if (!ownedEquipment.some((row) => row.itemKey === item.key)) {
+        throw new AppError('还没有这件装备', 400)
+      }
+      const listed = await tx.petMarketListing.count({
+        where: { sellerId: userId, status: 'active', itemType: 'equipment', itemKey: item.key },
+      })
+      if (listed > 0) throw new AppError('这件装备正在交易行挂单，请先下架', 409)
+      if (pet.level < item.minLevel) throw new AppError(`需要宠物等级 ${item.minLevel}`, 400)
+      if (input.equip) {
+        loadout[item.slot] = item.key
+      } else if (loadout[item.slot] === item.key) {
+        loadout[item.slot] = null
+      }
+    } else {
+      const skill = PET_SKILL_MAP.get(input.key)
+      if (!skill || skill.key === 'basic_attack') throw new AppError('技能不存在', 404)
+      if (!ownedSkills.some((row) => row.skillKey === skill.key)) {
+        throw new AppError('还没有学会这个技能', 400)
+      }
+      const listed = await tx.petMarketListing.count({
+        where: { sellerId: userId, status: 'active', itemType: 'skill', itemKey: skill.key },
+      })
+      if (listed > 0) throw new AppError('这个技能正在交易行挂单，请先下架', 409)
+      if (pet.level < skill.minLevel) throw new AppError(`需要宠物等级 ${skill.minLevel}`, 400)
+      if (input.equip) {
+        if (!loadout.skills.includes(skill.key)) {
+          if (loadout.skills.length >= PET_SKILL_MAX_EQUIPPED) {
+            throw new AppError(`最多只能装备 ${PET_SKILL_MAX_EQUIPPED} 个技能`, 400)
+          }
+          loadout.skills.push(skill.key)
+        }
+      } else {
+        loadout.skills = loadout.skills.filter((key) => key !== skill.key)
+      }
+    }
+
+    await tx.pet.update({
+      where: { id: pet.id },
+      data: { equipped: serializeLoadout(loadout) },
+    })
+    return { gone: false }
+  })
+  throwIfGone(outcome)
+  return toMutationResult(await getPetView(userId))
+}
+
 /** 召唤宠物（出走后可重新召唤：复用同一行重置，已购装扮保留） */
 export async function summonPet(
   userId: number,
@@ -422,8 +724,9 @@ export async function summonPet(
     const existing = await tx.pet.findUnique({ where: { userId } })
     if (existing && existing.status === 'alive') throw new AppError('你已经有一只宠物啦', 409)
     const now = new Date()
+    let petId: number
     if (existing) {
-      await tx.pet.update({
+      const updated = await tx.pet.update({
         where: { id: existing.id },
         data: {
           species: species.key,
@@ -433,14 +736,15 @@ export async function summonPet(
           cleanliness: 100,
           mood: 100,
           status: 'alive',
-          equipped: serializeEquipped(emptyPetEquipped()),
+          equipped: serializeLoadout(starterLoadout()),
           decayedAt: now,
           criticalSince: null,
           lastTouchAt: null,
         },
       })
+      petId = updated.id
     } else {
-      await tx.pet.create({
+      const created = await tx.pet.create({
         data: {
           userId,
           species: species.key,
@@ -448,10 +752,13 @@ export async function summonPet(
           hunger: 100,
           cleanliness: 100,
           mood: 100,
+          equipped: serializeLoadout(starterLoadout()),
           decayedAt: now,
         },
       })
+      petId = created.id
     }
+    await grantStarterEquipmentTx(tx, petId)
     await spendPointsTx(tx, userId, PET_COSTS.summon, {
       reason: 'pet_summon',
       note: `召唤${species.name}·${name}`,
@@ -605,11 +912,19 @@ export async function equipOutfit(
     const ownedSet = new Set(owned.map((row) => row.outfitKey))
     if (!ownedSet.has(outfit.key)) throw new AppError('还没有获得这件装扮', 400)
 
-    const base = filterEquippedByOwned(cleanEquipped(state.pet.equipped), ownedSet)
-    const next: PetEquipped = equip
-      ? { ...base, [outfit.slot]: outfit.key }
-      : { ...base, [outfit.slot]: base[outfit.slot] === outfit.key ? null : base[outfit.slot] }
-    await tx.pet.update({ where: { id: state.pet.id }, data: { equipped: serializeEquipped(next) } })
+    const [equipmentRows, skillRows] = await Promise.all([
+      tx.petEquipment.findMany({ where: { petId: state.pet.id }, select: { itemKey: true } }),
+      tx.petSkill.findMany({ where: { petId: state.pet.id }, select: { skillKey: true } }),
+    ])
+    const loadout = cleanLoadout(
+      state.pet.equipped,
+      equipmentRows.map((row) => row.itemKey),
+      skillRows.map((row) => row.skillKey),
+    )
+    const next: PetLoadout = equip
+      ? { ...loadout, [outfit.slot]: outfit.key }
+      : { ...loadout, [outfit.slot]: loadout[outfit.slot] === outfit.key ? null : loadout[outfit.slot] }
+    await tx.pet.update({ where: { id: state.pet.id }, data: { equipped: serializeLoadout(next) } })
     return { gone: false }
   })
   throwIfGone(outcome)

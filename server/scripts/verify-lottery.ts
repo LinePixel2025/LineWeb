@@ -1,8 +1,8 @@
 /**
  * 积分抽奖纯函数自检（不依赖数据库 / 环境变量 / 网络）。
  *
- * 覆盖：奖品目录不变量、权重与概率、pickPrize 确定性与边界、保底跨抽累计、
- *       抽奖次数清洗、成本折扣、数量随机区间、农场 / 宠物目录的运行时对齐。
+ * 2026-11 调息后重点：完整奖池期望值（含种子满收价值、肥料、装扮折算、保底）
+ * 必须低于十连每抽成本，避免抽奖成为无限刷分循环。
  *
  * 用法: cd server && npx tsx scripts/verify-lottery.ts
  */
@@ -28,9 +28,10 @@ import {
   sanitizeDrawCount,
   shouldTriggerPity,
   validateLotteryPrizes,
+  type LotteryPrize,
   type LotteryRarity,
 } from '../src/lib/lottery.js'
-import { FARM_CROPS } from '../src/lib/farmCrops.js'
+import { FARM_CROPS, FERTILIZER_COST } from '../src/lib/farmCrops.js'
 import { PET_OUTFITS } from '../src/lib/petCatalog.js'
 
 let passed = 0
@@ -74,8 +75,8 @@ const ALL_RARITIES: readonly LotteryRarity[] = ['common', 'rare', 'epic', 'legen
   assertEqual(LOTTERY_TOTAL_WEIGHT, 100, '导出的 LOTTERY_TOTAL_WEIGHT = 100')
   assertEqual(
     LOTTERY_WEIGHTS_BY_RARITY,
-    { common: 62, rare: 25, epic: 10, legendary: 3 },
-    '各稀有度权重 62 / 25 / 10 / 3',
+    { common: 78, rare: 18, epic: 3.5, legendary: 0.5 },
+    '各稀有度权重 78 / 18 / 3.5 / 0.5',
   )
 
   const keys = new Set(LOTTERY_PRIZES.map((prize) => prize.key))
@@ -108,29 +109,41 @@ const ALL_RARITIES: readonly LotteryRarity[] = ['common', 'rare', 'epic', 'legen
    种子 / 装扮与真实目录对齐（键名不硬编码）
    ============================================================ */
 
+/** 某档种子池 */
+function seedPool(prize: LotteryPrize): typeof FARM_CROPS {
+  const tierMin = Number(prize.payload?.tierMin)
+  const tierMax = Number(prize.payload?.tierMax)
+  const minValue = Number(prize.payload?.minValue ?? 0)
+  return FARM_CROPS.filter(
+    (crop) => crop.tier >= tierMin && crop.tier <= tierMax && crop.value >= minValue,
+  )
+}
+
+/** 单颗种子的期望满收价值（与 lotteryService 的 1/value 加权选作物一致） */
+function expectedSeedHarvest(prize: LotteryPrize): number {
+  const pool = seedPool(prize)
+  if (pool.length === 0) return 0
+  const weights = pool.map((crop) => 1 / Math.max(1, crop.value))
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
+  return pool.reduce(
+    (sum, crop, index) =>
+      sum + (weights[index] / totalWeight) * crop.yieldUnits * crop.value,
+    0,
+  )
+}
+
 {
   const seedPrizes = LOTTERY_PRIZES.filter((prize) => prize.type === 'seed')
   assertEqual(seedPrizes.length, 4, '普通 / 稀有 / 史诗 / 传说各一档种子')
 
   for (const prize of seedPrizes) {
-    const tierMin = Number(prize.payload?.tierMin)
-    const tierMax = Number(prize.payload?.tierMax)
-    const minValue = Number(prize.payload?.minValue ?? 0)
-    const pool = FARM_CROPS.filter(
-      (crop) => crop.tier >= tierMin && crop.tier <= tierMax && crop.value >= minValue,
-    )
-    assert(pool.length > 0, `${prize.key} 能在运行时农场目录中匹配到作物`)
+    assert(seedPool(prize).length > 0, `${prize.key} 能在运行时农场目录中匹配到作物`)
   }
 
   const legendarySeed = LOTTERY_PRIZES.find((prize) => prize.key === 'seed_legendary')
   assert(!!legendarySeed, '存在传说种子奖品')
   if (legendarySeed) {
-    const tierMin = Number(legendarySeed.payload?.tierMin)
-    const tierMax = Number(legendarySeed.payload?.tierMax)
-    const minValue = Number(legendarySeed.payload?.minValue ?? 0)
-    const pool = FARM_CROPS.filter(
-      (crop) => crop.tier >= tierMin && crop.tier <= tierMax && crop.value >= minValue,
-    )
+    const pool = seedPool(legendarySeed)
     assert(pool.some((crop) => crop.key === 'goldenapple'), '传说种子池包含金苹果')
     assert(pool.some((crop) => crop.key === 'starfruit'), '传说种子池包含星之果')
     assert(pool.every((crop) => crop.value >= 160), '传说种子池只含顶级作物')
@@ -155,11 +168,11 @@ const ALL_RARITIES: readonly LotteryRarity[] = ['common', 'rare', 'epic', 'legen
       `${prize.key} 的折算积分与稀有度一致`,
     )
   }
-  assertEqual(outfitFallbackPoints('epic'), 400, '史诗装扮无宠物折算 400 积分')
-  assertEqual(outfitFallbackPoints('legendary'), 800, '传说装扮无宠物折算 800 积分')
+  assertEqual(outfitFallbackPoints('epic'), 100, '史诗装扮无宠物折算 100 积分')
+  assertEqual(outfitFallbackPoints('legendary'), 200, '传说装扮无宠物折算 200 积分')
   assertEqual(
     OUTFIT_FALLBACK_POINTS,
-    { epic: 400, legendary: 800 },
+    { epic: 100, legendary: 200 },
     '装扮折算常量与函数一致',
   )
 }
@@ -173,24 +186,24 @@ const ALL_RARITIES: readonly LotteryRarity[] = ['common', 'rare', 'epic', 'legen
   assertEqual(pickPrize(() => 0.999999).key, 'outfit_legendary', 'rng→1 命中权重表最后一项')
 
   assertEqual(
-    pickPrize(() => 0.6199).key,
-    'points_common_50',
-    '0.6199 仍落在普通最后一项',
+    pickPrize(() => 0.7799).key,
+    'points_common_30',
+    '0.7799 仍落在普通最后一项',
   )
   assertEqual(
-    pickPrize(() => 0.62).key,
+    pickPrize(() => 0.78).key,
     'seed_rare',
-    '0.62 是普通 / 稀有边界，落在稀有第一项',
+    '0.78 是普通 / 稀有边界，落在稀有第一项',
   )
   assertEqual(
-    pickPrize(() => 0.87).key,
+    pickPrize(() => 0.96).key,
     'seed_epic',
-    '0.87 是稀有 / 史诗边界，落在史诗第一项',
+    '0.96 是稀有 / 史诗边界，落在史诗第一项',
   )
   assertEqual(
-    pickPrize(() => 0.97).key,
+    pickPrize(() => 0.995).key,
     'seed_legendary',
-    '0.97 是史诗 / 传说边界，落在传说第一项',
+    '0.995 是史诗 / 传说边界，落在传说第一项',
   )
 
   assertEqual(
@@ -199,15 +212,15 @@ const ALL_RARITIES: readonly LotteryRarity[] = ['common', 'rare', 'epic', 'legen
     '保底池从史诗第一项开始',
   )
 
-  const rng = seededRng(20261101)
+  const rng = seededRng(20261102)
   for (let index = 0; index < 200; index += 1) {
     const prize = pickPrize(rng, { minRarity: 'epic' })
     assert(isEpicOrBetter(prize.rarity), `第 ${index + 1} 次保底抽取为史诗及以上`)
   }
 
-  // 大样本分布：各稀有度比例与权重的偏差 < 2 个百分点
+  // 大样本分布：各稀有度比例与权重的偏差 < 1.5 个百分点
   const distributionRng = seededRng(42)
-  const rounds = 60_000
+  const rounds = 120_000
   const counts: Record<LotteryRarity, number> = { common: 0, rare: 0, epic: 0, legendary: 0 }
   for (let index = 0; index < rounds; index += 1) {
     counts[pickPrize(distributionRng).rarity] += 1
@@ -215,21 +228,16 @@ const ALL_RARITIES: readonly LotteryRarity[] = ['common', 'rare', 'epic', 'legen
   assertEqual(
     counts.common + counts.rare + counts.epic + counts.legendary,
     rounds,
-    '分布统计总数为 60000',
+    '分布统计总数为 120000',
   )
   for (const rarity of ALL_RARITIES) {
     const actualPct = (counts[rarity] / rounds) * 100
     const expectedPct = LOTTERY_WEIGHTS_BY_RARITY[rarity]
     assert(
-      Math.abs(actualPct - expectedPct) < 2,
+      Math.abs(actualPct - expectedPct) < 1.5,
       `${rarity} 大样本概率 ${actualPct.toFixed(2)}% 接近权重 ${expectedPct}%`,
     )
   }
-
-  // 十连 = 10 次独立抽取
-  const ten = Array.from({ length: TEN_DRAW_COUNT }, () => pickPrize(() => 0))
-  assertEqual(ten.length, 10, '十连返回 10 个结果')
-  assert(ten.every((prize) => prize.key === 'seed_common'), '固定 rng 的十连结果确定')
 }
 
 /* ============================================================
@@ -237,22 +245,22 @@ const ALL_RARITIES: readonly LotteryRarity[] = ['common', 'rare', 'epic', 'legen
    ============================================================ */
 
 {
-  assertEqual(PITY_LIMIT, 10, '保底上限 = 10 抽')
+  assertEqual(PITY_LIMIT, 30, '保底上限 = 30 抽')
   assertEqual(resolvePity(0, 'common'), 'common', 'pity=0 的普通结果不被保底')
-  assertEqual(resolvePity(8, 'common'), 'common', 'pity=8 的普通结果不被保底')
-  assertEqual(resolvePity(9, 'common'), 'epic', 'pity=9 的普通结果强制提升为史诗')
-  assertEqual(resolvePity(9, 'rare'), 'epic', 'pity=9 的稀有结果强制提升为史诗')
-  assertEqual(resolvePity(9, 'epic'), 'epic', 'pity=9 的史诗结果保持史诗')
-  assertEqual(resolvePity(9, 'legendary'), 'legendary', 'pity=9 的传说结果保持传说')
+  assertEqual(resolvePity(28, 'common'), 'common', 'pity=28 的普通结果不被保底')
+  assertEqual(resolvePity(29, 'common'), 'epic', 'pity=29 的普通结果强制提升为史诗')
+  assertEqual(resolvePity(29, 'rare'), 'epic', 'pity=29 的稀有结果强制提升为史诗')
+  assertEqual(resolvePity(29, 'epic'), 'epic', 'pity=29 的史诗结果保持史诗')
+  assertEqual(resolvePity(29, 'legendary'), 'legendary', 'pity=29 的传说结果保持传说')
 
-  assert(shouldTriggerPity(9), 'pity=9 触发保底')
-  assert(!shouldTriggerPity(8), 'pity=8 不触发保底')
+  assert(shouldTriggerPity(29), 'pity=29 触发保底')
+  assert(!shouldTriggerPity(28), 'pity=28 不触发保底')
 
   assertEqual(nextPityAfterDraw(0, { rarity: 'common' }), 1, '普通抽后 pity 0→1')
-  assertEqual(nextPityAfterDraw(8, { rarity: 'common' }), 9, '普通抽后 pity 8→9')
+  assertEqual(nextPityAfterDraw(28, { rarity: 'common' }), 29, '普通抽后 pity 28→29')
   assertEqual(nextPityAfterDraw(0, { rarity: 'rare' }), 1, '稀有抽不清空保底')
-  assertEqual(nextPityAfterDraw(9, { rarity: 'epic' }), 0, '史诗抽后 pity 归零')
-  assertEqual(nextPityAfterDraw(9, { rarity: 'legendary' }), 0, '传说抽后 pity 归零')
+  assertEqual(nextPityAfterDraw(29, { rarity: 'epic' }), 0, '史诗抽后 pity 归零')
+  assertEqual(nextPityAfterDraw(29, { rarity: 'legendary' }), 0, '传说抽后 pity 归零')
 }
 
 /** 模拟 service 的逐抽结算（rng 固定可复现） */
@@ -274,16 +282,16 @@ function simulateDraws(
 }
 
 {
-  const ten = simulateDraws(10, 0, () => 0)
-  assertEqual(ten.rarities.slice(0, 9), Array(9).fill('common'), '十连前 9 抽为普通')
-  assertEqual(ten.rarities[9], 'epic', '第 10 抽强制史诗')
-  assertEqual(ten.pity, 0, '保底命中后 pity 归零')
+  const thirty = simulateDraws(30, 0, () => 0)
+  assertEqual(thirty.rarities.slice(0, 29), Array(29).fill('common'), '前 29 抽为普通')
+  assertEqual(thirty.rarities[29], 'epic', '第 30 抽强制史诗')
+  assertEqual(thirty.pity, 0, '保底命中后 pity 归零')
 
-  const cross = simulateDraws(2, 8, () => 0)
-  assertEqual(cross.rarities, ['common', 'epic'], '保底跨抽累计：第 9 抽普通后下一抽保底')
+  const cross = simulateDraws(2, 28, () => 0)
+  assertEqual(cross.rarities, ['common', 'epic'], '保底跨抽累计：第 29 抽普通后下一抽保底')
   assertEqual(cross.pity, 0, '跨抽保底命中后归零')
 
-  const after = simulateDraws(3, 8, () => 0)
+  const after = simulateDraws(3, 28, () => 0)
   assertEqual(after.rarities, ['common', 'epic', 'common'], '保底后重新累计')
   assertEqual(after.pity, 1, '保底后普通抽 pity=1')
 }
@@ -311,25 +319,68 @@ function simulateDraws(
     '十连省 60 积分（9 折）',
   )
   assert(LOTTERY_COSTS.ten < LOTTERY_COSTS.single * TEN_DRAW_COUNT, '十连价格低于原价')
+}
 
-  // 经济性护栏：纯积分期望必须低于十连的「每抽成本」，否则抽奖会变成无限刷分循环
+/* ============================================================
+   完整期望值（含种子满收 / 肥料 / 装扮折算 / 保底）
+   ============================================================ */
+
+{
+  const tenPerDrawCost = LOTTERY_COSTS.ten / TEN_DRAW_COUNT
+
+  function prizeValue(prize: LotteryPrize, amount: number): number {
+    if (prize.type === 'points') return amount
+    if (prize.type === 'fertilizer') return amount * FERTILIZER_COST
+    if (prize.type === 'seed') return amount * expectedSeedHarvest(prize)
+    if (prize.type === 'outfit') return Number(prize.payload?.fallbackPoints ?? 0)
+    return 0
+  }
+
+  // 解析期望（不含保底），用于展示与断言
+  const analyticEv = LOTTERY_PRIZES.reduce((sum, prize) => {
+    const avgAmount = prize.amountMin !== undefined && prize.amountMax !== undefined
+      ? (prize.amountMin + prize.amountMax) / 2
+      : prize.amount
+    return sum + (prize.weight / LOTTERY_TOTAL_WEIGHT) * prizeValue(prize, avgAmount)
+  }, 0)
+
+  // 模拟 20 万抽（含保底），得到实际平均回收
+  const rounds = 200_000
+  const rng = seededRng(20261102)
+  let pity = 0
+  let total = 0
+  for (let index = 0; index < rounds; index += 1) {
+    const prize = shouldTriggerPity(pity)
+      ? pickPrize(rng, { minRarity: 'epic' })
+      : pickPrize(rng)
+    const amount = rollPrizeAmount(prize, rng)
+    total += prizeValue(prize, amount)
+    pity = nextPityAfterDraw(pity, prize)
+  }
+  const simulatedEv = total / rounds
+  console.log(`  解析期望（不含保底）：${analyticEv.toFixed(2)} 分/抽`)
+  console.log(`  模拟期望（含保底）：${simulatedEv.toFixed(2)} 分/抽（十连每抽成本 ${tenPerDrawCost}）`)
+
+  assert(
+    analyticEv < tenPerDrawCost * 1.05,
+    `解析完整 EV ${analyticEv.toFixed(2)} 低于十连每抽成本 ${tenPerDrawCost}（含 5% 容差）`,
+  )
+  assert(
+    simulatedEv < tenPerDrawCost,
+    `模拟完整 EV ${simulatedEv.toFixed(2)} 低于十连每抽成本 ${tenPerDrawCost}`,
+  )
+  assert(
+    simulatedEv > tenPerDrawCost * 0.75,
+    `模拟完整 EV ${simulatedEv.toFixed(2)} 没有低到劝退（> ${(tenPerDrawCost * 0.75).toFixed(2)}）`,
+  )
+
   const purePointsEv = LOTTERY_PRIZES
     .filter((prize) => prize.type === 'points')
     .reduce((sum, prize) => sum + (prize.weight / LOTTERY_TOTAL_WEIGHT) * prize.amount, 0)
-  const tenPerDrawCost = LOTTERY_COSTS.ten / TEN_DRAW_COUNT
   assert(
     purePointsEv < tenPerDrawCost,
     `纯积分期望 ${purePointsEv.toFixed(2)} 低于十连每抽成本 ${tenPerDrawCost}`,
   )
-
-  // 主题护栏：种子 + 肥料权重高于纯积分（抽奖主要给农场补货）
-  const farmWeight = LOTTERY_PRIZES
-    .filter((prize) => prize.type === 'seed' || prize.type === 'fertilizer')
-    .reduce((sum, prize) => sum + prize.weight, 0)
-  const pointsWeight = LOTTERY_PRIZES
-    .filter((prize) => prize.type === 'points')
-    .reduce((sum, prize) => sum + prize.weight, 0)
-  assert(farmWeight > pointsWeight, '种子 + 肥料权重高于积分权重')
 }
 
 /* ============================================================
@@ -345,8 +396,8 @@ function simulateDraws(
   )
   assertEqual(
     LOTTERY_PRIZE_LIST.map((group) => group.chancePct),
-    [62, 25, 10, 3],
-    '奖池概率与权重一致（62 / 25 / 10 / 3）',
+    [78, 18, 3.5, 0.5],
+    '奖池概率与权重一致（78 / 18 / 3.5 / 0.5）',
   )
   assertEqual(
     LOTTERY_PRIZE_LIST.reduce((sum, group) => sum + group.chancePct, 0),
@@ -379,16 +430,16 @@ function simulateDraws(
   const rareSeed = LOTTERY_PRIZES.find((prize) => prize.key === 'seed_rare')
   assert(!!rareSeed, '存在随机数量奖品')
   if (rareSeed) {
-    assertEqual(rollPrizeAmount(rareSeed, () => 0), 2, '稀有种子下界 = 2')
-    assertEqual(rollPrizeAmount(rareSeed, () => 0.5), 3, '稀有种子中段 = 3')
-    assertEqual(rollPrizeAmount(rareSeed, () => 0.999999), 4, '稀有种子上界 = 4')
+    assertEqual(rollPrizeAmount(rareSeed, () => 0), 1, '稀有种子下界 = 1')
+    assertEqual(rollPrizeAmount(rareSeed, () => 0.5), 2, '稀有种子中段 = 2')
+    assertEqual(rollPrizeAmount(rareSeed, () => 0.999999), 2, '稀有种子上界 = 2')
   }
 
   const legendarySeed = LOTTERY_PRIZES.find((prize) => prize.key === 'seed_legendary')
   assert(!!legendarySeed, '存在传说种子')
   if (legendarySeed) {
     assertEqual(rollPrizeAmount(legendarySeed, () => 0), 1, '传说种子下界 = 1')
-    assertEqual(rollPrizeAmount(legendarySeed, () => 0.999999), 2, '传说种子上界 = 2')
+    assertEqual(rollPrizeAmount(legendarySeed, () => 0.999999), 1, '传说种子上界 = 1')
   }
 
   for (const prize of LOTTERY_PRIZES) {

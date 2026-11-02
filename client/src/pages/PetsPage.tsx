@@ -567,6 +567,9 @@ export default function PetsPage() {
             <span aria-hidden>🪙</span>
             {points}
           </span>
+          <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/gear">🎒 装备</Link>
+          <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/battle">⚔️ 对战</Link>
+          <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/market">🏪 交易行</Link>
           <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/points">积分中心</Link>
         </div>
       </header>

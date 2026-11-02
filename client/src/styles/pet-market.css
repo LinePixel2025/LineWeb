@@ -1,0 +1,430 @@
+/* ============================================================
+   宠物装备 / 技能 / 交易行
+   ============================================================ */
+
+.gh-pet-gear-page,
+.gh-pet-market-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.gh-pet-gear-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.gh-pet-gear-links {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gh-pet-gear-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 22px;
+  align-items: center;
+  padding: 22px 24px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background:
+    radial-gradient(circle at 8% 30%, color-mix(in srgb, var(--pet-gear-accent) 20%, transparent), transparent 45%),
+    var(--gh-canvas);
+}
+
+.gh-pet-gear-avatar {
+  display: grid;
+  place-items: center;
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  background: var(--gh-canvas-inset);
+  border: 1px solid var(--gh-border-muted);
+}
+
+.gh-pet-gear-summary h1 { margin: 2px 0 6px; font-size: var(--gh-text-2xl); }
+.gh-pet-gear-summary > small { color: var(--gh-text-tertiary); }
+.gh-pet-gear-summary p { margin: 4px 0 12px; line-height: 1.6; }
+
+.gh-pet-gear-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 8px;
+}
+
+.gh-pet-gear-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius-md);
+  background: var(--gh-canvas-inset);
+}
+
+.gh-pet-gear-stat small { color: var(--gh-text-tertiary); }
+.gh-pet-gear-stat strong { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+.gh-pet-gear-wallet {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 12px 16px;
+  border-radius: var(--gh-radius-md);
+  border: 1px solid var(--gh-border-muted);
+  background: var(--gh-canvas-inset);
+}
+
+.gh-pet-gear-wallet strong { font-size: var(--gh-text-xl); color: var(--gh-accent); }
+
+.gh-pet-gear-tabs,
+.gh-pet-market-filters,
+.gh-pet-market-sell-type {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.gh-pet-gear-tab,
+.gh-pet-market-filter {
+  padding: 7px 14px;
+  border: 1px solid var(--gh-border);
+  border-radius: 999px;
+  background: var(--gh-canvas);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.gh-pet-gear-tab:hover,
+.gh-pet-market-filter:hover { border-color: var(--gh-accent); }
+
+.gh-pet-gear-tab--active,
+.gh-pet-market-filter--active {
+  background: var(--gh-accent);
+  border-color: transparent;
+  color: #fff;
+  font-weight: 700;
+}
+
+.gh-pet-gear-panel,
+.gh-pet-market-panel {
+  padding: 18px 20px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+}
+
+.gh-pet-gear-section-title {
+  margin: 20px 0 10px;
+  font-size: var(--gh-text-lg);
+}
+
+.gh-pet-gear-panel > .gh-pet-gear-section-title:first-child { margin-top: 0; }
+
+.gh-pet-gear-slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.gh-pet-gear-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 12px;
+  border: 1px dashed var(--gh-border);
+  border-radius: var(--gh-radius-md);
+  background: var(--gh-canvas-inset);
+  text-align: center;
+}
+
+.gh-pet-gear-slot--filled {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--gh-accent) 45%, var(--gh-border));
+  background: color-mix(in srgb, var(--gh-accent) 7%, var(--gh-canvas));
+}
+
+.gh-pet-gear-slot-icon { font-size: 28px; }
+.gh-pet-gear-slot small { color: var(--gh-text-tertiary); }
+.gh-pet-gear-slot-bonus { font-size: var(--gh-text-xs); color: var(--gh-text-secondary); }
+
+.gh-pet-gear-grid,
+.gh-pet-skill-grid,
+.gh-pet-shop-grid,
+.gh-pet-market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.gh-pet-gear-card,
+.gh-pet-skill-card,
+.gh-pet-shop-card,
+.gh-pet-market-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-md);
+  background: var(--gh-canvas-inset);
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.gh-pet-gear-card:hover,
+.gh-pet-skill-card:hover,
+.gh-pet-shop-card:hover,
+.gh-pet-market-card:hover {
+  border-color: var(--gh-accent);
+  transform: translateY(-1px);
+}
+
+.gh-pet-gear-card--equipped,
+.gh-pet-skill-card--equipped {
+  border-color: var(--gh-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--gh-accent) 16%, transparent);
+}
+
+.gh-pet-gear-card--rare,
+.gh-pet-shop-card--rare,
+.gh-pet-market-card--rare { border-left: 3px solid #3b82f6; }
+.gh-pet-gear-card--epic,
+.gh-pet-shop-card--epic,
+.gh-pet-market-card--epic { border-left: 3px solid #a855f7; }
+.gh-pet-gear-card--legendary,
+.gh-pet-shop-card--legendary,
+.gh-pet-market-card--legendary { border-left: 3px solid #f59e0b; }
+
+.gh-pet-gear-card header,
+.gh-pet-skill-card header,
+.gh-pet-shop-card header,
+.gh-pet-market-card header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.gh-pet-gear-card header > span,
+.gh-pet-skill-card header > span,
+.gh-pet-shop-card header > span,
+.gh-pet-market-emoji {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.gh-pet-gear-card header > div,
+.gh-pet-skill-card header > div,
+.gh-pet-shop-card header > div,
+.gh-pet-market-card header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.gh-pet-gear-card header small,
+.gh-pet-skill-card header small,
+.gh-pet-shop-card header small,
+.gh-pet-market-card header small {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-pet-gear-card header em,
+.gh-pet-skill-card header em {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--gh-accent);
+  color: #fff;
+  font-size: 10px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.gh-pet-gear-card p,
+.gh-pet-skill-card p,
+.gh-pet-shop-card p {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.55;
+}
+
+.gh-pet-gear-card-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gh-pet-gear-card-stats span {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--gh-canvas);
+  border: 1px solid var(--gh-border-muted);
+  font-size: 10px;
+  color: var(--gh-text-secondary);
+}
+
+.gh-pet-gear-card-delta {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-pet-gear-card > .gh-btn,
+.gh-pet-skill-card > .gh-btn,
+.gh-pet-shop-card > .gh-btn,
+.gh-pet-market-card > .gh-btn {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+.gh-pet-skill-slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.gh-pet-skill-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 14px 10px;
+  border: 1px dashed var(--gh-border);
+  border-radius: var(--gh-radius-md);
+  background: var(--gh-canvas-inset);
+  text-align: center;
+}
+
+.gh-pet-skill-slot--filled {
+  border-style: solid;
+  border-color: color-mix(in srgb, #a855f7 45%, var(--gh-border));
+  background: color-mix(in srgb, #a855f7 7%, var(--gh-canvas));
+}
+
+.gh-pet-skill-slot > span:first-child { font-size: 24px; }
+.gh-pet-skill-slot small { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+
+.gh-pet-shop-card header b {
+  color: var(--gh-accent);
+  white-space: nowrap;
+  font-size: var(--gh-text-sm);
+}
+
+.gh-pet-shop-card > small { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+
+/* ---------- 交易行 ---------- */
+
+.gh-pet-market-wallet {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.gh-pet-market-wallet small,
+.gh-pet-market-wallet span { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+.gh-pet-market-wallet strong { font-size: var(--gh-text-xl); color: var(--gh-accent); }
+
+.gh-pet-market-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.gh-pet-market-toolbar .gh-input { max-width: 260px; }
+
+.gh-pet-market-panel h2 { margin: 0 0 12px; font-size: var(--gh-text-lg); }
+
+.gh-pet-market-card header b {
+  color: var(--gh-accent);
+  white-space: nowrap;
+}
+
+.gh-pet-market-meta,
+.gh-pet-market-seller {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-pet-market-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gh-pet-market-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 12px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius-sm);
+  background: var(--gh-canvas-inset);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-pet-market-row span { color: var(--gh-text-secondary); }
+
+.gh-pet-market-sell-type { margin-bottom: 12px; }
+
+.gh-pet-market-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.gh-pet-market-field > span { color: var(--gh-text-secondary); font-size: var(--gh-text-sm); }
+
+.gh-pet-market-error-text { margin: 0 0 10px; color: var(--gh-danger); font-size: var(--gh-text-sm); }
+
+.gh-pet-market-error,
+.gh-pet-error-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 48px 20px;
+  border: 1px dashed var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  text-align: center;
+}
+
+.gh-pet-market-error h1,
+.gh-pet-error-box h1 { margin: 0; font-size: var(--gh-text-xl); }
+.gh-pet-market-error p,
+.gh-pet-error-box p { margin: 0; color: var(--gh-text-secondary); }
+
+.gh-pet-market-error-actions,
+.gh-pet-error-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+@media (max-width: 900px) {
+  .gh-pet-gear-hero { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+  .gh-pet-gear-wallet { align-items: center; }
+  .gh-pet-gear-slots,
+  .gh-pet-skill-slots { grid-template-columns: 1fr; }
+  .gh-pet-market-row { grid-template-columns: 1fr 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-pet-gear-card,
+  .gh-pet-skill-card,
+  .gh-pet-shop-card,
+  .gh-pet-market-card { transition: none; }
+}

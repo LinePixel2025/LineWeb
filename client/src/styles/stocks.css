@@ -372,50 +372,15 @@
   color: var(--gh-accent);
 }
 
-/* ===== 实时行情：异动 badge / 价格闪烁 ===== */
-.gh-stocks-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 6px;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  font-size: var(--gh-text-xs);
-  font-weight: 600;
-  line-height: 1.4;
-  background: color-mix(in srgb, currentColor 10%, transparent);
-}
-.gh-stocks-badge--up { color: var(--gh-danger); }
-.gh-stocks-badge--down { color: var(--gh-success); }
-.gh-stocks-badge--strong {
-  font-weight: 700;
-  background: color-mix(in srgb, currentColor 20%, transparent);
-}
-
-.gh-stocks-flash-up,
-.gh-stocks-flash-down {
-  border-radius: 4px;
-  padding: 0 3px;
-  margin: 0 -3px;
-  animation-duration: 900ms;
-  animation-timing-function: ease-out;
-}
-.gh-stocks-flash-up { animation-name: gh-stocks-flash-up; }
-.gh-stocks-flash-down { animation-name: gh-stocks-flash-down; }
-
-@keyframes gh-stocks-flash-up {
-  0% { background-color: color-mix(in srgb, var(--gh-danger) 30%, transparent); }
-  100% { background-color: transparent; }
-}
-@keyframes gh-stocks-flash-down {
-  0% { background-color: color-mix(in srgb, var(--gh-success) 30%, transparent); }
-  100% { background-color: transparent; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .gh-stocks-flash-up,
-  .gh-stocks-flash-down {
-    animation: none;
-  }
+/* ===== 实时行情：AI 快讯来源标记 ===== */
+.gh-stocks-news-source {
+  padding: 0 5px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius-pill);
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--gh-text-tertiary);
+  white-space: nowrap;
 }
 
 /* ===== 卖出对话框 ===== */
@@ -678,25 +643,8 @@
 .gh-stocks-inline-loading { display: flex; justify-content: center; padding: 24px; }
 
 /* ============================================================
-   持仓卡片：分红徽标 / 今日不计息
+   持仓卡片
    ============================================================ */
-.gh-stocks-holding-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
-.gh-stocks-tag {
-  padding: 0 6px;
-  border: 1px solid var(--gh-border-muted);
-  border-radius: var(--gh-radius-pill);
-  background: var(--gh-canvas-inset);
-  font-size: 10px;
-  line-height: 1.7;
-  color: var(--gh-text-secondary);
-  white-space: nowrap;
-}
-.gh-stocks-tag--yield {
-  color: var(--gh-danger);
-  border-color: currentColor;
-  background: color-mix(in srgb, var(--gh-danger) 10%, transparent);
-}
-.gh-stocks-tag--muted { color: var(--gh-text-tertiary); }
 .gh-stocks-warn {
   font-size: var(--gh-text-xs);
   font-weight: 600;
@@ -989,3 +937,5 @@
   .gh-stocks-alert-select { flex: 1 1 auto; }
   .gh-stocks-toasts { bottom: 16px; }
 }
+
+.gh-stocks-news-more { margin-top: 10px; }

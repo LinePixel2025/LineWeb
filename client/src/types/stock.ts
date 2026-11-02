@@ -1,10 +1,10 @@
 /**
- * 模拟股市实时行情：行情 3 秒一跳、玩家交易会小幅影响价格，交易用积分。
- * GET /api/stocks/market 返回全市场快照（含当日新闻快讯 / 大盘指数 / 市场情绪；
+ * 模拟股市实时行情：行情 3 秒一跳、玩家大额交易会明显影响价格，交易用积分。
+ * GET /api/stocks/market 返回全市场快照（含当日 AI 快讯 / 大盘指数 / 市场情绪；
  * 快照不含历史，历史走势走 /api/stocks/market/trend）。
  *
  * 金额一律是整数积分；价格是保留 2 位的浮点数；收益率 / 涨跌幅都是「百分比数值」
- * （1.23 表示 +1.23%），分红收益率与事件冲击则是「小数」（0.008 表示 0.8%）。
+ * （1.23 表示 +1.23%），事件冲击则是「小数」（0.032 表示 3.2%）。
  */
 export interface StockCandle {
   date: string
@@ -21,25 +21,28 @@ export interface StockIntradayPoint {
   price: number
 }
 
-/** 当日新闻快讯（利好 / 利空，触发后按半衰期衰减） */
+/** 当日 AI 快讯（利好 / 利空，触发后按半衰期衰减） */
 export interface StockNewsItem {
-  /** 稳定 id：`${code}-${dateKey}-${index}` */
+  /** 稳定 id：`${code}-${batchKey}-${index}` */
   id: string
   title: string
   summary: string
-  sentiment: 'good' | 'bad'
+  /** 未触发事件不返回方向 */
+  sentiment?: 'good' | 'bad'
   /** 触发 tick（1..28799）：t = startTick × tickMs 即分时图的横坐标 */
   startTick: number
   /** 触发时刻（ISO） */
   startAt: string
-  /** 初始冲击幅度（带符号小数，0.032 = 3.2%）；未触发的卡片不展示 */
+  /** 初始冲击幅度（带符号小数，0.032 = 3.2%）；未触发时为 0 */
   impact: number
-  /** 半衰期毫秒（45–120 分钟） */
+  /** 半衰期毫秒（30–180 分钟） */
   halfLifeMs: number
   /** 当前冲击幅度（未触发为 0） */
   currentImpact: number
   /** 是否已触发 */
   active: boolean
+  /** 事件来源：AI 生成 / 模板兜底 */
+  source?: 'ai' | 'template'
 }
 
 export interface StockQuote {
@@ -55,9 +58,7 @@ export interface StockQuote {
   change: number
   changePct: number
   volume: number
-  /** 每日分红收益率（0.008 = 0.8%/日，隔夜持仓按市值发放） */
-  dividendYield: number
-  /** 当日新闻快讯（实时行情必带；日线构建器不产生，故可选） */
+  /** 当日 AI 快讯（实时行情必带；日线构建器不产生，故可选） */
   news?: StockNewsItem[]
 }
 
@@ -119,20 +120,12 @@ export interface StockHolding {
   marketValue: number
   profit: number
   profitPct: number
-  /** 每日分红收益率（0.008 = 0.8%/日） */
-  dividendYield: number
-  /** 今日预计分红（当前市值 × 分红收益率） */
-  todayDividend: number
-  /** 是否隔夜持仓（当天没买卖过才结算今日分红） */
-  overnight: boolean
 }
 
-/** 股市账户摘要（累计分红 / 已实现盈亏 / 总资产） */
+/** 股市账户摘要（已实现盈亏 / 总资产） */
 export interface StockAccountSummary {
-  totalDividends: number
   realizedPoints: number
   totalAssets: number
-  todayDividend: number
 }
 
 export interface StockPortfolio {
@@ -153,13 +146,14 @@ export interface StockPortfolio {
 
 export interface StockBuyResult {
   balance: number
-  /** 该股票的每日分红收益率 */
-  dividendYield: number
   holding: StockHolding
   trade: {
     code: string
     name: string
+    /** 含本笔冲击的成交价 */
     price: number
+    /** 本笔成交冲击（百分比，买入为正） */
+    impactPct: number
     points: number
     fee: number
     shares: number
@@ -173,6 +167,8 @@ export interface StockSellResult {
   name: string
   shares: number
   price: number
+  /** 本笔成交冲击（百分比，卖出为负） */
+  impactPct: number
   gross: number
   fee: number
   proceeds: number

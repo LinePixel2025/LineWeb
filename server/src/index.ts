@@ -56,6 +56,8 @@ import { startBigGroupSync, stopBigGroupSync } from './services/bigGroup.js'
 import { startNekoAccountSync, stopNekoAccountSync } from './services/nekoAccountSync.js'
 import { startLineWebBigGroupSync, stopLineWebBigGroupSync } from './services/nekoBigGroup.js'
 import { startGameSweeper } from './services/gameService.js'
+import { startStockEventEngine, stopStockEventEngine } from './services/stockEventService.js'
+import { startPetBattleSweeper, stopPetBattleSweeper } from './services/petBattleService.js'
 import { recomputeAllLeaderTitles } from './services/gameLeaderTitleService.js'
 import { syncDriveFiles } from './services/storageSync.js'
 import { deduplicateDriveFiles } from './services/dedupDriveFiles.js'
@@ -383,16 +385,30 @@ app.get('/api', (_req, res) => {
       steal: { method: 'POST', path: '/api/farm/users/:id/steal/:index', auth: true, description: '偷菜（每日次数上限；同一茬每人一次；地主至少保留 1 单位）' },
     },
     pets: {
-      note: '宠物：花积分召唤一只 2D 小宠物（每用户一只），三项状态随时间衰减，冷落太久（最早一项归零后 48 小时）会离家出走，可花积分重新召唤（等级重置、已购装扮保留）。需 pet 功能开关。',
-      view: { method: 'GET', path: '/api/pets', auth: true, description: '我的宠物（未召唤时 pet 为 null；返回已结算状态 / 装扮 / 解锁动作 / 目录 / 积分）' },
-      summon: { method: 'POST', path: '/api/pets/summon', auth: true, description: '召唤宠物 { species:"cat"|"dog"|"bird", name? }（300 积分；出走后可重新召唤）' },
+      note: '宠物：花积分召唤一只 2D 小宠物（每用户一只），三项状态随时间衰减，冷落太久（最早一项归零后 48 小时）会离家出走。2026-11 新增：战斗装备 / 技能（Pet.equipped JSON）、实时手动回合制 PvP、玩家交易行（价格随成交浮动）。需 pet 功能开关。',
+      view: { method: 'GET', path: '/api/pets', auth: true, description: '我的宠物（含已结算状态 / 装扮 / 装备 / 技能 / 战斗属性 / 目录 / 积分）' },
+      summon: { method: 'POST', path: '/api/pets/summon', auth: true, description: '召唤宠物 { species:"cat"|"dog"|"bird"|"rabbit"|"fox"|"panda", name? }（300 积分；出走后可重新召唤）' },
       care: { method: 'POST', path: '/api/pets/feed|bathe|play', auth: true, description: '照顾动作：喂食 10 积分（L1）/ 洗澡 15 积分（L2）/ 玩耍 20 积分（L3）' },
       touch: { method: 'POST', path: '/api/pets/touch', auth: true, description: '抚摸（免费，60 秒冷却，心情 +2；冷却中返回 gained:false）' },
-      action: { method: 'POST', path: '/api/pets/action', auth: true, description: '特技动作 { action:"dance"|"roll"|"sing"|"flip"|"spin"|"magic"|"firework" }（免费，按等级解锁 L4–L10）' },
+      action: { method: 'POST', path: '/api/pets/action', auth: true, description: '特技动作（免费，按等级解锁 L2–L10）' },
       upgrade: { method: 'POST', path: '/api/pets/upgrade', auth: true, description: '升级（花费 = 100 × 当前等级，满级 10）' },
       outfitBuy: { method: 'POST', path: '/api/pets/outfits/buy', auth: true, description: '购买装扮 { outfitKey }（永久拥有，写积分流水）' },
       outfitEquip: { method: 'POST', path: '/api/pets/outfits/equip', auth: true, description: '佩戴/取下装扮 { outfitKey, equip:boolean }（同 slot 自动替换）' },
       rename: { method: 'POST', path: '/api/pets/rename', auth: true, description: '改名 { name }（1–12 字）' },
+      gear: { method: 'GET', path: '/api/pets/gear', auth: true, description: '装备与技能目录 + 我的拥有 / 穿戴 + 属性对比（首访补发绑定新手装）' },
+      gearEquip: { method: 'POST', path: '/api/pets/gear/equip', auth: true, description: '穿戴 / 卸下装备或技能 { itemType:"equipment"|"skill", key, equip }（对战进行中禁止）' },
+      shopEquipment: { method: 'POST', path: '/api/pets/shop/equipment/:key/buy', auth: true, description: '系统装备商店购买基础装备' },
+      shopSkill: { method: 'POST', path: '/api/pets/shop/skills/:key/buy', auth: true, description: '技能商店学习技能' },
+      battleOverview: { method: 'GET', path: '/api/pets/battle/overview', auth: true, description: '进行中 / 收到与发出的邀请 / 历史 / 战绩 / 可挑战对手' },
+      battleInvite: { method: 'POST', path: '/api/pets/battle/invite', auth: true, description: '邀请对战 { targetUserId }（同一对手每天 3 场，邀请 10 分钟有效）' },
+      battleRespond: { method: 'POST', path: '/api/pets/battle/:id/respond', auth: true, description: '应战 / 拒绝 { accept:boolean }（应战时快照双方属性）' },
+      battleAction: { method: 'POST', path: '/api/pets/battle/:id/action', auth: true, description: '行动 { skillKey, version }（30 秒回合超时自动普攻，连续 3 次超时判负）' },
+      battlePresence: { method: 'POST', path: '/api/pets/battle/:id/presence', auth: true, description: '对战心跳（客户端每 10 秒一次；90 秒无心跳判负）' },
+      battleForfeit: { method: 'POST', path: '/api/pets/battle/:id/forfeit', auth: true, description: '认输（结算积分转移与装备掉落）' },
+      market: { method: 'GET', path: '/api/pets/market', auth: true, description: '交易行：在售挂单 / 我的挂单 / 最近成交 / 参考价' },
+      marketList: { method: 'POST', path: '/api/pets/market/list', auth: true, description: '挂单 { itemType, key, price }（价格需在参考价 50%–150%）' },
+      marketBuy: { method: 'POST', path: '/api/pets/market/:id/buy', auth: true, description: '购买挂单（买家扣分、卖家到账 95%，所有权转移）' },
+      marketCancel: { method: 'DELETE', path: '/api/pets/market/:id', auth: true, description: '下架自己的挂单' },
     },
     reader: {
       note: '小说阅读器：上传 EPUB/TXT 在线阅读（EPUB 由前端 foliate-js 渲染、TXT 前端正则分章），书籍与封面存存储节点 _books/（不进网盘），文件计入网盘配额，进度多端同步。需 reader 功能开关。',
@@ -423,12 +439,13 @@ app.get('/api', (_req, res) => {
       update: { method: 'PUT', path: '/api/personal-space', auth: 'personal:manage', description: '更新空间名与 RustDesk 配置 { spaceName, rustdeskIdServer?, rustdeskRelayServer?, rustdeskKey?, rustdeskWebClient? }（rustdeskWebClient 非空时必须 http(s):// 开头）' },
     },
     stocks: {
-      note: '模拟股市：行情为 3 秒一 tick 的实时模拟（确定性日线锚点 + 秒级噪声，玩家交易会小幅影响价格并按 10 分钟半衰期衰减），可用统一积分按实时价买卖；买卖各收 1% 手续费。需 stock 功能开关。',
-      market: { method: 'GET', path: '/api/stocks/market', auth: true, description: '8 只虚构股票的实时报价 / 涨跌幅 / 成交量 + 交易规则（40 次/min，tickMs=3000）' },
+      note: '模拟股市：行情为 3 秒一 tick 的实时模拟（对称随机日线锚点 + 秒级噪声），AI 每 40 分钟生成一批事件；玩家大额交易会明显推动价格（±25%，15 分钟半衰期）并产生成交滑点；买卖各收 0.3% 手续费，无分红。需 stock 功能开关。',
+      market: { method: 'GET', path: '/api/stocks/market', auth: true, description: '12 只虚构股票的实时报价 / 涨跌幅 / 成交量 + 当日 AI 事件 + 交易规则（40 次/min，tickMs=3000）' },
       trend: { method: 'GET', path: '/api/stocks/market/trend?code=', auth: true, description: '单只股票近 30 根日线 + 当日分时（每 60 秒一点 + 最新实时价）（20 次/min）' },
+      events: { method: 'GET', path: '/api/stocks/events?limit=', auth: true, description: '当日 AI 事件（按时间倒序，最多 60 条；AI 不可用时为模板兜底，source 字段标记来源）' },
       portfolio: { method: 'GET', path: '/api/stocks/portfolio', auth: true, description: '我的持仓、市值与浮动盈亏（按实时价估值）' },
-      buy: { method: 'POST', path: '/api/stocks/buy', auth: true, description: '用积分按实时价买入 { code, points }（单笔 100–100000 积分，含 1% 手续费；买入会小幅推高价格）' },
-      sell: { method: 'POST', path: '/api/stocks/sell', auth: true, description: '按实时价卖出 { code, shares? }（缺省整仓，支持部分卖出并等比分摊成本；卖出会小幅压低价格），到账积分写入台账' },
+      buy: { method: 'POST', path: '/api/stocks/buy', auth: true, description: '用积分按实时价买入 { code, points }（单笔 100–100000 积分，含 0.3% 手续费与成交滑点；买入会明显推高价格）' },
+      sell: { method: 'POST', path: '/api/stocks/sell', auth: true, description: '按实时价卖出 { code, shares? }（缺省整仓，支持部分卖出并等比分摊成本；卖出会明显压低价格），到账积分写入台账' },
     },
     chat: {
       note: '聊天自建（2026-10 起）：会话 / 消息 / 群聊全部落 Prisma，无外部依赖。消息走 /ws/xmpp（不可用时降级 /api/chat/xmpp/http-* 长轮询），协议与原 XMPP 中继完全兼容。好友关系以 LineWeb Prisma 为唯一真相源。',
@@ -726,6 +743,12 @@ initChatHub(server)
 // 游戏定时器：邀请过期、超时结算、掉线判负、结束对局回收（每 15 秒，unref）
 startGameSweeper()
 
+// 股市 AI 事件：启动 5 秒后补当前 40 分钟批次，之后每 60 秒检查一次（unref）
+startStockEventEngine()
+
+// 宠物对战：回合超时 / 掉线判负 / 过期邀请清理（每 5 秒，unref）
+startPetBattleSweeper()
+
 // 网页反代：统计批量落库（每 15 秒）+ 黑名单缓存预热（失败只告警）
 startProxyStatsFlusher()
 refreshProxyBlacklist().catch((err) => console.warn('[proxy] 黑名单预热失败:', err instanceof Error ? err.message : err))
@@ -800,6 +823,8 @@ const shutdown = (signal: string) => {
   stopBigGroupSync()
   stopNekoAccountSync()
   stopLineWebBigGroupSync()
+  stopStockEventEngine()
+  stopPetBattleSweeper()
 
   server.close((err) => {
     if (err) {

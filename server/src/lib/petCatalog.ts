@@ -6,7 +6,12 @@
  *   - 三项状态（饥饿 hunger / 清洁 cleanliness / 心情 mood）随时间线性衰减、读取时惰性结算
  *   - 任意一项归零后开始计时（criticalSince），持续 PET_GRACE_HOURS 小时无人照料即离家出走（status='gone'）
  *   - 出走后可花积分重新召唤：重置数值与等级，已购装扮保留
+ *   - 2026-11 起 equipped JSON 同时承载战斗装备（weapon/armor/accessory）与技能（skills），
+ *     旧版仅含 hat/neck/face 的数据可无损读取
  */
+
+import { PET_EQUIPMENT_MAP, PET_EQUIPMENT_SLOTS, type PetEquipmentSlot } from './petEquipment.js'
+import { PET_SKILL_MAP, PET_SKILL_MAX_EQUIPPED } from './petSkills.js'
 
 /** 物种配色（主色 / 辅色 / 点缀色），前端据此画贴图与主题卡 */
 export interface PetSpeciesPalette {
@@ -454,6 +459,84 @@ export function cleanEquipped(raw: string | null | undefined): PetEquipped {
 /** 把装配序列化回 Pet.equipped 存储格式 */
 export function serializeEquipped(equipped: PetEquipped): string {
   return JSON.stringify(equipped)
+}
+
+/* ============================================================
+   战斗装备 / 技能装配（与装扮共用 Pet.equipped JSON）
+   ============================================================ */
+
+export interface PetLoadout extends PetEquipped {
+  weapon: string | null
+  armor: string | null
+  accessory: string | null
+  skills: string[]
+}
+
+export function emptyPetLoadout(): PetLoadout {
+  return { ...emptyPetEquipped(), weapon: null, armor: null, accessory: null, skills: [] }
+}
+
+/**
+ * 清洗完整装配 JSON：
+ *   - 装扮部分复用 cleanEquipped（未知装扮自动剔除）
+ *   - 装备部分只接受目录内、槽位匹配、且 ownedEquipment 中确实拥有的 key
+ *   - 技能只接受目录内、ownedSkills 中确实拥有、最多 3 个
+ * 任何解析失败都回退为全空，不抛异常。
+ */
+export function cleanLoadout(
+  raw: string | null | undefined,
+  ownedEquipment: readonly string[],
+  ownedSkills: readonly string[],
+): PetLoadout {
+  const result: PetLoadout = { ...cleanEquipped(raw), weapon: null, armor: null, accessory: null, skills: [] }
+  if (!raw) return result
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return result
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return result
+  const record = parsed as Record<string, unknown>
+  const equipmentSet = new Set(ownedEquipment)
+  for (const slot of PET_EQUIPMENT_SLOTS) {
+    const value = record[slot]
+    if (typeof value !== 'string' || !equipmentSet.has(value)) continue
+    const item = PET_EQUIPMENT_MAP.get(value)
+    if (item && item.slot === slot) result[slot] = item.key
+  }
+  const skillSet = new Set(ownedSkills)
+  const rawSkills = record.skills
+  if (Array.isArray(rawSkills)) {
+    const seen = new Set<string>()
+    for (const value of rawSkills) {
+      if (typeof value !== 'string' || seen.has(value) || !skillSet.has(value)) continue
+      if (!PET_SKILL_MAP.has(value)) continue
+      seen.add(value)
+      result.skills.push(value)
+      if (result.skills.length >= PET_SKILL_MAX_EQUIPPED) break
+    }
+  }
+  return result
+}
+
+export function serializeLoadout(loadout: PetLoadout): string {
+  return JSON.stringify(loadout)
+}
+
+/** 装配里的战斗装备 key 列表（按槽位顺序） */
+export function loadoutEquipmentKeys(loadout: PetLoadout): string[] {
+  return PET_EQUIPMENT_SLOTS.map((slot) => loadout[slot]).filter(
+    (key): key is string => typeof key === 'string' && key.length > 0,
+  )
+}
+
+/** 判断某个装备槽当前穿了什么 */
+export function equippedKeyOfSlot(
+  loadout: PetLoadout,
+  slot: PetEquipmentSlot,
+): string | null {
+  return loadout[slot]
 }
 
 /** 展示用：保留 1 位小数 */

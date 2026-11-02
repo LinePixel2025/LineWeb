@@ -23,6 +23,74 @@ export interface PetEquipped {
   face: string | null
 }
 
+/** 战斗装备槽位 */
+export type PetEquipmentSlot = 'weapon' | 'armor' | 'accessory'
+
+/** 完整装配：装扮 + 战斗装备 + 已装备技能 */
+export interface PetLoadout extends PetEquipped {
+  weapon: string | null
+  armor: string | null
+  accessory: string | null
+  skills: string[]
+}
+
+/** 战斗属性（服务端派生） */
+export interface PetCombatStats {
+  maxHp: number
+  maxMp: number
+  atk: number
+  def: number
+  spd: number
+  crit: number
+}
+
+/** 装备静态配置 */
+export interface PetEquipmentInfo {
+  key: string
+  name: string
+  emoji: string
+  description: string
+  slot: PetEquipmentSlot
+  rarity: 'common' | 'rare' | 'epic' | 'legendary'
+  price: number
+  atk: number
+  def: number
+  hp: number
+  spd: number
+  crit: number
+  minLevel: number
+  bound: boolean
+  shopable: boolean
+}
+
+/** 技能效果 */
+export interface PetSkillEffectInfo {
+  type: 'burn' | 'poison' | 'stun' | 'shield' | 'atk_up' | 'def_up'
+  turns: number
+  value: number
+  chance?: number
+}
+
+/** 技能静态配置 */
+export interface PetSkillInfo {
+  key: string
+  name: string
+  emoji: string
+  description: string
+  kind: 'damage' | 'heal' | 'buff' | 'shield' | 'cleanse'
+  power: number
+  mpCost: number
+  cooldown: number
+  price: number
+  minLevel: number
+  animation: string
+  ignoreDef?: number
+  lifesteal?: number
+  healPct?: number
+  critBonus?: number
+  effects?: PetSkillEffectInfo[]
+}
+
 /** 物种配色（主色 / 辅色 / 点缀色），用于贴图与主题卡 */
 export interface PetPalette {
   primary: string
@@ -53,8 +121,16 @@ export interface PetDto {
   /** 见底后的宽限期（小时），超过即离家出走 */
   graceHours: number
   equipped: PetEquipped
+  /** 完整装配（装扮 + 装备 + 技能）；旧服务端可能缺失 */
+  loadout?: PetLoadout
   /** 已购装扮 key */
   ownedOutfits: string[]
+  /** 已拥有装备 key */
+  ownedEquipment?: string[]
+  /** 已学会技能 key */
+  ownedSkills?: string[]
+  /** 由等级 + 物种 + 已穿戴装备派生的战斗属性 */
+  battleStats?: PetCombatStats
   /** 已解锁的手动动作 key（tricks 子集） */
   unlockedActions: string[]
   /** 升到下一级的花费；满级为 null */
@@ -113,6 +189,16 @@ export interface PetTrickInfo {
 export interface PetCatalog {
   species: PetSpeciesInfo[]
   outfits: PetOutfitInfo[]
+  /** 战斗装备目录 */
+  equipment?: PetEquipmentInfo[]
+  /** 技能目录 */
+  skills?: PetSkillInfo[]
+  /** 系统装备商店可售项 */
+  shopEquipment?: PetEquipmentInfo[]
+  /** 技能商店可售项 */
+  shopSkills?: PetSkillInfo[]
+  /** 最多同时装备几个技能 */
+  maxEquippedSkills?: number
   costs: { summon: number; feed: number; bathe: number; play: number; switch?: number }
   careActions: PetCareActionInfo[]
   tricks: PetTrickInfo[]

@@ -21,8 +21,11 @@ import {
   PET_TRICKS,
   canPatToday,
   cleanEquipped,
+  cleanLoadout,
   emptyPetEquipped,
+  emptyPetLoadout,
   getPetSpecies,
+  loadoutEquipmentKeys,
   nextNameAfterSwitch,
   normalizePetName,
   petUnlockedActions,
@@ -31,9 +34,50 @@ import {
   roundStat,
   sanitizeGuestbookContent,
   serializeEquipped,
+  serializeLoadout,
   settlePetStats,
   type PetStatsInput,
 } from '../src/lib/petCatalog.js'
+import {
+  PET_EQUIPMENTS,
+  PET_EQUIPMENT_MAP,
+  PET_EQUIPMENT_SLOTS,
+  PET_EQUIPMENT_KEYS,
+  PET_SHOP_EQUIPMENTS,
+  PET_STARTER_EQUIPMENT_KEYS,
+  equipmentPower,
+} from '../src/lib/petEquipment.js'
+import {
+  PET_BASIC_SKILL_KEY,
+  PET_SHOP_SKILLS,
+  PET_SKILLS,
+  PET_SKILL_MAP,
+  PET_SKILL_MAX_EQUIPPED,
+  skillPower,
+} from '../src/lib/petSkills.js'
+import {
+  applyBattleAction,
+  applyBattleForfeit,
+  applyBattleTimeout,
+  availableSkills,
+  battleStakeFor,
+  createBattleRng,
+  createBattleState,
+  deriveCombatStats,
+  normalizeEquipmentKeys,
+  normalizeSkillKeys,
+  PET_BATTLE_MAX_TIMEOUTS,
+  PET_BATTLE_MAX_ROUNDS,
+  type PetCombatInput,
+} from '../src/lib/petBattle.js'
+import {
+  decayRefPrice,
+  nextRefPrice,
+  petMarketFee,
+  petMarketSellerProceeds,
+  refPriceChangePct,
+  validateListingPrice,
+} from '../src/lib/petMarket.js'
 
 let passed = 0
 
@@ -450,5 +494,306 @@ assertEqual(
 assertEqual(Array.from(sanitizeGuestbookContent('🐱'.repeat(70)) ?? '').length, 60, 'emoji 按字符计（不截断半个代理对）')
 assertEqual(sanitizeGuestbookContent('  超长留言  '.concat('长'.repeat(80)))?.length, 60, 'trim 后再截断')
 assertEqual(sanitizeGuestbookContent('你好，来串门啦～'), '你好，来串门啦～', '正常留言原样保留')
+
+/* ============================================================
+   战斗装备目录
+   ============================================================ */
+
+assertEqual(PET_EQUIPMENTS.length, 12, '12 件战斗装备')
+assertEqual(new Set(PET_EQUIPMENT_KEYS).size, 12, '装备 key 唯一')
+assertEqual(PET_EQUIPMENT_SLOTS, ['weapon', 'armor', 'accessory'], '三个装备槽位')
+assertEqual(PET_STARTER_EQUIPMENT_KEYS.length, 3, '3 件绑定新手装')
+assertEqual(new Set(PET_SHOP_EQUIPMENTS.map((item) => item.key)).size, 3, '商店出售 3 件基础装备')
+
+for (const slot of PET_EQUIPMENT_SLOTS) {
+  assertEqual(
+    PET_EQUIPMENTS.filter((item) => item.slot === slot).length,
+    4,
+    `${slot} 槽位有 4 件装备`,
+  )
+}
+for (const item of PET_EQUIPMENTS) {
+  assert(item.key === item.key.toLowerCase(), `${item.key} key 为小写`)
+  assert(item.price >= 0 && Number.isInteger(item.price), `${item.key} 价格为非负整数`)
+  assert(item.atk >= 0 && item.def >= 0 && item.hp >= 0 && item.spd >= 0 && item.crit >= 0, `${item.key} 属性非负`)
+  assert(item.minLevel >= 1 && item.minLevel <= PET_MAX_LEVEL, `${item.key} 等级门槛合法`)
+  assert(item.bound === (item.key.startsWith('starter_')), `${item.key} 绑定标记与新手装一致`)
+  assert(!item.shopable || !item.bound, `${item.key} 绑定装备不在商店出售`)
+  assert(equipmentPower(item) > 0, `${item.key} 战力粗估为正`)
+}
+assert(PET_EQUIPMENT_MAP.get('iron_blade')?.atk === 8, '铁齿短刃攻击 +8')
+assert(PET_EQUIPMENT_MAP.get('dragon_scale')?.def === 20, '龙鳞战甲防御 +20')
+assert(PET_EQUIPMENT_MAP.get('starter_bell')?.bound === true, '新手铃铛绑定')
+assert(PET_EQUIPMENT_MAP.get('nope') === undefined, '未知装备取不到')
+
+/* ============================================================
+   技能目录
+   ============================================================ */
+
+assertEqual(PET_SKILLS.length, 12, '12 个技能（含普攻）')
+assertEqual(new Set(PET_SKILLS.map((skill) => skill.key)).size, 12, '技能 key 唯一')
+assertEqual(PET_SKILL_MAX_EQUIPPED, 3, '最多装备 3 个技能')
+assert(PET_SKILL_MAP.has(PET_BASIC_SKILL_KEY), '普攻存在')
+assertEqual(PET_SHOP_SKILLS.length, 11, '技能商店出售 11 个技能（不含普攻）')
+assert(!PET_SHOP_SKILLS.some((skill) => skill.key === PET_BASIC_SKILL_KEY), '技能商店不卖普攻')
+
+for (const skill of PET_SKILLS) {
+  assert(/^[a-z][a-z0-9_-]*$/.test(skill.animation), `${skill.key} animation 合法`)
+  assert(skill.mpCost >= 0 && skill.cooldown >= 0, `${skill.key} MP / 冷却非负`)
+  assert(skill.price >= 0 && Number.isInteger(skill.price), `${skill.key} 价格非负整数`)
+  assert(skill.minLevel >= 1 && skill.minLevel <= PET_MAX_LEVEL, `${skill.key} 等级门槛合法`)
+  if (skill.key === PET_BASIC_SKILL_KEY) {
+    assertEqual(skill.mpCost, 0, '普攻不耗 MP')
+    assertEqual(skill.cooldown, 0, '普攻无冷却')
+  } else {
+    assert(skill.price > 0, `${skill.key} 商店技能有价格`)
+  }
+}
+assert(skillPower(PET_SKILL_MAP.get('meteor')!) > skillPower(PET_SKILL_MAP.get('basic_attack')!), '流星坠威力高于普攻')
+
+/* ============================================================
+   属性派生 / 装配清洗
+   ============================================================ */
+
+const baseCat = deriveCombatStats({ species: 'cat', level: 1, equipmentKeys: [] })
+assertEqual(baseCat.maxHp, 98, '1 级小猫生命 = 98')
+assertEqual(baseCat.maxMp, 62, '1 级小猫魔力 = 62')
+assertEqual(baseCat.atk, 15, '1 级小猫攻击 = 15')
+assertEqual(baseCat.def, 6, '1 级小猫防御 = 6')
+assertEqual(baseCat.spd, 12, '1 级小猫速度 = 12')
+assertEqual(baseCat.crit, 8, '1 级小猫暴击 = 8')
+
+const armored = deriveCombatStats({
+  species: 'cat',
+  level: 1,
+  equipmentKeys: ['iron_blade', 'leather_armor', 'swift_boots'],
+})
+assertEqual(armored.atk, baseCat.atk + 8, '铁齿短刃 +8 攻击')
+assertEqual(armored.def, baseCat.def + 5, '硬皮护甲 +5 防御')
+assertEqual(armored.maxHp, baseCat.maxHp + 20, '硬皮护甲 +20 生命')
+assertEqual(armored.spd, baseCat.spd + 6, '疾风靴 +6 速度')
+assertEqual(armored.crit, baseCat.crit + 1, '铁齿短刃 +1 暴击')
+
+const dedup = deriveCombatStats({
+  species: 'cat',
+  level: 1,
+  equipmentKeys: ['iron_blade', 'flame_sword'],
+})
+assertEqual(dedup.atk, baseCat.atk + 8, '同槽位只取第一件武器')
+
+assertEqual(normalizeEquipmentKeys(['iron_blade', 'nope', 'iron_blade']), ['iron_blade'], '装备去重且过滤未知')
+assertEqual(normalizeSkillKeys(['fire_claw', 'basic_attack', 'fire_claw', 'meteor', 'healing_light']), ['fire_claw', 'meteor', 'healing_light'], '技能去重、过滤普攻、最多 3 个')
+
+const rawLoadout = JSON.stringify({
+  hat: 'hat_red',
+  neck: 'scarf_blue',
+  weapon: 'iron_blade',
+  armor: 'leather_armor',
+  accessory: 'starter_bell',
+  skills: ['fire_claw', 'meteor', 'healing_light', 'thunder_bolt'],
+})
+const loadout = cleanLoadout(
+  rawLoadout,
+  ['iron_blade', 'leather_armor', 'starter_bell'],
+  ['fire_claw', 'meteor', 'healing_light', 'thunder_bolt'],
+)
+assertEqual(loadout.hat, 'hat_red', '装配清洗保留装扮')
+assertEqual(loadout.weapon, 'iron_blade', '装配清洗保留武器')
+assertEqual(loadout.armor, 'leather_armor', '装配清洗保留护甲')
+assertEqual(loadout.accessory, 'starter_bell', '装配清洗保留饰品')
+assertEqual(loadout.skills, ['fire_claw', 'meteor', 'healing_light'], '装配清洗最多 3 个技能')
+assertEqual(loadoutEquipmentKeys(loadout), ['iron_blade', 'leather_armor', 'starter_bell'], '导出已穿戴装备 key')
+
+const dirtyLoadout = cleanLoadout(
+  JSON.stringify({ weapon: 'void_scythe', skills: ['nope'] }),
+  ['iron_blade'],
+  [],
+)
+assertEqual(dirtyLoadout.weapon, null, '未拥有装备被清洗')
+assertEqual(dirtyLoadout.skills, [], '未拥有技能被清洗')
+
+const serialized = serializeLoadout(loadout)
+assertEqual(serializeLoadout(cleanLoadout(serialized, ['iron_blade', 'leather_armor', 'starter_bell'], ['fire_claw', 'meteor', 'healing_light'])), serialized, '装配序列化往返一致')
+assertEqual(emptyPetLoadout().skills, [], '空装配技能为空')
+
+/* ============================================================
+   战斗引擎
+   ============================================================ */
+
+function battleInput(overrides: Partial<PetCombatInput> = {}): PetCombatInput {
+  return {
+    petId: 1,
+    userId: 1,
+    name: '咪咪',
+    species: 'cat',
+    level: 5,
+    equipmentKeys: ['iron_blade', 'leather_armor', 'swift_boots'],
+    skillKeys: ['fire_claw', 'ice_shield', 'healing_light'],
+    ...overrides,
+  }
+}
+
+const p1 = battleInput()
+const p2 = battleInput({
+  petId: 2,
+  userId: 2,
+  name: '旺旺',
+  species: 'dog',
+  level: 4,
+  equipmentKeys: ['starter_claw', 'starter_vest', 'starter_bell'],
+  skillKeys: ['thunder_bolt', 'battle_cry'],
+})
+const battle = createBattleState([p1, p2], 1_700_000_000_000)
+assertEqual(Object.keys(battle.sides).sort(), ['1', '2'], '战斗双方快照')
+assertEqual(battle.round, 1, '初始第 1 回合')
+assertEqual(battle.finished, false, '初始未结束')
+assertEqual(battle.maxRounds, PET_BATTLE_MAX_ROUNDS, '最大回合数 40')
+assert(battle.turnUserId === 1 || battle.turnUserId === 2, '先手是其中一方')
+const side1 = battle.sides['1']
+const side2 = battle.sides['2']
+assertEqual(side1.hp, side1.maxHp, '初始满血')
+assertEqual(side1.mp, side1.maxMp, '初始满蓝')
+assertEqual(side1.skills, ['fire_claw', 'ice_shield', 'healing_light'], '技能快照正确')
+assertEqual(side1.equipmentKeys, ['iron_blade', 'leather_armor', 'swift_boots'], '装备快照正确')
+
+// 非当前回合行动被拒绝
+const wrongUser = battle.turnUserId === 1 ? 2 : 1
+assertEqual(applyBattleAction(battle, wrongUser, 'basic_attack', () => 0.5).error, '还没轮到你行动', '非当前回合行动被拒绝')
+// 未装备技能被拒绝
+const actorId = battle.turnUserId!
+const actor = battle.sides[String(actorId)]
+const missingSkill = actor.skills.includes('meteor') ? 'thunder_bolt' : 'meteor'
+assertEqual(applyBattleAction(battle, actorId, missingSkill, () => 0.5).error, '没有装备这个技能', '未装备技能被拒绝')
+
+// 普攻造成伤害并切换回合
+const attackerBefore = battle.sides[String(actorId)].hp
+const defenderBefore = battle.sides[String(actorId === 1 ? 2 : 1)].hp
+const basicResult = applyBattleAction(battle, actorId, 'basic_attack', () => 0.5)
+assertEqual(basicResult.error, null, '普攻执行成功')
+const afterBasic = basicResult.state
+assert(afterBasic.sides[String(actorId === 1 ? 2 : 1)].hp < defenderBefore, '普攻减少目标 HP')
+assertEqual(afterBasic.sides[String(actorId)].hp, attackerBefore, '普攻不伤自己')
+assert(afterBasic.turnUserId !== actorId, '行动后切换回合')
+assert(afterBasic.log.length >= 1, '战斗日志有记录')
+assertEqual(afterBasic.log.at(-1)!.skillKey, 'basic_attack', '日志记录普攻')
+assert(afterBasic.log.at(-1)!.seq > 0, '日志 seq 为正')
+
+// 技能消耗 MP / 设置冷却
+const fireState = createBattleState([
+  battleInput({ userId: 1, skillKeys: ['fire_claw'] }),
+  battleInput({ userId: 2, species: 'panda', level: 1, equipmentKeys: [], skillKeys: [] }),
+], 1_700_000_000_000)
+fireState.turnUserId = 1
+fireState.order = [1, 2]
+fireState.orderIndex = 0
+const fireResult = applyBattleAction(fireState, 1, 'fire_claw', createBattleRng(7))
+assertEqual(fireResult.error, null, '烈焰爪执行成功')
+const fireSide = fireResult.state.sides['1']
+assert(fireSide.mp < fireSide.maxMp, '技能消耗 MP')
+assert((fireSide.cooldowns.fire_claw ?? 0) > 0, '技能进入冷却')
+assert(fireResult.state.log.at(-1)!.damage > 0, '技能造成伤害')
+
+// 护盾 / 治疗
+const shieldState = createBattleState([
+  battleInput({ userId: 1, skillKeys: ['ice_shield'] }),
+  battleInput({ userId: 2, species: 'panda', level: 1, equipmentKeys: [], skillKeys: [] }),
+])
+shieldState.turnUserId = 1
+shieldState.order = [1, 2]
+shieldState.orderIndex = 0
+const shieldResult = applyBattleAction(shieldState, 1, 'ice_shield', createBattleRng(3))
+assert(shieldResult.state.sides['1'].shield > 0, '冰晶护盾产生护盾值')
+assert(shieldResult.state.sides['1'].shieldTurns > 0, '护盾有持续回合')
+
+const healState = createBattleState([
+  battleInput({ userId: 1, skillKeys: ['healing_light'] }),
+  battleInput({ userId: 2, species: 'panda', level: 1, equipmentKeys: [], skillKeys: [] }),
+])
+healState.turnUserId = 1
+healState.order = [1, 2]
+healState.orderIndex = 0
+healState.sides['1'].hp = 20
+const healResult = applyBattleAction(healState, 1, 'healing_light', createBattleRng(5))
+assert(healResult.state.sides['1'].hp > 20, '治愈之光回复 HP')
+assert(healResult.state.log.at(-1)!.heal > 0, '治疗日志记录回复量')
+
+// 认输
+const forfeitState = createBattleState([battleInput({ userId: 1 }), battleInput({ userId: 2 })])
+const forfeited = applyBattleForfeit(forfeitState, 1, '认输')
+assert(forfeited.finished, '认输后战斗结束')
+assertEqual(forfeited.winnerId, 2, '认输方判负')
+assertEqual(forfeited.loserId, 1, '认输方是败者')
+assertEqual(forfeited.result, 'win', '认输结果为 win')
+
+// 连续超时：轮流超时 6 次后累计 3 次的一方判负
+let timeoutState = createBattleState([
+  battleInput({ userId: 1, level: 10, species: 'panda', equipmentKeys: [], skillKeys: [] }),
+  battleInput({ userId: 2, level: 10, species: 'panda', equipmentKeys: [], skillKeys: [] }),
+])
+for (let index = 0; index < PET_BATTLE_MAX_TIMEOUTS * 2; index += 1) {
+  timeoutState = applyBattleTimeout(timeoutState, createBattleRng(index + 1))
+  if (timeoutState.finished) break
+}
+assert(timeoutState.finished, '连续超时触发判负')
+assert(timeoutState.winnerId === 1 || timeoutState.winnerId === 2, '超时判负产生胜者')
+
+// 低血量目标会被击杀
+let killState = createBattleState([
+  battleInput({ userId: 1, level: 10, equipmentKeys: ['iron_blade'], skillKeys: [] }),
+  battleInput({ userId: 2, level: 1, species: 'bird', equipmentKeys: [], skillKeys: [] }),
+])
+killState.turnUserId = 1
+killState.order = [1, 2]
+killState.orderIndex = 0
+killState.sides['2'].hp = 1
+const killResult = applyBattleAction(killState, 1, 'basic_attack', createRngAlways(0.5))
+assert(killResult.state.finished, 'HP 归零后战斗结束')
+assertEqual(killResult.state.winnerId, 1, '击杀者获胜')
+
+function createRngAlways(value: number): () => number {
+  return () => value
+}
+
+// 可用技能列表（含普攻）
+const options = availableSkills(battle.sides['1'])
+assertEqual(options[0].key, PET_BASIC_SKILL_KEY, '技能列表第一项是普攻')
+assert(options.every((option) => option.name && option.emoji), '技能选项字段完整')
+assert(options.some((option) => option.key === 'fire_claw' && option.usable), '烈焰爪初始可用')
+
+/* ============================================================
+   交易行纯函数
+   ============================================================ */
+
+assertEqual(battleStakeFor(0), 0, '败者 0 分不扣分')
+assertEqual(battleStakeFor(5), 5, '败者 5 分只扣 5（不能超过余额）')
+assertEqual(battleStakeFor(100), 10, '败者 100 分按最低 10 扣')
+assertEqual(battleStakeFor(1000), 80, '败者 1000 分按 8% 扣')
+assertEqual(battleStakeFor(10_000), 300, '赌注上限 300')
+
+assertEqual(petMarketFee(100), 5, '100 积分手续费 5%')
+assertEqual(petMarketFee(1), 1, '最低手续费 1')
+assertEqual(petMarketFee(0), 0, '零价无手续费')
+assertEqual(petMarketSellerProceeds(100), 95, '卖家到账 95')
+assertEqual(petMarketSellerProceeds(1), 0, '1 积分成交卖家到账 0')
+
+assertEqual(validateListingPrice(500, 1000), null, '参考价 50% 可以挂单')
+assertEqual(validateListingPrice(1500, 1000), null, '参考价 150% 可以挂单')
+assert(validateListingPrice(499, 1000) !== null, '低于 50% 被拒绝')
+assert(validateListingPrice(1501, 1000) !== null, '高于 150% 被拒绝')
+assert(validateListingPrice(0, 1000) !== null, '0 价被拒绝')
+assert(validateListingPrice(10.5, 1000) !== null, '非整数被拒绝')
+
+const refAfter = nextRefPrice(1000, 1000, 1200, 0)
+assert(refAfter > 1000 && refAfter <= 1200, '成交价高于参考价时参考价上移')
+assert(refAfter <= 2000, '参考价不超过基础价 2 倍（本次上浮 2%）')
+assert(nextRefPrice(1000, 1000, 100, 20) < 1000, '大量在售 + 低价成交时参考价下压')
+
+const decayed = decayRefPrice(2000, 1000, 0, 7 * 86_400_000)
+assertCloseNumber(decayed, 1500, 1e-6, '7 天后参考价回归一半')
+assertEqual(refPriceChangePct(1100, 1000), 10, '参考价涨幅 10%')
+
+function assertCloseNumber(actual: number, expected: number, tolerance: number, label: string): void {
+  assert(Math.abs(actual - expected) <= tolerance, `${label}（实际 ${actual}，期望 ${expected}±${tolerance}）`)
+}
 
 console.log(`✅ 宠物系统纯函数自检：${passed} 个断言`)
