@@ -86,6 +86,63 @@ export interface FarmExpansion {
   cost: number
 }
 
+export interface FarmProtectionPackage {
+  hours: number
+  cost: number
+  label: string
+}
+
+export interface FarmProtection {
+  active: boolean
+  until: string | null
+  remainingMs: number
+  maxHours: number
+  packages: FarmProtectionPackage[]
+}
+
+/* ============================================================
+   玩家间种子交易
+   ============================================================ */
+
+export interface SeedListing {
+  id: number
+  crop: FarmCrop
+  count: number
+  price: number
+  unitPrice: number
+  status: string
+  seller: { id: number; username: string; title: UserTitleDto | null }
+  buyer: { id: number; username: string } | null
+  isMine: boolean
+  soldAt: string | null
+  createdAt: string
+}
+
+export interface SeedMarketView {
+  listings: SeedListing[]
+  myListings: SeedListing[]
+  recentSold: SeedListing[]
+  mySeeds: Array<{ key: string; name: string; emoji: string; count: number; tier: number }>
+  catalog: FarmCrop[]
+  feeRate: number
+  maxListings: number
+  maxCount: number
+  maxPrice: number
+}
+
+export interface SeedListingResult {
+  view: SeedMarketView
+  listing: SeedListing
+}
+
+export interface SeedBuyResult {
+  view: SeedMarketView
+  listing: SeedListing
+  balance: number
+  fee: number
+  sellerProceeds: number
+}
+
 /** GET /api/farm */
 export interface FarmView {
   farm: {
@@ -97,6 +154,7 @@ export interface FarmView {
     harvested: number
     harvestPoints: number
     stolenPoints: number
+    protectedUntil: string | null
   } | null
   plots: FarmPlot[]
   inventory: { seeds: FarmSeedStack[]; fertilizer: number }
@@ -112,6 +170,8 @@ export interface FarmView {
   stealQuota: StealQuota
   /** 自己今天已被偷的次数（达到上限后别人偷不到） */
   victimQuota: StealQuota
+  /** 偷菜保护状态 */
+  protection: FarmProtection
   /** 每日随机掉落种子（同一天只有一次 dropped=true） */
   seedDrop: SeedDrop
   /** 今日随机商人（每日 0 点刷新） */
@@ -135,6 +195,32 @@ export interface HarvestResult {
   balance: number
 }
 
+/** POST /api/farm/plant-all */
+export interface PlantAllResult {
+  view: FarmView
+  planted: number
+  crop: FarmCrop
+  remainingSeeds: number
+}
+
+/** POST /api/farm/harvest-all */
+export interface HarvestAllResult {
+  view: FarmView
+  harvested: number
+  units: number
+  points: number
+  balance: number
+  crops: Array<{ key: string; name: string; emoji: string; units: number; points: number }>
+}
+
+/** POST /api/farm/protect */
+export interface ProtectionPurchaseResult {
+  view: FarmView
+  balance: number
+  until: string
+  package: FarmProtectionPackage
+}
+
 /** GET /api/farm/neighbors */
 export interface FarmNeighbor {
   userId: number
@@ -145,6 +231,8 @@ export interface FarmNeighbor {
   stealableCount: number
   /** 该邻居今天已被偷的次数 */
   victimQuota: StealQuota
+  /** 该邻居的农场保护状态 */
+  protection: FarmProtection
   title: UserTitleDto | null
   updatedAt: string
 }
@@ -169,6 +257,8 @@ export interface NeighborFarmView {
   quota: StealQuota
   /** 地主今天已被偷的次数（达到上限后不可再偷） */
   victimQuota: StealQuota
+  /** 地主是否开启了偷菜保护 */
+  protection: FarmProtection
 }
 
 /** POST /api/farm/users/:id/steal/:index */

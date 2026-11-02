@@ -6,6 +6,7 @@ import { AppError } from '../middleware/errorHandler.js'
 import { authenticate } from '../middleware/auth.js'
 import {
   buyFarmItem,
+  buyFarmProtection,
   buyMerchantOffer,
   clearPlot,
   createFarm,
@@ -13,13 +14,21 @@ import {
   fertilizePlot,
   getFarmView,
   getNeighborFarm,
+  harvestAllPlots,
   harvestPlot,
   listNeighbors,
   markTutorialDone,
+  plantAllCrops,
   plantCrop,
   renameFarm,
   stealCrop,
 } from '../services/farmService.js'
+import {
+  buySeedListing,
+  cancelSeedListing,
+  createSeedListing,
+  getSeedMarketView,
+} from '../services/farmSeedMarketService.js'
 
 const router = Router()
 router.use(authenticate)
@@ -68,6 +77,14 @@ const buySchema = z.object({
   count: z.number().int().min(1).max(99),
 })
 const plantSchema = z.object({ crop: z.string().min(1).max(30) })
+const plantAllSchema = z.object({ crop: z.string().min(1).max(30).optional() })
+const protectSchema = z.object({ hours: z.coerce.number().int().min(1).max(48) })
+const seedListSchema = z.object({
+  cropKey: z.string().min(1).max(30),
+  count: z.coerce.number().int().min(1).max(99),
+  price: z.coerce.number().int().min(1).max(1_000_000),
+})
+const seedIdSchema = z.object({ id: z.coerce.number().int().positive() })
 const neighborsSchema = z.object({ q: z.string().max(30).optional() })
 
 // GET /api/farm — 我的农场（未创建时 farm 为 null，仍返回目录 / 经济参数 / 积分）
@@ -90,6 +107,12 @@ router.post('/rename', actionLimiter, asyncHandler(async (req: Request, res: Res
 // POST /api/farm/expand — 花积分扩建
 router.post('/expand', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
   res.json(await expandFarm(currentUserId(req)))
+}))
+
+// POST /api/farm/protect — 花积分购买偷菜保护 { hours }
+router.post('/protect', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(protectSchema, req.body ?? {})
+  res.json(await buyFarmProtection(currentUserId(req), input.hours))
 }))
 
 // POST /api/farm/shop — 购买种子 / 肥料
@@ -117,6 +140,17 @@ router.post('/plots/:index/plant', actionLimiter, asyncHandler(async (req: Reque
   res.json(await plantCrop(currentUserId(req), plotIndex(req.params.index), input.crop))
 }))
 
+// POST /api/farm/plant-all — 一键种满所有空地（crop 缺省 = 自动选种子最多的作物）
+router.post('/plant-all', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(plantAllSchema, req.body ?? {})
+  res.json(await plantAllCrops(currentUserId(req), input.crop))
+}))
+
+// POST /api/farm/harvest-all — 一键收获所有成熟作物
+router.post('/harvest-all', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await harvestAllPlots(currentUserId(req)))
+}))
+
 // POST /api/farm/plots/:index/fertilize
 router.post('/plots/:index/fertilize', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
   res.json(await fertilizePlot(currentUserId(req), plotIndex(req.params.index)))
@@ -130,6 +164,31 @@ router.post('/plots/:index/harvest', actionLimiter, asyncHandler(async (req: Req
 // POST /api/farm/plots/:index/clear — 铲除未收获的作物（不返还种子）
 router.post('/plots/:index/clear', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
   res.json(await clearPlot(currentUserId(req), plotIndex(req.params.index)))
+}))
+
+/* ---------- 玩家间种子交易 ---------- */
+
+// GET /api/farm/seed-market — 在售挂单 + 我的挂单 + 最近成交 + 仓库种子
+router.get('/seed-market', asyncHandler(async (req: Request, res: Response) => {
+  res.json(await getSeedMarketView(currentUserId(req)))
+}))
+
+// POST /api/farm/seed-market/list — { cropKey, count, price } 挂单（种子托管）
+router.post('/seed-market/list', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(seedListSchema, req.body ?? {})
+  res.status(201).json(await createSeedListing(currentUserId(req), input.cropKey, input.count, input.price))
+}))
+
+// POST /api/farm/seed-market/:id/buy — 买下挂单
+router.post('/seed-market/:id/buy', stealLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = parseInput(seedIdSchema, req.params)
+  res.json(await buySeedListing(currentUserId(req), id))
+}))
+
+// DELETE /api/farm/seed-market/:id — 下架自己的挂单（种子返还）
+router.delete('/seed-market/:id', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = parseInput(seedIdSchema, req.params)
+  res.json(await cancelSeedListing(currentUserId(req), id))
 }))
 
 // GET /api/farm/neighbors?q= — 可访问的邻居农场（有可偷作物优先）

@@ -49,6 +49,7 @@ const ThumbnailGrid = memo(function ThumbnailGrid({ items, size = 'medium' }: Th
                   alt={item.name}
                   className="gh-drive-thumbnail-image"
                   loading="lazy"
+                  decoding="async"
                 />
                 {isVideo && (
                   <div className="gh-drive-thumbnail-video-badge">

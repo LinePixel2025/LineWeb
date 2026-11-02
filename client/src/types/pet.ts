@@ -14,13 +14,15 @@ export type PetSpecies = 'cat' | 'dog' | 'bird' | 'rabbit' | 'fox' | 'panda'
 export type PetStatus = 'alive' | 'gone'
 
 /** 装扮槽位 */
-export type PetOutfitSlot = 'hat' | 'neck' | 'face'
+export type PetOutfitSlot = 'hat' | 'neck' | 'face' | 'back' | 'aura'
 
 /** 当前穿戴的装扮（按槽位） */
 export interface PetEquipped {
   hat: string | null
   neck: string | null
   face: string | null
+  back: string | null
+  aura: string | null
 }
 
 /** 战斗装备槽位 */
@@ -65,7 +67,9 @@ export interface PetEquipmentInfo {
 
 /** 技能效果 */
 export interface PetSkillEffectInfo {
-  type: 'burn' | 'poison' | 'stun' | 'shield' | 'atk_up' | 'def_up'
+  type: 'burn' | 'poison' | 'stun' | 'shield'
+    | 'atk_up' | 'def_up' | 'crit_up'
+    | 'weaken' | 'vulnerable' | 'regen'
   turns: number
   value: number
   chance?: number
@@ -88,6 +92,10 @@ export interface PetSkillInfo {
   lifesteal?: number
   healPct?: number
   critBonus?: number
+  /** 处决阈值（0–1） */
+  executeBelow?: number
+  /** 处决额外伤害（0–1） */
+  executeBonus?: number
   effects?: PetSkillEffectInfo[]
 }
 

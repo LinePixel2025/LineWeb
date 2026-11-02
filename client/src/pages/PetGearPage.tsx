@@ -202,7 +202,7 @@ export default function PetGearPage() {
         <div className="gh-pet-gear-summary">
           <small>{pet.speciesEmoji} {meta.name} · Lv.{pet.level}</small>
           <h1>{pet.name}</h1>
-          <p className="gh-text-tertiary">装备与技能只影响 PvP 对战；穿戴中的装备可以在战斗后被对手夺走。</p>
+          <p className="gh-text-tertiary">装备与技能同时用于 PvP 对战和搜打撤；PvP 战败会被夺走装备，搜打撤阵亡有概率掉落装备（可买保险）。</p>
           <div className="gh-pet-gear-stats">
             {STAT_LABELS.map((item) => (
               <div key={item.key} className="gh-pet-gear-stat">

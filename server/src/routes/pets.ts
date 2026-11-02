@@ -42,6 +42,12 @@ import {
   createListing,
   getPetMarketView,
 } from '../services/petMarketService.js'
+import {
+  claimRaidContract,
+  getRaidOverview,
+  performRaidAction,
+  startRaid,
+} from '../services/petRaidService.js'
 
 const router = Router()
 router.use(authenticate)
@@ -121,6 +127,17 @@ const marketListSchema = z.object({
   price: z.coerce.number().int().min(1).max(1_000_000),
 })
 const marketIdParamSchema = z.object({ id: z.coerce.number().int().positive() })
+const raidStartSchema = z.object({
+  mapKey: z.string().min(1).max(20),
+  insured: z.boolean().optional(),
+})
+const raidActionSchema = z.object({
+  type: z.enum(['move', 'search', 'extract', 'medkit', 'safe', 'unsafe', 'abandon']),
+  dir: z.enum(['up', 'down', 'left', 'right']).optional(),
+  lootId: z.string().min(1).max(80).optional(),
+  version: z.coerce.number().int().min(0).optional(),
+})
+const raidContractParamSchema = z.object({ key: z.string().min(1).max(40) })
 
 // GET /api/pets — 我的宠物（未召唤时 pet 为 null，仍返回目录与积分）
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
@@ -244,6 +261,31 @@ router.post('/shop/equipment/:key/buy', marketWriteLimiter, asyncHandler(async (
 router.post('/shop/skills/:key/buy', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
   const { key } = parseInput(shopBuySchema, req.params)
   res.json(await buySkill(currentUserId(req), key))
+}))
+
+/* ---------- 搜打撤（Delta Force 风格） ---------- */
+
+// GET /api/pets/raid — 地图 / 当前对局 / 战绩 / 每日契约
+router.get('/raid', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await getRaidOverview(currentUserId(req)))
+}))
+
+// POST /api/pets/raid/start — { mapKey, insured? } 进入地图（扣门票 / 可选保险）
+router.post('/raid/start', battleInviteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidStartSchema, req.body ?? {})
+  res.status(201).json(await startRaid(currentUserId(req), input.mapKey, { insured: input.insured }))
+}))
+
+// POST /api/pets/raid/action — { type, dir?, lootId?, version? }
+router.post('/raid/action', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidActionSchema, req.body ?? {})
+  res.json(await performRaidAction(currentUserId(req), input))
+}))
+
+// POST /api/pets/raid/contracts/:key/claim — 领取每日契约奖励
+router.post('/raid/contracts/:key/claim', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { key } = parseInput(raidContractParamSchema, req.params)
+  res.json(await claimRaidContract(currentUserId(req), key))
 }))
 
 /* ---------- PvP 对战 ---------- */

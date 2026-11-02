@@ -76,3 +76,45 @@ html[data-perf='low'] .gh-msg-toast {
 html[data-perf='low'] .gh-points-shop-name--legendary {
   animation: none;
 }
+
+/* =============================================================
+   2026-11 性能优化：离屏列表跳过布局 / 低性能模式关掉毛玻璃
+   ============================================================= */
+
+/* 长列表的离屏项不参与布局与绘制（滚动到视口内再渲染）。
+   contain-intrinsic-size 给一个占位高度，避免滚动条跳动。 */
+.gh-stocks-trades > li,
+.gh-stocks-orders > li,
+.gh-stocks-rank > li,
+.gh-raid-history-row,
+.gh-raid-loot,
+.gh-farm-market-card,
+.gh-pet-home-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 88px;
+}
+
+.gh-drive-grid-card,
+.gh-post-list-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 180px;
+}
+
+/* 低性能模式：去掉最费的毛玻璃合成（保留背景色，不影响可读性） */
+html[data-perf='low'] .gh-header,
+html[data-perf='low'] .gh-sidebar,
+html[data-perf='low'] .gh-admin-toolbar,
+html[data-perf='low'] .gh-dialog-overlay,
+html[data-perf='low'] .gh-toast,
+html[data-perf='low'] .gh-msg-toast {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* 老设备 / 窄屏：阴影层数减半，减少大面积重绘 */
+@media (max-width: 767px) {
+  .gh-header,
+  .gh-sidebar {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+}

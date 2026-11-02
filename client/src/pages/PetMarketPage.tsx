@@ -242,6 +242,7 @@ export default function PetMarketPage() {
         <div className="gh-pet-gear-links">
           <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/gear">🎒 装备与技能</Link>
           <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/battle">⚔️ 对战</Link>
+          <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/raid">🎯 搜打撤</Link>
         </div>
       </header>
 

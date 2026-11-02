@@ -105,3 +105,31 @@ export function executionPriceWithImpact(price: number, impactDelta: number): nu
 export function totalAssets(balance: number, marketValue: number): number {
   return Math.max(0, Math.round(balance)) + Math.max(0, Math.round(marketValue))
 }
+
+/* ============================================================
+   限价委托
+   ============================================================ */
+
+/** 限价单最小份额（与卖出的最小精度一致） */
+export const STOCK_ORDER_MIN_SHARES = 0.0001
+
+/** 限价单触发条件：买入现价 ≤ 限价；卖出现价 ≥ 限价 */
+export function limitOrderTriggered(side: 'buy' | 'sell', price: number, limitPrice: number): boolean {
+  if (!(price > 0) || !(limitPrice > 0)) return false
+  return side === 'buy' ? price <= limitPrice : price >= limitPrice
+}
+
+/**
+ * 限价单距离触发还差多少（百分比，正数表示还需波动多少；0 表示已触发）。
+ * 用于前端展示「还差 1.2% 触发」。
+ */
+export function limitOrderDistancePct(
+  side: 'buy' | 'sell',
+  price: number,
+  limitPrice: number,
+): number {
+  if (!(price > 0) || !(limitPrice > 0)) return 0
+  if (limitOrderTriggered(side, price, limitPrice)) return 0
+  const distance = side === 'buy' ? (price - limitPrice) / price : (limitPrice - price) / price
+  return Math.round(distance * 10_000) / 100
+}

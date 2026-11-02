@@ -8,88 +8,94 @@ datasource db {
 }
 
 model User {
-  id                     Int                  @id @default(autoincrement())
-  username               String               @unique
-  email                  String               @unique
+  id                     Int                   @id @default(autoincrement())
+  username               String                @unique
+  email                  String                @unique
   password               String
-  role                   String               @default("author") // 新注册用户默认 author（可发布自己的文章）
-  status                 String               @default("active") // pending | active | rejected（注册审核）
-  apiRateLimit           Int                  @default(600) @map("api_rate_limit") // 次/15min；0=不限业务配额
+  role                   String                @default("author") // 新注册用户默认 author（可发布自己的文章）
+  status                 String                @default("active") // pending | active | rejected（注册审核）
+  apiRateLimit           Int                   @default(600) @map("api_rate_limit") // 次/15min；0=不限业务配额
   settings               String? // JSON：用户个性化设置（背景类型、颜色等）
-  canAccessDrive         Boolean              @default(false) // 是否有网盘访问权限
-  storageQuota           BigInt               @default(2147483648) @map("storage_quota") // 网盘空间上限（字节，默认 2 GiB）
-  avatarPath             String?              @map("avatar_path") // 存储节点路径（如 _avatars/1.webp）
-  avatarVersion          Int                  @default(0) @map("avatar_version") // 聊天头像版本号（上传/删除自增，0 = 无头像）
-  chatBackend            String               @default("self") @map("chat_backend") // 聊天后端：self = 自建（默认）| xmpp = neko XMPP（可选）
-  tokenValidAfter        DateTime             @default(now()) @map("token_valid_after") // JWT 失效校验基准时间
-  gameStatsImportedAt    DateTime?            @map("game_stats_imported_at") // 本地战绩一次性迁移标记
-  createdAt              DateTime             @default(now()) @map("created_at")
-  updatedAt              DateTime             @updatedAt @map("updated_at")
+  canAccessDrive         Boolean               @default(false) // 是否有网盘访问权限
+  storageQuota           BigInt                @default(2147483648) @map("storage_quota") // 网盘空间上限（字节，默认 2 GiB）
+  avatarPath             String?               @map("avatar_path") // 存储节点路径（如 _avatars/1.webp）
+  avatarVersion          Int                   @default(0) @map("avatar_version") // 聊天头像版本号（上传/删除自增，0 = 无头像）
+  chatBackend            String                @default("self") @map("chat_backend") // 聊天后端：self = 自建（默认）| xmpp = neko XMPP（可选）
+  tokenValidAfter        DateTime              @default(now()) @map("token_valid_after") // JWT 失效校验基准时间
+  gameStatsImportedAt    DateTime?             @map("game_stats_imported_at") // 本地战绩一次性迁移标记
+  createdAt              DateTime              @default(now()) @map("created_at")
+  updatedAt              DateTime              @updatedAt @map("updated_at")
   posts                  Post[]
   comments               Comment[]
   driveFiles             DriveFile[] // 上传的文件
   driveFavorites         DriveFavorite[]
   screenTimeLogs         ScreenTimeLog[]
   oauthGrants            OAuthGrant[] // 该用户授权过的第三方应用
-  createdOAuthClients    OAuthClient[]        @relation("OAuthClientCreatedBy")
-  friendshipsA           Friendship[]         @relation("FriendshipUser")
-  friendshipsB           Friendship[]         @relation("FriendshipFriend")
-  friendRequestsSent     FriendRequest[]      @relation("FriendRequestSender")
-  friendRequestsReceived FriendRequest[]      @relation("FriendRequestReceiver")
+  createdOAuthClients    OAuthClient[]         @relation("OAuthClientCreatedBy")
+  friendshipsA           Friendship[]          @relation("FriendshipUser")
+  friendshipsB           Friendship[]          @relation("FriendshipFriend")
+  friendRequestsSent     FriendRequest[]       @relation("FriendRequestSender")
+  friendRequestsReceived FriendRequest[]       @relation("FriendRequestReceiver")
   conversationMembers    ConversationMember[]
   messages               Message[]
-  ownedConversations     Conversation[]       @relation("ConversationOwner")
+  ownedConversations     Conversation[]        @relation("ConversationOwner")
   aiConversations        AiConversation[] // AI 对话（DeepSeek）会话
   aiChatImages           AiChatImage[] // AI 对话上传的图片附件
   proxySites             ProxySite[] // 网页反代站点（含账号级的登录 Cookie）
   gameStats              GameStat[] // 游戏战绩（单机 + 联机）
-  siteAnnouncements      SiteAnnouncement[]   @relation("SiteAnnouncementAuthor") // 站点公告（LineWeb 自有，非 neko 群公告）
+  siteAnnouncements      SiteAnnouncement[]    @relation("SiteAnnouncementAuthor") // 站点公告（LineWeb 自有，非 neko 群公告）
   siteAnnouncementAcks   SiteAnnouncementAck[] // 站点公告确认记录
-  points                 Int                  @default(0) // 游戏积分余额（全游戏统一）
-  pointsEarned           Int                  @default(0) @map("points_earned") // 累计获得积分（排行榜 / 成就展示）
-  equippedTitleId        Int?                 @map("equipped_title_id") // 当前佩戴的称号（LineWeb 站内展示）
-  equippedTitle          PointsShopItem?      @relation("UserEquippedTitle", fields: [equippedTitleId], references: [id], onDelete: SetNull)
-  equippedAvatarFrameId  Int?                 @map("equipped_avatar_frame_id") // 当前佩戴的头像框（仅 LineWeb 站内展示，不同步 neko）
-  equippedAvatarFrame    PointsShopItem?      @relation("UserEquippedAvatarFrame", fields: [equippedAvatarFrameId], references: [id], onDelete: SetNull)
-  equippedLeaderTitleId  Int?                 @map("equipped_leader_title_id") // 当前佩戴的单机榜一传说称号（与商店称号互斥）
-  equippedLeaderTitle    GameLeaderTitle?     @relation("UserEquippedLeaderTitle", fields: [equippedLeaderTitleId], references: [id], onDelete: SetNull)
-  stockHoldings          StockHolding[]       // 模拟股市持仓
+  points                 Int                   @default(0) // 游戏积分余额（全游戏统一）
+  pointsEarned           Int                   @default(0) @map("points_earned") // 累计获得积分（排行榜 / 成就展示）
+  equippedTitleId        Int?                  @map("equipped_title_id") // 当前佩戴的称号（LineWeb 站内展示）
+  equippedTitle          PointsShopItem?       @relation("UserEquippedTitle", fields: [equippedTitleId], references: [id], onDelete: SetNull)
+  equippedAvatarFrameId  Int?                  @map("equipped_avatar_frame_id") // 当前佩戴的头像框（仅 LineWeb 站内展示，不同步 neko）
+  equippedAvatarFrame    PointsShopItem?       @relation("UserEquippedAvatarFrame", fields: [equippedAvatarFrameId], references: [id], onDelete: SetNull)
+  equippedLeaderTitleId  Int?                  @map("equipped_leader_title_id") // 当前佩戴的单机榜一传说称号（与商店称号互斥）
+  equippedLeaderTitle    GameLeaderTitle?      @relation("UserEquippedLeaderTitle", fields: [equippedLeaderTitleId], references: [id], onDelete: SetNull)
+  stockHoldings          StockHolding[] // 模拟股市持仓
   pointsLedger           PointsLedger[]
   pointsItems            UserPointsItem[]
   checkins               DailyCheckin[]
   leaderTitles           GameLeaderTitle[]
   chatBan                ChatBan?
   pet                    Pet?
-  equippedThemeKey       String?              @map("equipped_theme_key") // 当前佩戴的 LineWeb 主题 key（目录见 server/src/lib/themes.ts）
+  equippedThemeKey       String?               @map("equipped_theme_key") // 当前佩戴的 LineWeb 主题 key（目录见 server/src/lib/themes.ts）
   stockAccount           StockAccount? // 股市账户（分红水位 / 累计分红 / 已实现盈亏）
   stockTrades            StockTrade[] // 股市成交记录
   lotteryAccount         LotteryAccount? // 抽奖账户（保底计数 / 累计抽数）
   lotteryDraws           LotteryDraw[] // 抽奖记录
   themeUnlocks           ThemeUnlock[] // 已解锁的 LineWeb 主题
-  petGuestbook           PetGuestbook[]       @relation("PetGuestbookAuthor") // 我在别人宠物之家留的言
-  petVisits              PetVisit[]           @relation("PetVisitVisitor") // 我串门撸宠的记录
-  petBattlesAsChallenger PetBattle[]          @relation("PetBattleChallenger") // 我发起的宠物对战
-  petBattlesAsOpponent   PetBattle[]          @relation("PetBattleOpponent") // 我应战的宠物对战
-  petMarketListings      PetMarketListing[]   @relation("PetMarketSeller") // 我挂出的交易行条目
-  petMarketPurchases     PetMarketListing[]   @relation("PetMarketBuyer") // 我在交易行买下的条目
-  petMarketTradesSold    PetMarketTrade[]     @relation("PetMarketTradeSeller") // 我作为卖家的成交记录
-  petMarketTradesBought  PetMarketTrade[]     @relation("PetMarketTradeBuyer") // 我作为买家的成交记录
+  petGuestbook           PetGuestbook[]        @relation("PetGuestbookAuthor") // 我在别人宠物之家留的言
+  petVisits              PetVisit[]            @relation("PetVisitVisitor") // 我串门撸宠的记录
+  petBattlesAsChallenger PetBattle[]           @relation("PetBattleChallenger") // 我发起的宠物对战
+  petBattlesAsOpponent   PetBattle[]           @relation("PetBattleOpponent") // 我应战的宠物对战
+  petMarketListings      PetMarketListing[]    @relation("PetMarketSeller") // 我挂出的交易行条目
+  petMarketPurchases     PetMarketListing[]    @relation("PetMarketBuyer") // 我在交易行买下的条目
+  petMarketTradesSold    PetMarketTrade[]      @relation("PetMarketTradeSeller") // 我作为卖家的成交记录
+  petMarketTradesBought  PetMarketTrade[]      @relation("PetMarketTradeBuyer") // 我作为买家的成交记录
+  petRaid                PetRaid? // 进行中的宠物搜打撤对局（每人至多一局）
+  petRaidRecords         PetRaidRecord[] // 搜打撤战绩
+  petRaidContracts       PetRaidContract[] // 搜打撤每日契约
+  farmSeedListings       FarmSeedListing[]     @relation("FarmSeedSeller") // 我挂出的种子
+  farmSeedPurchases      FarmSeedListing[]     @relation("FarmSeedBuyer") // 我买下的种子
+  stockOrders            StockOrder[] // 股市限价委托
   personalSpace          PersonalSpace? // 个人空间（管理员私人服务，每管理员一份）
-  books                  Book[]               // 小说阅读器的书架（上传的书）
-  musicAccount           MusicAccount?        // 网易云音乐扫码绑定的账号（cookie 仅存服务端）
+  books                  Book[] // 小说阅读器的书架（上传的书）
+  musicAccount           MusicAccount? // 网易云音乐扫码绑定的账号（cookie 仅存服务端）
   farm                   Farm?
-  farmStealsMade         FarmSteal[]          @relation("FarmStealThief")
-  farmStealsReceived     FarmSteal[]          @relation("FarmStealVictim")
+  farmStealsMade         FarmSteal[]           @relation("FarmStealThief")
+  farmStealsReceived     FarmSteal[]           @relation("FarmStealVictim")
   chatUploads            ChatUpload[] // 聊天图片/表情上传
   chatStickers           ChatSticker[] // 聊天表情收藏
-  chatRemarksOwned       ChatContactSetting[] @relation("ChatContactOwner") // 我给别人设置的备注
-  chatRemarksTarget      ChatContactSetting[] @relation("ChatContactTarget") // 别人给我的备注行（仅对方视角）
-  sentRedPackets         RedPacket[]          @relation("RedPacketSender") // 我发出的聊天红包
+  chatRemarksOwned       ChatContactSetting[]  @relation("ChatContactOwner") // 我给别人设置的备注
+  chatRemarksTarget      ChatContactSetting[]  @relation("ChatContactTarget") // 别人给我的备注行（仅对方视角）
+  sentRedPackets         RedPacket[]           @relation("RedPacketSender") // 我发出的聊天红包
   redPacketClaims        RedPacketClaim[] // 我领取的红包记录
   /**
    * 网页反代排队赦免：不受并发闸门限制（管理员另有 role 兜底）
    */
-  proxyQueueExempt       Boolean              @default(false) @map("proxy_queue_exempt")
+  proxyQueueExempt       Boolean               @default(false) @map("proxy_queue_exempt")
 
   @@index([status, createdAt])
   @@map("users")
@@ -399,41 +405,41 @@ model FriendRequest {
 }
 
 model Conversation {
-  id            Int      @id @default(autoincrement())
-  type          String // direct | group
-  name          String? // 群名；direct 为 null
-  ownerId       Int?     @map("owner_id")
-  directKey     String?  @unique @map("direct_key") // direct 会话去重键：`minUserId:maxUserId`
-  lastMessageAt DateTime @default(now()) @map("last_message_at")
+  id                      Int       @id @default(autoincrement())
+  type                    String // direct | group
+  name                    String? // 群名；direct 为 null
+  ownerId                 Int?      @map("owner_id")
+  directKey               String?   @unique @map("direct_key") // direct 会话去重键：`minUserId:maxUserId`
+  lastMessageAt           DateTime  @default(now()) @map("last_message_at")
   // 自建聊天（2026-10 起）：群公告与全员禁言（与旧 neko 群语义对齐）
-  announcementText         String?   @map("announcement_text")
-  announcementUpdatedAt    DateTime? @map("announcement_updated_at")
-  announcementAckRequired  Boolean   @default(false) @map("announcement_ack_required")
-  allMuted                 Boolean   @default(false) @map("all_muted")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  announcementText        String?   @map("announcement_text")
+  announcementUpdatedAt   DateTime? @map("announcement_updated_at")
+  announcementAckRequired Boolean   @default(false) @map("announcement_ack_required")
+  allMuted                Boolean   @default(false) @map("all_muted")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
 
-  owner       User?                @relation("ConversationOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  members     ConversationMember[]
-  messages    Message[]
-  redPackets  RedPacket[] // 会话内的积分红包
+  owner      User?                @relation("ConversationOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  members    ConversationMember[]
+  messages   Message[]
+  redPackets RedPacket[] // 会话内的积分红包
 
   @@index([lastMessageAt])
   @@map("conversations")
 }
 
 model ConversationMember {
-  id                Int      @id @default(autoincrement())
-  conversationId    Int      @map("conversation_id")
-  userId            Int      @map("user_id")
-  role              String   @default("member") // owner | admin | member
-  joinedAt          DateTime @default(now()) @map("joined_at")
-  lastReadMessageId Int      @default(0) @map("last_read_message_id")
+  id                      Int       @id @default(autoincrement())
+  conversationId          Int       @map("conversation_id")
+  userId                  Int       @map("user_id")
+  role                    String    @default("member") // owner | admin | member
+  joinedAt                DateTime  @default(now()) @map("joined_at")
+  lastReadMessageId       Int       @default(0) @map("last_read_message_id")
   // 自建聊天（2026-10 起）：会话级偏好与群管理状态
-  notifyMuted              Boolean   @default(false) @map("notify_muted") // 群免打扰（只提醒 @我 与拍一拍）
-  pinned                   Boolean   @default(false) // 会话置顶
-  announcementConfirmedAt  DateTime? @map("announcement_confirmed_at") // 最近一次确认群公告的时间
-  mutedUntil               DateTime? @map("muted_until") // 被禁言截止时间（null = 未禁言）
+  notifyMuted             Boolean   @default(false) @map("notify_muted") // 群免打扰（只提醒 @我 与拍一拍）
+  pinned                  Boolean   @default(false) // 会话置顶
+  announcementConfirmedAt DateTime? @map("announcement_confirmed_at") // 最近一次确认群公告的时间
+  mutedUntil              DateTime? @map("muted_until") // 被禁言截止时间（null = 未禁言）
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -474,7 +480,9 @@ model Message {
   @@map("messages")
 }
 
-/** 聊天图片/表情上传（raw body 直传，24hex id；存储节点 _chat/uploads/，storageSync 排除） */
+/**
+ * 聊天图片/表情上传（raw body 直传，24hex id；存储节点 _chat/uploads/，storageSync 排除）
+ */
 model ChatUpload {
   id        String   @id // 24 位小写 hex
   ownerId   Int      @map("owner_id")
@@ -488,7 +496,9 @@ model ChatUpload {
   @@map("chat_uploads")
 }
 
-/** 聊天表情收藏（引用 ChatUpload 的 24hex id） */
+/**
+ * 聊天表情收藏（引用 ChatUpload 的 24hex id）
+ */
 model ChatSticker {
   id        Int      @id @default(autoincrement())
   userId    Int      @map("user_id")
@@ -502,7 +512,9 @@ model ChatSticker {
   @@map("chat_stickers")
 }
 
-/** 聊天积分红包（单聊专属：对方领全部；群聊拼手气：N 份二倍均值随机；24h 未领完惰性退回） */
+/**
+ * 聊天积分红包（单聊专属：对方领全部；群聊拼手气：N 份二倍均值随机；24h 未领完惰性退回）
+ */
 model RedPacket {
   id             Int      @id @default(autoincrement())
   conversationId Int      @map("conversation_id")
@@ -517,8 +529,8 @@ model RedPacket {
   expireAt       DateTime @map("expire_at") // 创建 + 24h，过期未领完退回发送者
   createdAt      DateTime @default(now()) @map("created_at")
 
-  conversation Conversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender       User               @relation("RedPacketSender", fields: [senderId], references: [id], onDelete: Cascade)
+  conversation Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User             @relation("RedPacketSender", fields: [senderId], references: [id], onDelete: Cascade)
   claims       RedPacketClaim[]
 
   @@index([conversationId, createdAt])
@@ -526,7 +538,9 @@ model RedPacket {
   @@map("red_packets")
 }
 
-/** 红包领取记录（一个红包一人最多领一次） */
+/**
+ * 红包领取记录（一个红包一人最多领一次）
+ */
 model RedPacketClaim {
   id          Int      @id @default(autoincrement())
   redPacketId Int      @map("red_packet_id")
@@ -542,7 +556,9 @@ model RedPacketClaim {
   @@map("red_packet_claims")
 }
 
-/** 联系人备注（仅自己可见；≤30 字） */
+/**
+ * 联系人备注（仅自己可见；≤30 字）
+ */
 model ChatContactSetting {
   id           Int      @id @default(autoincrement())
   ownerId      Int      @map("owner_id")
@@ -628,32 +644,34 @@ model ProxyDailyStat {
  * 与 neko XMPP 的群公告完全独立（后者的数据在聊天服务里，不落本库）。
  */
 model SiteAnnouncement {
-  id        Int      @id @default(autoincrement())
-  title     String
-  content   String
-  level     String   @default("info") // info | success | warning | danger
-  isActive  Boolean  @default(true) @map("is_active")
-  isPinned  Boolean  @default(false) @map("is_pinned")
+  id               Int                   @id @default(autoincrement())
+  title            String
+  content          String
+  level            String                @default("info") // info | success | warning | danger
+  isActive         Boolean               @default(true) @map("is_active")
+  isPinned         Boolean               @default(false) @map("is_pinned")
   // 首次发布要求用户点「我已知晓」：按公告 id 记一次确认，后续编辑不再重复要求
-  requireAck Boolean @default(false) @map("require_ack")
-  authorId  Int?     @map("author_id")
-  author    User?    @relation("SiteAnnouncementAuthor", fields: [authorId], references: [id], onDelete: SetNull)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  requireAck       Boolean               @default(false) @map("require_ack")
+  authorId         Int?                  @map("author_id")
+  author           User?                 @relation("SiteAnnouncementAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
   acknowledgements SiteAnnouncementAck[]
 
   @@index([isActive, isPinned, createdAt])
   @@map("site_announcements")
 }
 
-/** 站点公告确认记录（每个用户对每条公告最多一条） */
+/**
+ * 站点公告确认记录（每个用户对每条公告最多一条）
+ */
 model SiteAnnouncementAck {
-  id             Int      @id @default(autoincrement())
-  announcementId Int      @map("announcement_id")
-  userId         Int      @map("user_id")
-  acknowledgedAt DateTime @default(now()) @map("acknowledged_at")
+  id             Int              @id @default(autoincrement())
+  announcementId Int              @map("announcement_id")
+  userId         Int              @map("user_id")
+  acknowledgedAt DateTime         @default(now()) @map("acknowledged_at")
   announcement   SiteAnnouncement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([announcementId, userId])
   @@index([userId])
@@ -737,7 +755,7 @@ model PointsLedger {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   amount    Int // 正数=获得，负数=扣除
   balance   Int // 变动后余额
-  reason    String // game_result | farm_harvest | farm_steal | farm_welcome | farm_shop | farm_expand | farm_merchant | shop_purchase | checkin | leader_bonus | stock | redpacket_send | redpacket_receive | redpacket_refund | admin_adjust
+  reason    String // game_result | farm_harvest | farm_steal | farm_welcome | farm_shop | farm_expand | farm_merchant | farm_protect | farm_seed_buy | farm_seed_sell | shop_purchase | checkin | leader_bonus | stock | stock_order_buy | stock_order_refund | stock_order_sell | pet_raid | pet_raid_entry | pet_raid_insurance | pet_raid_contract | redpacket_send | redpacket_receive | redpacket_refund | admin_adjust
   game      String? // 来源游戏 id（2048 / doudizhu / ... / farm）
   note      String?
   createdAt DateTime @default(now()) @map("created_at")
@@ -766,21 +784,21 @@ model PointsConfig {
  * payload 为 JSON：称号 { color, icon }；表情包 { pack }；头像框 { frame, color }
  */
 model PointsShopItem {
-  id          Int              @id @default(autoincrement())
-  key         String           @unique // 稳定标识，管理员可改展示名但不改 key
-  type        String // title | emoji
-  name        String
-  description String?
-  cost        Int
-  rarity      String           @default("common") // common | rare | epic | legendary
-  payload     String? // JSON
-  isActive    Boolean          @default(true) @map("is_active")
-  sortOrder   Int              @default(0) @map("sort_order")
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
-  owners      UserPointsItem[]
-  equippedBy  User[]           @relation("UserEquippedTitle")
-  avatarFrameEquippedBy User[] @relation("UserEquippedAvatarFrame")
+  id                    Int              @id @default(autoincrement())
+  key                   String           @unique // 稳定标识，管理员可改展示名但不改 key
+  type                  String // title | emoji
+  name                  String
+  description           String?
+  cost                  Int
+  rarity                String           @default("common") // common | rare | epic | legendary
+  payload               String? // JSON
+  isActive              Boolean          @default(true) @map("is_active")
+  sortOrder             Int              @default(0) @map("sort_order")
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
+  owners                UserPointsItem[]
+  equippedBy            User[]           @relation("UserEquippedTitle")
+  avatarFrameEquippedBy User[]           @relation("UserEquippedAvatarFrame")
 
   @@index([type, isActive, sortOrder])
   @@map("points_shop_items")
@@ -808,21 +826,25 @@ model UserPointsItem {
  * 每个用户一块农场（创建即送新手种子与肥料）
  */
 model Farm {
-  id            Int        @id @default(autoincrement())
-  userId        Int        @unique @map("user_id")
-  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name          String     @default("我的农场")
-  plotCount     Int        @default(6) @map("plot_count") // 6 / 9 / 12 / 15 / 18
-  tutorialDone  Boolean    @default(false) @map("tutorial_done")
-  harvested     Int        @default(0) // 累计收获次数
-  harvestPoints Int        @default(0) @map("harvest_points") // 累计收获积分
-  stolenPoints  Int        @default(0) @map("stolen_points") // 累计偷菜所得
-  lastSeedDropDate String? @map("last_seed_drop_date") // 最近一次每日掉落种子日期（Asia/Shanghai YYYY-MM-DD）
-  createdAt     DateTime   @default(now()) @map("created_at")
-  updatedAt     DateTime   @updatedAt @map("updated_at")
-  plots         FarmPlot[]
-  items         FarmItem[]
-  merchantOffers FarmMerchantOffer[]
+  id               Int                 @id @default(autoincrement())
+  userId           Int                 @unique @map("user_id")
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String              @default("我的农场")
+  plotCount        Int                 @default(6) @map("plot_count") // 6 / 9 / 12 / 15 / 18 / 21 / 24 / 27 / 30
+  tutorialDone     Boolean             @default(false) @map("tutorial_done")
+  harvested        Int                 @default(0) // 累计收获次数
+  harvestPoints    Int                 @default(0) @map("harvest_points") // 累计收获积分
+  stolenPoints     Int                 @default(0) @map("stolen_points") // 累计偷菜所得
+  /**
+   * 农场保护到期时间（花积分购买，期间任何人都不能偷）
+   */
+  protectedUntil   DateTime?           @map("protected_until")
+  lastSeedDropDate String?             @map("last_seed_drop_date") // 最近一次每日掉落种子日期（Asia/Shanghai YYYY-MM-DD）
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+  plots            FarmPlot[]
+  items            FarmItem[]
+  merchantOffers   FarmMerchantOffer[]
 
   @@map("farms")
 }
@@ -905,6 +927,29 @@ model FarmMerchantOffer {
 }
 
 /**
+ * 玩家间种子交易挂单：挂单时把种子从卖家仓库扣除（托管），
+ * 成交后进入买家仓库；取消/过期原路返还。price 为整单总价（积分）。
+ */
+model FarmSeedListing {
+  id        Int       @id @default(autoincrement())
+  sellerId  Int       @map("seller_id")
+  seller    User      @relation("FarmSeedSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+  cropKey   String    @map("crop_key")
+  count     Int
+  price     Int
+  status    String    @default("active") // active | sold | cancelled
+  buyerId   Int?      @map("buyer_id")
+  buyer     User?     @relation("FarmSeedBuyer", fields: [buyerId], references: [id], onDelete: SetNull)
+  soldAt    DateTime? @map("sold_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, cropKey, createdAt])
+  @@index([sellerId, status])
+  @@map("farm_seed_listings")
+}
+
+/**
  * 每日签到记录（dateKey 唯一保证幂等）
  */
 model DailyCheckin {
@@ -925,15 +970,15 @@ model DailyCheckin {
  * 单机排行榜第一位（每个游戏至多一行）；被超过时整行改挂新用户或删除
  */
 model GameLeaderTitle {
-  id                Int      @id @default(autoincrement())
-  game              String   @unique
-  userId            Int      @map("user_id")
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              Int      @id @default(autoincrement())
+  game            String   @unique
+  userId          Int      @map("user_id")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   // 传说称号特效（TITLE_EFFECT_STYLES 白名单，管理员可改；重算 upsert 不写该字段故不会覆盖）
-  effect            String   @default("classic")
-  awardedAt         DateTime @default(now()) @map("awarded_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
-  equippedByUsers   User[]   @relation("UserEquippedLeaderTitle")
+  effect          String   @default("classic")
+  awardedAt       DateTime @default(now()) @map("awarded_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  equippedByUsers User[]   @relation("UserEquippedLeaderTitle")
 
   @@index([userId])
   @@map("game_leader_titles")
@@ -981,25 +1026,27 @@ model ChatBan {
  * hunger / cleanliness / mood 为 0–100 的连续值，按 PET_DECAY_PER_HOUR 线性衰减，读取时惰性结算。
  */
 model Pet {
-  id            Int       @id @default(autoincrement())
-  userId        Int       @unique @map("user_id")
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            Int            @id @default(autoincrement())
+  userId        Int            @unique @map("user_id")
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   species       String // 物种 key（PET_SPECIES：cat | dog | bird）
-  name          String    @default("小宠物")
-  level         Int       @default(1)
-  hunger        Float     @default(100)
-  cleanliness   Float     @default(100)
-  mood          Float     @default(100)
-  status        String    @default("alive") // alive | gone
-  equipped      String    @default("{}") // JSON 字符串: { "hat": "key"|null, "neck": ..., "face": ... }
-  decayedAt     DateTime  @default(now()) @map("decayed_at") // 上次衰减结算基准时刻
-  criticalSince DateTime? @map("critical_since") // 最早一项数值归零的时刻（判定离家出走）
-  lastTouchAt   DateTime? @map("last_touch_at") // 抚摸心情加成冷却
-  pats          Int       @default(0) // 被其它用户撸的总次数（宠物之家人气）
-  /** 最近一次被对战夺走装备的日期（Asia/Shanghai YYYY-MM-DD），用于每日掉落保护 */
-  lastDropDate  String?   @map("last_drop_date")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  name          String         @default("小宠物")
+  level         Int            @default(1)
+  hunger        Float          @default(100)
+  cleanliness   Float          @default(100)
+  mood          Float          @default(100)
+  status        String         @default("alive") // alive | gone
+  equipped      String         @default("{}") // JSON 字符串: { "hat": "key"|null, "neck": ..., "face": ... }
+  decayedAt     DateTime       @default(now()) @map("decayed_at") // 上次衰减结算基准时刻
+  criticalSince DateTime?      @map("critical_since") // 最早一项数值归零的时刻（判定离家出走）
+  lastTouchAt   DateTime?      @map("last_touch_at") // 抚摸心情加成冷却
+  pats          Int            @default(0) // 被其它用户撸的总次数（宠物之家人气）
+  /**
+   * 最近一次被对战夺走装备的日期（Asia/Shanghai YYYY-MM-DD），用于每日掉落保护
+   */
+  lastDropDate  String?        @map("last_drop_date")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
   outfits       PetOutfit[]
   guestbook     PetGuestbook[]
   visits        PetVisit[]
@@ -1066,15 +1113,17 @@ model PetOutfit {
  * 穿戴状态存在 Pet.equipped JSON（weapon / armor / accessory），不在本表冗余。
  */
 model PetEquipment {
-  id          Int                 @id @default(autoincrement())
-  petId       Int                 @map("pet_id")
-  pet         Pet                 @relation(fields: [petId], references: [id], onDelete: Cascade)
-  itemKey     String              @map("item_key")
-  bound       Boolean             @default(false)
-  /** 是否在交易行挂单中（同一物品最多一条 active 挂单） */
-  listed      Boolean             @default(false)
-  acquiredVia String              @default("shop") @map("acquired_via") // starter | shop | drop | market
-  createdAt   DateTime            @default(now()) @map("created_at")
+  id          Int                @id @default(autoincrement())
+  petId       Int                @map("pet_id")
+  pet         Pet                @relation(fields: [petId], references: [id], onDelete: Cascade)
+  itemKey     String             @map("item_key")
+  bound       Boolean            @default(false)
+  /**
+   * 是否在交易行挂单中（同一物品最多一条 active 挂单）
+   */
+  listed      Boolean            @default(false)
+  acquiredVia String             @default("shop") @map("acquired_via") // starter | shop | drop | market
+  createdAt   DateTime           @default(now()) @map("created_at")
   listings    PetMarketListing[]
 
   @@unique([petId, itemKey])
@@ -1087,14 +1136,16 @@ model PetEquipment {
  * 装备槽位存在 Pet.equipped JSON 的 skills 数组（最多 3 个），技能效果目录见 lib/petSkills.ts。
  */
 model PetSkill {
-  id          Int                 @id @default(autoincrement())
-  petId       Int                 @map("pet_id")
-  pet         Pet                 @relation(fields: [petId], references: [id], onDelete: Cascade)
-  skillKey    String              @map("skill_key")
-  /** 是否在交易行挂单中 */
-  listed      Boolean             @default(false)
-  acquiredVia String              @default("shop") @map("acquired_via") // shop | market
-  createdAt   DateTime            @default(now()) @map("created_at")
+  id          Int                @id @default(autoincrement())
+  petId       Int                @map("pet_id")
+  pet         Pet                @relation(fields: [petId], references: [id], onDelete: Cascade)
+  skillKey    String             @map("skill_key")
+  /**
+   * 是否在交易行挂单中
+   */
+  listed      Boolean            @default(false)
+  acquiredVia String             @default("shop") @map("acquired_via") // shop | market
+  createdAt   DateTime           @default(now()) @map("created_at")
   listings    PetMarketListing[]
 
   @@unique([petId, skillKey])
@@ -1141,22 +1192,22 @@ model PetBattle {
  * status: active | sold | cancelled。价格必须落在参考价 50%–150%。
  */
 model PetMarketListing {
-  id          Int             @id @default(autoincrement())
-  sellerId    Int             @map("seller_id")
-  seller      User            @relation("PetMarketSeller", fields: [sellerId], references: [id], onDelete: Cascade)
-  itemType    String          @map("item_type") // equipment | skill
-  itemKey     String          @map("item_key")
-  equipmentId Int?            @map("equipment_id")
-  equipment   PetEquipment?   @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
-  skillId     Int?            @map("skill_id")
-  skill       PetSkill?       @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  id          Int              @id @default(autoincrement())
+  sellerId    Int              @map("seller_id")
+  seller      User             @relation("PetMarketSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+  itemType    String           @map("item_type") // equipment | skill
+  itemKey     String           @map("item_key")
+  equipmentId Int?             @map("equipment_id")
+  equipment   PetEquipment?    @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  skillId     Int?             @map("skill_id")
+  skill       PetSkill?        @relation(fields: [skillId], references: [id], onDelete: Cascade)
   price       Int
-  status      String          @default("active") // active | sold | cancelled
-  buyerId     Int?            @map("buyer_id")
-  buyer       User?           @relation("PetMarketBuyer", fields: [buyerId], references: [id], onDelete: SetNull)
-  soldAt      DateTime?       @map("sold_at")
-  createdAt   DateTime        @default(now()) @map("created_at")
-  updatedAt   DateTime        @updatedAt @map("updated_at")
+  status      String           @default("active") // active | sold | cancelled
+  buyerId     Int?             @map("buyer_id")
+  buyer       User?            @relation("PetMarketBuyer", fields: [buyerId], references: [id], onDelete: SetNull)
+  soldAt      DateTime?        @map("sold_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
   trades      PetMarketTrade[]
 
   @@index([status, itemType, createdAt])
@@ -1232,17 +1283,17 @@ model PersonalSpace {
  * （storageSync 已把 _books 列为系统目录，不进网盘；封面体积小不计网盘配额）。
  */
 model Book {
-  id          Int      @id @default(autoincrement())
-  userId      Int      @map("user_id")
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          Int            @id @default(autoincrement())
+  userId      Int            @map("user_id")
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   title       String // epub 取 OPF 元数据；txt 取文件名（去扩展名）
-  author      String   @default("")
+  author      String         @default("")
   format      String // epub | txt
   size        Int // 文件字节数（计入网盘已用空间）
-  storagePath String   @unique @map("storage_path") // 存储节点路径 _books/<userId>/<uuid>.<ext>
-  coverPath   String?  @map("cover_path") // 封面节点路径（epub 内嵌封面缩略图，可空）
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  storagePath String         @unique @map("storage_path") // 存储节点路径 _books/<userId>/<uuid>.<ext>
+  coverPath   String?        @map("cover_path") // 封面节点路径（epub 内嵌封面缩略图，可空）
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
   progress    BookProgress[] // 每个读者一行进度（BookProgress 按 [bookId, userId] 唯一）
 
   @@index([userId])
@@ -1273,12 +1324,12 @@ model BookProgress {
  * 永不出服务端、任何 API 响应不回传；解绑（logout）即删行。
  */
 model MusicAccount {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @unique @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cookie    String // 网易云登录 cookie 串（敏感，不回传前端）
-  nickname  String   @default("") // 绑定时缓存的昵称（展示用）
-  avatarUrl String   @default("") @map("avatar_url") // 绑定时缓存的头像 URL（展示用）
+  id         Int      @id @default(autoincrement())
+  userId     Int      @unique @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cookie     String // 网易云登录 cookie 串（敏感，不回传前端）
+  nickname   String   @default("") // 绑定时缓存的昵称（展示用）
+  avatarUrl  String   @default("") @map("avatar_url") // 绑定时缓存的头像 URL（展示用）
   loggedInAt DateTime @default(now()) @map("logged_in_at")
 
   @@map("music_accounts")
@@ -1349,6 +1400,40 @@ model StockTrade {
   @@map("stock_trades")
 }
 
+/**
+ * 股市限价委托：买入时冻结积分（amount），卖出时冻结份额（shares + costPoints）。
+ * 引擎在行情 / 委托 / 资产请求时惰性撮合（无定时器），status: open | filled | cancelled。
+ */
+model StockOrder {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @map("user_id")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code        String
+  side        String // buy | sell
+  limitPrice  Float     @map("limit_price")
+  /**
+   * 买入冻结积分（含手续费）；卖出为 0
+   */
+  amount      Int       @default(0)
+  /**
+   * 卖出冻结份额；买入为 0
+   */
+  shares      Float     @default(0)
+  /**
+   * 卖出冻结成本（用于已实现盈亏）
+   */
+  costPoints  Int       @default(0) @map("cost_points")
+  status      String    @default("open") // open | filled | cancelled
+  filledPrice Float?    @map("filled_price")
+  filledAt    DateTime? @map("filled_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, code, createdAt])
+  @@index([userId, status])
+  @@map("stock_orders")
+}
+
 // === 积分抽奖 ===
 
 /**
@@ -1405,4 +1490,73 @@ model ThemeUnlock {
   @@unique([userId, themeKey])
   @@index([userId])
   @@map("theme_unlocks")
+}
+
+// === 宠物搜打撤（Delta Force 风格：搜索 / 战斗 / 撤离） ===
+
+/**
+ * 进行中的搜打撤对局（每人至多一局）。state 为完整对局 JSON（地图 / 视野 / 敌人 / 战利品 / 日志）。
+ * status: active | extracted | died | mia | abandoned。
+ */
+model PetRaid {
+  id         Int       @id @default(autoincrement())
+  userId     Int       @unique @map("user_id")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mapKey     String    @map("map_key")
+  difficulty String    @default("normal")
+  status     String    @default("active")
+  state      String    @default("{}")
+  version    Int       @default(0)
+  seed       Int
+  startedAt  DateTime  @default(now()) @map("started_at")
+  expiresAt  DateTime  @map("expires_at")
+  finishedAt DateTime? @map("finished_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, expiresAt])
+  @@map("pet_raids")
+}
+
+/**
+ * 搜打撤战绩（append-only，含本局带出的战利品摘要）。
+ */
+model PetRaidRecord {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mapKey     String   @map("map_key")
+  difficulty String   @map("difficulty")
+  result     String // extracted | died | mia | abandoned
+  points     Int      @default(0)
+  lootJson   String?  @map("loot_json")
+  kills      Int      @default(0)
+  moves      Int      @default(0)
+  durationMs Int      @default(0) @map("duration_ms")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@index([result, createdAt])
+  @@map("pet_raid_records")
+}
+
+/**
+ * 搜打撤每日契约（3 条/天，进度由服务端结算，领取发积分）。
+ */
+model PetRaidContract {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateKey      String   @map("date_key")
+  contractKey  String   @map("contract_key")
+  target       Int
+  progress     Int      @default(0)
+  claimed      Boolean  @default(false)
+  rewardPoints Int      @default(0) @map("reward_points")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, dateKey, contractKey])
+  @@index([userId, dateKey])
+  @@map("pet_raid_contracts")
 }

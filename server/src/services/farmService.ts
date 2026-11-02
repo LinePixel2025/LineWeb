@@ -4,6 +4,8 @@ import { AppError } from '../middleware/errorHandler.js'
 import {
   CROP_MAP,
   FARM_CROPS,
+  FARM_PROTECTION_MAX_HOURS,
+  FARM_PROTECTION_PACKAGES,
   FERTILIZER_COST,
   FERTILIZER_MAX_PER_CROP,
   INITIAL_FERTILIZER,
@@ -14,10 +16,13 @@ import {
   computeStealPoints,
   cropUnitsValue,
   fertilizeReadyAt,
+  findProtectionPackage,
   getCrop,
   nextExpansion,
   pickDailySeed,
   pickMerchantOffers,
+  protectionRemainingMs,
+  protectionUntilAfter,
   rollStealSuccess,
   type CropDef,
 } from '../lib/farmCrops.js'
@@ -307,6 +312,25 @@ async function ensureMerchantOffers(
   return { dateKey, offers: rows.map(merchantOfferDto) }
 }
 
+export interface FarmProtectionDto {
+  active: boolean
+  until: string | null
+  remainingMs: number
+  maxHours: number
+  packages: typeof FARM_PROTECTION_PACKAGES
+}
+
+function protectionDto(until: Date | null | undefined, now: number): FarmProtectionDto {
+  const remainingMs = protectionRemainingMs(until, now)
+  return {
+    active: remainingMs > 0,
+    until: remainingMs > 0 && until ? until.toISOString() : null,
+    remainingMs,
+    maxHours: FARM_PROTECTION_MAX_HOURS,
+    packages: FARM_PROTECTION_PACKAGES,
+  }
+}
+
 export interface FarmView {
   farm: {
     id: number
@@ -317,6 +341,7 @@ export interface FarmView {
     harvested: number
     harvestPoints: number
     stolenPoints: number
+    protectedUntil: string | null
   } | null
   plots: FarmPlotDto[]
   inventory: { seeds: ReturnType<typeof seedsOf>; fertilizer: number }
@@ -326,6 +351,8 @@ export interface FarmView {
   stealQuota: StealQuotaDto
   /** 自己今天已被偷的次数（达到上限后别人偷不到） */
   victimQuota: StealQuotaDto
+  /** 偷菜保护（花积分购买，期间任何人都偷不到） */
+  protection: FarmProtectionDto
   /** 每日随机掉落种子（同一天只有一次 dropped=true） */
   seedDrop: SeedDropDto
   /** 今日随机商人（每日 0 点刷新） */
@@ -356,6 +383,7 @@ export async function getFarmView(userId: number): Promise<FarmView> {
     points: profile.balance,
     stealQuota: quotaDto(used, config.farm.stealDailyLimit),
     victimQuota: quotaDto(victimUsed, config.farm.victimDailyStealLimit),
+    protection: protectionDto(farm?.protectedUntil, now),
     recentSteals: await recentSteals(userId),
   }
 
@@ -388,6 +416,7 @@ export async function getFarmView(userId: number): Promise<FarmView> {
       harvested: farm.harvested,
       harvestPoints: farm.harvestPoints,
       stolenPoints: farm.stolenPoints,
+      protectedUntil: farm.protectedUntil ? farm.protectedUntil.toISOString() : null,
     },
     plots: farm.plots
       .slice()
@@ -600,6 +629,184 @@ export async function plantCrop(userId: number, index: number, cropKey: string):
   return getFarmView(userId)
 }
 
+export interface PlantAllResult {
+  view: FarmView
+  planted: number
+  crop: CropDef
+  remainingSeeds: number
+}
+
+/**
+ * 一键种植：把当前所有空地按顺序种满同一种作物。
+ * cropKey 缺省时自动选择「仓库里数量最多」的种子（数量相同取高阶作物）。
+ * 种子不够时只种能种的地块，不报错。
+ */
+export async function plantAllCrops(userId: number, cropKey?: string): Promise<PlantAllResult> {
+  const result = await prisma.$transaction(async (tx) => {
+    const farm = await tx.farm.findUnique({
+      where: { userId },
+      include: { plots: true, items: true },
+    })
+    if (!farm) throw new AppError('还没有农场，先开一块地吧', 404)
+
+    const empty = farm.plots.filter((plot) => !plot.crop).sort((a, b) => a.index - b.index)
+    if (empty.length === 0) throw new AppError('没有空地可以种植', 400)
+
+    let crop: CropDef | null
+    if (cropKey) {
+      crop = getCrop(cropKey)
+      if (!crop) throw new AppError('未知的作物', 400)
+    } else {
+      const owned = farm.items
+        .filter((item) => item.kind === 'seed' && item.count > 0)
+        .map((item) => ({ item, crop: getCrop(item.itemKey) }))
+        .filter((row): row is { item: FarmItem; crop: CropDef } => row.crop !== null)
+        .sort((a, b) => b.item.count - a.item.count || b.crop.tier - a.crop.tier)
+      crop = owned[0]?.crop ?? null
+      if (!crop) throw new AppError('仓库里还没有种子，去商店买一些吧', 400)
+    }
+
+    const seed = farm.items.find((item) => item.kind === 'seed' && item.itemKey === crop!.key)
+    if (!seed || seed.count < 1) {
+      throw new AppError(`没有「${crop.name}」种子了，去商店买一些吧`, 400)
+    }
+
+    const now = Date.now()
+    let planted = 0
+    for (const plot of empty) {
+      if (planted >= seed.count) break
+      const updated = await tx.farmPlot.updateMany({
+        where: { id: plot.id, crop: null },
+        data: {
+          crop: crop.key,
+          plantedAt: new Date(now),
+          readyAt: new Date(now + crop.growMs),
+          yieldUnits: crop.yieldUnits,
+          stolenCount: 0,
+          fertilized: 0,
+        },
+      })
+      if (updated.count > 0) planted += 1
+    }
+    if (planted === 0) throw new AppError('地块状态已变化，请刷新后重试', 409)
+
+    if (seed.count <= planted) {
+      await tx.farmItem.delete({ where: { id: seed.id } })
+    } else {
+      await tx.farmItem.update({ where: { id: seed.id }, data: { count: { decrement: planted } } })
+    }
+    return { planted, crop, remainingSeeds: Math.max(0, seed.count - planted) }
+  })
+  return { view: await getFarmView(userId), ...result }
+}
+
+export interface HarvestAllResult {
+  view: FarmView
+  harvested: number
+  units: number
+  points: number
+  balance: number
+  crops: Array<{ key: string; name: string; emoji: string; units: number; points: number }>
+}
+
+/** 一键收获：把所有已成熟地块一次性收掉，积分合并为一笔奖励。 */
+export async function harvestAllPlots(userId: number): Promise<HarvestAllResult> {
+  const now = Date.now()
+  const result = await prisma.$transaction(async (tx) => {
+    const farm = await tx.farm.findUnique({ where: { userId }, include: { plots: true } })
+    if (!farm) throw new AppError('还没有农场，先开一块地吧', 404)
+    const ready = farm.plots.filter((plot) =>
+      !!plot.crop && !!plot.readyAt && plot.readyAt.getTime() <= now && plot.yieldUnits > 0)
+    if (ready.length === 0) throw new AppError('还没有成熟的作物，再等等吧', 400)
+
+    const crops: HarvestAllResult['crops'] = []
+    let totalPoints = 0
+    let totalUnits = 0
+    for (const plot of ready) {
+      const crop = getCrop(plot.crop)
+      if (!crop) continue
+      const updated = await tx.farmPlot.updateMany({
+        where: { id: plot.id, crop: plot.crop },
+        data: {
+          crop: null,
+          plantedAt: null,
+          readyAt: null,
+          yieldUnits: 0,
+          stolenCount: 0,
+          fertilized: 0,
+        },
+      })
+      if (updated.count === 0) continue
+      const units = Math.max(0, plot.yieldUnits)
+      const points = cropUnitsValue(crop, units)
+      const existing = crops.find((row) => row.key === crop.key)
+      if (existing) {
+        existing.units += units
+        existing.points += points
+      } else {
+        crops.push({ key: crop.key, name: crop.name, emoji: crop.emoji, units, points })
+      }
+      totalUnits += units
+      totalPoints += points
+    }
+    if (crops.length === 0) throw new AppError('地块状态已变化，请刷新后重试', 409)
+
+    const award = await awardPointsTx(tx, userId, {
+      amount: totalPoints,
+      reason: 'farm_harvest',
+      game: 'farm',
+      note: `一键收获 ${crops.map((row) => `${row.name}×${row.units}`).join('、')}`,
+    })
+    await tx.farm.update({
+      where: { id: farm.id },
+      data: { harvested: { increment: crops.length }, harvestPoints: { increment: totalPoints } },
+    })
+    return { harvested: crops.length, units: totalUnits, points: totalPoints, balance: award.balance, crops }
+  })
+  return { view: await getFarmView(userId), ...result }
+}
+
+export interface ProtectionPurchaseResult {
+  view: FarmView
+  balance: number
+  until: string
+  package: { hours: number; cost: number; label: string }
+}
+
+/** 花积分购买偷菜保护（可叠加，总剩余不超过 48 小时）。 */
+export async function buyFarmProtection(
+  userId: number,
+  hours: number,
+): Promise<ProtectionPurchaseResult> {
+  const pkg = findProtectionPackage(hours)
+  if (!pkg) throw new AppError('无效的保护时长', 400)
+
+  const result = await prisma.$transaction(async (tx) => {
+    const farm = await tx.farm.findUnique({ where: { userId } })
+    if (!farm) throw new AppError('还没有农场，先开一块地吧', 404)
+    const now = Date.now()
+    const remaining = protectionRemainingMs(farm.protectedUntil, now)
+    if (remaining >= FARM_PROTECTION_MAX_HOURS * 3_600_000) {
+      throw new AppError(`农场保护已达上限（${FARM_PROTECTION_MAX_HOURS} 小时）`, 400, 'PROTECTION_CAPPED')
+    }
+    if (remaining + pkg.hours * 3_600_000 > FARM_PROTECTION_MAX_HOURS * 3_600_000) {
+      throw new AppError(`叠加后超过 ${FARM_PROTECTION_MAX_HOURS} 小时上限，请选择更短的档位`, 400, 'PROTECTION_CAPPED')
+    }
+    const until = protectionUntilAfter(farm.protectedUntil, pkg.hours, now)
+    const spend = await spendPointsTx(tx, userId, pkg.cost, {
+      reason: 'farm_protect',
+      game: 'farm',
+      note: `农场保护 ${pkg.label}`,
+    })
+    const updated = await tx.farm.update({
+      where: { id: farm.id },
+      data: { protectedUntil: until },
+    })
+    return { balance: spend.balance, until: updated.protectedUntil?.toISOString() ?? until.toISOString() }
+  })
+  return { view: await getFarmView(userId), ...result, package: pkg }
+}
+
 export async function fertilizePlot(userId: number, index: number): Promise<FarmView> {
   await prisma.$transaction(async (tx) => {
     const { farm, plot } = await loadPlotTx(tx, userId, index)
@@ -723,6 +930,8 @@ export interface FarmNeighborDto {
   stealableCount: number
   /** 该邻居今天已被偷的次数 */
   victimQuota: StealQuotaDto
+  /** 该邻居的农场保护状态 */
+  protection: FarmProtectionDto
   title: UserTitleDto | null
   updatedAt: string
 }
@@ -777,7 +986,8 @@ export async function listNeighbors(userId: number, query?: string): Promise<Far
   const neighbors = farms.map((farm) => {
     const victimUsed = victimUsedMap.get(farm.userId) ?? 0
     const victimQuota = quotaDto(victimUsed, config.farm.victimDailyStealLimit)
-    const victimCapped = victimUsed >= config.farm.victimDailyStealLimit
+    const protection = protectionDto(farm.protectedUntil, now)
+    const victimCapped = victimUsed >= config.farm.victimDailyStealLimit || protection.active
     let readyCount = 0
     let stealableCount = 0
     for (const plot of farm.plots) {
@@ -797,6 +1007,7 @@ export async function listNeighbors(userId: number, query?: string): Promise<Far
       readyCount,
       stealableCount,
       victimQuota,
+      protection,
       title: effectiveTitleDto(farm.user),
       updatedAt: farm.updatedAt.toISOString(),
     }
@@ -822,6 +1033,8 @@ export interface NeighborFarmView {
   quota: StealQuotaDto
   /** 地主今天已被偷的次数（达到上限后不可再偷） */
   victimQuota: StealQuotaDto
+  /** 地主是否开启了偷菜保护 */
+  protection: FarmProtectionDto
 }
 
 export async function getNeighborFarm(userId: number, targetUserId: number): Promise<NeighborFarmView> {
@@ -856,7 +1069,8 @@ export async function getNeighborFarm(userId: number, targetUserId: number): Pro
 
   const quota = quotaDto(used, config.farm.stealDailyLimit)
   const victimQuota = quotaDto(victimUsed, config.farm.victimDailyStealLimit)
-  const victimCapped = victimUsed >= config.farm.victimDailyStealLimit
+  const protection = protectionDto(farm.protectedUntil, now)
+  const victimCapped = victimUsed >= config.farm.victimDailyStealLimit || protection.active
 
   const plots = farm.plots
     .slice()
@@ -881,6 +1095,7 @@ export async function getNeighborFarm(userId: number, targetUserId: number): Pro
     plots,
     quota,
     victimQuota,
+    protection,
   }
 }
 
@@ -918,6 +1133,9 @@ export async function stealCrop(userId: number, targetUserId: number, index: num
       include: { plots: true, user: { select: { username: true } } },
     })
     if (!farm) throw new AppError('对方还没有开农场', 404)
+    if (protectionRemainingMs(farm.protectedUntil, now) > 0) {
+      throw new AppError('对方开启了农场保护，暂时偷不到', 403, 'FARM_PROTECTED')
+    }
     const plot = farm.plots.find((row) => row.index === index)
     if (!plot) throw new AppError('地块不存在', 404)
     const crop = getCrop(plot.crop)

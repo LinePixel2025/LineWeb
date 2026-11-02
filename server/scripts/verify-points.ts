@@ -206,18 +206,18 @@ assertEqual(sanitizeTitleIcon('🐣'), '🐣', '单个 emoji 称号图标保留'
 assertEqual(sanitizeTitleIcon('🐣🐣🐣'), '🐣🐣', '图标最多两个字符')
 assertEqual(sanitizeTitleIcon(123), '', '非字符串图标回退空')
 
-assertEqual(AVATAR_FRAME_STYLES.length, 4, '头像框共 4 种样式')
+assertEqual(AVATAR_FRAME_STYLES.length, 7, '头像框共 7 种样式')
 assertEqual(sanitizeAvatarFrame('gold'), 'gold', 'gold 头像框合法')
 assertEqual(sanitizeAvatarFrame('galaxy'), 'galaxy', 'galaxy 头像框合法')
 assertEqual(sanitizeAvatarFrame('rainbow'), null, '未知头像框样式回退 null')
 assertEqual(sanitizeAvatarFrame(''), null, '空头像框样式回退 null')
 assertEqual(sanitizeAvatarFrame(123), null, '非字符串头像框回退 null')
 
-assertEqual(TITLE_EFFECT_STYLES.length, 5, '传说特效共 5 种样式')
+assertEqual(TITLE_EFFECT_STYLES.length, 8, '传说特效共 8 种样式')
 assertEqual(
   [...TITLE_EFFECT_STYLES],
-  ['classic', 'stardust', 'flame', 'aurora', 'thunder'],
-  '传说特效白名单依次为 classic/stardust/flame/aurora/thunder',
+  ['classic', 'stardust', 'flame', 'aurora', 'thunder', 'nova', 'prism', 'void'],
+  '传说特效白名单依次为 classic/stardust/flame/aurora/thunder/nova/prism/void',
 )
 for (const style of TITLE_EFFECT_STYLES) {
   assertEqual(sanitizeTitleEffect(style), style, `特效 ${style} 白名单内原样返回`)
@@ -233,7 +233,7 @@ assertEqual(EMOJI_PACK_KEYS, ['nailong', 'felyne', 'twemoji'], '付费表情包 
    ============================================================ */
 
 assertEqual(INITIAL_PLOT_COUNT, 6, '初始 6 块地')
-assertEqual(MAX_PLOT_COUNT, 18, '最大 18 块地')
+assertEqual(MAX_PLOT_COUNT, 30, '最大 30 块地')
 assertEqual(INITIAL_FERTILIZER, 2, '新手送 2 份肥料')
 assertEqual(INITIAL_SEEDS.carrot, 3, '新手送 3 颗胡萝卜种子')
 assertEqual(FERTILIZER_COST, 30, '肥料单价 30')
@@ -242,12 +242,14 @@ assertEqual(FERTILIZER_MAX_PER_CROP, 2, '每茬最多施肥 2 次')
 assertEqual(nextExpansion(6), { plotCount: 9, cost: 500 }, '6 → 9 块')
 assertEqual(nextExpansion(7), { plotCount: 9, cost: 500 }, '非档位数量也能找到下一档')
 assertEqual(nextExpansion(15), { plotCount: 18, cost: 6000 }, '15 → 18 块')
-assertEqual(nextExpansion(18), null, '已到上限无法扩建')
-assertEqual(nextExpansion(20), null, '超过上限返回 null')
+assertEqual(nextExpansion(18), { plotCount: 21, cost: 10_000 }, '18 → 21 块')
+assertEqual(nextExpansion(27), { plotCount: 30, cost: 36_000 }, '27 → 30 块')
+assertEqual(nextExpansion(30), null, '已到上限无法扩建')
+assertEqual(nextExpansion(31), null, '超过上限返回 null')
 assertEqual(
   Object.keys(PLOT_EXPANSION_COSTS).map(Number).sort((a, b) => a - b),
-  [9, 12, 15, 18],
-  '扩建档位固定为 9 / 12 / 15 / 18',
+  [9, 12, 15, 18, 21, 24, 27, 30],
+  '扩建档位固定为 9 / 12 / 15 / 18 / 21 / 24 / 27 / 30',
 )
 
 const keySet = new Set<string>()

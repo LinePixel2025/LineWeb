@@ -286,6 +286,7 @@ cd server && npm run verify:parkour   # 3D 跑酷引擎/关卡生成/机器人 +
 cd server && npm run verify:aichat   # AI 对话纯函数（日期边界/配额/标题/DTO/联网搜索解析与上下文，82 断言）
 cd server && npm run verify:chat     # 自建聊天：XML 解析/身份映射/XMPP 握手状态机/长轮询/票据/视图（98 断言）
 cd server && npm run verify:pet      # 宠物系统纯函数：衰减结算/归零时刻/离家出走判定/等级与解锁/装扮清洗/目录不变量（146 断言）
+cd server && npm run verify:raid     # 搜打撤地图/搜索/战斗/撤离/保险 + 农场 30 块扩建/保护 + 股市限价（104 断言）
 cd server && npm run verify:reader   # 小说阅读器纯函数：EPUB 元数据解析/zip 路径/实体解码/格式识别（32 断言）
 cd server && npm run verify:redpacket  # 红包纯函数：二倍均值拆分不变量/边界/greeting 清洗/入参校验（3864 断言）
 
@@ -562,3 +563,16 @@ cd storage-node && python main.py     # 存储节点，config.json 指向 ws://1
 - **抽奖调息**：稀有度 78/18/3.5/0.5（原 62/25/10/3）；种子权重与数量大幅下调、装扮折算 400/800→100/200、保底 10→30 抽；**完整 EV（种子满收 + 肥料 + 装扮折算 + 保底）≈49.56 分/抽 < 十连 54 分**，单抽 60 分则约 17% 负期望；`verify:lottery` 341 断言含完整 EV 模拟。
 - **自检**：`cd server && npx tsc --noEmit`；`npm run verify:stocks`（223）、`verify:pet`（507）、`verify:lottery`（341）；`cd client && npx tsc --noEmit` + `npm run test`（57 文件 / 594 用例）+ `npm run build` 全绿；本地 3002 + 临时 vite 5275 实测：两账号完整 PvP（邀请→应战→技能→击杀→积分转移/装备掉落）、交易行挂单与成交（参考价 220→224、手续费 11）、股市 1000 积分往返 −7、抽奖免费抽、AI 事件模板兜底；浏览器视觉验收战斗舞台/装备页/交易行/股市/抽奖通过。
 - **数据库**：新增 `StockEvent` / `PetEquipment` / `PetSkill` / `PetBattle` / `PetMarketListing` / `PetMarketTrade` / `PetMarketPrice` 均为 additive（`@@map` snake_case，不用 enum/Json），`prisma db push` 即可；生产由 `docker-entrypoint.sh` 自动 push，部署仍走本地产物链，不要在 ECS 上 `docker compose up --build`。
+
+---
+
+## 2026-11-02 搜打撤 / 种子交易 / 农场扩至 30 块 / 股市限价（实现口径）
+
+- **搜打撤（pet raid，Delta Force 烽火地带风格）**：`server/src/lib/petRaid.ts`（纯函数引擎）+ `services/petRaidService.ts` + `routes/pets.ts` 的 `/api/pets/raid*`。4 张地图（废弃农场 7×7 / 零号大坝 8×8 / 长弓溪谷 9×9 / 航天基地 9×9），服务端 seed 确定性生成地图 + 迷雾（只下发已探索格）；动作 `move/search/extract/medkit/safe/unsafe/abandon`，每步/搜索/撤离读条消耗 1 行动点（行动点耗尽 = MIA），搜索出积分/材料/种子/装备/技能/急救包，遭遇敌人复用 `petBattle` 引擎自动 AI 对打（装备与已装备技能就是战力来源）。撤离成功全部入账；阵亡/失联/放弃只保留保险箱（2 格）物品；阵亡/失联时非绑定装备每件 50% 掉落，进入时买「行动保险」（装备价值 15%，最低 20 积分）可完全免除；门票 0/80/200/500 积分按地图；每日 3 条契约（撤离 1 次 / 击杀 3 / 带出 2500 价值）手动领奖；`PetRaid`（每人至多一局）+ `PetRaidRecord` + `PetRaidContract` 三表 additive。前端 `/pets/raid`（地图选择 / 保险开关 / 迷雾网格 / WASD+方向键 / 搜索撤离 / 战利品与保险箱 / 战斗与结算弹层 / 契约与战绩），`raid.css`；页面懒加载，`PetSprite` 复用。
+- **宠物装备/技能扩充**：`lib/petEquipment.ts` 由 12 件扩到 26 件（武器 10 / 护甲 9 / 饰品 12，含商店可售稀有与仅掉落/交易行的史诗传说）；`lib/petSkills.ts` 由 12 个扩到 24 个（新增寒冰之息/圣光复苏/荆棘护甲/狂暴/虚弱诅咒/破甲击/星辰陨落/回春术/处决/时之加速/生命虹吸/净化之雨）；战斗引擎新增 `crit_up` 增益、`weaken`（攻击降低）/`vulnerable`（防御降低）/`regen`（持续治疗）状态与 `executeBelow/executeBonus` 处决机制；装备/技能目录由 `/api/pets/gear` 全量下发，前端自动出现，无需改枚举。
+- **宠物外观/动作/装扮**：`PetOutfitSlot` 扩展为 `hat/neck/face/back/aura` 五槽，装扮 7 件 → 18 件（新增派对尖帽/海盗头巾/单片眼镜/铃铛项圈/星星胸针/探险背包/天使之翼/暗夜蝠翼/星尘光环/圣光环/烈焰环绕）；`PetSprite` 新增背翼/光环/星尘/烈焰/背包 SVG 与 `wave/sneeze/yawn` 三个动作（`pet.css` 对应 keyframes，低性能模式与 `prefers-reduced-motion` 降级）；`PetSprite` 改为 `memo`，列表复用不随父级无关状态重渲染。
+- **农场 30 块 + 一键种植/收获 + 偷菜保护**：`MAX_PLOT_COUNT=30`，扩建档位 21/24/27/30（10000/16000/24000/36000 积分）；`POST /api/farm/plant-all`（crop 缺省自动选数量最多的种子，逐块条件更新，种子不足尽量种）、`POST /api/farm/harvest-all`（一次事务合并结算）；`Farm.protectedUntil` + `POST /api/farm/protect {hours}`（1/3/6/12/24 小时 = 30/75/120/200/320 积分，可叠加、总剩余≤48h），保护期间 `steal` 返回 403 `FARM_PROTECTED`，邻居列表/农场详情显示保护状态并置 `stealable=false`。
+- **玩家间种子交易**：`FarmSeedListing` + `services/farmSeedMarketService.ts` + `/api/farm/seed-market*`。挂单时种子从卖家仓库扣除托管，成交后进入买家仓库；取消原路退回；卖家 5% 手续费（最低 1），每人最多 20 条在售；前端「种子市场」Tab 支持挂单/买下/下架/最近成交。
+- **股市限价委托**：`StockOrder` + `services/stockOrderService.ts` + `GET/POST/DELETE /api/stocks/orders*`。买入挂单立即冻结积分，卖出挂单立即冻结份额（成本等比保留）；行情/委托/资产/排行榜请求触发惰性撮合（全局最多 4 秒一次，无定时器），买入现价≤限价、卖出现价≥限价时按实时价成交并照常写入冲击与成交记录；撤单原路退回；每人最多 20 条 open；前端交易面板新增「限价买入/限价卖出」与「委托」Tab（10 秒静默刷新）。另新增行情刷新间隔本机设置（3/10/30 秒），降低老设备与服务器压力。
+- **性能优化**：`vite.config.ts` 把 marked/katex/dompurify/marked-katex-extension 拆为独立 `markdown` chunk（335KB 只在 AI/预览页加载）；`performance.css` 对长列表（委托/成交/排行/搜打撤战利品/种子市场/宠物之家/网盘卡片）加 `content-visibility:auto`，低性能模式关闭 header/sidebar/dialog 的毛玻璃；`PetSprite` memo；Reader/Drive/Music/DeepSeek 图片补 `loading=lazy`/`decoding=async`；StocksPage 行情轮询可调。
+- **自检**：`cd server && npx tsc --noEmit`；`npm run verify:raid`（104 断言）；`cd client && npx tsc --noEmit` + `npm run test`（57 文件 / 594 用例）+ `npm run build` 全绿；本地 3002 冒烟覆盖种子挂单/取消、一键种植、保护后偷菜 403、搜打撤开局/移动/战斗/放弃/战绩/契约、股市限价买入/卖出自动成交与撤单。数据库 `Farm.protectedUntil` + `FarmSeedListing` / `StockOrder` / `PetRaid` / `PetRaidRecord` / `PetRaidContract` 均 additive，`prisma db push` 即可；生产仍走本地产物链（不要在 ECS 上 `docker compose up --build`）。

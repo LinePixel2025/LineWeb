@@ -159,6 +159,9 @@ export const PET_TRICKS: readonly PetTrickDef[] = [
   { key: 'moonwalk', name: '太空步', emoji: '🕺', minLevel: 7, description: '踩着拍子向后滑，经典太空步' },
   { key: 'spin', name: '转圈圈', emoji: '🌪️', minLevel: 8, description: '原地小旋风' },
   { key: 'playdead', name: '装死', emoji: '😵', minLevel: 8, description: '四脚一摊，装死骗你摸摸' },
+  { key: 'wave', name: '招手', emoji: '👋', minLevel: 3, description: '抬起小爪子朝你挥一挥' },
+  { key: 'sneeze', name: '打喷嚏', emoji: '🤧', minLevel: 6, description: '鼻头一痒，打出一个小喷嚏' },
+  { key: 'yawn', name: '打哈欠', emoji: '🥱', minLevel: 9, description: '张大嘴巴，困意传染给你' },
   { key: 'magic', name: '魔法秀', emoji: '✨', minLevel: 9, description: '凭空变出小花' },
   { key: 'cheer', name: '欢呼', emoji: '🎉', minLevel: 9, description: '蹦起来为你欢呼，撒一把彩纸' },
   { key: 'firework', name: '烟花庆祝', emoji: '🎆', minLevel: 10, description: '满级专属庆祝仪式' },
@@ -171,9 +174,9 @@ export const PET_TRICK_MAP: ReadonlyMap<string, PetTrickDef> = new Map(
 /** Zod enum 用的特技 key 元组 */
 export const PET_TRICK_KEYS = PET_TRICKS.map((trick) => trick.key) as [string, ...string[]]
 
-export type PetOutfitSlot = 'hat' | 'neck' | 'face'
+export type PetOutfitSlot = 'hat' | 'neck' | 'face' | 'back' | 'aura'
 
-export const PET_OUTFIT_SLOTS: readonly PetOutfitSlot[] = ['hat', 'neck', 'face']
+export const PET_OUTFIT_SLOTS: readonly PetOutfitSlot[] = ['hat', 'neck', 'face', 'back', 'aura']
 
 export interface PetOutfitDef {
   key: string
@@ -194,6 +197,17 @@ export const PET_OUTFITS: readonly PetOutfitDef[] = [
   { key: 'cape_hero', name: '英雄披风', emoji: '🦸', description: '披上它就是全场最靓', slot: 'neck', price: 600, minLevel: 6 },
   { key: 'glasses_round', name: '圆框眼镜', emoji: '👓', description: '瞬间文质彬彬', slot: 'face', price: 300, minLevel: 1 },
   { key: 'sunglasses', name: '墨镜', emoji: '🕶️', description: '酷就完事了', slot: 'face', price: 350, minLevel: 3 },
+  { key: 'monocle', name: '单片眼镜', emoji: '🧐', description: '绅士的象征，还带一条金链子', slot: 'face', price: 420, minLevel: 3 },
+  { key: 'party_hat', name: '派对尖帽', emoji: '🎉', description: '今天是什么日子？戴上它就知道了', slot: 'hat', price: 280, minLevel: 1 },
+  { key: 'bandana', name: '海盗头巾', emoji: '🏴‍☠️', description: '系上它，连走路都带风', slot: 'hat', price: 360, minLevel: 2 },
+  { key: 'bell_collar', name: '铃铛项圈', emoji: '🔔', description: '走一步响一下，想藏都藏不住', slot: 'neck', price: 220, minLevel: 1 },
+  { key: 'star_pin', name: '星星胸针', emoji: '⭐', description: '小小一颗，别在胸前刚刚好', slot: 'neck', price: 320, minLevel: 2 },
+  { key: 'backpack', name: '探险背包', emoji: '🎒', description: '装得下小鱼干，也装得下远方', slot: 'back', price: 400, minLevel: 1 },
+  { key: 'wings_angel', name: '天使之翼', emoji: '👼', description: '毛茸茸的白色羽翼，会随着呼吸轻轻扇动', slot: 'back', price: 900, minLevel: 4 },
+  { key: 'wings_bat', name: '暗夜蝠翼', emoji: '🦇', description: '深紫色的蝠翼，夜里看起来有点帅', slot: 'back', price: 750, minLevel: 3 },
+  { key: 'aura_sparkle', name: '星尘光环', emoji: '✨', description: '身边总飘着几颗不肯落下的星尘', slot: 'aura', price: 600, minLevel: 1 },
+  { key: 'halo_gold', name: '圣光环', emoji: '😇', description: '头顶一圈金色光环，自带圣洁滤镜', slot: 'aura', price: 1000, minLevel: 6 },
+  { key: 'aura_flame', name: '烈焰环绕', emoji: '🔥', description: '一圈不烫手的火焰，围着你转圈', slot: 'aura', price: 850, minLevel: 5 },
 ]
 
 export const PET_OUTFIT_MAP: ReadonlyMap<string, PetOutfitDef> = new Map(
@@ -423,11 +437,13 @@ export interface PetEquipped {
   hat: string | null
   neck: string | null
   face: string | null
+  back: string | null
+  aura: string | null
 }
 
 /** 空装配 */
 export function emptyPetEquipped(): PetEquipped {
-  return { hat: null, neck: null, face: null }
+  return { hat: null, neck: null, face: null, back: null, aura: null }
 }
 
 /**

@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import type { ReactNode } from 'react'
 import type { PetEquipped, PetPalette, PetSpecies } from '../../types/pet'
 import { normalizePetSpecies, resolveSpeciesMeta, resolveSpeciesPalette } from './petTheme'
@@ -41,7 +42,7 @@ const KNOWN_ANIMATIONS = new Set([
   'play',
   'touch', 'pat',
   'stretch', 'beg', 'dance', 'roll', 'highfive', 'sing', 'flip',
-  'moonwalk', 'spin', 'playdead', 'magic', 'cheer', 'firework',
+  'moonwalk', 'spin', 'playdead', 'wave', 'sneeze', 'yawn', 'magic', 'cheer', 'firework',
   // 战斗技能动画（PetBattleStage 直接传服务端 animation key）
   'basic', 'fire', 'ice', 'thunder', 'heal', 'poison', 'shadow',
   'roar', 'shield', 'drain', 'meteor', 'purify', 'stun', 'dot', 'faint',
@@ -250,6 +251,41 @@ function PetDefs({ species, palette }: { species: PetSpecies; palette: PetPalett
         <stop offset="0" stopColor="#4c4f5c" />
         <stop offset="0.55" stopColor="#1e2028" />
         <stop offset="1" stopColor="#0d0e13" />
+      </linearGradient>
+
+      {/* ---------- 2026-11 新增装扮 ---------- */}
+      <linearGradient id="lw-pet-party" x1="0" y1="0" x2="0.3" y2="1">
+        <stop offset="0" stopColor="#ff9a8b" />
+        <stop offset="0.45" stopColor="#ffd166" />
+        <stop offset="1" stopColor="#7b62e8" />
+      </linearGradient>
+      <linearGradient id="lw-pet-bandana" x1="0" y1="0" x2="0.3" y2="1">
+        <stop offset="0" stopColor="#e05a4f" />
+        <stop offset="1" stopColor="#9e2b25" />
+      </linearGradient>
+      <linearGradient id="lw-pet-wings-angel" x1="0" y1="0" x2="0.2" y2="1">
+        <stop offset="0" stopColor="#ffffff" />
+        <stop offset="0.6" stopColor="#f4f0ff" />
+        <stop offset="1" stopColor="#d9d2ff" />
+      </linearGradient>
+      <linearGradient id="lw-pet-wings-bat" x1="0" y1="0" x2="0.3" y2="1">
+        <stop offset="0" stopColor="#6a4f9e" />
+        <stop offset="0.6" stopColor="#4a3b6b" />
+        <stop offset="1" stopColor="#2b2140" />
+      </linearGradient>
+      <linearGradient id="lw-pet-backpack" x1="0" y1="0" x2="0.3" y2="1">
+        <stop offset="0" stopColor="#b08454" />
+        <stop offset="1" stopColor="#6f4f32" />
+      </linearGradient>
+      <radialGradient id="lw-pet-halo" cx="0.5" cy="0.5" r="0.5">
+        <stop offset="0" stopColor="#fff6c4" stopOpacity="0.9" />
+        <stop offset="0.7" stopColor="#f8cf5c" stopOpacity="0.55" />
+        <stop offset="1" stopColor="#f8cf5c" stopOpacity="0" />
+      </radialGradient>
+      <linearGradient id="lw-pet-aura-flame" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0" stopColor="#ff5f3c" stopOpacity="0.1" />
+        <stop offset="0.55" stopColor="#ff9a3c" stopOpacity="0.75" />
+        <stop offset="1" stopColor="#ffe9a3" stopOpacity="0.95" />
       </linearGradient>
     </defs>
   )
@@ -806,12 +842,203 @@ function Sunglasses() {
   )
 }
 
+/* ---------- 2026-11 新增装扮造型 ---------- */
+
+function PartyHat() {
+  return (
+    <g>
+      <path d="M-30 6 L0 -54 L30 6 Z" fill="url(#lw-pet-party)" stroke="#c26a7a" strokeWidth={1.6} strokeLinejoin="round" />
+      <path d="M-34 4 Q0 16 34 4 L34 12 Q0 24 -34 12 Z" fill="#ffd166" stroke="#d99b1c" strokeWidth={1.2} />
+      <circle cx={0} cy={-56} r={9} fill="#ff6f91" />
+      <circle cx={-3} cy={-59} r={3} fill="#fff" opacity={0.6} />
+      <path d="M-18 -10 L-8 -32" stroke="#fff" strokeWidth={4} strokeLinecap="round" opacity={0.4} />
+      <circle cx={0} cy={10} r={3.2} fill="#7b62e8" />
+      <circle cx={-18} cy={9} r={2.6} fill="#5fd0ff" />
+      <circle cx={18} cy={9} r={2.6} fill="#8bffb0" />
+    </g>
+  )
+}
+
+function Bandana() {
+  return (
+    <g>
+      <path d="M-42 -2 Q0 -18 42 -2 L42 8 Q0 20 -42 8 Z" fill="url(#lw-pet-bandana)" stroke="#7d211c" strokeWidth={1.4} />
+      <path d="M28 8 L48 27 L30 31 Z" fill="#b8352d" stroke="#7d211c" strokeWidth={1.2} />
+      <path d="M-42 -1 Q0 -14 42 -1" stroke="#ff9a8f" strokeWidth={2} opacity={0.45} fill="none" />
+      <circle cx={-22} cy={4} r={2} fill="#fff" opacity={0.55} />
+      <circle cx={-6} cy={7} r={2} fill="#fff" opacity={0.45} />
+      <circle cx={14} cy={5} r={2} fill="#fff" opacity={0.5} />
+    </g>
+  )
+}
+
+function Monocle() {
+  return (
+    <g className="gh-pet-outfit gh-pet-outfit--face">
+      <circle cx={19} cy={0} r={15} fill="url(#lw-pet-glass)" fillOpacity={0.35} stroke="#c9a227" strokeWidth={3} />
+      <circle cx={19} cy={0} r={15} fill="none" stroke="#f3d36a" strokeWidth={1} opacity={0.7} />
+      <path d="M34 5 C 44 18 46 32 40 44" stroke="#c9a227" strokeWidth={2.2} fill="none" strokeLinecap="round" />
+      <path d="M12 -7 L18 -10" stroke="#fff" strokeWidth={3} opacity={0.6} strokeLinecap="round" />
+    </g>
+  )
+}
+
+function BellCollar() {
+  return (
+    <g>
+      <path d="M-34 -4 Q0 10 34 -4" stroke="#c0392b" strokeWidth={8} strokeLinecap="round" fill="none" />
+      <path d="M-34 -4 Q0 7 34 -4" stroke="#e05a4f" strokeWidth={3} strokeLinecap="round" fill="none" opacity={0.6} />
+      <circle cx={0} cy={9} r={7.4} fill="#f8cf5c" stroke="#b88712" strokeWidth={1.6} />
+      <path d="M-2.2 9 H2.2" stroke="#8a6a10" strokeWidth={1.6} strokeLinecap="round" />
+      <circle cx={-2} cy={6.4} r={1.8} fill="#fff8d0" opacity={0.8} />
+    </g>
+  )
+}
+
+function StarPin() {
+  return (
+    <g>
+      <path d={SPARK_PATH} transform="translate(0 2) scale(0.66)" fill="#f8cf5c" stroke="#d99b1c" strokeWidth={1.4} />
+      <circle cx={0} cy={2} r={2.2} fill="#fff6c4" />
+      <path d="M-30 -2 Q0 7 30 -2" stroke="#d99b1c" strokeWidth={2.4} strokeLinecap="round" fill="none" opacity={0.55} />
+    </g>
+  )
+}
+
+function Backpack({ scale }: { scale: number }) {
+  return (
+    <g className="gh-pet-outfit gh-pet-outfit--back" transform={`translate(120 162) scale(${scale})`}>
+      <rect x={-38} y={-42} width={76} height={66} rx={16} fill="url(#lw-pet-backpack)" stroke="#5f4630" strokeWidth={2.2} />
+      <rect x={-30} y={-54} width={60} height={20} rx={9} fill="#a67c52" stroke="#5f4630" strokeWidth={1.8} />
+      <path d="M-38 -12 H38" stroke="#5f4630" strokeWidth={2.4} opacity={0.7} />
+      <rect x={-11} y={-6} width={22} height={18} rx={4} fill="#f0c36a" stroke="#b88712" strokeWidth={1.4} />
+      <path d="M-26 -32 V 8" stroke="#8a6a4a" strokeWidth={2} opacity={0.5} />
+      <path d="M26 -32 V 8" stroke="#8a6a4a" strokeWidth={2} opacity={0.5} />
+      <circle cx={0} cy={3} r={2.6} fill="#5f4630" />
+    </g>
+  )
+}
+
+function AngelWing() {
+  return (
+    <g>
+      <path
+        d="M-8 6 C -38 -16 -74 -12 -94 14 C -72 10 -58 22 -48 42 C -40 24 -26 12 -8 14 Z"
+        fill="url(#lw-pet-wings-angel)"
+        stroke="#cfc6f5"
+        strokeWidth={2}
+      />
+      <path d="M-20 12 C -38 6 -56 10 -70 22" stroke="#d8d0f7" strokeWidth={2.2} fill="none" strokeLinecap="round" />
+      <path d="M-16 20 C -32 18 -46 24 -56 34" stroke="#e2dcff" strokeWidth={2} fill="none" strokeLinecap="round" />
+      <path d="M-12 28 C -24 28 -34 34 -40 42" stroke="#ebe7ff" strokeWidth={1.8} fill="none" strokeLinecap="round" />
+    </g>
+  )
+}
+
+function WingsAngel() {
+  return (
+    <g className="gh-pet-outfit gh-pet-outfit--back gh-pet-outfit--wings">
+      <g transform="translate(120 150)">
+        <AngelWing />
+        <g transform="scale(-1 1)"><AngelWing /></g>
+      </g>
+    </g>
+  )
+}
+
+function BatWing() {
+  return (
+    <g>
+      <path
+        d="M-8 6 C -38 -10 -76 0 -94 32 C -68 26 -54 36 -40 50 C -30 30 -20 18 -8 18 Z"
+        fill="url(#lw-pet-wings-bat)"
+        stroke="#2b2140"
+        strokeWidth={1.8}
+      />
+      <path d="M-20 16 C -38 14 -54 22 -66 36" stroke="#8f74c9" strokeWidth={2} fill="none" opacity={0.55} />
+      <path d="M-14 24 C -28 26 -40 32 -48 42" stroke="#8f74c9" strokeWidth={1.8} fill="none" opacity={0.45} />
+      <path d="M-8 10 L-88 30" stroke="#241a38" strokeWidth={1.4} opacity={0.6} />
+    </g>
+  )
+}
+
+function WingsBat() {
+  return (
+    <g className="gh-pet-outfit gh-pet-outfit--back gh-pet-outfit--wings">
+      <g transform="translate(120 150)">
+        <BatWing />
+        <g transform="scale(-1 1)"><BatWing /></g>
+      </g>
+    </g>
+  )
+}
+
+function HaloGold() {
+  return (
+    <g className="gh-pet-outfit gh-pet-outfit--aura gh-pet-outfit--halo">
+      <ellipse cx={120} cy={28} rx={44} ry={12} fill="url(#lw-pet-halo)" opacity={0.8} />
+      <ellipse cx={120} cy={28} rx={34} ry={8} fill="none" stroke="url(#lw-pet-crown)" strokeWidth={6} />
+      <ellipse cx={120} cy={28} rx={34} ry={8} fill="none" stroke="#fff6c4" strokeWidth={1.6} opacity={0.8} />
+    </g>
+  )
+}
+
+function AuraSparkle() {
+  const sparks = [
+    { x: 38, y: 90, s: 0.75 },
+    { x: 196, y: 82, s: 0.62 },
+    { x: 52, y: 168, s: 0.52 },
+    { x: 188, y: 172, s: 0.58 },
+    { x: 96, y: 30, s: 0.45 },
+    { x: 150, y: 36, s: 0.4 },
+  ]
+  return (
+    <g className="gh-pet-outfit gh-pet-outfit--aura gh-pet-outfit--sparkle">
+      {sparks.map((spark, index) => (
+        <path
+          key={index}
+          d={SPARK_PATH}
+          transform={`translate(${spark.x} ${spark.y}) scale(${spark.s})`}
+          fill={index % 2 === 0 ? '#ffe9a3' : '#bfe6ff'}
+          opacity={0.85}
+        />
+      ))}
+    </g>
+  )
+}
+
+function AuraFlame() {
+  const flames = [
+    { x: 62, y: 198, s: 1 },
+    { x: 178, y: 198, s: 0.9 },
+    { x: 46, y: 160, s: 0.72 },
+    { x: 194, y: 158, s: 0.8 },
+    { x: 120, y: 220, s: 0.8 },
+  ]
+  return (
+    <g className="gh-pet-outfit gh-pet-outfit--aura gh-pet-outfit--flame">
+      {flames.map((flame, index) => (
+        <path
+          key={index}
+          d="M0 0 C -9 -14 -5 -28 0 -38 C 5 -28 9 -14 0 0 Z"
+          transform={`translate(${flame.x} ${flame.y}) scale(${flame.s})`}
+          fill="url(#lw-pet-aura-flame)"
+        />
+      ))}
+    </g>
+  )
+}
+
 function NeckOutfit({ outfitKey, anchor }: { outfitKey: string; anchor: SlotAnchor }) {
   const node = outfitKey === 'scarf_blue'
     ? <ScarfBlue />
     : outfitKey === 'bowtie'
       ? <Bowtie />
-      : null
+      : outfitKey === 'bell_collar'
+        ? <BellCollar />
+        : outfitKey === 'star_pin'
+          ? <StarPin />
+          : null
   if (!node) return null
   return (
     <g className="gh-pet-outfit gh-pet-outfit--neck" transform={`translate(${anchor.x} ${anchor.y}) scale(${anchor.s})`}>
@@ -825,7 +1052,11 @@ function HatOutfit({ outfitKey, anchor }: { outfitKey: string; anchor: SlotAncho
     ? <HatRed />
     : outfitKey === 'crown_gold'
       ? <CrownGold />
-      : null
+      : outfitKey === 'party_hat'
+        ? <PartyHat />
+        : outfitKey === 'bandana'
+          ? <Bandana />
+          : null
   if (!node) return null
   return (
     <g className="gh-pet-outfit gh-pet-outfit--hat" transform={`translate(${anchor.x} ${anchor.y}) scale(${anchor.s})`}>
@@ -839,13 +1070,33 @@ function FaceOutfit({ outfitKey, anchor }: { outfitKey: string; anchor: SlotAnch
     ? <GlassesRound />
     : outfitKey === 'sunglasses'
       ? <Sunglasses />
-      : null
+      : outfitKey === 'monocle'
+        ? <Monocle />
+        : null
   if (!node) return null
   return (
     <g className="gh-pet-outfit gh-pet-outfit--face" transform={`translate(${anchor.x} ${anchor.y}) scale(${anchor.s})`}>
       {node}
     </g>
   )
+}
+
+function BackOutfit({ outfitKey, scale }: { outfitKey: string; scale: number }) {
+  switch (outfitKey) {
+    case 'wings_angel': return <WingsAngel />
+    case 'wings_bat': return <WingsBat />
+    case 'backpack': return <Backpack scale={scale} />
+    default: return null
+  }
+}
+
+function AuraOutfit({ outfitKey }: { outfitKey: string }) {
+  switch (outfitKey) {
+    case 'halo_gold': return <HaloGold />
+    case 'aura_sparkle': return <AuraSparkle />
+    case 'aura_flame': return <AuraFlame />
+    default: return null
+  }
 }
 
 /* ============================================================
@@ -961,7 +1212,7 @@ function Sweat() {
    组件
    ============================================================ */
 
-export default function PetSprite({
+function PetSprite({
   species: rawSpecies,
   equipped = null,
   mood = 70,
@@ -997,12 +1248,14 @@ export default function PetSprite({
       <svg viewBox="0 0 240 240" role="img" aria-label={meta.name}>
         <PetDefs species={species} palette={palette} />
         <ellipse cx={120} cy={214} rx={62} ry={11} fill="url(#lw-pet-shadow)" />
+        {equipped?.back && <BackOutfit outfitKey={equipped.back} scale={anchors.cape} />}
         {equipped?.neck === 'cape_hero' && <CapeHero scale={anchors.cape} />}
         <g className="gh-pet-motion">
           <g className="gh-pet-breathe">
             {renderCreature(species, palette, safeMood)}
           </g>
         </g>
+        {equipped?.aura && <AuraOutfit outfitKey={equipped.aura} />}
         {equipped?.neck && equipped.neck !== 'cape_hero' && (
           <NeckOutfit outfitKey={equipped.neck} anchor={anchors.neck} />
         )}
@@ -1015,5 +1268,8 @@ export default function PetSprite({
     </div>
   )
 }
+
+/** 纯 SVG 立绘：props 不变时跳过渲染（列表里同一只宠物会随父级状态频繁重渲染） */
+export default memo(PetSprite)
 
 

@@ -360,7 +360,7 @@ export default function ReaderPage() {
                   aria-label={`${featuredBook.progress ? '继续阅读' : '开始阅读'}《${featuredBook.title}》`}
                 >
                   {featuredBook.hasCover ? (
-                    <img src={coverUrl(featuredBook)} alt="" />
+                    <img src={coverUrl(featuredBook)} alt="" decoding="async" />
                   ) : renderCoverFallback(featuredBook)}
                   <span className="gh-reader-hero-sheen" aria-hidden="true" />
                 </button>
@@ -418,7 +418,7 @@ export default function ReaderPage() {
                       aria-label={`阅读《${book.title}》`}
                     >
                       {book.hasCover ? (
-                        <img src={coverUrl(book)} alt="" loading="lazy" />
+                        <img src={coverUrl(book)} alt="" loading="lazy" decoding="async" />
                       ) : renderCoverFallback(book)}
                       <span className="gh-reader-card-hover">
                         <Icon name="play" size={15} />

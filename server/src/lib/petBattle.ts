@@ -44,8 +44,8 @@ export function battleStakeFor(points: number): number {
   )
 }
 
-export type PetBattleStatusType = 'burn' | 'poison' | 'stun'
-export type PetBattleBuffType = 'atk_up' | 'def_up'
+export type PetBattleStatusType = 'burn' | 'poison' | 'stun' | 'weaken' | 'vulnerable' | 'regen'
+export type PetBattleBuffType = 'atk_up' | 'def_up' | 'crit_up'
 
 export interface PetBattleStatus {
   type: PetBattleStatusType
@@ -294,6 +294,19 @@ function defBuff(side: PetBattleSide): number {
     .reduce((sum, buff) => sum + buff.value, 0)
 }
 
+function critBuff(side: PetBattleSide): number {
+  return side.buffs
+    .filter((buff) => buff.type === 'crit_up')
+    .reduce((sum, buff) => sum + buff.value, 0)
+}
+
+/** 某个负面状态的总强度（weaken / vulnerable 可叠加，按百分比求和） */
+function statusValue(side: PetBattleSide, type: PetBattleStatusType): number {
+  return side.statuses
+    .filter((status) => status.type === type && status.turns > 0)
+    .reduce((sum, status) => sum + status.value, 0)
+}
+
 function hasStun(side: PetBattleSide): boolean {
   return side.statuses.some((status) => status.type === 'stun' && status.turns > 0)
 }
@@ -331,7 +344,7 @@ function beginTurn(state: PetBattleState, side: PetBattleSide): boolean {
     }
   }
 
-  // 持续伤害：在自身回合开始结算（护盾不吸收 DoT）
+  // 持续伤害 / 持续治疗 / 减益计时：在自身回合开始结算（护盾不吸收 DoT）
   const remaining: PetBattleStatus[] = []
   for (const status of side.statuses) {
     if (status.type === 'burn' || status.type === 'poison') {
@@ -355,6 +368,35 @@ function beginTurn(state: PetBattleState, side: PetBattleSide): boolean {
       })
       status.turns -= 1
       if (status.turns > 0 && side.hp > 0) remaining.push(status)
+      continue
+    }
+    if (status.type === 'regen') {
+      const heal = healSide(side, (side.maxHp * status.value) / 100)
+      if (heal > 0) {
+        pushEvent(state, {
+          round: state.round,
+          actorId: side.userId,
+          targetId: side.userId,
+          skillKey: 'regen',
+          skillName: '回春',
+          animation: 'heal',
+          kind: 'regen',
+          damage: 0,
+          absorbed: 0,
+          heal,
+          crit: false,
+          hpAfter: side.hp,
+          mpAfter: side.mp,
+          text: `${side.name} 回复了 ${heal} 点生命`,
+        })
+      }
+      status.turns -= 1
+      if (status.turns > 0 && side.hp > 0) remaining.push(status)
+      continue
+    }
+    if (status.type === 'weaken' || status.type === 'vulnerable') {
+      status.turns -= 1
+      if (status.turns > 0) remaining.push(status)
       continue
     }
     remaining.push(status)
@@ -547,11 +589,21 @@ export function applyBattleAction(
   const extras: string[] = []
 
   if (skill.kind === 'damage') {
-    const attack = actor.atk * (1 + atkBuff(actor) / 100)
-    const defense = target.def * (1 + defBuff(target) / 100) * (1 - (skill.ignoreDef ?? 0))
-    const raw = Math.max(1, attack * skill.power - defense * 0.45)
+    const attack = actor.atk * (1 + atkBuff(actor) / 100) * (1 - statusValue(actor, 'weaken') / 100)
+    const defense = target.def
+      * (1 + defBuff(target) / 100)
+      * (1 - (skill.ignoreDef ?? 0))
+      * (1 - statusValue(target, 'vulnerable') / 100)
+    let raw = Math.max(1, attack * skill.power - defense * 0.45)
+    const execute = skill.executeBelow !== undefined
+      && skill.executeBelow >= 0
+      && target.hp / Math.max(1, target.maxHp) <= skill.executeBelow
+    if (execute) {
+      raw *= 1 + Math.max(0, skill.executeBonus ?? 0)
+      extras.push(`处决加成 +${Math.round((skill.executeBonus ?? 0) * 100)}%`)
+    }
     const variance = 0.9 + rng() * 0.2
-    const critChance = Math.min(0.75, Math.max(0, (actor.crit + (skill.critBonus ?? 0)) / 100))
+    const critChance = Math.min(0.75, Math.max(0, (actor.crit + (skill.critBonus ?? 0) + critBuff(actor)) / 100))
     crit = rng() < critChance
     damage = Math.max(1, Math.round(raw * variance * (crit ? 1.6 : 1)))
     const applied = applyDamage(target, damage)
@@ -576,10 +628,10 @@ export function applyBattleAction(
       extras.push(`${effectLabel(effect.type)}未触发`)
       continue
     }
-    if (effect.type === 'atk_up' || effect.type === 'def_up') {
+    if (effect.type === 'atk_up' || effect.type === 'def_up' || effect.type === 'crit_up') {
       actor.buffs = actor.buffs.filter((buff) => buff.type !== effect.type)
       actor.buffs.push({ type: effect.type, value: effect.value, turns: effect.turns })
-      extras.push(`${effect.type === 'atk_up' ? '攻击' : '防御'} +${effect.value}%（${effect.turns} 回合）`)
+      extras.push(`${effectLabel(effect.type)} +${effect.value}%（${effect.turns} 回合）`)
     } else if (effect.type === 'shield') {
       actor.shield = Math.min(
         actor.maxHp,
@@ -587,9 +639,23 @@ export function applyBattleAction(
       )
       actor.shieldTurns = Math.max(actor.shieldTurns, effect.turns)
       extras.push(`获得 ${Math.round((actor.maxHp * effect.value) / 100)} 点护盾`)
-    } else if (effect.type === 'stun' || effect.type === 'burn' || effect.type === 'poison') {
+    } else if (effect.type === 'regen') {
+      actor.statuses = actor.statuses.filter((status) => status.type !== 'regen')
+      actor.statuses.push({ type: 'regen', value: effect.value, turns: effect.turns })
+      extras.push(`获得回春（每回合 ${effect.value}% HP，${effect.turns} 回合）`)
+    } else if (
+      effect.type === 'stun'
+      || effect.type === 'burn'
+      || effect.type === 'poison'
+      || effect.type === 'weaken'
+      || effect.type === 'vulnerable'
+    ) {
       target.statuses = target.statuses.filter((status) => status.type !== effect.type)
-      target.statuses.push({ type: effect.type, value: effect.value, turns: effect.turns })
+      // weaken / vulnerable 在目标回合开始时递减：+1 让它们完整覆盖目标的 N 次行动
+      const turns = effect.type === 'weaken' || effect.type === 'vulnerable'
+        ? effect.turns + 1
+        : effect.turns
+      target.statuses.push({ type: effect.type, value: effect.value, turns })
       extras.push(
         effect.type === 'stun'
           ? `使目标眩晕 ${effect.turns} 回合`
@@ -668,6 +734,14 @@ function effectLabel(type: string): string {
       return '攻击提升'
     case 'def_up':
       return '防御提升'
+    case 'crit_up':
+      return '暴击提升'
+    case 'weaken':
+      return '虚弱'
+    case 'vulnerable':
+      return '破甲'
+    case 'regen':
+      return '回春'
     default:
       return type
   }

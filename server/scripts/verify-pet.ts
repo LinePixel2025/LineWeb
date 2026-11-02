@@ -95,6 +95,11 @@ function assertEqual(actual: unknown, expected: unknown, label: string): void {
   passed += 1
 }
 
+/** 五个装扮槽的完整期望（back/aura 为 2026-11 新增槽位） */
+function equippedWith(partial: Record<string, string | null>): Record<string, string | null> {
+  return { ...emptyPetEquipped(), ...partial }
+}
+
 const HOUR_MS = 3_600_000
 const BASE = 1_700_000_000_000
 
@@ -243,12 +248,12 @@ assertEqual(recomputeCriticalSince(50, 0, 0, null), null, '无记录且不新增
 assertEqual(petUnlockedActions(1), ['feed'], 'L1 只解锁喂食')
 assertEqual(
   petUnlockedActions(3),
-  ['feed', 'bathe', 'play', 'stretch', 'beg'],
-  'L3 解锁全部照顾动作 + 伸懒腰/作揖',
+  ['feed', 'bathe', 'play', 'stretch', 'beg', 'wave'],
+  'L3 解锁全部照顾动作 + 伸懒腰/作揖/招手',
 )
 assertEqual(
   petUnlockedActions(4),
-  ['feed', 'bathe', 'play', 'stretch', 'beg', 'dance'],
+  ['feed', 'bathe', 'play', 'stretch', 'beg', 'dance', 'wave'],
   'L4 追加跳舞',
 )
 assertEqual(
@@ -256,7 +261,7 @@ assertEqual(
   [
     'feed', 'bathe', 'play',
     'stretch', 'beg', 'dance', 'roll', 'highfive', 'sing', 'flip',
-    'moonwalk', 'spin', 'playdead', 'magic', 'cheer', 'firework',
+    'moonwalk', 'spin', 'playdead', 'wave', 'sneeze', 'yawn', 'magic', 'cheer', 'firework',
   ],
   'L10 全解锁',
 )
@@ -282,20 +287,22 @@ assertEqual(PET_MAX_LEVEL, 10, '满级为 10')
    ============================================================ */
 
 {
-  const equipped = { hat: 'hat_red', neck: 'scarf_blue', face: 'sunglasses' }
-  assertEqual(cleanEquipped(serializeEquipped(equipped)), equipped, '合法 JSON 往返一致')
+  const equipped = equippedWith({ hat: 'hat_red', neck: 'scarf_blue', face: 'sunglasses', back: 'wings_angel', aura: 'halo_gold' })
+  assertEqual(cleanEquipped(serializeEquipped(equipped as never)), equipped, '合法 JSON 往返一致')
 }
-assertEqual(cleanEquipped('{"hat":"hat_red","neck":null,"face":null}'), { hat: 'hat_red', neck: null, face: null }, '部分佩戴合法')
+assertEqual(cleanEquipped('{"hat":"hat_red","neck":null,"face":null}'), equippedWith({ hat: 'hat_red' }), '部分佩戴合法')
 assertEqual(cleanEquipped('not json'), emptyPetEquipped(), '非法 JSON 回全空')
 assertEqual(cleanEquipped('[]'), emptyPetEquipped(), '数组输入回全空')
 assertEqual(cleanEquipped('null'), emptyPetEquipped(), 'null 输入回全空')
 assertEqual(cleanEquipped(''), emptyPetEquipped(), '空串回全空')
 assertEqual(cleanEquipped(undefined), emptyPetEquipped(), 'undefined 回全空')
-assertEqual(cleanEquipped('{"hat":"crown_gold"}'), { hat: 'crown_gold', neck: null, face: null }, '未知 key 被过滤')
+assertEqual(cleanEquipped('{"hat":"crown_gold"}'), equippedWith({ hat: 'crown_gold' }), '未知 key 被过滤')
 assertEqual(cleanEquipped('{"hat":"scarf_blue"}'), emptyPetEquipped(), 'slot 与目录不符被过滤')
-assertEqual(cleanEquipped('{"hat":"hat_red","extra":"x","neck":123}'), { hat: 'hat_red', neck: null, face: null }, '多余字段与非法值被忽略')
+assertEqual(cleanEquipped('{"hat":"hat_red","extra":"x","neck":123}'), equippedWith({ hat: 'hat_red' }), '多余字段与非法值被忽略')
 assertEqual(cleanEquipped('{"hat":"HAT_RED"}'), emptyPetEquipped(), 'key 大小写敏感')
-assertEqual(cleanEquipped('{"face":"glasses_round","neck":"bowtie"}'), { hat: null, neck: 'bowtie', face: 'glasses_round' }, '多 slot 组合合法')
+assertEqual(cleanEquipped('{"face":"glasses_round","neck":"bowtie"}'), equippedWith({ neck: 'bowtie', face: 'glasses_round' }), '多 slot 组合合法')
+assertEqual(cleanEquipped('{"back":"wings_bat","aura":"aura_flame"}'), equippedWith({ back: 'wings_bat', aura: 'aura_flame' }), '背部 / 光环槽位合法')
+assertEqual(cleanEquipped('{"back":"hat_red"}'), emptyPetEquipped(), '背部槽拒绝头部装扮')
 
 /* ============================================================
    目录不变量
@@ -368,14 +375,14 @@ assertEqual(cleanEquipped('{"face":"glasses_round","neck":"bowtie"}'), { hat: nu
 {
   const keys = PET_TRICKS.map((trick) => trick.key)
   assertEqual(new Set(keys).size, keys.length, '特技 key 唯一')
-  assertEqual(keys.length, 13, '共 13 个特技（7 个既有 + 6 个新增）')
+  assertEqual(keys.length, 16, '共 16 个特技（13 个既有 + 招手/打喷嚏/打哈欠）')
   for (const trick of PET_TRICKS) {
     assert(trick.minLevel >= 2 && trick.minLevel <= PET_MAX_LEVEL, `特技 ${trick.key} minLevel 在 2–10`)
     assert(trick.emoji.length > 0, `特技 ${trick.key} 有 emoji`)
   }
-  // minLevel 覆盖 L2–L10；L5/L7/L8/L9 各有两档动作，其余等级一档
+  // minLevel 覆盖 L2–L10；L3/L6/L9 各有新增动作（招手/打喷嚏/打哈欠）
   const levels = PET_TRICKS.map((trick) => trick.minLevel).sort((a, b) => a - b)
-  assertEqual(levels, [2, 3, 4, 5, 5, 6, 7, 7, 8, 8, 9, 9, 10], '特技解锁等级覆盖 L2–L10')
+  assertEqual(levels, [2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 9, 10], '特技解锁等级覆盖 L2–L10')
 }
 
 // decay
@@ -499,17 +506,18 @@ assertEqual(sanitizeGuestbookContent('你好，来串门啦～'), '你好，来�
    战斗装备目录
    ============================================================ */
 
-assertEqual(PET_EQUIPMENTS.length, 12, '12 件战斗装备')
-assertEqual(new Set(PET_EQUIPMENT_KEYS).size, 12, '装备 key 唯一')
+assertEqual(PET_EQUIPMENTS.length, 26, '26 件战斗装备')
+assertEqual(new Set(PET_EQUIPMENT_KEYS).size, 26, '装备 key 唯一')
 assertEqual(PET_EQUIPMENT_SLOTS, ['weapon', 'armor', 'accessory'], '三个装备槽位')
 assertEqual(PET_STARTER_EQUIPMENT_KEYS.length, 3, '3 件绑定新手装')
-assertEqual(new Set(PET_SHOP_EQUIPMENTS.map((item) => item.key)).size, 3, '商店出售 3 件基础装备')
+assertEqual(new Set(PET_SHOP_EQUIPMENTS.map((item) => item.key)).size, 9, '商店出售 9 件基础/稀有装备')
 
+const EQUIPMENT_PER_SLOT: Record<string, number> = { weapon: 9, armor: 8, accessory: 9 }
 for (const slot of PET_EQUIPMENT_SLOTS) {
   assertEqual(
     PET_EQUIPMENTS.filter((item) => item.slot === slot).length,
-    4,
-    `${slot} 槽位有 4 件装备`,
+    EQUIPMENT_PER_SLOT[slot],
+    `${slot} 槽位装备数量与目录一致`,
   )
 }
 for (const item of PET_EQUIPMENTS) {
@@ -530,11 +538,11 @@ assert(PET_EQUIPMENT_MAP.get('nope') === undefined, '未知装备取不到')
    技能目录
    ============================================================ */
 
-assertEqual(PET_SKILLS.length, 12, '12 个技能（含普攻）')
-assertEqual(new Set(PET_SKILLS.map((skill) => skill.key)).size, 12, '技能 key 唯一')
+assertEqual(PET_SKILLS.length, 24, '24 个技能（含普攻）')
+assertEqual(new Set(PET_SKILLS.map((skill) => skill.key)).size, 24, '技能 key 唯一')
 assertEqual(PET_SKILL_MAX_EQUIPPED, 3, '最多装备 3 个技能')
 assert(PET_SKILL_MAP.has(PET_BASIC_SKILL_KEY), '普攻存在')
-assertEqual(PET_SHOP_SKILLS.length, 11, '技能商店出售 11 个技能（不含普攻）')
+assertEqual(PET_SHOP_SKILLS.length, 23, '技能商店出售 23 个技能（不含普攻）')
 assert(!PET_SHOP_SKILLS.some((skill) => skill.key === PET_BASIC_SKILL_KEY), '技能商店不卖普攻')
 
 for (const skill of PET_SKILLS) {

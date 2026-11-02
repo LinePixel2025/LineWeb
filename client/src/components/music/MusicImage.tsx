@@ -56,6 +56,7 @@ export default function MusicImage({
       src={src}
       alt={alt}
       loading={loading}
+      decoding="async"
       onError={handleError}
     />
   )

@@ -57,6 +57,7 @@ const ImagePreview = memo(function ImagePreview({ item, onClose }: DrivePreviewP
               src={imgSrc}
               alt={item.name}
               className="gh-drive-preview-image"
+              decoding="async"
               style={{ transform: `scale(${zoom}) rotate(${rotation}deg)` }}
               onLoad={() => setLoading(false)}
               onError={() => { setLoading(false); setError('图片加载失败') }}

@@ -56,14 +56,18 @@ export function getCrop(key: string | null | undefined): CropDef | null {
   return CROP_MAP.get(key) ?? null
 }
 
-/** 农田可扩建档位（初始 6 块，最大 18 块） */
+/** 农田可扩建档位（初始 6 块，最大 30 块） */
 export const INITIAL_PLOT_COUNT = 6
-export const MAX_PLOT_COUNT = 18
+export const MAX_PLOT_COUNT = 30
 export const PLOT_EXPANSION_COSTS: Readonly<Record<number, number>> = {
   9: 500,
   12: 1500,
   15: 3000,
   18: 6000,
+  21: 10_000,
+  24: 16_000,
+  27: 24_000,
+  30: 36_000,
 }
 
 /** 下一次扩建（已到上限返回 null） */
@@ -100,6 +104,55 @@ export function fertilizeReadyAt(readyAt: Date, now: number = Date.now()): Date 
   const remaining = Math.max(0, readyAt.getTime() - now)
   const next = Math.max(FERTILIZER_MIN_REMAINING_MS, remaining * FERTILIZER_TIME_RATIO)
   return new Date(now + next)
+}
+
+/* ============================================================
+   偷菜保护（花积分买一段免偷时间）
+   ============================================================ */
+
+export interface FarmProtectionPackage {
+  hours: number
+  cost: number
+  label: string
+}
+
+/** 可购买的时长档位（越长越便宜，24h 档单小时最划算） */
+export const FARM_PROTECTION_PACKAGES: readonly FarmProtectionPackage[] = [
+  { hours: 1, cost: 30, label: '1 小时' },
+  { hours: 3, cost: 75, label: '3 小时' },
+  { hours: 6, cost: 120, label: '6 小时' },
+  { hours: 12, cost: 200, label: '12 小时' },
+  { hours: 24, cost: 320, label: '24 小时' },
+]
+
+/** 单次购买后保护剩余时间上限（可叠加，但不会超过 48 小时） */
+export const FARM_PROTECTION_MAX_HOURS = 48
+
+export function findProtectionPackage(hours: number): FarmProtectionPackage | null {
+  return FARM_PROTECTION_PACKAGES.find((item) => item.hours === hours) ?? null
+}
+
+/**
+ * 计算购买后的保护到期时间：
+ *   - 从「当前生效保护」或现在（取较晚者）往后叠加
+ *   - 总剩余不超过 FARM_PROTECTION_MAX_HOURS（超出部分不收费也不延长，调用方需先拦截）
+ */
+export function protectionUntilAfter(
+  currentUntil: Date | null | undefined,
+  hours: number,
+  now: number = Date.now(),
+): Date {
+  const base = Math.max(now, currentUntil ? currentUntil.getTime() : now)
+  return new Date(base + hours * 3_600_000)
+}
+
+/** 剩余保护时长（毫秒，未保护为 0） */
+export function protectionRemainingMs(
+  until: Date | null | undefined,
+  now: number = Date.now(),
+): number {
+  if (!until) return 0
+  return Math.max(0, until.getTime() - now)
 }
 
 /** 小偷获得的积分（至少 1 分） */

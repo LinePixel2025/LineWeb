@@ -16,6 +16,12 @@ import {
   sellStock,
 } from '../services/stockService.js'
 import { listTodayStockEvents } from '../services/stockEventService.js'
+import {
+  cancelStockOrder,
+  createStockOrder,
+  getStockOrdersView,
+  processStockOrders,
+} from '../services/stockOrderService.js'
 
 /**
  * 模拟股市：行情只读（3 秒一 tick 实时刷新），交易用统一积分按实时价成交；
@@ -115,6 +121,19 @@ const eventsSchema = z.object({
   limit: z.coerce.number().int().min(1).max(60).optional(),
 })
 
+const orderSchema = z.object({
+  code: z.string().trim().min(1).max(12),
+  side: z.enum(['buy', 'sell']),
+  limitPrice: z.coerce.number().min(0.5).max(100_000),
+  points: z.coerce.number().int().min(1).max(100_000).optional(),
+  shares: z.coerce.number().min(0.0001).max(1e12).optional(),
+}).refine(
+  (data) => (data.side === 'buy' ? data.points !== undefined : data.shares !== undefined),
+  { message: '买入需要 points，卖出需要 shares' },
+)
+
+const orderIdSchema = z.object({ id: z.coerce.number().int().positive() })
+
 function parseInput<S extends z.ZodTypeAny>(schema: S, data: unknown): z.infer<S> {
   const parsed = schema.safeParse(data)
   if (!parsed.success) {
@@ -127,6 +146,10 @@ function parseInput<S extends z.ZodTypeAny>(schema: S, data: unknown): z.infer<S
 // GET /api/stocks/market — 全市场实时报价（每 3 秒推进一个 tick，价格实时计算）
 router.get('/market', marketLimiter, asyncHandler(async (_req: Request, res: Response) => {
   await ensureImpactLoaded()
+  // 惰性撮合（全局最多 4 秒一次；失败不影响行情）
+  await processStockOrders().catch((error) => {
+    console.warn('[stocks] 限价撮合失败：', (error as Error).message)
+  })
   res.json(buildLiveMarket(getTodayDateKey()))
 }))
 
@@ -148,7 +171,28 @@ router.get('/events', marketLimiter, asyncHandler(async (req: Request, res: Resp
 
 // GET /api/stocks/portfolio — 我的持仓与汇总收益
 router.get('/portfolio', asyncHandler(async (req: Request, res: Response) => {
-  res.json(await getStockPortfolio(currentUserId(req)))
+  const userId = currentUserId(req)
+  await processStockOrders(userId).catch((error) => {
+    console.warn('[stocks] 个人限价撮合失败：', (error as Error).message)
+  })
+  res.json(await getStockPortfolio(userId))
+}))
+
+// GET /api/stocks/orders — 我的限价委托（先撮合一次）
+router.get('/orders', tradesLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await getStockOrdersView(currentUserId(req)))
+}))
+
+// POST /api/stocks/orders — { code, side, limitPrice, points? | shares? }
+router.post('/orders', tradeLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(orderSchema, req.body ?? {})
+  res.status(201).json(await createStockOrder(currentUserId(req), input))
+}))
+
+// DELETE /api/stocks/orders/:id — 撤销自己的限价委托
+router.delete('/orders/:id', tradeLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = parseInput(orderIdSchema, req.params)
+  res.json(await cancelStockOrder(currentUserId(req), id))
 }))
 
 // POST /api/stocks/buy — { code, points } 用积分按实时价买入

@@ -14,6 +14,10 @@ import type {
   StockLeaderboard,
   StockMarket,
   StockNewsItem,
+  StockOrder,
+  StockOrderCancelResult,
+  StockOrderCreateResult,
+  StockOrdersView,
   StockPortfolio,
   StockQuote,
   StockSellResult,
@@ -33,6 +37,18 @@ const ALERT_LOG_KEY = 'lineweb_stock_alert_log_v1'
 
 /** 行情轮询间隔（与服务端 3 秒 tick 对齐） */
 const MARKET_POLL_MS = 3_000
+/** 行情刷新间隔（本机记忆；30 秒档可显著降低老设备与服务器压力） */
+const REFRESH_KEY = 'lineweb_stock_refresh_ms_v1'
+const REFRESH_OPTIONS = [3_000, 10_000, 30_000] as const
+
+function readRefreshMs(): number {
+  try {
+    const raw = Number(localStorage.getItem(REFRESH_KEY))
+    return REFRESH_OPTIONS.includes(raw as (typeof REFRESH_OPTIONS)[number]) ? raw : MARKET_POLL_MS
+  } catch {
+    return MARKET_POLL_MS
+  }
+}
 /** 行情请求失败后的退避时长，退避期内跳过轮询 */
 const MARKET_BACKOFF_MS = 10_000
 /** 个股走势（分时 + 日线）轮询间隔 */
@@ -209,7 +225,7 @@ function readAlertLog(): StockAlertHit[] {
 }
 
 type ChartMode = 'intraday' | 'daily'
-type LowerTab = 'holdings' | 'trades' | 'rank'
+type LowerTab = 'holdings' | 'orders' | 'trades' | 'rank'
 type ToastTone = 'info' | 'success' | 'danger'
 
 interface ToastItem {
@@ -575,6 +591,7 @@ export default function StocksPage() {
   const { balance, refresh: refreshPoints } = usePoints()
   const [market, setMarket] = useState<StockMarket | null>(null)
   const [marketError, setMarketError] = useState<string | null>(null)
+  const [refreshMs, setRefreshMs] = useState<number>(() => readRefreshMs())
   const [portfolio, setPortfolio] = useState<StockPortfolio | null>(null)
   const [loading, setLoading] = useState(true)
   const [tradeNotice, setTradeNotice] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null)
@@ -597,9 +614,18 @@ export default function StocksPage() {
   const [sellAll, setSellAll] = useState(false)
   const [sellError, setSellError] = useState<string | null>(null)
 
-  // 账户 / 交易记录 / 排行榜
+  // 账户 / 限价委托 / 交易记录 / 排行榜
   const [tab, setTab] = useState<LowerTab>('holdings')
   const [showAllNews, setShowAllNews] = useState(false)
+  const [orders, setOrders] = useState<StockOrdersView | null>(null)
+  const [ordersLoading, setOrdersLoading] = useState(false)
+  const [ordersError, setOrdersError] = useState<string | null>(null)
+  const [orderSide, setOrderSide] = useState<'buy' | 'sell'>('buy')
+  const [orderLimitPrice, setOrderLimitPrice] = useState('')
+  const [orderPoints, setOrderPoints] = useState('500')
+  const [orderShares, setOrderShares] = useState('')
+  const [orderBusy, setOrderBusy] = useState(false)
+  const [orderNotice, setOrderNotice] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null)
   const [trades, setTrades] = useState<StockTrade[] | null>(null)
   const [tradesLoading, setTradesLoading] = useState(false)
   const [tradesError, setTradesError] = useState<string | null>(null)
@@ -643,6 +669,19 @@ export default function StocksPage() {
     portfolioLoadedRef.current = true
     setPortfolio(data)
     return data
+  }, [])
+
+  const loadOrders = useCallback(async (silent = false) => {
+    if (!silent) setOrdersLoading(true)
+    try {
+      const data = await api.get<StockOrdersView>('/stocks/orders')
+      setOrders(data)
+      setOrdersError(null)
+    } catch (err) {
+      setOrdersError(err instanceof Error ? err.message : '委托加载失败')
+    } finally {
+      if (!silent) setOrdersLoading(false)
+    }
   }, [])
 
   const loadTrades = useCallback(async () => {
@@ -707,11 +746,19 @@ export default function StocksPage() {
   }, [loadMarket, loadPortfolio])
 
   useEffect(() => {
+    try {
+      localStorage.setItem(REFRESH_KEY, String(refreshMs))
+    } catch {
+      // 隐私模式忽略
+    }
+  }, [refreshMs])
+
+  useEffect(() => {
     const timer = window.setInterval(() => {
       if (document.hidden) return
       if (Date.now() < marketBackoffUntilRef.current) return
       void loadMarket()
-    }, MARKET_POLL_MS)
+    }, refreshMs)
     const handleVisibility = () => {
       if (document.hidden) return
       // 恢复可见立即拉一次并重置退避
@@ -723,7 +770,7 @@ export default function StocksPage() {
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [loadMarket])
+  }, [loadMarket, refreshMs])
 
   const loadTrend = useCallback(async (code: string) => {
     const requestId = ++trendRequestRef.current
@@ -752,11 +799,21 @@ export default function StocksPage() {
     return () => window.clearInterval(timer)
   }, [selectedCode, loadTrend])
 
-  // 切到「成交记录 / 排行榜」时才拉数据（每次进入都刷新，数据量小且有限流兜底）
+  // 切到「委托 / 成交记录 / 排行榜」时才拉数据（每次进入都刷新，数据量小且有限流兜底）
   useEffect(() => {
+    if (tab === 'orders') void loadOrders()
     if (tab === 'trades') void loadTrades()
     if (tab === 'rank') void loadLeaderboard()
-  }, [tab, loadTrades, loadLeaderboard])
+  }, [tab, loadOrders, loadTrades, loadLeaderboard])
+
+  // 委托页每 10 秒静默刷新（服务端惰性撮合可能已在后台成交）
+  useEffect(() => {
+    if (tab !== 'orders') return undefined
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadOrders(true)
+    }, 10_000)
+    return () => window.clearInterval(timer)
+  }, [tab, loadOrders])
 
   const selected = market?.stocks.find((stock) => stock.code === selectedCode) ?? market?.stocks[0] ?? null
   const holding = portfolio?.holdings.find((row) => row.code === selected?.code) ?? null
@@ -994,6 +1051,90 @@ export default function StocksPage() {
     }
   }
 
+  const submitOrder = async () => {
+    if (!selected || orderBusy) return
+    const limit = Number(orderLimitPrice) || selected.price
+    if (!Number.isFinite(limit) || limit <= 0) {
+      setOrderNotice({ tone: 'danger', text: '请输入有效的限价' })
+      return
+    }
+    if (orderSide === 'buy') {
+      const points = Number.parseInt(orderPoints, 10)
+      if (!Number.isInteger(points) || points < 100 || points > 100_000) {
+        setOrderNotice({ tone: 'danger', text: '买入金额需在 100–100,000 积分之间' })
+        return
+      }
+      if (points > balance) {
+        setOrderNotice({ tone: 'danger', text: '积分不足' })
+        return
+      }
+      setOrderBusy(true)
+      setOrderNotice(null)
+      try {
+        const result = await api.post<StockOrderCreateResult>('/stocks/orders', {
+          code: selected.code,
+          side: 'buy',
+          limitPrice: limit,
+          points,
+        })
+        setOrderNotice({
+          tone: 'success',
+          text: `限价买入已挂单：${result.order.name}，限价 ${formatPrice(limit)}，冻结 ${formatPoints(points)} 积分`,
+        })
+        await Promise.all([loadOrders(true), loadPortfolio(), refreshPoints(), loadMarket()])
+      } catch (err) {
+        setOrderNotice({ tone: 'danger', text: err instanceof Error ? err.message : '限价买入失败' })
+      } finally {
+        setOrderBusy(false)
+      }
+      return
+    }
+
+    if (!holding) {
+      setOrderNotice({ tone: 'danger', text: '没有持仓，无法限价卖出' })
+      return
+    }
+    const shares = Number(orderShares)
+    if (!Number.isFinite(shares) || shares <= 0 || shares > holding.shares + 1e-9) {
+      setOrderNotice({ tone: 'danger', text: `卖出份额需在 0–${formatShares(holding.shares)} 之间` })
+      return
+    }
+    setOrderBusy(true)
+    setOrderNotice(null)
+    try {
+      const result = await api.post<StockOrderCreateResult>('/stocks/orders', {
+        code: selected.code,
+        side: 'sell',
+        limitPrice: limit,
+        shares: Math.min(shares, holding.shares),
+      })
+      setOrderNotice({
+        tone: 'success',
+        text: `限价卖出已挂单：${result.order.name}，限价 ${formatPrice(limit)}，冻结 ${formatShares(result.order.shares)} 份`,
+      })
+      await Promise.all([loadOrders(true), loadPortfolio(), refreshPoints(), loadMarket()])
+    } catch (err) {
+      setOrderNotice({ tone: 'danger', text: err instanceof Error ? err.message : '限价卖出失败' })
+    } finally {
+      setOrderBusy(false)
+    }
+  }
+
+  const cancelOrder = async (order: StockOrder) => {
+    if (orderBusy) return
+    setOrderBusy(true)
+    setOrderNotice(null)
+    try {
+      await api.delete<StockOrderCancelResult>(`/stocks/orders/${order.id}`)
+      setOrderNotice({ tone: 'success', text: `已撤销 ${order.name} 的限价${order.side === 'buy' ? '买入' : '卖出'}委托` })
+      await Promise.all([loadOrders(true), loadPortfolio(), refreshPoints()])
+    } catch (err) {
+      setOrderNotice({ tone: 'danger', text: err instanceof Error ? err.message : '撤单失败' })
+    } finally {
+      setOrderBusy(false)
+    }
+  }
+
   const fillAmount = (value: number) => {
     if (!rule) return
     const next = Math.max(0, Math.min(rule.maxInvest, Math.floor(value)))
@@ -1038,6 +1179,18 @@ export default function StocksPage() {
               <span className="gh-text-tertiary gh-stocks-date">行情日 {market.dateKey}</span>
             </>
           )}
+          <label className="gh-stocks-refresh" title="行情刷新间隔（本机记忆）">
+            <span>刷新</span>
+            <select
+              className="gh-input"
+              value={refreshMs}
+              onChange={(event) => setRefreshMs(Number(event.target.value))}
+            >
+              <option value={3000}>3 秒</option>
+              <option value={10000}>10 秒</option>
+              <option value={30000}>30 秒</option>
+            </select>
+          </label>
           <Link to="/points" className="gh-header-points" title="积分中心">
             <span className="gh-header-points-icon" aria-hidden><Icon name="coin" size={15} /></span>
             <span className="gh-header-points-value">{formatPoints(balance)}</span>
@@ -1336,6 +1489,88 @@ export default function StocksPage() {
                       </p>
                     )}
 
+                    <div className="gh-stocks-orderbox">
+                      <div className="gh-stocks-orderbox-head">
+                        <div>
+                          <strong>限价委托</strong>
+                          <span className="gh-text-tertiary">挂单后由行情惰性撮合，无需盯盘</span>
+                        </div>
+                        <div className="gh-stocks-order-side" role="group" aria-label="委托方向">
+                          <button
+                            type="button"
+                            className={`gh-stocks-order-side-btn ${orderSide === 'buy' ? 'gh-stocks-order-side-btn--active' : ''}`}
+                            onClick={() => { setOrderSide('buy'); setOrderNotice(null) }}
+                          >
+                            限价买入
+                          </button>
+                          <button
+                            type="button"
+                            className={`gh-stocks-order-side-btn ${orderSide === 'sell' ? 'gh-stocks-order-side-btn--active' : ''}`}
+                            onClick={() => { setOrderSide('sell'); setOrderNotice(null) }}
+                          >
+                            限价卖出
+                          </button>
+                        </div>
+                      </div>
+                      <div className="gh-stocks-order-form">
+                        <label>
+                          <span>限价</span>
+                          <input
+                            className="gh-input"
+                            type="number"
+                            min={0.5}
+                            step={0.01}
+                            value={orderLimitPrice}
+                            placeholder={`现价 ${formatPrice(selected.price)}`}
+                            onChange={(event) => setOrderLimitPrice(event.target.value)}
+                          />
+                        </label>
+                        {orderSide === 'buy' ? (
+                          <label>
+                            <span>冻结积分</span>
+                            <input
+                              className="gh-input"
+                              type="number"
+                              min={100}
+                              max={100000}
+                              step={1}
+                              value={orderPoints}
+                              onChange={(event) => setOrderPoints(event.target.value)}
+                            />
+                          </label>
+                        ) : (
+                          <label>
+                            <span>卖出份额</span>
+                            <input
+                              className="gh-input"
+                              type="number"
+                              min={0.0001}
+                              max={holding?.shares ?? 0}
+                              step={0.01}
+                              value={orderShares}
+                              placeholder={holding ? `最多 ${formatShares(holding.shares)}` : '无持仓'}
+                              onChange={(event) => setOrderShares(event.target.value)}
+                            />
+                          </label>
+                        )}
+                        <button
+                          type="button"
+                          className="gh-btn gh-btn--secondary gh-btn--md"
+                          disabled={orderBusy || (orderSide === 'sell' && !holding)}
+                          onClick={() => void submitOrder()}
+                        >
+                          {orderBusy ? '挂单中…' : '挂单'}
+                        </button>
+                      </div>
+                      <p className="gh-text-tertiary gh-stocks-order-hint">
+                        买入：现价 ≤ 限价时成交；卖出：现价 ≥ 限价时成交。留空限价按现价挂单。
+                        挂单即冻结积分 / 份额，撤单原路退回；成交后出现在「成交记录」。
+                      </p>
+                      {orderNotice && (
+                        <div className={`gh-alert gh-alert--${orderNotice.tone}`} role="status">{orderNotice.text}</div>
+                      )}
+                    </div>
+
                     <div className="gh-stocks-alert">
                       <div className="gh-stocks-alert-head">
                         <strong>价格提醒</strong>
@@ -1411,14 +1646,18 @@ export default function StocksPage() {
               <SegmentedControl
                 tabs={[
                   { value: 'holdings', label: '持仓', count: portfolio?.holdings.length ?? 0 },
+                  { value: 'orders', label: '委托', count: orders?.openCount ?? 0 },
                   { value: 'trades', label: '成交记录' },
                   { value: 'rank', label: '排行榜' },
                 ]}
                 active={tab}
-                onChange={(value) => setTab(value === 'trades' ? 'trades' : value === 'rank' ? 'rank' : 'holdings')}
+                onChange={(value) => setTab(
+                  value === 'orders' ? 'orders' : value === 'trades' ? 'trades' : value === 'rank' ? 'rank' : 'holdings',
+                )}
               />
               <span className="gh-text-tertiary gh-stocks-lower-hint">
                 {tab === 'holdings' && '大额买卖会推动价格，成交价含冲击滑点'}
+                {tab === 'orders' && '限价委托每 10 秒刷新一次，成交后自动进入成交记录'}
                 {tab === 'trades' && '最近 50 笔买卖（含手续费与已实现盈亏）'}
                 {tab === 'rank' && '总资产 = 积分余额 + 持仓实时市值'}
               </span>
@@ -1440,6 +1679,73 @@ export default function StocksPage() {
               ) : (
                 <p className="gh-stocks-empty">还没有持仓，在上方选择股票买入</p>
               )
+            )}
+
+            {tab === 'orders' && (
+              <>
+                {ordersLoading && !orders && <div className="gh-stocks-inline-loading"><div className="gh-spinner" /></div>}
+                {ordersError && (
+                  <div className="gh-alert gh-alert--danger" role="status">
+                    {ordersError}
+                    <button type="button" className="gh-btn gh-btn--ghost gh-btn--sm" onClick={() => void loadOrders()}>
+                      重试
+                    </button>
+                  </div>
+                )}
+                {orders && orders.orders.length === 0 && (
+                  <p className="gh-stocks-empty">还没有委托。在右侧交易面板选择「限价买入 / 限价卖出」挂单。</p>
+                )}
+                {orders && orders.orders.length > 0 && (
+                  <ul className="gh-stocks-orders">
+                    {orders.orders.map((order) => (
+                      <li key={order.id} className={`gh-stocks-order-row gh-stocks-order-row--${order.status}`}>
+                        <span className={`gh-stocks-side gh-stocks-side--${order.side}`}>
+                          {order.side === 'buy' ? '限价买入' : '限价卖出'}
+                        </span>
+                        <span className="gh-stocks-trade-name">
+                          <i className="gh-stocks-dot" style={{ background: order.color }} aria-hidden />
+                          <span>
+                            <strong>{order.name}</strong>
+                            <small>{order.code} · {formatTradeTime(order.createdAt)}</small>
+                          </span>
+                        </span>
+                        <span className="gh-stocks-trade-cell">
+                          <small>限价 / 现价</small>
+                          <strong>{formatPrice(order.limitPrice)} / {order.currentPrice === null ? '—' : formatPrice(order.currentPrice)}</strong>
+                        </span>
+                        <span className="gh-stocks-trade-cell">
+                          <small>{order.side === 'buy' ? '冻结积分' : '冻结份额'}</small>
+                          <strong>{order.side === 'buy' ? formatPoints(order.amount) : `${formatShares(order.shares)} 份`}</strong>
+                        </span>
+                        <span className="gh-stocks-trade-cell">
+                          <small>状态</small>
+                          <strong>
+                            {order.status === 'open'
+                              ? order.triggered
+                                ? '已触发，等待撮合'
+                                : `待成交（差 ${order.distancePct.toFixed(2)}%）`
+                              : order.status === 'filled'
+                                ? `已成交 @ ${order.filledPrice === null ? '—' : formatPrice(order.filledPrice)}`
+                                : '已撤销'}
+                          </strong>
+                        </span>
+                        <span className="gh-stocks-order-actions">
+                          {order.status === 'open' && (
+                            <button
+                              type="button"
+                              className="gh-btn gh-btn--ghost gh-btn--sm"
+                              disabled={orderBusy}
+                              onClick={() => void cancelOrder(order)}
+                            >
+                              撤单
+                            </button>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
 
             {tab === 'trades' && (

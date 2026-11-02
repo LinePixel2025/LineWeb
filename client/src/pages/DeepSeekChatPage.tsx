@@ -648,7 +648,7 @@ export default function DeepSeekChatPage() {
               <div className="gh-ds-attachments">
                 {attachments.map(attachment => (
                   <div key={attachment.id} className="gh-ds-attachment">
-                    <img src={attachment.previewUrl} alt="待发送附件" />
+                    <img src={attachment.previewUrl} alt="待发送附件" loading="lazy" decoding="async" />
                     <button
                       type="button"
                       className="gh-ds-attachment-remove"

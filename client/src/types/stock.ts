@@ -247,3 +247,51 @@ export interface StockAlertHit {
   /** 触发时间（毫秒时间戳） */
   at: number
 }
+
+/** 限价委托（GET /api/stocks/orders） */
+export interface StockOrder {
+  id: number
+  code: string
+  name: string
+  sector: string
+  color: string
+  side: 'buy' | 'sell'
+  limitPrice: number
+  /** 买入冻结积分 */
+  amount: number
+  /** 卖出冻结份额 */
+  shares: number
+  /** 卖出冻结成本 */
+  costPoints: number
+  status: 'open' | 'filled' | 'cancelled'
+  filledPrice: number | null
+  filledAt: string | null
+  createdAt: string
+  currentPrice: number | null
+  changePct: number | null
+  /** 现价是否已满足限价（下一次撮合成交） */
+  triggered: boolean
+  /** 距离触发还差多少（百分比） */
+  distancePct: number
+}
+
+export interface StockOrdersView {
+  orders: StockOrder[]
+  openCount: number
+  rules: {
+    minInvest: number
+    maxInvest: number
+    minShares: number
+    feeRate: number
+  }
+}
+
+export interface StockOrderCreateResult {
+  order: StockOrder
+  balance: number
+}
+
+export interface StockOrderCancelResult {
+  order: StockOrder
+  balance: number
+}

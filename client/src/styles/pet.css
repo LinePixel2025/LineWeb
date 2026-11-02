@@ -2177,3 +2177,123 @@
   }
 }
 
+/* =============================================================
+   2026-11：新增动作（招手 / 打喷嚏 / 打哈欠）与装扮动效
+   ============================================================= */
+
+.gh-pet-anim-wave .gh-pet-motion {
+  animation: gh-pet-wave-body 1.3s ease-in-out infinite;
+  transform-origin: 120px 200px;
+}
+
+.gh-pet-anim-wave .gh-pet-fx-hand {
+  display: block;
+  animation: gh-pet-wave-hand 0.9s ease-in-out infinite;
+  transform-origin: 194px 120px;
+}
+
+.gh-pet-anim-sneeze .gh-pet-motion {
+  animation: gh-pet-sneeze-body 1.1s cubic-bezier(0.3, 0.8, 0.4, 1) infinite;
+  transform-origin: 120px 200px;
+}
+
+.gh-pet-anim-sneeze .gh-pet-fx-sparkles {
+  display: block;
+  animation: gh-pet-sneeze-spark 1.1s ease-out infinite;
+}
+
+.gh-pet-anim-yawn .gh-pet-motion {
+  animation: gh-pet-yawn-body 2.2s ease-in-out infinite;
+  transform-origin: 120px 190px;
+}
+
+.gh-pet-anim-yawn .gh-pet-fx-zzz {
+  display: block;
+  animation: gh-pet-yawn-zzz 2.2s ease-in-out infinite;
+}
+
+@keyframes gh-pet-wave-body {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-3.5deg) translateY(-2px); }
+  50% { transform: rotate(2.5deg); }
+  75% { transform: rotate(-2deg) translateY(-1px); }
+}
+
+@keyframes gh-pet-wave-hand {
+  0%, 100% { transform: translateY(0) rotate(0deg); opacity: 0.9; }
+  50% { transform: translateY(-7px) rotate(-12deg); opacity: 1; }
+}
+
+@keyframes gh-pet-sneeze-body {
+  0%, 55%, 100% { transform: translateY(0) scale(1, 1); }
+  62% { transform: translateY(-8px) scale(0.96, 1.04) rotate(-3deg); }
+  72% { transform: translateY(2px) scale(1.04, 0.96) rotate(4deg); }
+  80% { transform: translateY(0) scale(1, 1) rotate(0deg); }
+}
+
+@keyframes gh-pet-sneeze-spark {
+  0%, 55% { opacity: 0; transform: translate(-32px, 18px) scale(0.4); }
+  65% { opacity: 1; transform: translate(-42px, 10px) scale(1); }
+  100% { opacity: 0; transform: translate(-58px, -6px) scale(0.3); }
+}
+
+@keyframes gh-pet-yawn-body {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  35% { transform: translateY(-3px) scale(0.98, 1.02); }
+  60% { transform: translateY(1px) scale(1.02, 0.98); }
+}
+
+@keyframes gh-pet-yawn-zzz {
+  0%, 100% { opacity: 0; transform: translateY(6px) scale(0.85); }
+  45% { opacity: 0.9; transform: translateY(-4px) scale(1); }
+}
+
+/* 披风 / 翅膀 / 光环 / 星尘 / 烈焰 */
+.gh-pet-outfit--wings {
+  animation: gh-pet-wings-flutter 2.6s ease-in-out infinite;
+  transform-origin: 120px 150px;
+}
+
+.gh-pet-outfit--halo {
+  animation: gh-pet-halo-float 3.2s ease-in-out infinite;
+}
+
+.gh-pet-outfit--sparkle {
+  animation: gh-pet-aura-pulse 3s ease-in-out infinite;
+  transform-origin: 120px 120px;
+}
+
+.gh-pet-outfit--flame {
+  animation: gh-pet-flame-flicker 1.6s ease-in-out infinite;
+  transform-origin: 120px 200px;
+}
+
+@keyframes gh-pet-wings-flutter {
+  0%, 100% { transform: scaleX(1) scaleY(1); }
+  50% { transform: scaleX(1.035) scaleY(0.985); }
+}
+
+@keyframes gh-pet-halo-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes gh-pet-aura-pulse {
+  0%, 100% { opacity: 0.65; transform: scale(0.98) rotate(-1deg); }
+  50% { opacity: 1; transform: scale(1.03) rotate(1deg); }
+}
+
+@keyframes gh-pet-flame-flicker {
+  0%, 100% { opacity: 0.72; transform: scaleY(1) translateY(0); }
+  35% { opacity: 0.95; transform: scaleY(1.06) translateY(-2px); }
+  70% { opacity: 0.8; transform: scaleY(0.96) translateY(1px); }
+}
+
+/* 低性能模式：新装扮只保留静态配色 */
+html[data-perf='low'] .gh-pet-outfit--wings,
+html[data-perf='low'] .gh-pet-outfit--halo,
+html[data-perf='low'] .gh-pet-outfit--sparkle,
+html[data-perf='low'] .gh-pet-outfit--flame {
+  animation: none;
+}
+

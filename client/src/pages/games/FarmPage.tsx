@@ -7,22 +7,30 @@ import type {
   FarmCrop,
   FarmNeighbor,
   FarmPlot,
+  FarmProtectionPackage,
   FarmView,
+  HarvestAllResult,
   HarvestResult,
   MerchantOffer,
   MerchantPurchaseResult,
   NeighborFarmView,
+  PlantAllResult,
+  ProtectionPurchaseResult,
+  SeedBuyResult,
+  SeedListing,
+  SeedMarketView,
   StealResult,
   StealSuccess,
 } from '../../types/farm'
 
-type Tab = 'farm' | 'merchant' | 'neighbors' | 'shop' | 'records'
+type Tab = 'farm' | 'merchant' | 'neighbors' | 'shop' | 'market' | 'records'
 
 const TAB_LABELS: Array<[Tab, string]> = [
   ['farm', '我的农场'],
   ['merchant', '流浪商人'],
   ['neighbors', '邻居农场'],
   ['shop', '种子商店'],
+  ['market', '种子市场'],
   ['records', '偷菜记录'],
 ]
 
@@ -87,6 +95,8 @@ export default function FarmPage() {
   const [tab, setTab] = useState<Tab>('farm')
 
   const [seedPickerPlot, setSeedPickerPlot] = useState<number | null>(null)
+  const [plantAllOpen, setPlantAllOpen] = useState(false)
+  const [protectOpen, setProtectOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameValue, setRenameValue] = useState('')
   const [tutorialOpen, setTutorialOpen] = useState(false)
@@ -244,28 +254,59 @@ export default function FarmPage() {
     }
   }
 
-  /** 一键收获所有已成熟地块：逐块请求，服务端逐次结算并返回最新视图 */
+  /** 一键收获所有已成熟地块：服务端一次事务结算，避免 30 个地块逐条请求 */
   const handleHarvestAll = async () => {
     if (busy || readyPlots.length === 0) return
     setBusy('harvest-all')
     setError('')
     setNotice('')
-    let totalPoints = 0
-    let harvested = 0
     try {
-      for (const plot of readyPlots) {
-        const result = await api.post<HarvestResult>(`/farm/plots/${plot.index}/harvest`)
-        setView(result.view)
-        applyLocalDelta(result.points)
-        totalPoints += result.points
-        harvested += 1
-      }
-      setNotice(`一键收获 ${harvested} 块地，共获得 ${totalPoints} 积分`)
-      setStealFlash(`+${totalPoints}`)
+      const result = await api.post<HarvestAllResult>('/farm/harvest-all')
+      setView(result.view)
+      applyLocalDelta(result.points)
+      setNotice(`一键收获 ${result.harvested} 块地，共 ${result.units} 份作物，获得 ${result.points} 积分`)
+      setStealFlash(`+${result.points}`)
       window.setTimeout(() => setStealFlash(null), 1800)
       await refreshPoints()
     } catch (err) {
       setError(err instanceof Error ? err.message : '一键收获失败，请稍后再试')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** 一键种植：种满全部空地（cropKey 缺省时由服务端挑数量最多的种子） */
+  const handlePlantAll = async (cropKey?: string) => {
+    if (busy) return
+    setBusy('plant-all')
+    setError('')
+    setNotice('')
+    try {
+      const result = await api.post<PlantAllResult>('/farm/plant-all', cropKey ? { crop: cropKey } : {})
+      setView(result.view)
+      setNotice(`一键种下 ${result.planted} 块「${result.crop.name}」，剩余种子 ${result.remainingSeeds}`)
+      setPlantAllOpen(false)
+      await refreshPoints()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '一键种植失败，请稍后再试')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const handleProtect = async (hours: number) => {
+    const pkg = view?.protection.packages.find((item) => item.hours === hours)
+    if (busy || !pkg) return
+    setBusy(`protect-${hours}`)
+    setError('')
+    setNotice('')
+    try {
+      const result = await api.post<ProtectionPurchaseResult>('/farm/protect', { hours })
+      setView(result.view)
+      setNotice(`农场保护已开启 ${pkg.label}，到 ${formatTime(result.until)} 前没人能偷你的菜`)
+      await refreshPoints()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '购买保护失败')
     } finally {
       setBusy(null)
     }
@@ -379,11 +420,28 @@ export default function FarmPage() {
                 <div className="gh-farm-toolbar-actions">
                   <button
                     type="button"
+                    className="gh-btn gh-btn--secondary gh-btn--sm"
+                    disabled={!!busy || emptyPlots === 0}
+                    onClick={() => setPlantAllOpen(true)}
+                  >
+                    {busy === 'plant-all' ? '种植中…' : emptyPlots > 0 ? `一键种植 ${emptyPlots} 块` : '没有空地'}
+                  </button>
+                  <button
+                    type="button"
                     className="gh-btn gh-btn--primary gh-btn--sm"
                     disabled={!!busy || readyPlots.length === 0}
                     onClick={() => void handleHarvestAll()}
                   >
                     {busy === 'harvest-all' ? '收获中…' : readyPlots.length > 0 ? `一键收获 ${readyPlots.length} 块` : '暂无成熟作物'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`gh-btn gh-btn--sm ${view?.protection.active ? 'gh-btn--success' : 'gh-btn--ghost'}`}
+                    onClick={() => setProtectOpen(true)}
+                  >
+                    {view?.protection.active
+                      ? `🛡️ 保护中 ${formatDuration(view.protection.remainingMs)}`
+                      : '🛡️ 农场保护'}
                   </button>
                   <button
                     type="button"
@@ -459,6 +517,14 @@ export default function FarmPage() {
                 />
               )}
 
+              {tab === 'market' && (
+                <SeedMarketTab
+                  onNotice={(message) => { setNotice(message); setError('') }}
+                  onError={(message) => { setError(message); setNotice('') }}
+                  onBalance={(balance) => setView((prev) => (prev ? { ...prev, points: balance } : prev))}
+                />
+              )}
+
               {tab === 'records' && <RecordsTab view={view} />}
             </>
           )}
@@ -490,6 +556,24 @@ export default function FarmPage() {
             ) : (
               <p className="gh-farm-empty-line">开荒后这里会显示种子与肥料</p>
             )}
+          </div>
+
+          <div className={`gh-farm-card gh-farm-card--protection ${view?.protection.active ? 'gh-farm-card--protection-active' : ''}`}>
+            <h2 className="gh-farm-card-title">农场保护</h2>
+            {view?.protection.active ? (
+              <>
+                <p className="gh-farm-protection-line">
+                  <span aria-hidden>🛡️</span>
+                  保护中，还剩 <strong>{formatDuration(view.protection.remainingMs)}</strong>
+                </p>
+                <p className="gh-farm-hint">保护期间任何人都偷不到你的菜，成熟作物可以放心过夜。</p>
+              </>
+            ) : (
+              <p className="gh-farm-empty-line">尚未开启保护。花积分买一段时间，期间被偷风险为 0。</p>
+            )}
+            <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm" onClick={() => setProtectOpen(true)}>
+              {view?.protection.active ? '延长保护' : '开启保护'}
+            </button>
           </div>
 
           <div className="gh-farm-card">
@@ -540,6 +624,27 @@ export default function FarmPage() {
           onClose={() => setSeedPickerPlot(null)}
           onPlant={(cropKey) => void handlePlant(seedPickerPlot, cropKey)}
           onGoShop={() => { setSeedPickerPlot(null); setTab('shop') }}
+        />
+      )}
+
+      {plantAllOpen && view && (
+        <PlantAllModal
+          seeds={view.inventory.seeds}
+          catalog={view.catalog}
+          emptyPlots={emptyPlots}
+          busy={busy === 'plant-all'}
+          onClose={() => setPlantAllOpen(false)}
+          onPlant={(cropKey) => void handlePlantAll(cropKey)}
+        />
+      )}
+
+      {protectOpen && view && (
+        <ProtectionModal
+          protection={view.protection}
+          busy={busy}
+          points={view.points}
+          onClose={() => setProtectOpen(false)}
+          onBuy={(hours) => void handleProtect(hours)}
         />
       )}
 
@@ -1364,7 +1469,7 @@ const TUTORIAL_STEPS = [
   {
     icon: '🚜',
     title: '扩建农田，赚得更多',
-    body: '农田初始 6 块，最多 18 块。扩建要花积分，但更多地块意味着更稳定的收成。',
+    body: '农田初始 6 块，最多 30 块。扩建要花积分，但更多地块意味着更稳定的收成。',
   },
 ] as const
 
@@ -1397,6 +1502,349 @@ function FarmTutorial({ onClose, onFinish }: { onClose: () => void; onFinish: ()
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ============================================================
+   一键种植 / 农场保护
+   ============================================================ */
+
+function PlantAllModal({
+  seeds,
+  catalog,
+  emptyPlots,
+  busy,
+  onClose,
+  onPlant,
+}: {
+  seeds: FarmView['inventory']['seeds']
+  catalog: FarmCrop[]
+  emptyPlots: number
+  busy: boolean
+  onClose: () => void
+  onPlant: (cropKey?: string) => void
+}) {
+  const [cropKey, setCropKey] = useState<string>('')
+  const selectedSeed = seeds.find((seed) => seed.key === cropKey)
+  const selectedCrop = catalog.find((crop) => crop.key === cropKey)
+  const totalSeedCount = seeds.reduce((sum, seed) => sum + seed.count, 0)
+  const plantable = cropKey
+    ? Math.min(emptyPlots, selectedSeed?.count ?? 0)
+    : Math.min(emptyPlots, totalSeedCount)
+  return (
+    <div className="gh-farm-modal-mask" role="dialog" aria-modal="true" aria-label="一键种植">
+      <div className="gh-farm-modal">
+        <button type="button" className="gh-farm-modal-close" aria-label="关闭" onClick={onClose}>×</button>
+        <h2>一键种植</h2>
+        <p className="gh-farm-modal-sub">把当前 {emptyPlots} 块空地按顺序种满。种子不够时会尽量多种，不会报错。</p>
+        <label className="gh-farm-field">
+          <span>选择种子</span>
+          <select className="gh-input" value={cropKey} onChange={(event) => setCropKey(event.target.value)}>
+            <option value="">自动选择（数量最多的种子）</option>
+            {seeds.map((seed) => (
+              <option key={seed.key} value={seed.key}>
+                {seed.emoji} {seed.name} ×{seed.count}
+              </option>
+            ))}
+          </select>
+        </label>
+        {seeds.length === 0 && (
+          <p className="gh-alert gh-alert--danger">仓库里没有种子，先去种子商店或种子市场买一些。</p>
+        )}
+        <div className="gh-farm-plant-preview">
+          <span>{selectedCrop ? `${selectedCrop.emoji} ${selectedCrop.name}` : '🌱 自动选择'}</span>
+          <span>预计种下 <strong>{Math.max(0, plantable)}</strong> 块</span>
+          <span>消耗种子 <strong>{cropKey ? Math.min(emptyPlots, selectedSeed?.count ?? 0) : Math.min(emptyPlots, totalSeedCount)}</strong></span>
+        </div>
+        <div className="gh-farm-modal-actions">
+          <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm" onClick={onClose}>取消</button>
+          <button
+            type="button"
+            className="gh-btn gh-btn--primary gh-btn--sm"
+            disabled={busy || emptyPlots === 0 || seeds.length === 0 || (cropKey !== '' && !selectedSeed)}
+            onClick={() => onPlant(cropKey || undefined)}
+          >
+            {busy ? '种植中…' : `种下 ${Math.max(0, plantable)} 块`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ProtectionModal({
+  protection,
+  busy,
+  points,
+  onClose,
+  onBuy,
+}: {
+  protection: FarmView['protection']
+  busy: string | null
+  points: number
+  onClose: () => void
+  onBuy: (hours: number) => void
+}) {
+  const remainingHours = protection.remainingMs / 3_600_000
+  return (
+    <div className="gh-farm-modal-mask" role="dialog" aria-modal="true" aria-label="农场保护">
+      <div className="gh-farm-modal">
+        <button type="button" className="gh-farm-modal-close" aria-label="关闭" onClick={onClose}>×</button>
+        <h2>🛡️ 农场保护</h2>
+        <p className="gh-farm-modal-sub">
+          花积分买一段免偷时间。保护期间任何人都偷不到你的菜；可叠加，总剩余不超过 {protection.maxHours} 小时。
+        </p>
+        {protection.active ? (
+          <div className="gh-farm-protection-current">
+            <strong>当前保护中</strong>
+            <span>还剩 {formatDuration(protection.remainingMs)}（{formatTime(protection.until ?? '')} 到期）</span>
+            <span>当前积分 {points}</span>
+          </div>
+        ) : (
+          <p className="gh-farm-empty-line">当前未开启保护 · 积分余额 {points}</p>
+        )}
+        <div className="gh-farm-protection-grid">
+          {protection.packages.map((pkg) => {
+            const overCap = protection.active && remainingHours + pkg.hours > protection.maxHours
+            const disabled = busy !== null || overCap || points < pkg.cost
+            return (
+              <button
+                key={pkg.hours}
+                type="button"
+                className="gh-farm-protection-option"
+                disabled={disabled}
+                onClick={() => onBuy(pkg.hours)}
+              >
+                <strong>{pkg.label}</strong>
+                <span>{pkg.cost} 积分</span>
+                <small>{overCap ? '超过 48 小时上限' : points < pkg.cost ? '积分不足' : `约 ${Math.round(pkg.cost / pkg.hours)} 积分/小时`}</small>
+              </button>
+            )
+          })}
+        </div>
+        <p className="gh-farm-hint">提示：保护只防偷菜，自己的收获与施肥不受影响。</p>
+      </div>
+    </div>
+  )
+}
+
+/* ============================================================
+   种子市场（玩家间交易）
+   ============================================================ */
+
+function SeedMarketTab({
+  onNotice,
+  onError,
+  onBalance,
+}: {
+  onNotice: (message: string) => void
+  onError: (message: string) => void
+  onBalance: (balance: number) => void
+}) {
+  const [view, setView] = useState<SeedMarketView | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [cropKey, setCropKey] = useState('')
+  const [count, setCount] = useState('1')
+  const [price, setPrice] = useState('')
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
+    try {
+      const data = await api.get<SeedMarketView>('/farm/seed-market')
+      if (mountedRef.current) {
+        setView(data)
+        setCropKey((prev) => prev || data.mySeeds[0]?.key || data.catalog[0]?.key || '')
+      }
+    } catch (err) {
+      if (mountedRef.current) onError(err instanceof Error ? err.message : '加载种子市场失败')
+    } finally {
+      if (mountedRef.current && !silent) setLoading(false)
+    }
+  }, [onError])
+
+  useEffect(() => { void load() }, [load])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void load(true)
+    }, 30_000)
+    return () => window.clearInterval(timer)
+  }, [load])
+
+  const selectedSeed = view?.mySeeds.find((seed) => seed.key === cropKey)
+  const total = Number(price)
+  const valid = !!selectedSeed && Number(count) >= 1 && Number(count) <= (view?.maxCount ?? 99)
+    && Number.isInteger(Number(count)) && Number.isInteger(total)
+    && total >= 1 && total <= (view?.maxPrice ?? 1_000_000)
+
+  const handleList = async () => {
+    if (!view || !valid || busy) return
+    setBusy('list')
+    try {
+      await api.post('/farm/seed-market/list', { cropKey, count: Number(count), price: total })
+      onNotice(`已挂单：${selectedSeed?.name} ×${count}，总价 ${total} 积分`)
+      setPrice('')
+      await load(true)
+    } catch (err) {
+      onError(err instanceof Error ? err.message : '挂单失败')
+    } finally {
+      if (mountedRef.current) setBusy(null)
+    }
+  }
+
+  const handleBuy = async (listing: SeedListing) => {
+    if (busy) return
+    setBusy(`buy-${listing.id}`)
+    try {
+      const result = await api.post<SeedBuyResult>(`/farm/seed-market/${listing.id}/buy`)
+      setView(result.view)
+      onBalance(result.balance)
+      onNotice(`买下 ${result.listing.crop.name} ×${result.listing.count}，花费 ${result.listing.price} 积分`)
+    } catch (err) {
+      onError(err instanceof Error ? err.message : '购买失败')
+    } finally {
+      if (mountedRef.current) setBusy(null)
+    }
+  }
+
+  const handleCancel = async (listing: SeedListing) => {
+    if (busy) return
+    setBusy(`cancel-${listing.id}`)
+    try {
+      const next = await api.delete<SeedMarketView>(`/farm/seed-market/${listing.id}`)
+      setView(next)
+      onNotice(`已下架 ${listing.crop.name} ×${listing.count}，种子已退回仓库`)
+    } catch (err) {
+      onError(err instanceof Error ? err.message : '下架失败')
+    } finally {
+      if (mountedRef.current) setBusy(null)
+    }
+  }
+
+  if (loading && !view) {
+    return <div className="gh-farm-market-empty">正在打开种子市场…</div>
+  }
+  if (!view) return null
+
+  return (
+    <div className="gh-farm-market">
+      <section className="gh-farm-market-sell">
+        <h2>我要卖种子</h2>
+        <p className="gh-farm-hint">挂单时种子会从仓库扣除托管；成交后积分到账（扣 5% 手续费），下架原路退回。</p>
+        {view.mySeeds.length === 0 ? (
+          <p className="gh-farm-empty-line">仓库里没有种子可卖</p>
+        ) : (
+          <div className="gh-farm-market-form">
+            <label>
+              <span>种子</span>
+              <select className="gh-input" value={cropKey} onChange={(event) => setCropKey(event.target.value)}>
+                {view.mySeeds.map((seed) => (
+                  <option key={seed.key} value={seed.key}>{seed.emoji} {seed.name} ×{seed.count}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>数量（1–{view.maxCount}）</span>
+              <input className="gh-input" type="number" min={1} max={view.maxCount} value={count} onChange={(event) => setCount(event.target.value)} />
+            </label>
+            <label>
+              <span>整单总价（积分）</span>
+              <input className="gh-input" type="number" min={1} max={view.maxPrice} value={price} onChange={(event) => setPrice(event.target.value)} placeholder="例如 50" />
+            </label>
+            <button type="button" className="gh-btn gh-btn--primary gh-btn--sm" disabled={!valid || busy !== null} onClick={() => void handleList()}>
+              {busy === 'list' ? '挂单中…' : '挂单出售'}
+            </button>
+          </div>
+        )}
+        <p className="gh-farm-hint">
+          参考价：{selectedSeed ? `${selectedSeed.name} 商店价 ${view.catalog.find((crop) => crop.key === selectedSeed.key)?.seedCost ?? '?'} 积分/颗` : '选择种子后显示'}
+          {valid && selectedSeed ? ` · 你的单价 ${(total / Number(count)).toFixed(2)} 积分` : ''}
+        </p>
+      </section>
+
+      <section className="gh-farm-market-list">
+        <div className="gh-farm-market-head">
+          <h2>在售挂单</h2>
+          <span>{view.listings.length} 条</span>
+        </div>
+        {view.listings.length === 0 ? (
+          <p className="gh-farm-empty-line">市场上还没有人卖种子，你可以第一个挂单。</p>
+        ) : (
+          <div className="gh-farm-market-grid">
+            {view.listings.map((listing) => (
+              <article key={listing.id} className={`gh-farm-market-card ${listing.isMine ? 'gh-farm-market-card--mine' : ''}`}>
+                <div className="gh-farm-market-card-top">
+                  <span className="gh-farm-market-emoji" aria-hidden>{listing.crop.emoji}</span>
+                  <div>
+                    <strong>{listing.crop.name} ×{listing.count}</strong>
+                    <span className="gh-farm-market-seller">
+                      {listing.isMine ? '我的挂单' : `${listing.seller.username} 出售`}
+                      <UserTitleBadge title={listing.seller.title} />
+                    </span>
+                  </div>
+                </div>
+                <div className="gh-farm-market-price">
+                  <strong>{listing.price}</strong>
+                  <span>积分 · 单价 {listing.unitPrice}</span>
+                </div>
+                <div className="gh-farm-market-card-actions">
+                  {listing.isMine ? (
+                    <button type="button" className="gh-btn gh-btn--ghost gh-btn--sm" disabled={busy !== null} onClick={() => void handleCancel(listing)}>
+                      {busy === `cancel-${listing.id}` ? '下架中…' : '下架'}
+                    </button>
+                  ) : (
+                    <button type="button" className="gh-btn gh-btn--primary gh-btn--sm" disabled={busy !== null} onClick={() => void handleBuy(listing)}>
+                      {busy === `buy-${listing.id}` ? '购买中…' : '买下'}
+                    </button>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {view.myListings.length > 0 && (
+        <section className="gh-farm-market-mine">
+          <h2>我的挂单（{view.myListings.length}）</h2>
+          <ul>
+            {view.myListings.map((listing) => (
+              <li key={listing.id}>
+                <span>{listing.crop.emoji} {listing.crop.name} ×{listing.count}</span>
+                <span>{listing.price} 积分</span>
+                <button type="button" className="gh-btn gh-btn--ghost gh-btn--sm" disabled={busy !== null} onClick={() => void handleCancel(listing)}>
+                  下架
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="gh-farm-market-sold">
+        <h2>最近成交</h2>
+        {view.recentSold.length === 0 ? (
+          <p className="gh-farm-empty-line">还没有成交记录</p>
+        ) : (
+          <ul>
+            {view.recentSold.map((listing) => (
+              <li key={listing.id}>
+                <span>{listing.crop.emoji} {listing.crop.name} ×{listing.count}</span>
+                <span>{listing.price} 积分</span>
+                <span>{listing.buyer?.username ?? '有人'} · {formatTime(listing.soldAt ?? listing.createdAt)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   )
 }

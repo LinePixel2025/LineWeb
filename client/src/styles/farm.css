@@ -2260,3 +2260,185 @@
   .gh-farm-neighbor-grid,
   .gh-farm-neighbor-board { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* =============================================================
+   2026-11：一键种植 / 偷菜保护 / 种子市场
+   ============================================================= */
+
+.gh-farm-field { display: grid; gap: 6px; margin-top: 12px; }
+.gh-farm-field > span { color: var(--gh-text-secondary); font-size: var(--gh-text-xs); font-weight: 600; }
+.gh-farm-plant-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--gh-canvas-inset);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+}
+.gh-farm-plant-preview strong { color: var(--gh-text); }
+
+.gh-farm-card--protection { border-color: rgba(48, 209, 88, 0.28); }
+.gh-farm-card--protection-active {
+  background:
+    radial-gradient(120% 80% at 0% 0%, rgba(48, 209, 88, 0.12), transparent 60%),
+    var(--gh-canvas);
+}
+.gh-farm-protection-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 6px;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+}
+.gh-farm-protection-line strong { color: var(--gh-success); }
+.gh-farm-protection-current {
+  display: grid;
+  gap: 3px;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--gh-success-soft);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+}
+.gh-farm-protection-current strong { color: var(--gh-success); font-size: var(--gh-text-sm); }
+.gh-farm-protection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+.gh-farm-protection-option {
+  display: grid;
+  gap: 2px;
+  padding: 11px 10px;
+  border: 1px solid var(--gh-border);
+  border-radius: 12px;
+  background: var(--gh-canvas-subtle);
+  color: var(--gh-text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.gh-farm-protection-option:hover:not(:disabled) {
+  border-color: var(--gh-success);
+  transform: translateY(-1px);
+}
+.gh-farm-protection-option:disabled { opacity: 0.45; cursor: not-allowed; }
+.gh-farm-protection-option strong { font-size: var(--gh-text-sm); }
+.gh-farm-protection-option span { color: var(--gh-success); font-size: var(--gh-text-xs); font-weight: 700; }
+.gh-farm-protection-option small { color: var(--gh-text-tertiary); font-size: 10px; }
+
+/* ---------- 种子市场 ---------- */
+.gh-farm-market { display: grid; gap: 16px; }
+.gh-farm-market-empty {
+  padding: 32px;
+  border-radius: 14px;
+  background: var(--gh-canvas-subtle);
+  color: var(--gh-text-tertiary);
+  text-align: center;
+}
+.gh-farm-market-sell {
+  padding: 16px;
+  border: 1px solid var(--gh-border);
+  border-radius: 16px;
+  background: var(--gh-canvas);
+}
+.gh-farm-market-sell h2,
+.gh-farm-market-mine h2,
+.gh-farm-market-sold h2 { margin: 0 0 6px; font-size: var(--gh-text-md); }
+.gh-farm-market-form {
+  display: grid;
+  grid-template-columns: 1.2fr 0.7fr 0.9fr auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 12px;
+}
+.gh-farm-market-form label { display: grid; gap: 5px; min-width: 0; }
+.gh-farm-market-form label > span { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+.gh-farm-market-form .gh-input { width: 100%; min-width: 0; }
+.gh-farm-market-form .gh-btn { white-space: nowrap; }
+.gh-farm-market-list {
+  padding: 16px;
+  border: 1px solid var(--gh-border);
+  border-radius: 16px;
+  background: var(--gh-canvas);
+}
+.gh-farm-market-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.gh-farm-market-head h2 { margin: 0; font-size: var(--gh-text-md); }
+.gh-farm-market-head span { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+.gh-farm-market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+}
+.gh-farm-market-card {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--gh-border);
+  border-radius: 14px;
+  background: var(--gh-canvas-subtle);
+}
+.gh-farm-market-card--mine { border-color: color-mix(in srgb, var(--gh-accent) 35%, var(--gh-border)); background: var(--gh-accent-soft); }
+.gh-farm-market-card-top { display: flex; align-items: center; gap: 9px; }
+.gh-farm-market-emoji { font-size: 26px; }
+.gh-farm-market-card-top > div { display: grid; gap: 2px; min-width: 0; }
+.gh-farm-market-card-top strong { font-size: var(--gh-text-sm); }
+.gh-farm-market-seller {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+.gh-farm-market-price { display: flex; align-items: baseline; gap: 5px; }
+.gh-farm-market-price strong { color: var(--gh-success); font-size: var(--gh-text-lg); font-variant-numeric: tabular-nums; }
+.gh-farm-market-price span { color: var(--gh-text-tertiary); font-size: 10px; }
+.gh-farm-market-card-actions { display: flex; justify-content: flex-end; }
+.gh-farm-market-mine,
+.gh-farm-market-sold {
+  padding: 14px 16px;
+  border: 1px solid var(--gh-border);
+  border-radius: 16px;
+  background: var(--gh-canvas);
+}
+.gh-farm-market-mine ul,
+.gh-farm-market-sold ul {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.gh-farm-market-mine li,
+.gh-farm-market-sold li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: var(--gh-canvas-subtle);
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+}
+.gh-farm-market-mine li button { margin-left: auto; }
+
+@media (max-width: 860px) {
+  .gh-farm-market-form { grid-template-columns: 1fr 1fr; }
+  .gh-farm-market-form .gh-btn { grid-column: 1 / -1; }
+}
+@media (max-width: 540px) {
+  .gh-farm-market-form { grid-template-columns: 1fr; }
+}

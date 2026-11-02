@@ -29,6 +29,18 @@ function effectClass(animation: string | undefined): string {
   return ` gh-pb-fx--${animation.replace(/[^a-z0-9_-]/gi, '')}`
 }
 
+function statusLabel(type: string): string {
+  switch (type) {
+    case 'burn': return '燃烧'
+    case 'poison': return '中毒'
+    case 'stun': return '眩晕'
+    case 'weaken': return '虚弱'
+    case 'vulnerable': return '破甲'
+    case 'regen': return '回春'
+    default: return type
+  }
+}
+
 export default function PetBattleStage({ battle, myUserId, busy, onAction }: PetBattleStageProps) {
   const me = battle.me
   const opponent = battle.opponent
@@ -262,12 +274,12 @@ export default function PetBattleStage({ battle, myUserId, busy, onAction }: Pet
             {me.shield > 0 && <span className="gh-pb-tag gh-pb-tag--shield">护盾 {me.shield}</span>}
             {me.buffs.map((buff) => (
               <span key={buff.type} className="gh-pb-tag gh-pb-tag--buff">
-                {buff.type === 'atk_up' ? '攻击' : '防御'} +{buff.value}%（{buff.turns}）
+                {buff.type === 'atk_up' ? '攻击' : buff.type === 'def_up' ? '防御' : '暴击'} +{buff.value}%（{buff.turns}）
               </span>
             ))}
             {me.statuses.map((status) => (
-              <span key={status.type} className="gh-pb-tag gh-pb-tag--debuff">
-                {status.type === 'burn' ? '燃烧' : status.type === 'poison' ? '中毒' : '眩晕'}（{status.turns}）
+              <span key={status.type} className={`gh-pb-tag ${status.type === 'regen' ? 'gh-pb-tag--buff' : 'gh-pb-tag--debuff'}`}>
+                {statusLabel(status.type)}（{status.turns}）
               </span>
             ))}
           </div>

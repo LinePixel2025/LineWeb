@@ -27,6 +27,11 @@ export default defineConfig({
           if (id.includes('node_modules/@tanstack/react-query')) {
             return 'query'
           }
+          // Markdown / LaTeX 渲染链（AI 对话、首页助手、Markdown 预览）：
+          // 只有打开对应页面时才需要，单独分包避免拖累主包。
+          if (/node_modules\/(marked|marked-katex-extension|katex|dompurify)/.test(id)) {
+            return 'markdown'
+          }
           // three.js（我的世界体素渲染）：只有游戏页懒加载，独立分包避免污染主包
           if (id.includes('node_modules/three')) {
             return 'three'

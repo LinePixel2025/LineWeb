@@ -102,13 +102,13 @@ export interface PetBattleSkillOption {
 }
 
 export interface PetBattleBuff {
-  type: 'atk_up' | 'def_up'
+  type: 'atk_up' | 'def_up' | 'crit_up'
   value: number
   turns: number
 }
 
 export interface PetBattleStatus {
-  type: 'burn' | 'poison' | 'stun'
+  type: 'burn' | 'poison' | 'stun' | 'weaken' | 'vulnerable' | 'regen'
   value: number
   turns: number
 }

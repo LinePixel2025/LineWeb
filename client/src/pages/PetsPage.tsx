@@ -94,16 +94,20 @@ const STAT_WARN_TEXTS: Record<'hunger' | 'cleanliness' | 'mood', string> = {
   mood: '闷闷不乐',
 }
 
-const SLOT_LABELS: Record<'hat' | 'neck' | 'face', string> = {
+const SLOT_LABELS: Record<'hat' | 'neck' | 'face' | 'back' | 'aura', string> = {
   hat: '头部',
   neck: '颈部',
   face: '面部',
+  back: '背部',
+  aura: '光环',
 }
 
-const SLOT_ICONS: Record<'hat' | 'neck' | 'face', string> = {
+const SLOT_ICONS: Record<'hat' | 'neck' | 'face' | 'back' | 'aura', string> = {
   hat: '🎩',
   neck: '🧣',
   face: '👓',
+  back: '🎒',
+  aura: '✨',
 }
 
 /** 对话气泡：动作台词 */
@@ -569,6 +573,7 @@ export default function PetsPage() {
           </span>
           <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/gear">🎒 装备</Link>
           <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/battle">⚔️ 对战</Link>
+          <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/raid">🎯 搜打撤</Link>
           <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/market">🏪 交易行</Link>
           <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/points">积分中心</Link>
         </div>
@@ -844,7 +849,7 @@ export default function PetsPage() {
                     <h3 className="gh-pet-panel-title">衣柜</h3>
                     <span className="gh-pet-panel-hint">已购 {pet.ownedOutfits.length} / {catalog.outfits.length}</span>
                   </div>
-                  {(['hat', 'neck', 'face'] as const).map((slot) => (
+                  {(['hat', 'neck', 'face', 'back', 'aura'] as const).map((slot) => (
                     <div key={slot} className="gh-pet-wardrobe-slot">
                       <p className="gh-pet-wardrobe-slot-head">
                         <span aria-hidden>{SLOT_ICONS[slot]}</span>

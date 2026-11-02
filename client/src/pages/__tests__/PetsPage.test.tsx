@@ -72,7 +72,7 @@ const gonePet: PetDto = {
   decayPerHour: { hunger: 6, cleanliness: 4, mood: 3 },
   zeroAtMs: Date.now() - 26 * 3_600_000,
   graceHours: 24,
-  equipped: { hat: null, neck: null, face: null },
+  equipped: { hat: null, neck: null, face: null, back: null, aura: null },
   ownedOutfits: ['bowtie'],
   unlockedActions: ['dance'],
   nextLevelCost: 80,

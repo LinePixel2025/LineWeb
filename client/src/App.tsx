@@ -57,6 +57,7 @@ const PetHomePage = lazy(() => import('./pages/PetHomePage'))
 const PetGearPage = lazy(() => import('./pages/PetGearPage'))
 const PetBattlePage = lazy(() => import('./pages/PetBattlePage'))
 const PetMarketPage = lazy(() => import('./pages/PetMarketPage'))
+const PetRaidPage = lazy(() => import('./pages/PetRaidPage'))
 const LotteryPage = lazy(() => import('./pages/LotteryPage'))
 const ThemesPage = lazy(() => import('./pages/ThemesPage'))
 const PointsPage = lazy(() => import('./pages/PointsPage'))
@@ -199,6 +200,9 @@ export default function App() {
                         } />
                         <Route path="/pets/market" element={
                           <ProtectedRoute><PetMarketPage /></ProtectedRoute>
+                        } />
+                        <Route path="/pets/raid" element={
+                          <ProtectedRoute><PetRaidPage /></ProtectedRoute>
                         } />
                       </Route>
                       {/* 积分抽奖：花积分抽种子 / 积分 / 稀有装扮（需登录） */}

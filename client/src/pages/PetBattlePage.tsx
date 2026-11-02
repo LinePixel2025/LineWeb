@@ -244,6 +244,7 @@ export default function PetBattlePage() {
           </button>
           <div className="gh-pet-gear-links">
             <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/gear">🎒 装备</Link>
+            <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/raid">🎯 搜打撤</Link>
             <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/market">🏪 交易行</Link>
           </div>
         </header>
@@ -310,6 +311,7 @@ export default function PetBattlePage() {
         </Link>
         <div className="gh-pet-gear-links">
           <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/gear">🎒 装备与技能</Link>
+          <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/raid">🎯 搜打撤</Link>
           <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/market">🏪 交易行</Link>
         </div>
       </header>
