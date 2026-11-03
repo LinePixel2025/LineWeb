@@ -1,7 +1,22 @@
 /* =============================================================
-   搜打撤 v2（/pets/raid）—— 大厅 + 实时房间制战斗 + HUD + 结算
-   命名空间：.gh-raid-*；沿用全局 --gh-* 设计令牌与 .gh-btn / .gh-alert
+   搜打撤（/pets/raid）—— 大厅 + 组队 + 实时战斗舞台 + 浮层 HUD + 结算
+   命名空间：.gh-raid-*（对局与大厅）/ .gh-raidsq-*（组队面板）
+   对局视觉走独立战术暗色体系（--raid-* 变量），大厅沿用全站 --gh-* 令牌
    ============================================================= */
+
+.gh-raid-stage {
+  --raid-ink: #05080f;
+  --raid-glass: rgba(8, 14, 26, 0.72);
+  --raid-glass-soft: rgba(8, 14, 26, 0.5);
+  --raid-line: rgba(125, 211, 252, 0.22);
+  --raid-line-strong: rgba(125, 211, 252, 0.5);
+  --raid-cyan: #38bdf8;
+  --raid-amber: #fbbf24;
+  --raid-danger: #ff453a;
+  --raid-ok: #30d158;
+  --raid-text: #dbe6f5;
+  --raid-muted: rgba(187, 203, 224, 0.62);
+}
 
 .gh-raid-page {
   max-width: 1240px;
@@ -269,7 +284,7 @@
   color: var(--gh-text-secondary);
 }
 
-/* 地图 */
+/* 地图卡：每张按主题配色与光晕，和局内美术对齐 */
 
 .gh-raid-insurance {
   display: inline-flex;
@@ -288,22 +303,24 @@
 
 .gh-raid-map-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 14px;
 }
 
 .gh-raid-map-card {
   position: relative;
-  padding: 16px;
+  padding: 18px 16px 14px;
   border: 1px solid var(--gh-border);
   border-radius: var(--gh-radius-lg);
   background:
-    linear-gradient(160deg, color-mix(in srgb, var(--map-color, #64748b) 12%, transparent), transparent 55%),
+    radial-gradient(120% 90% at 12% 0%, color-mix(in srgb, var(--map-color, #64748b) 26%, transparent), transparent 62%),
+    linear-gradient(165deg, color-mix(in srgb, var(--map-color, #64748b) 10%, transparent), transparent 55%),
     var(--gh-canvas);
   display: flex;
   flex-direction: column;
   gap: 10px;
   overflow: hidden;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .gh-raid-map-card::before {
@@ -311,7 +328,60 @@
   position: absolute;
   inset: 0 auto 0 0;
   width: 4px;
-  background: var(--map-color, #64748b);
+  background: linear-gradient(180deg, var(--map-color, #64748b), transparent);
+}
+
+/* 地形纹理暗示：不引图片，用重复渐变做每张图的地貌记忆点 */
+.gh-raid-map-card::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 74px;
+  opacity: 0.5;
+  pointer-events: none;
+  background-image: var(--map-pattern, none);
+  mask-image: linear-gradient(180deg, transparent, #000);
+}
+
+.gh-raid-map-card[data-map='wasteland'] {
+  --map-pattern: repeating-linear-gradient(90deg, rgba(163, 230, 53, 0.22) 0 2px, transparent 2px 12px),
+    repeating-linear-gradient(0deg, rgba(120, 96, 58, 0.28) 0 1px, transparent 1px 9px);
+}
+
+.gh-raid-map-card[data-map='dam'] {
+  --map-pattern: repeating-linear-gradient(135deg, rgba(56, 189, 248, 0.22) 0 3px, transparent 3px 14px);
+}
+
+.gh-raid-map-card[data-map='valley'] {
+  --map-pattern: repeating-linear-gradient(60deg, rgba(251, 146, 60, 0.2) 0 4px, transparent 4px 16px),
+    repeating-linear-gradient(-60deg, rgba(138, 90, 68, 0.24) 0 3px, transparent 3px 18px);
+}
+
+.gh-raid-map-card[data-map='space'] {
+  --map-pattern: repeating-linear-gradient(0deg, rgba(165, 180, 252, 0.24) 0 1px, transparent 1px 18px),
+    repeating-linear-gradient(90deg, rgba(226, 240, 255, 0.18) 0 1px, transparent 1px 18px);
+}
+
+.gh-raid-map-card[data-map='fungal'] {
+  --map-pattern: radial-gradient(circle at 20% 70%, rgba(192, 132, 252, 0.3) 0 6px, transparent 7px),
+    radial-gradient(circle at 62% 40%, rgba(74, 222, 128, 0.26) 0 5px, transparent 6px),
+    radial-gradient(circle at 88% 78%, rgba(192, 132, 252, 0.22) 0 8px, transparent 9px);
+}
+
+.gh-raid-map-card[data-map='abyss'] {
+  --map-pattern: repeating-linear-gradient(90deg, rgba(34, 211, 238, 0.26) 0 2px, transparent 2px 10px),
+    repeating-linear-gradient(0deg, rgba(34, 211, 238, 0.14) 0 2px, transparent 2px 22px);
+}
+
+.gh-raid-map-card:hover {
+  border-color: color-mix(in srgb, var(--map-color, #64748b) 55%, var(--gh-border));
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.14);
+}
+
+.gh-raid-map-card.is-squad-target {
+  border-color: var(--gh-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gh-accent) 35%, transparent);
 }
 
 .gh-raid-map-head {
@@ -321,8 +391,9 @@
 }
 
 .gh-raid-map-emoji {
-  font-size: 28px;
+  font-size: 30px;
   line-height: 1;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.22));
 }
 
 .gh-raid-map-head h3 {
@@ -359,6 +430,22 @@
   color: var(--gh-text-secondary);
 }
 
+.gh-raid-map-foot {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.gh-raid-map-foot .gh-btn {
+  flex: 1;
+  white-space: nowrap;
+}
+
+.gh-raid-map-foot .gh-btn--ghost.is-active {
+  border-color: var(--gh-accent);
+  color: var(--gh-accent);
+}
+
 .gh-raid-page .gh-btn--block {
   width: 100%;
 }
@@ -372,6 +459,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  content-visibility: auto;
 }
 
 .gh-raid-history-row {
@@ -413,24 +501,68 @@
 .gh-raid-history-result.is-mia { color: #d70015; }
 .gh-raid-history-result.is-abandoned { color: var(--gh-text-tertiary); }
 
-/* ---------- 对局画布 ---------- */
+/* =============================================================
+   对局舞台：画布 + 浮层 HUD（横屏不遮挡）
+   ============================================================= */
 
 .gh-raid-game {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
+}
+
+.gh-raid-stage {
+  position: relative;
+  width: 100%;
+  height: clamp(360px, 68dvh, 760px);
+  border-radius: var(--gh-radius-lg);
+  overflow: hidden;
+  background: var(--raid-ink);
+  border: 1px solid rgba(125, 211, 252, 0.24);
+  box-shadow: 0 20px 48px rgba(2, 6, 23, 0.42), inset 0 0 0 1px rgba(148, 163, 184, 0.06);
+  touch-action: none;
+  color: var(--raid-text);
+}
+
+/* 战术框角标：四个 L 形亮角，替代原来的一圈灰边框 */
+.gh-raid-stage::before {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  pointer-events: none;
+  z-index: 3;
+  background:
+    linear-gradient(var(--raid-line-strong), var(--raid-line-strong)) left top / 26px 2px no-repeat,
+    linear-gradient(var(--raid-line-strong), var(--raid-line-strong)) left top / 2px 26px no-repeat,
+    linear-gradient(var(--raid-line-strong), var(--raid-line-strong)) right top / 26px 2px no-repeat,
+    linear-gradient(var(--raid-line-strong), var(--raid-line-strong)) right top / 2px 26px no-repeat,
+    linear-gradient(var(--raid-line-strong), var(--raid-line-strong)) left bottom / 26px 2px no-repeat,
+    linear-gradient(var(--raid-line-strong), var(--raid-line-strong)) left bottom / 2px 26px no-repeat,
+    linear-gradient(var(--raid-line-strong), var(--raid-line-strong)) right bottom / 26px 2px no-repeat,
+    linear-gradient(var(--raid-line-strong), var(--raid-line-strong)) right bottom / 2px 26px no-repeat;
+  opacity: 0.5;
+}
+
+.gh-raid-stage.is-immersive {
+  border-radius: 0;
+  height: 100dvh;
+}
+
+/* iOS Safari 不支持元素全屏：降级成 fixed 铺满，同样能横屏沉浸 */
+.gh-raid-stage.is-fallback {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  width: 100vw;
+  height: 100dvh;
+  border-radius: 0;
 }
 
 .gh-raid-canvas-wrap {
-  position: relative;
-  width: 100%;
-  height: clamp(320px, 62vh, 660px);
-  border-radius: var(--gh-radius-lg);
+  position: absolute;
+  inset: 0;
   overflow: hidden;
-  background: #0b1220;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  box-shadow: 0 16px 40px rgba(2, 6, 23, 0.35);
-  touch-action: none;
+  background: var(--raid-ink);
 }
 
 .gh-raid-canvas {
@@ -440,37 +572,553 @@
   cursor: crosshair;
 }
 
-/* 手机虚拟摇杆 */
+/* ---------- 浮层容器与面板 ---------- */
+
+.gh-raid-overlay,
+.gh-raid-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+}
+
+.gh-raid-pod {
+  position: absolute;
+  pointer-events: none;
+  padding: 9px 11px;
+  border: 1px solid var(--raid-line);
+  background: var(--raid-glass);
+  backdrop-filter: blur(10px) saturate(150%);
+  -webkit-backdrop-filter: blur(10px) saturate(150%);
+  color: var(--raid-text);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: 0 10px 26px rgba(2, 6, 23, 0.4);
+}
+
+.gh-raid-pod button,
+.gh-raid-pod input,
+.gh-raid-pod a {
+  pointer-events: auto;
+}
+
+.gh-raid-pod-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--raid-muted);
+  margin-bottom: 6px;
+}
+
+.gh-raid-pod-title b {
+  letter-spacing: 0.04em;
+  color: var(--raid-text);
+  font-size: 11px;
+  text-transform: none;
+}
+
+.gh-raid-pod--vitals { top: max(10px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); width: min(292px, 42vw); }
+.gh-raid-pod--mission { top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); min-width: 208px; }
+.gh-raid-pod--map { top: max(10px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); width: 168px; }
+.gh-raid-pod--squad { bottom: max(10px, env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); width: 210px; }
+.gh-raid-pod--loot { bottom: max(10px, env(safe-area-inset-bottom)); right: max(12px, env(safe-area-inset-right)); width: 232px; }
+.gh-raid-pod--action { bottom: max(10px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); }
+.gh-raid-pod--log { top: 190px; right: max(12px, env(safe-area-inset-right)); width: 208px; display: flex; flex-direction: column; gap: 4px; }
+
+.gh-raid-minimap {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1.28;
+  border-radius: 4px;
+  background: rgba(4, 8, 16, 0.55);
+}
+
+/* ---------- 生命 / 能量 / 装备 ---------- */
+
+.gh-raid-vitals {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.gh-raid-hp-ring {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+}
+
+.gh-raid-hp-ring svg {
+  position: absolute;
+  inset: 0;
+  width: 56px;
+  height: 56px;
+  transform: rotate(-90deg);
+}
+
+.gh-raid-hp-ring circle {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.gh-raid-hp-ring circle.is-track { stroke: rgba(148, 163, 184, 0.22); }
+.gh-raid-hp-ring circle.is-fill { stroke: #ff6b5e; transition: stroke-dasharray 0.18s ease; }
+
+.gh-raid-hp-ring b {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.gh-raid-hp-ring span {
+  position: absolute;
+  bottom: 6px;
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  color: var(--raid-muted);
+}
+
+.gh-raid-hp-ring.is-critical { animation: gh-raid-critical 1.1s ease-in-out infinite; }
+
+.gh-raid-vitals-right {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.gh-raid-meter {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--raid-muted);
+}
+
+.gh-raid-meter b {
+  text-align: right;
+  color: var(--raid-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-raid-meter-track {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+  overflow: hidden;
+}
+
+.gh-raid-meter-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.18s ease;
+}
+
+.gh-raid-meter-track i.is-mp { background: linear-gradient(90deg, #0a84ff, #64d2ff); }
+
+.gh-raid-gearrow {
+  display: flex;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--raid-text);
+}
+
+.gh-raid-gearrow span {
+  padding: 2px 6px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.gh-raid-dur {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) 26px;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--raid-muted);
+}
+
+.gh-raid-dur-track {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+  overflow: hidden;
+}
+
+.gh-raid-dur-track i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #34c759, #7dd3fc);
+}
+
+.gh-raid-dur-track i.is-warning { background: linear-gradient(90deg, #ff9f0a, #fbbf24); }
+.gh-raid-dur-track i.is-danger { background: linear-gradient(90deg, #ff453a, #ff6b5e); }
+
+.gh-raid-dur b { color: var(--raid-text); font-variant-numeric: tabular-nums; }
+
+.gh-raid-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gh-raid-chips em {
+  font-style: normal;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  color: #bae6fd;
+}
+
+.gh-raid-chips em.is-buff { background: rgba(251, 191, 36, 0.16); border-color: rgba(251, 191, 36, 0.34); color: #fde68a; }
+.gh-raid-chips em.is-insure { background: rgba(48, 209, 88, 0.14); border-color: rgba(48, 209, 88, 0.3); color: #a7f3d0; }
+.gh-raid-chips em.is-kill { background: rgba(148, 163, 184, 0.12); border-color: rgba(148, 163, 184, 0.24); color: var(--raid-text); }
+
+/* ---------- 任务条 ---------- */
+
+.gh-raid-mission-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.gh-raid-room {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--raid-muted);
+}
+
+.gh-raid-timer {
+  font-family: var(--gh-font-mono);
+  font-size: 19px;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-raid-timer.is-danger {
+  color: #ff6b5e;
+  animation: gh-raid-pulse 1s ease-in-out infinite;
+}
+
+.gh-raid-state {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  border: 1px solid transparent;
+}
+
+.gh-raid-state.is-clear { background: rgba(48, 209, 88, 0.16); border-color: rgba(48, 209, 88, 0.32); color: #86efac; }
+.gh-raid-state.is-danger { background: rgba(255, 69, 58, 0.16); border-color: rgba(255, 69, 58, 0.3); color: #fca5a5; }
+
+.gh-raid-extract {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.gh-raid-extract-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+  overflow: hidden;
+}
+
+.gh-raid-extract-track i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #30d158, #64d2ff);
+  transition: width 0.2s linear;
+}
+
+.gh-raid-extract b { font-size: 10px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- 队友 ---------- */
+
+.gh-raid-mate {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 40px 34px;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 11px;
+}
+
+.gh-raid-mate-index { font-size: 13px; }
+.gh-raid-mate-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gh-raid-mate-hp { height: 4px; border-radius: 999px; background: rgba(148, 163, 184, 0.2); overflow: hidden; }
+.gh-raid-mate-hp i { display: block; height: 100%; background: #34d399; }
+.gh-raid-mate b { font-size: 9.5px; color: var(--raid-muted); text-align: right; }
+.gh-raid-mate.is-extracted b { color: #86efac; }
+.gh-raid-mate.is-died,
+.gh-raid-mate.is-mia { opacity: 0.6; }
+.gh-raid-mate.is-died b,
+.gh-raid-mate.is-mia b { color: #fca5a5; }
+
+/* ---------- 技能与道具 ---------- */
+
+.gh-raid-prompt {
+  margin: 0 auto 6px;
+  width: fit-content;
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--raid-line);
+  background: var(--raid-glass-soft);
+  font-size: 11px;
+  color: #bae6fd;
+  letter-spacing: 0.02em;
+}
+
+.gh-raid-skills {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.gh-raid-skills-empty {
+  font-size: 10.5px;
+  color: var(--raid-muted);
+  padding: 4px 8px;
+  border: 1px dashed rgba(148, 163, 184, 0.3);
+  border-radius: 6px;
+}
+
+.gh-raid-skill {
+  position: relative;
+  width: 62px;
+  padding: 6px 6px 5px;
+  border: 1px solid rgba(192, 132, 252, 0.42);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(88, 28, 135, 0.4), rgba(8, 14, 26, 0.8));
+  color: var(--raid-text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.gh-raid-skill:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: rgba(216, 180, 254, 0.9);
+  box-shadow: 0 0 18px rgba(192, 132, 252, 0.35);
+}
+
+.gh-raid-skill.is-locked { opacity: 0.5; cursor: not-allowed; }
+
+/* 冷却：从下往上的暗帘，比纯数字更好读 */
+.gh-raid-skill-sweep {
+  position: absolute;
+  inset: auto 0 0 0;
+  background: rgba(2, 6, 23, 0.66);
+  pointer-events: none;
+  transition: height 0.2s linear;
+}
+
+.gh-raid-skill-emoji { font-size: 20px; line-height: 1; }
+
+.gh-raid-skill-cd {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #e9d5ff;
+  background: rgba(2, 6, 23, 0.6);
+  border-radius: 4px;
+  padding: 0 3px;
+}
+
+.gh-raid-skill-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.gh-raid-skill-meta i {
+  font-style: normal;
+  font-size: 10px;
+  max-width: 58px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-raid-skill-meta em {
+  font-style: normal;
+  font-size: 9px;
+  color: var(--raid-muted);
+}
+
+.gh-raid-quick {
+  display: flex;
+  gap: 6px;
+  margin-left: 4px;
+}
+
+.gh-raid-quick-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--raid-line);
+  background: var(--raid-glass);
+  color: var(--raid-text);
+  font-size: 15px;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.gh-raid-quick-btn:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--raid-cyan); }
+.gh-raid-quick-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.gh-raid-quick-btn.is-abandon { border-color: rgba(255, 69, 58, 0.4); color: #fca5a5; }
+
+/* ---------- 容器 ---------- */
+
+.gh-raid-ctainer + .gh-raid-ctainer {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.gh-raid-ctainer-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--raid-muted);
+  margin-bottom: 3px;
+}
+
+.gh-raid-ctainer-head b { font-size: 10.5px; color: var(--raid-text); font-variant-numeric: tabular-nums; }
+.gh-raid-ctainer-head b.is-full { color: #fca5a5; }
+.gh-raid-ctainer--safe .gh-raid-ctainer-head { color: #86efac; }
+
+.gh-raid-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.gh-raid-slot {
+  position: relative;
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  border: 1px dashed rgba(148, 163, 184, 0.28);
+  background: rgba(2, 6, 23, 0.35);
+  font-size: 12px;
+}
+
+.gh-raid-slot.is-filled { border-style: solid; border-color: rgba(148, 163, 184, 0.5); }
+.gh-raid-slot[data-rarity='uncommon'].is-filled { border-color: rgba(74, 222, 128, 0.7); }
+.gh-raid-slot[data-rarity='rare'].is-filled { border-color: rgba(96, 165, 250, 0.75); }
+.gh-raid-slot[data-rarity='epic'].is-filled { border-color: rgba(192, 132, 252, 0.8); }
+.gh-raid-slot[data-rarity='legendary'].is-filled { border-color: rgba(251, 146, 60, 0.85); box-shadow: 0 0 8px rgba(251, 146, 60, 0.35); }
+.gh-raid-slot[data-rarity='mythic'].is-filled { border-color: rgba(248, 113, 113, 0.9); box-shadow: 0 0 10px rgba(248, 113, 113, 0.45); }
+
+.gh-raid-slot i {
+  position: absolute;
+  right: 1px;
+  bottom: 0;
+  font-size: 8px;
+  font-style: normal;
+  color: var(--raid-text);
+  text-shadow: 0 1px 2px #000;
+}
+
+/* ---------- 事件流 ---------- */
+
+.gh-raid-log {
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  background: rgba(2, 6, 23, 0.55);
+  border-left: 2px solid rgba(148, 163, 184, 0.4);
+  align-self: flex-end;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: gh-raid-log-in 0.24s ease;
+}
+
+.gh-raid-log.is-success { border-left-color: var(--raid-ok); color: #a7f3d0; }
+.gh-raid-log.is-danger { border-left-color: var(--raid-danger); color: #fca5a5; }
+.gh-raid-log.is-info { border-left-color: var(--raid-cyan); color: #bae6fd; }
+
+/* ---------- 手机摇杆与工具条 ---------- */
 
 .gh-raid-touch {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 4;
 }
 
 .gh-raid-stick {
   position: absolute;
-  bottom: 22px;
-  width: 112px;
-  height: 112px;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  width: 108px;
+  height: 108px;
   border-radius: 50%;
-  border: 2px solid rgba(148, 163, 184, 0.35);
-  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(125, 211, 252, 0.32);
+  background: radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.12), rgba(2, 6, 23, 0.5) 70%);
   backdrop-filter: blur(6px);
   pointer-events: auto;
   touch-action: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.gh-raid-stick--move { left: 18px; }
-.gh-raid-stick--aim { right: 18px; }
+.gh-raid-stick.is-active {
+  border-color: rgba(125, 211, 252, 0.85);
+  box-shadow: 0 0 22px rgba(56, 189, 248, 0.28);
+}
+
+.gh-raid-stick--move { left: max(14px, env(safe-area-inset-left)); }
+.gh-raid-stick--aim { right: max(14px, env(safe-area-inset-right)); }
+
+.gh-raid-stick-glyph {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  color: rgba(148, 163, 184, 0.45);
+  pointer-events: none;
+}
 
 .gh-raid-stick-label {
   position: absolute;
-  top: -22px;
+  top: -20px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 11px;
-  color: rgba(226, 232, 240, 0.6);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(187, 203, 224, 0.55);
   white-space: nowrap;
 }
 
@@ -478,389 +1126,371 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 46px;
-  height: 46px;
-  margin: -23px 0 0 -23px;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
   border-radius: 50%;
-  background: rgba(226, 232, 240, 0.72);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  background: radial-gradient(circle at 40% 35%, rgba(226, 232, 240, 0.95), rgba(148, 163, 184, 0.65));
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
   transition: transform 0.05s linear;
   pointer-events: none;
 }
 
-.gh-raid-touch-actions {
+.gh-raid-toolbar {
   position: absolute;
-  right: 18px;
-  top: 18px;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: calc(max(10px, env(safe-area-inset-bottom)) + 236px);
   display: flex;
-  gap: 8px;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.gh-raid-tool {
   pointer-events: auto;
-}
-
-.gh-raid-touch-btn {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  border: 1px solid rgba(148, 163, 184, 0.45);
-  background: rgba(15, 23, 42, 0.65);
-  color: #e2e8f0;
-  font-size: 15px;
-  font-weight: 700;
-  backdrop-filter: blur(6px);
-  touch-action: manipulation;
-}
-
-.gh-raid-touch-btn:active {
-  transform: scale(0.94);
-  background: rgba(56, 189, 248, 0.35);
-}
-
-.gh-raid-touch-skills {
-  display: flex;
-  gap: 6px;
-}
-
-.gh-raid-touch-btn--skill {
-  width: 44px;
-  height: 44px;
-  background: rgba(168, 85, 247, 0.35);
-  border-color: rgba(192, 132, 252, 0.6);
-}
-
-/* ---------- HUD ---------- */
-
-.gh-raid-hud {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
-  border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius-lg);
-  background: var(--gh-canvas);
-}
-
-.gh-raid-hud-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.gh-raid-hud-map {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--gh-text-sm);
-}
-
-.gh-raid-hud-map span {
-  color: var(--gh-text-secondary);
-}
-
-.gh-raid-hud-map em {
-  font-style: normal;
-  padding: 2px 8px;
-  border-radius: var(--gh-radius-pill);
-  font-size: var(--gh-text-caption);
-  background: var(--gh-canvas-inset);
-  color: var(--gh-text-secondary);
-}
-
-.gh-raid-hud-map em.is-clear {
-  background: color-mix(in srgb, #34c759 16%, transparent);
-  color: #248a3d;
-}
-
-.gh-raid-hud-map em.is-danger {
-  background: color-mix(in srgb, #ff3b30 14%, transparent);
-  color: #d70015;
-}
-
-.gh-raid-hud-timer {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: var(--gh-text-caption);
-  color: var(--gh-text-tertiary);
-}
-
-.gh-raid-hud-timer strong {
-  font-family: var(--gh-font-mono);
-  font-size: var(--gh-text-lg);
-  color: var(--gh-text-primary, inherit);
-}
-
-.gh-raid-hud-timer strong.is-danger {
-  color: #d70015;
-  animation: gh-raid-pulse 1s ease-in-out infinite;
-}
-
-.gh-raid-hud-stats {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: var(--gh-text-caption);
-  color: var(--gh-text-secondary);
-}
-
-.gh-raid-hud-badge {
-  padding: 3px 8px;
-  border-radius: var(--gh-radius-pill);
-  background: color-mix(in srgb, #0a84ff 14%, transparent);
-  color: var(--gh-accent);
-}
-
-.gh-raid-hud-bars {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.gh-raid-hud-bar,
-.gh-raid-hud-extract {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) 96px;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--gh-text-caption);
-  color: var(--gh-text-secondary);
-}
-
-.gh-raid-hud-bar b,
-.gh-raid-hud-extract b {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: var(--gh-text-primary, inherit);
-}
-
-.gh-raid-hud-bar-track {
-  height: 10px;
-  border-radius: var(--gh-radius-pill);
-  background: var(--gh-canvas-inset);
-  overflow: hidden;
-}
-
-.gh-raid-hud-bar-track i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  transition: width 0.2s ease;
-}
-
-.gh-raid-hud-bar-track i.is-hp {
-  background: linear-gradient(90deg, #ff453a, #ff9f0a);
-}
-
-.gh-raid-hud-bar-track i.is-mp {
-  background: linear-gradient(90deg, #0a84ff, #64d2ff);
-}
-
-.gh-raid-hud-bar-track i.is-extract {
-  background: linear-gradient(90deg, #30d158, #64d2ff);
-}
-
-.gh-raid-hud-shield,
-.gh-raid-hud-buff {
-  font-size: var(--gh-text-caption);
-  color: var(--gh-text-secondary);
-}
-
-.gh-raid-hud-gear {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  font-size: var(--gh-text-caption);
-  color: var(--gh-text-secondary);
-}
-
-.gh-raid-hud-gear > span {
-  padding: 3px 8px;
-  border-radius: var(--gh-radius-pill);
-  background: var(--gh-canvas-inset);
-}
-
-.gh-raid-hud-durability {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.gh-raid-hud-durability-bar {
-  width: 90px;
-  height: 6px;
-  border-radius: var(--gh-radius-pill);
-  background: var(--gh-canvas-inset);
-  overflow: hidden;
-}
-
-.gh-raid-hud-durability-bar i {
-  display: block;
-  height: 100%;
-  background: #34c759;
-}
-
-.gh-raid-hud-durability-bar i.is-warning { background: #ff9f0a; }
-.gh-raid-hud-durability-bar i.is-danger { background: #ff453a; }
-
-.gh-raid-hud-durability b {
-  font-variant-numeric: tabular-nums;
-}
-
-.gh-raid-hud-skills {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.gh-raid-hud-skill {
-  position: relative;
-  display: grid;
-  grid-template-columns: 22px 28px minmax(0, 1fr);
-  grid-template-rows: auto auto;
-  align-items: center;
-  gap: 2px 6px;
-  padding: 8px 10px;
-  border: 1px solid var(--gh-border);
-  border-radius: var(--gh-radius);
-  background: var(--gh-canvas-subtle);
-  text-align: left;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--raid-line);
+  background: var(--raid-glass-soft);
+  color: var(--raid-muted);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
   cursor: pointer;
 }
 
-.gh-raid-hud-skill:hover:not(:disabled) {
-  border-color: var(--gh-accent);
-}
+.gh-raid-tool:hover,
+.gh-raid-tool.is-on { color: #bae6fd; border-color: var(--raid-line-strong); }
 
-.gh-raid-hud-skill.is-disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.gh-raid-hud-skill-key {
-  grid-row: 1 / 3;
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  background: var(--gh-canvas-inset);
-  font-size: 11px;
-  color: var(--gh-text-tertiary);
-}
-
-.gh-raid-hud-skill-emoji {
-  font-size: 20px;
-  line-height: 1;
-}
-
-.gh-raid-hud-skill-name {
-  font-size: var(--gh-text-sm);
-  font-weight: 600;
-}
-
-.gh-raid-hud-skill-meta {
-  grid-column: 2 / 4;
-  font-size: var(--gh-text-caption);
-  color: var(--gh-text-tertiary);
-}
-
-.gh-raid-hud-containers {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+/* 触屏：面板让位给摇杆与技能，全部靠边收窄；容器改成顶部一条计数带 */
+.gh-raid-stage[data-layout='touch'] .gh-raid-pod--vitals { width: min(196px, 28%); padding: 7px 9px; }
+.gh-raid-stage[data-layout='touch'] .gh-raid-pod--mission { min-width: 0; padding: 6px 10px; }
+.gh-raid-stage[data-layout='touch'] .gh-raid-pod--map { width: 112px; padding: 6px 7px; }
+.gh-raid-stage[data-layout='touch'] .gh-raid-pod--squad { width: 152px; bottom: auto; top: 148px; }
+.gh-raid-stage[data-layout='touch'] .gh-raid-pod--loot {
+  top: 58px;
+  bottom: auto;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  width: auto;
+  display: flex;
   gap: 10px;
+  padding: 5px 10px;
+}
+.gh-raid-stage[data-layout='touch'] .gh-raid-ctainer + .gh-raid-ctainer { margin-top: 0; padding-top: 0; border-top: none; }
+.gh-raid-stage[data-layout='touch'] .gh-raid-ctainer-head { margin-bottom: 0; gap: 5px; }
+.gh-raid-stage[data-layout='touch'] .gh-raid-slots { display: none; }
+.gh-raid-stage[data-layout='touch'] .gh-raid-pod--action {
+  bottom: max(24px, env(safe-area-inset-bottom));
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+}
+.gh-raid-stage[data-layout='touch'] .gh-raid-skill { width: 52px; }
+.gh-raid-stage[data-layout='touch'] .gh-raid-quick-btn { width: 44px; height: 44px; }
+.gh-raid-stage[data-layout='touch'] .gh-raid-pod--log { top: 150px; right: max(12px, env(safe-area-inset-right)); width: 150px; }
+.gh-raid-stage[data-layout='touch'] .gh-raid-toolbar { bottom: auto; top: 122px; right: max(12px, env(safe-area-inset-right)); }
+
+/* 竖屏手机：战斗区太窄，只留生命与技能，其余等「请旋转横屏」提示后由横屏承载 */
+@media (orientation: portrait) {
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--map,
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--log,
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--loot,
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--squad { display: none; }
+  /* 任务条改挂右上，避免和左上生命盘在 320~400px 宽度里叠住 */
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--mission {
+    left: auto;
+    right: max(12px, env(safe-area-inset-right));
+    transform: none;
+    padding: 5px 8px;
+  }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--vitals { width: min(168px, 48%); }
+  /* 竖屏任务条只留计时，房间名与清场状态交给中央提示与横屏承载 */
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--mission .gh-raid-room,
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--mission .gh-raid-state { display: none; }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--action { bottom: max(146px, env(safe-area-inset-bottom)); }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-toolbar { top: 122px; }
 }
 
-.gh-raid-hud-container {
-  padding: 8px 10px;
-  border: 1px solid var(--gh-border-muted);
-  border-radius: var(--gh-radius);
-  background: var(--gh-canvas-subtle);
+/* 横屏矮窗口（手机横屏 / 小笔电）：进一步压缩，保证中央战斗区干净 */
+@media (orientation: landscape) and (max-height: 560px) {
+  .gh-raid-pod { padding: 6px 8px; font-size: 11px; }
+  .gh-raid-pod--vitals { width: min(250px, 40vw); }
+  .gh-raid-vitals { grid-template-columns: 46px minmax(0, 1fr); gap: 8px; }
+  .gh-raid-hp-ring,
+  .gh-raid-hp-ring svg { width: 46px; height: 46px; }
+  .gh-raid-timer { font-size: 16px; }
+  .gh-raid-pod--log { display: none; }
+  .gh-raid-pod--loot { width: 132px; }
+  .gh-raid-slots { display: none; }
+  .gh-raid-stage.is-immersive { height: 100dvh; }
 }
 
-.gh-raid-hud-container-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: var(--gh-text-caption);
-  color: var(--gh-text-secondary);
-  margin-bottom: 6px;
-}
-
-.gh-raid-hud-slots {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.gh-raid-hud-slot {
-  position: relative;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 6px;
-  border: 1px dashed var(--gh-border);
-  background: var(--gh-canvas);
-  font-size: 16px;
-}
-
-.gh-raid-hud-slot--filled {
-  border-style: solid;
-  border-color: var(--gh-border-strong);
-}
-
-.gh-raid-hud-slot i {
+/* 操作提示卡 */
+.gh-raid-hint {
   position: absolute;
-  right: 2px;
-  bottom: 0;
-  font-size: 9px;
-  font-style: normal;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  z-index: 6;
+  width: min(420px, 88vw);
+  padding: 16px;
+  border: 1px solid var(--raid-line-strong);
+  border-radius: 12px;
+  background: rgba(4, 8, 16, 0.92);
+  backdrop-filter: blur(12px);
+  color: var(--raid-text);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.gh-raid-hint strong { font-size: 14px; letter-spacing: 0.04em; }
+.gh-raid-hint span { font-size: 12px; color: var(--raid-muted); line-height: 1.6; }
+.gh-raid-hint button {
+  align-self: flex-end;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--raid-line);
+  background: transparent;
+  color: #bae6fd;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.gh-raid-squadline {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: var(--gh-text-caption);
   color: var(--gh-text-secondary);
 }
 
-.gh-raid-hud-empty {
-  margin: 4px 0 0;
-  font-size: var(--gh-text-caption);
-  color: var(--gh-text-tertiary);
-}
+.gh-raid-squadline span.is-me { color: var(--gh-accent); font-weight: 600; }
+.gh-raid-squadline span.is-extracted { color: #248a3d; }
+.gh-raid-squadline span.is-died,
+.gh-raid-squadline span.is-mia { color: #d70015; }
 
-.gh-raid-hud-footer {
+/* =============================================================
+   组队面板（大厅）
+   ============================================================= */
+
+.gh-raidsq {
+  padding: 16px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  font-size: var(--gh-text-caption);
-  color: var(--gh-text-tertiary);
+  flex-direction: column;
+  gap: 12px;
 }
 
-.gh-raid-hud-toast {
+.gh-raidsq-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.gh-raidsq-head h2 {
+  margin: 0 0 4px;
+  font-size: var(--gh-text-lg);
+  letter-spacing: var(--gh-tracking-snug);
+}
+
+.gh-raidsq-head p {
+  margin: 0;
+  font-size: var(--gh-text-caption);
+  color: var(--gh-text-tertiary);
+  max-width: 620px;
+  line-height: 1.55;
+}
+
+.gh-raidsq-count {
   padding: 4px 10px;
   border-radius: var(--gh-radius-pill);
   background: var(--gh-canvas-inset);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
-.gh-raid-hud-toast.is-success {
-  background: color-mix(in srgb, #34c759 16%, transparent);
-  color: #248a3d;
+.gh-raidsq-invites {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.gh-raid-hud-toast.is-danger {
-  background: color-mix(in srgb, #ff3b30 14%, transparent);
-  color: #d70015;
+.gh-raidsq-invite {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--gh-radius);
+  border: 1px solid var(--gh-border);
+  background: var(--gh-canvas-subtle);
+  font-size: var(--gh-text-sm);
 }
 
-.gh-raid-hud-errors {
+.gh-raidsq-invite.is-in { border-color: color-mix(in srgb, var(--gh-accent) 45%, var(--gh-border)); }
+.gh-raidsq-invite span { flex: 1; color: var(--gh-text-secondary); }
+
+.gh-raidsq-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.gh-raidsq-block-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: var(--gh-text-caption);
+  letter-spacing: var(--gh-tracking-wide);
+  text-transform: uppercase;
+  color: var(--gh-text-tertiary);
+  margin-bottom: 8px;
+}
+
+.gh-raidsq-block-title input {
+  flex: 1;
+  max-width: 220px;
+  padding: 5px 9px;
+  font-size: var(--gh-text-sm);
+  border-radius: var(--gh-radius-sm);
+  border: 1px solid var(--gh-border);
+  background: var(--gh-canvas-subtle);
+  color: inherit;
+}
+
+.gh-raidsq-seat-list,
+.gh-raidsq-friend-list {
+  list-style: none;
   margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gh-raidsq-seat,
+.gh-raidsq-friend {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-subtle);
+  font-size: var(--gh-text-sm);
+}
+
+.gh-raidsq-friend { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+
+.gh-raidsq-seat.is-host { border-color: color-mix(in srgb, #ff9f0a 45%, var(--gh-border)); }
+.gh-raidsq-seat.is-extracted { border-color: color-mix(in srgb, #34c759 40%, var(--gh-border)); }
+.gh-raidsq-seat.is-died,
+.gh-raidsq-seat.is-mia { opacity: 0.72; }
+
+.gh-raidsq-seat-index {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: var(--gh-canvas-inset);
+  font-size: 10px;
+  color: var(--gh-text-tertiary);
+}
+
+.gh-raidsq-seat-avatar { font-size: 16px; }
+
+.gh-raidsq-seat-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.gh-raidsq-seat-main b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gh-raidsq-seat-main em {
+  font-style: normal;
+  font-size: var(--gh-text-caption);
+  color: var(--gh-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-raidsq-seat-state,
+.gh-raidsq-friend-state {
+  font-size: var(--gh-text-caption);
+  color: var(--gh-text-secondary);
+  padding: 2px 7px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-canvas-inset);
+  white-space: nowrap;
+}
+
+.gh-raidsq-friend-state.is-online { color: #248a3d; background: color-mix(in srgb, #34c759 12%, transparent); }
+.gh-raidsq-seat-state.is-offline { opacity: 0.6; }
+
+.gh-raidsq-kick {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--gh-border);
+  background: transparent;
+  color: var(--gh-text-tertiary);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.gh-raidsq-kick:hover { border-color: #ff3b30; color: #d70015; }
+
+.gh-raidsq-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.gh-raidsq-wait {
+  font-size: var(--gh-text-caption);
+  color: var(--gh-text-tertiary);
+}
+
+.gh-raidsq-note {
+  margin: 8px 0 0;
+  font-size: var(--gh-text-caption);
+  color: var(--gh-text-tertiary);
+}
+
+.gh-raidsq-failed {
+  margin: 8px 0 0;
   padding-left: 18px;
   font-size: var(--gh-text-caption);
   color: #d70015;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-/* ---------- 结算弹层 ---------- */
+.gh-raidsq-empty {
+  margin: 0;
+  padding: 12px;
+  border: 1px dashed var(--gh-border-strong);
+  border-radius: var(--gh-radius);
+  font-size: var(--gh-text-caption);
+  color: var(--gh-text-tertiary);
+  text-align: center;
+}
+
+.gh-raidsq-error { margin-top: 2px; }
+
+/* 对局内的队友浮层在 .gh-raid-pod--squad，这里只保留面板需要的样式 */
+
+/* =============================================================
+   结算弹层
+   ============================================================= */
 
 .gh-raid-result {
   max-width: 620px;
@@ -899,6 +1529,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  content-visibility: auto;
 }
 
 .gh-raid-result-list li {
@@ -938,9 +1569,23 @@
   margin: 0;
 }
 
+/* =============================================================
+   动效
+   ============================================================= */
+
 @keyframes gh-raid-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }
+}
+
+@keyframes gh-raid-critical {
+  0%, 100% { filter: none; }
+  50% { filter: drop-shadow(0 0 8px rgba(255, 69, 58, 0.75)); }
+}
+
+@keyframes gh-raid-log-in {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: none; }
 }
 
 /* ---------- 响应式 ---------- */
@@ -950,6 +1595,7 @@
   .gh-raid-contract-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .gh-raid-loadout-grid { grid-template-columns: 1fr; }
   .gh-raid-loadout-gear { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .gh-raidsq-body { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
@@ -964,29 +1610,37 @@
   .gh-raid-history-row > span:nth-child(5) {
     display: none;
   }
-  .gh-raid-canvas-wrap { height: clamp(300px, 52vh, 520px); }
-  .gh-raid-hud-skills { grid-template-columns: 1fr; }
-  .gh-raid-hud-containers { grid-template-columns: 1fr; }
-  .gh-raid-hud-bar,
-  .gh-raid-hud-extract { grid-template-columns: 32px minmax(0, 1fr) 74px; }
-  .gh-raid-touch-actions {
-    left: 50%;
-    right: auto;
-    top: auto;
-    bottom: 146px;
-    transform: translateX(-50%);
-    flex-wrap: nowrap;
-  }
-  .gh-raid-touch-btn { width: 42px; height: 42px; font-size: 13px; }
-  .gh-raid-touch-btn--skill { width: 40px; height: 40px; }
+  .gh-raid-stage { height: clamp(340px, 62dvh, 560px); }
+  .gh-raid-pod--log { display: none; }
   .gh-raid-result-list li { grid-template-columns: 22px minmax(0, 1fr) 44px; }
   .gh-raid-result-list em { display: none; }
+  .gh-raidsq-seat,
+  .gh-raidsq-friend { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .gh-raidsq-seat-index { display: none; }
+  .gh-raidsq-friend-state { display: none; }
 }
+
+/* 低性能模式：去掉毛玻璃与呼吸动效，只保留可读信息 */
+[data-perf='low'] .gh-raid-pod,
+[data-perf='low'] .gh-raid-hint,
+[data-perf='low'] .gh-raid-stick {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+[data-perf='low'] .gh-raid-hp-ring.is-critical,
+[data-perf='low'] .gh-raid-timer.is-danger {
+  animation: none;
+}
+
+[data-perf='low'] .gh-raid-log { animation: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .gh-raid-page *,
   .gh-raid-page *::before,
-  .gh-raid-page *::after {
+  .gh-raid-page *::after,
+  .gh-raidsq,
+  .gh-raidsq * {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;

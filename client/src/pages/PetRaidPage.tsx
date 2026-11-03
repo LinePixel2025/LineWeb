@@ -9,12 +9,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../lib/api'
+import { useAuth } from '../contexts/AuthContext'
 import type { RaidEvent } from '../lib/raid/raidRun'
 import { getRaidGear } from '../lib/raid/raidRun'
 import type { RaidEngine, RaidSnapshot } from '../lib/raid/engine'
+import { useRaidSquad } from '../lib/raid/squad'
 import RaidCanvas from '../components/raid/RaidCanvas'
 import RaidHud from '../components/raid/RaidHud'
 import RaidResultDialog from '../components/raid/RaidResultDialog'
+import RaidSquadPanel from '../components/raid/RaidSquadPanel'
 import type {
   RaidContract,
   RaidEventBatchResult,
@@ -22,6 +25,7 @@ import type {
   RaidRun,
   RaidSettlement,
 } from '../types/petRaid'
+import type { RaidSquadWorldDelta } from '../types/raidSquad'
 
 function errMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback
@@ -85,11 +89,15 @@ function initialSnapshot(run: RaidRun): RaidSnapshot {
 }
 
 export default function PetRaidPage() {
+  const { user } = useAuth()
+  const selfUserId = user?.id ?? 0
   const [overview, setOverview] = useState<RaidOverview | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [insured, setInsured] = useState(true)
+  const [squadMapKey, setSquadMapKey] = useState('')
+  const [engineReady, setEngineReady] = useState(0)
   const [gameRun, setGameRun] = useState<RaidRun | null>(null)
   const [run, setRun] = useState<RaidRun | null>(null)
   const [snapshot, setSnapshot] = useState<RaidSnapshot | null>(null)
@@ -119,6 +127,8 @@ export default function PetRaidPage() {
         setRun(data.run)
         setGameRun((current) => (current && current.id === data.run?.id ? current : data.run))
         setSnapshot((current) => current ?? initialSnapshot(data.run as RaidRun))
+        // 版本冲突自愈：重新拉到的服务端状态必须回灌引擎（击杀 / 容器 / 背包都以服务端为准）
+        engineRef.current?.applyServerRun(data.run)
       } else {
         runRef.current = null
         setRun(null)
@@ -138,6 +148,44 @@ export default function PetRaidPage() {
     })
   }, [loadOverview])
 
+  /* ---------- 好友组队 ---------- */
+
+  const handleWorld = useCallback((delta: RaidSquadWorldDelta): void => {
+    engineRef.current?.applyWorldDelta(delta)
+  }, [])
+
+  // 出击成功（本端或队友端收到 started）后重拉概览：本人若有新对局会自动进入战斗画面
+  const handleStarted = useCallback((): void => {
+    void loadOverview()
+  }, [loadOverview])
+
+  const squad = useRaidSquad({ selfUserId, onWorld: handleWorld, onStarted: handleStarted })
+
+  useEffect(() => {
+    if (!squadMapKey && overview?.maps.length) setSquadMapKey(overview.maps[0].key)
+  }, [overview, squadMapKey])
+
+  // 队友位置喂给引擎（同房间的画成幽灵，小地图上按房间标点）
+  useEffect(() => {
+    const engine = engineRef.current
+    if (!engine) return
+    engine.setTeammates(squad.members
+      .filter((member) => member.userId !== selfUserId)
+      .map((member) => ({
+        userId: member.userId,
+        name: member.displayName || member.name,
+        species: member.species,
+        x: member.x,
+        y: member.y,
+        angle: member.angle,
+        hp: member.hp,
+        maxHp: member.maxHp,
+        roomId: member.roomId,
+        kills: member.kills,
+        status: member.status,
+      })))
+  }, [engineReady, squad.members, selfUserId])
+
   /* ---------- 事件上报 ---------- */
 
   const sendPending = useCallback(async (): Promise<void> => {
@@ -146,12 +194,21 @@ export default function PetRaidPage() {
     if (!current || pendingRef.current.length === 0) return
     sendingRef.current = true
     const batch = pendingRef.current.splice(0, pendingRef.current.length)
+    const engine = engineRef.current
     try {
       const result = await api.post<RaidEventBatchResult>('/pets/raid/events', {
         version: current.version,
         events: batch,
+        // 组队时把本端位置带上去（纯表现，服务端不落库）
+        me: engine ? {
+          x: engine.player.x,
+          y: engine.player.y,
+          angle: engine.player.angle,
+          roomId: engine.roomId,
+        } : undefined,
       })
       if (!mountedRef.current) return
+      squad.applyEventBatchSquad(result.squad)
       if (result.settlement) {
         runRef.current = null
         setRun(null)
@@ -186,7 +243,7 @@ export default function PetRaidPage() {
         }, 500)
       }
     }
-  }, [loadOverview])
+  }, [loadOverview, squad.applyEventBatchSquad])
 
   const flushEvents = useCallback((events: RaidEvent[]): void => {
     if (events.length > 0) pendingRef.current.push(...events)
@@ -341,28 +398,62 @@ export default function PetRaidPage() {
             key={gameRun.id}
             initialRun={gameRun}
             species={overview.pet?.species ?? 'cat'}
-            paused={Boolean(settlement) || busy}
+            paused={Boolean(settlement)}
             onEngineReady={(engine) => {
               engineRef.current = engine
+              setEngineReady((value) => value + 1)
             }}
             onSnapshot={(next) => setSnapshot(next)}
             onFlush={flushEvents}
-          />
-          {run && snapshot && (
-            <RaidHud
-              run={run}
-              snapshot={snapshot}
-              busy={busy}
-              errors={actionErrors}
-              onAbandon={() => void abandon()}
-              onSkill={(index) => engineRef.current?.castSkill(index)}
-              onHeal={() => engineRef.current?.useConsumable('heal')}
-              onRepair={() => engineRef.current?.useConsumable('repair')}
-            />
+          >
+            {run && snapshot && (
+              <RaidHud
+                run={run}
+                snapshot={snapshot}
+                busy={busy}
+                errors={actionErrors}
+                squad={squad.members}
+                selfUserId={selfUserId}
+                onAbandon={() => void abandon()}
+                onSkill={(index) => engineRef.current?.castSkill(index)}
+                onHeal={() => engineRef.current?.useConsumable('heal')}
+                onRepair={() => engineRef.current?.useConsumable('repair')}
+              />
+            )}
+          </RaidCanvas>
+          {squad.inSquad && squad.members.length > 1 && (
+            <p className="gh-raid-squadline">
+              {squad.members.map((member) => (
+                <span key={member.userId} className={`is-${member.status}${member.userId === selfUserId ? ' is-me' : ''}`}>
+                  {member.displayName || member.name}：{member.status === 'active' ? `HP ${Math.round(member.hp)}` : '已离场'}
+                </span>
+              ))}
+            </p>
           )}
         </section>
       ) : (
         <div className="gh-raid-lobby">
+          <RaidSquadPanel
+            squad={squad.squad}
+            friends={squad.friends}
+            incoming={squad.incoming}
+            outgoing={squad.outgoing}
+            selfUserId={selfUserId}
+            busy={squad.busy}
+            error={squad.error}
+            failed={squad.failed}
+            maps={overview.maps}
+            selectedMapKey={squadMapKey}
+            insured={insured}
+            insuranceCost={loadout?.insuranceCost ?? 0}
+            onInvite={(userId) => void squad.invite(userId)}
+            onRespond={(inviteId, accept) => void squad.respond(inviteId, accept)}
+            onCancel={(inviteId) => void squad.cancel(inviteId)}
+            onLeave={() => void squad.leave()}
+            onKick={(userId) => void squad.kick(userId)}
+            onStart={(mapKey) => void squad.start(mapKey, insured)}
+          />
+
           <section className="gh-raid-stats">
             <div><span>总场次</span><b>{overview.stats.total}</b></div>
             <div><span>成功撤离</span><b>{overview.stats.extracted}</b></div>
@@ -466,7 +557,12 @@ export default function PetRaidPage() {
               {overview.maps.map((map) => {
                 const canAfford = overview.points >= map.entryCost + (insured && loadout ? loadout.insuranceCost : 0)
                 return (
-                  <article key={map.key} className="gh-raid-map-card" style={{ '--map-color': map.color } as CSSProperties}>
+                  <article
+                    key={map.key}
+                    className={`gh-raid-map-card${squadMapKey === map.key ? ' is-squad-target' : ''}`}
+                    data-map={map.key}
+                    style={{ '--map-color': map.color } as CSSProperties}
+                  >
                     <div className="gh-raid-map-head">
                       <span className="gh-raid-map-emoji">{map.emoji}</span>
                       <div>
@@ -481,14 +577,24 @@ export default function PetRaidPage() {
                       <span>{formatDuration(map.durationMs)}</span>
                       <span>{map.entryCost > 0 ? `门票 ${map.entryCost}` : '免费'}</span>
                     </div>
-                    <button
-                      type="button"
-                      className="gh-btn gh-btn--primary gh-btn--block"
-                      disabled={busy || !overview.pet || !canAfford}
-                      onClick={() => void startRaid(map.key)}
-                    >
-                      {busy ? '出击中…' : canAfford ? '进入行动' : '积分不足'}
-                    </button>
+                    <div className="gh-raid-map-foot">
+                      <button
+                        type="button"
+                        className="gh-btn gh-btn--primary"
+                        disabled={busy || !overview.pet || !canAfford}
+                        onClick={() => void startRaid(map.key)}
+                      >
+                        {busy ? '出击中…' : canAfford ? '单人进入行动' : '积分不足'}
+                      </button>
+                      <button
+                        type="button"
+                        className={`gh-btn gh-btn--ghost${squadMapKey === map.key ? ' is-active' : ''}`}
+                        onClick={() => setSquadMapKey(map.key)}
+                        title="作为好友组队出击的目标地图"
+                      >
+                        {squadMapKey === map.key ? '组队目标 ✓' : '设为组队目标'}
+                      </button>
+                    </div>
                   </article>
                 )
               })}

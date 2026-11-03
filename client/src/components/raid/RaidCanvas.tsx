@@ -1,15 +1,19 @@
 /**
- * 搜打撤对局画布：创建实时引擎、驱动 60fps 循环、渲染房间、处理键鼠与手机虚拟摇杆。
+ * 搜打撤对局舞台：实时引擎 + 60fps 循环 + 键鼠 / 双虚拟摇杆 + 横屏沉浸模式。
  *
- * 页面职责：拿到 onEngineReady 的引擎实例后周期上报事件（engine.flushEvents 由本组件按时调用），
- * 并把服务端返回的 run 通过 engine.applyServerRun 同步回本地。
+ * 口径：
+ *   - 画布铺满舞台，HUD 作为 children 叠在舞台上（浮层，不再占据画布下方一整块空间）；
+ *   - 小地图改用舞台内的独立 canvas（`renderMinimap`），位置交给 CSS，
+ *     这样手机横屏时摇杆、按钮不会再压在画布画的小地图上；
+ *   - 引擎的 update 每帧都跑（阵亡后特效仍需衰减），暂停时整体冻结。
  */
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import type { RaidEvent } from '../../lib/raid/raidRun'
 import { RaidEngine, type RaidSnapshot } from '../../lib/raid/engine'
-import { computeMetrics, renderRaid } from '../../lib/raid/renderer'
+import { computeMetrics, renderMinimap, renderRaid } from '../../lib/raid/renderer'
 import { createRaidInput, type RaidInputController } from '../../lib/raid/input'
+import { useLowPerformanceMode } from '../../lib/performanceMode'
 import type { RaidRun } from '../../types/petRaid'
 
 interface RaidCanvasProps {
@@ -19,17 +23,21 @@ interface RaidCanvasProps {
   onEngineReady: (engine: RaidEngine) => void
   onSnapshot: (snapshot: RaidSnapshot) => void
   onFlush: (events: RaidEvent[]) => void
+  /** HUD 浮层（由页面传入，渲染在舞台内、画布之上） */
+  children?: ReactNode
 }
 
 interface VirtualStickProps {
   className?: string
   label: string
+  glyph: string
   onChange: (x: number, y: number, active: boolean) => void
 }
 
-function VirtualStick({ className, label, onChange }: VirtualStickProps) {
+function VirtualStick({ className, label, glyph, onChange }: VirtualStickProps) {
   const ref = useRef<HTMLDivElement | null>(null)
   const [knob, setKnob] = useState({ x: 0, y: 0 })
+  const [active, setActive] = useState(false)
   const activeRef = useRef<number | null>(null)
 
   const update = (event: ReactPointerEvent<HTMLDivElement>): void => {
@@ -52,16 +60,18 @@ function VirtualStick({ className, label, onChange }: VirtualStickProps) {
   const reset = (): void => {
     activeRef.current = null
     setKnob({ x: 0, y: 0 })
+    setActive(false)
     onChange(0, 0, false)
   }
 
   return (
     <div
       ref={ref}
-      className={`gh-raid-stick ${className ?? ''}`}
+      className={`gh-raid-stick ${className ?? ''}${active ? ' is-active' : ''}`}
       role="presentation"
       onPointerDown={(event) => {
         activeRef.current = event.pointerId
+        setActive(true)
         event.currentTarget.setPointerCapture(event.pointerId)
         update(event)
       }}
@@ -72,6 +82,7 @@ function VirtualStick({ className, label, onChange }: VirtualStickProps) {
       onPointerUp={reset}
       onPointerCancel={reset}
     >
+      <span className="gh-raid-stick-glyph" aria-hidden>{glyph}</span>
       <span className="gh-raid-stick-label" aria-hidden>{label}</span>
       <span
         className="gh-raid-stick-knob"
@@ -89,21 +100,29 @@ export default function RaidCanvas({
   onEngineReady,
   onSnapshot,
   onFlush,
+  children,
 }: RaidCanvasProps) {
+  const stageRef = useRef<HTMLDivElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const minimapRef = useRef<HTMLCanvasElement | null>(null)
   const engineRef = useRef<RaidEngine | null>(null)
   const inputRef = useRef<RaidInputController | null>(null)
   const metricsRef = useRef({ tile: 32, offsetX: 0, offsetY: 0, width: 800, height: 560 })
   const pausedRef = useRef(paused)
+  const lowPerfRef = useRef(false)
   const callbacksRef = useRef({ onEngineReady, onSnapshot, onFlush })
   const [touchMode, setTouchMode] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 900
   })
+  const [immersive, setImmersive] = useState(false)
+  const [lowPerf] = useLowPerformanceMode()
+  const [hint, setHint] = useState<'none' | 'rotate' | 'fullscreen'>('none')
 
   callbacksRef.current = { onEngineReady, onSnapshot, onFlush }
   pausedRef.current = paused
+  lowPerfRef.current = lowPerf
 
   useEffect(() => {
     const query = window.matchMedia('(pointer: coarse)')
@@ -116,8 +135,70 @@ export default function RaidCanvas({
     }
   }, [])
 
+  // 手机竖屏时提示转横屏：竖屏里 HUD 浮层会把战斗画面压得很扁
+  useEffect(() => {
+    if (!touchMode) {
+      setHint('none')
+      return
+    }
+    const check = (): void => setHint(window.innerHeight > window.innerWidth ? 'rotate' : 'none')
+    check()
+    window.addEventListener('resize', check)
+    window.addEventListener('orientationchange', check)
+    return () => {
+      window.removeEventListener('resize', check)
+      window.removeEventListener('orientationchange', check)
+    }
+  }, [touchMode])
+
+  // 沉浸模式：优先原生全屏，被禁用时（iOS Safari 不支持元素全屏）退化成 fixed 铺满
+  useEffect(() => {
+    const onChange = (): void => {
+      const full = document.fullscreenElement || (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement
+      if (!full && immersive && !stageRef.current?.classList.contains('is-fallback')) setImmersive(false)
+    }
+    document.addEventListener('fullscreenchange', onChange)
+    document.addEventListener('webkitfullscreenchange', onChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange)
+      document.removeEventListener('webkitfullscreenchange', onChange)
+    }
+  }, [immersive])
+
+  const toggleImmersive = (): void => {
+    const stage = stageRef.current
+    if (!stage) return
+    const isFull = Boolean(document.fullscreenElement)
+    if (isFull) {
+      void Promise.resolve(document.exitFullscreen?.()).catch(() => undefined)
+      stage.classList.remove('is-fallback')
+      setImmersive(false)
+      return
+    }
+    const request = stage.requestFullscreen ?? ((stage as HTMLElement & { webkitRequestFullscreen?: () => void }).webkitRequestFullscreen?.bind(stage))
+    if (request) {
+      try {
+        const result = request() as unknown as Promise<void> | undefined
+        setImmersive(true)
+        void Promise.resolve(result).catch(() => {
+          // 被权限策略拒绝时（iframe / 非用户手势）走 CSS 铺满，效果同样可用
+          stage.classList.add('is-fallback')
+          setImmersive(true)
+        })
+        const orientation = (screen as unknown as { orientation?: { lock?: (o: string) => Promise<void> } }).orientation
+        orientation?.lock?.('landscape').catch(() => undefined)
+        return
+      } catch {
+        /* 继续走降级 */
+      }
+    }
+    stage.classList.toggle('is-fallback')
+    setImmersive(stage.classList.contains('is-fallback'))
+  }
+
   useEffect(() => {
     const canvas = canvasRef.current
+    const minimap = minimapRef.current
     const container = containerRef.current
     if (!canvas || !container) return
     const ctx = canvas.getContext('2d')
@@ -143,11 +224,19 @@ export default function RaidCanvas({
       canvas.style.width = `${cssWidth}px`
       canvas.style.height = `${cssHeight}px`
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      if (minimap) {
+        const miniRect = minimap.getBoundingClientRect()
+        minimap.width = Math.round(Math.max(60, miniRect.width) * dpr)
+        minimap.height = Math.round(Math.max(60, miniRect.height) * dpr)
+        const mctx = minimap.getContext('2d')
+        mctx?.setTransform(dpr, 0, 0, dpr, 0, 0)
+      }
       metricsRef.current = computeMetrics(engine.map, engine.room, cssWidth, cssHeight)
     }
     resize()
     const observer = new ResizeObserver(resize)
     observer.observe(container)
+    if (minimap) observer.observe(minimap)
 
     const input = createRaidInput(
       canvas,
@@ -166,15 +255,23 @@ export default function RaidCanvas({
     let last = performance.now()
     let lastSnapshot = 0
     let lastFlush = 0
+    let lastMinimap = 0
     const loop = (time: number): void => {
       const dt = Math.min(50, Math.max(0, time - last))
       last = time
       const now = Date.now()
-      if (!pausedRef.current && !engine.dead && !engine.ended) {
-        engine.update(dt, now)
-      }
+      if (!pausedRef.current) engine.update(dt, now)
       metricsRef.current = computeMetrics(engine.map, engine.room, cssWidth, cssHeight)
-      renderRaid(ctx, engine, cssWidth, cssHeight, now)
+      renderRaid(ctx, engine, cssWidth, cssHeight, now, { lowPerf: lowPerfRef.current })
+      // 小地图独立 canvas：20fps 足够，省下的都是战斗帧预算
+      if (now - lastMinimap >= 50) {
+        lastMinimap = now
+        const mctx = minimap?.getContext('2d')
+        if (mctx && minimap) {
+          const rect = minimap.getBoundingClientRect()
+          renderMinimap(mctx, engine, now, rect.width, rect.height)
+        }
+      }
       if (now - lastSnapshot >= 100) {
         lastSnapshot = now
         callbacksRef.current.onSnapshot(engine.snapshot(now))
@@ -228,29 +325,60 @@ export default function RaidCanvas({
   }
 
   return (
-    <div ref={containerRef} className="gh-raid-canvas-wrap">
-      <canvas ref={canvasRef} className="gh-raid-canvas" aria-label="搜打撤对局画面" />
+    <div
+      ref={stageRef}
+      className={`gh-raid-stage${immersive ? ' is-immersive' : ''}${touchMode ? ' is-touch' : ' is-desktop'}`}
+      data-layout={touchMode ? 'touch' : 'desktop'}
+    >
+      <div ref={containerRef} className="gh-raid-canvas-wrap">
+        <canvas ref={canvasRef} className="gh-raid-canvas" aria-label="搜打撤对局画面" />
+      </div>
+
+      <div className="gh-raid-overlay">
+        {/* 小地图浮层：位置完全交给 CSS，战斗画面不再被画上去的小地图占位 */}
+        <div className="gh-raid-pod gh-raid-pod--map">
+          <div className="gh-raid-pod-title">
+            <span>TACMAP</span>
+            <b>{initialRun.mapName}</b>
+          </div>
+          <canvas ref={minimapRef} className="gh-raid-minimap" aria-hidden />
+        </div>
+
+        {children}
+
+        <div className="gh-raid-toolbar">
+          <button type="button" className={`gh-raid-tool${immersive ? ' is-on' : ''}`} onClick={toggleImmersive}>
+            {immersive ? '退出横屏' : '横屏沉浸'}
+          </button>
+          <button type="button" className="gh-raid-tool" onClick={() => setHint(hint === 'none' ? 'fullscreen' : 'none')}>
+            操作提示
+          </button>
+        </div>
+      </div>
+
       {touchMode && (
         <div className="gh-raid-touch">
-          <VirtualStick className="gh-raid-stick--move" label="移动" onChange={handleMove} />
-          <VirtualStick className="gh-raid-stick--aim" label="射击" onChange={handleAim} />
-          <div className="gh-raid-touch-actions">
-            <button type="button" className="gh-raid-touch-btn" onClick={() => inputRef.current?.pressInteract()}>E</button>
-            <button type="button" className="gh-raid-touch-btn" onClick={() => inputRef.current?.pressHeal()}>💊</button>
-            <button type="button" className="gh-raid-touch-btn" onClick={() => inputRef.current?.pressRepair()}>🛠</button>
-            <div className="gh-raid-touch-skills">
-              {[0, 1, 2].map((index) => (
-                <button
-                  key={index}
-                  type="button"
-                  className="gh-raid-touch-btn gh-raid-touch-btn--skill"
-                  onClick={() => inputRef.current?.pressSkill(index)}
-                >
-                  {index + 1}
-                </button>
-              ))}
-            </div>
-          </div>
+          <VirtualStick className="gh-raid-stick--move" label="移动" glyph="✥" onChange={handleMove} />
+          <VirtualStick className="gh-raid-stick--aim" label="射击" glyph="◎" onChange={handleAim} />
+        </div>
+      )}
+
+      {hint === 'rotate' && (
+        <div className="gh-raid-hint">
+          <strong>请旋转手机横屏游玩</strong>
+          <span>竖屏下战斗区域过小，横屏并进入「横屏沉浸」后 HUD 才不会压住画面</span>
+          <button type="button" onClick={() => setHint('none')}>知道了</button>
+        </div>
+      )}
+      {hint === 'fullscreen' && (
+        <div className="gh-raid-hint">
+          <strong>操作方式</strong>
+          <span>
+            {touchMode
+              ? '左摇杆移动 · 右摇杆瞄准并开火 · 右侧圆形按钮：技能 1/2/3、治疗、维修、E 交互'
+              : 'WASD 移动 · 鼠标瞄准并点击开火 · E 交互 · 1 / 2 / 3 技能 · Q 治疗 · F 维修'}
+          </span>
+          <button type="button" onClick={() => setHint('none')}>关闭</button>
         </div>
       )}
     </div>

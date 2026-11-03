@@ -1,17 +1,23 @@
 /**
- * 搜打撤 HUD：生命 / 能量 / 护甲耐久 / 背包与胸挂 / 技能冷却 / 倒计时 / 撤离进度。
- * 数据来自引擎快照（服务端校准后回填），不直接请求 API。
+ * 搜打撤 HUD 浮层：生命 / 能量 / 护甲耐久 / 技能 / 容器 / 队友 / 提示。
+ *
+ * 口径：全部面板绝对定位在画布舞台内（由 RaidCanvas 提供 .gh-raid-overlay），
+ * 面板本身 `pointer-events: none`，只有按钮可点——这样横屏时不会有一整块 UI 压在战斗区上，
+ * 也不会挡住摇杆与瞄准手势。数据来自引擎快照（服务端校准后回填），不直接请求 API。
  */
 
 import type { RaidSnapshot } from '../../lib/raid/engine'
 import { RAID_ITEM_MAP, RAID_RARITY_LABELS, getRaidGear } from '../../lib/raid/raidRun'
 import type { RaidEquippedGearSnapshot, RaidRun } from '../../types/petRaid'
+import type { RaidSquadMember } from '../../types/raidSquad'
 
 interface RaidHudProps {
   run: RaidRun
   snapshot: RaidSnapshot
   busy: boolean
   errors: string[]
+  squad?: RaidSquadMember[] | null
+  selfUserId: number
   onAbandon: () => void
   onSkill: (index: number) => void
   onHeal: () => void
@@ -28,6 +34,20 @@ const ROOM_LABELS: Record<string, string> = {
   extract: '撤离区',
 }
 
+const SPECIES_EMOJI: Record<string, string> = {
+  cat: '🐱', dog: '🐶', bird: '🐦', rabbit: '🐰', fox: '🦊', panda: '🐼',
+}
+
+const MEMBER_STATUS_LABELS: Record<string, string> = {
+  lobby: '待命',
+  active: '行动中',
+  extracted: '已撤离',
+  died: '阵亡',
+  mia: '失联',
+  abandoned: '已撤退',
+  offline: '离线',
+}
+
 function formatMs(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000))
   const minutes = Math.floor(total / 60)
@@ -40,21 +60,21 @@ function gearLabel(gear: RaidEquippedGearSnapshot): { helmet: string; armor: str
   const armor = gear.armor ? getRaidGear(gear.armor.key) : null
   const boots = gear.boots ? getRaidGear(gear.boots) : null
   return {
-    helmet: helmet ? `${helmet.emoji} ${helmet.tier} 级头` : '无头盔',
-    armor: armor ? `${armor.emoji} ${armor.tier} 级甲` : '无护甲',
-    boots: boots ? `${boots.emoji} ${boots.tier} 级鞋` : '无战靴',
+    helmet: helmet ? `${helmet.emoji} T${helmet.tier}` : '🪯 无头',
+    armor: armor ? `${armor.emoji} T${armor.tier}` : '🦺 无甲',
+    boots: boots ? `${boots.emoji} T${boots.tier}` : '👟 无靴',
   }
 }
 
 function DurabilityBar({ label, value, max }: { label: string; value: number; max: number }) {
   const ratio = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0
   return (
-    <div className="gh-raid-hud-durability">
+    <div className="gh-raid-dur">
       <span>{label}</span>
-      <div className="gh-raid-hud-durability-bar">
+      <div className="gh-raid-dur-track">
         <i style={{ width: `${ratio * 100}%` }} className={ratio < 0.25 ? 'is-danger' : ratio < 0.5 ? 'is-warning' : ''} />
       </div>
-      <b>{value}/{max}</b>
+      <b>{Math.round(value)}</b>
     </div>
   )
 }
@@ -63,28 +83,31 @@ function ContainerGrid({
   title,
   items,
   capacity,
-  emptyText,
+  tone,
 }: {
   title: string
   items: RaidSnapshot['backpack']
   capacity: number
-  emptyText: string
+  tone: 'backpack' | 'rig' | 'safe'
 }) {
+  const full = items.length >= capacity && capacity > 0
   return (
-    <div className="gh-raid-hud-container">
-      <div className="gh-raid-hud-container-head">
+    <div className={`gh-raid-ctainer gh-raid-ctainer--${tone}`}>
+      <div className="gh-raid-ctainer-head">
         <span>{title}</span>
-        <b>{items.length}/{capacity}</b>
+        <b className={full ? 'is-full' : ''}>{items.length}/{capacity}</b>
       </div>
-      <div className="gh-raid-hud-slots">
+      <div className="gh-raid-slots">
         {Array.from({ length: Math.max(capacity, 1) }).map((_, index) => {
           const stack = items.find((item) => item.slotIndex === index)
           const def = stack ? RAID_ITEM_MAP.get(stack.itemKey) : null
+          const rarity = def?.rarity ?? 'common'
           return (
             <span
               key={index}
-              className={`gh-raid-hud-slot${stack ? ' gh-raid-hud-slot--filled' : ''}`}
-              title={def ? `${def.name} ×${stack?.amount}` : ''}
+              className={`gh-raid-slot${stack ? ' is-filled' : ''}`}
+              data-rarity={rarity}
+              title={def ? `${def.name} ×${stack?.amount}（${RAID_RARITY_LABELS[rarity]}）` : ''}
             >
               {def ? def.emoji : ''}
               {stack && stack.amount > 1 ? <i>{stack.amount}</i> : null}
@@ -92,132 +115,189 @@ function ContainerGrid({
           )
         })}
       </div>
-      {items.length === 0 && <p className="gh-raid-hud-empty">{emptyText}</p>}
     </div>
   )
 }
 
-export default function RaidHud({ run, snapshot, busy, errors, onAbandon, onSkill, onHeal, onRepair }: RaidHudProps) {
+export default function RaidHud({
+  run,
+  snapshot,
+  busy,
+  errors,
+  squad,
+  selfUserId,
+  onAbandon,
+  onSkill,
+  onHeal,
+  onRepair,
+}: RaidHudProps) {
   const labels = gearLabel(snapshot.gear)
   const hpRatio = snapshot.maxHp > 0 ? snapshot.hp / snapshot.maxHp : 0
   const mpRatio = snapshot.maxMp > 0 ? snapshot.mp / snapshot.maxMp : 0
   const helmetDur = snapshot.gear.helmet
   const armorDur = snapshot.gear.armor
-  const helmetDef = getRaidGear(snapshot.gear.helmet?.key ?? null)?.maxDurability ?? 0
-  const armorDef = getRaidGear(snapshot.gear.armor?.key ?? null)?.maxDurability ?? 0
+  const helmetMax = getRaidGear(snapshot.gear.helmet?.key ?? null)?.maxDurability ?? 0
+  const armorMax = getRaidGear(snapshot.gear.armor?.key ?? null)?.maxDurability ?? 0
+  const teammates = (squad ?? []).filter((member) => member.userId !== selfUserId)
+  const extractPct = Math.round(snapshot.extractionProgress * 100)
+  const prompt = snapshot.extracting
+    ? `撤离读条 ${extractPct}% · 站稳别动`
+    : snapshot.canExtract
+      ? '靠近撤离点按 E 开始撤离'
+      : snapshot.nearContainer
+        ? snapshot.nearContainer.opened
+          ? '这个容器已搜过'
+          : snapshot.roomCleared
+            ? '按 E 搜索容器'
+            : '清场后才能搜索'
+        : ''
 
   return (
     <div className="gh-raid-hud">
-      <div className="gh-raid-hud-top">
-        <div className="gh-raid-hud-map">
-          <strong>{run.mapName}</strong>
-          <span>{ROOM_LABELS[snapshot.roomKind] ?? '房间'}</span>
-          {snapshot.roomCleared ? <em className="is-clear">已清场</em> : <em className="is-danger">交战中</em>}
+      {/* 左上：生命 / 能量 / 护甲 */}
+      <section className="gh-raid-pod gh-raid-pod--vitals">
+        <div className="gh-raid-vitals">
+          <div className={`gh-raid-hp-ring${hpRatio < 0.3 ? ' is-critical' : ''}`}>
+            <svg viewBox="0 0 44 44" aria-hidden>
+              <circle className="is-track" cx="22" cy="22" r="19" />
+              <circle
+                className="is-fill"
+                cx="22"
+                cy="22"
+                r="19"
+                strokeDasharray={`${Math.max(0, hpRatio) * 119.4} 119.4`}
+              />
+            </svg>
+            <b>{Math.round(snapshot.hp)}</b>
+            <span>HP</span>
+          </div>
+          <div className="gh-raid-vitals-right">
+            <div className="gh-raid-meter">
+              <span>MP</span>
+              <div className="gh-raid-meter-track">
+                <i className="is-mp" style={{ width: `${Math.max(0, Math.min(100, mpRatio * 100))}%` }} />
+              </div>
+              <b>{Math.round(snapshot.mp)}</b>
+            </div>
+            <div className="gh-raid-gearrow">
+              <span title={labels.helmet}>{labels.helmet}</span>
+              <span title={labels.armor}>{labels.armor}</span>
+              <span title={labels.boots}>{labels.boots}</span>
+            </div>
+            {helmetDur && <DurabilityBar label="头" value={helmetDur.durability} max={helmetDur.maxDurability || helmetMax} />}
+            {armorDur && <DurabilityBar label="甲" value={armorDur.durability} max={armorDur.maxDurability || armorMax} />}
+            <div className="gh-raid-chips">
+              {snapshot.shield > 0 && <em className="is-shield">🛡 {Math.round(snapshot.shield)}</em>}
+              {snapshot.atkBuffMs > 0 && <em className="is-buff">🔥 {Math.ceil(snapshot.atkBuffMs / 1000)}s</em>}
+              {run.insured && <em className="is-insure">保险</em>}
+              <em className="is-kill">击杀 {snapshot.kills}</em>
+            </div>
+          </div>
         </div>
-        <div className="gh-raid-hud-timer">
-          <span>剩余</span>
-          <strong className={snapshot.remainingMs < 60_000 ? 'is-danger' : ''}>{formatMs(snapshot.remainingMs)}</strong>
-        </div>
-        <div className="gh-raid-hud-stats">
-          <span>击杀 <b>{snapshot.kills}</b></span>
-          <span>攻击 <b>{snapshot.atk}</b></span>
-          {run.insured && <span className="gh-raid-hud-badge">🛡 保险</span>}
-          <button type="button" className="gh-btn gh-btn--ghost gh-btn--sm" disabled={busy} onClick={onHeal}>
-            💊 治疗
-          </button>
-          <button type="button" className="gh-btn gh-btn--ghost gh-btn--sm" disabled={busy} onClick={onRepair}>
-            🛠 维修
-          </button>
-          <button type="button" className="gh-btn gh-btn--ghost gh-btn--sm" disabled={busy} onClick={onAbandon}>
-            放弃
-          </button>
-        </div>
-      </div>
+      </section>
 
-      <div className="gh-raid-hud-bars">
-        <div className="gh-raid-hud-bar">
-          <span>HP</span>
-          <div className="gh-raid-hud-bar-track">
-            <i className="is-hp" style={{ width: `${Math.max(0, Math.min(100, hpRatio * 100))}%` }} />
-          </div>
-          <b>{Math.round(snapshot.hp)}/{snapshot.maxHp}</b>
+      {/* 顶部中央：任务状态 + 计时 */}
+      <section className="gh-raid-pod gh-raid-pod--mission">
+        <div className="gh-raid-mission-row">
+          <span className="gh-raid-room">{ROOM_LABELS[snapshot.roomKind] ?? '房间'}</span>
+          <strong className={`gh-raid-timer${snapshot.remainingMs < 60_000 ? ' is-danger' : ''}`}>
+            {formatMs(snapshot.remainingMs)}
+          </strong>
+          <span className={`gh-raid-state${snapshot.roomCleared ? ' is-clear' : ' is-danger'}`}>
+            {snapshot.roomCleared ? '已清场' : '交战中'}
+          </span>
         </div>
-        <div className="gh-raid-hud-bar">
-          <span>MP</span>
-          <div className="gh-raid-hud-bar-track">
-            <i className="is-mp" style={{ width: `${Math.max(0, Math.min(100, mpRatio * 100))}%` }} />
+        {snapshot.extracting && (
+          <div className="gh-raid-extract">
+            <div className="gh-raid-extract-track">
+              <i style={{ width: `${extractPct}%` }} />
+            </div>
+            <b>{extractPct}%</b>
           </div>
-          <b>{Math.round(snapshot.mp)}/{snapshot.maxMp}</b>
-        </div>
-        {snapshot.shield > 0 && (
-          <div className="gh-raid-hud-shield">🛡 护盾 {Math.round(snapshot.shield)}</div>
         )}
-        {snapshot.atkBuffMs > 0 && <div className="gh-raid-hud-buff">🔥 攻击强化 {Math.ceil(snapshot.atkBuffMs / 1000)}s</div>}
-      </div>
+      </section>
 
-      <div className="gh-raid-hud-gear">
-        <span title={labels.helmet}>{labels.helmet}</span>
-        <span title={labels.armor}>{labels.armor}</span>
-        <span title={labels.boots}>{labels.boots}</span>
-        {helmetDur && <DurabilityBar label="头耐久" value={helmetDur.durability} max={helmetDur.maxDurability || helmetDef} />}
-        {armorDur && <DurabilityBar label="甲耐久" value={armorDur.durability} max={armorDur.maxDurability || armorDef} />}
-      </div>
+      {/* 左侧：队友（无队友时不占位） */}
+      {teammates.length > 0 && (
+        <section className="gh-raid-pod gh-raid-pod--squad">
+          <div className="gh-raid-pod-title"><span>SQUAD</span></div>
+          {teammates.map((mate, index) => {
+            const ratio = mate.maxHp > 0 ? mate.hp / mate.maxHp : 0
+            return (
+              <div key={mate.userId} className={`gh-raid-mate is-${mate.status}`}>
+                <span className="gh-raid-mate-index" data-tone={index % 4}>{SPECIES_EMOJI[mate.species] ?? '🐾'}</span>
+                <span className="gh-raid-mate-name">{mate.displayName || mate.name}</span>
+                <div className="gh-raid-mate-hp">
+                  <i style={{ width: `${Math.max(0, Math.min(100, ratio * 100))}%` }} />
+                </div>
+                <b>{MEMBER_STATUS_LABELS[mate.status] ?? mate.status}</b>
+              </div>
+            )
+          })}
+        </section>
+      )}
 
-      <div className="gh-raid-hud-skills">
-        {snapshot.skills.length === 0 && <span className="gh-raid-hud-empty">宠物没有装备技能，只能普攻</span>}
-        {snapshot.skills.map((skill, index) => {
-          const onCooldown = skill.cooldownLeftMs > 0
-          return (
-            <button
-              key={skill.key}
-              type="button"
-              className={`gh-raid-hud-skill${onCooldown || !skill.affordable ? ' is-disabled' : ''}`}
-              disabled={busy || onCooldown || !skill.affordable}
-              title={`${skill.name} · ${skill.mpCost} MP`}
-              onClick={() => onSkill(index)}
-            >
-              <span className="gh-raid-hud-skill-key">{index + 1}</span>
-              <span className="gh-raid-hud-skill-emoji">{skill.emoji}</span>
-              <span className="gh-raid-hud-skill-name">{skill.name}</span>
-              <span className="gh-raid-hud-skill-meta">
-                {skill.mpCost > 0 ? `${skill.mpCost} MP` : '无消耗'}
-                {onCooldown ? ` · ${Math.ceil(skill.cooldownLeftMs / 1000)}s` : ''}
-              </span>
+      {/* 底部中央：交互提示 + 技能 + 道具 */}
+      <section className="gh-raid-pod gh-raid-pod--action">
+        {prompt && <div className="gh-raid-prompt">{prompt}</div>}
+        <div className="gh-raid-skills">
+          {snapshot.skills.length === 0 && <span className="gh-raid-skills-empty">未装备技能 · 只能普攻</span>}
+          {snapshot.skills.map((skill, index) => {
+            const cdRatio = skill.cooldownMs > 0 ? skill.cooldownLeftMs / skill.cooldownMs : 0
+            const locked = busy || skill.cooldownLeftMs > 0 || !skill.affordable
+            return (
+              <button
+                key={skill.key}
+                type="button"
+                className={`gh-raid-skill${locked ? ' is-locked' : ''}`}
+                disabled={locked}
+                title={`${skill.name} · ${skill.mpCost} MP · 冷却 ${Math.round(skill.cooldownMs / 1000)}s`}
+                onClick={() => onSkill(index)}
+              >
+                <span className="gh-raid-skill-sweep" style={{ height: `${Math.min(100, cdRatio * 100)}%` }} />
+                <span className="gh-raid-skill-emoji">{skill.emoji}</span>
+                <span className="gh-raid-skill-cd">
+                  {skill.cooldownLeftMs > 0 ? Math.ceil(skill.cooldownLeftMs / 1000) : index + 1}
+                </span>
+                <span className="gh-raid-skill-meta">
+                  <i>{skill.name}</i>
+                  <em>{skill.mpCost > 0 ? `${skill.mpCost}` : '0'} MP</em>
+                </span>
+              </button>
+            )
+          })}
+          <div className="gh-raid-quick">
+            <button type="button" className="gh-raid-quick-btn is-heal" disabled={busy} onClick={onHeal} title="治疗道具（Q）">
+              💊
             </button>
-          )
-        })}
-      </div>
-
-      {snapshot.extracting && (
-        <div className="gh-raid-hud-extract">
-          <span>撤离读条</span>
-          <div className="gh-raid-hud-bar-track">
-            <i className="is-extract" style={{ width: `${snapshot.extractionProgress * 100}%` }} />
+            <button type="button" className="gh-raid-quick-btn is-repair" disabled={busy} onClick={onRepair} title="维修包（F）">
+              🛠
+            </button>
+            <button type="button" className="gh-raid-quick-btn is-abandon" disabled={busy} onClick={onAbandon} title="放弃行动">
+              ⚑
+            </button>
           </div>
-          <b>{Math.round(snapshot.extractionProgress * 100)}%</b>
         </div>
-      )}
+      </section>
 
-      <div className="gh-raid-hud-containers">
-        <ContainerGrid title="背包" items={snapshot.backpack} capacity={snapshot.capacities.backpack} emptyText="背包空着，去搜刮吧" />
-        <ContainerGrid title="胸挂（消耗品）" items={snapshot.rig} capacity={snapshot.capacities.rig} emptyText="胸挂空着" />
-        <ContainerGrid title="安全箱（阵亡保留）" items={snapshot.safe} capacity={snapshot.capacities.safe} emptyText="安全箱空着" />
-      </div>
+      {/* 底部左侧：三类容器 */}
+      <section className="gh-raid-pod gh-raid-pod--loot">
+        <ContainerGrid title="背包" items={snapshot.backpack} capacity={snapshot.capacities.backpack} tone="backpack" />
+        <ContainerGrid title="胸挂" items={snapshot.rig} capacity={snapshot.capacities.rig} tone="rig" />
+        <ContainerGrid title="安全箱" items={snapshot.safe} capacity={snapshot.capacities.safe} tone="safe" />
+      </section>
 
-      <div className="gh-raid-hud-footer">
-        <span>WASD 移动 · 鼠标瞄准射击 · E 交互 · 1/2/3 技能 · Q 治疗 · F 维修</span>
+      {/* 右侧：事件流 + 报错 */}
+      <section className="gh-raid-pod gh-raid-pod--log">
+        {errors.slice(0, 2).map((error, index) => (
+          <div key={`${error}-${index}`} className="gh-raid-log is-danger">{error}</div>
+        ))}
         {snapshot.toast && (
-          <span className={`gh-raid-hud-toast is-${snapshot.toast.tone}`}>{snapshot.toast.text}</span>
+          <div key={snapshot.toast.id} className={`gh-raid-log is-${snapshot.toast.tone}`}>
+            {snapshot.toast.text}
+          </div>
         )}
-      </div>
-
-      {errors.length > 0 && (
-        <ul className="gh-raid-hud-errors">
-          {errors.slice(0, 3).map((error, index) => (
-            <li key={`${error}-${index}`}>{error}</li>
-          ))}
-        </ul>
-      )}
+      </section>
     </div>
   )
 }
