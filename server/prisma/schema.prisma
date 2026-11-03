@@ -14,7 +14,7 @@ model User {
   password               String
   role                   String                @default("author") // 新注册用户默认 author（可发布自己的文章）
   status                 String                @default("active") // pending | active | rejected（注册审核）
-  apiRateLimit           Int                   @default(600) @map("api_rate_limit") // 次/15min；0=不限业务配额
+  apiRateLimit           Int                   @default(8000) @map("api_rate_limit") // 次/15min；0=不限业务配额
   settings               String? // JSON：用户个性化设置（背景类型、颜色等）
   canAccessDrive         Boolean               @default(false) // 是否有网盘访问权限
   storageQuota           BigInt                @default(2147483648) @map("storage_quota") // 网盘空间上限（字节，默认 2 GiB）
@@ -79,8 +79,10 @@ model User {
   petRaidContracts       PetRaidContract[] // 搜打撤每日契约
   raidStorage            RaidStorage? // 搜打撤仓库（等级决定容量与保险箱格数）
   raidInventoryItems     RaidInventoryItem[] // 搜打撤仓库物品（按物品聚合）
-  raidMarketListingsSold   RaidMarketListing[] @relation("RaidMarketListingSeller") // 我挂出的搜打撤交易行条目
-  raidMarketListingsBought RaidMarketListing[] @relation("RaidMarketListingBuyer") // 我买下的搜打撤交易行条目
+  raidGears              RaidGear[] // 搜打撤专属装备（头盔 / 护甲 / 战靴 / 背包 / 胸挂）
+  raidBagItems           RaidBagItem[] // 搜打撤容器（背包 / 胸挂 / 安全箱）
+  raidMarketListingsSold   RaidMarketListing[] @relation("RaidMarketListingSeller") // 已停用（2026-11-03 交易行改为官方商店）
+  raidMarketListingsBought RaidMarketListing[] @relation("RaidMarketListingBuyer") // 已停用（2026-11-03 交易行改为官方商店）
   farmSeedListings       FarmSeedListing[]     @relation("FarmSeedSeller") // 我挂出的种子
   farmSeedPurchases      FarmSeedListing[]     @relation("FarmSeedBuyer") // 我买下的种子
   stockOrders            StockOrder[] // 股市限价委托
@@ -759,7 +761,7 @@ model PointsLedger {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   amount    Int // 正数=获得，负数=扣除
   balance   Int // 变动后余额
-  reason    String // game_result | farm_harvest | farm_steal | farm_welcome | farm_shop | farm_expand | farm_merchant | farm_protect | farm_seed_buy | farm_seed_sell | shop_purchase | checkin | leader_bonus | stock | stock_order_buy | stock_order_refund | stock_order_sell | pet_raid | pet_raid_entry | pet_raid_insurance | pet_raid_contract | raid_recycle | raid_market_sell | raid_market_buy | raid_storage_upgrade | redpacket_send | redpacket_receive | redpacket_refund | admin_adjust
+  reason    String // game_result | farm_harvest | farm_steal | farm_welcome | farm_shop | farm_expand | farm_merchant | farm_protect | farm_seed_buy | farm_seed_sell | shop_purchase | checkin | leader_bonus | stock | stock_order_buy | stock_order_refund | stock_order_sell | pet_raid | pet_raid_entry | pet_raid_insurance | pet_raid_contract | raid_recycle | raid_shop | raid_market_sell | raid_market_buy | raid_storage_upgrade | redpacket_send | redpacket_receive | redpacket_refund | admin_adjust
   game      String? // 来源游戏 id（2048 / doudizhu / ... / farm）
   note      String?
   createdAt DateTime @default(now()) @map("created_at")
@@ -1499,7 +1501,8 @@ model ThemeUnlock {
 // === 宠物搜打撤（Delta Force 风格：搜索 / 战斗 / 撤离） ===
 
 /**
- * 进行中的搜打撤对局（每人至多一局）。state 为完整对局 JSON（地图 / 视野 / 敌人 / 战利品 / 日志）。
+ * 搜打撤 v2 对局（每人至多一局）。state 为运行状态 JSON（seed / 容器 / 装备耐久 / 事件状态），
+ * 地图由 seed 按 raidRun.ts 的生成器重算，不落库。schemaVersion 升级后旧对局自动按放弃结算。
  * status: active | extracted | died | mia | abandoned。
  */
 model PetRaid {
@@ -1565,7 +1568,7 @@ model PetRaidContract {
   @@map("pet_raid_contracts")
 }
 
-// === 搜打撤仓库 / 交易行（撤离战利品入仓 + 玩家间材料交易） ===
+// === 搜打撤仓库 / 容器 / 装备（2026-11-03 重构：交易行删除，改为官方商店） ===
 
 /**
  * 搜打撤仓库（每用户一行）。等级 1–6，容量 / 保险箱格数由
@@ -1601,8 +1604,10 @@ model RaidInventoryItem {
 }
 
 /**
- * 搜打撤交易行挂单（整单出售，不支持部分购买）。
- * itemName / rarity / value 为挂单时的目录快照，防目录调整影响历史挂单。
+ * 搜打撤交易行挂单（**已停用**：2026-11-03 起交易行整体改为官方商店）。
+ *
+ * 表保留的原因：生产容器启动执行不带 --accept-data-loss 的 `prisma db push`，
+ * 直接删表会因数据丢失让启动失败。代码层已不再读写（services/raidMarketService.ts 已删除）。
  */
 model RaidMarketListing {
   id        Int       @id @default(autoincrement())
@@ -1626,7 +1631,7 @@ model RaidMarketListing {
 }
 
 /**
- * 搜打撤交易行成交记录（append-only）。fee 为卖家手续费（5% 向上取整，最低 1）。
+ * 搜打撤交易行成交记录（**已停用**：2026-11-03 起改为官方商店，仅保留历史数据）。
  */
 model RaidMarketTrade {
   id        Int      @id @default(autoincrement())
@@ -1642,4 +1647,48 @@ model RaidMarketTrade {
 
   @@index([createdAt])
   @@map("raid_market_trades")
+}
+
+/**
+ * 搜打撤专属装备实例（每用户每件装备一行）。
+ * slot: helmet | armor | boots | backpack | rig；durability / maxDurability 只对头盔、护甲有意义。
+ * equipped 表示已放进出击配置（每个槽位最多一件，服务层守卫）。
+ */
+model RaidGear {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @map("user_id")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gearKey       String   @map("gear_key") // lib/raidRun.ts 的 RAID_GEARS.key
+  slot          String // helmet | armor | boots | backpack | rig
+  durability    Int      @default(0) // 当前耐久（头盔 / 护甲）
+  maxDurability Int      @default(0) @map("max_durability") // 当前耐久上限（维修会逐步降低）
+  equipped      Boolean  @default(false)
+  acquiredVia   String   @default("shop") @map("acquired_via") // shop | drop | starter
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, gearKey])
+  @@index([userId, slot])
+  @@map("raid_gears")
+}
+
+/**
+ * 搜打撤容器物品（背包 / 胸挂 / 安全箱）。
+ * container: backpack | rig | safe；slotIndex 为容器内格位（容量由装备 / 仓库等级派生）。
+ * 撤离后物品留在这里，玩家手动存入仓库；仓库满不会自动出售。
+ */
+model RaidBagItem {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  container   String   @default("backpack") // backpack | rig | safe
+  slotIndex   Int      @map("slot_index")
+  itemKey     String   @map("item_key") // lib/raidRun.ts 的 RAID_ITEMS.key
+  amount      Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, container, slotIndex])
+  @@index([userId, itemKey])
+  @@map("raid_bag_items")
 }

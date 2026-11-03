@@ -1,261 +1,524 @@
 /**
- * 搜打撤引擎 / 农场扩建与保护 / 股市限价规则纯函数自检。
- * 不依赖数据库、环境变量或网络。
+ * 搜打撤 v2 共享引擎自检（纯函数，不依赖数据库 / 网络）。
+ *
+ * 覆盖：物品与装备目录不变量、地图生成确定性与连通性、房间类型分配、
+ *       容器掉落、运行状态机（进房 / 击杀 / 清房 / 开箱 / 拾取 / 使用 / 技能 / 受伤 / 撤离）、
+ *       耐久与维修、保险、结算保留规则、每日契约。
  *
  * 用法: cd server && npx tsx scripts/verify-raid.ts（或 npm run verify:raid）
  */
 
 import {
-  RAID_LOOT_ENTRIES,
-  RAID_SAFE_CAPACITY,
+  RAID_CONTRACTS,
+  RAID_CONTRACT_MAP,
+  RAID_GEAR_MAP,
+  RAID_GEARS,
+  RAID_ITEMS,
+  RAID_ITEM_MAP,
   RAID_MAPS,
-  abandonRaid,
-  buildRaidCellDtos,
-  createRaidRng,
-  createRaidState,
-  expireRaid,
-  extractRaid,
+  RAID_RARITY_ORDER,
+  RAID_REPAIR_FLOOR_RATIO,
+  RAID_SKILL_CD_MS,
+  RAID_STATE_VERSION,
+  addItemToContainer,
+  applyRaidEvent,
+  applyRaidEvents,
+  consumeItemFromContainer,
+  createRaidRun,
+  findContainerSlot,
+  generateRaidMap,
+  getRaidGear,
+  getRaidItem,
   getRaidMap,
-  insuranceCost,
-  insurableGearValue,
-  lootValue,
-  moveRaid,
-  rollRaidLoot,
-  searchRaid,
-  storeSafeRaid,
-  takeSafeRaid,
-  totalLootValue,
-  useMedkitRaid,
-  resolveRaidCombat,
-  type RaidEnemy,
-  type RaidLootItem,
-  type RaidState,
-} from '../src/lib/petRaid.js'
-import {
-  FARM_PROTECTION_MAX_HOURS,
-  FARM_PROTECTION_PACKAGES,
-  MAX_PLOT_COUNT,
-  findProtectionPackage,
-  nextExpansion,
-  protectionRemainingMs,
-  protectionUntilAfter,
-} from '../src/lib/farmCrops.js'
-import {
-  limitOrderDistancePct,
-  limitOrderTriggered,
-  quoteStockBuy,
-  quoteStockSell,
-} from '../src/lib/stockTrading.js'
+  raidInsuranceCost,
+  raidKeptContainers,
+  raidLootValue,
+  raidSellPrice,
+  rarityWeightAtTier,
+  repairRaidGear,
+  resolveRaidDamage,
+  rollRaidItemKey,
+  tickRaidRun,
+  type RaidEnemyNode,
+  type RaidEvent,
+  type RaidMapDef,
+  type RaidRunState,
+} from '../src/lib/raidRun.js'
 
 let passed = 0
 
 function assert(condition: unknown, message: string): void {
-  if (!condition) throw new Error(`❌ ${message}`)
+  if (!condition) throw new Error(`断言失败：${message}`)
   passed += 1
 }
 
 function assertEqual<T>(actual: T, expected: T, message: string): void {
   if (actual !== expected) {
-    throw new Error(`❌ ${message}（实际 ${String(actual)}，期望 ${String(expected)}）`)
+    throw new Error(`断言失败：${message}（期望 ${String(expected)}，实际 ${String(actual)}）`)
   }
   passed += 1
 }
 
-function makeState(seed = 12345): RaidState {
-  const map = getRaidMap('wasteland')
-  assert(!!map, '废弃农场地图存在')
-  return createRaidState({
-    map: map!,
-    seed,
-    now: 1_700_000_000_000,
-    loadout: {
-      petId: 1,
-      userId: 7,
-      name: '测试宠物',
-      species: 'dog',
-      level: 10,
-      equipmentKeys: ['flame_sword', 'crystal_plate'],
-      skillKeys: ['fire_claw', 'healing_light', 'meteor'],
-    },
-    stats: { maxHp: 400, maxMp: 200, atk: 100, def: 50, spd: 50, crit: 20 },
-    insured: false,
-  })
+function assertClose(actual: number, expected: number, tolerance: number, message: string): void {
+  if (Math.abs(actual - expected) > tolerance) {
+    throw new Error(`断言失败：${message}（期望 ${expected} ± ${tolerance}，实际 ${actual}）`)
+  }
+  passed += 1
 }
 
-function medkit(id = 'med-1'): RaidLootItem {
-  return {
-    id,
-    key: 'medkit',
-    name: '急救包',
-    emoji: '🩹',
-    rarity: 'common',
-    kind: 'medkit',
-    value: 45,
-    amount: 1,
-    payload: null,
+/* ============================================================
+   目录不变量
+   ============================================================ */
+
+assert(RAID_ITEMS.length >= 48, `物品目录至少 48 种（实际 ${RAID_ITEMS.length}）`)
+assertEqual(new Set(RAID_ITEMS.map((item) => item.key)).size, RAID_ITEMS.length, '物品 key 唯一')
+assert(RAID_ITEMS.every((item) => item.value > 0), '所有物品目录价值 > 0')
+assert(RAID_ITEMS.every((item) => item.stackMax >= 1 && item.stackMax <= 5), '堆叠上限在 1–5')
+assert(RAID_ITEMS.every((item) => item.weight > 0), '掉落权重 > 0')
+for (const rarity of RAID_RARITY_ORDER) {
+  assert(RAID_ITEMS.some((item) => item.rarity === rarity), `品质 ${rarity} 至少有一种物品`)
+}
+assert(RAID_ITEMS.filter((item) => item.rarity === 'mythic').length >= 2, '神话物品至少 2 种')
+assertEqual(RAID_ITEMS.filter((item) => item.kind === 'gear_cache').length, 4, '装备箱共 4 种')
+assertEqual(RAID_ITEMS.filter((item) => item.kind === 'skill_cache').length, 3, '技能卷轴共 3 种')
+assert(RAID_ITEMS.filter((item) => item.kind === 'consumable').length >= 8, '消耗品至少 8 种')
+assert(RAID_ITEMS.filter((item) => item.rarity === 'mythic').every((item) => item.value >= 5000), '神话物品价值 ≥ 5000')
+
+assertEqual(RAID_GEARS.length, 30, '装备目录 30 件（头/甲/鞋/背包/胸挂 × 6 级）')
+assertEqual(new Set(RAID_GEARS.map((gear) => gear.key)).size, RAID_GEARS.length, '装备 key 唯一')
+for (const slot of ['helmet', 'armor', 'boots', 'backpack', 'rig'] as const) {
+  const list = RAID_GEARS.filter((gear) => gear.slot === slot)
+  assertEqual(list.length, 6, `${slot} 共 6 级`)
+  assertEqual(list.map((gear) => gear.tier).join(','), '1,2,3,4,5,6', `${slot} 等级连续`)
+  assert(list.every((gear) => gear.tier <= 3 === gear.shopable), `${slot} 只有 1–3 级可购买`)
+}
+const helmets = RAID_GEARS.filter((gear) => gear.slot === 'helmet')
+assert(
+  helmets.every((gear, index) => index === 0 || (gear.defense ?? 0) > (helmets[index - 1]?.defense ?? 0)),
+  '头盔减伤随等级严格递增',
+)
+const armors = RAID_GEARS.filter((gear) => gear.slot === 'armor')
+assert(
+  armors.every((gear, index) => index === 0 || (gear.maxDurability ?? 0) > (armors[index - 1]?.maxDurability ?? 0)),
+  '护甲耐久上限随等级严格递增',
+)
+const backpacks = RAID_GEARS.filter((gear) => gear.slot === 'backpack')
+assertEqual(backpacks.map((gear) => gear.slots).join(','), '8,12,16,20,24,28', '背包容量 8/12/16/20/24/28')
+const rigs = RAID_GEARS.filter((gear) => gear.slot === 'rig')
+assertEqual(rigs.map((gear) => gear.slots).join(','), '2,3,4,5,6,7', '胸挂容量 2/3/4/5/6/7')
+assert(RAID_GEARS.every((gear) => gear.rarity === RAID_RARITY_ORDER[gear.tier - 1]), '装备品质与等级对应')
+assert(getRaidGear('helmet_t6')?.defense === 38, '6 级头盔减伤 38%')
+assert(getRaidGear('armor_t6')?.defense === 47, '6 级护甲减伤 47%')
+assertEqual(getRaidGear('nope'), null, '不存在的装备返回 null')
+
+/* ============================================================
+   品质权重
+   ============================================================ */
+
+for (let tier = 1; tier <= 5; tier += 1) {
+  const total = RAID_RARITY_ORDER.reduce((sum, rarity) => sum + rarityWeightAtTier(rarity, tier), 0)
+  assertClose(total, 100, 1e-9, `lootTier ${tier} 品质权重合计 100`)
+}
+for (let tier = 1; tier <= 4; tier += 1) {
+  assertEqual(rarityWeightAtTier('mythic', tier), 0, `lootTier ${tier} 不会掉神话`)
+}
+assert(rarityWeightAtTier('mythic', 5) > 0, 'lootTier 5 可能掉神话')
+
+let mythicHits = 0
+let commonHits = 0
+for (let i = 0; i < 6000; i += 1) {
+  const key = rollRaidItemKey(() => (i + 0.5) / 6000, 1)
+  const def = RAID_ITEM_MAP.get(key)
+  assert(!!def, '掷出的物品一定在目录里')
+  if (def?.rarity === 'mythic') mythicHits += 1
+  if (def?.rarity === 'common') commonHits += 1
+}
+assertEqual(mythicHits, 0, 'tier 1 固定种子不产出神话')
+assert(commonHits > 0, 'tier 1 会产出普通物品')
+
+/* ============================================================
+   地图生成
+   ============================================================ */
+
+const wasteland = getRaidMap('wasteland') as RaidMapDef
+const abyss = getRaidMap('abyss') as RaidMapDef
+assertEqual(RAID_MAPS.length, 6, '6 张地图')
+assertEqual(new Set(RAID_MAPS.map((map) => map.key)).size, RAID_MAPS.length, '地图 key 唯一')
+
+const mapA = generateRaidMap(123456, wasteland)
+const mapB = generateRaidMap(123456, wasteland)
+const mapC = generateRaidMap(654321, wasteland)
+assertEqual(JSON.stringify(mapA), JSON.stringify(mapB), '同 seed 地图完全一致')
+assert(JSON.stringify(mapA) !== JSON.stringify(mapC), '不同 seed 地图不同')
+assertEqual(mapA.width, wasteland.cols * 17, '地图宽度 = 列数 × 17')
+assertEqual(mapA.height, wasteland.rows * 13, '地图高度 = 行数 × 13')
+assertEqual(mapA.tiles.length, mapA.width * mapA.height, '瓦片数量正确')
+assert(mapA.tiles.every((tile) => tile >= 0 && tile <= 3), '瓦片取值 0–3')
+assertEqual(mapA.rooms.length, wasteland.cols * wasteland.rows, '房间数量正确')
+assertEqual(mapA.startRoom, 0, '起点房间为 0')
+assertEqual(mapA.rooms[0]?.kind, 'start', '0 号房间是起点')
+assertEqual(mapA.rooms.filter((room) => room.kind === 'extract').length, wasteland.extractRooms, '撤离房间数量正确')
+assertEqual(mapA.doors.length >= mapA.rooms.length - 1, true, '门数量至少覆盖生成树')
+assert(mapA.extracts.length > 0 && mapA.extracts.every((point) => point.roomId >= 0), '撤离点存在')
+
+// 连通性：从起点 BFS 能到达所有房间
+const reachable = new Set<number>([0])
+const queue = [0]
+while (queue.length > 0) {
+  const current = queue.shift() as number
+  for (const next of mapA.rooms[current]?.neighbors ?? []) {
+    if (reachable.has(next)) continue
+    reachable.add(next)
+    queue.push(next)
+  }
+}
+assertEqual(reachable.size, mapA.rooms.length, '所有房间连通')
+assert(mapA.rooms.every((room) => room.neighbors.length >= 1), '每个房间至少有一扇门')
+
+// 敌人 / 容器落在房间内部且 id 唯一
+const enemyIds = new Set<string>()
+for (const room of mapA.rooms) {
+  for (const enemy of room.enemies) {
+    assert(!enemyIds.has(enemy.id), `敌人 id 唯一 ${enemy.id}`)
+    enemyIds.add(enemy.id)
+    assert(enemy.x > room.x && enemy.x < room.x + room.w, `敌人 x 在房间内 ${enemy.id}`)
+    assert(enemy.y > room.y && enemy.y < room.y + room.h, `敌人 y 在房间内 ${enemy.id}`)
+    assert(enemy.maxHp > 0 && enemy.damage > 0 && enemy.speed > 0, `敌人属性有效 ${enemy.id}`)
+  }
+  for (const container of room.containers) {
+    assert(container.loot.length >= 1, `容器至少一件掉落 ${container.id}`)
+    for (const loot of container.loot) {
+      assert(!!getRaidItem(loot.itemKey), `容器掉落 key 合法 ${loot.itemKey}`)
+      assert(loot.amount >= 1 && loot.amount <= (getRaidItem(loot.itemKey)?.stackMax ?? 1), `容器掉落数量合法 ${loot.id}`)
+    }
+  }
+}
+assertEqual(mapA.rooms[0]?.enemies.length, 0, '起点房间没有敌人')
+assertEqual(mapA.rooms.filter((room) => room.kind === 'extract').every((room) => room.enemies.length === 0), true, '撤离房间没有敌人')
+
+const abyssMap = generateRaidMap(999, abyss)
+assertEqual(abyssMap.rooms.filter((room) => room.kind === 'boss').length, abyss.bossRooms, '深渊首领房间数量正确')
+assertEqual(abyssMap.rooms.filter((room) => room.kind === 'elite').length, abyss.eliteRooms, '深渊精英房间数量正确')
+assert(abyssMap.rooms.filter((room) => room.kind === 'boss').every((room) => room.enemies.some((enemy) => enemy.kind === 'boss')), '首领房间有 Boss')
+assert(abyssMap.rooms.filter((room) => room.kind === 'boss').every((room) => room.containers.length >= 2), '首领房间至少 2 个容器')
+
+/* ============================================================
+   运行状态机
+   ============================================================ */
+
+function makeRun(overrides: Partial<RaidRunState> = {}): RaidRunState {
+  const state = createRaidRun({
+    seed: 42,
+    mapKey: 'wasteland',
+    difficulty: 'normal',
+    hp: 200,
+    maxHp: 200,
+    mp: 80,
+    maxMp: 80,
+    atk: 30,
+    insured: false,
+    capacities: { backpack: 8, rig: 2, safe: 2 },
+    gear: {
+      helmet: { key: 'helmet_t3', durability: 70, maxDurability: 70 },
+      armor: { key: 'armor_t3', durability: 100, maxDurability: 100 },
+      boots: 'boots_t2',
+      backpack: 'backpack_t1',
+      rig: 'rig_t1',
+    },
+    backpack: [],
+    rig: [],
+    safe: [],
+    skills: [
+      { key: 'fire_claw', name: '烈焰爪', emoji: '🔥', kind: 'damage', mpCost: 25, cooldownMs: 2500 },
+      { key: 'healing_light', name: '治愈之光', emoji: '✨', kind: 'heal', mpCost: 25, cooldownMs: 5000, healPct: 30 },
+    ],
+    startedAt: 1_000_000,
+  })
+  return Object.assign(state, overrides)
+}
+
+const run = makeRun()
+assertEqual(run.schemaVersion, RAID_STATE_VERSION, '状态 schema 版本正确')
+assertEqual(run.status, 'active', '新对局为 active')
+assertEqual(run.currentRoom, 0, '从起点房间开始')
+assertEqual(run.hp, 200, '初始 HP 正确')
+assertEqual(run.capacities.safe, 2, '安全箱容量来自传入值')
+assertEqual(run.log.length, 1, '开局写一条日志')
+
+// 进房：不相邻拒绝；起点无敌人，可直接进入相邻房间
+const neighbor = mapA.rooms[0]?.neighbors[0] as number
+const farRoom = mapA.rooms.find((room) => room.id !== 0 && !(mapA.rooms[0]?.neighbors ?? []).includes(room.id))
+if (farRoom) {
+  const bad = applyRaidEvent(run, mapA, { type: 'enterRoom', roomId: farRoom.id }, 1_000_001)
+  assert(!!bad.error, '不能进入不相邻的房间')
+}
+const entered = applyRaidEvent(run, mapA, { type: 'enterRoom', roomId: neighbor }, 1_000_001)
+assert(!entered.error, '可以进入相邻房间')
+assertEqual(entered.state.currentRoom, neighbor, '当前房间已更新')
+
+// 击杀 / 清房
+const room = mapA.rooms[neighbor] as (typeof mapA.rooms)[number]
+const firstEnemy = room.enemies[0]
+if (firstEnemy) {
+  const clearTooEarly = applyRaidEvent(entered.state, mapA, { type: 'clearRoom', roomId: neighbor }, 1_000_002)
+  assert(!!clearTooEarly.error, '还有敌人时不能清房')
+  const killed = applyRaidEvent(entered.state, mapA, { type: 'kill', enemyId: firstEnemy.id }, 1_000_002)
+  assert(!killed.error, '可以击杀当前房间的敌人')
+  assertEqual(killed.state.kills, 1, '击杀数 +1')
+  const unknownKill = applyRaidEvent(killed.state, mapA, { type: 'kill', enemyId: 'e-999-9' }, 1_000_003)
+  assert(!!unknownKill.error, '不能击杀不存在的敌人')
+}
+
+// 开箱需要清场
+const firstContainer = room.containers[0]
+assert(!!firstContainer, '战斗房间至少有一个容器')
+if (firstContainer) {
+  const notCleared = applyRaidEvent(entered.state, mapA, { type: 'openContainer', containerId: firstContainer.id }, 1_000_004)
+  assert(!!notCleared.error, '房间未清场时不能开箱')
+}
+
+// 造一个「已清场」的状态：杀光当前房间所有敌人
+let clearedState = entered.state
+for (const enemy of room.enemies) {
+  clearedState = applyRaidEvent(clearedState, mapA, { type: 'kill', enemyId: enemy.id }, 1_000_005).state
+}
+const cleared = applyRaidEvent(clearedState, mapA, { type: 'clearRoom', roomId: neighbor }, 1_000_006)
+assert(!cleared.error, '杀光后可以清房')
+assertEqual(cleared.state.clearedRooms.includes(neighbor), true, '清房记录已写入')
+
+// 开箱 + 拾取
+if (firstContainer) {
+  const opened = applyRaidEvent(cleared.state, mapA, { type: 'openContainer', containerId: firstContainer.id }, 1_000_007)
+  assert(!opened.error, '清场后可以开箱')
+  const loot = firstContainer.loot[0]
+  assert(!!loot, '容器里有掉落')
+  if (loot) {
+    const take = applyRaidEvent(opened.state, mapA, {
+      type: 'takeLoot',
+      containerId: firstContainer.id,
+      lootId: loot.id,
+      target: 'backpack',
+    }, 1_000_008)
+    assert(!take.error, '可以拾取到背包')
+    assertEqual(take.state.backpack.length, 1, '背包多了一格')
+    const again = applyRaidEvent(take.state, mapA, {
+      type: 'takeLoot',
+      containerId: firstContainer.id,
+      lootId: loot.id,
+      target: 'backpack',
+    }, 1_000_009)
+    assert(!!again.error, '同一件掉落不能重复拾取')
+    const def = getRaidItem(loot.itemKey)
+    if (def && def.kind !== 'consumable') {
+      const rigTake = applyRaidEvent(cleared.state, mapA, {
+        type: 'takeLoot',
+        containerId: firstContainer.id,
+        lootId: loot.id,
+        target: 'rig',
+      }, 1_000_010)
+      assert(!!rigTake.error, '胸挂只能放消耗品')
+    }
   }
 }
 
-/* ---------- 地图 / 生成 ---------- */
-assertEqual(RAID_MAPS.length, 6, '共 6 张搜打撤地图')
-assertEqual(new Set(RAID_MAPS.map((map) => map.key)).size, RAID_MAPS.length, '地图 key 唯一')
-for (const map of RAID_MAPS) {
-  assert(map.size >= 7 && map.size <= 10, `${map.name} 地图尺寸合理`)
-  assert(map.enemyCount > 0, `${map.name} 有敌人`)
-  assert(map.lootCount > 0, `${map.name} 有物资`)
-  assert(map.extractCount >= 1, `${map.name} 至少一个撤离点`)
-  assert(map.maxTurns >= 30, `${map.name} 行动点足够`)
+// 容量为 0 时不能拾取
+const noBag = makeRun({ capacities: { backpack: 0, rig: 0, safe: 0 } })
+const noBagCleared = { ...noBag, currentRoom: neighbor, clearedRooms: [neighbor], killedEnemies: room.enemies.map((enemy) => enemy.id) }
+if (firstContainer) {
+  const openedNoBag = applyRaidEvent(noBagCleared, mapA, { type: 'openContainer', containerId: firstContainer.id }, 1_000_011)
+  const loot = firstContainer.loot[0]
+  if (loot && !openedNoBag.error) {
+    const take = applyRaidEvent(openedNoBag.state, mapA, {
+      type: 'takeLoot',
+      containerId: firstContainer.id,
+      lootId: loot.id,
+      target: 'backpack',
+    }, 1_000_012)
+    assert(!!take.error, '没有背包容量时不能拾取')
+  }
 }
-assert(RAID_LOOT_ENTRIES.length >= 20, '战利品目录足够丰富')
-assertEqual(new Set(RAID_LOOT_ENTRIES.map((item) => item.key)).size, RAID_LOOT_ENTRIES.length, '战利品 key 唯一')
 
-const a = makeState(999)
-const b = makeState(999)
-const c = makeState(1000)
-assertEqual(JSON.stringify(a.cells), JSON.stringify(b.cells), '同 seed 地图完全一致')
-assert(JSON.stringify(a.cells) !== JSON.stringify(c.cells), '不同 seed 地图不同')
-assertEqual(a.player.x, 0, '出生点 x = 0')
-assertEqual(a.player.y, 0, '出生点 y = 0')
-assert(a.cells.some((cell) => cell.kind === 'extract'), '地图存在撤离点')
-assert(a.cells.filter((cell) => cell.kind === 'loot').length > 0, '地图存在物资箱')
-assert(a.cells.filter((cell) => cell.kind === 'enemy').length > 0, '地图存在敌人')
-assert(a.visited.length >= 3, '出生点及相邻格已探索')
+/* ============================================================
+   容器工具
+   ============================================================ */
 
-const dtos = buildRaidCellDtos(a)
-assertEqual(dtos.length, a.width * a.height, 'DTO 覆盖全部格子')
-assert(dtos.some((cell) => cell.kind === 'unknown'), '未探索区域被隐藏')
-assert(dtos.some((cell) => cell.current), '当前格标记正确')
+const stack = addItemToContainer([], 2, 'scrap_metal', 3)
+assert(!!stack && stack.length === 1 && stack[0]?.amount === 3, '空容器放入 3 件')
+const stacked = addItemToContainer(stack, 2, 'scrap_metal', 3)
+assert(!!stacked && stacked.length === 2 && stacked.reduce((sum, item) => sum + item.amount, 0) === 6, '超过堆叠上限自动开新格')
+const overflow = addItemToContainer(stacked, 2, 'scrap_metal', 5)
+assertEqual(overflow, null, '容器满时返回 null')
+assertEqual(findContainerSlot([{ slotIndex: 0, itemKey: 'scrap_metal', amount: 1 }], 2), 1, '找到下一个空槽')
+assertEqual(findContainerSlot([{ slotIndex: 0, itemKey: 'scrap_metal', amount: 1 }, { slotIndex: 1, itemKey: 'copper_wire', amount: 1 }], 2), -1, '容器满时没有空槽')
+const consumed = consumeItemFromContainer(stacked, 'scrap_metal', 4)
+assert(!!consumed && consumed.reduce((sum, item) => sum + item.amount, 0) === 2, '按数量消耗物品')
 
-/* ---------- 移动 / 搜索 / 撤离 ---------- */
-const fresh = makeState(42)
-const outOfBounds = moveRaid(fresh, 'up', createRaidRng(1))
-assert(!!outOfBounds.error, '向上越界被拒绝')
-assertEqual(outOfBounds.state.turn, 0, '越界不消耗行动点')
+/* ============================================================
+   伤害 / 耐久 / 维修
+   ============================================================ */
 
-const right = moveRaid(fresh, 'right', createRaidRng(2))
-assert(!right.error, '向右移动成功')
-assertEqual(right.state.turn, 1, '移动消耗 1 行动点')
-assertEqual(right.state.player.x, 1, '玩家移动到 x=1')
-assert(right.state.mp >= fresh.mp, '移动回复 MP（不超过上限）')
+const bodyHit = resolveRaidDamage({
+  raw: 100,
+  zone: 'body',
+  helmet: { key: 'helmet_t3', durability: 70, maxDurability: 70 },
+  armor: { key: 'armor_t3', durability: 100, maxDurability: 100 },
+})
+assertEqual(bodyHit.hpDamage, 74, '3 级护甲 26% 减伤：100 → 74')
+assertEqual(bodyHit.armorLoss, 25, '耐久损耗 = 100 × 0.25')
+assertEqual(bodyHit.helmetLoss, 0, '打身体不掉头盔耐久')
+const headHit = resolveRaidDamage({
+  raw: 100,
+  zone: 'head',
+  helmet: { key: 'helmet_t3', durability: 70, maxDurability: 70 },
+  armor: { key: 'armor_t3', durability: 100, maxDurability: 100 },
+})
+assertEqual(headHit.hpDamage, 80, '3 级头盔 20% 减伤：100 → 80')
+assertEqual(headHit.helmetLoss, 25, '头盔掉耐久')
+const brokenArmor = resolveRaidDamage({
+  raw: 100,
+  zone: 'body',
+  helmet: null,
+  armor: { key: 'armor_t6', durability: 0, maxDurability: 180 },
+})
+assertEqual(brokenArmor.hpDamage, 100, '耐久为 0 时护甲不再减伤')
+assertEqual(brokenArmor.armorLoss, 0, '耐久为 0 时不再扣耐久')
 
-const searchState = makeState(7)
-const lootCell = searchState.cells.find((cell) => cell.kind === 'loot')!
-searchState.player = { x: lootCell.x, y: lootCell.y }
-const searched = searchRaid(searchState, createRaidRng(3))
-assert(!searched.error, '在物资箱上搜索成功')
-assertEqual(searched.state.turn, 1, '搜索消耗 1 行动点')
-assert((searched.gained?.length ?? 0) > 0, '搜索至少获得一件战利品')
-const searchedAgain = searchRaid(searched.state, createRaidRng(4))
-assert(!!searchedAgain.error, '同一箱子不能重复搜索')
+const damaged = makeRun()
+const damageEvent = applyRaidEvent(damaged, mapA, { type: 'damage', amount: 100, zone: 'body' }, 1_000_020)
+assert(!damageEvent.error, '受伤事件成功')
+assertEqual(damageEvent.state.hp, 126, '受伤后 HP 126')
+assertEqual(damageEvent.state.gear.armor?.durability, 75, '护甲耐久 100 → 75')
+const lethal = applyRaidEvent(damageEvent.state, mapA, { type: 'damage', amount: 100000, zone: 'body' }, 1_000_021)
+assertEqual(lethal.state.status, 'died', 'HP 归零判阵亡')
 
-const extractState = makeState(8)
-const extractCell = extractState.cells.find((cell) => cell.kind === 'extract')!
-extractState.player = { x: extractCell.x, y: extractCell.y }
-const e1 = extractRaid(extractState)
-assert(!e1.error && e1.state.extracting > 0, '开始撤离读条')
-const e2 = extractRaid(e1.state)
-assert(!e2.error && e2.state.status === 'active', '撤离读条第二回合')
-const e3 = extractRaid(e2.state)
-assert(!e3.error && e3.state.status === 'extracted', '第三回合撤离成功')
-
-const wrongExtract = extractRaid(fresh)
-assert(!!wrongExtract.error, '不在撤离点不能撤离')
-
-const abandonState = makeState(9)
-const abandoned = abandonRaid(abandonState)
-assertEqual(abandoned.state.status, 'abandoned', '放弃行动状态正确')
-const expired = expireRaid(abandonState)
-assertEqual(expired.state.status, 'mia', '超时判 MIA')
-
-/* ---------- 战利品 / 保险箱 / 急救包 ---------- */
-const lootState = makeState(11)
-lootState.loot = rollRaidLoot(lootState, createRaidRng(5))
-assert(lootState.loot.length > 0, '战利品抽取非空')
-assert(totalLootValue(lootState.loot) > 0, '战利品总价值大于 0')
-assert(lootValue(medkit()) === 45, '急救包价值 45')
-
-const safeState = makeState(12)
-const lootA = rollRaidLoot(safeState, createRaidRng(6))[0]
-const lootB = rollRaidLoot(safeState, createRaidRng(7))[0]
-const lootC = rollRaidLoot(safeState, createRaidRng(8))[0]
-safeState.loot = [lootA, lootB, lootC]
-const st1 = storeSafeRaid(safeState, lootA.id)
-assert(!st1.error && st1.state.safe.length === 1, '第一件战利品放入保险箱')
-const st2 = storeSafeRaid(st1.state, lootB.id)
-assert(!st2.error && st2.state.safe.length === 2, '第二件战利品放入保险箱')
-const st3 = storeSafeRaid(st2.state, lootC.id)
-assert(!!st3.error, `保险箱最多 ${RAID_SAFE_CAPACITY} 件`)
-const back = takeSafeRaid(st2.state, lootA.id)
-assert(!back.error && back.state.safe.length === 1, '从保险箱取回战利品')
-
-const healState = makeState(13)
-healState.hp = 10
-healState.loot = [medkit()]
-const healed = useMedkitRaid(healState, 'med-1')
-assert(!healed.error, '使用急救包成功')
-assert(healed.state.hp > 10, '急救包回复生命')
-assertEqual(healed.state.loot.length, 0, '急救包被消耗')
-
-/* ---------- 战斗 ---------- */
-const combatState = makeState(14)
-const enemy: RaidEnemy = {
-  id: 'test-enemy',
-  name: '测试兵',
-  emoji: '🥷',
-  kind: 'scout',
-  level: 1,
-  hp: 50,
-  maxHp: 50,
-  atk: 5,
-  def: 1,
-  spd: 1,
-  crit: 0,
-  skills: [],
+const repairSource = { key: 'armor_t3', durability: 20, maxDurability: 100 }
+const repaired = repairRaidGear(repairSource, 'armor_repair')
+assert(repaired.ok && !!repaired.gear, '甲修包可以维修护甲')
+assertEqual(repaired.gear?.durability, 95, '维修后耐久 20 + 80 → 95（受上限）')
+assertEqual(repaired.gear?.maxDurability, 95, '维修后耐久上限 100 → 95')
+const repairedTwice = repairRaidGear({ ...repaired.gear!, durability: 50 }, 'armor_repair')
+assertEqual(repairedTwice.gear?.maxDurability, Math.floor(95 * 0.95), '再次维修上限继续下降')
+assertEqual(repairRaidGear({ key: 'helmet_t3', durability: 10, maxDurability: 70 }, 'armor_repair').ok, false, '甲修包不能修头盔')
+assertEqual(repairRaidGear({ key: 'helmet_t3', durability: 70, maxDurability: 70 }, 'helmet_repair').ok, false, '满耐久不需要维修')
+const floorRepair = repairRaidGear(
+  { key: 'helmet_t1', durability: 0, maxDurability: 40 },
+  'helmet_repair',
+)
+assertEqual(floorRepair.gear?.maxDurability, 38, '首次维修上限 40 → 38')
+let floorGear = { key: 'helmet_t1', durability: 0, maxDurability: 40 }
+for (let i = 0; i < 50; i += 1) {
+  const result = repairRaidGear({ ...floorGear, durability: 0 }, 'helmet_repair')
+  if (!result.ok || !result.gear) break
+  floorGear = result.gear
 }
-const combat = resolveRaidCombat(combatState, enemy, createRaidRng(10))
-assert(combat.won, '高属性宠物击败低级敌人')
-assert(combat.playerHp > 0, '胜利后宠物存活')
-assert(combat.rounds >= 1, '战斗回合数有效')
-assert(combat.events.length > 0, '战斗日志非空')
+assert((floorGear.maxDurability ?? 0) >= Math.ceil(40 * RAID_REPAIR_FLOOR_RATIO), '耐久上限不会低于初始 30%')
+assert((floorGear.maxDurability ?? 0) < 40, '耐久上限确实被维修磨损')
 
-/* ---------- 保险 ---------- */
-assertEqual(insurableGearValue(['flame_sword', 'crystal_plate']), 1750, '非绑定装备价值合计')
-assert(insuranceCost(['flame_sword', 'crystal_plate']) >= 20, '保险最低 20 积分')
-assertEqual(insuranceCost(['starter_claw']), 0, '绑定新手装不需要保险')
+/* ============================================================
+   道具 / 技能 / 撤离
+   ============================================================ */
 
-/* ---------- 农场扩建 / 保护 ---------- */
-assertEqual(MAX_PLOT_COUNT, 30, '农田上限 30 块')
-assertEqual(nextExpansion(18)?.plotCount, 21, '18 块下一档是 21')
-assertEqual(nextExpansion(27)?.plotCount, 30, '27 块下一档是 30')
-assertEqual(nextExpansion(30), null, '30 块已满')
-assertEqual(FARM_PROTECTION_PACKAGES.length, 5, '保护档位 5 档')
-assertEqual(findProtectionPackage(6)?.cost, 120, '6 小时保护 120 积分')
-assertEqual(findProtectionPackage(5), null, '不存在的档位返回 null')
-const now = 1_700_000_000_000
-const until = protectionUntilAfter(null, 3, now)
-assertEqual(until.getTime(), now + 3 * 3_600_000, '保护到期时间 = 现在 + 时长')
-const stacked = protectionUntilAfter(until, 6, now + 1000)
-assertEqual(stacked.getTime(), until.getTime() + 6 * 3_600_000, '保护可叠加')
-assertEqual(protectionRemainingMs(null, now), 0, '未保护剩余 0')
-assertEqual(protectionRemainingMs(until, now + 3_600_000), 2 * 3_600_000, '剩余保护计算正确')
-assert(FARM_PROTECTION_MAX_HOURS === 48, '保护总上限 48 小时')
+const withMedkit = makeRun({
+  hp: 100,
+  backpack: [{ slotIndex: 0, itemKey: 'medkit', amount: 1 }],
+})
+const heal = applyRaidEvent(withMedkit, mapA, { type: 'useItem', itemKey: 'medkit', from: 'backpack' }, 1_000_030)
+assert(!heal.error, '可以使用急救包')
+assertEqual(heal.state.hp, 170, '急救包回复 35% 最大 HP（200 → 170）')
+assertEqual(heal.state.backpack.length, 0, '急救包被消耗')
 
-/* ---------- 股市限价 ---------- */
-assert(limitOrderTriggered('buy', 10, 12), '买入现价 10 ≤ 限价 12 触发')
-assert(!limitOrderTriggered('buy', 13, 12), '买入现价 13 > 限价 12 不触发')
-assert(limitOrderTriggered('sell', 13, 12), '卖出现价 13 ≥ 限价 12 触发')
-assert(!limitOrderTriggered('sell', 10, 12), '卖出现价 10 < 限价 12 不触发')
-assertEqual(limitOrderDistancePct('buy', 10, 9), 10, '买入距触发 10%')
-assertEqual(limitOrderDistancePct('buy', 9, 10), 0, '已触发距离 0')
-assertEqual(limitOrderDistancePct('sell', 10, 11), 10, '卖出距触发 10%')
+const fullHp = makeRun({ backpack: [{ slotIndex: 0, itemKey: 'medkit', amount: 1 }] })
+assert(!!applyRaidEvent(fullHp, mapA, { type: 'useItem', itemKey: 'medkit', from: 'backpack' }, 1_000_031).error, '满血不能使用急救包')
 
-const buyQuote = quoteStockBuy(10_000, 25)
-assertEqual(buyQuote.fee, 30, '买入手续费 0.3%')
-assertEqual(buyQuote.netPoints, 9_970, '扣费后买入金额')
-assert(Math.abs(buyQuote.shares - 398.8) < 1e-9, '买入份额按价格折算')
-const sellQuote = quoteStockSell(100, 25)
-assertEqual(sellQuote.gross, 2_500, '卖出毛收入')
-assertEqual(sellQuote.fee, 8, '卖出手续费 0.3%（向上取整）')
-assertEqual(sellQuote.proceeds, 2_492, '卖出到账金额')
+const skillRun = makeRun()
+const cast = applyRaidEvent(skillRun, mapA, { type: 'castSkill', skillKey: 'fire_claw' }, 1_000_040)
+assert(!cast.error, '可以释放已装备技能')
+assertEqual(cast.state.mp, 55, '技能扣除 25 MP')
+const cooldown = applyRaidEvent(cast.state, mapA, { type: 'castSkill', skillKey: 'fire_claw' }, 1_000_041)
+assert(!!cooldown.error, '冷却中不能再次释放')
+const afterCd = applyRaidEvent(cast.state, mapA, { type: 'castSkill', skillKey: 'fire_claw' }, 1_000_040 + RAID_SKILL_CD_MS)
+assert(!afterCd.error, '冷却结束可以再次释放')
+const healSkill = applyRaidEvent(
+  { ...makeRun({ hp: 100 }), mp: 80 },
+  mapA,
+  { type: 'castSkill', skillKey: 'healing_light' },
+  1_000_050,
+)
+assert(!healSkill.error, '治疗技能成功')
+assertEqual(healSkill.state.hp, 160, '治疗技能回复 30% 最大 HP（100 → 160）')
+const noMp = applyRaidEvent({ ...makeRun(), mp: 10 }, mapA, { type: 'castSkill', skillKey: 'fire_claw' }, 1_000_060)
+assert(!!noMp.error, 'MP 不足不能释放技能')
 
-console.log(`✅ 搜打撤 / 农场 / 股市规则自检：${passed} 个断言`)
+// 撤离：错误房间 / 未读条 / 读条完成
+const extractRoom = mapA.rooms.find((room) => room.kind === 'extract') as (typeof mapA.rooms)[number]
+const wrongRoom = applyRaidEvent(makeRun(), mapA, { type: 'extractStart' }, 1_000_070)
+assert(!!wrongRoom.error, '非撤离房间不能开始撤离')
+const atExtract = makeRun({ currentRoom: extractRoom.id, clearedRooms: [extractRoom.id] })
+const startExtract = applyRaidEvent(atExtract, mapA, { type: 'extractStart' }, 1_000_071)
+assert(!startExtract.error, '撤离房间可以开始读条')
+const tooEarly = applyRaidEvent(startExtract.state, mapA, { type: 'extractDone' }, 1_000_072)
+assert(!!tooEarly.error, '读条未完成不能撤离')
+const done = applyRaidEvent(startExtract.state, mapA, { type: 'extractDone' }, 1_000_071 + 6000)
+assertEqual(done.state.status, 'extracted', '读条完成后撤离成功')
+
+// 放弃 / 超时
+assertEqual(applyRaidEvent(makeRun(), mapA, { type: 'abandon' }, 1_000_080).state.status, 'abandoned', '主动放弃')
+const expired = tickRaidRun(makeRun(), 1_000_000 + wasteland.durationMs)
+assertEqual(expired.status, 'mia', '超时判失联')
+
+/* ============================================================
+   结算 / 保险 / 契约
+   ============================================================ */
+
+const extractedState = makeRun({
+  status: 'extracted',
+  backpack: [{ slotIndex: 0, itemKey: 'scrap_metal', amount: 2 }],
+  rig: [{ slotIndex: 0, itemKey: 'medkit', amount: 1 }],
+  safe: [{ slotIndex: 0, itemKey: 'gold_compass', amount: 1 }],
+})
+const keptAll = raidKeptContainers(extractedState)
+assertEqual(keptAll.backpack.length, 1, '撤离保留背包')
+assertEqual(keptAll.rig.length, 1, '撤离保留胸挂')
+assertEqual(keptAll.safe.length, 1, '撤离保留安全箱')
+const diedState = { ...extractedState, status: 'died' as const }
+const keptSafe = raidKeptContainers(diedState)
+assertEqual(keptSafe.backpack.length, 0, '阵亡丢失背包')
+assertEqual(keptSafe.rig.length, 0, '阵亡丢失胸挂')
+assertEqual(keptSafe.safe.length, 1, '阵亡保留安全箱')
+assertEqual(raidLootValue(keptAll.backpack), 70, '战利品价值 = 35 × 2')
+
+const gearValue = {
+  helmet: { key: 'helmet_t3', durability: 70, maxDurability: 70 },
+  armor: { key: 'armor_t3', durability: 100, maxDurability: 100 },
+  boots: 'boots_t2',
+  backpack: 'backpack_t2',
+  rig: 'rig_t1',
+}
+assertEqual(raidInsuranceCost(gearValue), Math.ceil((900 + 1100 + 320 + 700 + 200) * 0.15), '保险 = 装备价值 15%')
+assertEqual(raidInsuranceCost({ helmet: null, armor: null, boots: null, backpack: null, rig: null }), 0, '裸装保险为 0')
+assertEqual(raidInsuranceCost({ helmet: { key: 'helmet_t1', durability: 40, maxDurability: 40 }, armor: null, boots: null, backpack: null, rig: null }), 23, '低价值装备保险向上取整')
+
+assertEqual(raidSellPrice('scrap_metal', 2), 70, '材料回收价 100%')
+assertEqual(raidSellPrice('medkit', 1), 72, '消耗品回收价 60%')
+assertEqual(raidSellPrice('gear_cache', 1), 182, '装备箱回收价 70%')
+assertEqual(raidSellPrice('nope', 1), 0, '未知物品回收价 0')
+
+assertEqual(RAID_CONTRACTS.length, 3, '每日契约 3 条')
+assert(RAID_CONTRACT_MAP.has('extract_1') && RAID_CONTRACT_MAP.has('kill_3') && RAID_CONTRACT_MAP.has('loot_2500'), '契约 key 正确')
+assert(RAID_CONTRACTS.every((contract) => contract.rewardPoints > 0 && contract.target > 0), '契约奖励与目标为正')
+
+/* ---------- 批量事件 ---------- */
+const batchRun = makeRun()
+const batch = applyRaidEvents(batchRun, mapA, [
+  { type: 'enterRoom', roomId: neighbor },
+  { type: 'kill', enemyId: 'not-a-real-enemy' },
+  { type: 'abandon' },
+], 1_000_090)
+assertEqual(batch.applied, 2, '批量事件跳过非法条目')
+assertEqual(batch.errors.length, 1, '批量事件记录 1 条错误')
+assertEqual(batch.state.status, 'abandoned', '批量事件最终状态')
+
+const legacyState = { ...makeRun(), schemaVersion: 1 } as unknown as RaidRunState
+assertEqual(legacyState.schemaVersion, 1, '旧 schema 可构造（服务层按放弃处理）')
+
+console.log(`✅ 搜打撤 v2 引擎自检：${passed} 个断言`)

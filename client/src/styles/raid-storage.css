@@ -1,25 +1,34 @@
 /* =============================================================
-   搜打撤仓库 / 交易行（Raid Storage & Market）
-   页面 /pets/raid/storage 懒加载；复用 raid.css 的变量与卡片语言。
+   搜打撤仓库 / 背包 / 装备 / 官方商店（Raid Storage）
+   页面 /pets/raid/storage 懒加载；沿用 raid.css 的卡片语言与全局变量。
    ============================================================= */
 
 .gh-raid-storage-page {
-  max-width: 1080px;
+  max-width: 1240px;
   margin: 0 auto;
   padding-bottom: 56px;
 }
 
 /* ---------- 加载 / 错误 ---------- */
-.gh-raid-storage-loading {
+.gh-raid-storage-loading,
+.gh-raid-storage-inline-loading {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 14px;
-  min-height: 46vh;
+  min-height: 30vh;
   color: var(--gh-text-secondary);
 }
-.gh-raid-storage-loading span { font-size: 44px; animation: gh-raid-storage-float 2.4s ease-in-out infinite; }
+.gh-raid-storage-loading { min-height: 46vh; }
+.gh-raid-storage-loading span,
+.gh-raid-storage-inline-loading span {
+  font-size: 44px;
+  animation: gh-raid-storage-float 2.4s ease-in-out infinite;
+}
+.gh-raid-storage-loading p,
+.gh-raid-storage-inline-loading p { margin: 0; font-size: var(--gh-text-sm); }
+
 @keyframes gh-raid-storage-float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-8px); }
@@ -37,7 +46,13 @@
 }
 .gh-raid-storage-error h1 { margin: 0; }
 .gh-raid-storage-error p { margin: 0; color: var(--gh-text-secondary); }
-.gh-raid-storage-error-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; justify-content: center; }
+.gh-raid-storage-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+  justify-content: center;
+}
 
 /* ---------- 头部 ---------- */
 .gh-raid-storage-header {
@@ -61,7 +76,7 @@
   letter-spacing: var(--gh-tracking-display);
 }
 .gh-raid-storage-sub {
-  max-width: 56ch;
+  max-width: 62ch;
   margin: 8px 0 0;
   color: var(--gh-text-secondary);
   font-size: var(--gh-text-sm);
@@ -85,19 +100,25 @@
   font-size: var(--gh-text-sm);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* ---------- Tab 分段控件 ---------- */
 .gh-raid-storage-tabs {
   display: inline-flex;
   gap: 4px;
+  max-width: 100%;
   padding: 4px;
   margin-bottom: 18px;
+  overflow-x: auto;
   border: 1px solid var(--gh-border);
   border-radius: 12px;
   background: var(--gh-canvas-inset);
 }
 .gh-raid-storage-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-height: 32px;
   padding: 0 18px;
   border: none;
@@ -107,6 +128,7 @@
   font-family: var(--gh-font);
   font-size: var(--gh-text-sm);
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
@@ -119,11 +141,30 @@
 
 .gh-raid-storage-body { display: grid; gap: 14px; }
 
+/* ---------- 通用进度条 ---------- */
+.gh-raid-storage-bar {
+  position: relative;
+  height: 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--gh-canvas-inset);
+}
+.gh-raid-storage-bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--gh-accent), #64d2ff);
+  transition: width 0.35s ease;
+}
+.gh-raid-storage-bar--slim { height: 6px; }
+.gh-raid-storage-bar > .gh-raid-storage-bar-fill--warning { background: linear-gradient(90deg, #ff9f0a, #ff453a); }
+.gh-raid-storage-bar > .gh-raid-storage-bar-fill--danger { background: linear-gradient(90deg, #ff9f0a, #ff453a); }
+
 /* ---------- 仓库状态卡 ---------- */
 .gh-raid-storage-status {
   padding: 16px 18px;
   border: 1px solid var(--gh-border);
-  border-radius: 16px;
+  border-radius: 18px;
   background: var(--gh-canvas);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
@@ -142,6 +183,7 @@
   color: #fff;
   font-size: var(--gh-text-xs);
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 .gh-raid-storage-capacity-text {
   margin-left: auto;
@@ -149,27 +191,21 @@
   font-size: var(--gh-text-xs);
   font-variant-numeric: tabular-nums;
 }
-.gh-raid-storage-bar {
-  position: relative;
-  height: 14px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--gh-canvas-inset);
-}
-.gh-raid-storage-bar > span {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--gh-accent), #64d2ff);
-  transition: width 0.35s ease;
-}
-.gh-raid-storage-bar > .gh-raid-storage-bar-fill--warning {
-  background: linear-gradient(90deg, #ff9f0a, #ff453a);
-}
 .gh-raid-storage-safe-note {
   margin: 10px 0 0;
   color: var(--gh-text-secondary);
   font-size: var(--gh-text-xs);
+  line-height: 1.6;
+}
+.gh-raid-storage-warn {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--gh-warning-soft);
+  color: var(--gh-warning);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  line-height: 1.5;
 }
 
 /* ---------- 升级卡 ---------- */
@@ -180,7 +216,7 @@
   gap: 10px 16px;
   padding: 14px 16px;
   border: 1px solid color-mix(in srgb, var(--gh-accent) 30%, var(--gh-border));
-  border-radius: 16px;
+  border-radius: 18px;
   background: color-mix(in srgb, var(--gh-accent) 5%, var(--gh-canvas));
 }
 .gh-raid-storage-upgrade-head { display: flex; flex-direction: column; gap: 2px; }
@@ -219,16 +255,34 @@
   border-radius: 20px;
   background: var(--gh-canvas);
 }
-.gh-raid-storage-panel h2 {
-  margin: 0 0 12px;
+.gh-raid-storage-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+  margin-bottom: 12px;
+}
+.gh-raid-storage-panel-head h2 {
+  margin: 0;
   font-size: var(--gh-text-lg);
   letter-spacing: var(--gh-tracking-tight);
+}
+.gh-raid-storage-panel-head h2 span {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  font-weight: 500;
+}
+.gh-raid-storage-panel-head > span {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.5;
 }
 .gh-raid-storage-hint {
   margin: 0 0 10px;
   color: var(--gh-text-tertiary);
   font-size: var(--gh-text-xs);
-  line-height: 1.6;
+  line-height: 1.65;
 }
 .gh-raid-storage-empty {
   display: flex;
@@ -240,16 +294,17 @@
   border-radius: 16px;
   text-align: center;
 }
-.gh-raid-storage-empty span { font-size: 40px; }
+.gh-raid-storage-empty > span { font-size: 40px; }
 .gh-raid-storage-empty p {
-  max-width: 44ch;
+  max-width: 46ch;
   margin: 0;
   color: var(--gh-text-secondary);
   font-size: var(--gh-text-sm);
-  line-height: 1.6;
+  line-height: 1.65;
 }
+.gh-raid-storage-empty-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 
-/* ---------- 稀有度徽章（仓库 / 交易行共用） ---------- */
+/* ---------- 稀有度徽章 ---------- */
 .gh-raid-storage-rarity {
   width: fit-content;
   padding: 1px 8px;
@@ -260,6 +315,7 @@
   background: var(--gh-canvas-inset);
   color: var(--gh-text-tertiary);
 }
+.gh-raid-storage-rarity--uncommon { background: rgba(48, 209, 88, 0.14); color: #1d7c3d; }
 .gh-raid-storage-rarity--rare { background: rgba(10, 132, 255, 0.12); color: #0069d1; }
 .gh-raid-storage-rarity--epic { background: rgba(191, 90, 242, 0.14); color: #8e3fc0; }
 .gh-raid-storage-rarity--legendary { background: rgba(255, 159, 10, 0.16); color: #a35a00; }
@@ -267,6 +323,7 @@
   background: linear-gradient(120deg, rgba(255, 214, 10, 0.22), rgba(255, 69, 58, 0.18));
   color: #b25000;
 }
+[data-theme='dark'] .gh-raid-storage-rarity--uncommon { color: #30d158; }
 [data-theme='dark'] .gh-raid-storage-rarity--rare { color: #64d2ff; }
 [data-theme='dark'] .gh-raid-storage-rarity--epic { color: #bf5af2; }
 [data-theme='dark'] .gh-raid-storage-rarity--legendary { color: #ffd60a; }
@@ -275,7 +332,7 @@
 /* ---------- 仓库物品卡 ---------- */
 .gh-raid-storage-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(244px, 1fr));
   gap: 12px;
 }
 .gh-raid-storage-item {
@@ -286,7 +343,10 @@
   border: 1px solid var(--gh-border-muted);
   border-radius: 14px;
   background: var(--gh-canvas-subtle);
+  transition: transform 0.18s ease, border-color 0.18s ease;
 }
+.gh-raid-storage-item:hover { transform: translateY(-1px); }
+.gh-raid-storage-item--uncommon { border-color: rgba(48, 209, 88, 0.35); }
 .gh-raid-storage-item--rare { border-color: rgba(10, 132, 255, 0.35); }
 .gh-raid-storage-item--epic { border-color: rgba(191, 90, 242, 0.4); }
 .gh-raid-storage-item--legendary {
@@ -309,9 +369,14 @@
   50% { box-shadow: 0 0 0 1px rgba(255, 214, 10, 0.5), 0 0 18px rgba(255, 69, 58, 0.3); }
 }
 .gh-raid-storage-item-head { display: flex; align-items: center; gap: 10px; }
-.gh-raid-storage-item-emoji { font-size: 26px; }
+.gh-raid-storage-item-emoji { font-size: 26px; line-height: 1; }
 .gh-raid-storage-item-titles { display: grid; gap: 3px; min-width: 0; flex: 1; }
-.gh-raid-storage-item-titles strong { font-size: var(--gh-text-sm); }
+.gh-raid-storage-item-titles strong {
+  font-size: var(--gh-text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .gh-raid-storage-item-value {
   color: var(--gh-text-secondary);
   font-size: var(--gh-text-xs);
@@ -327,180 +392,413 @@
   font-size: var(--gh-text-xs);
   font-variant-numeric: tabular-nums;
 }
-.gh-raid-storage-item-listed {
+.gh-raid-storage-item-tag {
   padding: 1px 8px;
   border-radius: 999px;
   background: var(--gh-accent-soft);
   color: var(--gh-accent);
+  font-size: 10px;
   font-weight: 700;
 }
 .gh-raid-storage-item-actions { display: flex; gap: 8px; margin-top: auto; }
 .gh-raid-storage-item-actions .gh-btn { flex: 1; }
 
-/* ---------- 交易行卡片 ---------- */
-.gh-raid-market-grid {
+/* ---------- 背包 / 胸挂 / 安全箱 ---------- */
+.gh-raid-storage-bag-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--gh-border);
+  border-radius: 18px;
+  background: var(--gh-canvas);
+}
+.gh-raid-storage-bag-head h2 {
+  margin: 0 0 4px;
+  font-size: var(--gh-text-lg);
+  letter-spacing: var(--gh-tracking-tight);
+}
+.gh-raid-storage-bag-head p {
+  max-width: 64ch;
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.65;
+}
+
+.gh-raid-storage-bag-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+.gh-raid-storage-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--gh-border);
+  border-radius: 18px;
+  background: var(--gh-canvas);
+}
+.gh-raid-storage-container--locked {
+  border-style: dashed;
+  border-color: var(--gh-border-strong);
+  background: var(--gh-canvas-subtle);
+}
+.gh-raid-storage-container-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.gh-raid-storage-container-head strong { font-size: var(--gh-text-md); }
+.gh-raid-storage-container-head .gh-raid-storage-capacity-text { margin-left: auto; }
+.gh-raid-storage-container-hint {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.55;
+}
+.gh-raid-storage-container-items { display: grid; gap: 8px; }
+.gh-raid-storage-container-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 26px 12px;
+  border: 1px dashed var(--gh-border-strong);
+  border-radius: 14px;
+  text-align: center;
+}
+.gh-raid-storage-container-empty > span { font-size: 32px; }
+.gh-raid-storage-container-empty p {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.55;
+}
+.gh-raid-storage-container-empty--plain {
+  display: block;
+  padding: 18px 12px;
+  color: var(--gh-text-tertiary);
+}
+
+.gh-raid-storage-bag-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 12px;
+  background: var(--gh-canvas-subtle);
+}
+.gh-raid-storage-bag-item--uncommon { border-color: rgba(48, 209, 88, 0.32); }
+.gh-raid-storage-bag-item--rare { border-color: rgba(10, 132, 255, 0.32); }
+.gh-raid-storage-bag-item--epic { border-color: rgba(191, 90, 242, 0.36); }
+.gh-raid-storage-bag-item--legendary { border-color: rgba(255, 159, 10, 0.45); }
+.gh-raid-storage-bag-item--mythic { border-color: rgba(255, 214, 10, 0.5); }
+.gh-raid-storage-bag-item-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.gh-raid-storage-bag-slot {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--gh-canvas-inset);
+  color: var(--gh-text-tertiary);
+  font-family: var(--gh-font-mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+.gh-raid-storage-bag-emoji { flex: none; font-size: 20px; line-height: 1; }
+.gh-raid-storage-bag-titles { display: grid; gap: 3px; min-width: 0; }
+.gh-raid-storage-bag-titles strong {
+  font-size: var(--gh-text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gh-raid-storage-bag-item-actions { display: flex; gap: 6px; }
+.gh-raid-storage-bag-item-actions .gh-btn { flex: 1; }
+
+/* ---------- 装备槽位 ---------- */
+.gh-raid-storage-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 12px;
 }
-.gh-raid-market-card {
+.gh-raid-storage-slot {
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 14px;
   border: 1px solid var(--gh-border-muted);
+  border-radius: 16px;
+  background: var(--gh-canvas-subtle);
+}
+.gh-raid-storage-slot-head { display: flex; align-items: center; gap: 6px; }
+.gh-raid-storage-slot-icon { font-size: 18px; line-height: 1; }
+.gh-raid-storage-slot-head strong { font-size: var(--gh-text-sm); }
+.gh-raid-storage-slot-tier {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--gh-canvas-inset);
+  color: var(--gh-text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.gh-raid-storage-slot-gear { display: flex; align-items: center; gap: 10px; }
+.gh-raid-storage-slot-emoji { font-size: 26px; line-height: 1; }
+.gh-raid-storage-slot-titles { display: grid; gap: 2px; min-width: 0; }
+.gh-raid-storage-slot-titles strong { font-size: var(--gh-text-sm); }
+.gh-raid-storage-slot-titles p {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.gh-raid-storage-durability { display: grid; gap: 4px; }
+.gh-raid-storage-durability > span {
+  color: var(--gh-text-tertiary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.gh-raid-storage-slot-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+.gh-raid-storage-slot-actions .gh-btn { flex: 1; }
+.gh-raid-storage-slot-hint {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: 10px;
+  line-height: 1.55;
+}
+.gh-raid-storage-slot-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 96px;
+  padding: 16px 10px;
+  border: 1px dashed var(--gh-border-strong);
+  border-radius: 12px;
+  text-align: center;
+}
+.gh-raid-storage-slot-empty p {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+}
+.gh-raid-storage-slot-empty span { color: var(--gh-text-tertiary); font-size: 10px; }
+
+/* ---------- 我的装备（按槽位分组） ---------- */
+.gh-raid-storage-gear-groups { display: grid; gap: 18px; }
+.gh-raid-storage-gear-group { display: grid; gap: 10px; }
+.gh-raid-storage-gear-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+}
+.gh-raid-storage-gear-group-title small {
+  margin-left: auto;
+  color: var(--gh-text-tertiary);
+  font-size: 10px;
+  font-weight: 500;
+}
+.gh-raid-storage-gear-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(244px, 1fr));
+  gap: 10px;
+}
+.gh-raid-storage-gear-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--gh-border-muted);
   border-radius: 14px;
   background: var(--gh-canvas-subtle);
 }
-.gh-raid-market-card--rare { border-color: rgba(10, 132, 255, 0.35); }
-.gh-raid-market-card--epic { border-color: rgba(191, 90, 242, 0.4); }
-.gh-raid-market-card--legendary {
-  border-color: rgba(255, 159, 10, 0.5);
-  background: color-mix(in srgb, #ff9f0a 7%, var(--gh-canvas-subtle));
-}
-.gh-raid-market-card--mythic {
-  border-color: rgba(255, 214, 10, 0.55);
-  background: linear-gradient(
-    120deg,
-    color-mix(in srgb, #ffd60a 10%, var(--gh-canvas-subtle)),
-    color-mix(in srgb, #ff453a 9%, var(--gh-canvas-subtle)),
-    color-mix(in srgb, #bf5af2 8%, var(--gh-canvas-subtle))
-  );
-  box-shadow: 0 0 0 1px rgba(255, 214, 10, 0.28), 0 0 12px rgba(255, 159, 10, 0.18);
-  animation: gh-raid-storage-mythic-glow 2.8s ease-in-out infinite;
-}
-.gh-raid-market-card-head { display: flex; align-items: center; gap: 10px; }
-.gh-raid-market-card-emoji { font-size: 26px; }
-.gh-raid-market-card-titles { display: grid; gap: 3px; min-width: 0; flex: 1; }
-.gh-raid-market-card-titles strong { font-size: var(--gh-text-sm); }
-.gh-raid-market-card-price {
-  color: var(--gh-text);
+.gh-raid-storage-gear-card--uncommon { border-color: rgba(48, 209, 88, 0.3); }
+.gh-raid-storage-gear-card--rare { border-color: rgba(10, 132, 255, 0.32); }
+.gh-raid-storage-gear-card--epic { border-color: rgba(191, 90, 242, 0.36); }
+.gh-raid-storage-gear-card--legendary { border-color: rgba(255, 159, 10, 0.45); }
+.gh-raid-storage-gear-card--mythic { border-color: rgba(255, 214, 10, 0.5); }
+.gh-raid-storage-gear-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.gh-raid-storage-gear-card-emoji { font-size: 22px; line-height: 1; }
+.gh-raid-storage-gear-card-titles { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.gh-raid-storage-gear-card-titles strong {
   font-size: var(--gh-text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gh-raid-storage-gear-card-price {
+  color: var(--gh-text-tertiary);
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.gh-raid-market-card-meta {
+.gh-raid-storage-gear-card-meta {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
   gap: 4px 10px;
   color: var(--gh-text-tertiary);
   font-size: var(--gh-text-xs);
   font-variant-numeric: tabular-nums;
 }
-.gh-raid-market-card-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: auto;
-}
-.gh-raid-market-card-foot > span { color: var(--gh-text-secondary); font-size: var(--gh-text-xs); }
+.gh-raid-storage-gear-card > .gh-btn { margin-top: auto; }
 
-/* ---------- 交易行行列表（我的挂单 / 成交记录） ---------- */
-.gh-raid-market-list { display: grid; gap: 6px; margin-bottom: 10px; }
-.gh-raid-market-row {
+/* ---------- 官方商店 ---------- */
+.gh-raid-storage-shop-summary {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 14px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: var(--gh-canvas-subtle);
-  color: var(--gh-text-secondary);
-  font-size: var(--gh-text-xs);
-}
-.gh-raid-market-row-name { font-weight: 600; color: var(--gh-text); }
-.gh-raid-market-row strong { color: var(--gh-text); font-variant-numeric: tabular-nums; }
-.gh-raid-market-row > span:last-of-type { margin-left: auto; text-align: right; }
-.gh-raid-market-row .gh-btn { margin-left: 0; }
-
-/* ---------- 对话框 ---------- */
-.gh-raid-storage-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 90;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: rgba(0, 0, 0, 0.4);
-  animation: gh-raid-storage-fade 0.2s ease;
-}
-.gh-raid-storage-modal-card {
-  width: min(440px, 100%);
-  max-height: min(80vh, 640px);
-  overflow: auto;
-  padding: 22px;
-  border: 1px solid var(--gh-border);
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--gh-accent) 26%, var(--gh-border));
   border-radius: 18px;
-  background: var(--gh-canvas);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
-  animation: gh-raid-storage-pop 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+  background: color-mix(in srgb, var(--gh-accent) 5%, var(--gh-canvas));
 }
-.gh-raid-storage-modal-card h2 { margin: 0 0 8px; font-size: var(--gh-text-lg); }
-.gh-raid-storage-modal-note {
-  margin: 0 0 12px;
-  color: var(--gh-text-tertiary);
+.gh-raid-storage-shop-summary strong { font-size: var(--gh-text-md); }
+.gh-raid-storage-shop-summary p {
+  max-width: 66ch;
+  margin: 4px 0 0;
+  color: var(--gh-text-secondary);
   font-size: var(--gh-text-xs);
   line-height: 1.6;
 }
-.gh-raid-storage-modal-preview {
+.gh-raid-storage-shop-groups { display: grid; gap: 16px; }
+.gh-raid-storage-shop-group { display: grid; gap: 10px; }
+.gh-raid-storage-shop-group-title {
+  margin: 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+}
+.gh-raid-storage-shop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 10px;
+}
+.gh-raid-storage-shop-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 14px;
+  background: var(--gh-canvas-subtle);
+}
+.gh-raid-storage-shop-card--uncommon { border-color: rgba(48, 209, 88, 0.3); }
+.gh-raid-storage-shop-card--rare { border-color: rgba(10, 132, 255, 0.32); }
+.gh-raid-storage-shop-card--epic { border-color: rgba(191, 90, 242, 0.36); }
+.gh-raid-storage-shop-card--legendary { border-color: rgba(255, 159, 10, 0.45); }
+.gh-raid-storage-shop-card--mythic { border-color: rgba(255, 214, 10, 0.5); }
+.gh-raid-storage-shop-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.gh-raid-storage-shop-card-emoji { font-size: 24px; line-height: 1; }
+.gh-raid-storage-shop-card-titles { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.gh-raid-storage-shop-card-titles strong {
+  font-size: var(--gh-text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gh-raid-storage-shop-card-price {
+  color: var(--gh-text);
+  font-size: var(--gh-text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.gh-raid-storage-shop-card-desc {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  line-height: 1.55;
+}
+.gh-raid-storage-shop-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.gh-raid-storage-shop-card > .gh-btn { margin-top: auto; }
+.gh-raid-storage-shop-buy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+}
+.gh-raid-storage-shop-buy > .gh-btn { flex: 1; min-width: 132px; }
+
+.gh-raid-storage-qty {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--gh-border);
+  border-radius: 9px;
+  background: var(--gh-canvas-inset);
+}
+.gh-raid-storage-qty-btn {
+  min-width: 30px;
+  height: 26px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--gh-text-secondary);
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.gh-raid-storage-qty-btn:hover:not(:disabled) { color: var(--gh-text); }
+.gh-raid-storage-qty-btn--active {
+  background: var(--gh-canvas);
+  color: var(--gh-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+.gh-raid-storage-qty-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+
+/* ---------- 卖出对话框 ---------- */
+.gh-raid-storage-field { display: grid; gap: 6px; margin-bottom: 12px; }
+.gh-raid-storage-field > span { color: var(--gh-text-secondary); font-size: var(--gh-text-sm); }
+.gh-raid-storage-field-row { display: flex; align-items: center; gap: 8px; }
+.gh-raid-storage-field-row .gh-input { flex: 1; width: auto; min-width: 0; }
+.gh-raid-storage-sell-preview {
   margin: 0 0 10px;
   color: var(--gh-text-secondary);
   font-size: var(--gh-text-sm);
 }
-.gh-raid-storage-modal-preview strong {
+.gh-raid-storage-sell-preview strong {
   color: var(--gh-success);
   font-size: var(--gh-text-md);
   font-variant-numeric: tabular-nums;
 }
-.gh-raid-storage-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 14px;
-}
-@keyframes gh-raid-storage-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes gh-raid-storage-pop {
-  from { opacity: 0; transform: scale(0.94) translateY(6px); }
-  to { opacity: 1; transform: none; }
-}
-
-.gh-raid-storage-field { display: grid; gap: 6px; margin-bottom: 12px; }
-.gh-raid-storage-field > span { color: var(--gh-text-secondary); font-size: var(--gh-text-sm); }
-.gh-raid-storage-field-row { display: flex; align-items: center; gap: 8px; }
-.gh-raid-storage-field-row .gh-input { flex: 1; }
 .gh-raid-storage-error-text { margin: 0 0 10px; color: var(--gh-danger); font-size: var(--gh-text-sm); }
-
-.gh-raid-storage-buy-summary {
-  display: grid;
-  gap: 8px;
-  margin: 0 0 12px;
-  padding: 12px;
-  border-radius: 12px;
-  background: var(--gh-canvas-subtle);
-}
-.gh-raid-storage-buy-summary div {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: var(--gh-text-sm);
-}
-.gh-raid-storage-buy-summary span { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
-.gh-raid-storage-buy-summary strong { font-variant-numeric: tabular-nums; }
 
 /* ---------- Toast ---------- */
 .gh-raid-storage-toast {
   position: fixed;
   left: 50%;
   bottom: 28px;
-  z-index: 95;
+  z-index: 1200;
   transform: translateX(-50%);
-  max-width: min(420px, calc(100vw - 32px));
+  max-width: min(460px, calc(100vw - 32px));
   padding: 11px 20px;
   border-radius: 999px;
   background: rgba(28, 28, 30, 0.92);
@@ -518,14 +816,33 @@
 }
 
 /* ---------- 响应式 ---------- */
+@media (min-width: 761px) and (max-width: 1079px) {
+  .gh-raid-storage-bag-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 1080px) {
+  .gh-raid-storage-bag-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 @media (max-width: 760px) {
   .gh-raid-storage-header { flex-direction: column; gap: 12px; }
   .gh-raid-storage-actions { justify-content: flex-start; }
-  .gh-raid-storage-tabs { width: 100%; }
-  .gh-raid-storage-tab { flex: 1; }
+  .gh-raid-storage-tabs { display: flex; width: 100%; }
+  .gh-raid-storage-tab { flex: 1 0 auto; justify-content: center; padding: 0 12px; }
+  .gh-raid-storage-bag-head { flex-direction: column; align-items: stretch; }
+  .gh-raid-storage-bag-head .gh-btn { width: 100%; }
   .gh-raid-storage-upgrade { flex-direction: column; align-items: stretch; }
   .gh-raid-storage-upgrade > .gh-btn { margin-left: 0; width: 100%; }
-  .gh-raid-market-row > span:last-of-type { margin-left: 0; text-align: left; }
+  .gh-raid-storage-panel-head { flex-direction: column; align-items: flex-start; }
+  .gh-raid-storage-grid,
+  .gh-raid-storage-gear-grid,
+  .gh-raid-storage-shop-grid,
+  .gh-raid-storage-slots { grid-template-columns: 1fr; }
+  .gh-raid-storage-shop-buy { flex-direction: column; align-items: stretch; }
+  .gh-raid-storage-shop-buy > .gh-btn { width: 100%; }
+  .gh-raid-storage-qty { justify-content: center; }
+  .gh-dialog-actions { flex-wrap: wrap; }
+  .gh-dialog-actions .gh-btn { flex: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

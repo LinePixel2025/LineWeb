@@ -1,102 +1,239 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../lib/api'
+import {
+  RAID_CONTAINER_LABELS,
+  RAID_ITEM_MAP,
+  RAID_RARITY_LABELS,
+  raidSellPrice,
+} from '../lib/raid/raidRun'
 import type {
-  RaidLootRarity,
-  RaidMarketListing,
-  RaidMarketView,
+  RaidBagItem,
+  RaidContainerKind,
+  RaidContainerView,
+  RaidDepositAllResult,
+  RaidGearInfo,
+  RaidGearSlot,
+  RaidOpenCacheResult,
   RaidRecycleResult,
+  RaidShopBuyResult,
+  RaidShopGear,
+  RaidShopItem,
+  RaidShopView,
   RaidStorageItem,
   RaidStorageView,
 } from '../types/petRaid'
 
-type Tab = 'storage' | 'market'
+/* ============================================================
+   常量
+   ============================================================ */
 
-const RARITY_LABELS: Record<RaidLootRarity, string> = {
-  common: '普通',
-  rare: '稀有',
-  epic: '史诗',
-  legendary: '传说',
-  mythic: '神话',
+type TabKey = 'storage' | 'bag' | 'gear' | 'shop'
+type SellFrom = 'warehouse' | RaidContainerKind
+
+const TABS: ReadonlyArray<{ key: TabKey; icon: string; label: string }> = [
+  { key: 'storage', icon: '📦', label: '仓库' },
+  { key: 'bag', icon: '🎒', label: '背包' },
+  { key: 'gear', icon: '🪖', label: '装备' },
+  { key: 'shop', icon: '🏪', label: '官方商店' },
+]
+
+const SLOT_ORDER: readonly RaidGearSlot[] = ['helmet', 'armor', 'boots', 'backpack', 'rig']
+
+const SLOT_LABELS: Record<RaidGearSlot, string> = {
+  helmet: '头盔',
+  armor: '护甲',
+  boots: '战靴',
+  backpack: '背包',
+  rig: '胸挂',
 }
 
-/** 挂单价格区间（与服务端 RAID_MARKET_PRICE_* 常量保持一致） */
-const PRICE_MIN_RATIO = 0.5
-const PRICE_MAX_RATIO = 1.5
-const PRICE_HARD_MAX = 1_000_000
+const SLOT_ICONS: Record<RaidGearSlot, string> = {
+  helmet: '🪖',
+  armor: '🦺',
+  boots: '🥾',
+  backpack: '🎒',
+  rig: '🎽',
+}
+
+const CONTAINER_ORDER: readonly RaidContainerKind[] = ['backpack', 'rig', 'safe']
+
+const CONTAINER_HINTS: Record<RaidContainerKind, string> = {
+  backpack: '任意物品都能塞进背包，格数由已装备的背包决定。',
+  rig: '胸挂只能放消耗品，格数由已装备的胸挂决定。',
+  safe: '安全箱里的物品阵亡也会保留，格数随仓库等级提升。',
+}
+
+/** 仓库容量使用率超过该比例时提示清理 */
+const CAPACITY_WARNING_RATIO = 0.8
+
+/** 商店快捷购买数量 */
+const SHOP_AMOUNTS: readonly number[] = [1, 5, 10]
+
+const ITEM_KIND_LABELS: Record<string, string> = {
+  material: '材料',
+  consumable: '消耗品',
+  treasure: '珍宝',
+  gear_cache: '装备箱',
+  skill_cache: '技能卷轴',
+}
+
+const REPAIR_KIT_KEYS: Partial<Record<RaidGearSlot, string>> = {
+  helmet: 'helmet_repair',
+  armor: 'armor_repair',
+}
+
+interface ToastState {
+  tone: 'success' | 'danger'
+  text: string
+}
+
+interface SellTarget {
+  from: SellFrom
+  slotIndex?: number
+  itemKey: string
+  name: string
+  emoji: string
+  available: number
+  sellUnit: number
+}
+
+/* ============================================================
+   纯函数
+   ============================================================ */
 
 function errMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback
 }
 
-function formatTime(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return '--'
-  return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+function rarityLabel(rarity: string): string {
+  return RAID_RARITY_LABELS[rarity as keyof typeof RAID_RARITY_LABELS] ?? '普通'
 }
 
-/** 挂单价区间：目录总价值（value × amount）的 50%–150%，含端点 */
-function priceBounds(value: number, amount: number): { min: number; max: number } {
-  const total = Math.max(0, value) * Math.max(0, amount)
-  const min = Math.max(1, Math.floor(total * PRICE_MIN_RATIO))
-  return { min, max: Math.max(min, Math.ceil(total * PRICE_MAX_RATIO)) }
+function itemKindLabel(kind: string): string {
+  return ITEM_KIND_LABELS[kind] ?? '物品'
 }
 
-/** 卖家手续费：ceil(price × 5%)，最低 1（与服务端 raidMarketFee 一致） */
-function marketFee(price: number): number {
-  if (price <= 0) return 0
-  return Math.max(1, Math.ceil(price * 0.05))
+/** 装备箱 / 技能卷轴可以在仓库里直接开启 */
+function isOpenable(item: { kind: string }): boolean {
+  return item.kind === 'gear_cache' || item.kind === 'skill_cache'
 }
 
-interface Toast {
-  tone: 'success' | 'danger'
-  text: string
+function repairKitFor(slot: RaidGearSlot): { key: string; label: string; amount: number } | null {
+  const key = REPAIR_KIT_KEYS[slot]
+  if (!key) return null
+  const def = RAID_ITEM_MAP.get(key)
+  if (!def) return null
+  return { key, label: def.name, amount: def.repairAmount ?? 0 }
 }
+
+function countItem(items: readonly RaidStorageItem[], itemKey: string): number {
+  return items.find((item) => item.itemKey === itemKey)?.amount ?? 0
+}
+
+function containerPct(view: RaidContainerView): number {
+  if (view.capacity <= 0) return 0
+  return Math.min(100, Math.round((view.usedSlots / view.capacity) * 100))
+}
+
+function durabilityPct(gear: RaidGearInfo): number {
+  if (gear.maxDurability <= 0) return 0
+  return Math.max(0, Math.min(100, Math.round((gear.durability / gear.maxDurability) * 100)))
+}
+
+/** 装备属性摘要（槽位不同，展示口径不同） */
+function gearStatText(gear: RaidGearInfo): string {
+  if (gear.slot === 'helmet' || gear.slot === 'armor') {
+    return `减伤 ${gear.defense}% · 耐久 ${gear.durability}/${gear.maxDurability}`
+  }
+  if (gear.slot === 'boots') return `移动速度 +${gear.speedBonus}%`
+  return `${gear.slots} 格容量`
+}
+
+function shopGearStatText(gear: RaidShopGear): string {
+  if (gear.slot === 'helmet' || gear.slot === 'armor') {
+    return `减伤 ${gear.defense}% · 耐久上限 ${gear.maxDurability}`
+  }
+  if (gear.slot === 'boots') return `移动速度 +${gear.speedBonus}%`
+  return `${gear.slots} 格容量`
+}
+
+function sellFromLabel(from: SellFrom): string {
+  return from === 'warehouse' ? '仓库' : RAID_CONTAINER_LABELS[from]
+}
+
+/* ============================================================
+   页面
+   ============================================================ */
 
 /**
- * 搜打撤仓库 + 交易行（/pets/raid/storage）。
- * 仓库：容量 / 保险箱 / 升级 / 回收材料折积分；交易行：仓库物品挂单买卖。
+ * 搜打撤仓库 / 背包 / 装备 / 官方商店（/pets/raid/storage）。
+ *
+ * 数据口径：
+ *   - 仓库页只负责「入仓 / 回收 / 升级」，交易行已删除，回收即卖给系统；
+ *   - 背包页展示撤离后留在背包 / 胸挂 / 安全箱里的物品，存入仓库或直接卖出；
+ *   - 装备页负责穿戴 / 卸下 / 维修，仓库里的装备箱与技能卷轴在仓库页开启；
+ *   - 商店只出售 1–3 级装备与补给，4–6 级装备只能靠搜打撤掉落。
  */
 export default function RaidStoragePage() {
-  const [tab, setTab] = useState<Tab>('storage')
+  const [tab, setTab] = useState<TabKey>('storage')
   const [storage, setStorage] = useState<RaidStorageView | null>(null)
-  const [market, setMarket] = useState<RaidMarketView | null>(null)
+  const [shop, setShop] = useState<RaidShopView | null>(null)
+  const [points, setPoints] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [shopLoading, setShopLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [shopError, setShopError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [toast, setToast] = useState<Toast | null>(null)
+  const busyRef = useRef(false)
+  const [toast, setToast] = useState<ToastState | null>(null)
 
-  // 回收对话框
-  const [recycleItem, setRecycleItem] = useState<RaidStorageItem | null>(null)
-  const [recycleAmount, setRecycleAmount] = useState('1')
-  const [recycleError, setRecycleError] = useState<string | null>(null)
-  // 上架对话框
-  const [listItem, setListItem] = useState<RaidStorageItem | null>(null)
-  const [listAmount, setListAmount] = useState('1')
-  const [listPrice, setListPrice] = useState('')
-  const [listError, setListError] = useState<string | null>(null)
-  // 购买确认对话框
-  const [buyListing, setBuyListing] = useState<RaidMarketListing | null>(null)
-  const [buyError, setBuyError] = useState<string | null>(null)
+  // 卖出 / 回收对话框
+  const [sellTarget, setSellTarget] = useState<SellTarget | null>(null)
+  const [sellAmount, setSellAmount] = useState('1')
+  const [sellError, setSellError] = useState<string | null>(null)
 
-  const load = useCallback(async (silent = false) => {
+  // 商店物品的快捷购买数量（按物品 key 记忆）
+  const [shopAmounts, setShopAmounts] = useState<Record<string, number>>({})
+
+  const applyStorage = useCallback((view: RaidStorageView) => {
+    setStorage(view)
+    setPoints(view.points)
+  }, [])
+
+  const loadStorage = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
-      const [storageData, marketData] = await Promise.all([
-        api.get<RaidStorageView>('/pets/raid/storage'),
-        api.get<RaidMarketView>('/pets/raid/market'),
-      ])
-      setStorage(storageData)
-      setMarket(marketData)
-      setError(null)
+      const view = await api.get<RaidStorageView>('/pets/raid/storage')
+      setStorage(view)
+      setPoints(view.points)
+      if (!silent) setError(null)
     } catch (err) {
-      setError(errMessage(err, '仓库加载失败'))
+      // 静默刷新失败时保留旧数据，避免把已经加载好的页面打回错误页
+      if (!silent) setError(errMessage(err, '仓库加载失败'))
     } finally {
       if (!silent) setLoading(false)
     }
   }, [])
 
-  useEffect(() => { void load() }, [load])
+  const loadShop = useCallback(async () => {
+    setShopLoading(true)
+    try {
+      const view = await api.get<RaidShopView>('/pets/raid/shop')
+      setShop(view)
+      setPoints(view.points)
+      setShopError(null)
+    } catch (err) {
+      setShopError(errMessage(err, '官方商店加载失败'))
+    } finally {
+      setShopLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadStorage()
+    void loadShop()
+  }, [loadStorage, loadShop])
 
   useEffect(() => {
     if (!toast) return undefined
@@ -104,158 +241,239 @@ export default function RaidStoragePage() {
     return () => window.clearTimeout(timer)
   }, [toast])
 
-  const balance = storage?.balance ?? market?.balance ?? 0
+  // 卖出对话框支持 Esc 关闭（请求进行中不打断）
+  useEffect(() => {
+    if (!sellTarget) return undefined
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !busyRef.current) setSellTarget(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [sellTarget])
 
-  const run = async (fn: () => Promise<unknown>, successText: string) => {
-    if (busy) return
+  /** 商店数据静默刷新：开启装备箱后可能新增装备，需要同步「已拥有」标记 */
+  const refreshShop = useCallback(async () => {
+    try {
+      const view = await api.get<RaidShopView>('/pets/raid/shop')
+      setShop(view)
+      setPoints(view.points)
+      setShopError(null)
+    } catch {
+      // 商店刷新失败不阻塞主流程；用户切到商店 Tab 时仍可手动重试
+    }
+  }, [])
+
+  /** 统一动作入口：请求期间锁住所有按钮，成功 / 失败都用 toast 反馈 */
+  const runAction = async (fallback: string, action: () => Promise<string | null>): Promise<void> => {
+    if (busyRef.current) return
+    busyRef.current = true
     setBusy(true)
     try {
-      await fn()
-      await load(true)
-      setToast({ tone: 'success', text: successText })
+      const message = await action()
+      if (message) setToast({ tone: 'success', text: message })
     } catch (err) {
-      setToast({ tone: 'danger', text: errMessage(err, '操作失败') })
+      setToast({ tone: 'danger', text: errMessage(err, fallback) })
     } finally {
+      busyRef.current = false
       setBusy(false)
     }
   }
 
-  /* ---------- 回收 ---------- */
+  /* ---------- 仓库：回收 / 升级 / 开箱 ---------- */
 
-  const openRecycle = (item: RaidStorageItem) => {
-    setRecycleItem(item)
-    setRecycleAmount(String(item.freeAmount))
-    setRecycleError(null)
+  const openSellFromWarehouse = (item: RaidStorageItem) => {
+    setSellTarget({
+      from: 'warehouse',
+      itemKey: item.itemKey,
+      name: item.name,
+      emoji: item.emoji,
+      available: item.amount,
+      sellUnit: item.sellUnit,
+    })
+    setSellAmount(String(item.amount))
+    setSellError(null)
   }
 
-  const recycleCount = Math.max(0, Math.floor(Number(recycleAmount) || 0))
-  const recyclePoints = recycleItem ? recycleItem.value * recycleCount : 0
+  const openSellFromBag = (container: RaidContainerKind, item: RaidBagItem) => {
+    setSellTarget({
+      from: container,
+      slotIndex: item.slotIndex,
+      itemKey: item.itemKey,
+      name: item.name,
+      emoji: item.emoji,
+      available: item.amount,
+      sellUnit: item.sellUnit,
+    })
+    setSellAmount(String(item.amount))
+    setSellError(null)
+  }
 
-  const submitRecycle = async () => {
-    if (!recycleItem || busy) return
-    const amount = Number.parseInt(recycleAmount, 10)
-    if (!Number.isInteger(amount) || amount < 1) {
-      setRecycleError('回收数量必须是正整数')
-      return
-    }
-    if (amount > recycleItem.freeAmount) {
-      setRecycleError(`可回收的只剩 ${recycleItem.freeAmount} 件`)
-      return
-    }
-    setBusy(true)
-    try {
-      const result = await api.post<RaidRecycleResult>('/raid/storage/recycle', {
-        itemKey: recycleItem.itemKey,
-        amount,
+  /** 从仓库取出 1 件到背包 / 胸挂（消耗品才能进胸挂） */
+  const withdrawToContainer = (item: RaidStorageItem, container: RaidContainerKind): void => {
+    void runAction('取出失败', async () => {
+      const view = await api.post<RaidStorageView>('/pets/raid/storage/withdraw', {
+        container,
+        itemKey: item.itemKey,
+        amount: 1,
       })
-      setRecycleItem(null)
-      await load(true)
-      setToast({ tone: 'success', text: `回收成功 +${result.points} 积分` })
-    } catch (err) {
-      setRecycleError(errMessage(err, '回收失败'))
-    } finally {
-      setBusy(false)
+      applyStorage(view)
+      return `已取出 1 件${item.name}到${RAID_CONTAINER_LABELS[container]}`
+    })
+  }
+
+  const submitSell = async () => {
+    const target = sellTarget
+    if (!target || busyRef.current) return
+    const amount = Number(sellAmount)
+    if (!Number.isInteger(amount) || amount < 1) {
+      setSellError('卖出数量必须是正整数')
+      return
     }
-  }
-
-  /* ---------- 上架 ---------- */
-
-  const openList = (item: RaidStorageItem) => {
-    setListItem(item)
-    setListAmount('1')
-    setListPrice(String(priceBounds(item.value, 1).min))
-    setListError(null)
-  }
-
-  const listCount = Math.max(0, Math.floor(Number(listAmount) || 0))
-  const listBounds = listItem ? priceBounds(listItem.value, listCount) : { min: 0, max: 0 }
-  const listPriceNum = Number.parseInt(listPrice, 10)
-  const listFee = Number.isInteger(listPriceNum) && listPriceNum > 0 ? marketFee(listPriceNum) : 0
-
-  const changeListAmount = (raw: string) => {
-    setListAmount(raw)
-    if (listItem) {
-      const amount = Number.parseInt(raw, 10)
-      if (Number.isInteger(amount) && amount >= 1 && amount <= listItem.freeAmount) {
-        setListPrice(String(priceBounds(listItem.value, amount).min))
+    if (amount > target.available) {
+      setSellError(`最多只能卖出 ${target.available} 件`)
+      return
+    }
+    busyRef.current = true
+    setBusy(true)
+    try {
+      const body: { from: SellFrom; itemKey: string; amount: number; slotIndex?: number } = {
+        from: target.from,
+        itemKey: target.itemKey,
+        amount,
       }
-    }
-  }
-
-  const submitList = async () => {
-    if (!listItem || busy) return
-    const amount = Number.parseInt(listAmount, 10)
-    const price = Number.parseInt(listPrice, 10)
-    if (!Number.isInteger(amount) || amount < 1) {
-      setListError('数量必须是正整数')
-      return
-    }
-    if (amount > listItem.freeAmount) {
-      setListError(`可上架的只剩 ${listItem.freeAmount} 件`)
-      return
-    }
-    if (!Number.isInteger(price) || price < 1) {
-      setListError('价格必须是大于 0 的整数')
-      return
-    }
-    if (price > PRICE_HARD_MAX) {
-      setListError(`价格不能超过 ${PRICE_HARD_MAX.toLocaleString('zh-CN')}`)
-      return
-    }
-    const bounds = priceBounds(listItem.value, amount)
-    if (price < bounds.min || price > bounds.max) {
-      setListError(`价格需在 ${bounds.min}–${bounds.max} 积分之间（目录价值 ${listItem.value * amount} 的 50%–150%）`)
-      return
-    }
-    setBusy(true)
-    try {
-      await api.post<RaidMarketListing>('/raid/market/list', {
-        itemKey: listItem.itemKey,
-        amount,
-        price,
+      if (target.from !== 'warehouse' && target.slotIndex !== undefined) {
+        body.slotIndex = target.slotIndex
+      }
+      const result = await api.post<RaidRecycleResult>('/pets/raid/storage/recycle', body)
+      setStorage(result.view)
+      setPoints(result.balance)
+      setSellTarget(null)
+      setSellError(null)
+      setToast({
+        tone: 'success',
+        text: `已卖出 ${target.emoji} ${target.name} ×${amount}，+${result.points.toLocaleString('zh-CN')} 积分`,
       })
-      setListItem(null)
-      await load(true)
-      setToast({ tone: 'success', text: '已上架交易行' })
     } catch (err) {
-      setListError(errMessage(err, '挂单失败'))
+      setSellError(errMessage(err, '卖出失败'))
     } finally {
+      busyRef.current = false
       setBusy(false)
     }
   }
 
-  /* ---------- 购买 / 下架 ---------- */
-
-  const openBuy = (listing: RaidMarketListing) => {
-    setBuyListing(listing)
-    setBuyError(null)
+  const upgradeStorage = async () => {
+    await runAction('仓库升级失败', async () => {
+      const view = await api.post<RaidStorageView>('/pets/raid/storage/upgrade', {})
+      applyStorage(view)
+      return `仓库已升级到 Lv.${view.level}（容量 ${view.capacity} 件）`
+    })
   }
 
-  const submitBuy = async () => {
-    if (!buyListing || busy) return
-    setBusy(true)
-    try {
-      await api.post(`/raid/market/${buyListing.id}/buy`, {})
-      setBuyListing(null)
-      await load(true)
-      setToast({ tone: 'success', text: '购买成功' })
-    } catch (err) {
-      setBuyError(errMessage(err, '购买失败'))
-    } finally {
-      setBusy(false)
+  const openCache = async (item: RaidStorageItem) => {
+    await runAction('开启失败', async () => {
+      const result = await api.post<RaidOpenCacheResult>('/pets/raid/gear/open-cache', {
+        itemKey: item.itemKey,
+      })
+      applyStorage(result.view)
+      await refreshShop()
+      const kind = result.type === 'gear' ? '装备' : '技能'
+      return result.duplicatePoints > 0
+        ? `开启「${item.name}」：重复获得 ${result.emoji} ${result.name}，折算 ${result.duplicatePoints.toLocaleString('zh-CN')} 积分`
+        : `开启「${item.name}」：获得${kind} ${result.emoji} ${result.name}`
+    })
+  }
+
+  /* ---------- 背包：存入仓库 ---------- */
+
+  const depositSlot = async (container: RaidContainerKind, item: RaidBagItem) => {
+    await runAction('存入仓库失败', async () => {
+      const view = await api.post<RaidStorageView>('/pets/raid/storage/deposit', {
+        container,
+        slotIndex: item.slotIndex,
+        amount: item.amount,
+      })
+      applyStorage(view)
+      return `已存入 ${item.emoji} ${item.name} ×${item.amount}`
+    })
+  }
+
+  const depositAll = async () => {
+    await runAction('一键存入失败', async () => {
+      const result = await api.post<RaidDepositAllResult>('/pets/raid/storage/deposit-all', {})
+      applyStorage(result)
+      if (result.remainingUnits > 0) {
+        return `已存入 ${result.movedUnits} 件，还有 ${result.remainingUnits} 件没装下（仓库已满）`
+      }
+      return `已全部存入仓库（${result.movedUnits} 件）`
+    })
+  }
+
+  /* ---------- 装备：穿戴 / 卸下 / 维修 ---------- */
+
+  const equipGear = async (slot: RaidGearSlot, gearKey: string | null, name: string) => {
+    await runAction('装备操作失败', async () => {
+      const view = await api.post<RaidStorageView>('/pets/raid/gear/equip', { slot, gearKey })
+      applyStorage(view)
+      return gearKey ? `已穿戴 ${name}` : `已卸下 ${name}`
+    })
+  }
+
+  const repairGear = async (gear: RaidGearInfo) => {
+    await runAction('维修失败', async () => {
+      const view = await api.post<RaidStorageView>('/pets/raid/gear/repair', {
+        gearKey: gear.gearKey,
+      })
+      applyStorage(view)
+      const next = view.gear.find((row) => row.gearKey === gear.gearKey)
+      return next
+        ? `维修完成：${gear.name} 耐久 ${gear.durability} → ${next.durability} / ${next.maxDurability}`
+        : `维修完成：${gear.name}`
+    })
+  }
+
+  /* ---------- 商店：购买 ---------- */
+
+  const chooseShopAmount = (itemKey: string, amount: number) => {
+    if (!Number.isInteger(amount) || amount < 1) return
+    setShopAmounts((prev) => ({ ...prev, [itemKey]: amount }))
+  }
+
+  const buyGear = async (gear: RaidShopGear) => {
+    await runAction('购买失败', async () => {
+      const result = await api.post<RaidShopBuyResult>('/pets/raid/shop/buy', {
+        kind: 'gear',
+        key: gear.key,
+      })
+      setShop(result.view)
+      setPoints(result.balance)
+      // 新装备会出现在仓库的装备列表里，静默同步一次
+      await loadStorage(true)
+      return `已购买 ${result.emoji} ${result.name}（-${result.spent.toLocaleString('zh-CN')} 积分）`
+    })
+  }
+
+  const buyItem = async (item: RaidShopItem, amount: number) => {
+    if (busyRef.current) return
+    if (!Number.isInteger(amount) || amount < 1) {
+      setToast({ tone: 'danger', text: '购买数量必须是正整数' })
+      return
     }
-  }
-
-  const delist = (listing: RaidMarketListing) => {
-    if (!window.confirm(`确定下架「${listing.itemName}×${listing.amount}」？挂单会重新回到仓库。`)) return
-    void run(() => api.delete(`/raid/market/${listing.id}`), '已下架')
-  }
-
-  const submitUpgrade = () => {
-    void run(async () => {
-      const next = await api.post<RaidStorageView>('/raid/storage/upgrade', {})
-      setStorage(next)
-    }, `仓库已升级到 Lv.${storage?.nextUpgrade?.level ?? '?'}`)
+    const total = item.price * amount
+    if (total > points) {
+      setToast({ tone: 'danger', text: `积分不足，需要 ${total.toLocaleString('zh-CN')} 积分` })
+      return
+    }
+    await runAction('购买失败', async () => {
+      const result = await api.post<RaidShopBuyResult>('/pets/raid/shop/buy', {
+        kind: 'item',
+        key: item.key,
+        amount,
+      })
+      setShop(result.view)
+      setPoints(result.balance)
+      await loadStorage(true)
+      return `已购买 ${result.emoji} ${result.name} ×${result.amount}（-${result.spent.toLocaleString('zh-CN')} 积分）`
+    })
   }
 
   /* ---------- 渲染 ---------- */
@@ -271,7 +489,7 @@ export default function RaidStoragePage() {
     )
   }
 
-  if (error || !storage || !market) {
+  if (!storage) {
     return (
       <div className="gh-page-container gh-raid-storage-page">
         <div className="gh-raid-storage-error">
@@ -279,7 +497,7 @@ export default function RaidStoragePage() {
           <p>{error ?? '请稍后再试'}</p>
           <div className="gh-raid-storage-error-actions">
             <Link className="gh-btn gh-btn--primary gh-btn--md" to="/pets/raid">返回搜打撤</Link>
-            <button type="button" className="gh-btn gh-btn--secondary gh-btn--md" onClick={() => void load()}>
+            <button type="button" className="gh-btn gh-btn--secondary gh-btn--md" onClick={() => void loadStorage()}>
               再试一次
             </button>
           </div>
@@ -288,77 +506,131 @@ export default function RaidStoragePage() {
     )
   }
 
-  const usedPct = Math.min(100, (storage.used / Math.max(1, storage.capacity)) * 100)
-  const capacityTight = storage.used / Math.max(1, storage.capacity) > 0.8
-  const next = storage.nextUpgrade
+  const usedPct = Math.min(100, Math.round((storage.used / Math.max(1, storage.capacity)) * 100))
+  const capacityWarning = storage.used / Math.max(1, storage.capacity) > CAPACITY_WARNING_RATIO
+  const totalContainerUnits =
+    storage.containers.backpack.usedUnits +
+    storage.containers.rig.usedUnits +
+    storage.containers.safe.usedUnits
+  const upgrade = storage.upgrade
+
+  const sellCount = Number(sellAmount)
+  const sellValid = Boolean(
+    sellTarget &&
+      Number.isInteger(sellCount) &&
+      sellCount >= 1 &&
+      sellCount <= sellTarget.available,
+  )
+  const sellEstimate =
+    sellTarget && sellValid ? raidSellPrice(sellTarget.itemKey, sellCount) : 0
+
+  // 「我的装备」按槽位分组，只展示未穿戴的备用件
+  const gearGroups = SLOT_ORDER
+    .map((slot) => ({
+      slot,
+      gears: storage.gear.filter((gear) => gear.slot === slot && !gear.equipped),
+    }))
+    .filter((group) => group.gears.length > 0)
+
+  const shopGearGroups = shop
+    ? SLOT_ORDER
+      .map((slot) => ({
+        slot,
+        gears: shop.gear.filter((gear) => gear.slot === slot && gear.tier <= 3),
+      }))
+      .filter((group) => group.gears.length > 0)
+    : []
 
   return (
     <div className="gh-page-container gh-raid-storage-page">
-      {toast && <div className={`gh-raid-storage-toast gh-raid-storage-toast--${toast.tone}`} role="status">{toast.text}</div>}
+      {toast && (
+        <div
+          className={`gh-raid-storage-toast gh-raid-storage-toast--${toast.tone}`}
+          role="status"
+          aria-live="polite"
+        >
+          {toast.text}
+        </div>
+      )}
 
       <header className="gh-raid-storage-header">
         <div>
           <p className="gh-raid-storage-eyebrow">RAID WAREHOUSE</p>
           <h1>📦 搜打撤仓库</h1>
-          <p className="gh-raid-storage-sub">撤离带出的材料入仓保管：回收折积分、升级扩容，或挂到交易行与其他玩家交易。</p>
+          <p className="gh-raid-storage-sub">
+            撤离带出的物资先留在背包、胸挂与安全箱里，存入仓库后可回收折积分、升级扩容；
+            官方商店补齐装备与补给，装备箱和技能卷轴直接在仓库里开启。
+          </p>
         </div>
         <div className="gh-raid-storage-actions">
-          <span className="gh-raid-storage-points" title="当前积分">🪙 {balance.toLocaleString('zh-CN')}</span>
+          <span className="gh-raid-storage-points" title="当前积分">
+            🪙 {points.toLocaleString('zh-CN')}
+          </span>
           <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/raid">← 返回搜打撤</Link>
         </div>
       </header>
 
-      <div className="gh-raid-storage-tabs" role="tablist" aria-label="仓库与交易行">
-        {([
-          ['storage', '📦 仓库'],
-          ['market', '🏪 交易行'],
-        ] as const).map(([key, label]) => (
+      <div className="gh-raid-storage-tabs" role="tablist" aria-label="仓库、背包、装备与官方商店">
+        {TABS.map((entry) => (
           <button
-            key={key}
+            key={entry.key}
             type="button"
             role="tab"
-            aria-selected={tab === key}
-            className={`gh-raid-storage-tab${tab === key ? ' gh-raid-storage-tab--active' : ''}`}
-            onClick={() => setTab(key)}
+            aria-selected={tab === entry.key}
+            className={`gh-raid-storage-tab${tab === entry.key ? ' gh-raid-storage-tab--active' : ''}`}
+            onClick={() => setTab(entry.key)}
           >
-            {label}
+            <span aria-hidden>{entry.icon}</span> {entry.label}
           </button>
         ))}
       </div>
 
+      {/* ==================== 仓库 ==================== */}
       {tab === 'storage' && (
         <div className="gh-raid-storage-body">
-          <section className="gh-raid-storage-status">
+          <section className="gh-raid-storage-status" aria-label="仓库容量">
             <div className="gh-raid-storage-status-head">
               <span className="gh-raid-storage-level">Lv.{storage.level}</span>
               <strong>仓库容量</strong>
               <span className="gh-raid-storage-capacity-text">
-                {storage.used} / {storage.capacity} 格 · 空闲 {storage.free}
+                {storage.used} / {storage.capacity} 件 · 空闲 {storage.free}
               </span>
             </div>
-            <div className="gh-raid-storage-bar">
+            <div
+              className="gh-raid-storage-bar"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={storage.capacity}
+              aria-valuenow={storage.used}
+              aria-label="仓库容量使用率"
+            >
               <span
-                className={capacityTight ? 'gh-raid-storage-bar-fill--warning' : undefined}
+                className={capacityWarning ? 'gh-raid-storage-bar-fill--warning' : undefined}
                 style={{ width: `${usedPct}%` }}
               />
             </div>
             <p className="gh-raid-storage-safe-note">
-              🛡 对局中可存放 {storage.safeCapacity} 件保险箱物品，阵亡也保留
+              🛡 安全箱 {storage.safeCapacity} 格（随仓库等级提升），阵亡也能保住里面的物品。
             </p>
+            {capacityWarning && (
+              <p className="gh-raid-storage-warn">
+                容量已用 {usedPct}%，建议先回收低价值材料，或升级仓库扩容。
+              </p>
+            )}
           </section>
 
-          {next ? (
+          {upgrade ? (
             <section className="gh-raid-storage-upgrade">
               <div className="gh-raid-storage-upgrade-head">
-                <strong>升级到 Lv.{next.level}</strong>
-                <span>容量 {next.capacity} 格 · 保险箱 {next.safeCapacity} 件</span>
+                <strong>升级到 Lv.{upgrade.level}</strong>
+                <span>容量 {upgrade.capacity} 件 · 安全箱 {upgrade.safeCapacity} 格</span>
               </div>
               <div className="gh-raid-storage-reqs">
-                <span className={next.pointsOk ? 'gh-raid-storage-req--ok' : 'gh-raid-storage-req--lack'}>
-                  🪙 积分 {next.upgradePoints.toLocaleString('zh-CN')}
-                  <small>余额 {balance.toLocaleString('zh-CN')}</small>
+                <span className={upgrade.pointsOk ? 'gh-raid-storage-req--ok' : 'gh-raid-storage-req--lack'}>
+                  🪙 {upgrade.upgradePoints.toLocaleString('zh-CN')} 积分
+                  <small>余额 {points.toLocaleString('zh-CN')}</small>
                 </span>
-                {next.items.map((req) => (
+                {upgrade.items.map((req) => (
                   <span
                     key={req.itemKey}
                     className={req.have >= req.count ? 'gh-raid-storage-req--ok' : 'gh-raid-storage-req--lack'}
@@ -370,63 +642,104 @@ export default function RaidStoragePage() {
               <button
                 type="button"
                 className="gh-btn gh-btn--primary gh-btn--sm"
-                disabled={busy || !next.pointsOk || !next.materialsOk}
-                onClick={submitUpgrade}
+                disabled={busy || !upgrade.pointsOk || !upgrade.materialsOk}
+                onClick={() => void upgradeStorage()}
               >
-                {busy ? '升级中…' : next.pointsOk && next.materialsOk ? `升级（${next.upgradePoints} 积分 + 材料）` : '条件不足'}
+                {busy
+                  ? '升级中…'
+                  : upgrade.pointsOk && upgrade.materialsOk
+                    ? '升级仓库'
+                    : '积分 / 材料不足'}
               </button>
             </section>
           ) : (
             <section className="gh-raid-storage-upgrade gh-raid-storage-upgrade--max">
               <strong>🏆 仓库已满级</strong>
-              <span>Lv.{storage.level} · 容量 {storage.capacity} 格 · 保险箱 {storage.safeCapacity} 件</span>
+              <span>Lv.{storage.level} · 容量 {storage.capacity} 件 · 安全箱 {storage.safeCapacity} 格</span>
             </section>
           )}
 
           <section className="gh-raid-storage-panel">
-            <h2>仓库物品 {storage.items.length} 种</h2>
+            <div className="gh-raid-storage-panel-head">
+              <h2>仓库物品 <span>{storage.items.length} 种</span></h2>
+              <span>回收价：材料 / 珍宝 100%、消耗品 60%、装备箱 / 技能卷轴 70%</span>
+            </div>
             {storage.items.length === 0 ? (
               <div className="gh-raid-storage-empty">
                 <span aria-hidden>🧰</span>
-                <p>仓库还是空的。去搜打撤带回一些材料，或从交易行买点别人的存货吧。</p>
-                <Link className="gh-btn gh-btn--primary gh-btn--sm" to="/pets/raid">🎯 去搜打撤</Link>
+                <p>仓库还是空的。去搜打撤带点物资回来，或在官方商店买些补给。</p>
+                <div className="gh-raid-storage-empty-actions">
+                  <Link className="gh-btn gh-btn--primary gh-btn--sm" to="/pets/raid">🎯 去搜打撤</Link>
+                  <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm" onClick={() => setTab('shop')}>
+                    🏪 逛官方商店
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="gh-raid-storage-grid">
                 {storage.items.map((item) => (
-                  <article key={item.itemKey} className={`gh-raid-storage-item gh-raid-storage-item--${item.rarity}`}>
+                  <article
+                    key={item.itemKey}
+                    className={`gh-raid-storage-item gh-raid-storage-item--${item.rarity}`}
+                    title={item.description}
+                  >
                     <div className="gh-raid-storage-item-head">
                       <span className="gh-raid-storage-item-emoji" aria-hidden>{item.emoji}</span>
                       <div className="gh-raid-storage-item-titles">
                         <strong>{item.name}</strong>
                         <span className={`gh-raid-storage-rarity gh-raid-storage-rarity--${item.rarity}`}>
-                          {RARITY_LABELS[item.rarity]}
+                          {rarityLabel(item.rarity)}
                         </span>
                       </div>
-                      <b className="gh-raid-storage-item-value">{item.value} 积分/件</b>
+                      <b className="gh-raid-storage-item-value">
+                        {item.sellUnit.toLocaleString('zh-CN')} 积分/件
+                      </b>
                     </div>
                     <div className="gh-raid-storage-item-meta">
                       <span>持有 {item.amount}</span>
-                      {item.listedAmount > 0 && <span className="gh-raid-storage-item-listed">出售中 {item.listedAmount}</span>}
-                      <span>可用 {item.freeAmount}</span>
+                      <span>目录价 {item.value.toLocaleString('zh-CN')}</span>
+                      <span>{itemKindLabel(item.kind)}</span>
+                      {isOpenable(item) && <span className="gh-raid-storage-item-tag">可开启</span>}
                     </div>
                     <div className="gh-raid-storage-item-actions">
                       <button
                         type="button"
+                        className="gh-btn gh-btn--secondary gh-btn--sm"
+                        disabled={busy || storage.backpackSlots <= 0}
+                        title={storage.backpackSlots <= 0 ? '先装备背包' : '取出 1 件到背包'}
+                        onClick={() => withdrawToContainer(item, 'backpack')}
+                      >
+                        🎒 取到背包
+                      </button>
+                      {item.kind === 'consumable' && (
+                        <button
+                          type="button"
+                          className="gh-btn gh-btn--secondary gh-btn--sm"
+                          disabled={busy || storage.rigSlots <= 0}
+                          title={storage.rigSlots <= 0 ? '先装备胸挂' : '取出 1 件到胸挂'}
+                          onClick={() => withdrawToContainer(item, 'rig')}
+                        >
+                          🎽 取到胸挂
+                        </button>
+                      )}
+                      <button
+                        type="button"
                         className="gh-btn gh-btn--ghost gh-btn--sm"
-                        disabled={busy || item.freeAmount < 1}
-                        onClick={() => openRecycle(item)}
+                        disabled={busy}
+                        onClick={() => openSellFromWarehouse(item)}
                       >
                         ♻️ 回收
                       </button>
-                      <button
-                        type="button"
-                        className="gh-btn gh-btn--secondary gh-btn--sm"
-                        disabled={busy || item.freeAmount < 1}
-                        onClick={() => openList(item)}
-                      >
-                        🏪 上架
-                      </button>
+                      {isOpenable(item) && (
+                        <button
+                          type="button"
+                          className="gh-btn gh-btn--secondary gh-btn--sm"
+                          disabled={busy}
+                          onClick={() => void openCache(item)}
+                        >
+                          🎁 开启
+                        </button>
+                      )}
                     </div>
                   </article>
                 ))}
@@ -436,247 +749,504 @@ export default function RaidStoragePage() {
         </div>
       )}
 
-      {tab === 'market' && (
+      {/* ==================== 背包 / 胸挂 / 安全箱 ==================== */}
+      {tab === 'bag' && (
+        <div className="gh-raid-storage-body">
+          <section className="gh-raid-storage-bag-head">
+            <div>
+              <h2>随身容器</h2>
+              <p>撤离成功后战利品留在容器里，必须先存入仓库；阵亡只会保住安全箱。</p>
+            </div>
+            <button
+              type="button"
+              className="gh-btn gh-btn--primary gh-btn--sm"
+              disabled={busy || totalContainerUnits === 0}
+              onClick={() => void depositAll()}
+            >
+              {busy ? '存入中…' : `全部存入仓库（${totalContainerUnits} 件）`}
+            </button>
+          </section>
+
+          {totalContainerUnits === 0 && (
+            <p className="gh-raid-storage-hint">
+              容器里还没有物品。撤离成功后带出的战利品会先留在这里，等你手动存入仓库。
+            </p>
+          )}
+
+          <div className="gh-raid-storage-bag-grid">
+            {CONTAINER_ORDER.map((kind) => {
+              const container = storage.containers[kind]
+              const locked = container.capacity <= 0
+              return (
+                <section
+                  key={kind}
+                  className={`gh-raid-storage-container${locked ? ' gh-raid-storage-container--locked' : ''}`}
+                >
+                  <div className="gh-raid-storage-container-head">
+                    <strong>{container.label}</strong>
+                    <span className="gh-raid-storage-capacity-text">
+                      {locked
+                        ? '未装备'
+                        : `${container.usedSlots} / ${container.capacity} 格 · ${container.usedUnits} 件`}
+                    </span>
+                  </div>
+                  <div className="gh-raid-storage-bar gh-raid-storage-bar--slim">
+                    <span style={{ width: `${containerPct(container)}%` }} />
+                  </div>
+                  <p className="gh-raid-storage-container-hint">{CONTAINER_HINTS[kind]}</p>
+
+                  {locked ? (
+                    <div className="gh-raid-storage-container-empty">
+                      <span aria-hidden>
+                        {kind === 'backpack' ? '🎒' : kind === 'rig' ? '🎽' : '🛡️'}
+                      </span>
+                      {kind === 'safe' ? (
+                        <p>安全箱暂不可用，请稍后再试</p>
+                      ) : (
+                        <>
+                          <p>还没装备{container.label}，去装备页装备</p>
+                          <button
+                            type="button"
+                            className="gh-btn gh-btn--secondary gh-btn--sm"
+                            onClick={() => setTab('gear')}
+                          >
+                            去装备页
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ) : container.items.length === 0 ? (
+                    <p className="gh-raid-storage-container-empty gh-raid-storage-container-empty--plain">
+                      这里是空的。
+                    </p>
+                  ) : (
+                    <div className="gh-raid-storage-container-items">
+                      {container.items.map((item) => (
+                        <article
+                          key={`${kind}-${item.slotIndex}`}
+                          className={`gh-raid-storage-bag-item gh-raid-storage-bag-item--${item.rarity}`}
+                          title={item.description}
+                        >
+                          <div className="gh-raid-storage-bag-item-head">
+                            <span className="gh-raid-storage-bag-slot">#{item.slotIndex + 1}</span>
+                            <span className="gh-raid-storage-bag-emoji" aria-hidden>{item.emoji}</span>
+                            <div className="gh-raid-storage-bag-titles">
+                              <strong>{item.name} ×{item.amount}</strong>
+                              <span className={`gh-raid-storage-rarity gh-raid-storage-rarity--${item.rarity}`}>
+                                {rarityLabel(item.rarity)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="gh-raid-storage-bag-item-actions">
+                            <button
+                              type="button"
+                              className="gh-btn gh-btn--secondary gh-btn--sm"
+                              disabled={busy}
+                              onClick={() => void depositSlot(kind, item)}
+                            >
+                              存入仓库
+                            </button>
+                            <button
+                              type="button"
+                              className="gh-btn gh-btn--ghost gh-btn--sm"
+                              disabled={busy}
+                              onClick={() => openSellFromBag(kind, item)}
+                            >
+                              卖出
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== 装备 ==================== */}
+      {tab === 'gear' && (
         <div className="gh-raid-storage-body">
           <section className="gh-raid-storage-panel">
-            <h2>在售 {market.listings.length} 单</h2>
-            {market.listings.length === 0 ? (
-              <div className="gh-raid-storage-empty">
-                <span aria-hidden>🏪</span>
-                <p>交易行暂时没有挂单。把仓库里的材料上架，做个第一位卖家？</p>
-              </div>
-            ) : (
-              <div className="gh-raid-market-grid">
-                {market.listings.map((listing) => {
-                  const affordable = balance >= listing.price
-                  return (
-                    <article key={listing.id} className={`gh-raid-market-card gh-raid-market-card--${listing.rarity}`}>
-                      <div className="gh-raid-market-card-head">
-                        <span className="gh-raid-market-card-emoji" aria-hidden>{listing.emoji}</span>
-                        <div className="gh-raid-market-card-titles">
-                          <strong>{listing.itemName}{listing.amount > 1 ? ` ×${listing.amount}` : ''}</strong>
-                          <span className={`gh-raid-storage-rarity gh-raid-storage-rarity--${listing.rarity}`}>
-                            {RARITY_LABELS[listing.rarity]}
-                          </span>
+            <div className="gh-raid-storage-panel-head">
+              <h2>当前装备</h2>
+              <span>头盔与护甲有耐久，耐久归零后不再提供减伤；维修会永久降低耐久上限。</span>
+            </div>
+            <div className="gh-raid-storage-slots">
+              {SLOT_ORDER.map((slot) => {
+                const gear = storage.equipped[slot]
+                const kit = repairKitFor(slot)
+                const kitCount = kit ? countItem(storage.items, kit.key) : 0
+                const pct = gear ? durabilityPct(gear) : 0
+                const canRepair = Boolean(
+                  gear && kit && gear.durability < gear.maxDurability && kitCount > 0,
+                )
+                return (
+                  <article key={slot} className="gh-raid-storage-slot">
+                    <div className="gh-raid-storage-slot-head">
+                      <span className="gh-raid-storage-slot-icon" aria-hidden>{SLOT_ICONS[slot]}</span>
+                      <strong>{SLOT_LABELS[slot]}</strong>
+                      {gear && (
+                        <span className="gh-raid-storage-slot-tier">
+                          {rarityLabel(gear.rarity)} · {gear.tier} 级
+                        </span>
+                      )}
+                    </div>
+
+                    {gear ? (
+                      <>
+                        <div className="gh-raid-storage-slot-gear">
+                          <span className="gh-raid-storage-slot-emoji" aria-hidden>{gear.emoji}</span>
+                          <div className="gh-raid-storage-slot-titles">
+                            <strong>{gear.name}</strong>
+                            <p>
+                              {slot === 'helmet' || slot === 'armor'
+                                ? `减伤 ${gear.defense}%`
+                                : gearStatText(gear)}
+                            </p>
+                          </div>
                         </div>
-                        <b className="gh-raid-market-card-price">{listing.price.toLocaleString('zh-CN')} 积分</b>
-                      </div>
-                      <div className="gh-raid-market-card-meta">
-                        <span>单价 {listing.unitPrice} · 目录价 {listing.value}/件</span>
-                        <span>{formatTime(listing.createdAt)}</span>
-                      </div>
-                      <div className="gh-raid-market-card-foot">
-                        <span>卖家 {listing.isMine ? '我' : listing.sellerName}</span>
-                        {listing.isMine ? (
+
+                        {(slot === 'helmet' || slot === 'armor') && (
+                          <div className="gh-raid-storage-durability">
+                            <div className="gh-raid-storage-bar gh-raid-storage-bar--slim">
+                              <span
+                                className={pct <= 25 ? 'gh-raid-storage-bar-fill--danger' : undefined}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span>耐久 {gear.durability} / {gear.maxDurability}</span>
+                          </div>
+                        )}
+
+                        <div className="gh-raid-storage-slot-actions">
                           <button
                             type="button"
                             className="gh-btn gh-btn--secondary gh-btn--sm"
                             disabled={busy}
-                            onClick={() => delist(listing)}
+                            onClick={() => void equipGear(slot, null, gear.name)}
                           >
-                            下架
+                            卸下
                           </button>
-                        ) : (
+                          {kit && (
+                            <button
+                              type="button"
+                              className="gh-btn gh-btn--ghost gh-btn--sm"
+                              disabled={busy || !canRepair}
+                              title={
+                                kitCount < 1
+                                  ? `仓库里没有${kit.label}`
+                                  : gear.durability >= gear.maxDurability
+                                    ? '耐久已满，不需要维修'
+                                    : `消耗 1 个${kit.label}，耐久上限降低 5%`
+                              }
+                              onClick={() => void repairGear(gear)}
+                            >
+                              {gear.durability >= gear.maxDurability
+                                ? '耐久已满'
+                                : kitCount < 1
+                                  ? `缺少${kit.label}`
+                                  : `维修（1 ${kit.label}）`}
+                            </button>
+                          )}
+                        </div>
+                        {kit && gear.durability < gear.maxDurability && (
+                          <p className="gh-raid-storage-slot-hint">
+                            维修恢复 {kit.amount} 点耐久，耐久上限降至 95%（不低于初始 30%）。
+                            仓库现有 {kitCount} 个{kit.label}。
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <div className="gh-raid-storage-slot-empty">
+                        <p>未装备</p>
+                        {(slot === 'backpack' || slot === 'rig') && (
+                          <span>不装备会让对应容器容量为 0。</span>
+                        )}
+                      </div>
+                    )}
+                  </article>
+                )
+              })}
+            </div>
+          </section>
+
+          <section className="gh-raid-storage-panel">
+            <div className="gh-raid-storage-panel-head">
+              <h2>我的装备</h2>
+              <span>按槽位分组展示未穿戴的备用件，点击「穿戴」即可替换当前装备。</span>
+            </div>
+            {gearGroups.length === 0 ? (
+              <div className="gh-raid-storage-empty">
+                <span aria-hidden>🎽</span>
+                <p>没有多余的装备。商店只卖 1–3 级装备，更高级的只能靠搜打撤掉落或开箱。</p>
+                <button type="button" className="gh-btn gh-btn--primary gh-btn--sm" onClick={() => setTab('shop')}>
+                  🏪 去官方商店
+                </button>
+              </div>
+            ) : (
+              <div className="gh-raid-storage-gear-groups">
+                {gearGroups.map((group) => (
+                  <div key={group.slot} className="gh-raid-storage-gear-group">
+                    <h3 className="gh-raid-storage-gear-group-title">
+                      <span aria-hidden>{SLOT_ICONS[group.slot]}</span> {SLOT_LABELS[group.slot]}
+                      <small>{group.gears.length} 件</small>
+                    </h3>
+                    <div className="gh-raid-storage-gear-grid">
+                      {group.gears.map((gear) => (
+                        <article
+                          key={gear.gearKey}
+                          className={`gh-raid-storage-gear-card gh-raid-storage-gear-card--${gear.rarity}`}
+                          title={gear.description}
+                        >
+                          <div className="gh-raid-storage-gear-card-head">
+                            <span className="gh-raid-storage-gear-card-emoji" aria-hidden>{gear.emoji}</span>
+                            <div className="gh-raid-storage-gear-card-titles">
+                              <strong>{gear.name}</strong>
+                              <span className={`gh-raid-storage-rarity gh-raid-storage-rarity--${gear.rarity}`}>
+                                {rarityLabel(gear.rarity)} · {gear.tier} 级
+                              </span>
+                            </div>
+                            <b className="gh-raid-storage-gear-card-price">
+                              {gear.price.toLocaleString('zh-CN')} 积分
+                            </b>
+                          </div>
+                          <div className="gh-raid-storage-gear-card-meta">
+                            <span>{gearStatText(gear)}</span>
+                          </div>
                           <button
                             type="button"
                             className="gh-btn gh-btn--primary gh-btn--sm"
-                            disabled={busy || !affordable}
-                            onClick={() => openBuy(listing)}
+                            disabled={busy}
+                            onClick={() => void equipGear(gear.slot, gear.gearKey, gear.name)}
                           >
-                            {affordable ? '购买' : '积分不足'}
+                            穿戴
                           </button>
-                        )}
-                      </div>
-                    </article>
-                  )
-                })}
-              </div>
-            )}
-          </section>
-
-          <section className="gh-raid-storage-panel">
-            <h2>我的挂单 {market.myListings.length}</h2>
-            {market.myListings.length === 0 ? (
-              <p className="gh-raid-storage-hint">还没有挂单。在仓库 Tab 对材料点「上架」即可寄售。</p>
-            ) : (
-              <div className="gh-raid-market-list">
-                {market.myListings.map((listing) => (
-                  <div key={listing.id} className="gh-raid-market-row">
-                    <span className="gh-raid-market-row-name">
-                      {listing.emoji} {listing.itemName}{listing.amount > 1 ? ` ×${listing.amount}` : ''}
-                    </span>
-                    <span className={`gh-raid-storage-rarity gh-raid-storage-rarity--${listing.rarity}`}>
-                      {RARITY_LABELS[listing.rarity]}
-                    </span>
-                    <strong>{listing.price.toLocaleString('zh-CN')} 积分</strong>
-                    <span>单价 {listing.unitPrice}</span>
-                    <span>{formatTime(listing.createdAt)}</span>
-                    <button
-                      type="button"
-                      className="gh-btn gh-btn--ghost gh-btn--sm"
-                      disabled={busy}
-                      onClick={() => delist(listing)}
-                    >
-                      下架
-                    </button>
+                        </article>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
             )}
-          </section>
-
-          <section className="gh-raid-storage-panel">
-            <h2>最近成交</h2>
-            {market.trades.length === 0 ? (
-              <p className="gh-raid-storage-hint">还没有成交记录。</p>
-            ) : (
-              <div className="gh-raid-market-list">
-                {market.trades.map((trade) => (
-                  <div key={trade.id} className="gh-raid-market-row">
-                    <span className="gh-raid-market-row-name">
-                      {trade.emoji} {trade.itemName}{trade.amount > 1 ? ` ×${trade.amount}` : ''}
-                    </span>
-                    <strong>{trade.price.toLocaleString('zh-CN')} 积分</strong>
-                    <span>手续费 {trade.fee}</span>
-                    <span>{trade.sellerName} → {trade.buyerName}</span>
-                    <span>{formatTime(trade.createdAt)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <p className="gh-raid-storage-hint">成交收取 {Math.round(market.feeRate * 100)}% 手续费（卖家承担，最低 1 积分）。</p>
           </section>
         </div>
       )}
 
-      {/* 回收确认 */}
-      {recycleItem && (
-        <div className="gh-raid-storage-modal" role="dialog" aria-modal="true" aria-label="回收物品">
-          <div className="gh-raid-storage-modal-card">
-            <h2>♻️ 回收 {recycleItem.emoji} {recycleItem.name}</h2>
-            <p className="gh-raid-storage-modal-note">
-              可回收 {recycleItem.freeAmount} 件（{recycleItem.listedAmount} 件正在出售中）· 单件回收价 {recycleItem.value} 积分
+      {/* ==================== 官方商店 ==================== */}
+      {tab === 'shop' && (
+        <div className="gh-raid-storage-body">
+          {shopLoading && !shop ? (
+            <div className="gh-raid-storage-inline-loading">
+              <span aria-hidden>🏪</span>
+              <p>正在整理货架…</p>
+            </div>
+          ) : !shop ? (
+            <div className="gh-raid-storage-empty">
+              <span aria-hidden>🏪</span>
+              <p>{shopError ?? '官方商店暂时打不开'}</p>
+              <button type="button" className="gh-btn gh-btn--primary gh-btn--sm" onClick={() => void loadShop()}>
+                再试一次
+              </button>
+            </div>
+          ) : (
+            <>
+              <section className="gh-raid-storage-shop-summary">
+                <div>
+                  <strong>🏪 官方商店</strong>
+                  <p>只出售 1–3 级装备与补给；4–6 级装备只能在搜打撤里搜到或开箱。</p>
+                </div>
+                <span className="gh-raid-storage-points" title="当前积分">
+                  🪙 {points.toLocaleString('zh-CN')}
+                </span>
+              </section>
+
+              <section className="gh-raid-storage-panel">
+                <div className="gh-raid-storage-panel-head">
+                  <h2>装备（1–3 级）</h2>
+                  <span>同一件装备只能持有一件，购买后为满耐久。</span>
+                </div>
+                <div className="gh-raid-storage-shop-groups">
+                  {shopGearGroups.map((group) => (
+                    <div key={group.slot} className="gh-raid-storage-shop-group">
+                      <h3 className="gh-raid-storage-shop-group-title">
+                        <span aria-hidden>{SLOT_ICONS[group.slot]}</span> {SLOT_LABELS[group.slot]}
+                      </h3>
+                      <div className="gh-raid-storage-shop-grid">
+                        {group.gears.map((gear) => {
+                          const affordable = points >= gear.price
+                          return (
+                            <article
+                              key={gear.key}
+                              className={`gh-raid-storage-shop-card gh-raid-storage-shop-card--${gear.rarity}`}
+                              title={gear.description}
+                            >
+                              <div className="gh-raid-storage-shop-card-head">
+                                <span className="gh-raid-storage-shop-card-emoji" aria-hidden>{gear.emoji}</span>
+                                <div className="gh-raid-storage-shop-card-titles">
+                                  <strong>{gear.name}</strong>
+                                  <span className={`gh-raid-storage-rarity gh-raid-storage-rarity--${gear.rarity}`}>
+                                    {rarityLabel(gear.rarity)} · {gear.tier} 级
+                                  </span>
+                                </div>
+                                <b className="gh-raid-storage-shop-card-price">
+                                  {gear.price.toLocaleString('zh-CN')} 积分
+                                </b>
+                              </div>
+                              <p className="gh-raid-storage-shop-card-desc">{gear.description}</p>
+                              <div className="gh-raid-storage-shop-card-meta">
+                                <span>{shopGearStatText(gear)}</span>
+                                {gear.owned && <span className="gh-raid-storage-item-tag">已拥有</span>}
+                              </div>
+                              <button
+                                type="button"
+                                className="gh-btn gh-btn--primary gh-btn--sm"
+                                disabled={busy || gear.owned || !affordable}
+                                onClick={() => void buyGear(gear)}
+                              >
+                                {gear.owned ? '已拥有' : affordable ? `购买（${gear.price}）` : '积分不足'}
+                              </button>
+                            </article>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="gh-raid-storage-panel">
+                <div className="gh-raid-storage-panel-head">
+                  <h2>补给与箱子</h2>
+                  <span>消耗品按目录价 140% 出售，购买后直接进入仓库；装备箱与技能卷轴可回仓库页开启。</span>
+                </div>
+                <div className="gh-raid-storage-shop-grid">
+                  {shop.items.map((item) => {
+                    const amount = shopAmounts[item.key] ?? 1
+                    const total = item.price * amount
+                    const affordable = points >= total
+                    return (
+                      <article
+                        key={item.key}
+                        className={`gh-raid-storage-shop-card gh-raid-storage-shop-card--${item.rarity}`}
+                        title={item.description}
+                      >
+                        <div className="gh-raid-storage-shop-card-head">
+                          <span className="gh-raid-storage-shop-card-emoji" aria-hidden>{item.emoji}</span>
+                          <div className="gh-raid-storage-shop-card-titles">
+                            <strong>{item.name}</strong>
+                            <span className={`gh-raid-storage-rarity gh-raid-storage-rarity--${item.rarity}`}>
+                              {rarityLabel(item.rarity)}
+                            </span>
+                          </div>
+                          <b className="gh-raid-storage-shop-card-price">
+                            {item.price.toLocaleString('zh-CN')} 积分
+                          </b>
+                        </div>
+                        <p className="gh-raid-storage-shop-card-desc">{item.description}</p>
+                        <div className="gh-raid-storage-shop-card-meta">
+                          <span>{itemKindLabel(item.kind)}</span>
+                          <span>单格上限 {item.stackMax}</span>
+                        </div>
+                        <div className="gh-raid-storage-shop-buy">
+                          <div
+                            className="gh-raid-storage-qty"
+                            role="group"
+                            aria-label={`${item.name} 购买数量`}
+                          >
+                            {SHOP_AMOUNTS.map((option) => (
+                              <button
+                                key={option}
+                                type="button"
+                                className={`gh-raid-storage-qty-btn${amount === option ? ' gh-raid-storage-qty-btn--active' : ''}`}
+                                aria-pressed={amount === option}
+                                disabled={busy}
+                                onClick={() => chooseShopAmount(item.key, option)}
+                              >
+                                {option}
+                              </button>
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            className="gh-btn gh-btn--primary gh-btn--sm"
+                            disabled={busy || !affordable}
+                            onClick={() => void buyItem(item, amount)}
+                          >
+                            {affordable
+                              ? `购买 ×${amount}（${total.toLocaleString('zh-CN')}）`
+                              : '积分不足'}
+                          </button>
+                        </div>
+                      </article>
+                    )
+                  })}
+                </div>
+              </section>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ==================== 卖出 / 回收对话框 ==================== */}
+      {sellTarget && (
+        <div className="gh-dialog-overlay" role="dialog" aria-modal="true" aria-label="卖出物品">
+          <div className="gh-dialog">
+            <h2 className="gh-dialog-title">♻️ 卖出 {sellTarget.emoji} {sellTarget.name}</h2>
+            <p className="gh-raid-storage-hint">
+              从{sellFromLabel(sellTarget.from)}卖出 · 可卖 {sellTarget.available} 件 · 单件回收价{' '}
+              {sellTarget.sellUnit.toLocaleString('zh-CN')} 积分
             </p>
             <label className="gh-raid-storage-field">
-              <span>回收数量（1–{recycleItem.freeAmount}）</span>
+              <span>卖出数量（1–{sellTarget.available}）</span>
               <div className="gh-raid-storage-field-row">
                 <input
                   className="gh-input"
                   type="number"
                   min={1}
-                  max={recycleItem.freeAmount}
-                  value={recycleAmount}
-                  onChange={(event) => setRecycleAmount(event.target.value)}
+                  max={sellTarget.available}
+                  step={1}
+                  value={sellAmount}
+                  onChange={(event) => {
+                    setSellAmount(event.target.value)
+                    setSellError(null)
+                  }}
                 />
                 <button
                   type="button"
                   className="gh-btn gh-btn--ghost gh-btn--sm"
-                  onClick={() => setRecycleAmount(String(recycleItem.freeAmount))}
+                  disabled={busy}
+                  onClick={() => {
+                    setSellAmount(String(sellTarget.available))
+                    setSellError(null)
+                  }}
                 >
                   全部
                 </button>
               </div>
             </label>
-            <p className="gh-raid-storage-modal-preview">
-              预计可得 <strong>{recyclePoints.toLocaleString('zh-CN')}</strong> 积分
+            <p className="gh-raid-storage-sell-preview">
+              预计获得 <strong>{sellEstimate.toLocaleString('zh-CN')}</strong> 积分
             </p>
-            {recycleError && <p className="gh-raid-storage-error-text">{recycleError}</p>}
-            <div className="gh-raid-storage-modal-actions">
-              <button type="button" className="gh-btn gh-btn--secondary gh-btn--md" onClick={() => setRecycleItem(null)}>
+            {sellError && <p className="gh-raid-storage-error-text">{sellError}</p>}
+            <div className="gh-dialog-actions">
+              <button
+                type="button"
+                className="gh-btn gh-btn--secondary gh-btn--md"
+                disabled={busy}
+                onClick={() => setSellTarget(null)}
+              >
                 取消
               </button>
               <button
                 type="button"
                 className="gh-btn gh-btn--primary gh-btn--md"
-                disabled={busy || recycleCount < 1 || recycleCount > recycleItem.freeAmount}
-                onClick={() => void submitRecycle()}
+                disabled={busy || !sellValid}
+                onClick={() => void submitSell()}
               >
-                {busy ? '回收中…' : '确认回收'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 上架 */}
-      {listItem && (
-        <div className="gh-raid-storage-modal" role="dialog" aria-modal="true" aria-label="上架交易行">
-          <div className="gh-raid-storage-modal-card">
-            <h2>🏪 上架 {listItem.emoji} {listItem.name}</h2>
-            <p className="gh-raid-storage-modal-note">可上架 {listItem.freeAmount} 件（{listItem.listedAmount} 件已在售）</p>
-            <label className="gh-raid-storage-field">
-              <span>数量（1–{listItem.freeAmount}）</span>
-              <input
-                className="gh-input"
-                type="number"
-                min={1}
-                max={listItem.freeAmount}
-                value={listAmount}
-                onChange={(event) => changeListAmount(event.target.value)}
-              />
-            </label>
-            <label className="gh-raid-storage-field">
-              <span>
-                整单价格（{listItem.value}×{listCount}={listItem.value * listCount} 的 50%–150%：
-                {listBounds.min}–{listBounds.max}）
-              </span>
-              <input
-                className="gh-input"
-                type="number"
-                min={listBounds.min}
-                max={listBounds.max}
-                value={listPrice}
-                onChange={(event) => setListPrice(event.target.value)}
-              />
-            </label>
-            <p className="gh-raid-storage-modal-preview">
-              手续费 5%（{listFee} 积分）· 成交到账{' '}
-              <strong>{(Math.max(0, (Number.isInteger(listPriceNum) ? listPriceNum : 0)) - listFee).toLocaleString('zh-CN')}</strong> 积分
-            </p>
-            {listError && <p className="gh-raid-storage-error-text">{listError}</p>}
-            <div className="gh-raid-storage-modal-actions">
-              <button type="button" className="gh-btn gh-btn--secondary gh-btn--md" onClick={() => setListItem(null)}>
-                取消
-              </button>
-              <button
-                type="button"
-                className="gh-btn gh-btn--primary gh-btn--md"
-                disabled={busy || listCount < 1 || listCount > listItem.freeAmount}
-                onClick={() => void submitList()}
-              >
-                {busy ? '挂单中…' : '确认挂单'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 购买确认 */}
-      {buyListing && (
-        <div className="gh-raid-storage-modal" role="dialog" aria-modal="true" aria-label="购买确认">
-          <div className="gh-raid-storage-modal-card">
-            <h2>🛒 确认购买</h2>
-            <p className="gh-raid-storage-modal-note">
-              {buyListing.emoji} {buyListing.itemName}{buyListing.amount > 1 ? ` ×${buyListing.amount}` : ''}
-            </p>
-            <div className="gh-raid-storage-buy-summary">
-              <div><span>卖家</span><strong>{buyListing.sellerName}</strong></div>
-              <div><span>整单价格</span><strong>{buyListing.price.toLocaleString('zh-CN')} 积分</strong></div>
-              <div><span>当前余额</span><strong>{balance.toLocaleString('zh-CN')} 积分</strong></div>
-            </div>
-            {balance < buyListing.price && <p className="gh-raid-storage-error-text">积分余额不足，无法购买。</p>}
-            {buyError && <p className="gh-raid-storage-error-text">{buyError}</p>}
-            <div className="gh-raid-storage-modal-actions">
-              <button type="button" className="gh-btn gh-btn--secondary gh-btn--md" onClick={() => setBuyListing(null)}>
-                取消
-              </button>
-              <button
-                type="button"
-                className="gh-btn gh-btn--primary gh-btn--md"
-                disabled={busy || balance < buyListing.price}
-                onClick={() => void submitBuy()}
-              >
-                {busy ? '购买中…' : '确认购买'}
+                {busy ? '处理中…' : '确认卖出'}
               </button>
             </div>
           </div>

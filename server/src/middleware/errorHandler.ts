@@ -54,6 +54,7 @@ export function errorHandler(
         res.status(400).json({ error: '无效的关联 ID', code })
         return
       default:
+        console.error('[Prisma]', code, (err as unknown as { meta?: unknown }).meta ?? err.message)
         res.status(400).json({ error: '数据库操作失败', code })
         return
     }

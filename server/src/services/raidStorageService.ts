@@ -1,59 +1,90 @@
 /**
- * 搜打撤仓库服务：撤离战利品入仓、材料回收折积分、仓库升级。
+ * 搜打撤仓库服务（2026-11-03 重构）：仓库 / 背包 / 胸挂 / 安全箱 / 官方商店回收 / 升级。
  *
- * 并发口径：
- *   - 仓库物品按 [userId, itemKey] 聚合，listedAmount 为交易行在售预留数量；
- *   - 所有扣减都带守卫条件（amount >= listedAmount + n）并在写后复核
- *     listedAmount <= amount，违反即 throw 回滚，保证不变式永不被并发破坏；
- *   - Prisma 的 where 无法比较两列，因此先在事务内重读行、再把快照值写进守卫条件。
+ * 口径：
+ *   - 交易行已删除，物品只能按官方回收价卖给系统商店；
+ *   - 撤离后战利品留在容器里，必须手动存入仓库；仓库满时整笔拒绝，绝不自动出售；
+ *   - 容器容量由已装备的背包 / 胸挂 / 仓库等级派生，容量不足时禁止卸下或换小。
  */
 
 import prisma from '../lib/prisma.js'
-import type { Prisma, PrismaClient, RaidStorage } from '@prisma/client'
+import type { Prisma, RaidBagItem, RaidGear, RaidInventoryItem } from '@prisma/client'
 import { AppError } from '../middleware/errorHandler.js'
-import { RAID_LOOT_MAP } from '../lib/petRaid.js'
 import {
-  RAID_MARKET_FEE_RATE,
-  nextStorageUpgrade,
-  planWarehouseInsert,
-  raidRecycleValue,
-  safeCapacityFor,
-  storageLevelInfo,
-  type WarehouseStack,
-} from '../lib/raidStorage.js'
+  RAID_CONTAINER_LABELS,
+  RAID_ITEM_MAP,
+  addItemToContainer,
+  getRaidItem,
+  normalizeContainer,
+  raidSellPrice,
+  type RaidContainerKind,
+  type RaidItemStack,
+} from '../lib/raidRun.js'
+import { nextStorageUpgrade, storageLevelInfo } from '../lib/raidStorage.js'
 import { awardPointsTx, spendPointsTx } from './pointsService.js'
+import { assertNoActiveRaid } from './raidRunService.js'
+import {
+  bagRowsToStacks,
+  bagRowsOf,
+  capacitiesOf,
+  ensureRaidStorageTx,
+  equippedGearRows,
+  gearDto,
+  loadRaidLoadoutTx,
+  writeContainersTx,
+  type RaidBagContainer,
+  type RaidGearDto,
+} from './raidCommon.js'
 
 type Db = Prisma.TransactionClient
-
-/* ============================================================
-   行确保（事务内 / 事务外各一份）
-   ============================================================ */
-
-/** 事务内惰性建行（首访自动建 1 级仓库） */
-export async function ensureRaidStorageTx(tx: Db, userId: number): Promise<RaidStorage> {
-  return tx.raidStorage.upsert({ where: { userId }, create: { userId }, update: {} })
-}
-
-/** 事务外惰性建行（读接口 / 对局动作使用） */
-export async function ensureRaidStorage(userId: number): Promise<RaidStorage> {
-  return prisma.$transaction((tx) => ensureRaidStorageTx(tx, userId))
-}
 
 /* ============================================================
    DTO
    ============================================================ */
 
-export interface RaidStorageItemDto {
+export interface RaidItemInfoDto {
   itemKey: string
   name: string
   emoji: string
   rarity: string
-  /** 单件目录价值 */
+  kind: string
   value: number
+  sellUnit: number
+  stackMax: number
+  description: string
+}
+
+function itemInfo(itemKey: string): RaidItemInfoDto {
+  const def = RAID_ITEM_MAP.get(itemKey)
+  return {
+    itemKey,
+    name: def?.name ?? itemKey,
+    emoji: def?.emoji ?? '📦',
+    rarity: def?.rarity ?? 'common',
+    kind: def?.kind ?? 'material',
+    value: def?.value ?? 0,
+    sellUnit: raidSellPrice(itemKey, 1),
+    stackMax: def?.stackMax ?? 1,
+    description: def?.description ?? '',
+  }
+}
+
+export interface RaidStorageItemDto extends RaidItemInfoDto {
   amount: number
-  listedAmount: number
-  /** amount - listedAmount（可回收 / 可上架 / 可当升级材料的数量） */
-  freeAmount: number
+}
+
+export interface RaidBagItemDto extends RaidItemInfoDto {
+  slotIndex: number
+  amount: number
+}
+
+export interface RaidContainerDto {
+  container: RaidBagContainer
+  label: string
+  capacity: number
+  usedSlots: number
+  usedUnits: number
+  items: RaidBagItemDto[]
 }
 
 export interface RaidStorageUpgradeItemDto {
@@ -69,11 +100,17 @@ export interface RaidStorageUpgradePreviewDto {
   capacity: number
   safeCapacity: number
   upgradePoints: number
-  /** 积分是否足够 */
   pointsOk: boolean
-  /** 材料是否足够 */
   materialsOk: boolean
   items: RaidStorageUpgradeItemDto[]
+}
+
+export interface RaidEquippedSummaryDto {
+  helmet: RaidGearDto | null
+  armor: RaidGearDto | null
+  boots: RaidGearDto | null
+  backpack: RaidGearDto | null
+  rig: RaidGearDto | null
 }
 
 export interface RaidStorageViewDto {
@@ -82,128 +119,76 @@ export interface RaidStorageViewDto {
   used: number
   free: number
   safeCapacity: number
-  items: RaidStorageItemDto[]
-  nextUpgrade: RaidStorageUpgradePreviewDto | null
-  feeRate: number
-  balance: number
-}
-
-export interface RaidRecycleResultDto {
-  itemKey: string
-  recycled: number
-  remaining: number
+  backpackSlots: number
+  rigSlots: number
   points: number
-  balance: number
+  items: RaidStorageItemDto[]
+  containers: {
+    backpack: RaidContainerDto
+    rig: RaidContainerDto
+    safe: RaidContainerDto
+  }
+  gear: RaidGearDto[]
+  equipped: RaidEquippedSummaryDto
+  upgrade: RaidStorageUpgradePreviewDto | null
 }
 
 /* ============================================================
-   查询
+   视图
    ============================================================ */
 
-async function sumInventoryAmount(client: Db | PrismaClient, userId: number): Promise<number> {
-  const agg = await client.raidInventoryItem.aggregate({
-    where: { userId },
-    _sum: { amount: true },
-  })
-  return agg._sum.amount ?? 0
-}
-
-/** 仓库概要（惰性建行）；getRaidOverview / 对局 DTO 使用 */
-export async function getRaidStorageSummary(userId: number): Promise<{
-  level: number
-  capacity: number
-  used: number
-  safeCapacity: number
-}> {
-  const row = await ensureRaidStorage(userId)
-  const info = storageLevelInfo(row.level)
-  const used = await sumInventoryAmount(prisma, userId)
-  return { level: info.level, capacity: info.capacity, used, safeCapacity: info.safeCapacity }
-}
-
-/** 事务内版本（finishRaid 结算用） */
-export async function getRaidStorageSummaryTx(tx: Db, userId: number): Promise<{
-  level: number
-  capacity: number
-  used: number
-  safeCapacity: number
-}> {
-  const row = await ensureRaidStorageTx(tx, userId)
-  const info = storageLevelInfo(row.level)
-  const used = await sumInventoryAmount(tx, userId)
-  return { level: info.level, capacity: info.capacity, used, safeCapacity: info.safeCapacity }
-}
-
-/** 仓库页视图 */
-export async function getRaidStorageView(userId: number): Promise<RaidStorageViewDto> {
-  const row = await ensureRaidStorage(userId)
-  const [rows, balance] = await Promise.all([
-    prisma.raidInventoryItem.findMany({ where: { userId }, orderBy: [{ id: 'asc' }] }),
-    prisma.user.findUnique({ where: { id: userId }, select: { points: true } }),
-  ])
-  const info = storageLevelInfo(row.level)
-  const items = buildItemDtos(rows)
-  const used = items.reduce((sum, item) => sum + item.amount, 0)
-  const next = nextStorageUpgrade(row.level)
+function containerDto(
+  container: RaidBagContainer,
+  rows: readonly RaidBagItem[],
+  capacity: number,
+): RaidContainerDto {
+  const items = bagRowsOf(rows, container)
+    .sort((a, b) => a.slotIndex - b.slotIndex)
+    .map((row) => ({
+      ...itemInfo(row.itemKey),
+      slotIndex: row.slotIndex,
+      amount: row.amount,
+    }))
   return {
-    level: info.level,
-    capacity: info.capacity,
-    used,
-    free: Math.max(0, info.capacity - used),
-    safeCapacity: info.safeCapacity,
+    container,
+    label: RAID_CONTAINER_LABELS[container],
+    capacity,
+    usedSlots: items.length,
+    usedUnits: items.reduce((sum, item) => sum + item.amount, 0),
     items,
-    nextUpgrade: next ? await buildUpgradePreview(row.level, balance?.points ?? 0, rows) : null,
-    feeRate: RAID_MARKET_FEE_RATE,
-    balance: balance?.points ?? 0,
   }
 }
 
-function buildItemDtos(rows: Array<{ itemKey: string; amount: number; listedAmount: number }>): RaidStorageItemDto[] {
-  // 按目录顺序展示，未知 key（目录被删的残留行）排到最后
-  const order = new Map<string, number>()
-  let index = 0
-  for (const key of RAID_LOOT_MAP.keys()) {
-    order.set(key, index)
-    index += 1
+function equippedSummary(rows: readonly RaidGear[]): RaidEquippedSummaryDto {
+  const equipped = equippedGearRows(rows)
+  const pick = (slot: string): RaidGearDto | null => {
+    const row = equipped.find((item) => item.slot === slot)
+    return row ? gearDto(row) : null
   }
-  return [...rows]
-    .filter((row) => row.amount > 0)
-    .sort((a, b) => (order.get(a.itemKey) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.itemKey) ?? Number.MAX_SAFE_INTEGER))
-    .map((row) => {
-      const entry = RAID_LOOT_MAP.get(row.itemKey)
-      return {
-        itemKey: row.itemKey,
-        name: entry?.name ?? row.itemKey,
-        emoji: entry?.emoji ?? '📦',
-        rarity: entry?.rarity ?? 'common',
-        value: entry?.value ?? 0,
-        amount: row.amount,
-        listedAmount: row.listedAmount,
-        freeAmount: row.amount - row.listedAmount,
-      }
-    })
+  return {
+    helmet: pick('helmet'),
+    armor: pick('armor'),
+    boots: pick('boots'),
+    backpack: pick('backpack'),
+    rig: pick('rig'),
+  }
 }
 
-async function buildUpgradePreview(
+function upgradePreview(
   level: number,
-  balance: number,
-  rows: Array<{ itemKey: string; amount: number; listedAmount: number }>,
-): Promise<RaidStorageUpgradePreviewDto> {
+  points: number,
+  warehouse: readonly RaidInventoryItem[],
+): RaidStorageUpgradePreviewDto | null {
   const next = nextStorageUpgrade(level)
-  if (!next) {
-    throw new AppError('仓库已经满级了', 400)
-  }
-  const available = new Map(rows.map((row) => [row.itemKey, row.amount - row.listedAmount]))
-  let materialsOk = true
-  const items: RaidStorageUpgradeItemDto[] = next.upgradeItems.map((req) => {
-    const entry = RAID_LOOT_MAP.get(req.itemKey)
-    const have = available.get(req.itemKey) ?? 0
-    if (have < req.count) materialsOk = false
+  if (!next) return null
+  const items = next.upgradeItems.map((item) => {
+    const def = RAID_ITEM_MAP.get(item.itemKey)
+    const have = warehouse.find((row) => row.itemKey === item.itemKey)?.amount ?? 0
     return {
-      itemKey: req.itemKey,
-      name: entry?.name ?? req.itemKey,
-      emoji: entry?.emoji ?? '📦',
-      count: req.count,
+      itemKey: item.itemKey,
+      name: def?.name ?? item.itemKey,
+      emoji: def?.emoji ?? '📦',
+      count: item.count,
       have,
     }
   })
@@ -212,157 +197,312 @@ async function buildUpgradePreview(
     capacity: next.capacity,
     safeCapacity: next.safeCapacity,
     upgradePoints: next.upgradePoints,
-    pointsOk: balance >= next.upgradePoints,
-    materialsOk,
+    pointsOk: points >= next.upgradePoints,
+    materialsOk: items.every((item) => item.have >= item.count),
     items,
   }
 }
 
+export async function buildStorageView(userId: number): Promise<RaidStorageViewDto> {
+  const [storage, warehouse, bagRows, gearRows, user] = await Promise.all([
+    prisma.$transaction((tx) => ensureRaidStorageTx(tx, userId)),
+    prisma.raidInventoryItem.findMany({ where: { userId }, orderBy: { itemKey: 'asc' } }),
+    prisma.raidBagItem.findMany({ where: { userId }, orderBy: { slotIndex: 'asc' } }),
+    prisma.raidGear.findMany({ where: { userId }, orderBy: [{ slot: 'asc' }, { id: 'asc' }] }),
+    prisma.user.findUnique({ where: { id: userId }, select: { points: true } }),
+  ])
+  const info = storageLevelInfo(storage.level)
+  const used = warehouse.reduce((sum, row) => sum + Math.max(0, row.amount), 0)
+  const capacities = capacitiesOf(gearRows, storage.level)
+  return {
+    level: info.level,
+    capacity: info.capacity,
+    used,
+    free: Math.max(0, info.capacity - used),
+    safeCapacity: info.safeCapacity,
+    backpackSlots: capacities.backpack,
+    rigSlots: capacities.rig,
+    points: user?.points ?? 0,
+    items: warehouse
+      .filter((row) => row.amount > 0)
+      .map((row) => ({ ...itemInfo(row.itemKey), amount: row.amount })),
+    containers: {
+      backpack: containerDto('backpack', bagRows, capacities.backpack),
+      rig: containerDto('rig', bagRows, capacities.rig),
+      safe: containerDto('safe', bagRows, capacities.safe),
+    },
+    gear: gearRows.map((row) => gearDto(row)),
+    equipped: equippedSummary(gearRows),
+    upgrade: upgradePreview(info.level, user?.points ?? 0, warehouse),
+  }
+}
+
+export async function getRaidStorageView(userId: number): Promise<RaidStorageViewDto> {
+  return buildStorageView(userId)
+}
+
 /* ============================================================
-   回收
+   仓库行工具
    ============================================================ */
 
-/** 回收仓库材料换取积分（listedAmount 预留的部分不可回收） */
-export async function recycleRaidItems(
+async function upsertWarehouseTx(tx: Db, userId: number, itemKey: string, amount: number): Promise<void> {
+  if (amount <= 0) return
+  await tx.raidInventoryItem.upsert({
+    where: { userId_itemKey: { userId, itemKey } },
+    create: { userId, itemKey, amount },
+    update: { amount: { increment: amount } },
+  })
+}
+
+async function decrementWarehouseTx(
+  tx: Db,
   userId: number,
   itemKey: string,
   amount: number,
-): Promise<RaidRecycleResultDto> {
-  const entry = RAID_LOOT_MAP.get(itemKey)
-  if (!entry) throw new AppError('没有这件物品', 404)
-  if (!Number.isInteger(amount) || amount < 1) throw new AppError('回收数量必须是正整数', 400)
+): Promise<void> {
+  if (amount <= 0) return
+  const row = await tx.raidInventoryItem.findUnique({
+    where: { userId_itemKey: { userId, itemKey } },
+  })
+  if (!row || row.amount < amount) throw new AppError('仓库里没有这么多物品', 400)
+  const left = row.amount - amount
+  if (left <= 0) {
+    await tx.raidInventoryItem.delete({ where: { id: row.id } })
+  } else {
+    await tx.raidInventoryItem.update({ where: { id: row.id }, data: { amount: left } })
+  }
+}
 
-  return prisma.$transaction(async (tx) => {
-    const row = await tx.raidInventoryItem.findUnique({
-      where: { userId_itemKey: { userId, itemKey } },
+async function decrementBagSlotTx(
+  tx: Db,
+  userId: number,
+  container: RaidBagContainer,
+  slotIndex: number,
+  amount: number,
+): Promise<void> {
+  const row = await tx.raidBagItem.findUnique({
+    where: { userId_container_slotIndex: { userId, container, slotIndex } },
+  })
+  if (!row || row.amount < amount) throw new AppError('容器里没有这么多物品', 400)
+  const left = row.amount - amount
+  if (left <= 0) {
+    await tx.raidBagItem.delete({ where: { id: row.id } })
+  } else {
+    await tx.raidBagItem.update({ where: { id: row.id }, data: { amount: left } })
+  }
+}
+
+export async function getRaidWarehouseUsed(userId: number, tx: Db = prisma): Promise<number> {
+  const rows = await tx.raidInventoryItem.findMany({ where: { userId }, select: { amount: true } })
+  return rows.reduce((sum, row) => sum + Math.max(0, row.amount), 0)
+}
+
+/* ============================================================
+   存入 / 取出
+   ============================================================ */
+
+export interface RaidDepositInput {
+  container: RaidContainerKind
+  slotIndex: number
+  amount: number
+}
+
+/** 单格整笔存入仓库：仓库剩余容量不足时整笔失败，物品留在原容器 */
+export async function depositRaidItems(userId: number, input: RaidDepositInput): Promise<RaidStorageViewDto> {
+  await assertNoActiveRaid(userId)
+  const container = input.container
+  const amount = Math.max(1, Math.trunc(input.amount))
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.raidBagItem.findUnique({
+      where: { userId_container_slotIndex: { userId, container, slotIndex: input.slotIndex } },
     })
-    if (!row || row.amount < amount) {
-      throw new AppError(`仓库里没有这么多「${entry.name}」`, 400)
+    if (!row) throw new AppError('这个格子里没有物品', 404)
+    if (row.amount < amount) throw new AppError('数量超过格子里的持有量', 400)
+    const storage = await ensureRaidStorageTx(tx, userId)
+    const info = storageLevelInfo(storage.level)
+    const used = await getRaidWarehouseUsed(userId, tx)
+    if (used + amount > info.capacity) {
+      throw new AppError(`仓库空间不足（剩余 ${Math.max(0, info.capacity - used)} 件），先清理仓库或升级吧`, 400)
     }
-    const freeAmount = row.amount - row.listedAmount
-    if (freeAmount < amount) {
-      throw new AppError(`「${entry.name}」有 ${row.listedAmount} 件正在交易行出售，可回收的只剩 ${freeAmount} 件`, 400)
-    }
+    await decrementBagSlotTx(tx, userId, container, input.slotIndex, amount)
+    await upsertWarehouseTx(tx, userId, row.itemKey, amount)
+  })
+  return buildStorageView(userId)
+}
 
-    // 守卫扣减：amount 必须仍能覆盖「listedAmount + 本次回收量」
-    const guarded = await tx.raidInventoryItem.updateMany({
-      where: { id: row.id, amount: { gte: row.listedAmount + amount } },
-      data: { amount: { decrement: amount } },
+export interface RaidDepositAllResult extends RaidStorageViewDto {
+  movedUnits: number
+  remainingUnits: number
+}
+
+/** 一键存入：按容器顺序（背包 → 胸挂 → 安全箱）尽量装入，装不下的留在原处 */
+export async function depositAllRaidItems(userId: number): Promise<RaidDepositAllResult> {
+  await assertNoActiveRaid(userId)
+  let movedUnits = 0
+  await prisma.$transaction(async (tx) => {
+    const storage = await ensureRaidStorageTx(tx, userId)
+    const info = storageLevelInfo(storage.level)
+    let free = info.capacity - (await getRaidWarehouseUsed(userId, tx))
+    const rows = await tx.raidBagItem.findMany({
+      where: { userId },
+      orderBy: [{ container: 'asc' }, { slotIndex: 'asc' }],
     })
-    if (guarded.count !== 1) throw new AppError('仓库数量已变化，请重试', 409)
-
-    // 写后复核：listedAmount <= amount 不变式
-    const after = await tx.raidInventoryItem.findUnique({ where: { id: row.id } })
-    if (!after || after.listedAmount > after.amount) {
-      throw new AppError('仓库数据异常，回收已回滚', 500)
-    }
-    if (after.amount === 0) {
-      await tx.raidInventoryItem.delete({ where: { id: row.id } })
-    }
-
-    const points = raidRecycleValue(itemKey, amount)
-    const award = await awardPointsTx(tx, userId, {
-      amount: points,
-      reason: 'raid_recycle',
-      note: `回收 ${entry.name}×${amount}`,
-    })
-    return {
-      itemKey,
-      recycled: amount,
-      remaining: after.amount,
-      points,
-      balance: award.balance,
+    for (const row of rows) {
+      if (free <= 0) break
+      const take = Math.min(row.amount, free)
+      if (take <= 0) continue
+      await decrementBagSlotTx(tx, userId, row.container as RaidBagContainer, row.slotIndex, take)
+      await upsertWarehouseTx(tx, userId, row.itemKey, take)
+      movedUnits += take
+      free -= take
     }
   })
+  const view = await buildStorageView(userId)
+  return {
+    ...view,
+    movedUnits,
+    remainingUnits:
+      view.containers.backpack.usedUnits +
+      view.containers.rig.usedUnits +
+      view.containers.safe.usedUnits,
+  }
+}
+
+export interface RaidWithdrawInput {
+  container: RaidContainerKind
+  itemKey: string
+  amount: number
+}
+
+/** 从仓库取出到容器（背包/胸挂/安全箱），容器放不下则整笔失败 */
+export async function withdrawRaidItems(userId: number, input: RaidWithdrawInput): Promise<RaidStorageViewDto> {
+  await assertNoActiveRaid(userId)
+  const amount = Math.max(1, Math.trunc(input.amount))
+  const def = getRaidItem(input.itemKey)
+  if (!def) throw new AppError('没有这件物品', 404)
+  if (input.container === 'rig' && def.kind !== 'consumable') {
+    throw new AppError('胸挂只能放消耗品', 400)
+  }
+  await prisma.$transaction(async (tx) => {
+    const loadout = await loadRaidLoadoutTx(tx, userId)
+    const capacity = input.container === 'rig'
+      ? loadout.capacities.rig
+      : input.container === 'safe'
+        ? loadout.capacities.safe
+        : loadout.capacities.backpack
+    if (capacity <= 0) {
+      throw new AppError(`还没有装备${RAID_CONTAINER_LABELS[input.container]}，先去商店买一个吧`, 400)
+    }
+    const rows = await tx.raidBagItem.findMany({ where: { userId, container: input.container } })
+    const stacks: RaidItemStack[] = bagRowsToStacks(rows)
+    const next = addItemToContainer(stacks, capacity, input.itemKey, amount)
+    if (!next) throw new AppError(`${RAID_CONTAINER_LABELS[input.container]}已满，装不下了`, 400)
+    await decrementWarehouseTx(tx, userId, input.itemKey, amount)
+    await writeContainersTx(tx, userId, {
+      [input.container]: normalizeContainer(next, capacity, input.container === 'rig'),
+    })
+  })
+  return buildStorageView(userId)
+}
+
+/* ============================================================
+   卖给官方商店
+   ============================================================ */
+
+export interface RaidRecycleInput {
+  from: RaidBagContainer | 'warehouse'
+  itemKey: string
+  amount: number
+  slotIndex?: number
+}
+
+export interface RaidRecycleResult {
+  points: number
+  balance: number
+  view: RaidStorageViewDto
+}
+
+/** 回收（卖给系统商店）：材料 100% / 消耗品 60% / 箱子 70% 目录价值 */
+export async function recycleRaidItems(userId: number, input: RaidRecycleInput): Promise<RaidRecycleResult> {
+  await assertNoActiveRaid(userId)
+  const amount = Math.max(1, Math.trunc(input.amount))
+  const def = getRaidItem(input.itemKey)
+  if (!def) throw new AppError('没有这件物品', 404)
+  const value = raidSellPrice(input.itemKey, amount)
+  if (value <= 0) throw new AppError('这件物品无法回收', 400)
+  const result = await prisma.$transaction(async (tx) => {
+    if (input.from === 'warehouse') {
+      await decrementWarehouseTx(tx, userId, input.itemKey, amount)
+    } else {
+      const slotIndex = input.slotIndex
+      if (slotIndex === undefined || !Number.isInteger(slotIndex)) {
+        throw new AppError('缺少容器格位', 400)
+      }
+      const row = await tx.raidBagItem.findUnique({
+        where: { userId_container_slotIndex: { userId, container: input.from, slotIndex } },
+      })
+      if (!row || row.itemKey !== input.itemKey) throw new AppError('这个格子里没有这件物品', 404)
+      await decrementBagSlotTx(tx, userId, input.from, slotIndex, amount)
+    }
+    return awardPointsTx(tx, userId, {
+      amount: value,
+      reason: 'raid_recycle',
+      note: `回收 ${def.name} ×${amount}`,
+    })
+  })
+  const view = await buildStorageView(userId)
+  return { points: value, balance: result.balance, view }
 }
 
 /* ============================================================
    升级
    ============================================================ */
 
-/** 仓库升级：花积分 + 消耗仓库材料（预留中的材料不可用） */
 export async function upgradeRaidStorage(userId: number): Promise<RaidStorageViewDto> {
   await prisma.$transaction(async (tx) => {
     const storage = await ensureRaidStorageTx(tx, userId)
     const next = nextStorageUpgrade(storage.level)
-    if (!next) throw new AppError('仓库已经满级了', 400)
-    if (next.upgradeItems.length === 0 && next.upgradePoints <= 0) {
-      throw new AppError('仓库已经满级了', 400)
+    if (!next) throw new AppError('仓库已经是满级了', 400)
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { points: true } })
+    if (!user) throw new AppError('用户不存在', 404)
+    if (user.points < next.upgradePoints) {
+      throw new AppError(`升级需要 ${next.upgradePoints} 积分，当前只有 ${user.points}`, 400)
     }
-
-    const rows = await tx.raidInventoryItem.findMany({
-      where: { userId, itemKey: { in: next.upgradeItems.map((req) => req.itemKey) } },
-    })
-    const rowByKey = new Map(rows.map((row) => [row.itemKey, row]))
-
-    // 先整体校验材料与积分，任一不足都不动账
-    for (const req of next.upgradeItems) {
-      const entry = RAID_LOOT_MAP.get(req.itemKey)
-      const row = rowByKey.get(req.itemKey)
-      const freeAmount = row ? row.amount - row.listedAmount : 0
-      if (freeAmount < req.count) {
-        const missing = req.count - freeAmount
-        throw new AppError(
-          `仓库材料不足：升级还需要 ${entry?.name ?? req.itemKey}×${missing}（预留出售中的材料不能用来升级）`,
-          400,
-        )
+    const rows = await tx.raidInventoryItem.findMany({ where: { userId } })
+    for (const item of next.upgradeItems) {
+      const row = rows.find((entry) => entry.itemKey === item.itemKey)
+      if (!row || row.amount < item.count) {
+        const def = RAID_ITEM_MAP.get(item.itemKey)
+        throw new AppError(`升级材料不足：${def?.name ?? item.itemKey} 需要 ${item.count} 件`, 400)
       }
     }
-    await spendPointsTx(tx, userId, next.upgradePoints, {
-      reason: 'raid_storage_upgrade',
-      note: `仓库升级到 ${next.level} 级`,
-    })
-
-    // 守卫扣减材料：amount 必须仍能覆盖「listedAmount + 消耗量」
-    for (const req of next.upgradeItems) {
-      const row = rowByKey.get(req.itemKey)
-      if (!row) throw new AppError('仓库材料已被占用，升级失败，请重试', 409)
-      const guarded = await tx.raidInventoryItem.updateMany({
-        where: { id: row.id, amount: { gte: row.listedAmount + req.count } },
-        data: { amount: { decrement: req.count } },
+    if (next.upgradePoints > 0) {
+      await spendPointsTx(tx, userId, next.upgradePoints, {
+        reason: 'raid_storage_upgrade',
+        note: `仓库升级到 Lv.${next.level}`,
       })
-      if (guarded.count !== 1) throw new AppError('仓库材料已被占用，升级失败，请重试', 409)
-      // 写后复核：listedAmount <= amount 不变式
-      const after = await tx.raidInventoryItem.findUnique({ where: { id: row.id } })
-      if (!after || after.listedAmount > after.amount) {
-        throw new AppError('仓库数据异常，升级已回滚', 500)
-      }
-      if (after.amount === 0) {
-        await tx.raidInventoryItem.delete({ where: { id: row.id } })
-      }
     }
-
-    // 守卫写等级：以事务头读到的 level 为前提条件更新，并发重复升级只有一笔成功
-    // （绝对 set 会让并发第二笔双倍扣费，甚至把别人已升到的更高等级回写）
-    const levelUpdated = await tx.raidStorage.updateMany({
+    for (const item of next.upgradeItems) {
+      await decrementWarehouseTx(tx, userId, item.itemKey, item.count)
+    }
+    const updated = await tx.raidStorage.updateMany({
       where: { userId, level: storage.level },
       data: { level: next.level },
     })
-    if (levelUpdated.count !== 1) {
-      throw new AppError('仓库等级已变化，请刷新后重试', 409)
-    }
+    if (updated.count !== 1) throw new AppError('仓库等级已变化，请重试', 409)
   })
-  return getRaidStorageView(userId)
+  return buildStorageView(userId)
 }
 
-/* ============================================================
-   入仓（finishRaid 结算用）
-   ============================================================ */
-
-/**
- * 把已规划好的 accepted 堆叠写入仓库（必须在 finishRaid 的事务内调用）。
- * 规划（容量判断）由调用方用 planWarehouseInsert 完成后传入。
- */
-export async function insertWarehouseStacksTx(tx: Db, userId: number, accepted: ReadonlyArray<WarehouseStack>): Promise<void> {
-  for (const stack of accepted) {
-    if (stack.amount <= 0) continue
-    await tx.raidInventoryItem.upsert({
-      where: { userId_itemKey: { userId, itemKey: stack.itemKey } },
-      create: { userId, itemKey: stack.itemKey, amount: stack.amount, listedAmount: 0 },
-      update: { amount: { increment: stack.amount } },
-    })
+/** 事务内读容器（结算 / 校验用） */
+export async function readContainersTx(
+  tx: Db,
+  userId: number,
+): Promise<Record<RaidBagContainer, RaidItemStack[]>> {
+  const rows = await tx.raidBagItem.findMany({ where: { userId } })
+  return {
+    backpack: bagRowsToStacks(bagRowsOf(rows, 'backpack')),
+    rig: bagRowsToStacks(bagRowsOf(rows, 'rig')),
+    safe: bagRowsToStacks(bagRowsOf(rows, 'safe')),
   }
 }
-
-/** 保险箱格数（用户级，转发 lib 纯函数） */
-export { safeCapacityFor }

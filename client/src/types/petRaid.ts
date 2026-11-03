@@ -1,129 +1,67 @@
-/** 宠物搜打撤（GET /api/pets/raid 等）类型，字段与服务端 petRaidService DTO 对齐。 */
+/**
+ * 搜打撤 v2 客户端 DTO 类型（与服务端 raidRunService / raidStorageService / raidShopService 对齐）。
+ */
 
-import type { PetCombatStats, PetEquipmentInfo, PetLoadout, PetSkillInfo } from './pet'
+import type {
+  RaidGearInstance,
+  RaidItemStack,
+  RaidLogEntry,
+  RaidMapNode,
+  RaidSkillRule,
+} from '../lib/raid/raidRun'
 
-export type RaidMapKey = 'wasteland' | 'dam' | 'valley' | 'space' | 'fungal' | 'abyss'
-export type RaidDifficulty = 'normal' | 'hard' | 'extreme'
+export type RaidContainerKind = 'backpack' | 'rig' | 'safe'
+export type RaidGearSlot = 'helmet' | 'armor' | 'boots' | 'backpack' | 'rig'
 export type RaidStatus = 'active' | 'extracted' | 'died' | 'mia' | 'abandoned'
-export type RaidLootRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic'
-export type RaidLootKind = 'points' | 'material' | 'seed' | 'equipment' | 'skill' | 'medkit'
-export type RaidCellKind = 'empty' | 'spawn' | 'loot' | 'enemy' | 'boss' | 'extract' | 'hazard' | 'unknown'
-export type RaidDirection = 'up' | 'down' | 'left' | 'right'
 
-export interface RaidMapInfo {
-  key: RaidMapKey
-  name: string
-  emoji: string
-  description: string
-  difficulty: RaidDifficulty
-  size: number
-  enemyCount: number
-  bossCount: number
-  lootCount: number
-  extractCount: number
-  hazardCount: number
-  entryCost: number
-  maxTurns: number
-  recommendLevel: number
-  lootTier: number
-  color: string
-  enemyLevel: number
-  durationMs: number
-}
+/* ---------- 大厅 ---------- */
 
-export interface RaidLootItem {
-  id: string
+export interface RaidMapListItem {
   key: string
   name: string
   emoji: string
-  rarity: RaidLootRarity
-  kind: RaidLootKind
-  value: number
+  description: string
+  difficulty: string
+  cols: number
+  rows: number
+  entryCost: number
+  recommendLevel: number
+  lootTier: number
+  color: string
+  durationMs: number
+  enemyBudget: number
+}
+
+export interface RaidHistoryLoot {
+  itemKey: string
+  name: string
+  emoji: string
   amount: number
-  payload: string | null
-}
-
-export interface RaidCell {
-  index: number
-  x: number
-  y: number
-  kind: RaidCellKind
-  revealed: boolean
-  visited: boolean
-  searched: boolean
-  enemy: null | {
-    name: string
-    emoji: string
-    level: number
-    kind: 'scout' | 'soldier' | 'elite' | 'boss'
-    hp: number
-    maxHp: number
-  }
-  current: boolean
-}
-
-export interface RaidLogEntry {
-  id: number
-  turn: number
-  kind: 'move' | 'search' | 'combat' | 'loot' | 'extract' | 'info' | 'danger' | 'death' | 'success'
-  text: string
-  detail?: string[]
-}
-
-export interface RaidState {
-  id: number
-  version: number
-  mapKey: string
-  mapName: string
-  mapEmoji: string
-  difficulty: RaidDifficulty
-  status: RaidStatus
-  turn: number
-  maxTurns: number
-  hp: number
-  mp: number
-  maxHp: number
-  maxMp: number
-  stats: PetCombatStats
-  player: { x: number; y: number }
-  width: number
-  height: number
-  cells: RaidCell[]
-  loot: RaidLootItem[]
-  safe: RaidLootItem[]
-  safeCapacity: number
-  log: RaidLogEntry[]
-  kills: number
-  insured: boolean
-  extracting: number
-  extractionCell: number | null
-  totalLootValue: number
-  startedAt: string
-  expiresAt: string
-  remainingMs: number
-  loadout: {
-    petId: number
-    userId: number
-    name: string
-    species: string
-    level: number
-    equipmentKeys: string[]
-    skillKeys: string[]
-  }
+  value: number
 }
 
 export interface RaidHistoryEntry {
   id: number
   mapKey: string
   mapName: string
+  mapEmoji: string
   difficulty: string
-  result: RaidStatus
-  points: number
+  result: string
   kills: number
   moves: number
   durationMs: number
-  loot: RaidLootItem[]
+  lootValue: number
+  loot: RaidHistoryLoot[]
   createdAt: string
+}
+
+export interface RaidStats {
+  total: number
+  extracted: number
+  died: number
+  mia: number
+  kills: number
+  bestLootValue: number
 }
 
 export interface RaidContract {
@@ -137,44 +75,88 @@ export interface RaidContract {
   rewardPoints: number
 }
 
+export interface RaidEquippedGearSnapshot {
+  helmet: RaidGearInstance | null
+  armor: RaidGearInstance | null
+  boots: string | null
+  backpack: string | null
+  rig: string | null
+}
+
+export interface RaidOverviewLoadout {
+  gear: RaidEquippedGearSnapshot
+  capacities: { backpack: number; rig: number; safe: number }
+  skills: RaidSkillRule[]
+  backpackUnits: number
+  rigUnits: number
+  safeUnits: number
+  storageLevel: number
+  insuranceCost: number
+  insuranceRate: number
+}
+
 export interface RaidOverview {
   active: boolean
-  raid: RaidState | null
-  maps: RaidMapInfo[]
+  run: RaidRun | null
+  maps: RaidMapListItem[]
   history: RaidHistoryEntry[]
-  stats: {
-    totalRaids: number
-    extracted: number
-    died: number
-    mia: number
-    kills: number
-    bestValue: number
-  }
+  stats: RaidStats
   contracts: RaidContract[]
-  pet: null | {
-    species: string
-    name: string
-    level: number
-    equipped: PetLoadout
-    stats: PetCombatStats
-    hp: number
-    mp: number
-    maxHp: number
-    maxMp: number
-    equipmentKeys: string[]
-    skillKeys: string[]
-  }
+  pet: { name: string; species: string; level: number } | null
   points: number
+  loadout: RaidOverviewLoadout | null
+  storage: { level: number; capacity: number; used: number; free: number }
+}
+
+/* ---------- 对局 ---------- */
+
+export interface RaidRun {
+  id: number
+  version: number
+  mapKey: string
+  mapName: string
+  mapEmoji: string
+  difficulty: string
+  status: RaidStatus
+  seed: number
+  insured: boolean
+  hp: number
+  mp: number
+  maxHp: number
+  maxMp: number
+  atk: number
+  kills: number
+  damageTaken: number
+  currentRoom: number
+  clearedRooms: number[]
+  killedEnemies: string[]
+  openedContainers: string[]
+  takenLoot: string[]
+  backpack: RaidItemStack[]
+  rig: RaidItemStack[]
+  safe: RaidItemStack[]
+  capacities: { backpack: number; rig: number; safe: number }
+  gear: RaidEquippedGearSnapshot
+  skills: RaidSkillRule[]
+  map: RaidMapNode
+  log: RaidLogEntry[]
+  extractionStartedAt: number | null
+  startedAt: string
+  expiresAt: string
+  remainingMs: number
+  entryCost: number
+  insuranceCost: number
   insuranceRate: number
-  /** 单局保险箱格数（随仓库等级提升；旧后端响应可能缺省） */
-  safeCapacity?: number
-  /** 搜打撤仓库概要（旧后端响应可能缺省） */
-  storage?: {
-    level: number
-    capacity: number
-    used: number
-    safeCapacity: number
-  }
+}
+
+export interface RaidSettlementItem {
+  container: RaidContainerKind
+  itemKey: string
+  name: string
+  emoji: string
+  rarity: string
+  amount: number
+  value: number
 }
 
 export interface RaidSettlement {
@@ -182,53 +164,78 @@ export interface RaidSettlement {
   points: number
   balance: number
   gearLost: string[]
-  loot: RaidSettlementLoot[]
-  record: RaidHistoryEntry
-  contracts: RaidContract[]
+  loot: RaidSettlementItem[]
+  kept: {
+    backpack: RaidItemStack[]
+    rig: RaidItemStack[]
+    safe: RaidItemStack[]
+  }
+  record: {
+    id: number
+    mapKey: string
+    result: string
+    kills: number
+    lootValue: number
+    createdAt: string
+  }
 }
 
-export interface RaidActionResponse {
-  raid: RaidState | null
-  gained: RaidLootItem[]
-  combat: null | {
-    enemyName: string
-    won: boolean
-    events: string[]
-  }
+export interface RaidEventBatchResult {
+  run: RaidRun | null
+  errors: string[]
   settlement: RaidSettlement | null
 }
 
-/** 结算条目的去向：material 入仓 / 折积分，seed 入农场，装备技能入栏或重复折价 */
-export type RaidLootOutcome = 'warehouse' | 'points' | 'farm' | 'equipment' | 'skill' | 'dupe'
+/* ---------- 仓库 / 背包 ---------- */
 
-/** 结算弹层用的战利品条目（在基础条目上追加去向字段；旧后端响应缺省时按折积分兜底渲染） */
-export interface RaidSettlementLoot extends RaidLootItem {
-  outcome?: RaidLootOutcome
-  /** outcome = 'warehouse' 时：本条已入仓的数量 */
-  storedAmount?: number
-  /** 本条折算成积分的部分（仓库溢出 / 急救包 / 重复装备等折价） */
-  overflowPoints?: number
-}
-
-/* ============================================================
-   搜打撤仓库（GET /api/pets/raid/storage 等）
-   ============================================================ */
-
-export interface RaidStorageItem {
+export interface RaidItemInfo {
   itemKey: string
   name: string
   emoji: string
-  rarity: RaidLootRarity
-  /** 单件目录价值 */
+  rarity: string
+  kind: string
   value: number
-  amount: number
-  /** 交易行在售预留数量 */
-  listedAmount: number
-  /** amount - listedAmount（可回收 / 可上架的数量） */
-  freeAmount: number
+  sellUnit: number
+  stackMax: number
+  description: string
 }
 
-export interface RaidStorageUpgradeItem {
+export interface RaidStorageItem extends RaidItemInfo {
+  amount: number
+}
+
+export interface RaidBagItem extends RaidItemInfo {
+  slotIndex: number
+  amount: number
+}
+
+export interface RaidContainerView {
+  container: RaidContainerKind
+  label: string
+  capacity: number
+  usedSlots: number
+  usedUnits: number
+  items: RaidBagItem[]
+}
+
+export interface RaidGearInfo {
+  gearKey: string
+  name: string
+  emoji: string
+  slot: RaidGearSlot
+  tier: number
+  rarity: string
+  price: number
+  description: string
+  defense: number
+  maxDurability: number
+  durability: number
+  speedBonus: number
+  slots: number
+  equipped: boolean
+}
+
+export interface RaidUpgradeItem {
   itemKey: string
   name: string
   emoji: string
@@ -236,16 +243,22 @@ export interface RaidStorageUpgradeItem {
   have: number
 }
 
-export interface RaidStorageUpgradePreview {
+export interface RaidUpgradePreview {
   level: number
   capacity: number
   safeCapacity: number
   upgradePoints: number
-  /** 积分是否足够 */
   pointsOk: boolean
-  /** 材料是否足够 */
   materialsOk: boolean
-  items: RaidStorageUpgradeItem[]
+  items: RaidUpgradeItem[]
+}
+
+export interface RaidEquippedSummary {
+  helmet: RaidGearInfo | null
+  armor: RaidGearInfo | null
+  boots: RaidGearInfo | null
+  backpack: RaidGearInfo | null
+  rig: RaidGearInfo | null
 }
 
 export interface RaidStorageView {
@@ -254,76 +267,83 @@ export interface RaidStorageView {
   used: number
   free: number
   safeCapacity: number
+  backpackSlots: number
+  rigSlots: number
+  points: number
   items: RaidStorageItem[]
-  nextUpgrade: RaidStorageUpgradePreview | null
-  feeRate: number
-  balance: number
+  containers: {
+    backpack: RaidContainerView
+    rig: RaidContainerView
+    safe: RaidContainerView
+  }
+  gear: RaidGearInfo[]
+  equipped: RaidEquippedSummary
+  upgrade: RaidUpgradePreview | null
+}
+
+export interface RaidDepositAllResult extends RaidStorageView {
+  movedUnits: number
+  remainingUnits: number
 }
 
 export interface RaidRecycleResult {
-  itemKey: string
-  recycled: number
-  remaining: number
   points: number
   balance: number
+  view: RaidStorageView
 }
 
-/* ============================================================
-   搜打撤交易行（GET /api/pets/raid/market 等）
-   ============================================================ */
+/* ---------- 官方商店 ---------- */
 
-export interface RaidMarketListing {
-  id: number
-  sellerId: number
-  sellerName: string
-  itemKey: string
-  itemName: string
+export interface RaidShopGear {
+  key: string
+  name: string
   emoji: string
-  rarity: RaidLootRarity
-  /** 单件目录价值快照 */
-  value: number
-  amount: number
-  /** 整单总价（积分） */
+  slot: RaidGearSlot
+  tier: number
+  rarity: string
   price: number
-  /** 单件均价 */
-  unitPrice: number
-  createdAt: string
-  isMine: boolean
+  description: string
+  defense: number
+  maxDurability: number
+  speedBonus: number
+  slots: number
+  owned: boolean
 }
 
-export interface RaidMarketTrade {
-  id: number
-  itemKey: string
-  itemName: string
+export interface RaidShopItem {
+  key: string
+  name: string
+  emoji: string
+  rarity: string
+  kind: string
+  price: number
+  stackMax: number
+  description: string
+}
+
+export interface RaidShopView {
+  points: number
+  gear: RaidShopGear[]
+  items: RaidShopItem[]
+}
+
+export interface RaidShopBuyResult {
+  kind: 'gear' | 'item'
+  key: string
+  name: string
   emoji: string
   amount: number
-  price: number
-  fee: number
-  sellerName: string
-  buyerName: string
-  createdAt: string
-}
-
-export interface RaidMarketView {
+  spent: number
   balance: number
-  feeRate: number
-  listings: RaidMarketListing[]
-  myListings: RaidMarketListing[]
-  trades: RaidMarketTrade[]
+  points: number
+  view: RaidShopView
 }
 
-export interface RaidMarketBuyResult {
-  balance: number
-  fee: number
-  proceeds: number
-  item: {
-    itemKey: string
-    itemName: string
-    amount: number
-    price: number
-  }
+export interface RaidOpenCacheResult {
+  type: 'gear' | 'skill'
+  key: string
+  name: string
+  emoji: string
+  duplicatePoints: number
+  view: RaidStorageView
 }
-
-/** 装备 / 技能目录（复用宠物 gear 页的类型，避免重复定义） */
-export type RaidEquipmentInfo = PetEquipmentInfo
-export type RaidSkillInfo = PetSkillInfo

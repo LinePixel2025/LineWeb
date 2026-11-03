@@ -79,10 +79,10 @@ function hasAdminRoleClaim(req: Request): boolean {
 
 const fifteenMinutes = 15 * 60 * 1000
 
-/** 认证前 IP 硬上限：默认 3000 次/15min，可通过环境变量调整 */
+/** 认证前 IP 硬上限：默认 30000 次/15min，可通过环境变量调整（须高于单用户 8000，避免 NAT 互伤） */
 export const ipHardLimiter = rateLimit({
   windowMs: fifteenMinutes,
-  limit: Math.max(100, Number.parseInt(process.env.API_IP_HARD_LIMIT || '3000', 10) || 3000),
+  limit: Math.max(100, Number.parseInt(process.env.API_IP_HARD_LIMIT || '30000', 10) || 30000),
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => isHighFrequencyPath(req) || hasAdminRoleClaim(req),
@@ -92,14 +92,14 @@ export const ipHardLimiter = rateLimit({
 /**
  * 认证后的按用户业务限额。
  *
- * - 默认 600 次/15min，管理员可逐个用户在管理端调整；
+ * - 默认 8000 次/15min（2026-11-03 从 600 上调），管理员可逐个用户在管理端调整；
  * - 0 = 不限业务配额（仍受 IP 硬上限约束）；
  * - 管理员恒不触发（角色来自数据库，降权后立即恢复受限）；
  * - 公开路径没有 req.user，跳过并交给登录/OAuth 自己的限流。
  */
 export const userApiLimiter = rateLimit({
   windowMs: fifteenMinutes,
-  limit: (req) => req.user?.apiRateLimit ?? 600,
+  limit: (req) => req.user?.apiRateLimit ?? 8000,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => String(req.user?.userId ?? ipKeyGenerator(req.ip ?? '')),

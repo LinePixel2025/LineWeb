@@ -1813,8 +1813,8 @@ curl -s -X DELETE http://<ECS 公网 IP>:3001/api/posts/1 \
 
 ### 19.2 限流
 
-- 认证前：IP 防滥用硬上限（默认 3000 次/15min，`API_IP_HARD_LIMIT` 可调）。
-- 认证后：每用户全局 API 限额（`User.apiRateLimit`，默认 600 次/15min，0=不限；管理员恒不受限）。
+- 认证前：IP 防滥用硬上限（默认 30000 次/15min，`API_IP_HARD_LIMIT` 可调）。
+- 认证后：每用户全局 API 限额（`User.apiRateLimit`，默认 8000 次/15min，0=不限；管理员恒不受限）。
 - 游戏/聊天/AI 专用限流保持原值，管理员豁免；登录/注册与 OAuth 应用侧限流不豁免。
 - 管理端 `PUT /api/users/:id/rate-limit` 可逐个用户调整。
 

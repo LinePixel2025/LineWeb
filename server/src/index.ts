@@ -62,6 +62,7 @@ import { recomputeAllLeaderTitles } from './services/gameLeaderTitleService.js'
 import { syncDriveFiles } from './services/storageSync.js'
 import { deduplicateDriveFiles } from './services/dedupDriveFiles.js'
 import { ensureFTSTable } from './services/ftsSearch.js'
+import { runStartupMigrations } from './services/systemMigrations.js'
 import { recordRequest, startTracking } from './services/deviceTracker.js'
 import prisma from './lib/prisma.js'
 
@@ -768,6 +769,11 @@ syncInterval.unref()  // 不阻止进程退出
 // 启动时初始化 FTS5 表（非阻塞）
 ensureFTSTable().catch(err => {
   console.warn('[FTS] Initialization skipped:', err.message)
+})
+
+// 一次性系统迁移（限流默认值回填等，幂等，失败只告警）
+runStartupMigrations().catch(err => {
+  console.warn('[Migration] 启动迁移失败:', err instanceof Error ? err.message : err)
 })
 
 // 启动后延迟 10 秒执行去重 + 首次同步（等待节点连接）

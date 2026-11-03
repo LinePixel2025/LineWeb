@@ -42,23 +42,23 @@ import {
   createListing,
   getPetMarketView,
 } from '../services/petMarketService.js'
+import { startRaid } from '../services/raidRunService.js'
 import {
-  claimRaidContract,
+  abandonRaid,
+  claimRaidContractForUser,
   getRaidOverview,
-  performRaidAction,
-  startRaid,
+  performRaidEvents,
 } from '../services/petRaidService.js'
 import {
+  depositAllRaidItems,
+  depositRaidItems,
   getRaidStorageView,
   recycleRaidItems,
   upgradeRaidStorage,
+  withdrawRaidItems,
 } from '../services/raidStorageService.js'
-import {
-  buyRaidListing,
-  cancelRaidListing,
-  getRaidMarketView,
-  listRaidItem,
-} from '../services/raidMarketService.js'
+import { equipRaidGear, openRaidCache, repairRaidGearForUser } from '../services/raidGearService.js'
+import { buyRaidShopItem, getRaidShopView } from '../services/raidShopService.js'
 
 const router = Router()
 router.use(authenticate)
@@ -142,22 +142,66 @@ const raidStartSchema = z.object({
   mapKey: z.string().min(1).max(20),
   insured: z.boolean().optional(),
 })
-const raidActionSchema = z.object({
-  type: z.enum(['move', 'search', 'extract', 'medkit', 'safe', 'unsafe', 'abandon']),
-  dir: z.enum(['up', 'down', 'left', 'right']).optional(),
-  lootId: z.string().min(1).max(80).optional(),
-  version: z.coerce.number().int().min(0).optional(),
+const raidContainerSchema = z.enum(['backpack', 'rig', 'safe'])
+const raidEventSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('enterRoom'), roomId: z.coerce.number().int().min(0).max(99) }),
+  z.object({ type: z.literal('kill'), enemyId: z.string().min(1).max(40) }),
+  z.object({ type: z.literal('clearRoom'), roomId: z.coerce.number().int().min(0).max(99) }),
+  z.object({ type: z.literal('openContainer'), containerId: z.string().min(1).max(40) }),
+  z.object({
+    type: z.literal('takeLoot'),
+    containerId: z.string().min(1).max(40),
+    lootId: z.string().min(1).max(40),
+    target: raidContainerSchema,
+    slotIndex: z.coerce.number().int().min(0).max(200).optional(),
+  }),
+  z.object({
+    type: z.literal('useItem'),
+    itemKey: z.string().min(1).max(40),
+    from: raidContainerSchema,
+  }),
+  z.object({ type: z.literal('castSkill'), skillKey: z.string().min(1).max(40) }),
+  z.object({
+    type: z.literal('damage'),
+    amount: z.coerce.number().int().min(0).max(100000),
+    zone: z.enum(['head', 'body']).default('body'),
+  }),
+  z.object({ type: z.literal('extractStart') }),
+  z.object({ type: z.literal('extractDone') }),
+  z.object({ type: z.literal('abandon') }),
+])
+const raidEventsSchema = z.object({
+  version: z.coerce.number().int().min(0),
+  events: z.array(raidEventSchema).max(120),
 })
 const raidContractParamSchema = z.object({ key: z.string().min(1).max(40) })
-const raidRecycleSchema = z.object({
+const raidDepositSchema = z.object({
+  container: raidContainerSchema,
+  slotIndex: z.coerce.number().int().min(0).max(200),
+  amount: z.coerce.number().int().min(1).max(9999),
+})
+const raidWithdrawSchema = z.object({
+  container: raidContainerSchema,
   itemKey: z.string().min(1).max(40),
   amount: z.coerce.number().int().min(1).max(9999),
 })
-const raidStorageUpgradeSchema = z.object({}).strict()
-const raidMarketListSchema = z.object({
+const raidRecycleSchema = z.object({
+  from: z.enum(['warehouse', 'backpack', 'rig', 'safe']),
   itemKey: z.string().min(1).max(40),
   amount: z.coerce.number().int().min(1).max(9999),
-  price: z.coerce.number().int().min(1).max(1_000_000),
+  slotIndex: z.coerce.number().int().min(0).max(200).optional(),
+})
+const raidStorageUpgradeSchema = z.object({}).strict()
+const raidGearEquipSchema = z.object({
+  slot: z.enum(['helmet', 'armor', 'boots', 'backpack', 'rig']),
+  gearKey: z.string().min(1).max(40).nullable().optional(),
+})
+const raidGearKeySchema = z.object({ gearKey: z.string().min(1).max(40) })
+const raidOpenCacheSchema = z.object({ itemKey: z.string().min(1).max(40) })
+const raidShopBuySchema = z.object({
+  kind: z.enum(['gear', 'item']),
+  key: z.string().min(1).max(40),
+  amount: z.coerce.number().int().min(1).max(99).optional(),
 })
 
 // GET /api/pets — 我的宠物（未召唤时 pet 为 null，仍返回目录与积分）
@@ -284,9 +328,9 @@ router.post('/shop/skills/:key/buy', marketWriteLimiter, asyncHandler(async (req
   res.json(await buySkill(currentUserId(req), key))
 }))
 
-/* ---------- 搜打撤（Delta Force 风格） ---------- */
+/* ---------- 搜打撤 v2（实时房间制） ---------- */
 
-// GET /api/pets/raid — 地图 / 当前对局 / 战绩 / 每日契约
+// GET /api/pets/raid — 地图 / 当前对局 / 战绩 / 每日契约 / 出击装配
 router.get('/raid', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
   res.json(await getRaidOverview(currentUserId(req)))
 }))
@@ -297,29 +341,52 @@ router.post('/raid/start', battleInviteLimiter, asyncHandler(async (req: Request
   res.status(201).json(await startRaid(currentUserId(req), input.mapKey, { insured: input.insured }))
 }))
 
-// POST /api/pets/raid/action — { type, dir?, lootId?, version? }
-router.post('/raid/action', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
-  const input = parseInput(raidActionSchema, req.body ?? {})
-  res.json(await performRaidAction(currentUserId(req), input))
+// POST /api/pets/raid/events — { version, events[] } 批量上报（移动/击杀/开箱/拾取/技能/受伤/撤离）
+router.post('/raid/events', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidEventsSchema, req.body ?? {})
+  res.json(await performRaidEvents(currentUserId(req), input))
+}))
+
+// POST /api/pets/raid/abandon — 主动放弃行动
+router.post('/raid/abandon', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await abandonRaid(currentUserId(req)))
 }))
 
 // POST /api/pets/raid/contracts/:key/claim — 领取每日契约奖励
 router.post('/raid/contracts/:key/claim', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
   const { key } = parseInput(raidContractParamSchema, req.params)
-  res.json(await claimRaidContract(currentUserId(req), key))
+  res.json(await claimRaidContractForUser(currentUserId(req), key))
 }))
 
-/* ---------- 搜打撤仓库 / 交易行 ---------- */
+/* ---------- 搜打撤仓库 / 背包 / 胸挂 / 安全箱 ---------- */
 
-// GET /api/pets/raid/storage — 仓库等级 / 容量 / 物品 / 升级预览
+// GET /api/pets/raid/storage — 仓库 + 三类容器 + 装备 + 升级预览
 router.get('/raid/storage', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
   res.json(await getRaidStorageView(currentUserId(req)))
 }))
 
-// POST /api/pets/raid/storage/recycle — { itemKey, amount } 回收材料折积分
+// POST /api/pets/raid/storage/deposit — { container, slotIndex, amount } 单格存入仓库（整笔）
+router.post('/raid/storage/deposit', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidDepositSchema, req.body ?? {})
+  res.json(await depositRaidItems(currentUserId(req), input))
+}))
+
+// POST /api/pets/raid/storage/deposit-all — 一键存入（装不下的留在容器）
+router.post('/raid/storage/deposit-all', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  parseInput(raidStorageUpgradeSchema, req.body ?? {})
+  res.json(await depositAllRaidItems(currentUserId(req)))
+}))
+
+// POST /api/pets/raid/storage/withdraw — { container, itemKey, amount } 仓库取到容器
+router.post('/raid/storage/withdraw', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidWithdrawSchema, req.body ?? {})
+  res.json(await withdrawRaidItems(currentUserId(req), input))
+}))
+
+// POST /api/pets/raid/storage/recycle — { from, itemKey, amount, slotIndex? } 卖给官方商店
 router.post('/raid/storage/recycle', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
   const input = parseInput(raidRecycleSchema, req.body ?? {})
-  res.json(await recycleRaidItems(currentUserId(req), input.itemKey, input.amount))
+  res.json(await recycleRaidItems(currentUserId(req), input))
 }))
 
 // POST /api/pets/raid/storage/upgrade — {} 花积分 + 消耗材料升级仓库
@@ -328,28 +395,35 @@ router.post('/raid/storage/upgrade', marketWriteLimiter, asyncHandler(async (req
   res.json(await upgradeRaidStorage(currentUserId(req)))
 }))
 
-// GET /api/pets/raid/market — 在售挂单 + 我的挂单 + 最近成交
-router.get('/raid/market', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
-  res.json(await getRaidMarketView(currentUserId(req)))
+/* ---------- 搜打撤官方商店 / 装备 ---------- */
+
+// GET /api/pets/raid/shop — 官方商店（1–3 级装备 + 消耗品 + 箱子）
+router.get('/raid/shop', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await getRaidShopView(currentUserId(req)))
 }))
 
-// POST /api/pets/raid/market/list — { itemKey, amount, price } 整单上架
-router.post('/raid/market/list', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
-  const input = parseInput(raidMarketListSchema, req.body ?? {})
-  res.status(201).json(await listRaidItem(currentUserId(req), input.itemKey, input.amount, input.price))
+// POST /api/pets/raid/shop/buy — { kind, key, amount? }
+router.post('/raid/shop/buy', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidShopBuySchema, req.body ?? {})
+  res.json(await buyRaidShopItem(currentUserId(req), input))
 }))
 
-// POST /api/pets/raid/market/:id/buy — 购买挂单（整单）
-router.post('/raid/market/:id/buy', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
-  const { id } = parseInput(marketIdParamSchema, req.params)
-  res.json(await buyRaidListing(currentUserId(req), id))
+// POST /api/pets/raid/gear/equip — { slot, gearKey|null }
+router.post('/raid/gear/equip', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidGearEquipSchema, req.body ?? {})
+  res.json(await equipRaidGear(currentUserId(req), input.slot, input.gearKey ?? null))
 }))
 
-// DELETE /api/pets/raid/market/:id — 下架自己的挂单
-router.delete('/raid/market/:id', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
-  const { id } = parseInput(marketIdParamSchema, req.params)
-  await cancelRaidListing(currentUserId(req), id)
-  res.json({ ok: true })
+// POST /api/pets/raid/gear/repair — { gearKey } 消耗头修包 / 甲修包
+router.post('/raid/gear/repair', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidGearKeySchema, req.body ?? {})
+  res.json(await repairRaidGearForUser(currentUserId(req), input.gearKey))
+}))
+
+// POST /api/pets/raid/gear/open-cache — { itemKey } 开启装备箱 / 技能卷轴
+router.post('/raid/gear/open-cache', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidOpenCacheSchema, req.body ?? {})
+  res.json(await openRaidCache(currentUserId(req), input.itemKey))
 }))
 
 /* ---------- PvP 对战 ---------- */

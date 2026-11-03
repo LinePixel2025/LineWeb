@@ -1,16 +1,16 @@
 /**
- * 搜打撤仓库 / 交易行纯函数（等级表 / 入仓规划 / 定价与手续费）。
+ * 搜打撤仓库纯函数（等级表 / 存入规划 / 官方商店回收价）。
  *
- * 口径：
- *   - 仓库共 6 级，容量（可堆放物品总数）与保险箱格数随等级提升；
- *   - 升级除积分外还要消耗仓库里的 material 类战利品（升级材料不入积分）；
- *   - 撤离结算时 material 先入仓，仓库装不下的部分按目录价值折积分；
- *   - 交易行挂单价必须落在「目录总价值 × 0.5–1.5」区间，卖家收 5% 手续费（最低 1）。
+ * 口径（2026-11-03 重构）：
+ *   - 仓库共 6 级，容量按「可堆放物品总件数」计，保险箱格数随等级提升；
+ *   - 撤离后战利品留在背包 / 胸挂 / 安全箱，玩家手动存入仓库；
+ *     仓库满时不自动出售、不收部分存入（deposit 整笔失败），deposit-all 只填得下的部分；
+ *   - 交易行已删除，物品只能按官方回收价卖给系统商店（材料 100% / 消耗品 60% / 箱子 70%）。
  *
- * 本文件不碰数据库，全部为纯函数，供 raidStorageService / petRaidService / 自检共用。
+ * 本文件不碰数据库，供 raidStorageService / 自检共用。
  */
 
-import { RAID_LOOT_ENTRIES, RAID_LOOT_MAP, type RaidLootEntry } from './petRaid.js'
+import { RAID_ITEM_MAP, raidSellPrice } from './raidRun.js'
 
 /* ============================================================
    仓库等级表
@@ -18,11 +18,11 @@ import { RAID_LOOT_ENTRIES, RAID_LOOT_MAP, type RaidLootEntry } from './petRaid.
 
 export interface RaidStorageLevel {
   level: number
-  /** 仓库容量（可堆放物品总数） */
+  /** 仓库容量（可堆放物品总件数） */
   capacity: number
-  /** 单局保险箱格数 */
+  /** 单局安全箱格数 */
   safeCapacity: number
-  /** 升级到下一级需要的积分（level 1 为初始级，此值对 level 1 无意义恒为 0） */
+  /** 升级到下一级需要的积分（level 1 初始级恒为 0） */
   upgradePoints: number
   /** 升级到下一级需要的仓库材料（level 1 无） */
   upgradeItems: ReadonlyArray<{ itemKey: string; count: number }>
@@ -39,27 +39,24 @@ export const RAID_STORAGE_LEVELS: readonly RaidStorageLevel[] = [
 
 export const RAID_STORAGE_MAX_LEVEL = RAID_STORAGE_LEVELS.length
 
-/** 等级越界时夹取到 1–6 */
 export function storageLevelInfo(level: number): RaidStorageLevel {
   const clean = Number.isFinite(level) ? Math.trunc(level) : 1
   const clamped = Math.max(1, Math.min(RAID_STORAGE_MAX_LEVEL, clean))
   return RAID_STORAGE_LEVELS[clamped - 1] ?? RAID_STORAGE_LEVELS[0]
 }
 
-/** 下一级升级需求；已满级返回 null */
 export function nextStorageUpgrade(level: number): RaidStorageLevel | null {
   const info = storageLevelInfo(level)
   if (info.level >= RAID_STORAGE_MAX_LEVEL) return null
   return RAID_STORAGE_LEVELS[info.level] ?? null
 }
 
-/** 单局保险箱格数 = 仓库等级派生（越界夹取） */
 export function safeCapacityFor(level: number): number {
   return storageLevelInfo(level).safeCapacity
 }
 
 /* ============================================================
-   入仓规划
+   存入规划
    ============================================================ */
 
 export interface WarehouseStack {
@@ -70,8 +67,8 @@ export interface WarehouseStack {
 export interface WarehouseStackPlan {
   /** 装得下的部分（按传入顺序填充） */
   accepted: WarehouseStack[]
-  /** 仓库装不下、按目录价值折积分的部分 */
-  overflow: WarehouseStack[]
+  /** 仓库装不下的剩余部分（留在背包，不会自动出售） */
+  remaining: WarehouseStack[]
 }
 
 function assertNonNegativeInt(value: number, label: string): void {
@@ -81,8 +78,8 @@ function assertNonNegativeInt(value: number, label: string): void {
 }
 
 /**
- * 入仓规划：按 stacks 传入顺序逐个填充，仓库剩余容量不够时把余量划入 overflow。
- * 同名物品多段堆放会先合并（合并后按首次出现位置排序），保证结果确定性。
+ * 存入规划：按 stacks 顺序逐个填充，仓库剩余容量不够时把余量留在 remaining。
+ * 同名物品多段先合并（按首次出现位置），保证结果确定性。
  */
 export function planWarehouseInsert(
   capacity: number,
@@ -110,7 +107,7 @@ export function planWarehouseInsert(
   }
 
   const accepted: WarehouseStack[] = []
-  const overflow: WarehouseStack[] = []
+  const remaining: WarehouseStack[] = []
   for (const itemKey of order) {
     const amount = merged.get(itemKey) ?? 0
     const take = Math.min(amount, free)
@@ -119,75 +116,57 @@ export function planWarehouseInsert(
       free -= take
     }
     if (amount - take > 0) {
-      overflow.push({ itemKey, amount: amount - take })
+      remaining.push({ itemKey, amount: amount - take })
     }
   }
-  return { accepted, overflow }
+  return { accepted, remaining }
 }
 
 /* ============================================================
-   交易行定价
+   官方商店 / 回收
    ============================================================ */
 
-export const RAID_MARKET_FEE_RATE = 0.05
-export const RAID_MARKET_PRICE_MIN_RATIO = 0.5
-export const RAID_MARKET_PRICE_MAX_RATIO = 1.5
-/** 挂单价格硬上限（防恶意天价），与宠物交易行一致 */
-export const RAID_MARKET_PRICE_HARD_MAX = 1_000_000
-
-/** 目录条目查询（不存在返回 null） */
-export function raidLootEntry(itemKey: string): RaidLootEntry | null {
-  return RAID_LOOT_MAP.get(itemKey) ?? null
+/** 单件回收价（材料 / 珍宝 100%，消耗品 60%，装备箱 / 技能卷轴 70%） */
+export function raidRecycleUnitPrice(itemKey: string): number {
+  return raidSellPrice(itemKey, 1)
 }
 
-/** 目录价值 = 单件目录价值 × 数量（未知物品按 0 计） */
-export function raidListingValue(itemKey: string, amount: number): number {
-  const entry = RAID_LOOT_MAP.get(itemKey)
-  if (!entry) return 0
-  const clean = Number.isFinite(amount) ? Math.max(0, Math.trunc(amount)) : 0
-  return entry.value * clean
-}
-
-/** 卖家手续费：ceil(price × 5%)，最低 1（价格 ≤ 0 返回 0） */
-export function raidMarketFee(price: number): number {
-  const clean = Number.isFinite(price) ? Math.max(0, Math.trunc(price)) : 0
-  if (clean <= 0) return 0
-  return Math.max(1, Math.ceil(clean * RAID_MARKET_FEE_RATE))
-}
-
-/** 卖家到账 = 整单价 − 手续费 */
-export function raidMarketSellerProceeds(price: number): number {
-  const clean = Number.isFinite(price) ? Math.max(0, Math.trunc(price)) : 0
-  return Math.max(0, clean - raidMarketFee(clean))
-}
-
-/**
- * 挂单校验：不合法直接 throw Error（文案由服务层转 AppError）。
- * 价格必须落在「目录总价值 × 0.5–1.5」（含端点）之间。
- */
-export function validateRaidListingPrice(itemKey: string, amount: number, price: number): void {
-  const entry = RAID_LOOT_MAP.get(itemKey)
-  if (!entry) throw new Error('没有这件物品')
-  if (!Number.isFinite(amount) || !Number.isInteger(amount) || amount < 1) {
-    throw new Error('数量必须是正整数')
-  }
-  if (!Number.isFinite(price) || !Number.isInteger(price)) throw new Error('价格必须是整数')
-  if (price < 1) throw new Error('价格必须大于 0')
-  if (price > RAID_MARKET_PRICE_HARD_MAX) throw new Error(`价格不能超过 ${RAID_MARKET_PRICE_HARD_MAX.toLocaleString()}`)
-  const total = raidListingValue(itemKey, amount)
-  const min = Math.max(1, Math.floor(total * RAID_MARKET_PRICE_MIN_RATIO))
-  const max = Math.max(min, Math.ceil(total * RAID_MARKET_PRICE_MAX_RATIO))
-  if (price < min || price > max) {
-    throw new Error(`价格需在 ${min}–${max} 积分之间（目录价值 ${total} 的 50%–150%）`)
-  }
-}
-
-/** 回收可得积分 = 单件目录价值 × 数量（未知物品按 0 计） */
+/** 整组回收价 */
 export function raidRecycleValue(itemKey: string, amount: number): number {
-  return raidListingValue(itemKey, amount)
+  return raidSellPrice(itemKey, amount)
 }
 
-/** 目录（交易行 / 仓库展示用，只含可入仓的 material 类） */
-export function raidMaterialEntries(): readonly RaidLootEntry[] {
-  return RAID_LOOT_ENTRIES.filter((item) => item.kind === 'material')
+/** 目录条目是否存在且可入仓（未知 / 非物品 key 一律拒绝） */
+export function isRaidStorableItem(itemKey: string): boolean {
+  return RAID_ITEM_MAP.has(itemKey)
+}
+
+/** 装备箱档次提示（商店 / 仓库展示） */
+export function gearCacheTierLabel(itemKey: string): string {
+  const def = RAID_ITEM_MAP.get(itemKey)
+  if (!def || def.kind !== 'gear_cache') return ''
+  return `${def.cacheTierMin ?? 1}–${def.cacheTierMax ?? 6} 级`
+}
+
+/* ============================================================
+   容量换算
+   ============================================================ */
+
+/** 背包容量 = 已装备背包的格数（没背包为 0） */
+export function backpackCapacityOf(slots: number | null | undefined): number {
+  if (!slots || !Number.isFinite(slots)) return 0
+  return Math.max(0, Math.trunc(slots))
+}
+
+/** 胸挂容量 = 已装备胸挂的格数（没胸挂为 0） */
+export function rigCapacityOf(slots: number | null | undefined): number {
+  if (!slots || !Number.isFinite(slots)) return 0
+  return Math.max(0, Math.trunc(slots))
+}
+
+/** 仓库已用件数 = 各物品数量之和 */
+export function warehouseUsedUnits(
+  rows: ReadonlyArray<{ amount: number }>,
+): number {
+  return rows.reduce((sum, row) => sum + Math.max(0, Math.trunc(row.amount)), 0)
 }

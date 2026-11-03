@@ -395,7 +395,7 @@ GET /api/drive/files/:id/download?token=<ticket>     # 兼容路径
 
 | 范围 | 限制 | 触发响应 |
 |---|---|---|
-| 全局（每 IP） | 600 次 / 15 分钟 | 429 `请求过于频繁，请稍后再试` |
+| 全局（每 IP） | 30000 次 / 15 分钟 | 429 `请求过于频繁，请稍后再试` |
 | 登录 / 注册（每 IP） | 20 次 / 15 分钟 | 429 `请求过于频繁，请 15 分钟后再试` |
 
 > 设备/脚本请**缓存令牌**而不是每次调用都登录；仅在收到 401 时重新登录一次，并对 429 做指数退避。
@@ -624,7 +624,7 @@ try { Invoke-RestMethod "$base/auth/me" -Headers $h } catch { $_.Exception.Respo
 
 ### 13.3 每用户 API 限额
 
-- `User.apiRateLimit` 默认 600（次/15min），0=不限；管理员恒不受限。
+- `User.apiRateLimit` 默认 8000（次/15min），0=不限；管理员恒不受限。
 - 管理端 `PUT /api/users/:id/rate-limit` body `{ "apiRateLimit": 0 }`（0–100000）。
 - 游戏/聊天/AI 专用限流对管理员豁免；登录/注册/OAuth 限流不豁免。
 

@@ -1,106 +1,86 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+/**
+ * 宠物搜打撤 v2（/pets/raid）：大厅 + 元气骑士式实时战斗 + 结算。
+ *
+ * 客户端职责：实时表现与本地预测；服务端按 seed 重算地图校验事件，并作为背包 / HP / 撤离的权威。
+ * 撤离后战利品留在背包 / 胸挂 / 安全箱，必须到仓库页手动存入（不会自动出售）。
+ */
+
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
-import PetSprite from '../components/pets/PetSprite'
 import api from '../lib/api'
-import type { PetSpecies } from '../types/pet'
+import type { RaidEvent } from '../lib/raid/raidRun'
+import { getRaidGear } from '../lib/raid/raidRun'
+import type { RaidEngine, RaidSnapshot } from '../lib/raid/engine'
+import RaidCanvas from '../components/raid/RaidCanvas'
+import RaidHud from '../components/raid/RaidHud'
+import RaidResultDialog from '../components/raid/RaidResultDialog'
 import type {
-  RaidActionResponse,
-  RaidCell,
   RaidContract,
-  RaidDirection,
-  RaidHistoryEntry,
-  RaidLootItem,
-  RaidMapInfo,
+  RaidEventBatchResult,
   RaidOverview,
+  RaidRun,
   RaidSettlement,
-  RaidSettlementLoot,
-  RaidState,
 } from '../types/petRaid'
 
-const DIR_LABEL: Record<RaidDirection, string> = {
-  up: '↑',
-  down: '↓',
-  left: '←',
-  right: '→',
-}
-
-const RARITY_LABEL: Record<RaidLootItem['rarity'], string> = {
-  common: '普通',
-  rare: '稀有',
-  epic: '史诗',
-  legendary: '传说',
-  mythic: '神话',
-}
-
-const RESULT_LABEL: Record<string, string> = {
-  extracted: '撤离成功',
-  died: '阵亡',
-  mia: '失联',
-  abandoned: '放弃行动',
+function errMessage(err: unknown, fallback: string): string {
+  return err instanceof Error && err.message ? err.message : fallback
 }
 
 function formatDuration(ms: number): string {
-  if (ms <= 0) return '00:00'
-  const total = Math.ceil(ms / 1000)
-  const minutes = Math.floor(total / 60)
-  const seconds = total % 60
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  const minutes = Math.round(ms / 60000)
+  return `${minutes} 分钟`
 }
 
-function formatTime(iso: string): string {
+function formatDate(iso: string): string {
   const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  if (Number.isNaN(date.getTime())) return '--'
+  return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-/** 结算条目右侧的去向文案（旧后端响应没有 outcome 字段时按折积分兜底） */
-function settlementLootText(item: RaidSettlementLoot): string {
-  if (item.outcome === 'warehouse' || (item.storedAmount != null && item.storedAmount > 0)) {
-    // 部分入仓、部分溢出时两个去向都要显示（否则溢出折分对不上账）
-    const parts = [`📦 入仓 ×${item.storedAmount ?? item.amount}`]
-    if (item.overflowPoints != null && item.overflowPoints > 0) {
-      parts.push(`溢出折 ${item.overflowPoints} 积分`)
-    }
-    return parts.join(' · ')
-  }
-  if (item.overflowPoints != null && item.overflowPoints > 0) {
-    return `折 ${item.overflowPoints} 积分`
-  }
-  switch (item.outcome) {
-    case 'farm': return '🌱 已种入农场'
-    case 'equipment': return '🎒 已入装备栏'
-    case 'skill': return '✨ 已学得技能'
-    case 'dupe': return '重复折价'
-    default: return `${item.value} 积分`
-  }
+const RESULT_LABELS: Record<string, string> = {
+  extracted: '撤离成功',
+  died: '阵亡',
+  mia: '失联',
+  abandoned: '放弃',
 }
 
-function cellIcon(cell: RaidCell): string {
-  if (!cell.revealed && !cell.current) return '·'
-  if (cell.current) return '🐾'
-  switch (cell.kind) {
-    case 'spawn': return '🏠'
-    case 'loot': return cell.searched ? '📭' : '📦'
-    case 'enemy': return cell.enemy?.emoji ?? '🥷'
-    case 'boss': return cell.enemy?.emoji ?? '👹'
-    case 'extract': return '🚁'
-    case 'hazard': return '☢️'
-    default: return ''
-  }
-}
-
-function cellTitle(cell: RaidCell): string {
-  if (!cell.revealed && !cell.current) return '未探索区域'
-  if (cell.current) return '你在这里'
-  switch (cell.kind) {
-    case 'spawn': return '出生点'
-    case 'loot': return cell.searched ? '已搜空的容器' : '物资容器'
-    case 'enemy': return `${cell.enemy?.name ?? '敌人'}（Lv.${cell.enemy?.level ?? '?'}）`
-    case 'boss': return `首领 ${cell.enemy?.name ?? ''}（Lv.${cell.enemy?.level ?? '?'}）`
-    case 'extract': return '撤离点'
-    case 'hazard': return '危险区'
-    default: return '空地'
+function initialSnapshot(run: RaidRun): RaidSnapshot {
+  return {
+    hp: run.hp,
+    mp: run.mp,
+    maxHp: run.maxHp,
+    maxMp: run.maxMp,
+    atk: run.atk,
+    kills: run.kills,
+    roomId: run.currentRoom,
+    roomKind: run.map.rooms[run.currentRoom]?.kind ?? 'combat',
+    roomCleared: false,
+    remainingMs: Math.max(0, new Date(run.expiresAt).getTime() - Date.now()),
+    extractionProgress: run.extractionStartedAt ? 1 : 0,
+    gear: run.gear,
+    helmetDefense: 0,
+    armorDefense: 0,
+    backpack: run.backpack,
+    rig: run.rig,
+    safe: run.safe,
+    capacities: run.capacities,
+    skills: run.skills.map((skill) => ({
+      key: skill.key,
+      name: skill.name,
+      emoji: skill.emoji,
+      mpCost: skill.mpCost,
+      cooldownMs: skill.cooldownMs,
+      cooldownLeftMs: 0,
+      affordable: run.mp >= skill.mpCost,
+    })),
+    toast: null,
+    nearContainer: null,
+    canExtract: false,
+    extracting: Boolean(run.extractionStartedAt),
+    dead: run.hp <= 0,
+    shield: 0,
+    atkBuffMs: 0,
   }
 }
 
@@ -108,481 +88,406 @@ export default function PetRaidPage() {
   const [overview, setOverview] = useState<RaidOverview | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [busy, setBusy] = useState<string | null>(null)
-  const [insurance, setInsurance] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [insured, setInsured] = useState(true)
+  const [gameRun, setGameRun] = useState<RaidRun | null>(null)
+  const [run, setRun] = useState<RaidRun | null>(null)
+  const [snapshot, setSnapshot] = useState<RaidSnapshot | null>(null)
   const [settlement, setSettlement] = useState<RaidSettlement | null>(null)
-  const [combat, setCombat] = useState<RaidActionResponse['combat']>(null)
-  const [flashLoot, setFlashLoot] = useState<RaidLootItem[]>([])
-  const [now, setNow] = useState(() => Date.now())
+  const [actionErrors, setActionErrors] = useState<string[]>([])
+
+  const engineRef = useRef<RaidEngine | null>(null)
+  const runRef = useRef<RaidRun | null>(null)
+  const pendingRef = useRef<RaidEvent[]>([])
+  const sendingRef = useRef(false)
   const mountedRef = useRef(true)
 
   useEffect(() => {
     mountedRef.current = true
-    return () => { mountedRef.current = false }
+    return () => {
+      mountedRef.current = false
+    }
   }, [])
 
-  const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true)
+  const loadOverview = useCallback(async (): Promise<RaidOverview | null> => {
     try {
       const data = await api.get<RaidOverview>('/pets/raid')
-      if (mountedRef.current) {
-        setOverview(data)
-        setError('')
+      if (!mountedRef.current) return null
+      setOverview(data)
+      if (data.run) {
+        runRef.current = data.run
+        setRun(data.run)
+        setGameRun((current) => (current && current.id === data.run?.id ? current : data.run))
+        setSnapshot((current) => current ?? initialSnapshot(data.run as RaidRun))
+      } else {
+        runRef.current = null
+        setRun(null)
       }
+      setError('')
+      return data
     } catch (err) {
-      if (mountedRef.current) setError(err instanceof Error ? err.message : '加载搜打撤失败')
-    } finally {
-      if (mountedRef.current && !silent) setLoading(false)
+      if (mountedRef.current) setError(errMessage(err, '加载搜打撤失败'))
+      return null
     }
   }, [])
 
-  useEffect(() => { void load() }, [load])
-
-  // 倒计时；有对局时每 15 秒静默同步一次（主要用于超时判 MIA）
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(timer)
-  }, [])
+    setLoading(true)
+    void loadOverview().finally(() => {
+      if (mountedRef.current) setLoading(false)
+    })
+  }, [loadOverview])
 
-  useEffect(() => {
-    if (!overview?.active) return undefined
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void load(true)
-    }, 15_000)
-    return () => window.clearInterval(timer)
-  }, [overview?.active, load])
+  /* ---------- 事件上报 ---------- */
 
-  const raid = overview?.raid ?? null
-  const remainingMs = raid ? Math.max(0, new Date(raid.expiresAt).getTime() - now) : 0
-  const currentCell = raid ? raid.cells[raid.player.y * raid.width + raid.player.x] : null
-
-  const adjacent = useMemo(() => {
-    if (!raid) return new Set<number>()
-    const result = new Set<number>()
-    const { x, y } = raid.player
-    if (x > 0) result.add(y * raid.width + x - 1)
-    if (x < raid.width - 1) result.add(y * raid.width + x + 1)
-    if (y > 0) result.add((y - 1) * raid.width + x)
-    if (y < raid.height - 1) result.add((y + 1) * raid.width + x)
-    return result
-  }, [raid])
-
-  const perform = useCallback(async (
-    type: 'move' | 'search' | 'extract' | 'medkit' | 'safe' | 'unsafe' | 'abandon',
-    payload: { dir?: RaidDirection; lootId?: string } = {},
-  ) => {
-    if (!raid || busy) return
-    setBusy(type)
-    setError('')
-    setNotice('')
+  const sendPending = useCallback(async (): Promise<void> => {
+    if (sendingRef.current) return
+    const current = runRef.current
+    if (!current || pendingRef.current.length === 0) return
+    sendingRef.current = true
+    const batch = pendingRef.current.splice(0, pendingRef.current.length)
     try {
-      const response = await api.post<RaidActionResponse>('/pets/raid/action', {
-        type,
-        ...payload,
-        version: raid.version,
+      const result = await api.post<RaidEventBatchResult>('/pets/raid/events', {
+        version: current.version,
+        events: batch,
       })
-      if (response.gained.length > 0) {
-        setFlashLoot(response.gained)
-        window.setTimeout(() => setFlashLoot([]), 2600)
+      if (!mountedRef.current) return
+      if (result.settlement) {
+        runRef.current = null
+        setRun(null)
+        setGameRun(null)
+        setSnapshot(null)
+        setSettlement(result.settlement)
+        pendingRef.current = []
+        void loadOverview()
+        return
       }
-      if (response.combat) setCombat(response.combat)
-      if (response.settlement) {
-        setSettlement(response.settlement)
-        setOverview((prev) => (prev ? { ...prev, active: false, raid: null } : prev))
-        void load(true)
-      } else if (response.raid) {
-        setOverview((prev) => (prev ? { ...prev, active: true, raid: response.raid } : prev))
+      if (result.run) {
+        runRef.current = result.run
+        setRun(result.run)
+        engineRef.current?.applyServerRun(result.run)
+        setActionErrors(result.errors)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '行动失败')
+      // 版本冲突 / 网络失败：把事件放回队列，下一轮用新版本重试（版本冲突时先刷新）
+      pendingRef.current.unshift(...batch)
+      const message = errMessage(err, '同步失败')
+      if (message.includes('版本') || message.includes('结束')) {
+        pendingRef.current = []
+        void loadOverview()
+      } else {
+        setActionErrors([message])
+      }
     } finally {
-      if (mountedRef.current) setBusy(null)
+      sendingRef.current = false
+      if (mountedRef.current && pendingRef.current.length > 0) {
+        window.setTimeout(() => {
+          void sendPending()
+        }, 500)
+      }
     }
-  }, [raid, busy, load])
+  }, [loadOverview])
 
-  const startRaid = useCallback(async (mapKey: string) => {
+  const flushEvents = useCallback((events: RaidEvent[]): void => {
+    if (events.length > 0) pendingRef.current.push(...events)
+    void sendPending()
+  }, [sendPending])
+
+  /* ---------- 大厅操作 ---------- */
+
+  const startRaid = useCallback(async (mapKey: string): Promise<void> => {
     if (busy) return
-    setBusy(`start-${mapKey}`)
-    setError('')
-    setNotice('')
+    setBusy(true)
+    setActionErrors([])
     try {
-      const data = await api.post<RaidOverview>('/pets/raid/start', { mapKey, insured: insurance })
-      setOverview(data)
-      setNotice('已进入地图：搜索物资、避开或击败敌人，然后到撤离点撤离。')
+      const next = await api.post<RaidRun>('/pets/raid/start', { mapKey, insured })
+      if (!mountedRef.current) return
+      runRef.current = next
+      setRun(next)
+      setGameRun(next)
+      setSnapshot(initialSnapshot(next))
+      setSettlement(null)
+      pendingRef.current = []
+      void loadOverview()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '进入地图失败')
+      setActionErrors([errMessage(err, '开始行动失败')])
     } finally {
-      if (mountedRef.current) setBusy(null)
+      if (mountedRef.current) setBusy(false)
     }
-  }, [busy, insurance])
+  }, [busy, insured, loadOverview])
 
-  const claimContract = useCallback(async (contract: RaidContract) => {
+  const abandon = useCallback(async (): Promise<void> => {
     if (busy) return
-    setBusy(`contract-${contract.key}`)
-    setError('')
+    if (!window.confirm('确定放弃本次行动？背包与胸挂里的物品会丢失，安全箱保留。')) return
+    setBusy(true)
     try {
-      const data = await api.post<RaidOverview>(`/pets/raid/contracts/${contract.key}/claim`)
-      setOverview(data)
-      setNotice(`契约「${contract.name}」奖励 ${contract.rewardPoints} 积分已到账`)
+      pendingRef.current = []
+      const result = await api.post<RaidSettlement>('/pets/raid/abandon')
+      if (!mountedRef.current) return
+      setSettlement(result)
+      runRef.current = null
+      setRun(null)
+      setGameRun(null)
+      setSnapshot(null)
+      void loadOverview()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '领取失败')
+      setActionErrors([errMessage(err, '放弃失败')])
     } finally {
-      if (mountedRef.current) setBusy(null)
+      if (mountedRef.current) setBusy(false)
+    }
+  }, [busy, loadOverview])
+
+  const claimContract = useCallback(async (contract: RaidContract): Promise<void> => {
+    if (busy || contract.claimed) return
+    setBusy(true)
+    try {
+      const result = await api.post<{ points: number; contracts: RaidContract[] }>(
+        `/pets/raid/contracts/${contract.key}/claim`,
+        {},
+      )
+      if (!mountedRef.current) return
+      setOverview((current) => current
+        ? { ...current, points: current.points + result.points, contracts: result.contracts }
+        : current)
+    } catch (err) {
+      setActionErrors([errMessage(err, '领取失败')])
+    } finally {
+      if (mountedRef.current) setBusy(false)
     }
   }, [busy])
 
-  // 键盘操作：WASD / 方向键移动，F 搜索，E 撤离
-  useEffect(() => {
-    if (!raid) return undefined
-    const handler = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) return
-      const key = event.key.toLowerCase()
-      if (key === 'w' || key === 'arrowup') { event.preventDefault(); void perform('move', { dir: 'up' }) }
-      else if (key === 's' || key === 'arrowdown') { event.preventDefault(); void perform('move', { dir: 'down' }) }
-      else if (key === 'a' || key === 'arrowleft') { event.preventDefault(); void perform('move', { dir: 'left' }) }
-      else if (key === 'd' || key === 'arrowright') { event.preventDefault(); void perform('move', { dir: 'right' }) }
-      else if (key === 'f') { event.preventDefault(); void perform('search') }
-      else if (key === 'e') { event.preventDefault(); void perform('extract') }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [raid, perform])
+  const closeSettlement = useCallback((): void => {
+    setSettlement(null)
+    setActionErrors([])
+    void loadOverview()
+  }, [loadOverview])
 
-  const handleCell = (cell: RaidCell) => {
-    if (!raid || !adjacent.has(cell.index)) return
-    const { x, y } = raid.player
-    if (cell.x === x - 1) void perform('move', { dir: 'left' })
-    else if (cell.x === x + 1) void perform('move', { dir: 'right' })
-    else if (cell.y === y - 1) void perform('move', { dir: 'up' })
-    else if (cell.y === y + 1) void perform('move', { dir: 'down' })
-  }
-
-  if (loading && !overview) {
+  if (loading) {
     return (
-      <div className="gh-page-container gh-raid-page">
-        <div className="gh-raid-loading">
-          <span aria-hidden>🎒</span>
-          <p>正在整理行动装备…</p>
-        </div>
+      <div className="gh-raid-page">
+        <div className="gh-raid-loading">正在加载搜打撤…</div>
       </div>
     )
   }
 
+  if (error) {
+    return (
+      <div className="gh-raid-page">
+        <div className="gh-alert gh-alert--danger">{error}</div>
+        <button type="button" className="gh-btn gh-btn--secondary" onClick={() => void loadOverview()}>
+          重试
+        </button>
+      </div>
+    )
+  }
+
+  if (!overview) {
+    return (
+      <div className="gh-raid-page">
+        <div className="gh-raid-loading">暂无数据</div>
+      </div>
+    )
+  }
+
+  const loadout = overview.loadout
+  const noBackpack = !loadout || loadout.capacities.backpack <= 0
+
   return (
-    <div className="gh-page-container gh-raid-page">
+    <div className="gh-raid-page">
       <header className="gh-raid-header">
         <div>
-          <p className="gh-raid-eyebrow">PET EXTRACTION</p>
-          <h1>宠物搜打撤</h1>
+          <p className="gh-raid-eyebrow">宠物搜打撤 · 三角洲 × 元气骑士</p>
+          <h1>搜打撤行动</h1>
           <p className="gh-raid-sub">
-            带宠物进入封锁区：搜物资、打敌人、活着撤离。阵亡会丢掉随身战利品，装备有概率掉落；保险箱和行动保险能保底。
+            实时房间制搜刮、会移动的敌人、手动释放技能。撤离后物资留在背包里，回仓库手动入库——仓库满了不会自动卖掉。
           </p>
         </div>
         <div className="gh-raid-header-actions">
-          <span className="gh-raid-points" title="当前积分">🪙 {overview?.points ?? 0}</span>
-          <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets">返回宠物</Link>
-          <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/raid/storage">📦 仓库</Link>
-          <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/gear">🎒 装备</Link>
-          <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/battle">⚔️ 对战</Link>
+          <span className="gh-raid-points">💰 {overview.points} 积分</span>
+          <Link className="gh-btn gh-btn--secondary gh-btn--sm" to="/pets/raid/storage">
+            仓库 / 背包 / 商店
+          </Link>
+          <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets">
+            宠物之家
+          </Link>
         </div>
       </header>
 
-      {error && <div className="gh-alert gh-alert--danger" role="alert">{error}</div>}
-      {notice && <div className="gh-alert gh-alert--success" role="status">{notice}</div>}
-
-      {!overview?.pet ? (
-        <div className="gh-raid-empty">
-          <span aria-hidden>🐾</span>
-          <h2>先召唤一只宠物</h2>
-          <p>搜打撤需要宠物出战。去宠物页召唤或重新召唤一只，再回来带队进入封锁区。</p>
-          <Link className="gh-btn gh-btn--primary" to="/pets">去宠物页</Link>
+      {!overview.pet && (
+        <div className="gh-alert gh-alert--warning">
+          还没有可出击的宠物，先去 <Link to="/pets">宠物之家</Link> 召唤一只吧。
         </div>
-      ) : raid ? (
-        <div className="gh-raid-game">
-          <section className="gh-raid-hud">
-            <div className="gh-raid-hud-main">
-              <span className="gh-raid-map-badge" style={{ background: `${raid.difficulty === 'extreme' ? '#5b4b8a' : raid.difficulty === 'hard' ? '#8a5a44' : '#3d7ea6'}` }}>
-                {raid.mapEmoji} {raid.mapName}
-              </span>
-              <span className={`gh-raid-timer ${remainingMs < 120_000 ? 'gh-raid-timer--danger' : ''}`}>
-                ⏱ {formatDuration(remainingMs)}
-              </span>
-              <span className="gh-raid-turn">行动点 {raid.turn} / {raid.maxTurns}</span>
-              <span className="gh-raid-kills">击杀 {raid.kills}</span>
-              {raid.insured && <span className="gh-badge gh-badge--success">已投保</span>}
-            </div>
-            <div className="gh-raid-bars">
-              <div className="gh-raid-bar gh-raid-bar--hp">
-                <span style={{ width: `${Math.max(0, Math.min(100, (raid.hp / Math.max(1, raid.maxHp)) * 100))}%` }} />
-                <strong>HP {raid.hp} / {raid.maxHp}</strong>
-              </div>
-              <div className="gh-raid-bar gh-raid-bar--mp">
-                <span style={{ width: `${Math.max(0, Math.min(100, (raid.mp / Math.max(1, raid.maxMp)) * 100))}%` }} />
-                <strong>MP {raid.mp} / {raid.maxMp}</strong>
-              </div>
-            </div>
-          </section>
+      )}
 
-          <div className="gh-raid-layout">
-            <section className="gh-raid-board-wrap">
-              <div
-                className="gh-raid-board"
-                style={{ '--raid-cols': raid.width } as CSSProperties}
-                role="grid"
-                aria-label={`${raid.mapName} 地图`}
-              >
-                {raid.cells.map((cell) => {
-                  const isAdjacent = adjacent.has(cell.index)
-                  const classes = [
-                    'gh-raid-cell',
-                    `gh-raid-cell--${cell.kind}`,
-                    cell.current ? 'gh-raid-cell--current' : '',
-                    isAdjacent ? 'gh-raid-cell--adjacent' : '',
-                    !cell.revealed && !cell.current ? 'gh-raid-cell--fog' : '',
-                    cell.searched ? 'gh-raid-cell--searched' : '',
-                  ].filter(Boolean).join(' ')
-                  return (
-                    <button
-                      key={cell.index}
-                      type="button"
-                      role="gridcell"
-                      className={classes}
-                      title={cellTitle(cell)}
-                      disabled={!isAdjacent || busy !== null}
-                      onClick={() => handleCell(cell)}
-                    >
-                      <span className="gh-raid-cell-icon" aria-hidden>{cellIcon(cell)}</span>
-                      {cell.enemy && (cell.revealed || cell.current) && (
-                        <span className="gh-raid-cell-level">Lv.{cell.enemy.level}</span>
-                      )}
-                      {cell.kind === 'extract' && !cell.current && (cell.revealed || cell.current) && (
-                        <span className="gh-raid-cell-tag">撤离</span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-
-              <div className="gh-raid-controls">
-                <div className="gh-raid-dpad" aria-label="移动">
-                  <button type="button" className="gh-raid-dpad-btn gh-raid-dpad-btn--up" disabled={busy !== null} onClick={() => void perform('move', { dir: 'up' })}>↑</button>
-                  <button type="button" className="gh-raid-dpad-btn gh-raid-dpad-btn--left" disabled={busy !== null} onClick={() => void perform('move', { dir: 'left' })}>←</button>
-                  <button type="button" className="gh-raid-dpad-btn gh-raid-dpad-btn--down" disabled={busy !== null} onClick={() => void perform('move', { dir: 'down' })}>↓</button>
-                  <button type="button" className="gh-raid-dpad-btn gh-raid-dpad-btn--right" disabled={busy !== null} onClick={() => void perform('move', { dir: 'right' })}>→</button>
-                </div>
-                <div className="gh-raid-actions">
-                  <button
-                    type="button"
-                    className="gh-btn gh-btn--primary gh-btn--sm"
-                    disabled={busy !== null || currentCell?.kind !== 'loot' || currentCell?.searched}
-                    onClick={() => void perform('search')}
-                  >
-                    {busy === 'search' ? '搜索中…' : currentCell?.searched ? '已搜空' : '🔍 搜索容器 (F)'}
-                  </button>
-                  <button
-                    type="button"
-                    className="gh-btn gh-btn--secondary gh-btn--sm"
-                    disabled={busy !== null || currentCell?.kind !== 'extract'}
-                    onClick={() => void perform('extract')}
-                  >
-                    {raid.extracting > 0 ? `🚁 撤离读条 ${raid.extracting + 1}` : '🚁 撤离 (E)'}
-                  </button>
-                  <button
-                    type="button"
-                    className="gh-btn gh-btn--ghost gh-btn--sm"
-                    disabled={busy !== null}
-                    onClick={() => {
-                      if (window.confirm('放弃本次行动？随身战利品会丢失，保险箱物品保留。')) void perform('abandon')
-                    }}
-                  >
-                    放弃
-                  </button>
-                </div>
-                <p className="gh-raid-keyhint">WASD / 方向键移动 · F 搜索 · E 撤离</p>
-              </div>
-            </section>
-
-            <aside className="gh-raid-side">
-              <div className="gh-raid-pet-card">
-                <PetSprite
-                  species={overview.pet.species as PetSpecies}
-                  equipped={overview.pet.equipped}
-                  mood={70}
-                  size={112}
-                />
-                <div>
-                  <strong>{overview.pet.name}</strong>
-                  <span>Lv.{overview.pet.level} · {overview.pet.species}</span>
-                  <span className="gh-raid-pet-stats">
-                    ATK {raid.stats.atk} · DEF {raid.stats.def} · SPD {raid.stats.spd} · CRIT {raid.stats.crit}%
-                  </span>
-                </div>
-              </div>
-
-              <div className="gh-raid-panel">
-                <div className="gh-raid-panel-head">
-                  <strong>随身战利品</strong>
-                  <span>{raid.loot.length} 件 · 价值 {raid.totalLootValue}</span>
-                </div>
-                {raid.loot.length === 0 ? (
-                  <p className="gh-raid-empty-line">还没有搜到东西</p>
-                ) : (
-                  <ul className="gh-raid-loot-list">
-                    {raid.loot.map((item) => (
-                      <li key={item.id} className={`gh-raid-loot gh-raid-loot--${item.rarity}`}>
-                        <span className="gh-raid-loot-emoji" aria-hidden>{item.emoji}</span>
-                        <span className="gh-raid-loot-main">
-                          <strong>{item.name}{item.amount > 1 ? ` ×${item.amount}` : ''}</strong>
-                          <small>{RARITY_LABEL[item.rarity]} · {item.kind === 'equipment' || item.kind === 'skill' || item.kind === 'seed' ? '可带出' : `${item.value} 积分`}</small>
-                        </span>
-                        <span className="gh-raid-loot-actions">
-                          {item.kind === 'medkit' && (
-                            <button type="button" className="gh-btn gh-btn--ghost gh-btn--sm" disabled={busy !== null || raid.hp >= raid.maxHp} onClick={() => void perform('medkit', { lootId: item.id })}>
-                              使用
-                            </button>
-                          )}
-                          <button type="button" className="gh-btn gh-btn--ghost gh-btn--sm" disabled={busy !== null || raid.safe.length >= raid.safeCapacity} onClick={() => void perform('safe', { lootId: item.id })}>
-                            保险箱
-                          </button>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              <div className="gh-raid-panel">
-                <div className="gh-raid-panel-head">
-                  <strong>保险箱</strong>
-                  <span>{raid.safe.length} / {raid.safeCapacity}</span>
-                </div>
-                {raid.safe.length === 0 ? (
-                  <p className="gh-raid-empty-line">阵亡 / 失联时只有保险箱里的东西能带出来</p>
-                ) : (
-                  <ul className="gh-raid-loot-list">
-                    {raid.safe.map((item) => (
-                      <li key={item.id} className={`gh-raid-loot gh-raid-loot--${item.rarity}`}>
-                        <span className="gh-raid-loot-emoji" aria-hidden>{item.emoji}</span>
-                        <span className="gh-raid-loot-main">
-                          <strong>{item.name}{item.amount > 1 ? ` ×${item.amount}` : ''}</strong>
-                          <small>已保护 · 价值 {item.value}</small>
-                        </span>
-                        <button type="button" className="gh-btn gh-btn--ghost gh-btn--sm" disabled={busy !== null} onClick={() => void perform('unsafe', { lootId: item.id })}>
-                          取回
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              <div className="gh-raid-panel gh-raid-log">
-                <div className="gh-raid-panel-head">
-                  <strong>行动日志</strong>
-                  <span>第 {raid.turn} 回合</span>
-                </div>
-                <ul>
-                  {raid.log.slice().reverse().map((entry) => (
-                    <li key={entry.id} className={`gh-raid-log-${entry.kind}`}>
-                      <span className="gh-raid-log-turn">T{entry.turn}</span>
-                      <span>{entry.text}</span>
-                      {entry.detail && entry.detail.length > 0 && (
-                        <ul className="gh-raid-log-detail">
-                          {entry.detail.map((line, index) => <li key={index}>{line}</li>)}
-                        </ul>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </aside>
-          </div>
+      {overview.pet && noBackpack && (
+        <div className="gh-alert gh-alert--warning">
+          还没有装备背包，进入对局后什么都装不下。先去{' '}
+          <Link to="/pets/raid/storage">仓库 → 装备</Link>{' '}
+          买一个背包（商店 1 级背包 300 积分）。
         </div>
+      )}
+
+      {actionErrors.length > 0 && !gameRun && (
+        <div className="gh-alert gh-alert--danger">
+          {actionErrors.map((message, index) => (
+            <div key={`${message}-${index}`}>{message}</div>
+          ))}
+        </div>
+      )}
+
+      {gameRun ? (
+        <section className="gh-raid-game">
+          <RaidCanvas
+            key={gameRun.id}
+            initialRun={gameRun}
+            species={overview.pet?.species ?? 'cat'}
+            paused={Boolean(settlement) || busy}
+            onEngineReady={(engine) => {
+              engineRef.current = engine
+            }}
+            onSnapshot={(next) => setSnapshot(next)}
+            onFlush={flushEvents}
+          />
+          {run && snapshot && (
+            <RaidHud
+              run={run}
+              snapshot={snapshot}
+              busy={busy}
+              errors={actionErrors}
+              onAbandon={() => void abandon()}
+              onSkill={(index) => engineRef.current?.castSkill(index)}
+              onHeal={() => engineRef.current?.useConsumable('heal')}
+              onRepair={() => engineRef.current?.useConsumable('repair')}
+            />
+          )}
+        </section>
       ) : (
         <div className="gh-raid-lobby">
           <section className="gh-raid-stats">
-            <div><span>总行动</span><strong>{overview.stats.totalRaids}</strong></div>
-            <div><span>成功撤离</span><strong>{overview.stats.extracted}</strong></div>
-            <div><span>阵亡</span><strong>{overview.stats.died}</strong></div>
-            <div><span>失联</span><strong>{overview.stats.mia}</strong></div>
-            <div><span>累计击杀</span><strong>{overview.stats.kills}</strong></div>
-            <div><span>最高带出</span><strong>{overview.stats.bestValue}</strong></div>
+            <div><span>总场次</span><b>{overview.stats.total}</b></div>
+            <div><span>成功撤离</span><b>{overview.stats.extracted}</b></div>
+            <div><span>阵亡</span><b>{overview.stats.died}</b></div>
+            <div><span>失联</span><b>{overview.stats.mia}</b></div>
+            <div><span>总击杀</span><b>{overview.stats.kills}</b></div>
+            <div><span>最佳带出</span><b>{overview.stats.bestLootValue}</b></div>
           </section>
 
           <section className="gh-raid-contracts">
             <div className="gh-raid-section-head">
               <h2>每日契约</h2>
-              <span>每天 0 点刷新 · 完成后手动领取</span>
+              <span>每天 0 点刷新 · 手动领取</span>
             </div>
             <div className="gh-raid-contract-grid">
               {overview.contracts.map((contract) => {
                 const done = contract.progress >= contract.target
                 return (
-                  <article key={contract.key} className={`gh-raid-contract ${done ? 'gh-raid-contract--done' : ''}`}>
-                    <div>
+                  <article key={contract.key} className={`gh-raid-contract${contract.claimed ? ' is-claimed' : done ? ' is-done' : ''}`}>
+                    <div className="gh-raid-contract-head">
                       <strong>{contract.name}</strong>
-                      <p>{contract.description}</p>
+                      <span>+{contract.rewardPoints} 积分</span>
                     </div>
+                    <p>{contract.description}</p>
                     <div className="gh-raid-contract-progress">
-                      <span style={{ width: `${Math.min(100, (contract.progress / Math.max(1, contract.target)) * 100)}%` }} />
-                      <small>{contract.progress} / {contract.target}</small>
+                      <i style={{ width: `${Math.min(100, (contract.progress / contract.target) * 100)}%` }} />
                     </div>
-                    <button
-                      type="button"
-                      className="gh-btn gh-btn--primary gh-btn--sm"
-                      disabled={contract.claimed || !done || busy !== null}
-                      onClick={() => void claimContract(contract)}
-                    >
-                      {contract.claimed ? '已领取' : done ? `领取 ${contract.rewardPoints} 积分` : `奖励 ${contract.rewardPoints} 积分`}
-                    </button>
+                    <div className="gh-raid-contract-foot">
+                      <span>{Math.min(contract.progress, contract.target)} / {contract.target}</span>
+                      <button
+                        type="button"
+                        className="gh-btn gh-btn--primary gh-btn--sm"
+                        disabled={busy || contract.claimed || !done}
+                        onClick={() => void claimContract(contract)}
+                      >
+                        {contract.claimed ? '已领取' : done ? '领取' : '进行中'}
+                      </button>
+                    </div>
                   </article>
                 )
               })}
             </div>
           </section>
 
+          {loadout && (
+            <section className="gh-raid-loadout">
+              <div className="gh-raid-section-head">
+                <h2>出击装配</h2>
+                <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/raid/storage">整理装备</Link>
+              </div>
+              <div className="gh-raid-loadout-grid">
+                <div className="gh-raid-loadout-gear">
+                  {(['helmet', 'armor', 'boots', 'backpack', 'rig'] as const).map((slot) => {
+                    const instance = loadout.gear[slot]
+                    const def = typeof instance === 'string'
+                      ? getRaidGear(instance)
+                      : instance
+                        ? getRaidGear(instance.key)
+                        : null
+                    const label = { helmet: '头盔', armor: '护甲', boots: '战靴', backpack: '背包', rig: '胸挂' }[slot]
+                    return (
+                      <div key={slot} className={`gh-raid-loadout-slot${def ? ' is-filled' : ''}`}>
+                        <span>{label}</span>
+                        <b>{def ? `${def.emoji} ${def.name}` : '未装备'}</b>
+                        {instance && typeof instance === 'object' && (
+                          <em>{instance.durability}/{instance.maxDurability} 耐久</em>
+                        )}
+                        {def?.slots ? <em>{def.slots} 格</em> : null}
+                        {def?.speedBonus ? <em>速度 +{def.speedBonus}%</em> : null}
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="gh-raid-loadout-side">
+                  <p>背包 {loadout.backpackUnits} 件 · 胸挂 {loadout.rigUnits} 件 · 安全箱 {loadout.safeUnits} 件</p>
+                  <p>仓库 Lv.{loadout.storageLevel} · 保险 {loadout.insuranceCost > 0 ? `${loadout.insuranceCost} 积分（装备价值 15%）` : '无需保险'}</p>
+                  <div className="gh-raid-loadout-skills">
+                    {loadout.skills.length === 0
+                      ? <span>未装备技能（只能普攻）</span>
+                      : loadout.skills.map((skill) => <span key={skill.key}>{skill.emoji} {skill.name}</span>)}
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
           <section className="gh-raid-maps">
             <div className="gh-raid-section-head">
-              <h2>选择行动地图</h2>
+              <h2>选择行动区域</h2>
               <label className="gh-raid-insurance">
-                <input type="checkbox" checked={insurance} onChange={(event) => setInsurance(event.target.checked)} />
-                <span>
-                  行动保险
-                  <small>按装备价值 15% 扣积分（最低 20）；阵亡 / 失联时装备不掉落</small>
-                </span>
+                <input
+                  type="checkbox"
+                  checked={insured}
+                  disabled={!loadout || loadout.insuranceCost <= 0}
+                  onChange={(event) => setInsured(event.target.checked)}
+                />
+                行动保险 {loadout && loadout.insuranceCost > 0 ? `（${loadout.insuranceCost} 积分，阵亡保住装备）` : '（当前没有可保装备）'}
               </label>
             </div>
             <div className="gh-raid-map-grid">
               {overview.maps.map((map) => {
-                const locked = overview.pet ? overview.pet.level + 2 < map.recommendLevel : true
+                const canAfford = overview.points >= map.entryCost + (insured && loadout ? loadout.insuranceCost : 0)
                 return (
-                  <article key={map.key} className={`gh-raid-map-card gh-raid-map-card--${map.difficulty}`} style={{ '--raid-map-color': map.color } as CSSProperties}>
-                    <div className="gh-raid-map-card-head">
-                      <span className="gh-raid-map-emoji" aria-hidden>{map.emoji}</span>
+                  <article key={map.key} className="gh-raid-map-card" style={{ '--map-color': map.color } as CSSProperties}>
+                    <div className="gh-raid-map-head">
+                      <span className="gh-raid-map-emoji">{map.emoji}</span>
                       <div>
                         <h3>{map.name}</h3>
-                        <span className="gh-raid-map-diff">
-                          {map.difficulty === 'normal' ? '常规' : map.difficulty === 'hard' ? '高危' : '绝密'}
-                          {' · '}建议 Lv.{map.recommendLevel}
-                        </span>
+                        <span className="gh-raid-map-difficulty">{map.difficulty}</span>
                       </div>
                     </div>
-                    <p>{map.description}</p>
-                    <dl className="gh-raid-map-meta">
-                      <div><dt>门票</dt><dd>{map.entryCost > 0 ? `${map.entryCost} 积分` : '免费'}</dd></div>
-                      <div><dt>行动点</dt><dd>{map.maxTurns}</dd></div>
-                      <div><dt>敌人</dt><dd>{map.enemyCount}{map.bossCount > 0 ? ' + 首领' : ''}</dd></div>
-                      <div><dt>物资</dt><dd>Tier {map.lootTier}</dd></div>
-                    </dl>
+                    <p className="gh-raid-map-desc">{map.description}</p>
+                    <div className="gh-raid-map-meta">
+                      <span>推荐 Lv.{map.recommendLevel}</span>
+                      <span>战利品 T{map.lootTier}</span>
+                      <span>{formatDuration(map.durationMs)}</span>
+                      <span>{map.entryCost > 0 ? `门票 ${map.entryCost}` : '免费'}</span>
+                    </div>
                     <button
                       type="button"
-                      className="gh-btn gh-btn--primary gh-btn--sm"
-                      disabled={busy !== null || locked}
+                      className="gh-btn gh-btn--primary gh-btn--block"
+                      disabled={busy || !overview.pet || !canAfford}
                       onClick={() => void startRaid(map.key)}
                     >
-                      {busy === `start-${map.key}` ? '进入中…' : locked ? `需要 Lv.${map.recommendLevel}` : '进入地图'}
+                      {busy ? '出击中…' : canAfford ? '进入行动' : '积分不足'}
                     </button>
                   </article>
                 )
@@ -593,14 +498,20 @@ export default function PetRaidPage() {
           <section className="gh-raid-history">
             <div className="gh-raid-section-head">
               <h2>最近战绩</h2>
-              <span>最多保留 20 条</span>
+              <span>最近 20 场</span>
             </div>
             {overview.history.length === 0 ? (
-              <p className="gh-raid-empty-line">还没有行动记录，选一张地图开始第一次搜打撤吧。</p>
+              <p className="gh-raid-empty">还没有行动记录，选一张地图出发吧。</p>
             ) : (
               <ul className="gh-raid-history-list">
                 {overview.history.map((entry) => (
-                  <HistoryRow key={entry.id} entry={entry} />
+                  <li key={entry.id} className={`gh-raid-history-row is-${entry.result}`}>
+                    <span className="gh-raid-history-map">{entry.mapEmoji} {entry.mapName}</span>
+                    <span className={`gh-raid-history-result is-${entry.result}`}>{RESULT_LABELS[entry.result] ?? entry.result}</span>
+                    <span>击杀 {entry.kills}</span>
+                    <span>带出 {entry.lootValue}</span>
+                    <span>{formatDate(entry.createdAt)}</span>
+                  </li>
                 ))}
               </ul>
             )}
@@ -608,96 +519,7 @@ export default function PetRaidPage() {
         </div>
       )}
 
-      {flashLoot.length > 0 && (
-        <div className="gh-raid-flash" role="status">
-          <strong>获得战利品</strong>
-          <ul>
-            {flashLoot.map((item) => (
-              <li key={item.id} className={`gh-raid-loot--${item.rarity}`}>
-                {item.emoji} {item.name}{item.amount > 1 ? ` ×${item.amount}` : ''}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {combat && !settlement && (
-        <div className="gh-dialog-overlay" role="presentation">
-          <div className="gh-dialog gh-raid-combat" role="dialog" aria-modal="true" aria-label="战斗结果">
-            <h2 className="gh-dialog-title">{combat.won ? '战斗胜利' : '战斗失败'}</h2>
-            <p className="gh-text-secondary">对手：{combat.enemyName}</p>
-            <ul className="gh-raid-combat-log">
-              {combat.events.map((line, index) => <li key={index}>{line}</li>)}
-            </ul>
-            <div className="gh-dialog-actions">
-              <button type="button" className="gh-btn gh-btn--primary" onClick={() => setCombat(null)}>继续</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {settlement && (
-        <div className="gh-dialog-overlay" role="presentation">
-          <div className={`gh-dialog gh-raid-settlement gh-raid-settlement--${settlement.result}`} role="dialog" aria-modal="true" aria-label="行动结算">
-            <h2 className="gh-dialog-title">{RESULT_LABEL[settlement.result] ?? '行动结束'}</h2>
-            <p className="gh-raid-settlement-points">
-              带出价值 <strong>{settlement.points}</strong> 积分
-              {settlement.gearLost.length > 0 && ` · 丢失装备 ${settlement.gearLost.length} 件`}
-            </p>
-            {settlement.loot.length === 0 ? (
-              <p className="gh-raid-empty-line">没有战利品带出</p>
-            ) : (
-              <ul className="gh-raid-settlement-loot">
-                {settlement.loot.map((item) => (
-                  <li key={item.id} className={`gh-raid-loot--${item.rarity}`}>
-                    {item.emoji} {item.name}{item.amount > 1 ? ` ×${item.amount}` : ''}
-                    <span>{settlementLootText(item)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {settlement.gearLost.length > 0 && (
-              <p className="gh-raid-settlement-gear">
-                装备掉落：{settlement.gearLost.join('、')}（可在装备页重新购买或交易行入手）
-              </p>
-            )}
-            <div className="gh-dialog-actions">
-              {settlement.loot.some((item) => item.outcome === 'warehouse') && (
-                <Link
-                  className="gh-btn gh-btn--secondary"
-                  to="/pets/raid/storage"
-                  onClick={() => { setSettlement(null); setCombat(null) }}
-                >
-                  前往仓库
-                </Link>
-              )}
-              <button
-                type="button"
-                className="gh-btn gh-btn--primary"
-                onClick={() => { setSettlement(null); setCombat(null); void load(true) }}
-              >
-                返回行动大厅
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {settlement && <RaidResultDialog settlement={settlement} onClose={closeSettlement} />}
     </div>
-  )
-}
-
-function HistoryRow({ entry }: { entry: RaidHistoryEntry }) {
-  const tone = entry.result === 'extracted' ? 'success' : entry.result === 'abandoned' ? 'muted' : 'danger'
-  return (
-    <li className={`gh-raid-history-row gh-raid-history-row--${tone}`}>
-      <span className={`gh-raid-history-result gh-raid-history-result--${entry.result}`}>
-        {RESULT_LABEL[entry.result] ?? entry.result}
-      </span>
-      <span className="gh-raid-history-map">{entry.mapName}</span>
-      <span>{entry.kills} 击杀</span>
-      <span>{entry.moves} 行动点</span>
-      <span className={entry.points > 0 ? 'gh-text-success' : ''}>+{entry.points} 积分</span>
-      <span className="gh-raid-history-time">{formatTime(entry.createdAt)}</span>
-    </li>
   )
 }
