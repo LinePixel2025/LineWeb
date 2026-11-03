@@ -9,6 +9,7 @@ import type {
   RaidMapNode,
   RaidSkillRule,
 } from '../lib/raid/raidRun'
+import type { RaidSquadMember } from './raidSquad'
 
 export type RaidContainerKind = 'backpack' | 'rig' | 'safe'
 export type RaidGearSlot = 'helmet' | 'armor' | 'boots' | 'backpack' | 'rig'
@@ -119,6 +120,8 @@ export interface RaidRun {
   difficulty: string
   status: RaidStatus
   seed: number
+  /** 组队模式下的队伍 id（单人局为 null） */
+  squadId: string | null
   insured: boolean
   hp: number
   mp: number
@@ -184,6 +187,8 @@ export interface RaidEventBatchResult {
   run: RaidRun | null
   errors: string[]
   settlement: RaidSettlement | null
+  /** 本人所在队伍的队友实时状态（服务端在批处理响应里带回，供无 WebSocket 降级） */
+  squad?: { members: RaidSquadMember[] } | null
 }
 
 /* ---------- 仓库 / 背包 ---------- */
