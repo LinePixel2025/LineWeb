@@ -45,6 +45,22 @@ import {
 import { bumpRaidContractsTx } from './raidContractService.js'
 import { getTodayDateKey } from '../lib/pointsRules.js'
 import { spendPointsTx } from './pointsService.js'
+import {
+  announceStarted,
+  assertCanStart,
+  broadcastWorld,
+  dropMembers,
+  getSquadById,
+  getSquadMateIds,
+  markSquadStarted,
+  notifyMemberSettled,
+  pushSquadState,
+  toSquadDto,
+  updateMemberLive,
+  type RaidSquadDto,
+  type RaidSquadMemberDto,
+  type RaidWorldDelta,
+} from './raidSquadService.js'
 
 type Db = Prisma.TransactionClient
 
@@ -61,6 +77,7 @@ export interface RaidRunDto {
   difficulty: string
   status: RaidStatus
   seed: number
+  squadId: string | null
   insured: boolean
   hp: number
   mp: number
@@ -160,6 +177,7 @@ function runDto(row: PetRaid, state: RaidRunState, now: number): RaidRunDto {
     difficulty: state.difficulty,
     status: state.status,
     seed: state.seed,
+    squadId: state.squadId ?? null,
     insured: state.insured,
     hp: state.hp,
     mp: state.mp,
@@ -220,6 +238,9 @@ async function abandonLegacyRaid(row: PetRaid): Promise<void> {
 
 export interface RaidStartOptions {
   insured?: boolean
+  /** 组队模式：全队共用同一个 seed（同一张地图），单人开局自行随机 */
+  seed?: number
+  squadId?: string
 }
 
 export async function startRaid(
@@ -248,9 +269,12 @@ export async function startRaid(
     safe: bagRowsToStacks(bagRows.filter((row) => row.container === 'safe')),
   }
   // SQLite 的 INT 是 32 位有符号，seed 必须落在 1..2^31-1，避免 P2023 溢出
-  const seed = (Math.floor(Math.random() * 0x7fffffff) >>> 0) || 1
+  const seed = options.seed
+    ? ((options.seed >>> 0) % 0x7fffffff) || 1
+    : (Math.floor(Math.random() * 0x7fffffff) >>> 0) || 1
   const state = createRaidRun({
     seed,
+    squadId: options.squadId,
     mapKey: map.key,
     difficulty: map.difficulty,
     hp: loadout.stats.maxHp,
@@ -299,18 +323,148 @@ export async function startRaid(
 }
 
 /* ============================================================
+   组队出击
+   ============================================================ */
+
+export interface RaidSquadStartResult {
+  squad: RaidSquadDto
+  failed: { userId: number; name: string; reason: string }[]
+}
+
+/**
+ * 房主一次性为全队开局：同一个 seed（同一张地图）+ 同一个 squadId。
+ *
+ * 门票与保险各自扣。先在请求内逐个预检（积分 / 是否已在行动中），不合格的人只进 failed
+ * 名单并移出队伍，不会留下半截对局，也不需要退款；真正开局阶段再失败（并发把积分花掉了）
+ * 同样只是该成员不进本局，其余人照常出击。
+ */
+export async function startSquadRaid(
+  userId: number,
+  mapKey: string,
+  insured: boolean,
+): Promise<RaidSquadStartResult> {
+  const squad = assertCanStart(userId, mapKey)
+  const mapDef = getRaidMap(mapKey)
+  if (!mapDef) throw new AppError('地图不存在', 404)
+  // SQLite 的 INT 是 32 位有符号，seed 必须落在 1..2^31-1
+  const seed = (Math.floor(Math.random() * 0x7fffffff) >>> 0) || 1
+
+  const failed: RaidSquadStartResult['failed'] = []
+  const eligible: { userId: number; name: string }[] = []
+  for (const member of squad.members) {
+    const loadout = await loadRaidLoadoutTx(prisma as unknown as Db, member.userId).catch(() => null)
+    if (!loadout) {
+      failed.push({ userId: member.userId, name: member.name, reason: '还没有可出击的宠物' })
+      continue
+    }
+    if (loadout.capacities.backpack <= 0) {
+      failed.push({ userId: member.userId, name: member.name, reason: '没有装备背包，进场也装不了东西' })
+      continue
+    }
+    const cost = mapDef.entryCost + (insured ? raidInsuranceCost(loadout.gear) : 0)
+    const points = await prisma.user.findUnique({ where: { id: member.userId }, select: { points: true } })
+    if ((points?.points ?? 0) < cost) {
+      failed.push({ userId: member.userId, name: member.name, reason: `积分不足，进入本图需 ${cost}` })
+      continue
+    }
+    eligible.push({ userId: member.userId, name: member.name })
+  }
+
+  if (eligible.length < 2) {
+    throw new AppError(
+      failed.length > 0
+        ? `可以出击的人数不足 2 人（${failed.map((item) => `${item.name}：${item.reason}`).join('；')}）`
+        : '至少 2 人才能组队出击',
+      400,
+      'SQUAD_START_FAILED',
+    )
+  }
+
+  const started: number[] = []
+  for (const member of eligible) {
+    try {
+      await startRaid(member.userId, mapKey, { insured, seed, squadId: squad.id })
+      started.push(member.userId)
+    } catch (err) {
+      failed.push({
+        userId: member.userId,
+        name: member.name,
+        reason: err instanceof AppError ? err.message : '开局失败',
+      })
+    }
+  }
+  if (started.length === 0) throw new AppError('出击失败，请重试', 400, 'SQUAD_START_FAILED')
+
+  dropMembers(squad, started)
+  markSquadStarted(squad, mapKey, seed, mapDef.durationMs)
+  const dto = await announceStarted(squad)
+  return { squad: dto, failed }
+}
+
+/* ============================================================
    事件批处理
    ============================================================ */
 
 export interface RaidEventBatchInput {
   version: number
   events: RaidEvent[]
+  /** 组队模式：本端实时位置（纯表现，不落库，只用于队友幽灵与小地图） */
+  me?: { x?: number; y?: number; angle?: number; roomId?: number }
 }
 
 export interface RaidEventBatchResult {
   run: RaidRunDto | null
   errors: string[]
   settlement: RaidSettlementDto | null
+  /** 本人所在队伍的成员实时状态；单人局为 null */
+  squad?: { members: RaidSquadMemberDto[] } | null
+}
+
+/** 会改变全队共享地图状态的事件 */
+function diffWorldDelta(before: RaidRunState, after: RaidRunState): RaidWorldDelta | null {
+  const killedEnemies = after.killedEnemies.filter((id) => !before.killedEnemies.includes(id))
+  const openedContainers = after.openedContainers.filter((id) => !before.openedContainers.includes(id))
+  const takenLoot = after.takenLoot.filter((id) => !before.takenLoot.includes(id))
+  const clearedRooms = after.clearedRooms.filter((id) => !before.clearedRooms.includes(id))
+  if (killedEnemies.length === 0 && openedContainers.length === 0 && takenLoot.length === 0 && clearedRooms.length === 0) {
+    return null
+  }
+  return { killedEnemies, openedContainers, takenLoot, clearedRooms }
+}
+
+/** 只并入世界集合，不给队友计击杀、不占队友背包（战利品归拾取者） */
+function mergeWorldDelta(state: RaidRunState, delta: RaidWorldDelta): void {
+  for (const id of delta.killedEnemies) if (!state.killedEnemies.includes(id)) state.killedEnemies.push(id)
+  for (const id of delta.openedContainers) if (!state.openedContainers.includes(id)) state.openedContainers.push(id)
+  for (const id of delta.takenLoot) if (!state.takenLoot.includes(id)) state.takenLoot.push(id)
+  // 门是否解锁由 killedEnemies 推导（roomIsClear），clearedRooms 只是房间已清的记录
+  for (const roomId of delta.clearedRooms) if (!state.clearedRooms.includes(roomId)) state.clearedRooms.push(roomId)
+}
+
+/**
+ * 把世界增量写进队友的对局行。
+ *
+ * 队友那一行可能正在被 TA 自己的批处理推进，所以用 version 守卫写：
+ * 抢不到就跳过（下一个世界事件批次还会再同步一次），绝不覆盖队友的本地进度。
+ */
+async function propagateWorldDelta(
+  squadId: string,
+  actorUserId: number,
+  actorMapKey: string,
+  delta: RaidWorldDelta,
+): Promise<void> {
+  const mateIds = getSquadMateIds(squadId, actorUserId)
+  if (mateIds.length === 0) return
+  const rows = await prisma.petRaid.findMany({ where: { userId: { in: mateIds }, status: 'active' } })
+  for (const row of rows) {
+    const state = parseRaidRunState(row.state)
+    if (!state || state.squadId !== squadId || state.mapKey !== actorMapKey) continue
+    mergeWorldDelta(state, delta)
+    await prisma.petRaid.updateMany({
+      where: { id: row.id, version: row.version },
+      data: { state: JSON.stringify(state), version: row.version + 1 },
+    })
+  }
 }
 
 export async function performRaidEvents(
@@ -321,14 +475,15 @@ export async function performRaidEvents(
   const row = await prisma.petRaid.findUnique({ where: { userId } })
   if (!row) throw new AppError('当前没有进行中的行动', 404)
   if (row.status !== 'active') {
-    return { run: null, errors: ['对局已结束'], settlement: null }
+    return { run: null, errors: ['对局已结束'], settlement: null, squad: null }
   }
   const state = parseRaidRunState(row.state)
   if (!state) {
     await abandonLegacyRaid(row)
     throw new AppError('旧版本对局已结束，请重新开始行动', 409, 'RAID_LEGACY')
   }
-  if (Number.isFinite(input.version) && input.version !== row.version) {
+  // 队友的世界同步会推进本行 version，所以只拒绝「客户端比服务端还新」的情况
+  if (Number.isFinite(input.version) && input.version > row.version) {
     throw new AppError('对局状态已变化，请刷新后继续', 409, 'RAID_VERSION')
   }
   const mapDef = getRaidMap(state.mapKey)
@@ -337,11 +492,12 @@ export async function performRaidEvents(
 
   const ticked = tickRaidRun(state, now)
   const { state: applied, errors } = applyRaidEvents(ticked, map, input.events, now)
+  const delta = diffWorldDelta(ticked, applied)
   applied.version = row.version + 1
 
   if (applied.status !== 'active') {
     const settlement = await finishRaid(row, applied, now)
-    return { run: null, errors, settlement }
+    return { run: null, errors, settlement, squad: null }
   }
 
   const updated = await prisma.petRaid.updateMany({
@@ -355,7 +511,43 @@ export async function performRaidEvents(
   if (updated.count === 0) {
     throw new AppError('对局状态已变化，请刷新后继续', 409, 'RAID_VERSION')
   }
-  return { run: runDto({ ...row, version: applied.version }, applied, now), errors, settlement: null }
+
+  const run = runDto({ ...row, version: applied.version }, applied, now)
+
+  if (applied.squadId) {
+    const squad = getSquadById(applied.squadId)
+    if (squad) {
+      updateMemberLive(squad.id, userId, {
+        hp: applied.hp,
+        maxHp: applied.maxHp,
+        kills: applied.kills,
+        roomId: applied.currentRoom,
+        lootValue: raidLootValue([...applied.backpack, ...applied.rig, ...applied.safe]),
+        x: clampCoord(input.me?.x),
+        y: clampCoord(input.me?.y),
+        angle: clampAngle(input.me?.angle),
+      })
+      if (delta) {
+        await propagateWorldDelta(squad.id, userId, applied.mapKey, delta)
+        broadcastWorld(squad.id, userId, delta)
+      }
+      void pushSquadState(squad.id)
+      const dto = await toSquadDto(squad, userId)
+      return { run, errors, settlement: null, squad: { members: dto.members } }
+    }
+  }
+
+  return { run, errors, settlement: null, squad: null }
+}
+
+function clampCoord(value: number | undefined): number {
+  if (!Number.isFinite(value)) return 0
+  return Math.max(0, Math.min(400, Number(value)))
+}
+
+function clampAngle(value: number | undefined): number {
+  if (!Number.isFinite(value)) return 0
+  return Math.max(-Math.PI * 2, Math.min(Math.PI * 2, Number(value)))
 }
 
 export async function abandonRaid(userId: number): Promise<RaidSettlementDto> {
@@ -452,6 +644,11 @@ async function finishRaid(
   })
 
   if (!outcome) return null
+  if (state.squadId) {
+    // 队伍里少了一个活口：通知其他人刷新队友状态，并安排空队伍回收
+    notifyMemberSettled(state.squadId)
+    void pushSquadState(state.squadId)
+  }
   return {
     result: state.status,
     points: 0,

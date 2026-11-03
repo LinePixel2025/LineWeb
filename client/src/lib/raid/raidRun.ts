@@ -1101,6 +1101,8 @@ export interface RaidRunState {
   schemaVersion: number
   seed: number
   mapKey: string
+  /** 组队模式下的队伍 id（单人局没有这个字段） */
+  squadId?: string
   difficulty: string
   version: number
   status: RaidStatus
@@ -1136,6 +1138,7 @@ export interface RaidRunState {
 export interface RaidStartInput {
   seed: number
   mapKey: string
+  squadId?: string
   difficulty: string
   hp: number
   maxHp: number
@@ -1169,6 +1172,7 @@ export function createRaidRun(input: RaidStartInput): RaidRunState {
     schemaVersion: RAID_STATE_VERSION,
     seed: input.seed >>> 0,
     mapKey: map.key,
+    squadId: input.squadId,
     difficulty: input.difficulty,
     version: 0,
     status: 'active',

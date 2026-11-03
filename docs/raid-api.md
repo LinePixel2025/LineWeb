@@ -9,7 +9,7 @@
 |---|---|---|
 | GET | `/api/pets/raid` | 概览：地图列表 / 当前对局（含地图布局）/ 战绩 / 每日契约 / 出击装配 / 仓库容量 |
 | POST | `/api/pets/raid/start` | `{ mapKey, insured? }` 开局，扣门票与可选保险，返回 `RaidRun` |
-| POST | `/api/pets/raid/events` | `{ version, events[] }` 批量事件，返回 `{ run, errors, settlement }` |
+| POST | `/api/pets/raid/events` | `{ version, events[], me? }` 批量事件，返回 `{ run, errors, settlement, squad }`；`me` 为组队时本端位置（纯表现、不落库） |
 | POST | `/api/pets/raid/abandon` | 主动放弃，返回结算 |
 | POST | `/api/pets/raid/contracts/:key/claim` | 领取每日契约奖励 |
 
@@ -36,7 +36,43 @@
 - `takeLoot` 的 `target` 容量为 0 或已满时拒绝；`rig` 只能放消耗品；
 - `damage` 由服务端按头盔 / 护甲减伤并扣耐久，HP ≤ 0 判阵亡；
 - `extractStart` 只在撤离房间、清场后可开始，`extractDone` 需满 6 秒读条；
-- 版本不一致返回 409 `RAID_VERSION`，客户端刷新对局后继续。
+- 版本号只拒绝「客户端比服务端更新」的情况：队友造成的世界同步会推进本行 `version`，
+  客户端落后时照常接受并在响应里回权威状态（`applyServerRun` 自愈）；超前则 409 `RAID_VERSION`。
+
+## 3. 好友组队（2026-11-03）
+
+2–4 人好友共享同一张地图：同一 seed ⇒ 同一份房间布局；**世界状态共享**（击杀、房门解锁、开箱、被拿走的战利品全局唯一），**个人状态独立**（HP / 背包 / 装备 / 撤离结算 / 门票与保险各自一份 `PetRaid` 行）。队伍房间、邀请、实时位置都在内存（与站内其他联机游戏一致，不新增 Prisma 表），服务重启即失效。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/pets/raid/squad` | `{ serverTime, squad, friends, incoming, outgoing }`，`friends` 带 `online / inRaid / inOtherGame` |
+| GET | `/api/pets/raid/squad/state` | 战斗中队友状态（无 WebSocket 时 2 秒轮询） |
+| POST | `/api/pets/raid/squad/invite` | `{ userId }` 非本人建队时自动建房主队伍；非好友 403，对方忙 / 已在队 / 满员 409 |
+| POST | `/api/pets/raid/squad/respond` | `{ inviteId, accept }` 邀请 5 分钟有效且一次性核销 |
+| POST | `/api/pets/raid/squad/cancel` | `{ inviteId }` 撤回自己发出的邀请 |
+| POST | `/api/pets/raid/squad/leave` | 房主退出即解散并通知全员；成员退出只离队，不影响他人对局 |
+| POST | `/api/pets/raid/squad/kick` | `{ userId }` 仅房主，且只能在出击前使用 |
+| POST | `/api/pets/raid/squad/start` | `{ mapKey, insured }` 房主为全队同一 seed 开局，返回 `{ squad, failed[] }` |
+
+`RaidSquadMember`：`userId / name / displayName / petName / species / level / host / online / hp / maxHp / roomId / x / y / angle / kills / lootValue / status`，
+`status` 取 `lobby / active / extracted / died / mia / abandoned / offline`。
+
+出击预检：成员需有存活宠物、有背包容量、积分够门票 + 保险；不合格者进 `failed` 并移出队伍（不开局、不扣费），实际可出击人数 ≥2 才成立。
+
+WebSocket 事件（复用 `/ws/chat`，`chatHub.sendToUser`）：
+
+| 事件 | 载荷 | 用途 |
+|---|---|---|
+| `raid:squad:invite` | `{ invite }` | 受邀端弹接受 / 拒绝 |
+| `raid:squad:invite:removed` | `{ inviteId }` | 撤回 / 过期 / 已处理 |
+| `raid:squad:update` | `{ squad \| null }` | 名册变化与解散（`null` 表示队伍没了） |
+| `raid:squad:started` | `{ squad }` | 全员按同一 seed 进入战斗 |
+| `raid:squad:world` | `{ squadId, byUserId, byName, killedEnemies, openedContainers, takenLoot, clearedRooms }` | 队友造成的世界变化，免等下一次批处理 |
+| `raid:squad:state` | `{ squad }` | 位置 / 血量推送（按队伍节流 ≥0.9 秒一次） |
+
+跨游戏互斥：`raidSquadService` 用 `registerGameModule({ name: 'raid' })` 注册探针，在队伍中的玩家会被其他游戏的邀请判定为「对局中」；清扫钩子挂在既有 15 秒 `startGameSweeper` 上（大厅闲置 10 分钟、出击后 `时长 + 3 分钟`、邀请 5 分钟过期）。
+
+限流：组队读接口 `battlePollLimiter`（600/5min），邀请 / 应答 / 出击 `battleInviteLimiter`（30/5min），按用户且管理员豁免。
 
 ## 2. 仓库 / 容器 / 官方商店
 

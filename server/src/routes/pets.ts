@@ -42,7 +42,16 @@ import {
   createListing,
   getPetMarketView,
 } from '../services/petMarketService.js'
-import { startRaid } from '../services/raidRunService.js'
+import { startRaid, startSquadRaid } from '../services/raidRunService.js'
+import {
+  cancelInvite,
+  getSquadState,
+  getSquadView,
+  inviteToSquad,
+  kickMember,
+  leaveSquad,
+  respondToInvite,
+} from '../services/raidSquadService.js'
 import {
   abandonRaid,
   claimRaidContractForUser,
@@ -173,6 +182,23 @@ const raidEventSchema = z.discriminatedUnion('type', [
 const raidEventsSchema = z.object({
   version: z.coerce.number().int().min(0),
   events: z.array(raidEventSchema).max(120),
+  // 组队模式：本端位置（纯表现，服务端不落库）
+  me: z.object({
+    x: z.coerce.number().min(0).max(400).optional(),
+    y: z.coerce.number().min(0).max(400).optional(),
+    angle: z.coerce.number().min(-7).max(7).optional(),
+    roomId: z.coerce.number().int().min(0).max(99).optional(),
+  }).optional(),
+})
+const raidSquadInviteSchema = z.object({ userId: z.coerce.number().int().positive() })
+const raidSquadRespondSchema = z.object({
+  inviteId: z.coerce.number().int().positive(),
+  accept: z.boolean(),
+})
+const raidSquadCancelSchema = z.object({ inviteId: z.coerce.number().int().positive() })
+const raidSquadStartSchema = z.object({
+  mapKey: z.string().min(1).max(20),
+  insured: z.boolean().optional(),
 })
 const raidContractParamSchema = z.object({ key: z.string().min(1).max(40) })
 const raidDepositSchema = z.object({
@@ -356,6 +382,54 @@ router.post('/raid/abandon', actionLimiter, asyncHandler(async (req: Request, re
 router.post('/raid/contracts/:key/claim', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
   const { key } = parseInput(raidContractParamSchema, req.params)
   res.json(await claimRaidContractForUser(currentUserId(req), key))
+}))
+
+/* ---------- 搜打撤好友组队（复用站内好友关系与 /ws/chat 推送） ---------- */
+
+// GET /api/pets/raid/squad — 队伍 + 可邀请好友 + 收发邀请
+router.get('/raid/squad', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await getSquadView(currentUserId(req)))
+}))
+
+// GET /api/pets/raid/squad/state — 战斗中队友状态（无 WebSocket 时轮询）
+router.get('/raid/squad/state', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await getSquadState(currentUserId(req)))
+}))
+
+// POST /api/pets/raid/squad/invite — { userId } 邀请好友（无队伍时自动建队并成为房主）
+router.post('/raid/squad/invite', battleInviteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidSquadInviteSchema, req.body ?? {})
+  res.status(201).json(await inviteToSquad(currentUserId(req), input.userId))
+}))
+
+// POST /api/pets/raid/squad/respond — { inviteId, accept } 接受 / 拒绝邀请
+router.post('/raid/squad/respond', battleInviteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidSquadRespondSchema, req.body ?? {})
+  res.json(await respondToInvite(currentUserId(req), input.inviteId, input.accept))
+}))
+
+// POST /api/pets/raid/squad/cancel — { inviteId } 撤回自己发出的邀请
+router.post('/raid/squad/cancel', battleInviteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidSquadCancelSchema, req.body ?? {})
+  cancelInvite(currentUserId(req), input.inviteId)
+  res.json({ ok: true })
+}))
+
+// POST /api/pets/raid/squad/leave — 退出队伍（房主退出即解散）
+router.post('/raid/squad/leave', battleInviteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json({ ok: true, squad: await leaveSquad(currentUserId(req)) })
+}))
+
+// POST /api/pets/raid/squad/kick — { userId } 房主在出击前移出成员
+router.post('/raid/squad/kick', battleInviteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidSquadInviteSchema, req.body ?? {})
+  res.json({ ok: true, squad: await kickMember(currentUserId(req), input.userId) })
+}))
+
+// POST /api/pets/raid/squad/start — { mapKey, insured } 房主为全队同一 seed 开局
+router.post('/raid/squad/start', battleInviteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidSquadStartSchema, req.body ?? {})
+  res.status(201).json(await startSquadRaid(currentUserId(req), input.mapKey, Boolean(input.insured)))
 }))
 
 /* ---------- 搜打撤仓库 / 背包 / 胸挂 / 安全箱 ---------- */
