@@ -35,6 +35,7 @@ import personalSpaceRoutes from './routes/personalSpace.js'
 import readerRoutes from './routes/reader.js'
 import musicRoutes from './routes/music.js'
 import stockRoutes from './routes/stocks.js'
+import bankRoutes from './routes/bank.js'
 import lotteryRoutes from './routes/lottery.js'
 import themeRoutes from './routes/themes.js'
 import adminPointsRoutes from './routes/adminPoints.js'
@@ -253,6 +254,8 @@ app.use('/api/music', requireFeature('music'), musicRoutes)
 app.use('/api/personal-space', personalSpaceRoutes)
 // 模拟股市（行情只读 + 积分交易 + 分红 / 新闻事件 / 成交记录），受 stock 功能开关控制
 app.use('/api/stocks', requireFeature('stock'), stockRoutes)
+// 银行系统（活期 / 定期存款 + 基金投资，利息惰性结算 / NAV 当日确定），受 bank 功能开关控制
+app.use('/api/bank', requireFeature('bank'), bankRoutes)
 // 积分抽奖（种子 / 肥料 / 积分 / 稀有装扮，10 抽保底），受 lottery 功能开关控制
 app.use('/api/lottery', requireFeature('lottery'), lotteryRoutes)
 // LineWeb 主题（积分兑换 / 佩戴 / 全站生效），受 theme 功能开关控制
@@ -478,6 +481,16 @@ app.get('/api', (_req, res) => {
       portfolio: { method: 'GET', path: '/api/stocks/portfolio', auth: true, description: '我的持仓、市值与浮动盈亏（按实时价估值）' },
       buy: { method: 'POST', path: '/api/stocks/buy', auth: true, description: '用积分按实时价买入 { code, points }（单笔 100–100000 积分，含 0.3% 手续费与成交滑点；买入会明显推高价格）' },
       sell: { method: 'POST', path: '/api/stocks/sell', auth: true, description: '按实时价卖出 { code, shares? }（缺省整仓，支持部分卖出并等比分摊成本；卖出会明显压低价格），到账积分写入台账' },
+    },
+    bank: {
+      note: '银行系统：积分活期（年化 2%，利息按日惰性结算、水位封顶 365 天）与定期（7/30/90 天，到期全额计息、提前支取按活期）+ 3 只虚构基金（净值从 2026-01-01 起逐日确定性复利，同日恒定；买卖各收 0.25% 手续费）。单笔 100–100000 积分。需 bank 功能开关。',
+      overview: { method: 'GET', path: '/api/bank', auth: true, description: '总览：活期余额 / 定期存单 / 基金净值与持仓 / 最近流水（读取时惰性结息，60 次/5min）' },
+      demandDeposit: { method: 'POST', path: '/api/bank/demand/deposit', auth: true, description: '活期存入 { amount }（可用积分 → 活期本金）' },
+      demandWithdraw: { method: 'POST', path: '/api/bank/demand/withdraw', auth: true, description: '活期取出 { amount }（条件更新防并发超取，余额不足 400）' },
+      depositOpen: { method: 'POST', path: '/api/bank/deposits', auth: true, description: '开定期存单 { termKey: 7d|30d|90d, amount }（开单锁定年化利率，到期 = startAt + 期限天数）' },
+      depositRedeem: { method: 'POST', path: '/api/bank/deposits/:id/redeem', auth: true, description: '支取存单（到期全额计息 / 提前支取按活期日利率 × 已过天数计息；重复支取 400/409）' },
+      fundBuy: { method: 'POST', path: '/api/bank/funds/buy', auth: true, description: '买入基金 { code, points }（当日确定性净值成交，0.25% 手续费，可分批加仓）' },
+      fundSell: { method: 'POST', path: '/api/bank/funds/sell', auth: true, description: '卖出基金 { code, shares }（当日净值成交，0.25% 手续费，支持部分卖出并等比分摊成本；份额不足 400）' },
     },
     chat: {
       note: '聊天自建（2026-10 起）：会话 / 消息 / 群聊全部落 Prisma，无外部依赖。消息走 /ws/xmpp（不可用时降级 /api/chat/xmpp/http-* 长轮询），协议与原 XMPP 中继完全兼容。好友关系以 LineWeb Prisma 为唯一真相源。',

@@ -14,6 +14,7 @@ export type IconName =
   | 'chevron-down' | 'chevron-right' | 'chevron-left' | 'chevron-up'
   | 'home' | 'dashboard' | 'book' | 'folder' | 'compass' | 'gamepad' | 'paw' | 'chart'
   | 'chat' | 'coin' | 'sparkles' | 'globe' | 'user' | 'settings' | 'shield' | 'toggles'
+  | 'bank'
   | 'code' | 'power' | 'plus' | 'upload' | 'download' | 'search' | 'filter' | 'refresh'
   | 'close' | 'check' | 'star' | 'trash' | 'edit' | 'more' | 'panel' | 'grid' | 'list'
   | 'clock' | 'copy' | 'move' | 'select-all' | 'file' | 'image' | 'video' | 'audio'
@@ -150,6 +151,14 @@ const glyphs: Record<IconName, ReactNode> = {
       <path d="m10 3.1 1.65 4.25L15.9 9l-4.25 1.65L10 14.9l-1.65-4.25L4.1 9l4.25-1.65L10 3.1Z" {...TINT} />
       <path d="m10 3.1 1.65 4.25L15.9 9l-4.25 1.65L10 14.9l-1.65-4.25L4.1 9l4.25-1.65L10 3.1Z" />
       <path d="m18.2 13.1.85 2.15 2.15.85-2.15.85-.85 2.15-.85-2.15-2.15-.85 2.15-.85.85-2.15Z" />
+    </>
+  ),
+  bank: (
+    <>
+      <path d="M3.6 9.3 12 3.4l8.4 5.9Z" {...TINT} />
+      <path d="M3.6 9.3 12 3.4l8.4 5.9" />
+      <path d="M5.7 11.7v6.4M9.9 11.7v6.4M14.1 11.7v6.4M18.3 11.7v6.4" />
+      <path d="M3.6 20.6h16.8" />
     </>
   ),
   globe: (

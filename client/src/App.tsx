@@ -26,6 +26,7 @@ const PostsPage = lazy(() => import('./pages/PostsPage'))
 const PostPage = lazy(() => import('./pages/PostPage'))
 const CalculatorPage = lazy(() => import('./pages/CalculatorPage'))
 const StocksPage = lazy(() => import('./pages/StocksPage'))
+const BankPage = lazy(() => import('./pages/BankPage'))
 const FeaturesPage = lazy(() => import('./pages/FeaturesPage'))
 const GamesPage = lazy(() => import('./pages/GamesPage'))
 const GameLeaderboardPage = lazy(() => import('./pages/games/GameLeaderboardPage'))
@@ -183,6 +184,12 @@ export default function App() {
                       <Route element={<RequireFeature feature="stock" />}>
                         <Route path="/stocks" element={
                           <ProtectedRoute><StocksPage /></ProtectedRoute>
+                        } />
+                      </Route>
+                      {/* 银行：积分活期 / 定期存款与基金投资（需登录） */}
+                      <Route element={<RequireFeature feature="bank" />}>
+                        <Route path="/bank" element={
+                          <ProtectedRoute><BankPage /></ProtectedRoute>
                         } />
                       </Route>
                       {/* 宠物：花积分召唤并照顾一只 2D 小宠物（需登录） */}

@@ -1,0 +1,363 @@
+/* ===== 银行系统（活期 / 定期存款 + 基金投资） ===== */
+.gh-bank-page { max-width: 1080px; }
+
+.gh-bank-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.gh-bank-eyebrow { margin: 0 0 6px; font-size: var(--gh-text-sm); }
+.gh-bank-eyebrow a { color: var(--gh-text-secondary); text-decoration: none; }
+.gh-bank-eyebrow a:hover { color: var(--gh-accent); text-decoration: underline; }
+
+.gh-bank-loading {
+  display: flex;
+  justify-content: center;
+  padding: 60px;
+}
+
+/* 涨跌色（与模拟股市一致：红涨绿跌） */
+.gh-bank-up { color: var(--gh-danger); }
+.gh-bank-down { color: var(--gh-success); }
+.gh-bank-flat { color: var(--gh-text-secondary); }
+
+/* ===== 卡片布局 ===== */
+.gh-bank-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.gh-bank-card { padding: 16px; }
+.gh-bank-card + .gh-bank-card { margin-top: 16px; }
+.gh-bank-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.gh-bank-card-head h2 {
+  margin: 0;
+  font-size: var(--gh-text-lg);
+}
+
+/* ===== 活期 ===== */
+.gh-bank-demand-balance {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 8px;
+}
+.gh-bank-demand-balance span { color: var(--gh-text-tertiary); font-size: var(--gh-text-sm); }
+.gh-bank-demand-balance strong {
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.gh-bank-interest-hint {
+  margin: 0 0 10px;
+  padding: 6px 10px;
+  border-radius: var(--gh-radius-sm);
+  background: color-mix(in srgb, var(--gh-success) 10%, transparent);
+  color: var(--gh-success);
+  font-size: var(--gh-text-xs);
+}
+
+/* 存入 / 取出分段切换 */
+.gh-bank-segment {
+  display: inline-flex;
+  padding: 2px;
+  margin-bottom: 12px;
+  border-radius: 999px;
+  background: var(--gh-btn-hover);
+}
+.gh-bank-segment-btn {
+  padding: 4px 16px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--gh-text-secondary);
+  font-family: var(--gh-font);
+  font-size: var(--gh-text-sm);
+  cursor: pointer;
+  transition: background var(--gh-transition), color var(--gh-transition);
+}
+.gh-bank-segment-btn--active {
+  background: var(--gh-accent);
+  color: #fff;
+  font-weight: 600;
+}
+.gh-bank-segment-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--gh-focus-ring);
+}
+
+/* 金额输入 + 快捷按钮 + 主按钮 */
+.gh-bank-action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gh-bank-amount { width: 140px; flex: 0 1 auto; }
+.gh-bank-quick-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.gh-bank-hint { margin: 8px 0 0; font-size: var(--gh-text-xs); }
+
+/* ===== 定期 ===== */
+.gh-bank-terms {
+  width: 100%;
+  margin: 0 0 12px;
+  border-collapse: collapse;
+  font-size: var(--gh-text-sm);
+}
+.gh-bank-terms th {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--gh-border-muted);
+  color: var(--gh-text-tertiary);
+  font-weight: 500;
+  text-align: left;
+}
+.gh-bank-terms td {
+  padding: 8px;
+  border-bottom: 1px solid var(--gh-border-muted);
+  font-variant-numeric: tabular-nums;
+}
+.gh-bank-terms tr:last-child td { border-bottom: none; }
+.gh-bank-terms-row--active { background: var(--gh-accent-soft); }
+
+.gh-bank-deposits {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+.gh-bank-deposit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  border-top: 1px solid var(--gh-border-muted);
+}
+.gh-bank-deposit--matured .gh-bank-deposit-main strong { color: var(--gh-danger); }
+.gh-bank-deposit-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.gh-bank-deposit-main strong { font-size: var(--gh-text-sm); }
+.gh-bank-deposit-main span { font-size: var(--gh-text-xs); }
+.gh-bank-deposit-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.gh-bank-deposit-interest { font-size: var(--gh-text-xs); font-variant-numeric: tabular-nums; }
+
+/* ===== 基金 ===== */
+.gh-bank-funds {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.gh-bank-fund {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: var(--gh-radius);
+  transition: border-color var(--gh-transition), box-shadow var(--gh-transition);
+}
+.gh-bank-fund:hover {
+  border-color: var(--gh-accent);
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--gh-accent) 12%, transparent);
+}
+.gh-bank-fund-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.gh-bank-fund-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-weight: 600;
+}
+.gh-bank-fund-name i { font-style: normal; font-size: 18px; }
+.gh-bank-fund-name small { color: var(--gh-text-tertiary); font-weight: 400; }
+.gh-bank-fund-pct {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+}
+.gh-bank-fund-nav {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.gh-bank-fund-nav strong {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.gh-bank-fund-nav small { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+.gh-bank-spark {
+  width: 100%;
+  height: 36px;
+  display: block;
+}
+.gh-bank-spark--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+.gh-bank-fund-holding {
+  margin: 0;
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.gh-bank-fund-holding strong { font-variant-numeric: tabular-nums; }
+.gh-bank-fund-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+.gh-bank-fund-actions .gh-btn { flex: 1 1 auto; }
+
+/* ===== 最近流水 ===== */
+.gh-bank-ledger {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.gh-bank-ledger-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--gh-border-muted);
+}
+.gh-bank-ledger-row:last-child { border-bottom: none; }
+.gh-bank-ledger-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.gh-bank-ledger-main strong { font-size: var(--gh-text-sm); }
+.gh-bank-ledger-main small {
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gh-bank-ledger-side {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.gh-bank-ledger-side small { font-size: var(--gh-text-xs); }
+.gh-bank-empty {
+  margin: 8px 0 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-sm);
+  text-align: center;
+  padding: 16px 0;
+}
+
+/* ===== 基金买卖弹层 ===== */
+.gh-bank-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: color-mix(in srgb, #000 40%, transparent);
+}
+.gh-bank-modal {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border-radius: var(--gh-radius-lg, 14px);
+  background: var(--gh-canvas);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.25);
+}
+.gh-bank-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.gh-bank-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--gh-text-tertiary);
+  cursor: pointer;
+  transition: background var(--gh-transition), color var(--gh-transition);
+}
+.gh-bank-modal-close:hover { background: var(--gh-btn-hover); color: var(--gh-text); }
+.gh-bank-modal-nav { margin: 0; }
+.gh-bank-modal-nav strong { font-variant-numeric: tabular-nums; }
+.gh-bank-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--gh-text-sm);
+}
+.gh-bank-modal-preview { margin: 0; font-variant-numeric: tabular-nums; }
+.gh-bank-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+/* 卖出主按钮改用中性强调色，避免与「买入」同色 */
+.gh-bank-btn-sell {
+  background: var(--gh-text);
+  border-color: var(--gh-text);
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 860px) {
+  .gh-bank-layout { grid-template-columns: minmax(0, 1fr); }
+  .gh-bank-funds { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-bank-fund,
+  .gh-bank-segment-btn,
+  .gh-bank-modal-close {
+    transition: none;
+  }
+}

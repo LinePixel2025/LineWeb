@@ -63,6 +63,10 @@ model User {
   equippedThemeKey       String?               @map("equipped_theme_key") // 当前佩戴的 LineWeb 主题 key（目录见 server/src/lib/themes.ts）
   stockAccount           StockAccount? // 股市账户（分红水位 / 累计分红 / 已实现盈亏）
   stockTrades            StockTrade[] // 股市成交记录
+  bankAccount            BankAccount? // 银行账户（活期余额 / 利息结算水位）
+  bankDeposits           BankDeposit[] // 银行定期存单
+  fundHoldings           FundHolding[] // 基金持仓
+  fundTrades             FundTrade[] // 基金交易记录
   lotteryAccount         LotteryAccount? // 抽奖账户（保底计数 / 累计抽数）
   lotteryDraws           LotteryDraw[] // 抽奖记录
   themeUnlocks           ThemeUnlock[] // 已解锁的 LineWeb 主题
@@ -761,7 +765,7 @@ model PointsLedger {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   amount    Int // 正数=获得，负数=扣除
   balance   Int // 变动后余额
-  reason    String // game_result | farm_harvest | farm_steal | farm_welcome | farm_shop | farm_expand | farm_merchant | farm_protect | farm_seed_buy | farm_seed_sell | shop_purchase | checkin | leader_bonus | stock | stock_order_buy | stock_order_refund | stock_order_sell | pet_raid | pet_raid_entry | pet_raid_insurance | pet_raid_contract | raid_recycle | raid_shop | raid_market_sell | raid_market_buy | raid_storage_upgrade | redpacket_send | redpacket_receive | redpacket_refund | admin_adjust
+  reason    String // game_result | farm_harvest | farm_steal | farm_welcome | farm_shop | farm_expand | farm_merchant | farm_protect | farm_seed_buy | farm_seed_sell | shop_purchase | checkin | leader_bonus | stock | stock_order_buy | stock_order_refund | stock_order_sell | pet_raid | pet_raid_entry | pet_raid_insurance | pet_raid_contract | raid_recycle | raid_shop | raid_market_sell | raid_market_buy | raid_storage_upgrade | redpacket_send | redpacket_receive | redpacket_refund | bank_deposit_in | bank_demand_withdraw | bank_fixed_open | bank_fixed_redeem | bank_interest | fund_buy | fund_sell | admin_adjust
   game      String? // 来源游戏 id（2048 / doudizhu / ... / farm）
   note      String?
   createdAt DateTime @default(now()) @map("created_at")
@@ -1006,6 +1010,85 @@ model StockHolding {
   @@unique([userId, code])
   @@index([code])
   @@map("stock_holdings")
+}
+
+// === 银行系统（活期 / 定期存款 + 基金投资，2026-11） ===
+
+/**
+ * 银行账户（每用户一行，读时惰性建）：活期余额 + 利息结算水位。
+ * lastInterestDateKey 为上次结息的 Asia/Shanghai 日期键（YYYY-MM-DD），
+ * 惰性结算时按自然日差计息并把水位推进到当天（差值 > 365 天按 365 封顶，防止补天量利息）。
+ */
+model BankAccount {
+  id                  Int      @id @default(autoincrement())
+  userId              Int      @unique @map("user_id")
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  demandBalance       Int      @default(0) @map("demand_balance") // 活期本金（存入的积分，不含未结利息）
+  lastInterestDateKey String   @default("") @map("last_interest_date_key") // 利息结算水位（YYYY-MM-DD，空串 = 建行当天）
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("bank_accounts")
+}
+
+/**
+ * 银行定期存单：开单时锁定利率与期限；到期按年化全额计息，提前支取按活期利率计息。
+ * 支取后 status = redeemed（保留行作对账，不删除）。
+ */
+model BankDeposit {
+  id           Int       @id @default(autoincrement())
+  userId       Int       @map("user_id")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  termKey      String    @map("term_key") // 期限档（FIXED_TERMS：7d / 30d / 90d）
+  principal    Int // 本金（积分）
+  annualRate   Float     @map("annual_rate") // 开单时锁定的年化利率
+  startAt      DateTime  @map("start_at") // 起息时刻
+  maturityAt   DateTime  @map("maturity_at") // 到期时刻（startAt + 期限天数）
+  status       String    @default("active") // active | redeemed
+  interestPaid Int       @default(0) @map("interest_paid") // 支取时实付利息（含提前支取的活期利息）
+  redeemedAt   DateTime? @map("redeemed_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@index([userId, status])
+  @@map("bank_deposits")
+}
+
+/**
+ * 基金持仓（userId + fundCode 唯一）：份额允许小数，costPoints 为累计投入积分（含买入手续费）。
+ */
+model FundHolding {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fundCode   String   @map("fund_code") // 基金代码（BANK_FUNDS）
+  shares     Float // 持有份额（允许小数）
+  costPoints Int      @map("cost_points") // 累计投入积分（含买入手续费）
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, fundCode])
+  @@map("fund_holdings")
+}
+
+/**
+ * 基金交易记录（append-only，对账用）：买入 points = 投入积分（含手续费），卖出 points = 到账积分。
+ */
+model FundTrade {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fundCode  String   @map("fund_code")
+  type      String // buy | sell
+  nav       Float // 成交净值（当日确定性 NAV）
+  shares    Float
+  points    Int // 买入 = 投入积分（含手续费）；卖出 = 到账积分
+  fee       Int      @default(0) // 本笔手续费
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@index([fundCode, createdAt])
+  @@map("fund_trades")
 }
 
 /**
