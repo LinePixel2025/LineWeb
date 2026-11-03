@@ -103,6 +103,15 @@ const DEFAULT_PREMIUM_FRAME_SEED_FLAG = 'points.shop.frames.premium.seeded'
  * 不修改管理员已经改过的旧称号，也不复活已删除的商品。
  */
 const DEFAULT_PREMIUM_TITLE_SEED_FLAG = 'points.shop.titles.premium.seeded'
+/**
+ * 第三批（幻彩系列）头像框：frost / venom / royal / cyber。
+ * 照旧用独立 flag：旧 flag 已在生产置位，只补下面这批新 key。
+ */
+const DEFAULT_FRAME_SEED_FLAG_V3 = 'points.shop.frames.v3.seeded'
+/**
+ * 幻彩系列称号（meteor / blossom 新特效 + 现有特效新配色）同样用独立 flag 补种。
+ */
+const DEFAULT_TITLE_SEED_FLAG_V3 = 'points.shop.titles.v3.seeded'
 
 interface DefaultShopItem {
   key: string
@@ -157,6 +166,33 @@ const DEFAULT_PREMIUM_TITLE_ITEMS: readonly DefaultShopItem[] = [
   { key: 'title_nova', type: 'title', name: '超新星', description: '一颗恒星在你名字旁边炸开，连排行榜都要眯一下眼。', cost: 8000, rarity: 'legendary', payload: { icon: '💥', color: '#d4a72c', effect: 'nova' }, sortOrder: 91 },
   { key: 'title_prism', type: 'title', name: '棱镜虹光', description: '把光拆成七种颜色，走过的地方都留下全息残影。', cost: 10000, rarity: 'legendary', payload: { icon: '💠', color: '#8250df', effect: 'prism' }, sortOrder: 92 },
   { key: 'title_void', type: 'title', name: '虚空领主', description: '名字周围的光开始向内坍缩，像一个小小的黑洞。', cost: 15000, rarity: 'legendary', payload: { icon: '🕳️', color: '#6639ba', effect: 'void' }, sortOrder: 93 },
+]
+
+/**
+ * 幻彩系列头像框（第三批）：冰晶 / 翠毒为普通框（伪元素外圈），紫金 / 赛博带装饰层动画。
+ * 与旧批次一样是幂等 upsert（update 为空），只新增这四个 key，不复活管理员删掉的旧商品。
+ */
+const DEFAULT_FRAME_ITEMS_V3: readonly DefaultShopItem[] = [
+  { key: 'frame_v3_frost', type: 'avatar_frame', name: '冰晶之环', description: '极地寒冰凝成的光环，转起来像把极光戴在头上。', cost: 1600, rarity: 'epic', payload: { frame: 'frost', color: '#5fb8e8' }, sortOrder: 270 },
+  { key: 'frame_v3_venom', type: 'avatar_frame', name: '翠影之环', description: '幽绿的毒液沿头像缓缓流淌，来自秘密实验室的失窃样品。', cost: 1800, rarity: 'epic', payload: { frame: 'venom', color: '#2ea043' }, sortOrder: 280 },
+  { key: 'frame_v3_royal', type: 'avatar_frame', name: '鎏金紫冕', description: '紫金双色冕环加身，鎏金冠羽绕头像徐徐上升，王者气象。', cost: 2800, rarity: 'legendary', payload: { frame: 'royal', color: '#a371f7' }, sortOrder: 290 },
+  { key: 'frame_v3_cyber', type: 'avatar_frame', name: '赛博脉冲', description: '青色能量环分段脉冲，扫描线一遍遍掠过，像接入了主脑。', cost: 3000, rarity: 'legendary', payload: { frame: 'cyber', color: '#22d3ee' }, sortOrder: 300 },
+]
+
+/**
+ * 幻彩系列称号（第三批）：meteor / blossom 两个新特效各两件传说，
+ * 另有现有特效的新配色四件 epic（epic 阶段特效由客户端忽略，升为 legendary 后生效）。
+ * 幂等补种，管理员可在管理端点「设置特效」改成别的风格。
+ */
+const DEFAULT_TITLE_ITEMS_V3: readonly DefaultShopItem[] = [
+  { key: 'title_v3_meteor', type: 'title', name: '流星赶月', description: '一道流星拖着银尾掠过你的名字，月色都成了背景板。', cost: 4800, rarity: 'legendary', payload: { icon: '💫', color: '#7aa7ff', effect: 'meteor' }, sortOrder: 94 },
+  { key: 'title_v3_meteor_shower', type: 'title', name: '星陨如雨', description: '夜幕低垂，流星成雨，每一颗都从你的称号旁划过。', cost: 5000, rarity: 'legendary', payload: { icon: '☄️', color: '#a5c8ff', effect: 'meteor' }, sortOrder: 95 },
+  { key: 'title_v3_blossom', type: 'title', name: '繁花似锦', description: '名字周围花开成海，粉白花瓣绕着徽章缓缓飘落。', cost: 4200, rarity: 'legendary', payload: { icon: '🌸', color: '#f472a8', effect: 'blossom' }, sortOrder: 96 },
+  { key: 'title_v3_petalfall', type: 'title', name: '落樱缤纷', description: '春风拂过，落樱成阵，走过的每一步都铺满花瓣。', cost: 4500, rarity: 'legendary', payload: { icon: '🌺', color: '#ff8fc0', effect: 'blossom' }, sortOrder: 97 },
+  { key: 'title_v3_stardust', type: 'title', name: '星河拾遗', description: '把散落星河的碎光一颗颗拾起，缀在自己的名字上。', cost: 1200, rarity: 'epic', payload: { icon: '✨', color: '#8ddbff', effect: 'stardust' }, sortOrder: 98 },
+  { key: 'title_v3_prism', type: 'title', name: '流光溢彩', description: '光在你的称号里折出七彩，低调又藏不住的华丽。', cost: 1500, rarity: 'epic', payload: { icon: '🔮', color: '#d2a8ff', effect: 'prism' }, sortOrder: 99 },
+  { key: 'title_v3_mooneclipse', type: 'title', name: '月蚀之影', description: '一轮月被暗影缓缓吞没，只在名字边缘留一圈紫晕。', cost: 1800, rarity: 'epic', payload: { icon: '🌑', color: '#8250df', effect: 'void' }, sortOrder: 100 },
+  { key: 'title_v3_emberglow', type: 'title', name: '焰羽流金', description: '余烬未熄的金色火羽，安静地躺在名字旁边发着光。', cost: 2000, rarity: 'epic', payload: { icon: '🔥', color: '#ffa657', effect: 'nova' }, sortOrder: 101 },
 ]
 
 /* ============================================================
@@ -223,6 +259,8 @@ async function ensureDefaultShop(): Promise<void> {
   await seedShopItems(DEFAULT_FRAME_SEED_FLAG, DEFAULT_FRAME_ITEMS)
   await seedShopItems(DEFAULT_PREMIUM_FRAME_SEED_FLAG, DEFAULT_PREMIUM_FRAME_ITEMS)
   await seedShopItems(DEFAULT_PREMIUM_TITLE_SEED_FLAG, DEFAULT_PREMIUM_TITLE_ITEMS)
+  await seedShopItems(DEFAULT_FRAME_SEED_FLAG_V3, DEFAULT_FRAME_ITEMS_V3)
+  await seedShopItems(DEFAULT_TITLE_SEED_FLAG_V3, DEFAULT_TITLE_ITEMS_V3)
 }
 
 /** 幂等播种：同一批商品只补一次，已存在（或被管理员删掉）的 key 不受影响 */

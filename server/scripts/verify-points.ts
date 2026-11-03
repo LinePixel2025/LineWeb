@@ -207,18 +207,20 @@ assertEqual(sanitizeTitleIcon('🐣'), '🐣', '单个 emoji 称号图标保留'
 assertEqual(sanitizeTitleIcon('🐣🐣🐣'), '🐣🐣', '图标最多两个字符')
 assertEqual(sanitizeTitleIcon(123), '', '非字符串图标回退空')
 
-assertEqual(AVATAR_FRAME_STYLES.length, 7, '头像框共 7 种样式')
+assertEqual(AVATAR_FRAME_STYLES.length, 11, '头像框共 11 种样式')
 assertEqual(sanitizeAvatarFrame('gold'), 'gold', 'gold 头像框合法')
 assertEqual(sanitizeAvatarFrame('galaxy'), 'galaxy', 'galaxy 头像框合法')
+assertEqual(sanitizeAvatarFrame('frost'), 'frost', 'frost 头像框合法')
+assertEqual(sanitizeAvatarFrame('cyber'), 'cyber', 'cyber 头像框合法')
 assertEqual(sanitizeAvatarFrame('rainbow'), null, '未知头像框样式回退 null')
 assertEqual(sanitizeAvatarFrame(''), null, '空头像框样式回退 null')
 assertEqual(sanitizeAvatarFrame(123), null, '非字符串头像框回退 null')
 
-assertEqual(TITLE_EFFECT_STYLES.length, 8, '传说特效共 8 种样式')
+assertEqual(TITLE_EFFECT_STYLES.length, 10, '传说特效共 10 种样式')
 assertEqual(
   [...TITLE_EFFECT_STYLES],
-  ['classic', 'stardust', 'flame', 'aurora', 'thunder', 'nova', 'prism', 'void'],
-  '传说特效白名单依次为 classic/stardust/flame/aurora/thunder/nova/prism/void',
+  ['classic', 'stardust', 'flame', 'aurora', 'thunder', 'nova', 'prism', 'void', 'meteor', 'blossom'],
+  '传说特效白名单依次为 classic/stardust/flame/aurora/thunder/nova/prism/void/meteor/blossom',
 )
 for (const style of TITLE_EFFECT_STYLES) {
   assertEqual(sanitizeTitleEffect(style), style, `特效 ${style} 白名单内原样返回`)

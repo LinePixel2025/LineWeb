@@ -1,6 +1,7 @@
 /**
  * 传说称号动态特效白名单（与服务端 TITLE_EFFECT_STYLES 一致，顺序一致）。
  * 炸裂系列：nova 超新星 / prism 棱镜虹光 / void 虚空黑洞。
+ * 幻彩系列：meteor 流星拖尾 / blossom 花瓣飘落。
  */
 export const TITLE_EFFECTS = [
   'classic',
@@ -11,6 +12,8 @@ export const TITLE_EFFECTS = [
   'nova',
   'prism',
   'void',
+  'meteor',
+  'blossom',
 ] as const
 export type TitleEffectStyle = typeof TITLE_EFFECTS[number]
 
@@ -82,6 +85,7 @@ export type ShopRarity = 'common' | 'rare' | 'epic' | 'legendary'
 /**
  * 头像框样式白名单（与服务端 AVATAR_FRAME_STYLES 一致，顺序一致）。
  * 炸裂系列：inferno 炽焰 / storm 雷霆 / supernova 星爆。
+ * 幻彩系列：frost 冰晶 / venom 翠毒（普通框）、royal 紫金 / cyber 赛博（装饰层框）。
  */
 export const AVATAR_FRAMES = [
   'gold',
@@ -91,11 +95,15 @@ export const AVATAR_FRAMES = [
   'inferno',
   'storm',
   'supernova',
+  'frost',
+  'venom',
+  'royal',
+  'cyber',
 ] as const
 export type AvatarFrameStyle = typeof AVATAR_FRAMES[number]
 
-/** 需要额外装饰层（gh-avatar-frame-fx）的炸裂头像框；其余框只用外圈伪元素 */
-export const PREMIUM_AVATAR_FRAMES = ['inferno', 'storm', 'supernova'] as const
+/** 需要额外装饰层（gh-avatar-frame-fx）的炸裂 / 幻彩头像框；其余框只用外圈伪元素 */
+export const PREMIUM_AVATAR_FRAMES = ['inferno', 'storm', 'supernova', 'royal', 'cyber'] as const
 export type PremiumAvatarFrameStyle = typeof PREMIUM_AVATAR_FRAMES[number]
 
 /** 头像框（LineWeb 站内展示，不同步 neko） */

@@ -41,7 +41,7 @@ describe('titleEffects 前后端一致性', () => {
     expect([...TITLE_EFFECTS]).toEqual(serverTitleEffects())
   })
 
-  it('特效白名单共 8 个（5 个既有 + 3 个炸裂）且与 CSS fx 类名后缀约定一致', () => {
+  it('特效白名单共 10 个（8 个既有 + 2 个幻彩）且与 CSS fx 类名后缀约定一致', () => {
     expect([...TITLE_EFFECTS]).toEqual([
       'classic',
       'stardust',
@@ -51,12 +51,14 @@ describe('titleEffects 前后端一致性', () => {
       'nova',
       'prism',
       'void',
+      'meteor',
+      'blossom',
     ])
-    expect(TITLE_EFFECTS.length).toBe(8)
+    expect(TITLE_EFFECTS.length).toBe(10)
   })
 
-  it('炸裂特效 key 均为小写且可作为 gh-title-badge--fx-<key> 类名后缀', () => {
-    for (const key of ['nova', 'prism', 'void']) {
+  it('炸裂 / 幻彩特效 key 均为小写且可作为 gh-title-badge--fx-<key> 类名后缀', () => {
+    for (const key of ['nova', 'prism', 'void', 'meteor', 'blossom']) {
       expect(TITLE_EFFECTS).toContain(key)
       expect(key).toMatch(/^[a-z][a-z0-9-]*$/)
     }
@@ -68,7 +70,7 @@ describe('avatarFrames 前后端一致性', () => {
     expect([...AVATAR_FRAMES]).toEqual(serverAvatarFrames())
   })
 
-  it('头像框白名单共 7 个（4 个既有 + 3 个炸裂）且与 gh-avatar-frame--<key> 约定一致', () => {
+  it('头像框白名单共 11 个（4 个既有 + 3 个炸裂 + 4 个幻彩）且与 gh-avatar-frame--<key> 约定一致', () => {
     expect([...AVATAR_FRAMES]).toEqual([
       'gold',
       'neon',
@@ -77,9 +79,13 @@ describe('avatarFrames 前后端一致性', () => {
       'inferno',
       'storm',
       'supernova',
+      'frost',
+      'venom',
+      'royal',
+      'cyber',
     ])
-    expect(AVATAR_FRAMES.length).toBe(7)
-    for (const key of ['inferno', 'storm', 'supernova']) {
+    expect(AVATAR_FRAMES.length).toBe(11)
+    for (const key of ['inferno', 'storm', 'supernova', 'royal', 'cyber']) {
       expect(AVATAR_FRAMES).toContain(key)
       expect(key).toMatch(/^[a-z][a-z0-9-]*$/)
     }
