@@ -634,3 +634,22 @@ cd storage-node && python main.py     # 存储节点，config.json 指向 ws://1
 - **对局内移动物资**：共享 `raidRun.ts` 新增 `moveItem { from,to,slotIndex,amount? }`（双端逐字副本；胸挂只能放消耗品、目标容量/堆叠校验、整格或部分数量），`routes/pets.ts` 的 discriminatedUnion 同步；`engine.moveItem` 本地即时生效并上报。新增 `RaidInventory.tsx` 全屏面板（背包/胸挂/安全箱，点选物品 → 点目标容器，价值/格数/品质展示；`B`/`I`/Esc 快捷键），移动端 HUD 新增「战术背包」常驻入口（竖屏在生命盘下方，横屏在移动摇杆上方）。
 - **移动端交互**：新增常驻「交互 E」按钮（手机没有键盘也能开箱/撤离，横屏在射击摇杆上方、竖屏在左侧竖排），撤离读条改为到点**自动完成**并每 2 秒重试被拒的 `extractDone`；触屏日志/工具条重新排布，小横屏居中显示紧凑错误/提示流，竖屏也保留提示条；`RaidInventory` 渲染进 stage 子树，原生全屏时仍然可见，且 `--raid-*` 变量提升到 `.gh-raid-page` 修复浅色主题下深色面板文字不可读。对局中隐藏站点公告条与页面大标题，舞台高度按 `100dvh - 118px` 撑满首屏（平板横屏无需滚动就能看到摇杆与技能）。
 - **自检**：`cd server && npx tsc --noEmit`、`npm run verify:raid`（6292）；`cd client && npx tsc --noEmit` + `npm run test`（59 文件 / 617 用例，含新增 `engine.test.ts` 的走廊侧格换房 + 服务端拒绝回滚）+ `npm run build`；生产模式本地 3002 实测 CSP 3 个 sha256 与构建产物一致、页面无控制台错误、对局可启动。
+
+---
+
+## 2026-11-04 搜打撤体验大版本 + 银行系统 + 称号头像框扩充（实现口径）
+
+- **搜打撤（raid，`RAID_STATE_VERSION` 2→3，旧对局读时按废弃结算）**：
+  - **丢弃物品**：新事件 `dropItem`（容器格→当前房间地面，落点客户端坐标服务端夹取进房间内圈）+ `takeGround`（捡回背包/胸挂）；`RaidRunState.groundLoot`（单房上限 `RAID_GROUND_LOOT_LIMIT=24`、`groundSeq` 发号）；DTO 带 `groundLoot/groundSeq`；组队 `RaidWorldDelta` 增 `groundDropped/groundTaken`（`startSquadRaid` 按成员序号传 `groundSeqBase=(i+1)×100` 防撞 id）；客户端走过地面物品自动捡起（engine `updateGroundPickups`），`RaidInventory` 选中物品有「丢在地上」按钮，renderer `drawGroundLoot` 虚线圈渲染。自检 `verify:raid` 6312 断言。
+  - **胸挂放宽**：`normalizeContainer` 去掉 consumablesOnly 参数，takeLoot/moveItem/withdraw/开局清洗 4 处「只能放消耗品」校验移除，任意物品可入胸挂。
+  - **背包扩容**：`backpack_t7`（36 格）/`backpack_t8`（48 格）神话品质掉落限定；新增神话掉落物「深渊装备箱 `gear_cache_mythic`」（开 6–8 级装备、仅 lootTier 5 图）；`verify-raid`/`verify-raid-storage` 硬编码断言同步（装备 32 件、装备箱 5 种）。
+  - **人机增强**：`createRaidEnemy` HP ×1.2/2.4/5.0（原 1/1.9/4.2）、伤害 ×1.15/1.45/1.8（原 1/1.2/1.5）、scout/soldier 远程概率 85%/65%、各图 enemyLevel +1、enemyBudget +2~4；客户端远程射击 1700/1200→1500/1100ms、近战 1000→950ms。
+  - **触屏操控**：`VirtualStick` 改悬浮式（`gh-raid-stick-zone` 左右半屏热区、按下即触点生成底盘、超半径底盘跟随手指漂移）；开火自动锁敌 `aimAssistAngle`（±75° 锥内最近可视敌人，仅 `touchMode`）；技能伤害类全平台 `skillAutoTarget` 朝最近可视敌人；引擎 LOS 检测按敌 ~120ms 节流（`sightCheck`）。
+  - **地图直观化**：房间类型水印徽标（⚔🛡👑📦☢🚁🏠 + 中文标签）烙进 scene 缓存零逐帧成本、tint 加深；minimap 每格加类型字标（起/战/精/王/资/危/撤）。
+  - **平板适配**：raid.css 新增 768–1279px 断点（隐藏事件流、squad 上移、loot 计数带让位、vitals/技能紧凑化）；修复触屏 `.gh-raid-bag` top+bottom 双向生效拉伸。
+  - **性能**：cone/pillar/screenFlash 的 `createLinearGradient`/`createRadialGradient` 按 ctx+参数缓存（`cachedGradient`，WeakMap）；平板（粗指针+宽≥1024）`detectQuality` 直接送 low 档。
+  - **组队邀请修复**：`/raid/squad/invite|respond` 统一返回 `{ squad }`（拒绝 `{ squad: null }`，此前裸 null 让前端 `result.squad` 抛 TypeError 显示「操作失败」）；客户端对 404 竞态静默移除邀请。
+  - **一键回收**：`POST /api/pets/raid/storage/recycle-all`（`{ keepUpgradeItems? }` 默认 true 跳过全部等级升级材料），事务内整仓按官方价结算；仓库 Tab「♻️ 一键回收」按钮 + 确认弹窗。
+- **银行系统（bank，全新功能）**：`/api/bank`（`requireFeature('bank')`，读写各 60/5min 按用户限流）。**活期**年化 2% 按自然日惰性结息直接入积分余额（`bank_interest`，game:null 不占游戏日上限，水位 `lastInterestDateKey` 封顶 365 天）；**定期** 7 天 5% / 30 天 10% / 90 天 18%，到期支取全额利息、提前支取按活期；**基金** 3 只（稳健🛟 drift 4% vol 0.4% / 均衡⚖️ 10%/1.2% / 进取🚀 18%/2.8%），NAV 自 2026-01-01=1 逐日确定性复利（mulberry32 种子 `lineweb-fund:<code>:<dateKey>`）**带均值回归**（日拉力=0.05×ln(目标线/净值)，钳 ±0.02，防纯随机游走出 ±50% 极端路径）；单笔 100–100,000、申赎费 0.25%。schema additive 4 表 `BankAccount/BankDeposit/FundHolding/FundTrade`（`prisma db push` 即可）；lib 纯函数 `bankRules.ts` + 服务 `bankService.ts`（事务用 `spendPointsTx/awardPointsTx` + 条件 updateMany 防并发）；前端 `/bank`（BankPage + Sidebar 探索组入口 + features 双份加 `bank` 键）；自检 `cd server && npm run verify:bank`（1029 断言）；文档 `docs/bank-api.md`。
+- **称号/头像框扩充（points）**：`AVATAR_FRAME_STYLES` 7→11（新增 frost/venom/royal/cyber，royal/cyber 走 premium fx 装饰层）、`TITLE_EFFECT_STYLES` 8→10（新增 meteor/blossom）；新种子商品 12 件走新标记 `points.shop.frames.v3.seeded`/`points.shop.titles.v3.seeded`（4 框 1500–3000 分 + 8 称号 800–5000 分）；前端 `types/points.ts` 拷贝、points.css 类与 reduced-motion 降级、`verify:points`（361）与 `titleEffects.test.ts` 长度断言同步。
+- **部署**：2026-11-04 按本地产物链上线（本地 build → client-dist 覆盖 → `git push deploy master` → 服务器 fetch/reset → `Dockerfile.prebuilt` 重建），生产 schema 由 docker-entrypoint.sh 自动 db push。
