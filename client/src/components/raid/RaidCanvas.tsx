@@ -1,19 +1,21 @@
 /**
- * 搜打撤对局舞台：实时引擎 + 60fps 循环 + 键鼠 / 双虚拟摇杆 + 横屏沉浸模式。
+ * 搜打撤对局舞台：实时引擎 + 自适应帧率 + 键鼠 / 双虚拟摇杆 + 横屏沉浸模式。
  *
- * 口径：
- *   - 画布铺满舞台，HUD 作为 children 叠在舞台上（浮层，不再占据画布下方一整块空间）；
- *   - 小地图改用舞台内的独立 canvas（`renderMinimap`），位置交给 CSS，
- *     这样手机横屏时摇杆、按钮不会再压在画布画的小地图上；
- *   - 引擎的 update 每帧都跑（阵亡后特效仍需衰减），暂停时整体冻结。
+ * 兼容性口径（2026-11）：
+ *   - 旧 Android WebView / iOS Safari 没有 ResizeObserver、matchMedia().addEventListener、
+ *     PointerEvent：全部做特性检测与降级，任何一项缺失都不会让对局初始化失败。
+ *   - 画质分 high / balanced / low：低画质降 DPR、锁 30fps、减少粒子与环境特效，
+ *     但技能特效与出口箭头保留。帧耗时连续超标会自动降档。
+ *   - 竖屏会提示旋转横屏；平板横屏（iPad 1024×768 等）按触屏布局渲染。
  */
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type TouchEvent as ReactTouchEvent } from 'react'
 import type { RaidEvent } from '../../lib/raid/raidRun'
 import { RaidEngine, type RaidSnapshot } from '../../lib/raid/engine'
-import { computeMetrics, renderMinimap, renderRaid } from '../../lib/raid/renderer'
+import { computeMetrics, renderMinimap, renderRaid, type RaidRenderQuality } from '../../lib/raid/renderer'
 import { createRaidInput, type RaidInputController } from '../../lib/raid/input'
 import { useLowPerformanceMode } from '../../lib/performanceMode'
+import { onMediaQueryChange } from '../../lib/mediaQuery'
 import type { RaidRun } from '../../types/petRaid'
 
 interface RaidCanvasProps {
@@ -34,21 +36,62 @@ interface VirtualStickProps {
   onChange: (x: number, y: number, active: boolean) => void
 }
 
+const SUPPORTS_POINTER = typeof window !== 'undefined' && 'PointerEvent' in window
+
+const QUALITY_LABELS: Record<RaidRenderQuality, string> = {
+  high: '画质 高',
+  balanced: '画质 均衡',
+  low: '画质 省电',
+}
+
+function detectQuality(lowPerf: boolean): RaidRenderQuality {
+  if (lowPerf) return 'low'
+  if (typeof navigator === 'undefined') return 'balanced'
+  // 旧内核直接省电档：inset 是最可靠的「Chrome < 87 / Safari < 14」探针
+  try {
+    if (typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && !CSS.supports('inset', '0px')) {
+      return 'low'
+    }
+  } catch {
+    /* 忽略 */
+  }
+  const ua = navigator.userAgent
+  const chrome = /Chrome\/(\d+)/.exec(ua)
+  if (chrome && Number(chrome[1]) < 80) return 'low'
+  const ios = /OS (\d+)_/.exec(ua)
+  if (ios && Number(ios[1]) < 13) return 'low'
+  const cores = navigator.hardwareConcurrency ?? 4
+  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4
+  const coarse = typeof window.matchMedia === 'function'
+    ? window.matchMedia('(pointer: coarse)').matches
+    : false
+  if (cores <= 4 || memory <= 3) return coarse ? 'low' : 'balanced'
+  if (coarse) return 'balanced'
+  return 'high'
+}
+
+function dprForQuality(quality: RaidRenderQuality): number {
+  const raw = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+  if (quality === 'low') return Math.min(1, raw)
+  if (quality === 'balanced') return Math.min(1.5, raw)
+  return Math.min(2, raw)
+}
+
 function VirtualStick({ className, label, glyph, onChange }: VirtualStickProps) {
   const ref = useRef<HTMLDivElement | null>(null)
   const [knob, setKnob] = useState({ x: 0, y: 0 })
   const [active, setActive] = useState(false)
   const activeRef = useRef<number | null>(null)
 
-  const update = (event: ReactPointerEvent<HTMLDivElement>): void => {
+  const updatePoint = (clientX: number, clientY: number): void => {
     const element = ref.current
     if (!element) return
     const rect = element.getBoundingClientRect()
     const cx = rect.left + rect.width / 2
     const cy = rect.top + rect.height / 2
-    const dx = event.clientX - cx
-    const dy = event.clientY - cy
-    const radius = rect.width * 0.38
+    const dx = clientX - cx
+    const dy = clientY - cy
+    const radius = Math.max(1, rect.width * 0.38)
     const dist = Math.hypot(dx, dy)
     const scale = dist > radius ? radius / dist : 1
     const nx = (dx * scale) / radius
@@ -64,23 +107,52 @@ function VirtualStick({ className, label, glyph, onChange }: VirtualStickProps) 
     onChange(0, 0, false)
   }
 
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    activeRef.current = event.pointerId
+    setActive(true)
+    try {
+      event.currentTarget.setPointerCapture?.(event.pointerId)
+    } catch {
+      /* 旧内核不支持指针捕获：不影响拖动 */
+    }
+    updatePoint(event.clientX, event.clientY)
+  }
+
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (activeRef.current !== event.pointerId) return
+    updatePoint(event.clientX, event.clientY)
+  }
+
+  const onTouchStart = (event: ReactTouchEvent<HTMLDivElement>): void => {
+    const touch = event.changedTouches[0]
+    if (!touch) return
+    activeRef.current = touch.identifier
+    setActive(true)
+    updatePoint(touch.clientX, touch.clientY)
+  }
+
+  const onTouchMove = (event: ReactTouchEvent<HTMLDivElement>): void => {
+    const touches = Array.from(event.touches)
+    const touch = touches.find((entry) => entry.identifier === activeRef.current)
+    if (!touch) return
+    updatePoint(touch.clientX, touch.clientY)
+  }
+
+  const onTouchEnd = (): void => reset()
+
   return (
     <div
       ref={ref}
       className={`gh-raid-stick ${className ?? ''}${active ? ' is-active' : ''}`}
       role="presentation"
-      onPointerDown={(event) => {
-        activeRef.current = event.pointerId
-        setActive(true)
-        event.currentTarget.setPointerCapture(event.pointerId)
-        update(event)
-      }}
-      onPointerMove={(event) => {
-        if (activeRef.current !== event.pointerId) return
-        update(event)
-      }}
-      onPointerUp={reset}
-      onPointerCancel={reset}
+      onPointerDown={SUPPORTS_POINTER ? onPointerDown : undefined}
+      onPointerMove={SUPPORTS_POINTER ? onPointerMove : undefined}
+      onPointerUp={SUPPORTS_POINTER ? reset : undefined}
+      onPointerCancel={SUPPORTS_POINTER ? reset : undefined}
+      onTouchStart={SUPPORTS_POINTER ? undefined : onTouchStart}
+      onTouchMove={SUPPORTS_POINTER ? undefined : onTouchMove}
+      onTouchEnd={SUPPORTS_POINTER ? undefined : onTouchEnd}
+      onTouchCancel={SUPPORTS_POINTER ? undefined : onTouchEnd}
     >
       <span className="gh-raid-stick-glyph" aria-hidden>{glyph}</span>
       <span className="gh-raid-stick-label" aria-hidden>{label}</span>
@@ -108,30 +180,43 @@ export default function RaidCanvas({
   const minimapRef = useRef<HTMLCanvasElement | null>(null)
   const engineRef = useRef<RaidEngine | null>(null)
   const inputRef = useRef<RaidInputController | null>(null)
+  const requestResizeRef = useRef<() => void>(() => {})
   const metricsRef = useRef({ tile: 32, offsetX: 0, offsetY: 0, width: 800, height: 560 })
   const pausedRef = useRef(paused)
-  const lowPerfRef = useRef(false)
   const callbacksRef = useRef({ onEngineReady, onSnapshot, onFlush })
   const [touchMode, setTouchMode] = useState(() => {
     if (typeof window === 'undefined') return false
-    return window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 900
+    const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
+    return Boolean(coarse) || window.innerWidth < 900
   })
   const [immersive, setImmersive] = useState(false)
   const [lowPerf] = useLowPerformanceMode()
+  const [quality, setQuality] = useState<RaidRenderQuality>(() => detectQuality(false))
+  const qualityRef = useRef<RaidRenderQuality>(quality)
+  const manualQualityRef = useRef(false)
   const [hint, setHint] = useState<'none' | 'rotate' | 'fullscreen'>('none')
 
   callbacksRef.current = { onEngineReady, onSnapshot, onFlush }
   pausedRef.current = paused
-  lowPerfRef.current = lowPerf
+  qualityRef.current = quality
+
+  // 用户手动切换 / 系统低性能模式：手动选择后不再自动降档
+  useEffect(() => {
+    manualQualityRef.current = false
+    setQuality(lowPerf ? 'low' : detectQuality(false))
+  }, [lowPerf])
 
   useEffect(() => {
-    const query = window.matchMedia('(pointer: coarse)')
-    const update = (): void => setTouchMode(query.matches || window.innerWidth < 900)
-    query.addEventListener('change', update)
+    const query = typeof window.matchMedia === 'function' ? window.matchMedia('(pointer: coarse)') : null
+    const update = (): void => setTouchMode(Boolean(query?.matches) || window.innerWidth < 900)
+    const off = onMediaQueryChange('(pointer: coarse)', update)
     window.addEventListener('resize', update)
+    window.addEventListener('orientationchange', update)
+    update()
     return () => {
-      query.removeEventListener('change', update)
+      off()
       window.removeEventListener('resize', update)
+      window.removeEventListener('orientationchange', update)
     }
   }, [])
 
@@ -156,6 +241,8 @@ export default function RaidCanvas({
     const onChange = (): void => {
       const full = document.fullscreenElement || (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement
       if (!full && immersive && !stageRef.current?.classList.contains('is-fallback')) setImmersive(false)
+      // 进入 / 退出全屏后舞台尺寸变化，但旧内核没有 ResizeObserver，需要显式重排画布
+      window.setTimeout(() => requestResizeRef.current(), 60)
     }
     document.addEventListener('fullscreenchange', onChange)
     document.addEventListener('webkitfullscreenchange', onChange)
@@ -173,6 +260,7 @@ export default function RaidCanvas({
       void Promise.resolve(document.exitFullscreen?.()).catch(() => undefined)
       stage.classList.remove('is-fallback')
       setImmersive(false)
+      window.setTimeout(() => requestResizeRef.current(), 60)
       return
     }
     const request = stage.requestFullscreen ?? ((stage as HTMLElement & { webkitRequestFullscreen?: () => void }).webkitRequestFullscreen?.bind(stage))
@@ -186,7 +274,11 @@ export default function RaidCanvas({
           setImmersive(true)
         })
         const orientation = (screen as unknown as { orientation?: { lock?: (o: string) => Promise<void> } }).orientation
-        orientation?.lock?.('landscape').catch(() => undefined)
+        try {
+          orientation?.lock?.('landscape').catch(() => undefined)
+        } catch {
+          /* 旧内核没有锁屏 API */
+        }
         return
       } catch {
         /* 继续走降级 */
@@ -194,6 +286,14 @@ export default function RaidCanvas({
     }
     stage.classList.toggle('is-fallback')
     setImmersive(stage.classList.contains('is-fallback'))
+    window.setTimeout(() => requestResizeRef.current(), 60)
+  }
+
+  const cycleQuality = (): void => {
+    manualQualityRef.current = true
+    const order: RaidRenderQuality[] = ['high', 'balanced', 'low']
+    const next = order[(order.indexOf(qualityRef.current) + 1) % order.length] ?? 'balanced'
+    setQuality(next)
   }
 
   useEffect(() => {
@@ -206,37 +306,60 @@ export default function RaidCanvas({
 
     const engine = new RaidEngine(initialRun, species)
     engineRef.current = engine
+    engine.setCosmeticLevel(qualityRef.current)
     if (import.meta.env.DEV) {
       ;(window as unknown as { __raidEngine?: RaidEngine }).__raidEngine = engine
+      // 调试钩子：IAB 等环境可能暂停 rAF，用它可以手动推进并重绘
+      ;(window as unknown as { __raidRender?: typeof renderRaid }).__raidRender = renderRaid
     }
     callbacksRef.current.onEngineReady(engine)
 
-    const dpr = Math.min(2, window.devicePixelRatio || 1)
     let cssWidth = 0
     let cssHeight = 0
+    let activeDpr = dprForQuality(qualityRef.current)
 
     const resize = (): void => {
       const rect = container.getBoundingClientRect()
       cssWidth = Math.max(320, rect.width)
       cssHeight = Math.max(220, rect.height)
-      canvas.width = Math.round(cssWidth * dpr)
-      canvas.height = Math.round(cssHeight * dpr)
+      const desired = dprForQuality(qualityRef.current)
+      if (desired !== activeDpr) activeDpr = desired
+      canvas.width = Math.round(cssWidth * activeDpr)
+      canvas.height = Math.round(cssHeight * activeDpr)
       canvas.style.width = `${cssWidth}px`
       canvas.style.height = `${cssHeight}px`
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.setTransform(activeDpr, 0, 0, activeDpr, 0, 0)
       if (minimap) {
         const miniRect = minimap.getBoundingClientRect()
-        minimap.width = Math.round(Math.max(60, miniRect.width) * dpr)
-        minimap.height = Math.round(Math.max(60, miniRect.height) * dpr)
+        minimap.width = Math.round(Math.max(60, miniRect.width) * activeDpr)
+        minimap.height = Math.round(Math.max(60, miniRect.height) * activeDpr)
         const mctx = minimap.getContext('2d')
-        mctx?.setTransform(dpr, 0, 0, dpr, 0, 0)
+        mctx?.setTransform(activeDpr, 0, 0, activeDpr, 0, 0)
       }
       metricsRef.current = computeMetrics(engine.map, engine.room, cssWidth, cssHeight)
     }
     resize()
-    const observer = new ResizeObserver(resize)
-    observer.observe(container)
-    if (minimap) observer.observe(minimap)
+    let rafResize = 0
+    let fallbackResizeTimer = 0
+    let resizeObserver: ResizeObserver | null = null
+    const scheduleResize = (): void => {
+      if (rafResize) return
+      rafResize = window.requestAnimationFrame(() => {
+        rafResize = 0
+        resize()
+      })
+    }
+    requestResizeRef.current = scheduleResize
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(scheduleResize)
+      resizeObserver.observe(container)
+      if (minimap) resizeObserver.observe(minimap)
+    } else {
+      // 旧 WebView：没有 ResizeObserver，退化成窗口尺寸 / 旋转监听
+      window.addEventListener('resize', scheduleResize)
+      window.addEventListener('orientationchange', scheduleResize)
+      fallbackResizeTimer = window.setTimeout(scheduleResize, 120)
+    }
 
     const input = createRaidInput(
       canvas,
@@ -253,18 +376,54 @@ export default function RaidCanvas({
 
     let raf = 0
     let last = performance.now()
+    let lastRender = 0
     let lastSnapshot = 0
     let lastFlush = 0
     let lastMinimap = 0
+    let lastQuality = qualityRef.current
+    let slowdownAccum = 0
+    let slowdownCount = 0
+    let lastDowngradeAt = performance.now()
+
     const loop = (time: number): void => {
       const dt = Math.min(50, Math.max(0, time - last))
       last = time
       const now = Date.now()
       if (!pausedRef.current) engine.update(dt, now)
       metricsRef.current = computeMetrics(engine.map, engine.room, cssWidth, cssHeight)
-      renderRaid(ctx, engine, cssWidth, cssHeight, now, { lowPerf: lowPerfRef.current })
-      // 小地图独立 canvas：20fps 足够，省下的都是战斗帧预算
-      if (now - lastMinimap >= 50) {
+
+      const currentQuality = qualityRef.current
+      if (currentQuality !== lastQuality) {
+        lastQuality = currentQuality
+        engine.setCosmeticLevel(currentQuality)
+        resize()
+      }
+      const targetInterval = currentQuality === 'low' ? 32 : 0
+      if (!pausedRef.current && (targetInterval === 0 || time - lastRender >= targetInterval)) {
+        const renderStart = performance.now()
+        renderRaid(ctx, engine, cssWidth, cssHeight, now, {
+          quality: currentQuality,
+          dpr: activeDpr,
+        })
+        const renderCost = performance.now() - renderStart
+        lastRender = time
+        // 自动降档：连续 90 帧渲染耗时偏高时降一级，避免旧设备卡成幻灯片
+        if (!manualQualityRef.current && currentQuality !== 'low' && time - lastDowngradeAt > 2500) {
+          slowdownAccum += renderCost
+          slowdownCount += 1
+          if (slowdownCount >= 90) {
+            const avg = slowdownAccum / slowdownCount
+            slowdownAccum = 0
+            slowdownCount = 0
+            if (avg > (currentQuality === 'high' ? 15 : 22)) {
+              lastDowngradeAt = time
+              setQuality(currentQuality === 'high' ? 'balanced' : 'low')
+            }
+          }
+        }
+      }
+
+      if (!pausedRef.current && now - lastMinimap >= (currentQuality === 'low' ? 180 : 80)) {
         lastMinimap = now
         const mctx = minimap?.getContext('2d')
         if (mctx && minimap) {
@@ -272,7 +431,8 @@ export default function RaidCanvas({
           renderMinimap(mctx, engine, now, rect.width, rect.height)
         }
       }
-      if (now - lastSnapshot >= 100) {
+      const snapshotInterval = currentQuality === 'low' ? 220 : currentQuality === 'balanced' ? 140 : 110
+      if (now - lastSnapshot >= snapshotInterval) {
         lastSnapshot = now
         callbacksRef.current.onSnapshot(engine.snapshot(now))
       }
@@ -294,12 +454,20 @@ export default function RaidCanvas({
     return () => {
       document.removeEventListener('visibilitychange', onVisibility)
       cancelAnimationFrame(raf)
-      observer.disconnect()
+      if (rafResize) cancelAnimationFrame(rafResize)
+      if (fallbackResizeTimer) window.clearTimeout(fallbackResizeTimer)
+      resizeObserver?.disconnect()
+      requestResizeRef.current = () => {}
+      if (!resizeObserver) {
+        window.removeEventListener('resize', scheduleResize)
+        window.removeEventListener('orientationchange', scheduleResize)
+      }
       input.dispose()
       inputRef.current = null
       engineRef.current = null
       if (import.meta.env.DEV) {
         delete (window as unknown as { __raidEngine?: RaidEngine }).__raidEngine
+        delete (window as unknown as { __raidRender?: typeof renderRaid }).__raidRender
       }
     }
     // 只在首次挂载时创建引擎；对局内的服务端同步通过 applyServerRun 完成
@@ -329,6 +497,7 @@ export default function RaidCanvas({
       ref={stageRef}
       className={`gh-raid-stage${immersive ? ' is-immersive' : ''}${touchMode ? ' is-touch' : ' is-desktop'}`}
       data-layout={touchMode ? 'touch' : 'desktop'}
+      data-quality={quality}
     >
       <div ref={containerRef} className="gh-raid-canvas-wrap">
         <canvas ref={canvasRef} className="gh-raid-canvas" aria-label="搜打撤对局画面" />
@@ -347,6 +516,9 @@ export default function RaidCanvas({
         {children}
 
         <div className="gh-raid-toolbar">
+          <button type="button" className="gh-raid-tool" onClick={cycleQuality}>
+            {QUALITY_LABELS[quality]}
+          </button>
           <button type="button" className={`gh-raid-tool${immersive ? ' is-on' : ''}`} onClick={toggleImmersive}>
             {immersive ? '退出横屏' : '横屏沉浸'}
           </button>
@@ -375,8 +547,8 @@ export default function RaidCanvas({
           <strong>操作方式</strong>
           <span>
             {touchMode
-              ? '左摇杆移动 · 右摇杆瞄准并开火 · 右侧圆形按钮：技能 1/2/3、治疗、维修、E 交互'
-              : 'WASD 移动 · 鼠标瞄准并点击开火 · E 交互 · 1 / 2 / 3 技能 · Q 治疗 · F 维修'}
+              ? '左摇杆移动 · 右摇杆瞄准并开火 · 右侧按钮：技能 1/2/3、治疗、维修、E 交互 · 左上「背包」可整理物资'
+              : 'WASD 移动 · 鼠标瞄准并点击开火 · E 交互 · 1 / 2 / 3 技能 · Q 治疗 · F 维修 · B 背包'}
           </span>
           <button type="button" onClick={() => setHint('none')}>关闭</button>
         </div>

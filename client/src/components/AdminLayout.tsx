@@ -8,6 +8,7 @@ import { canAccessAdminPath } from '../lib/permissions'
 import { FEATURE_KEYS, type FeatureKey } from '../lib/features'
 import api from '../lib/api'
 import Icon, { type IconName } from './ui/Icon'
+import { onMediaQueryChange } from '../lib/mediaQuery'
 
 /** 导航项可见性由 lib/permissions.ts 的 ADMIN_ROUTE_CAPABILITIES 决定（与路由守卫同源）；
  * 分组仅影响侧边栏展示，能力过滤与守卫仍按 path 单项判定 */
@@ -133,12 +134,9 @@ export default memo(function AdminLayout() {
   // ≤1279px 为抽屉模式：视口跨回桌面档（≥1280px）时复位抽屉状态，
   // 避免旋转/缩放后抽屉与遮罩在桌面布局中残留
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 1279px)')
-    const handleChange = (e: MediaQueryListEvent) => {
-      if (!e.matches) setMobileOpen(false)
-    }
-    mq.addEventListener('change', handleChange)
-    return () => mq.removeEventListener('change', handleChange)
+    return onMediaQueryChange('(max-width: 1279px)', (matches) => {
+      if (!matches) setMobileOpen(false)
+    })
   }, [])
 
   useEffect(() => {

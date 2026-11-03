@@ -430,6 +430,35 @@ assertEqual(heal.state.backpack.length, 0, '急救包被消耗')
 const fullHp = makeRun({ backpack: [{ slotIndex: 0, itemKey: 'medkit', amount: 1 }] })
 assert(!!applyRaidEvent(fullHp, mapA, { type: 'useItem', itemKey: 'medkit', from: 'backpack' }, 1_000_031).error, '满血不能使用急救包')
 
+/* ---------- 对局内移动物资（背包 → 安全箱 / 胸挂） ---------- */
+const moveRun = makeRun({
+  backpack: [
+    { slotIndex: 0, itemKey: 'gold_compass', amount: 1 },
+    { slotIndex: 1, itemKey: 'medkit', amount: 2 },
+  ],
+  rig: [],
+  safe: [],
+})
+const movedToSafe = applyRaidEvent(moveRun, mapA, {
+  type: 'moveItem', from: 'backpack', to: 'safe', slotIndex: 0,
+}, 1_000_032)
+assertEqual(movedToSafe.error, undefined, '背包物品可挪进安全箱')
+assertEqual(movedToSafe.state.safe[0]?.itemKey, 'gold_compass', '安全箱拿到物品')
+assertEqual(movedToSafe.state.backpack.length, 1, '来源背包少一格')
+const movedToRig = applyRaidEvent(movedToSafe.state, mapA, {
+  type: 'moveItem', from: 'backpack', to: 'rig', slotIndex: 1,
+}, 1_000_033)
+assertEqual(movedToRig.error, undefined, '消耗品可挪进胸挂')
+assertEqual(movedToRig.state.rig[0]?.itemKey, 'medkit', '胸挂拿到消耗品')
+const rejectRig = applyRaidEvent(moveRun, mapA, {
+  type: 'moveItem', from: 'backpack', to: 'rig', slotIndex: 0,
+}, 1_000_034)
+assert(!!rejectRig.error, '胸挂拒收非消耗品')
+const rejectSame = applyRaidEvent(moveRun, mapA, {
+  type: 'moveItem', from: 'backpack', to: 'backpack', slotIndex: 0,
+}, 1_000_035)
+assert(!!rejectSame.error, '同容器移动被拒绝')
+
 const skillRun = makeRun()
 const cast = applyRaidEvent(skillRun, mapA, { type: 'castSkill', skillKey: 'fire_claw' }, 1_000_040)
 assert(!cast.error, '可以释放已装备技能')

@@ -236,4 +236,68 @@ describe('raidRun 状态机', () => {
     const overflow = addItemToContainer(full!, 2, 'old_watch', 1)
     expect(overflow).toBeNull()
   })
+
+  it('对局内可把背包物资挪进安全箱', () => {
+    const state = makeRun({
+      backpack: [{ slotIndex: 0, itemKey: 'gold_compass', amount: 1 }],
+      safe: [],
+    })
+    const moved = applyRaidEvent(state, map, {
+      type: 'moveItem',
+      from: 'backpack',
+      to: 'safe',
+      slotIndex: 0,
+    }, 1_000_100)
+    expect(moved.error).toBeUndefined()
+    expect(moved.state.backpack).toHaveLength(0)
+    expect(moved.state.safe).toHaveLength(1)
+    expect(moved.state.safe[0]?.itemKey).toBe('gold_compass')
+  })
+
+  it('胸挂只能放消耗品，安全箱也受容量限制', () => {
+    const state = makeRun({
+      backpack: [
+        { slotIndex: 0, itemKey: 'gold_compass', amount: 1 },
+        { slotIndex: 1, itemKey: 'medkit', amount: 2 },
+      ],
+      rig: [],
+      safe: [],
+      capacities: { backpack: 8, rig: 2, safe: 0 },
+    })
+    const wrongKind = applyRaidEvent(state, map, {
+      type: 'moveItem', from: 'backpack', to: 'rig', slotIndex: 0,
+    }, 1_000_101)
+    expect(wrongKind.error).toBeTruthy()
+    expect(wrongKind.state.rig).toHaveLength(0)
+
+    const noSafe = applyRaidEvent(state, map, {
+      type: 'moveItem', from: 'backpack', to: 'safe', slotIndex: 1,
+    }, 1_000_102)
+    expect(noSafe.error).toBeTruthy()
+    expect(noSafe.state.backpack).toHaveLength(2)
+
+    const toRig = applyRaidEvent(state, map, {
+      type: 'moveItem', from: 'backpack', to: 'rig', slotIndex: 1,
+    }, 1_000_103)
+    expect(toRig.error).toBeUndefined()
+    expect(toRig.state.rig[0]?.itemKey).toBe('medkit')
+    expect(toRig.state.backpack).toHaveLength(1)
+  })
+
+  it('目标容器满时移动失败且来源不变', () => {
+    const state = makeRun({
+      backpack: [
+        { slotIndex: 0, itemKey: 'scrap_metal', amount: 3 },
+        { slotIndex: 1, itemKey: 'copper_wire', amount: 3 },
+      ],
+      safe: [{ slotIndex: 0, itemKey: 'old_watch', amount: 1 }],
+      capacities: { backpack: 8, rig: 2, safe: 1 },
+    })
+    const full = applyRaidEvent(state, map, {
+      type: 'moveItem', from: 'backpack', to: 'safe', slotIndex: 0,
+    }, 1_000_104)
+    expect(full.error).toBeTruthy()
+    expect(full.state.backpack).toHaveLength(2)
+    expect(full.state.safe).toHaveLength(1)
+  })
 })

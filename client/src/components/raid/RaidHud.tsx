@@ -22,6 +22,8 @@ interface RaidHudProps {
   onSkill: (index: number) => void
   onHeal: () => void
   onRepair: () => void
+  onOpenInventory: () => void
+  onInteract: () => void
 }
 
 const ROOM_LABELS: Record<string, string> = {
@@ -84,19 +86,22 @@ function ContainerGrid({
   items,
   capacity,
   tone,
+  onOpen,
 }: {
   title: string
   items: RaidSnapshot['backpack']
   capacity: number
   tone: 'backpack' | 'rig' | 'safe'
+  onOpen?: () => void
 }) {
   const full = items.length >= capacity && capacity > 0
+  const total = items.reduce((sum, stack) => sum + stack.amount, 0)
   return (
     <div className={`gh-raid-ctainer gh-raid-ctainer--${tone}`}>
-      <div className="gh-raid-ctainer-head">
+      <button type="button" className="gh-raid-ctainer-head" onClick={onOpen} title={`打开${title}整理物资`}>
         <span>{title}</span>
-        <b className={full ? 'is-full' : ''}>{items.length}/{capacity}</b>
-      </div>
+        <b className={full ? 'is-full' : ''}>{items.length}/{capacity}{total > items.length ? ` · ${total}件` : ''}</b>
+      </button>
       <div className="gh-raid-slots">
         {Array.from({ length: Math.max(capacity, 1) }).map((_, index) => {
           const stack = items.find((item) => item.slotIndex === index)
@@ -130,6 +135,8 @@ export default function RaidHud({
   onSkill,
   onHeal,
   onRepair,
+  onOpenInventory,
+  onInteract,
 }: RaidHudProps) {
   const labels = gearLabel(snapshot.gear)
   const hpRatio = snapshot.maxHp > 0 ? snapshot.hp / snapshot.maxHp : 0
@@ -141,14 +148,14 @@ export default function RaidHud({
   const teammates = (squad ?? []).filter((member) => member.userId !== selfUserId)
   const extractPct = Math.round(snapshot.extractionProgress * 100)
   const prompt = snapshot.extracting
-    ? `撤离读条 ${extractPct}% · 站稳别动`
+    ? `撤离读条 ${extractPct}% · 读条完成自动撤离`
     : snapshot.canExtract
-      ? '靠近撤离点按 E 开始撤离'
+      ? '靠近撤离点按 E / 点「交互」开始撤离'
       : snapshot.nearContainer
         ? snapshot.nearContainer.opened
           ? '这个容器已搜过'
           : snapshot.roomCleared
-            ? '按 E 搜索容器'
+            ? '按 E / 点「交互」搜索容器'
             : '清场后才能搜索'
         : ''
 
@@ -244,14 +251,23 @@ export default function RaidHud({
           {snapshot.skills.length === 0 && <span className="gh-raid-skills-empty">未装备技能 · 只能普攻</span>}
           {snapshot.skills.map((skill, index) => {
             const cdRatio = skill.cooldownMs > 0 ? skill.cooldownLeftMs / skill.cooldownMs : 0
-            const locked = busy || skill.cooldownLeftMs > 0 || !skill.affordable
+            const cooldown = skill.cooldownLeftMs > 0
+            const lackMp = !cooldown && !skill.affordable
+            const reason = cooldown
+              ? `冷却 ${Math.ceil(skill.cooldownLeftMs / 1000)}s`
+              : lackMp
+                ? `需 ${skill.mpCost} MP`
+                : busy
+                  ? '同步中'
+                  : ''
+            const locked = Boolean(reason)
             return (
               <button
                 key={skill.key}
                 type="button"
-                className={`gh-raid-skill${locked ? ' is-locked' : ''}`}
+                className={`gh-raid-skill${locked ? ' is-locked' : ''}${lackMp ? ' is-lack-mp' : ''}`}
                 disabled={locked}
-                title={`${skill.name} · ${skill.mpCost} MP · 冷却 ${Math.round(skill.cooldownMs / 1000)}s`}
+                title={`${skill.name} · ${skill.mpCost} MP · 冷却 ${Math.round(skill.cooldownMs / 1000)}s${reason ? ` · ${reason}` : ''}`}
                 onClick={() => onSkill(index)}
               >
                 <span className="gh-raid-skill-sweep" style={{ height: `${Math.min(100, cdRatio * 100)}%` }} />
@@ -261,30 +277,73 @@ export default function RaidHud({
                 </span>
                 <span className="gh-raid-skill-meta">
                   <i>{skill.name}</i>
-                  <em>{skill.mpCost > 0 ? `${skill.mpCost}` : '0'} MP</em>
+                  <em className={lackMp ? 'is-danger' : ''}>{reason || `${skill.mpCost} MP`}</em>
                 </span>
               </button>
             )
           })}
           <div className="gh-raid-quick">
             <button type="button" className="gh-raid-quick-btn is-heal" disabled={busy} onClick={onHeal} title="治疗道具（Q）">
-              💊
+              <span aria-hidden>💊</span>
+              <em>治疗</em>
             </button>
             <button type="button" className="gh-raid-quick-btn is-repair" disabled={busy} onClick={onRepair} title="维修包（F）">
-              🛠
+              <span aria-hidden>🛠</span>
+              <em>维修</em>
             </button>
             <button type="button" className="gh-raid-quick-btn is-abandon" disabled={busy} onClick={onAbandon} title="放弃行动">
-              ⚑
+              <span aria-hidden>⚑</span>
+              <em>撤退</em>
             </button>
           </div>
         </div>
       </section>
 
+      {/* 移动端背包入口：容量 + 一键打开整理面板 */}
+      <button type="button" className="gh-raid-bag" onClick={onOpenInventory} aria-label="打开战术背包">
+        <span className="gh-raid-bag-icon" aria-hidden>🎒</span>
+        <span className="gh-raid-bag-text">
+          <b>战术背包</b>
+          <em>背包 {snapshot.backpack.length}/{snapshot.capacities.backpack} · 安全箱 {snapshot.safe.length}/{snapshot.capacities.safe}</em>
+        </span>
+      </button>
+
+      {/* 交互按钮：手机没有键盘，必须给「开箱 / 撤离 / 拾取」一个可点的入口 */}
+      <button
+        type="button"
+        className={`gh-raid-interact${prompt ? ' is-hot' : ''}`}
+        onClick={onInteract}
+        title="交互（E）：搜索容器 / 撤离"
+        aria-label="交互"
+      >
+        <span aria-hidden>✋</span>
+        <b>交互</b>
+        <em>E</em>
+      </button>
+
       {/* 底部左侧：三类容器 */}
       <section className="gh-raid-pod gh-raid-pod--loot">
-        <ContainerGrid title="背包" items={snapshot.backpack} capacity={snapshot.capacities.backpack} tone="backpack" />
-        <ContainerGrid title="胸挂" items={snapshot.rig} capacity={snapshot.capacities.rig} tone="rig" />
-        <ContainerGrid title="安全箱" items={snapshot.safe} capacity={snapshot.capacities.safe} tone="safe" />
+        <ContainerGrid
+          title="背包"
+          items={snapshot.backpack}
+          capacity={snapshot.capacities.backpack}
+          tone="backpack"
+          onOpen={onOpenInventory}
+        />
+        <ContainerGrid
+          title="胸挂"
+          items={snapshot.rig}
+          capacity={snapshot.capacities.rig}
+          tone="rig"
+          onOpen={onOpenInventory}
+        />
+        <ContainerGrid
+          title="安全箱"
+          items={snapshot.safe}
+          capacity={snapshot.capacities.safe}
+          tone="safe"
+          onOpen={onOpenInventory}
+        />
       </section>
 
       {/* 右侧：事件流 + 报错 */}

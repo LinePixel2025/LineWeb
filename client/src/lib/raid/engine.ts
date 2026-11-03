@@ -11,7 +11,6 @@ import {
   RAID_EXTRACT_CHANNEL_MS,
   RAID_ITEM_MAP,
   RAID_MP_REGEN_PER_SEC,
-  RAID_TILE_DOOR,
   RAID_TILE_HAZARD,
   RAID_TILE_WALL,
   addItemToContainer,
@@ -20,6 +19,7 @@ import {
   normalizeContainer,
   raidDefenseOf,
   raidTileIndex,
+  removeItemFromContainer,
   resolveRaidDamage,
   type RaidContainerKind,
   type RaidEnemyNode,
@@ -125,6 +125,7 @@ export interface LocalParticle {
 export type RaidEffectKind =
   | 'cast' | 'ring' | 'cone' | 'bolt' | 'mist' | 'slash' | 'aura'
   | 'shield' | 'heal' | 'impact' | 'spark' | 'death' | 'door' | 'pickup' | 'muzzle'
+  | 'nova' | 'shards' | 'pillar' | 'beam'
 
 export interface RaidEffect {
   id: number
@@ -310,6 +311,12 @@ export class RaidEngine {
   hurtFlash = 0
   /** 受击方向指示（弧度 + 剩余寿命秒） */
   hurtDirs: { angle: number; age: number }[] = []
+  /** 技能释放瞬间的屏幕染色（让低画质模式也有明确的技能反馈） */
+  skillFlash: { color: string; ms: number; life: number } | null = null
+  /** 技能名横幅（技能释放时在角色上方浮出） */
+  skillBanner: { text: string; color: string; age: number; life: number } | null = null
+  /** 表现层质量：低端设备降低粒子数量，但保留技能特效 */
+  cosmeticLevel: 'high' | 'balanced' | 'low' = 'high'
 
   clearedRooms: Set<number>
   killedEnemies: Set<string>
@@ -327,6 +334,7 @@ export class RaidEngine {
 
   extractStartedAt: number | null = null
   extractSentDone = false
+  extractLastSentAt = 0
   dead = false
   ended = false
 
@@ -469,7 +477,32 @@ export class RaidEngine {
     this.updatePickups()
     this.updateHazard(dt, now)
     this.updateMp(dt)
+    this.updateExtraction(now)
     this.updateToasts(now)
+  }
+
+  /** 撤离读条走完自动完成：手机上不需要再按一次「交互」 */
+  private updateExtraction(now: number): void {
+    if (this.extractStartedAt === null) return
+    if (now - this.extractStartedAt < RAID_EXTRACT_CHANNEL_MS) return
+    if (this.extractSentDone) {
+      // 服务端拒绝（时钟偏差 / 慢网）时每 2 秒重试一次，避免本局卡死
+      if (now - this.extractLastSentAt > 2000 && !this.ended) this.extractSentDone = false
+      else return
+    }
+    this.extractSentDone = true
+    this.extractLastSentAt = now
+    const point = this.extractPoint
+    if (point) {
+      this.spawnEffect('aura', point.x + 0.5, point.y + 0.5, {
+        color: '#34d399',
+        accent: '#d1fae5',
+        radius: 2.6,
+        life: 1.2,
+      })
+    }
+    this.events.push({ type: 'extractDone' })
+    this.pushToast('撤离读条完成', 'success', now)
   }
 
   private updatePlayer(dt: number, now: number): void {
@@ -503,21 +536,36 @@ export class RaidEngine {
     const nextX = this.player.x + dx
     if (this.canStand(nextX, this.player.y)) {
       const tileX = Math.floor(nextX)
-      if (this.isDoorTile(tileX, Math.floor(this.player.y))) {
-        this.tryTransition(tileX, Math.floor(this.player.y), now)
+      const tileY = Math.floor(this.player.y)
+      // 房间边界上的走廊有 3 格宽（门在正中，上下各一格也是可走的），
+      // 只认「门格」会导致从侧格走出去后既没换房、又走出渲染裁剪区。
+      // 这里统一按「目标瓦片属于哪个房间」判定换房，任何一格都能正常进出。
+      const crossed = this.roomAtTile(tileX, tileY)
+      if (crossed && crossed.id !== this.roomId && room.neighbors.includes(crossed.id)) {
+        this.transitionToRoom(crossed.id, this.player.x, this.player.y, now)
         return
       }
       this.player.x = nextX
     }
     const nextY = this.player.y + dy
     if (this.canStand(this.player.x, nextY)) {
+      const tileX = Math.floor(this.player.x)
       const tileY = Math.floor(nextY)
-      if (this.isDoorTile(Math.floor(this.player.x), tileY)) {
-        this.tryTransition(Math.floor(this.player.x), tileY, now)
+      const crossed = this.roomAtTile(tileX, tileY)
+      if (crossed && crossed.id !== this.roomId && room.neighbors.includes(crossed.id)) {
+        this.transitionToRoom(crossed.id, this.player.x, this.player.y, now)
         return
       }
       this.player.y = nextY
     }
+  }
+
+  /** 玩家所在瓦片归属的房间（房间矩形互不重叠，走廊格归属相邻房间） */
+  private roomAtTile(x: number, y: number): RaidRoomNode | null {
+    for (const room of this.map.rooms) {
+      if (x >= room.x && x < room.x + room.w && y >= room.y && y < room.y + room.h) return room
+    }
+    return null
   }
 
   private canStand(x: number, y: number): boolean {
@@ -529,50 +577,32 @@ export class RaidEngine {
     return true
   }
 
-  private isDoorTile(x: number, y: number): boolean {
-    return tileAt(this.map, x, y) === RAID_TILE_DOOR
-  }
-
-  private doorTarget(x: number, y: number): number | null {
-    const door = this.map.doors.find((entry) => entry.x === x && entry.y === y)
-    if (!door) return null
-    if (door.roomA === this.roomId) return door.roomB
-    if (door.roomB === this.roomId) return door.roomA
-    return null
-  }
-
-  private tryTransition(x: number, y: number, now: number): void {
+  /** 进入相邻房间：落在目标房间靠门一侧，避免直接叠在房中央的敌人堆里 */
+  private transitionToRoom(target: number, fromX: number, fromY: number, now: number): void {
     if (this.transitionLock > 0) return
-    const target = this.doorTarget(x, y)
-    if (target === null) return
+    const targetRoom = this.map.rooms[target]
+    const prevRoom = this.room
+    if (!targetRoom || !prevRoom) return
+    if (!prevRoom.neighbors.includes(target)) return
     if (!this.roomCleared) {
       this.pushToast('房间还有敌人，门锁死了', 'danger', now)
       this.transitionLock = 600
       return
     }
-    const targetRoom = this.map.rooms[target]
-    if (!targetRoom) return
-    const prevRoom = this.room
     this.loadRoom(target)
-    // 落在目标房间靠门的位置：以房间中心为基准偏移
-    const here = { x: this.player.x, y: this.player.y }
-    if (prevRoom) {
-      if (targetRoom.col > prevRoom.col) {
-        this.player.x = targetRoom.x + 2
-        this.player.y = y + 0.5
-      } else if (targetRoom.col < prevRoom.col) {
-        this.player.x = targetRoom.x + targetRoom.w - 2
-        this.player.y = y + 0.5
-      } else if (targetRoom.row > prevRoom.row) {
-        this.player.y = targetRoom.y + 2
-        this.player.x = x + 0.5
-      } else {
-        this.player.y = targetRoom.y + targetRoom.h - 2
-        this.player.x = x + 0.5
-      }
+    const margin = 2
+    if (targetRoom.col > prevRoom.col) {
+      this.player.x = targetRoom.x + margin
+      this.player.y = clamp(fromY, targetRoom.y + margin, targetRoom.y + targetRoom.h - margin)
+    } else if (targetRoom.col < prevRoom.col) {
+      this.player.x = targetRoom.x + targetRoom.w - margin
+      this.player.y = clamp(fromY, targetRoom.y + margin, targetRoom.y + targetRoom.h - margin)
+    } else if (targetRoom.row > prevRoom.row) {
+      this.player.y = targetRoom.y + margin
+      this.player.x = clamp(fromX, targetRoom.x + margin, targetRoom.x + targetRoom.w - margin)
     } else {
-      this.player.x = here.x
-      this.player.y = here.y
+      this.player.y = targetRoom.y + targetRoom.h - margin
+      this.player.x = clamp(fromX, targetRoom.x + margin, targetRoom.x + targetRoom.w - margin)
     }
     this.events.push({ type: 'enterRoom', roomId: target })
     this.transitionLock = 700
@@ -1054,6 +1084,7 @@ export class RaidEngine {
         this.pushToast('开始撤离读条，站稳别动……', 'info', now)
       } else if (now - this.extractStartedAt >= RAID_EXTRACT_CHANNEL_MS && !this.extractSentDone) {
         this.extractSentDone = true
+        this.extractLastSentAt = now
         this.spawnEffect('aura', point.x + 0.5, point.y + 0.5, {
           color: '#34d399',
           accent: '#d1fae5',
@@ -1108,26 +1139,38 @@ export class RaidEngine {
 
   castSkill(index: number, now = Date.now()): boolean {
     const skill = this.skills[index]
-    if (!skill || this.dead) return false
+    if (!skill || this.dead || this.ended) return false
+    const art = resolveSkillArt(skill.key, skill.kind)
     const readyAt = this.skillReadyAt[skill.key] ?? 0
     if (now < readyAt) {
-      this.pushToast(`${skill.name} 冷却中`, 'info', now)
+      // 失败也要有反馈：冷却 / 能量不足都在角色脚下给出可读提示
+      this.pushToast(`${skill.name} 冷却中（${Math.ceil((readyAt - now) / 1000)}s）`, 'info', now)
+      this.pushFloat('冷却中', this.player.x, this.player.y - 0.8, '#94a3b8', false)
+      this.spawnEffect('ring', this.player.x, this.player.y, {
+        color: '#94a3b8', accent: '#cbd5e1', radius: 0.8, life: 0.3,
+      })
       return false
     }
     if (this.mp < skill.mpCost) {
-      this.pushToast('能量不足', 'danger', now)
+      this.pushToast(`能量不足（需要 ${skill.mpCost} MP）`, 'danger', now)
+      this.pushFloat(`MP ${Math.ceil(this.mp)}/${skill.mpCost}`, this.player.x, this.player.y - 0.8, '#60a5fa', false)
+      this.spawnEffect('ring', this.player.x, this.player.y, {
+        color: '#60a5fa', accent: '#bfdbfe', radius: 0.9, life: 0.35,
+      })
       return false
     }
     this.mp -= skill.mpCost
     this.skillReadyAt[skill.key] = now + skill.cooldownMs
     this.events.push({ type: 'castSkill', skillKey: skill.key })
 
-    const art = resolveSkillArt(skill.key, skill.kind)
     const angle = this.player.angle
     const px = this.player.x
     const py = this.player.y
+    // 技能释放的全局反馈：屏幕元素染色 + 角色上方技能名横幅
+    this.skillFlash = { color: art.color, ms: 320, life: 320 }
+    this.skillBanner = { text: skill.name, color: art.accent, age: 0, life: 1.4 }
 
-    // 通用起手：脚下元素法阵 + 轻微后坐震动
+    // 通用起手：脚下元素法阵 + 外扩能量环 + 轻微后坐震动
     this.spawnEffect('cast', px, py, {
       color: art.color,
       accent: art.accent,
@@ -1135,11 +1178,17 @@ export class RaidEngine {
       radius: 1.15,
       life: 0.55,
     })
-    this.addShake(90, art.shape === 'cone' ? 0.05 : 0.03)
+    this.spawnEffect('nova', px, py, {
+      color: art.color,
+      accent: art.accent,
+      radius: 1.5,
+      life: 0.42,
+    })
+    this.addShake(120, art.shape === 'cone' ? 0.055 : 0.035)
 
     if (skill.kind === 'damage') {
-      const count = skill.power >= 2 ? 7 : 5
-      const spreadStep = art.shape === 'cone' ? 0.12 : 0.08
+      const count = skill.power >= 2 ? 8 : 6
+      const spreadStep = art.shape === 'cone' ? 0.13 : 0.09
       for (let i = 0; i < count; i += 1) {
         const spread = (i - (count - 1) / 2) * spreadStep
         const bulletAngle = angle + spread
@@ -1151,7 +1200,7 @@ export class RaidEngine {
           damage: Math.max(2, Math.round(this.atk * Math.max(0.6, skill.power) * 0.4)),
           friendly: true,
           life: 1.2,
-          radius: art.shape === 'bolt' ? 0.16 : 0.13,
+          radius: art.shape === 'bolt' ? 0.17 : 0.14,
           color: art.color,
           element: art.label,
           skill: true,
@@ -1161,44 +1210,87 @@ export class RaidEngine {
         color: art.accent,
         accent: art.color,
         angle,
-        radius: 0.9,
-        life: 0.22,
+        radius: 1.1,
+        life: 0.24,
       })
       if (art.shape === 'cone') {
-        this.spawnEffect('cone', px, py, { color: art.color, accent: art.accent, angle, radius: 3.4, life: 0.4 })
+        this.spawnEffect('cone', px, py, { color: art.color, accent: art.accent, angle, radius: 3.8, life: 0.45 })
+        this.spawnEffect('ring', px + Math.cos(angle) * 1.5, py + Math.sin(angle) * 1.5, {
+          color: art.color, accent: art.accent, radius: 1.9, life: 0.4,
+        })
       } else if (art.shape === 'slash') {
         this.spawnEffect('slash', px + Math.cos(angle) * 1.1, py + Math.sin(angle) * 1.1, {
-          color: art.color, accent: art.accent, angle, radius: 1.6, life: 0.34,
+          color: art.color, accent: art.accent, angle, radius: 1.9, life: 0.36,
+        })
+        this.spawnEffect('shards', px + Math.cos(angle) * 1.1, py + Math.sin(angle) * 1.1, {
+          color: art.color, accent: art.accent, angle, radius: 1.8, life: 0.5,
         })
       } else if (art.shape === 'mist') {
         this.spawnEffect('mist', px + Math.cos(angle) * 1.6, py + Math.sin(angle) * 1.6, {
-          color: art.color, accent: art.accent, angle, radius: 2.4, life: 0.9,
+          color: art.color, accent: art.accent, angle, radius: 2.5, life: 0.95,
+        })
+      } else if (art.shape === 'ring') {
+        this.spawnEffect('shards', px, py, {
+          color: art.color, accent: art.accent, radius: 2.6, life: 0.6,
+        })
+      } else if (art.shape === 'bolt') {
+        const target = this.nearestEnemy()
+        const tx = target ? target.x : px + Math.cos(angle) * 4
+        const ty = target ? target.y : py + Math.sin(angle) * 4
+        this.spawnEffect('beam', px, py, {
+          color: art.color, accent: art.accent, tx, ty, radius: 0.9, life: 0.32,
+        })
+      } else {
+        this.spawnEffect('pillar', px, py, {
+          color: art.color, accent: art.accent, radius: 1.4, life: 0.6,
         })
       }
-      this.spawnParticles(px, py, 12, art.color)
+      this.spawnParticles(px, py, 18, art.color)
     } else if (skill.kind === 'heal' || skill.kind === 'cleanse') {
       const heal = Math.ceil(this.maxHp * (skill.healPct ?? 15) / 100)
       this.hp = Math.min(this.maxHp, this.hp + heal)
       this.pushFloat(`+${heal}`, px, py - 0.5, '#34d399', true)
       this.spawnEffect(art.shape === 'ring' ? 'ring' : 'heal', px, py, {
-        color: art.color, accent: art.accent, radius: 1.7, life: 0.85,
+        color: art.color, accent: art.accent, radius: 1.9, life: 0.9,
       })
-      this.spawnParticles(px, py, 16, art.accent)
+      this.spawnEffect('pillar', px, py, {
+        color: art.color, accent: art.accent, radius: 1.3, life: 0.8,
+      })
+      this.spawnEffect('shards', px, py, {
+        color: art.accent, accent: '#ffffff', radius: 1.7, life: 0.7,
+      })
+      this.spawnParticles(px, py, 24, art.accent)
     } else if (skill.kind === 'shield') {
       const shield = Math.ceil(this.maxHp * 0.3)
       this.player.shield = Math.max(this.player.shield, shield)
       this.pushFloat(`护盾 +${shield}`, px, py - 0.5, art.color, false)
-      this.spawnEffect('shield', px, py, { color: art.color, accent: art.accent, radius: 1.2, life: 1 })
-      this.spawnParticles(px, py, 14, art.color)
+      this.spawnEffect('shield', px, py, { color: art.color, accent: art.accent, radius: 1.35, life: 1.1 })
+      this.spawnEffect('pillar', px, py, { color: art.color, accent: art.accent, radius: 1.2, life: 0.7 })
+      this.spawnParticles(px, py, 20, art.color)
     } else {
       this.player.atkBuffUntil = now + 8000
       this.pushFloat('攻击强化！', px, py - 0.5, art.color, false)
-      this.spawnEffect('aura', px, py, { color: art.color, accent: art.accent, radius: 1.5, life: 0.9 })
-      this.spawnParticles(px, py, 14, art.accent)
-      this.addShake(120, 0.04)
+      this.spawnEffect('aura', px, py, { color: art.color, accent: art.accent, radius: 1.6, life: 0.95 })
+      this.spawnEffect('pillar', px, py, { color: art.color, accent: art.accent, radius: 1.5, life: 0.85 })
+      this.spawnParticles(px, py, 20, art.accent)
+      this.addShake(150, 0.045)
     }
     this.pushToast(`释放 ${skill.name}`, 'success', now)
     return true
+  }
+
+  private nearestEnemy(): LocalEnemy | null {
+    let best: LocalEnemy | null = null
+    let bestDist = Number.POSITIVE_INFINITY
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue
+      const dist = distance(enemy.x, enemy.y, this.player.x, this.player.y)
+      if (dist < bestDist) {
+        bestDist = dist
+        best = enemy
+      }
+    }
+    return best
   }
 
   useConsumable(kind: 'heal' | 'repair', now = Date.now()): boolean {
@@ -1253,6 +1345,45 @@ export class RaidEngine {
     return false
   }
 
+  /** 对局内挪动物品（背包 / 胸挂 / 安全箱），本地立即生效并上报服务端校验 */
+  moveItem(
+    from: RaidContainerKind,
+    to: RaidContainerKind,
+    slotIndex: number,
+    amount?: number,
+    now = Date.now(),
+  ): boolean {
+    if (this.dead || this.ended || from === to) return false
+    const source = from === 'rig' ? this.rig : from === 'safe' ? this.safe : this.backpack
+    const stack = source.find((entry) => entry.slotIndex === slotIndex)
+    if (!stack) return false
+    const def = RAID_ITEM_MAP.get(stack.itemKey)
+    if (!def) return false
+    if (to === 'rig' && def.kind !== 'consumable') {
+      this.pushToast('胸挂只能放消耗品', 'danger', now)
+      return false
+    }
+    const capacity = to === 'rig' ? this.capacities.rig : to === 'safe' ? this.capacities.safe : this.capacities.backpack
+    const moved = Math.max(1, Math.min(stack.amount, Math.trunc(amount ?? stack.amount)))
+    const targetStacks = to === 'rig' ? this.rig : to === 'safe' ? this.safe : this.backpack
+    const added = addItemToContainer(targetStacks, capacity, stack.itemKey, moved)
+    if (!added) {
+      this.pushToast(`${to === 'rig' ? '胸挂' : to === 'safe' ? '安全箱' : '背包'}已满，放不下`, 'danger', now)
+      return false
+    }
+    const removed = removeItemFromContainer(source, slotIndex, moved)
+    if (!removed) return false
+    if (from === 'rig') this.rig = removed
+    else if (from === 'safe') this.safe = removed
+    else this.backpack = removed
+    if (to === 'rig') this.rig = added
+    else if (to === 'safe') this.safe = added
+    else this.backpack = added
+    this.events.push({ type: 'moveItem', from, to, slotIndex, amount: moved })
+    this.pushToast(`已挪到${to === 'rig' ? '胸挂' : to === 'safe' ? '安全箱' : '背包'}`, 'success', now)
+    return true
+  }
+
   abandon(): void {
     if (this.ended) return
     this.ended = true
@@ -1287,9 +1418,32 @@ export class RaidEngine {
     this.killedEnemies = new Set(run.killedEnemies)
     this.openedContainers = new Set(run.openedContainers)
     this.takenLoot = new Set(run.takenLoot)
-    this.extractStartedAt = run.extractionStartedAt
+    const serverExtractStart = run.extractionStartedAt
+    if (serverExtractStart !== this.extractStartedAt) {
+      // 服务端时间戳才是撤离读条的权威：本地早发被拒后必须允许重试
+      this.extractStartedAt = serverExtractStart
+      this.extractSentDone = false
+    }
     if (run.currentRoom !== this.roomId) {
       this.loadRoom(run.currentRoom)
+      // 服务端拒绝 enterRoom 时会把房间改回来，但本地坐标可能还停在相邻房间；
+      // 不夹回本房间会导致每帧都判定「跨房」而无法移动（软锁）。
+      const room = this.room
+      if (room) {
+        const minX = room.x + 2
+        const maxX = room.x + room.w - 2
+        const minY = room.y + 2
+        const maxY = room.y + room.h - 2
+        if (this.player.x < minX || this.player.x > maxX || this.player.y < minY || this.player.y > maxY) {
+          this.player.x = room.x + room.w / 2
+          this.player.y = room.y + room.h / 2
+        }
+      }
+    }
+    // 服务端已判定死亡的敌人不要继续留在本地攻击（世界增量丢包时自愈）
+    this.enemies = this.enemies.filter((enemy) => !enemy.dead && !this.killedEnemies.has(enemy.id))
+    for (const container of this.containers) {
+      if (this.openedContainers.has(container.id)) container.opened = true
     }
     if (run.status !== 'active') {
       this.ended = true
@@ -1300,7 +1454,9 @@ export class RaidEngine {
   /* ---------- 特效 / 提示 ---------- */
 
   spawnParticles(x: number, y: number, count: number, color: string): void {
-    for (let i = 0; i < count; i += 1) {
+    const scale = this.cosmeticLevel === 'low' ? 0.28 : this.cosmeticLevel === 'balanced' ? 0.6 : 1
+    const total = Math.max(1, Math.round(count * scale))
+    for (let i = 0; i < total; i += 1) {
       const angle = Math.random() * Math.PI * 2
       const speed = 0.6 + Math.random() * 2.4
       this.particles.push({
@@ -1314,9 +1470,15 @@ export class RaidEngine {
         size: 0.05 + Math.random() * 0.08,
       })
     }
-    if (this.particles.length > 220) {
-      this.particles.splice(0, this.particles.length - 220)
+    const cap = this.cosmeticLevel === 'low' ? 90 : this.cosmeticLevel === 'balanced' ? 160 : 220
+    if (this.particles.length > cap) {
+      this.particles.splice(0, this.particles.length - cap)
     }
+  }
+
+  /** 低端设备降级表现层：只减少粒子 / 环境浮尘，技能特效仍然保留 */
+  setCosmeticLevel(level: 'high' | 'balanced' | 'low'): void {
+    this.cosmeticLevel = level
   }
 
   pushToast(text: string, tone: RaidToast['tone'], now: number): void {
@@ -1366,6 +1528,14 @@ export class RaidEngine {
       this.hurtDirs = this.hurtDirs.filter((dir) => (dir.age -= dt) > 0)
       this.shakeMs = Math.max(0, this.shakeMs - dt * 1000)
       this.hurtFlash = Math.max(0, this.hurtFlash - dt * 2.4)
+      if (this.skillFlash) {
+        this.skillFlash.ms = Math.max(0, this.skillFlash.ms - dt * 1000)
+        if (this.skillFlash.ms <= 0) this.skillFlash = null
+      }
+      if (this.skillBanner) {
+        this.skillBanner.age += dt
+        if (this.skillBanner.age >= this.skillBanner.life) this.skillBanner = null
+      }
     }
   }
 
@@ -1401,7 +1571,8 @@ export class RaidEngine {
       big: options.big ?? false,
     })
     // 同屏特效数量兜底（低端机 / 弹幕房间）
-    if (this.effects.length > 90) this.effects.splice(0, this.effects.length - 90)
+    const cap = this.cosmeticLevel === 'low' ? 42 : this.cosmeticLevel === 'balanced' ? 66 : 90
+    if (this.effects.length > cap) this.effects.splice(0, this.effects.length - cap)
   }
 
   pushFloat(text: string, x: number, y: number, color: string, crit = false): void {

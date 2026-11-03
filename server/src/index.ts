@@ -4,6 +4,8 @@ import helmet from 'helmet'
 import compression from 'compression'
 import http from 'http'
 import path from 'path'
+import fs from 'fs'
+import { createHash } from 'crypto'
 import { fileURLToPath } from 'url'
 import { config } from './config/index.js'
 import authRoutes from './routes/auth.js'
@@ -70,6 +72,35 @@ const app = express()
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+/**
+ * 生产 CSP 只允许同源脚本；Vite plugin-legacy 会在 index.html 注入几段
+ * 浏览器探测 / SystemJS 引导的内联脚本。这里在启动时按构建产物算出它们的
+ * sha256，写进 script-src，旧内核的 legacy 包才能在不放开 unsafe-inline 的前提下加载。
+ */
+function collectInlineScriptHashes(htmlPath: string): string[] {
+  try {
+    const html = fs.readFileSync(htmlPath, 'utf8')
+    const hashes: string[] = []
+    const pattern = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi
+    let match: RegExpExecArray | null
+    while ((match = pattern.exec(html)) !== null) {
+      const attrs = match[1] ?? ''
+      const body = match[2] ?? ''
+      if (/\bsrc\s*=/i.test(attrs) || body.trim().length === 0) continue
+      const digest = createHash('sha256').update(body).digest('base64')
+      const hash = `'sha256-${digest}'`
+      if (!hashes.includes(hash)) hashes.push(hash)
+    }
+    return hashes
+  } catch {
+    return []
+  }
+}
+
+const productionScriptHashes = process.env.NODE_ENV === 'production'
+  ? collectInlineScriptHashes(path.join(__dirname, '../../client/dist/index.html'))
+  : []
+
 // === 安全中间件 ===
 // helmet 设置安全 HTTP 头：CSP、X-Content-Type-Options、X-Frame-Options、HSTS 等
 app.use(helmet({
@@ -78,7 +109,7 @@ app.use(helmet({
       upgradeInsecureRequests: null,  // 无 HTTPS 时禁用，否则浏览器强制升级 HTTP → HTTPS
       defaultSrc: ["'self'"],
       scriptSrc: process.env.NODE_ENV === 'production'
-        ? ["'self'"]
+        ? ["'self'", ...productionScriptHashes]
         : ["'self'", "'unsafe-inline'", "'unsafe-eval'", "'blob:'"],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       imgSrc: ["'self'", 'data:', 'blob:', 'https:'],

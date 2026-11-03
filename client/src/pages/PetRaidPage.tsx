@@ -16,6 +16,7 @@ import type { RaidEngine, RaidSnapshot } from '../lib/raid/engine'
 import { useRaidSquad } from '../lib/raid/squad'
 import RaidCanvas from '../components/raid/RaidCanvas'
 import RaidHud from '../components/raid/RaidHud'
+import RaidInventory from '../components/raid/RaidInventory'
 import RaidResultDialog from '../components/raid/RaidResultDialog'
 import RaidSquadPanel from '../components/raid/RaidSquadPanel'
 import type {
@@ -103,6 +104,7 @@ export default function PetRaidPage() {
   const [snapshot, setSnapshot] = useState<RaidSnapshot | null>(null)
   const [settlement, setSettlement] = useState<RaidSettlement | null>(null)
   const [actionErrors, setActionErrors] = useState<string[]>([])
+  const [inventoryOpen, setInventoryOpen] = useState(false)
 
   const engineRef = useRef<RaidEngine | null>(null)
   const runRef = useRef<RaidRun | null>(null)
@@ -116,6 +118,36 @@ export default function PetRaidPage() {
       mountedRef.current = false
     }
   }, [])
+
+  // B / I 打开战术背包；背包打开时本地引擎冻结（单人局不担心被偷袭）
+  useEffect(() => {
+    if (!gameRun) {
+      setInventoryOpen(false)
+      return
+    }
+    const onKey = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement | null
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+      if (event.key === 'b' || event.key === 'B' || event.key === 'i' || event.key === 'I') {
+        event.preventDefault()
+        setInventoryOpen((open) => !open)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [gameRun])
+
+  const moveItem = useCallback(
+    (from: 'backpack' | 'rig' | 'safe', to: 'backpack' | 'rig' | 'safe', slotIndex: number, amount?: number): boolean =>
+      engineRef.current?.moveItem(from, to, slotIndex, amount) ?? false,
+    [],
+  )
+
+  // 进入对局后压缩页面头部与全站公告条：把可玩区域尽量留在首屏（平板横屏尤其关键）
+  useEffect(() => {
+    document.body.classList.toggle('lineweb-raid-playing', Boolean(gameRun))
+    return () => document.body.classList.remove('lineweb-raid-playing')
+  }, [gameRun])
 
   const loadOverview = useCallback(async (): Promise<RaidOverview | null> => {
     try {
@@ -350,7 +382,7 @@ export default function PetRaidPage() {
   const noBackpack = !loadout || loadout.capacities.backpack <= 0
 
   return (
-    <div className="gh-raid-page">
+    <div className={`gh-raid-page${gameRun ? ' is-in-game' : ''}`}>
       <header className="gh-raid-header">
         <div>
           <p className="gh-raid-eyebrow">宠物搜打撤 · 三角洲 × 元气骑士</p>
@@ -376,7 +408,7 @@ export default function PetRaidPage() {
         </div>
       )}
 
-      {overview.pet && noBackpack && (
+      {!gameRun && overview.pet && noBackpack && (
         <div className="gh-alert gh-alert--warning">
           还没有装备背包，进入对局后什么都装不下。先去{' '}
           <Link to="/pets/raid/storage">仓库 → 装备</Link>{' '}
@@ -398,7 +430,7 @@ export default function PetRaidPage() {
             key={gameRun.id}
             initialRun={gameRun}
             species={overview.pet?.species ?? 'cat'}
-            paused={Boolean(settlement)}
+            paused={Boolean(settlement) || inventoryOpen}
             onEngineReady={(engine) => {
               engineRef.current = engine
               setEngineReady((value) => value + 1)
@@ -418,6 +450,17 @@ export default function PetRaidPage() {
                 onSkill={(index) => engineRef.current?.castSkill(index)}
                 onHeal={() => engineRef.current?.useConsumable('heal')}
                 onRepair={() => engineRef.current?.useConsumable('repair')}
+                onOpenInventory={() => setInventoryOpen(true)}
+                onInteract={() => engineRef.current?.interact()}
+              />
+            )}
+            {/* 背包面板挂在舞台内部：原生全屏时 Fullscreen API 只渲染该子树 */}
+            {inventoryOpen && snapshot && (
+              <RaidInventory
+                snapshot={snapshot}
+                busy={busy}
+                onMove={moveItem}
+                onClose={() => setInventoryOpen(false)}
               />
             )}
           </RaidCanvas>

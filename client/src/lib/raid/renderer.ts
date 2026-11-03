@@ -1,14 +1,20 @@
 /**
  * 搜打撤实时战斗渲染器（Canvas 2D）。
  *
- * 口径：
- *   - 只渲染当前房间（元气骑士式房间相机），地图材质来自 lib/raid/mapArt.ts 的程序化纹理；
- *   - 特效 / 飘字 / 命中标记 / 队友幽灵都画在世界层，小地图与交互提示改由 DOM 浮层承载
- *     （`renderMinimap` 单独导出给 HUD 的小地图 canvas 用），避免和屏幕控件互相遮挡。
+ * 性能口径（2026-11 重写）：
+ *   - 地板 / 墙体 / 污渍 / 装饰物 / 背景整套静态场景按「房间 + 瓦片尺寸 + 门锁状态」
+ *     缓存到离屏 canvas，每帧只 drawImage 一次；旧设备不再逐格重画 200+ 个图元。
+ *   - 屏幕暗角、玩家手电、背景渐变全部缓存；每帧只做一次贴图。
+ *   - emoji 字形缓存成小 canvas，避免每帧 fillText 触发字体栅格化（旧 WebView 很贵）。
+ *   - quality: high / balanced / low。low 只减粒子、环境浮尘、屏幕震动，
+ *     **技能特效和命中反馈始终保留**，低端机也能看清技能释放。
+ *   - 不使用 shadowBlur / filter / roundRect 等旧 WebView 缺失或昂贵的特性。
+ *
+ * 视觉口径：只渲染当前房间；地面与墙体带体积感，门洞整段 3 格都画出口箭头
+ * （引擎同步支持从任意一格换房），角色与敌人改为矢量绘制，不再依赖 emoji 字体。
  */
 
 import {
-  RAID_EXTRACT_CHANNEL_MS,
   RAID_ITEM_MAP,
   RAID_TILE_DOOR,
   RAID_TILE_HAZARD,
@@ -20,13 +26,13 @@ import {
 import type { RaidEffect, RaidEngine, RaidFloatText, RaidTeammate } from './engine'
 import { getMapArt, hashTile, drawProp, buildTextures, pickProp, type RaidMapArt } from './mapArt'
 
-const SPECIES_COLORS: Record<string, { body: string; ear: string; accent: string }> = {
-  cat: { body: '#f6c177', ear: '#e0883a', accent: '#fff7ed' },
-  dog: { body: '#c99a6e', ear: '#9a6b45', accent: '#fff7ed' },
-  bird: { body: '#7dd3fc', ear: '#38bdf8', accent: '#f0f9ff' },
-  rabbit: { body: '#f5d0fe', ear: '#d8b4fe', accent: '#fdf4ff' },
-  fox: { body: '#fb923c', ear: '#ea580c', accent: '#fff7ed' },
-  panda: { body: '#e5e7eb', ear: '#4b5563', accent: '#f9fafb' },
+const SPECIES_COLORS: Record<string, { body: string; belly: string; ear: string; accent: string }> = {
+  cat: { body: '#f0b35f', belly: '#ffe2b0', ear: '#d97a2b', accent: '#fff7ed' },
+  dog: { body: '#b9855c', belly: '#e8c8a4', ear: '#8a5a38', accent: '#fff7ed' },
+  bird: { body: '#62c7ef', belly: '#c7efff', ear: '#2f9fd0', accent: '#f0f9ff' },
+  rabbit: { body: '#eec4fa', belly: '#fbe8ff', ear: '#cf9be8', accent: '#fdf4ff' },
+  fox: { body: '#f07f2c', belly: '#ffd0a1', ear: '#c85a12', accent: '#fff7ed' },
+  panda: { body: '#d9dde4', belly: '#f4f6f9', ear: '#3f4650', accent: '#f9fafb' },
 }
 
 const TEAMMATE_RING = ['#34d399', '#fbbf24', '#f472b6', '#60a5fa']
@@ -48,9 +54,14 @@ export interface RaidRenderMetrics {
   height: number
 }
 
+export type RaidRenderQuality = 'high' | 'balanced' | 'low'
+
 export interface RaidRenderOptions {
-  /** 低性能模式：关掉光晕 / 粒子 / 环境浮尘，只保留可读性必需的元素 */
+  /** 低性能模式：兼容旧调用；等价于 quality: 'low' */
   lowPerf?: boolean
+  quality?: RaidRenderQuality
+  /** 设备像素比（缓存贴图按它生成，避免高 DPI 发虚） */
+  dpr?: number
 }
 
 export function computeMetrics(
@@ -61,7 +72,7 @@ export function computeMetrics(
 ): RaidRenderMetrics {
   const w = room?.w ?? 17
   const h = room?.h ?? 13
-  const tile = Math.min(width / w, height / h)
+  const tile = Math.max(1, Math.min(width / w, height / h))
   return {
     tile,
     offsetX: (width - tile * w) / 2 - (room?.x ?? 0) * tile,
@@ -96,30 +107,124 @@ function roundedRect(
   ctx.closePath()
 }
 
+function createCanvas(width: number, height: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null {
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(width))
+  canvas.height = Math.max(1, Math.round(height))
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  ctx.imageSmoothingEnabled = true
+  return { canvas, ctx }
+}
+
+function paletteFor(species: string): { body: string; belly: string; ear: string; accent: string } {
+  return SPECIES_COLORS[species] ?? SPECIES_COLORS.cat!
+}
+
+/* ============================================================
+   emoji 字形缓存：旧 WebView 每次 fillText 彩色 emoji 都很贵
+   ============================================================ */
+
+const emojiCache = new Map<string, HTMLCanvasElement>()
+
+function emojiSprite(emoji: string, size: number, dpr: number): HTMLCanvasElement | null {
+  const px = Math.max(8, Math.round(size))
+  const ratio = Math.max(1, Math.min(3, dpr))
+  const key = `${emoji}|${px}|${ratio}`
+  const cached = emojiCache.get(key)
+  if (cached) return cached
+  const made = createCanvas(px * ratio, px * ratio)
+  if (!made) return null
+  const { canvas, ctx } = made
+  ctx.scale(ratio, ratio)
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = `${px}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`
+  ctx.fillStyle = '#f8fafc'
+  ctx.fillText(emoji, px / 2, px / 2 + px * 0.04)
+  if (emojiCache.size > 96) {
+    const first = emojiCache.keys().next().value
+    if (first) emojiCache.delete(first)
+  }
+  emojiCache.set(key, canvas)
+  return canvas
+}
+
 function drawEmoji(
   ctx: CanvasRenderingContext2D,
   emoji: string,
   x: number,
   y: number,
   size: number,
+  dpr: number,
 ): void {
-  // 彩色 emoji 不受 fillStyle 影响；无彩色字体时退回可见的浅色单色字形
+  const sprite = emojiSprite(emoji, size, dpr)
+  if (sprite) {
+    ctx.drawImage(sprite, x - size / 2, y - size / 2, size, size)
+    return
+  }
+  // 极端兜底：离屏 canvas 创建失败时退回 fillText
   ctx.fillStyle = '#f8fafc'
-  ctx.font = `${size}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`
+  ctx.font = `${size}px "Apple Color Emoji", "Segoe UI Emoji", sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(emoji, x, y)
 }
 
-function enemyEmoji(kind: string): string {
-  if (kind === 'boss') return '👑'
-  if (kind === 'elite') return '🦾'
-  if (kind === 'scout') return '🥷'
-  return '🪖'
+/* ============================================================
+   静态场景缓存
+   ============================================================ */
+
+interface SceneCache {
+  key: string
+  canvas: HTMLCanvasElement
+}
+
+const sceneCache = new WeakMap<RaidEngine, SceneCache>()
+
+interface OverlayCache {
+  key: string
+  canvas: HTMLCanvasElement | null
+}
+
+let lightCache: OverlayCache = { key: '', canvas: null }
+let vignetteCache: OverlayCache = { key: '', canvas: null }
+
+function buildVignette(width: number, height: number, art: RaidMapArt, dpr: number): HTMLCanvasElement | null {
+  const made = createCanvas(width * dpr, height * dpr)
+  if (!made) return null
+  const { canvas, ctx } = made
+  ctx.scale(dpr, dpr)
+  const vignette = ctx.createRadialGradient(
+    width / 2, height / 2, Math.min(width, height) * 0.34,
+    width / 2, height / 2, Math.min(width, height) * 0.84,
+  )
+  vignette.addColorStop(0, 'rgba(0, 0, 0, 0)')
+  vignette.addColorStop(0.72, `rgba(2, 6, 18, ${art.vignette * 0.42})`)
+  vignette.addColorStop(1, `rgba(2, 6, 18, ${art.vignette})`)
+  ctx.fillStyle = vignette
+  ctx.fillRect(0, 0, width, height)
+  return canvas
+}
+
+function buildLight(radius: number, art: RaidMapArt, dpr: number): HTMLCanvasElement | null {
+  const size = Math.max(32, radius * 2)
+  const made = createCanvas(size * dpr, size * dpr)
+  if (!made) return null
+  const { canvas, ctx } = made
+  ctx.scale(dpr, dpr)
+  const center = size / 2
+  const light = ctx.createRadialGradient(center, center, radius * 0.2, center, center, radius)
+  light.addColorStop(0, 'rgba(0, 0, 0, 0)')
+  light.addColorStop(0.58, `rgba(2, 6, 20, ${0.16 + art.vignette * 0.1})`)
+  light.addColorStop(1, `rgba(2, 6, 20, ${0.4 + art.vignette * 0.42})`)
+  ctx.fillStyle = light
+  ctx.fillRect(0, 0, size, size)
+  return canvas
 }
 
 /* ============================================================
-   环境粒子（每个引擎实例一份，按主题参数生成）
+   环境粒子
    ============================================================ */
 
 interface AmbientMote {
@@ -178,42 +283,40 @@ function updateAmbient(engine: RaidEngine, room: RaidRoomNode, art: RaidMapArt, 
 }
 
 /* ============================================================
-   主渲染
+   静态场景绘制（只在换房 / 尺寸变化时执行）
    ============================================================ */
 
-export function renderRaid(
-  ctx: CanvasRenderingContext2D,
+function buildScene(
   engine: RaidEngine,
+  room: RaidRoomNode,
+  art: RaidMapArt,
+  metrics: RaidRenderMetrics,
   width: number,
   height: number,
-  now: number,
-  options: RaidRenderOptions = {},
-): void {
-  const lowPerf = Boolean(options.lowPerf)
-  const room = engine.room
-  const art = getMapArt(engine.map.key)
-  const metrics = computeMetrics(engine.map, room, width, height)
+  dpr: number,
+  low: boolean,
+): HTMLCanvasElement | null {
+  const made = createCanvas(width * dpr, height * dpr)
+  if (!made) return null
+  const { canvas, ctx } = made
+  ctx.scale(dpr, dpr)
 
-  ctx.clearRect(0, 0, width, height)
-  ctx.save()
-
-  // 主题底：房间之外的空间用主题暗色 + 极淡的强调色渐变
+  // 房间之外：主题暗色 + 斜向光带，避免纯黑显得未完成
   const bg = ctx.createLinearGradient(0, 0, width, height)
   bg.addColorStop(0, art.wallFace)
-  bg.addColorStop(1, '#05070c')
+  bg.addColorStop(0.55, '#070b12')
+  bg.addColorStop(1, '#04060a')
   ctx.fillStyle = bg
   ctx.fillRect(0, 0, width, height)
-
-  if (!room) {
-    ctx.restore()
-    return
-  }
-
-  // 屏幕震动：只在还有剩余时长时偏移
-  if (!lowPerf && engine.shakeMs > 0) {
-    const amp = engine.shakeAmp * metrics.tile * (engine.shakeMs / 220)
-    ctx.translate((Math.random() - 0.5) * amp, (Math.random() - 0.5) * amp)
-  }
+  ctx.save()
+  ctx.globalAlpha = 0.08
+  ctx.strokeStyle = art.accent
+  ctx.lineWidth = Math.max(20, width * 0.04)
+  ctx.beginPath()
+  ctx.moveTo(-width * 0.1, height * 0.85)
+  ctx.lineTo(width * 1.1, -height * 0.2)
+  ctx.stroke()
+  ctx.restore()
 
   const tile = metrics.tile
   const textures = buildTextures(art, tile)
@@ -229,85 +332,126 @@ export function renderRaid(
   ctx.rect(roomRect.x, roomRect.y, roomRect.w, roomRect.h)
   ctx.clip()
 
-  drawFloor(ctx, engine, room, art, metrics, textures, lowPerf, now)
-  drawWalls(ctx, engine, room, art, metrics, textures, now)
-  drawExtractBeacon(ctx, engine, metrics, art, now, lowPerf)
-  drawContainers(ctx, engine, metrics, art, now, lowPerf)
-  drawPickups(ctx, engine, metrics, now, lowPerf)
-  if (!lowPerf) drawAmbient(ctx, engine, room, art, metrics, now)
-  drawTeam( ctx, engine, metrics, now, lowPerf)
-  drawEnemies(ctx, engine, metrics, art, now, lowPerf)
-  drawBullets(ctx, engine, metrics, lowPerf)
-  drawPlayer(ctx, engine, metrics, art, now, lowPerf)
-  if (!lowPerf) {
-    drawParticles(ctx, engine, metrics)
-    drawEffects(ctx, engine.effects, metrics, now)
-  }
-  drawHitMarkers(ctx, engine, metrics)
-  drawFloats(ctx, engine.floats, metrics)
-  drawRoomLight(ctx, roomRect, art, metrics, engine, now, lowPerf)
+  drawFloorStatic(ctx, engine, room, art, metrics, textures, low)
+  drawWallsStatic(ctx, engine, room, art, metrics, textures, low)
+  drawRoomTint(ctx, room, metrics)
 
   ctx.restore()
-
-  // 屏幕后处理：暗角 + 受击红闪 + 低血脉动 + 撤离进度环
-  drawVignette(ctx, width, height, art)
-  drawScreenFlash(ctx, engine, width, height, now)
-  drawHurtCompass(ctx, engine, width, height)
-
-  ctx.restore()
+  return canvas
 }
 
-/* ---------- 地面 ---------- */
+/** 房间类型染色 + 墙脚内阴影：让战斗房、撤离区、首领房一眼可区分 */
+function drawRoomTint(
+  ctx: CanvasRenderingContext2D,
+  room: RaidRoomNode,
+  metrics: RaidRenderMetrics,
+): void {
+  const tile = metrics.tile
+  const x = metrics.offsetX + (room.x + 1) * tile
+  const y = metrics.offsetY + (room.y + 1) * tile
+  const w = (room.w - 2) * tile
+  const h = (room.h - 2) * tile
+  const tint: Record<string, string> = {
+    combat: 'rgba(248, 113, 113, 0.035)',
+    elite: 'rgba(251, 146, 60, 0.05)',
+    boss: 'rgba(248, 113, 113, 0.07)',
+    loot: 'rgba(250, 204, 21, 0.045)',
+    hazard: 'rgba(192, 132, 252, 0.05)',
+    extract: 'rgba(56, 189, 248, 0.06)',
+  }
+  const color = tint[room.kind]
+  if (color) {
+    ctx.fillStyle = color
+    ctx.fillRect(x, y, w, h)
+  }
+  // 四面墙脚压暗，提升房间的体积感
+  const depth = Math.min(tile * 1.4, w * 0.18, h * 0.22)
+  const edges: Array<[number, number, number, number, number, number]> = [
+    [x, y, x + w, y, 0, 0],
+    [x, y + h, x + w, y + h, 0, 1],
+    [x, y, x, y + h, 1, 0],
+    [x + w, y, x + w, y + h, 1, 0],
+  ]
+  for (const [x0, y0, x1, y1] of edges) {
+    const vertical = x0 === x1
+    const gradient = vertical
+      ? ctx.createLinearGradient(x0 === x ? x : x - depth, 0, x0 === x ? x + depth : x, 0)
+      : ctx.createLinearGradient(0, y0 === y ? y : y - depth, 0, y0 === y ? y + depth : y)
+    const inner = vertical
+      ? (x0 === x ? 0 : 1)
+      : (y0 === y ? 0 : 1)
+    gradient.addColorStop(inner, 'rgba(0, 0, 0, 0.34)')
+    gradient.addColorStop(1 - inner, 'rgba(0, 0, 0, 0)')
+    ctx.fillStyle = gradient
+    if (vertical) ctx.fillRect(x0 === x ? x : x - depth, y, depth, h)
+    else ctx.fillRect(x, y0 === y ? y : y - depth, w, depth)
+  }
+}
 
-function drawFloor(
+function drawFloorStatic(
   ctx: CanvasRenderingContext2D,
   engine: RaidEngine,
   room: RaidRoomNode,
   art: RaidMapArt,
   metrics: RaidRenderMetrics,
   textures: ReturnType<typeof buildTextures>,
-  lowPerf: boolean,
-  now: number,
+  low: boolean,
 ): void {
   const tile = metrics.tile
+  // 房间底：先铺一层暗色，砖缝之外不会露出背景光带
+  const roomBase = worldToScreen(metrics, room.x, room.y)
+  ctx.fillStyle = '#070b12'
+  ctx.fillRect(roomBase.x, roomBase.y, room.w * tile, room.h * tile)
+
   for (let ty = room.y + 1; ty < room.y + room.h - 1; ty += 1) {
     for (let tx = room.x + 1; tx < room.x + room.w - 1; tx += 1) {
       const value = engine.map.tiles[raidTileIndex(engine.map.width, tx, ty)]
       const screen = worldToScreen(metrics, tx, ty)
       if (value === RAID_TILE_HAZARD) {
-        const pulse = lowPerf ? 0.34 : 0.28 + 0.12 * Math.sin(now / 300 + tx * 1.7 + ty)
         ctx.fillStyle = art.hazard.base
         ctx.fillRect(screen.x, screen.y, tile, tile)
         ctx.strokeStyle = art.hazard.glow
-        ctx.globalAlpha = pulse
-        ctx.lineWidth = Math.max(1, tile * 0.06)
-        ctx.beginPath()
-        ctx.moveTo(screen.x + tile * 0.15, screen.y + tile * 0.82)
-        ctx.lineTo(screen.x + tile * 0.85, screen.y + tile * 0.18)
-        ctx.stroke()
+        ctx.globalAlpha = 0.42
+        ctx.lineWidth = Math.max(1, tile * 0.07)
+        for (let i = -1; i <= 1; i += 1) {
+          ctx.beginPath()
+          ctx.moveTo(screen.x + tile * (0.08 + i * 0.3), screen.y + tile * 0.9)
+          ctx.lineTo(screen.x + tile * (0.58 + i * 0.3), screen.y + tile * 0.1)
+          ctx.stroke()
+        }
         ctx.globalAlpha = 1
         continue
       }
       const source = (tx + ty) % 2 === 0 ? textures.floorA : textures.floorB
       ctx.drawImage(source, screen.x, screen.y, tile, tile)
+      // 砖缝 + 内侧高光：静态缓存里做，不占每帧预算
       ctx.strokeStyle = art.grout
       ctx.lineWidth = 1
       ctx.strokeRect(screen.x + 0.5, screen.y + 0.5, tile - 1, tile - 1)
-      if (!lowPerf) {
-        // 确定性污渍：同一张地图永远长在同一处，不会闪
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.035)'
+      ctx.fillRect(screen.x + 1, screen.y + 1, tile - 2, Math.max(1, tile * 0.06))
+      if (!low) {
         const stain = hashTile(engine.seed, tx, ty, 5)
-        if (stain > 0.86) {
+        if (stain > 0.82) {
           ctx.fillStyle = 'rgba(0, 0, 0, 0.22)'
           ctx.beginPath()
-          ctx.ellipse(screen.x + tile * 0.5, screen.y + tile * 0.55, tile * 0.3, tile * 0.16, stain * 3, 0, Math.PI * 2)
+          ctx.ellipse(screen.x + tile * 0.5, screen.y + tile * 0.55, tile * 0.32, tile * 0.16, stain * 3, 0, Math.PI * 2)
           ctx.fill()
+        } else if (stain < 0.08) {
+          // 少量发光地缝：让地面不是一整片死色
+          ctx.strokeStyle = art.accentSoft
+          ctx.lineWidth = Math.max(1, tile * 0.035)
+          ctx.beginPath()
+          ctx.moveTo(screen.x + tile * 0.2, screen.y + tile * 0.75)
+          ctx.lineTo(screen.x + tile * 0.45, screen.y + tile * 0.42)
+          ctx.lineTo(screen.x + tile * 0.72, screen.y + tile * 0.62)
+          ctx.stroke()
         }
       }
     }
   }
 
-  if (lowPerf) return
-  // 装饰物（放在敌人之下，避免挡住角色）
+  // 装饰物进静态缓存：低画质也保留，只在换房时画一次，不占每帧预算
   for (let ty = room.y + 2; ty < room.y + room.h - 2; ty += 1) {
     for (let tx = room.x + 2; tx < room.x + room.w - 2; tx += 1) {
       const value = engine.map.tiles[raidTileIndex(engine.map.width, tx, ty)]
@@ -315,89 +459,302 @@ function drawFloor(
       const prop = pickProp(art, engine.seed, room.id, tx, ty)
       if (!prop) continue
       const screen = worldToScreen(metrics, tx + 0.5, ty + 0.5)
-      drawProp(ctx, prop.kind, screen.x, screen.y, tile, art, prop.variant, prop.scale, now)
+      // 静态帧时间固定，装饰物不闪烁
+      drawProp(ctx, prop.kind, screen.x, screen.y, tile, art, prop.variant, prop.scale, 0)
     }
   }
 }
 
-/* ---------- 墙体与门 ---------- */
-
-function drawWalls(
+function drawWallsStatic(
   ctx: CanvasRenderingContext2D,
   engine: RaidEngine,
   room: RaidRoomNode,
   art: RaidMapArt,
   metrics: RaidRenderMetrics,
   textures: ReturnType<typeof buildTextures>,
-  now: number,
+  low: boolean,
 ): void {
   const tile = metrics.tile
   for (let ty = room.y; ty < room.y + room.h; ty += 1) {
     for (let tx = room.x; tx < room.x + room.w; tx += 1) {
       const value = engine.map.tiles[raidTileIndex(engine.map.width, tx, ty)]
-      if (value !== RAID_TILE_WALL && value !== RAID_TILE_DOOR) continue
+      if (value !== RAID_TILE_WALL) continue
       const screen = worldToScreen(metrics, tx, ty)
-      if (value === RAID_TILE_DOOR) {
-        drawDoor(ctx, engine, screen, tile, art, now)
-        continue
-      }
       ctx.drawImage(textures.wall, screen.x, screen.y, tile, tile)
-      // 只有朝房间内侧的墙才画压顶高光，否则整面墙会糊成一片
-      const facesRoom =
+
+      const inner =
         engine.map.tiles[raidTileIndex(engine.map.width, tx, ty - 1)] === 1 ||
         engine.map.tiles[raidTileIndex(engine.map.width, tx, ty + 1)] === 1 ||
         engine.map.tiles[raidTileIndex(engine.map.width, tx - 1, ty)] === 1 ||
         engine.map.tiles[raidTileIndex(engine.map.width, tx + 1, ty)] === 1
-      if (facesRoom) {
-        ctx.fillStyle = art.wallTop
-        ctx.fillRect(screen.x, screen.y, tile, Math.max(2, tile * 0.2))
-        ctx.fillStyle = art.wallEdge
-        ctx.fillRect(screen.x, screen.y, tile, Math.max(1, tile * 0.06))
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'
-        if (engine.map.tiles[raidTileIndex(engine.map.width, tx, ty - 1)] === 1) {
-          ctx.fillRect(screen.x, screen.y + tile - Math.max(1, tile * 0.08), tile, Math.max(1, tile * 0.08))
+      if (!inner) continue
+      // 立体墙：顶部亮边 + 底部阴影 + 内侧竖向接缝
+      ctx.fillStyle = art.wallTop
+      ctx.fillRect(screen.x, screen.y, tile, Math.max(2, tile * 0.24))
+      ctx.fillStyle = art.wallEdge
+      ctx.fillRect(screen.x, screen.y, tile, Math.max(1, tile * 0.055))
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.42)'
+      ctx.fillRect(screen.x, screen.y + tile - Math.max(1, tile * 0.1), tile, Math.max(1, tile * 0.1))
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.22)'
+      ctx.fillRect(screen.x + tile - Math.max(1, tile * 0.05), screen.y, Math.max(1, tile * 0.05), tile)
+      if (!low) {
+        // 铆钉 / 螺栓：每块墙最多 2 颗，静态缓存不心疼
+        const rivet = hashTile(engine.seed, tx, ty, 23)
+        if (rivet > 0.55) {
+          ctx.fillStyle = art.wallEdge
+          ctx.globalAlpha = 0.55
+          const r = Math.max(1, tile * 0.035)
+          ctx.beginPath()
+          ctx.arc(screen.x + tile * 0.18, screen.y + tile * 0.52, r, 0, Math.PI * 2)
+          ctx.arc(screen.x + tile * 0.82, screen.y + tile * 0.52, r, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.globalAlpha = 1
         }
+      }
+    }
+  }
+  // 门框（门扇开合动画由动态层画）
+  for (let ty = room.y; ty < room.y + room.h; ty += 1) {
+    for (let tx = room.x; tx < room.x + room.w; tx += 1) {
+      if (engine.map.tiles[raidTileIndex(engine.map.width, tx, ty)] !== RAID_TILE_DOOR) continue
+      const screen = worldToScreen(metrics, tx, ty)
+      ctx.fillStyle = 'rgba(2, 6, 18, 0.55)'
+      ctx.fillRect(screen.x, screen.y, tile, tile)
+      ctx.strokeStyle = art.door.frame
+      ctx.lineWidth = Math.max(2, tile * 0.1)
+      ctx.strokeRect(screen.x + tile * 0.12, screen.y + tile * 0.12, tile * 0.76, tile * 0.76)
+    }
+  }
+}
+
+/* ============================================================
+   主渲染
+   ============================================================ */
+
+export function renderRaid(
+  ctx: CanvasRenderingContext2D,
+  engine: RaidEngine,
+  width: number,
+  height: number,
+  now: number,
+  options: RaidRenderOptions = {},
+): void {
+  const quality: RaidRenderQuality = options.quality ?? (options.lowPerf ? 'low' : 'high')
+  const low = quality === 'low'
+  const dpr = Math.max(1, Math.min(3, options.dpr ?? 1))
+  const room = engine.room
+  const art = getMapArt(engine.map.key)
+  const metrics = computeMetrics(engine.map, room, width, height)
+
+  if (!room) {
+    ctx.clearRect(0, 0, width, height)
+    return
+  }
+
+  // —— 静态场景：key 命中时整屏一次 drawImage ——
+  const sceneKey = `${art.key}|${room.id}|${Math.round(metrics.tile * 2)}|${engine.roomCleared ? 1 : 0}|${low ? 0 : 1}|${Math.round(dpr * 100)}|${Math.round(width)}x${Math.round(height)}`
+  let scene = sceneCache.get(engine)
+  if (!scene || scene.key !== sceneKey) {
+    const canvas = buildScene(engine, room, art, metrics, width, height, dpr, low)
+    if (canvas) {
+      scene = { key: sceneKey, canvas }
+      sceneCache.set(engine, scene)
+    } else {
+      scene = undefined
+    }
+  }
+  ctx.clearRect(0, 0, width, height)
+  if (scene) {
+    ctx.drawImage(scene.canvas, 0, 0, width, height)
+  } else {
+    // 极端兜底：离屏 canvas 不可用时直接画地面与墙体
+    const textures = buildTextures(art, metrics.tile)
+    drawFloorStatic(ctx, engine, room, art, metrics, textures, low)
+    drawWallsStatic(ctx, engine, room, art, metrics, textures, low)
+  }
+
+  const roomRect = {
+    x: metrics.offsetX + room.x * metrics.tile,
+    y: metrics.offsetY + room.y * metrics.tile,
+    w: room.w * metrics.tile,
+    h: room.h * metrics.tile,
+  }
+
+  ctx.save()
+  // 屏幕震动：低画质关闭，避免旧设备持续重绘整屏
+  if (!low && engine.shakeMs > 0) {
+    const amp = engine.shakeAmp * metrics.tile * (engine.shakeMs / 220)
+    ctx.translate((Math.random() - 0.5) * amp, (Math.random() - 0.5) * amp)
+  }
+
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(roomRect.x, roomRect.y, roomRect.w, roomRect.h)
+  ctx.clip()
+
+  drawDoors(ctx, engine, art, metrics, now, low)
+  // 出口箭头即使低画质也保留：这是玩家能不能继续推进的关键信息
+  drawExitGuides(ctx, engine, art, metrics, now, low)
+  drawExtractBeacon(ctx, engine, metrics, art, now, low, dpr)
+  drawContainers(ctx, engine, metrics, art, now, low, dpr)
+  drawPickups(ctx, engine, metrics, now, low, dpr)
+  if (!low) drawAmbient(ctx, engine, room, art, metrics, now)
+  drawTeam(ctx, engine, metrics, now, low)
+  drawEnemies(ctx, engine, metrics, art, now, low)
+  drawBullets(ctx, engine, metrics, low)
+  drawAimReticle(ctx, engine, metrics, art)
+  drawPlayer(ctx, engine, metrics, art, now, low, dpr)
+  drawEffects(ctx, engine.effects, metrics, now, low)
+  if (!low) drawParticles(ctx, engine, metrics)
+  drawHitMarkers(ctx, engine, metrics)
+  drawFloats(ctx, engine.floats, metrics)
+  drawSkillBanner(ctx, engine, metrics)
+  drawRoomLight(ctx, roomRect, art, metrics, engine, now, low, dpr)
+
+  ctx.restore()
+  ctx.restore()
+
+  // —— 屏幕后处理：缓存暗角 + 受击红闪 + 低血脉动 + 技能染色 ——
+  drawVignette(ctx, width, height, art, dpr)
+  drawScreenFlash(ctx, engine, width, height, now)
+  drawHurtCompass(ctx, engine, width, height)
+  drawSkillFlash(ctx, engine, width, height)
+}
+
+/* ---------- 门 / 出口 ---------- */
+
+function drawDoors(
+  ctx: CanvasRenderingContext2D,
+  engine: RaidEngine,
+  art: RaidMapArt,
+  metrics: RaidRenderMetrics,
+  now: number,
+  low: boolean,
+): void {
+  const room = engine.room
+  if (!room) return
+  const tile = metrics.tile
+  const open = engine.roomCleared
+  for (let ty = room.y; ty < room.y + room.h; ty += 1) {
+    for (let tx = room.x; tx < room.x + room.w; tx += 1) {
+      if (engine.map.tiles[raidTileIndex(engine.map.width, tx, ty)] !== RAID_TILE_DOOR) continue
+      const screen = worldToScreen(metrics, tx, ty)
+      if (open) {
+        // 解锁：门扇打开，留下流动光闸
+        ctx.fillStyle = 'rgba(12, 18, 30, 0.18)'
+        ctx.fillRect(screen.x + tile * 0.1, screen.y + tile * 0.1, tile * 0.8, tile * 0.8)
+        const sweep = low ? 0.5 : (now / 900) % 1
+        ctx.fillStyle = art.accentSoft
+        ctx.fillRect(screen.x + tile * 0.12, screen.y + tile * 0.12 + sweep * tile * 0.6, tile * 0.76, tile * 0.1)
+        ctx.fillStyle = art.door.open
+        ctx.beginPath()
+        ctx.moveTo(screen.x + tile * 0.24, screen.y + tile * 0.24)
+        ctx.lineTo(screen.x + tile * 0.4, screen.y + tile * 0.24)
+        ctx.lineTo(screen.x + tile * 0.4, screen.y + tile * 0.76)
+        ctx.lineTo(screen.x + tile * 0.24, screen.y + tile * 0.76)
+        ctx.closePath()
+        ctx.fill()
+        ctx.beginPath()
+        ctx.moveTo(screen.x + tile * 0.76, screen.y + tile * 0.24)
+        ctx.lineTo(screen.x + tile * 0.6, screen.y + tile * 0.24)
+        ctx.lineTo(screen.x + tile * 0.6, screen.y + tile * 0.76)
+        ctx.lineTo(screen.x + tile * 0.76, screen.y + tile * 0.76)
+        ctx.closePath()
+        ctx.fill()
+      } else {
+        ctx.fillStyle = art.door.locked
+        ctx.fillRect(screen.x + tile * 0.14, screen.y + tile * 0.14, tile * 0.72, tile * 0.72)
+        ctx.strokeStyle = art.door.frame
+        ctx.lineWidth = Math.max(1.5, tile * 0.06)
+        ctx.strokeRect(screen.x + tile * 0.2, screen.y + tile * 0.2, tile * 0.6, tile * 0.6)
+        // 锁扣
+        ctx.strokeStyle = '#cbd5e1'
+        ctx.lineWidth = Math.max(1.5, tile * 0.08)
+        ctx.beginPath()
+        ctx.arc(screen.x + tile * 0.5, screen.y + tile * 0.46, tile * 0.12, Math.PI, Math.PI * 2)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(screen.x + tile * 0.5, screen.y + tile * 0.46)
+        ctx.lineTo(screen.x + tile * 0.5, screen.y + tile * 0.64)
+        ctx.stroke()
       }
     }
   }
 }
 
-function drawDoor(
+interface ExitGuide {
+  x: number
+  y: number
+  dx: number
+  dy: number
+}
+
+/** 当前房间所有可通行出口（门洞 3 格都算），引擎支持从任意一格换房 */
+function roomExits(engine: RaidEngine): ExitGuide[] {
+  const room = engine.room
+  if (!room) return []
+  const out: ExitGuide[] = []
+  for (const door of engine.map.doors) {
+    // 每扇门在两侧房间各有一个端点；只取落在当前房间矩形内的那个
+    if (door.x < room.x || door.x >= room.x + room.w || door.y < room.y || door.y >= room.y + room.h) continue
+    const targetId = door.roomA === room.id ? door.roomB : door.roomB === room.id ? door.roomA : null
+    if (targetId === null) continue
+    const target = engine.map.rooms[targetId]
+    if (!target) continue
+    const dx = Math.sign(target.col - room.col)
+    const dy = Math.sign(target.row - room.row)
+    if (dx !== 0) {
+      for (let offset = -1; offset <= 1; offset += 1) {
+        out.push({ x: door.x, y: door.y + offset, dx, dy: 0 })
+      }
+    } else if (dy !== 0) {
+      for (let offset = -1; offset <= 1; offset += 1) {
+        out.push({ x: door.x + offset, y: door.y, dx: 0, dy })
+      }
+    }
+  }
+  return out
+}
+
+function drawExitGuides(
   ctx: CanvasRenderingContext2D,
   engine: RaidEngine,
-  screen: { x: number; y: number },
-  tile: number,
   art: RaidMapArt,
+  metrics: RaidRenderMetrics,
   now: number,
+  low: boolean,
 ): void {
+  const exits = roomExits(engine)
+  if (exits.length === 0) return
+  const tile = metrics.tile
   const open = engine.roomCleared
-  ctx.fillStyle = open ? 'rgba(12, 18, 30, 0.35)' : art.door.locked
-  ctx.fillRect(screen.x, screen.y, tile, tile)
-  ctx.strokeStyle = open ? art.door.open : art.door.frame
-  ctx.lineWidth = Math.max(1.5, tile * 0.08)
-  ctx.strokeRect(screen.x + tile * 0.14, screen.y + tile * 0.14, tile * 0.72, tile * 0.72)
-  if (open) {
-    // 解锁：流动的光闸，比一个「开」字更容易在激战中读到
-    const sweep = (now / 900) % 1
-    ctx.fillStyle = art.accentSoft
-    ctx.fillRect(screen.x + tile * 0.14, screen.y + tile * 0.14 + sweep * tile * 0.6, tile * 0.72, tile * 0.1)
-    ctx.strokeStyle = art.door.open
-    ctx.beginPath()
-    ctx.moveTo(screen.x + tile * 0.32, screen.y + tile * 0.62)
-    ctx.lineTo(screen.x + tile * 0.5, screen.y + tile * 0.36)
-    ctx.lineTo(screen.x + tile * 0.68, screen.y + tile * 0.62)
-    ctx.stroke()
-    return
+  const pulse = low ? 0.8 : 0.55 + 0.35 * Math.sin(now / 380)
+  for (const exit of exits) {
+    const screen = worldToScreen(metrics, exit.x + 0.5, exit.y + 0.5)
+    ctx.save()
+    ctx.translate(screen.x, screen.y)
+    ctx.rotate(Math.atan2(exit.dy, exit.dx))
+    ctx.fillStyle = open ? art.door.open : 'rgba(148, 163, 184, 0.4)'
+    ctx.globalAlpha = open ? pulse : 0.42
+    for (let i = 0; i < 2; i += 1) {
+      const shift = open && !low ? ((now / 700 + i * 0.5) % 1) * tile * 0.14 : 0
+      ctx.beginPath()
+      ctx.moveTo(-tile * 0.14 + shift, -tile * 0.16)
+      ctx.lineTo(tile * 0.06 + shift, 0)
+      ctx.lineTo(-tile * 0.14 + shift, tile * 0.16)
+      ctx.lineTo(-tile * 0.05 + shift, 0)
+      ctx.closePath()
+      ctx.fill()
+    }
+    ctx.restore()
+    if (open) {
+      ctx.strokeStyle = art.door.open
+      ctx.globalAlpha = pulse * 0.5
+      ctx.lineWidth = Math.max(1, tile * 0.04)
+      ctx.strokeRect(screen.x - tile * 0.42, screen.y - tile * 0.42, tile * 0.84, tile * 0.84)
+      ctx.globalAlpha = 1
+    }
   }
-  ctx.strokeStyle = '#94a3b8'
-  ctx.lineWidth = Math.max(1.5, tile * 0.09)
-  ctx.beginPath()
-  ctx.arc(screen.x + tile * 0.5, screen.y + tile * 0.44, tile * 0.13, Math.PI, Math.PI * 2)
-  ctx.stroke()
-  ctx.beginPath()
-  ctx.moveTo(screen.x + tile * 0.5, screen.y + tile * 0.44)
-  ctx.lineTo(screen.x + tile * 0.5, screen.y + tile * 0.66)
-  ctx.stroke()
 }
 
 /* ---------- 撤离点 ---------- */
@@ -408,49 +765,62 @@ function drawExtractBeacon(
   metrics: RaidRenderMetrics,
   art: RaidMapArt,
   now: number,
-  lowPerf: boolean,
+  low: boolean,
+  dpr: number,
 ): void {
   const extract = engine.extractPoint
   if (!extract) return
   const screen = worldToScreen(metrics, extract.x + 0.5, extract.y + 0.5)
   const tile = metrics.tile
-  const pulse = lowPerf ? 1 : 1 + 0.1 * Math.sin(now / 260)
-  const radius = tile * 1.15 * pulse
+  const pulse = low ? 1 : 1 + 0.08 * Math.sin(now / 260)
+  const radius = tile * 1.2 * pulse
 
-  if (!lowPerf) {
+  if (!low) {
     const gradient = ctx.createRadialGradient(screen.x, screen.y, 0, screen.x, screen.y, radius)
-    gradient.addColorStop(0, 'rgba(56, 189, 248, 0.42)')
+    gradient.addColorStop(0, 'rgba(56, 189, 248, 0.45)')
+    gradient.addColorStop(0.55, 'rgba(56, 189, 248, 0.16)')
     gradient.addColorStop(1, 'rgba(56, 189, 248, 0)')
     ctx.fillStyle = gradient
     ctx.beginPath()
     ctx.arc(screen.x, screen.y, radius, 0, Math.PI * 2)
     ctx.fill()
   }
-  // 停机坪：同心圆 + 旋转箭头，一眼能认出「站这里撤离」
-  ctx.strokeStyle = 'rgba(125, 211, 252, 0.85)'
+  ctx.strokeStyle = 'rgba(125, 211, 252, 0.9)'
   ctx.lineWidth = Math.max(1.5, tile * 0.07)
   ctx.beginPath()
-  ctx.arc(screen.x, screen.y, tile * 0.85, 0, Math.PI * 2)
+  ctx.arc(screen.x, screen.y, tile * 0.9, 0, Math.PI * 2)
   ctx.stroke()
   ctx.beginPath()
-  ctx.arc(screen.x, screen.y, tile * 0.55, 0, Math.PI * 2)
+  ctx.arc(screen.x, screen.y, tile * 0.58, 0, Math.PI * 2)
   ctx.stroke()
-  const spin = lowPerf ? 0 : now / 1400
+  // 四向箭头
+  const spin = low ? 0 : now / 1400
   ctx.save()
   ctx.translate(screen.x, screen.y)
   ctx.rotate(spin)
-  ctx.strokeStyle = 'rgba(224, 242, 254, 0.9)'
+  ctx.fillStyle = 'rgba(224, 242, 254, 0.9)'
   for (let i = 0; i < 4; i += 1) {
     ctx.rotate(Math.PI / 2)
     ctx.beginPath()
-    ctx.moveTo(0, -tile * 0.62)
-    ctx.lineTo(tile * 0.1, -tile * 0.76)
-    ctx.lineTo(-tile * 0.1, -tile * 0.76)
+    ctx.moveTo(0, -tile * 0.72)
+    ctx.lineTo(tile * 0.12, -tile * 0.56)
+    ctx.lineTo(-tile * 0.12, -tile * 0.56)
     ctx.closePath()
-    ctx.stroke()
+    ctx.fill()
   }
   ctx.restore()
-  drawEmoji(ctx, '🚁', screen.x, screen.y, tile * 0.7)
+  drawEmoji(ctx, '🚁', screen.x, screen.y, tile * 0.62, dpr)
+  // 停机坪 H 标识
+  ctx.strokeStyle = 'rgba(224, 242, 254, 0.55)'
+  ctx.lineWidth = Math.max(1.5, tile * 0.055)
+  ctx.beginPath()
+  ctx.moveTo(screen.x - tile * 0.34, screen.y - tile * 0.26)
+  ctx.lineTo(screen.x - tile * 0.34, screen.y + tile * 0.26)
+  ctx.moveTo(screen.x + tile * 0.34, screen.y - tile * 0.26)
+  ctx.lineTo(screen.x + tile * 0.34, screen.y + tile * 0.26)
+  ctx.moveTo(screen.x - tile * 0.34, screen.y)
+  ctx.lineTo(screen.x + tile * 0.34, screen.y)
+  ctx.stroke()
 }
 
 /* ---------- 容器 / 掉落 ---------- */
@@ -461,31 +831,41 @@ function drawContainers(
   metrics: RaidRenderMetrics,
   art: RaidMapArt,
   now: number,
-  lowPerf: boolean,
+  low: boolean,
+  dpr: number,
 ): void {
   const tile = metrics.tile
   for (const container of engine.containers) {
     const screen = worldToScreen(metrics, container.x, container.y)
-    const size = tile * 0.78
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'
+    const size = tile * 0.8
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.38)'
     ctx.beginPath()
-    ctx.ellipse(screen.x, screen.y + size * 0.5, size * 0.5, size * 0.18, 0, 0, Math.PI * 2)
+    ctx.ellipse(screen.x, screen.y + size * 0.5, size * 0.52, size * 0.18, 0, 0, Math.PI * 2)
     ctx.fill()
-    ctx.fillStyle = container.opened ? 'rgba(71, 85, 105, 0.55)' : '#3f3a2c'
-    roundedRect(ctx, screen.x - size / 2, screen.y - size / 2, size, size, size * 0.16)
-    ctx.fill()
-    ctx.strokeStyle = container.opened ? 'rgba(148, 163, 184, 0.6)' : art.accent
-    ctx.lineWidth = Math.max(1.5, size * 0.06)
-    ctx.stroke()
-    if (!container.opened && !lowPerf) {
-      // 未搜索的容器呼吸发光，替代原来满屏的黄色方块
-      const glow = 0.25 + 0.2 * Math.sin(now / 420 + container.x)
+    if (!container.opened && !low) {
+      const glow = 0.22 + 0.18 * Math.sin(now / 420 + container.x)
       ctx.strokeStyle = `rgba(250, 204, 21, ${glow})`
       ctx.lineWidth = Math.max(2, size * 0.1)
       roundedRect(ctx, screen.x - size * 0.62, screen.y - size * 0.62, size * 1.24, size * 1.24, size * 0.2)
       ctx.stroke()
     }
-    drawEmoji(ctx, container.opened ? '📭' : '📦', screen.x, screen.y, size * 0.62)
+    // 箱体：顶盖 + 箱身 + 锁扣
+    const w = size
+    const h = size * 0.82
+    const top = screen.y - h / 2
+    const left = screen.x - w / 2
+    ctx.fillStyle = container.opened ? 'rgba(51, 65, 85, 0.62)' : '#4a3d28'
+    roundedRect(ctx, left, top, w, h, size * 0.12)
+    ctx.fill()
+    ctx.strokeStyle = container.opened ? 'rgba(148, 163, 184, 0.55)' : art.accent
+    ctx.lineWidth = Math.max(1.5, size * 0.05)
+    ctx.stroke()
+    ctx.fillStyle = container.opened ? 'rgba(30, 41, 59, 0.8)' : '#5f4d31'
+    ctx.fillRect(left + w * 0.08, top + h * 0.26, w * 0.84, Math.max(2, h * 0.1))
+    ctx.fillRect(left + w * 0.08, top + h * 0.58, w * 0.84, Math.max(2, h * 0.1))
+    ctx.fillStyle = container.opened ? '#94a3b8' : '#facc15'
+    ctx.fillRect(screen.x - size * 0.06, top + h * 0.3, size * 0.12, h * 0.24)
+    drawEmoji(ctx, container.opened ? '📭' : '📦', screen.x, screen.y, size * 0.5, dpr)
   }
 }
 
@@ -494,31 +874,32 @@ function drawPickups(
   engine: RaidEngine,
   metrics: RaidRenderMetrics,
   now: number,
-  lowPerf: boolean,
+  low: boolean,
+  dpr: number,
 ): void {
   const tile = metrics.tile
   for (const pickup of engine.pickups) {
     const def = RAID_ITEM_MAP.get(pickup.itemKey)
     if (!def) continue
-    const bob = lowPerf ? 0 : Math.sin(now / 320 + pickup.x * 3) * tile * 0.08
+    const bob = low ? 0 : Math.sin(now / 320 + pickup.x * 3) * tile * 0.08
     const screen = worldToScreen(metrics, pickup.x, pickup.y)
     const color = RARITY_RING[def.rarity] ?? '#94a3b8'
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.7)'
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.72)'
     ctx.beginPath()
-    ctx.arc(screen.x, screen.y - bob * 0.4, tile * 0.34, 0, Math.PI * 2)
+    ctx.arc(screen.x, screen.y - bob * 0.4, tile * 0.35, 0, Math.PI * 2)
     ctx.fill()
     ctx.strokeStyle = color
     ctx.lineWidth = Math.max(1.5, tile * 0.06)
     ctx.stroke()
-    if (!lowPerf && (def.rarity === 'legendary' || def.rarity === 'mythic')) {
+    if (!low && (def.rarity === 'legendary' || def.rarity === 'mythic')) {
       ctx.strokeStyle = color
-      ctx.globalAlpha = 0.35 + 0.25 * Math.sin(now / 240)
+      ctx.globalAlpha = 0.28 + 0.22 * Math.sin(now / 240)
       ctx.beginPath()
-      ctx.arc(screen.x, screen.y - bob * 0.4, tile * 0.5, 0, Math.PI * 2)
+      ctx.arc(screen.x, screen.y - bob * 0.4, tile * 0.52, 0, Math.PI * 2)
       ctx.stroke()
       ctx.globalAlpha = 1
     }
-    drawEmoji(ctx, def.emoji, screen.x, screen.y - bob * 0.5, tile * 0.44)
+    drawEmoji(ctx, def.emoji, screen.x, screen.y - bob * 0.5, tile * 0.42, dpr)
   }
 }
 
@@ -529,7 +910,7 @@ function drawTeam(
   engine: RaidEngine,
   metrics: RaidRenderMetrics,
   now: number,
-  lowPerf: boolean,
+  low: boolean,
 ): void {
   const tile = metrics.tile
   for (let index = 0; index < engine.teammates.length; index += 1) {
@@ -537,52 +918,117 @@ function drawTeam(
     if (!mate || mate.roomId !== engine.roomId) continue
     if (mate.status !== 'active') continue
     const screen = worldToScreen(metrics, mate.x, mate.y)
-    const colors = SPECIES_COLORS[mate.species] ?? SPECIES_COLORS.cat!
+    const colors = paletteFor(mate.species)
     const ring = TEAMMATE_RING[index % TEAMMATE_RING.length] ?? '#34d399'
     const radius = tile * 0.34
 
     ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'
     ctx.beginPath()
-    ctx.ellipse(screen.x, screen.y + radius * 0.9, radius * 0.9, radius * 0.32, 0, 0, Math.PI * 2)
+    ctx.ellipse(screen.x, screen.y + radius * 0.95, radius * 0.9, radius * 0.3, 0, 0, Math.PI * 2)
     ctx.fill()
-    ctx.save()
-    ctx.translate(screen.x, screen.y)
-    ctx.rotate(mate.angle)
-    ctx.beginPath()
-    ctx.ellipse(0, 0, radius * 1.02, radius * 0.88, 0, 0, Math.PI * 2)
-    ctx.fillStyle = colors.body
-    ctx.globalAlpha = 0.92
-    ctx.fill()
-    ctx.globalAlpha = 1
-    ctx.strokeStyle = ring
-    ctx.lineWidth = Math.max(1.5, tile * 0.05)
-    ctx.stroke()
-    ctx.restore()
-    if (!lowPerf) {
+    drawPetBody(ctx, screen.x, screen.y, radius, mate.angle, colors, ring)
+    if (!low) {
       const ping = 0.3 + 0.25 * Math.sin(now / 380 + index)
       ctx.strokeStyle = ring
       ctx.globalAlpha = ping
       ctx.beginPath()
-      ctx.arc(screen.x, screen.y, radius * 1.5, 0, Math.PI * 2)
+      ctx.arc(screen.x, screen.y, radius * 1.55, 0, Math.PI * 2)
       ctx.stroke()
       ctx.globalAlpha = 1
     }
     ctx.fillStyle = 'rgba(226, 232, 240, 0.95)'
-    ctx.font = `${Math.max(10, tile * 0.22)}px sans-serif`
+    ctx.font = `600 ${Math.max(10, tile * 0.2)}px "Inter", system-ui, sans-serif`
     ctx.textAlign = 'center'
-    ctx.fillText(shortName(mate.name), screen.x, screen.y - radius * 1.7)
-    // 队友血条：只画一条，够用于判断是否需要救援
+    ctx.fillText(shortName(mate.name), screen.x, screen.y - radius * 1.9)
     const barW = radius * 2
     const ratio = mate.maxHp > 0 ? Math.max(0, mate.hp / mate.maxHp) : 0
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.8)'
-    ctx.fillRect(screen.x - barW / 2, screen.y + radius * 1.3, barW, Math.max(2, tile * 0.06))
-    ctx.fillStyle = ratio > 0.5 ? ring : ratio > 0.25 ? '#fbbf24' : '#f87171'
-    ctx.fillRect(screen.x - barW / 2, screen.y + radius * 1.3, barW * ratio, Math.max(2, tile * 0.06))
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'
+    ctx.fillRect(screen.x - barW / 2, screen.y + radius * 1.35, barW, Math.max(2, tile * 0.07))
+    ctx.fillStyle = ring
+    ctx.fillRect(screen.x - barW / 2, screen.y + radius * 1.35, barW * ratio, Math.max(2, tile * 0.07))
   }
 }
 
 function shortName(name: string): string {
   return name.length > 6 ? `${name.slice(0, 5)}…` : name
+}
+
+/** 宠物正面/俯视身体：耳朵、尾巴、枪与眼睛都按朝向旋转 */
+function drawPetBody(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  angle: number,
+  colors: { body: string; belly: string; ear: string; accent: string },
+  ring?: string,
+): void {
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(angle)
+  // 尾巴（朝后）
+  ctx.strokeStyle = colors.ear
+  ctx.lineWidth = Math.max(1.5, radius * 0.16)
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(-radius * 0.85, 0)
+  ctx.quadraticCurveTo(-radius * 1.35, -radius * 0.1, -radius * 1.25, -radius * 0.55)
+  ctx.stroke()
+  // 身体
+  ctx.beginPath()
+  ctx.ellipse(0, 0, radius * 1.08, radius * 0.9, 0, 0, Math.PI * 2)
+  ctx.fillStyle = colors.body
+  ctx.fill()
+  // 腹部高光
+  ctx.beginPath()
+  ctx.ellipse(radius * 0.18, radius * 0.12, radius * 0.62, radius * 0.5, 0, 0, Math.PI * 2)
+  ctx.fillStyle = colors.belly
+  ctx.globalAlpha = 0.55
+  ctx.fill()
+  ctx.globalAlpha = 1
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.6)'
+  ctx.lineWidth = Math.max(1.5, radius * 0.12)
+  ctx.stroke()
+  if (ring) {
+    ctx.strokeStyle = ring
+    ctx.lineWidth = Math.max(1.5, radius * 0.08)
+    ctx.beginPath()
+    ctx.ellipse(0, 0, radius * 1.18, radius * 0.98, 0, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+  // 耳朵
+  ctx.fillStyle = colors.ear
+  ctx.beginPath()
+  ctx.moveTo(-radius * 0.52, -radius * 0.52)
+  ctx.lineTo(-radius * 0.9, -radius * 1.3)
+  ctx.lineTo(-radius * 0.08, -radius * 0.76)
+  ctx.closePath()
+  ctx.fill()
+  ctx.beginPath()
+  ctx.moveTo(radius * 0.52, -radius * 0.52)
+  ctx.lineTo(radius * 0.9, -radius * 1.3)
+  ctx.lineTo(radius * 0.08, -radius * 0.76)
+  ctx.closePath()
+  ctx.fill()
+  // 眼睛
+  ctx.fillStyle = '#0f172a'
+  ctx.beginPath()
+  ctx.arc(radius * 0.48, -radius * 0.16, radius * 0.12, 0, Math.PI * 2)
+  ctx.arc(radius * 0.48, radius * 0.22, radius * 0.12, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'
+  ctx.beginPath()
+  ctx.arc(radius * 0.52, -radius * 0.2, radius * 0.04, 0, Math.PI * 2)
+  ctx.arc(radius * 0.52, radius * 0.18, radius * 0.04, 0, Math.PI * 2)
+  ctx.fill()
+  // 枪
+  ctx.fillStyle = '#94a3b8'
+  ctx.fillRect(radius * 0.72, -radius * 0.12, radius * 0.78, radius * 0.24)
+  ctx.fillStyle = '#e2e8f0'
+  ctx.fillRect(radius * 0.82, -radius * 0.04, radius * 0.55, radius * 0.08)
+  ctx.fillStyle = colors.accent
+  ctx.fillRect(radius * 1.42, -radius * 0.08, radius * 0.16, radius * 0.16)
+  ctx.restore()
 }
 
 function drawEnemies(
@@ -591,19 +1037,20 @@ function drawEnemies(
   metrics: RaidRenderMetrics,
   art: RaidMapArt,
   now: number,
-  lowPerf: boolean,
+  low: boolean,
 ): void {
   const tile = metrics.tile
   for (const enemy of engine.enemies) {
     if (enemy.dead) continue
     const screen = worldToScreen(metrics, enemy.x, enemy.y)
     const radius = Math.max(8, enemy.source.radius * tile)
+    const kind = enemy.source.kind
 
-    // 开火预警：远程单位蓄力时画一条到玩家的虚线 + 准星，玩家才来得及走位
-    if (!lowPerf && enemy.telegraph > 0.05 && enemy.source.ranged) {
+    // 开火预警：远程单位蓄力时画虚线 + 准星
+    if (!low && enemy.telegraph > 0.05 && enemy.source.ranged) {
       const playerScreen = worldToScreen(metrics, engine.player.x, engine.player.y)
       ctx.save()
-      ctx.globalAlpha = 0.18 + enemy.telegraph * 0.32
+      ctx.globalAlpha = 0.18 + enemy.telegraph * 0.34
       ctx.strokeStyle = '#fca5a5'
       ctx.lineWidth = Math.max(1, tile * 0.03)
       ctx.setLineDash([tile * 0.2, tile * 0.2])
@@ -613,38 +1060,32 @@ function drawEnemies(
       ctx.stroke()
       ctx.setLineDash([])
       ctx.beginPath()
-      ctx.arc(playerScreen.x, playerScreen.y, radius * (1.4 - enemy.telegraph), 0, Math.PI * 2)
+      ctx.arc(playerScreen.x, playerScreen.y, radius * (1.5 - enemy.telegraph), 0, Math.PI * 2)
       ctx.stroke()
       ctx.restore()
     }
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.42)'
     ctx.beginPath()
-    ctx.ellipse(screen.x, screen.y + radius * 0.92, radius * 0.85, radius * 0.3, 0, 0, Math.PI * 2)
+    ctx.ellipse(screen.x, screen.y + radius * 0.95, radius * 0.9, radius * 0.3, 0, 0, Math.PI * 2)
     ctx.fill()
 
-    // 首领落地光环，精英用一圈细边，普通怪不加装饰（同屏怪多时省性能）
-    if (!lowPerf && (enemy.source.kind === 'boss' || enemy.source.kind === 'elite')) {
+    if (!low) {
       const aura = 0.25 + 0.15 * Math.sin(now / 400 + enemy.source.level)
-      ctx.strokeStyle = enemy.source.kind === 'boss' ? `rgba(251, 191, 36, ${aura})` : `rgba(249, 115, 22, ${aura})`
-      ctx.lineWidth = Math.max(2, radius * 0.18)
-      ctx.beginPath()
-      ctx.arc(screen.x, screen.y, radius * 1.35, 0, Math.PI * 2)
-      ctx.stroke()
+      if (kind === 'boss' || kind === 'elite') {
+        ctx.strokeStyle = kind === 'boss' ? `rgba(251, 191, 36, ${aura})` : `rgba(249, 115, 22, ${aura})`
+        ctx.lineWidth = Math.max(2, radius * 0.16)
+        ctx.beginPath()
+        ctx.arc(screen.x, screen.y, radius * 1.4, 0, Math.PI * 2)
+        ctx.stroke()
+      }
     }
 
     const lunge = enemy.lunge > 0 ? enemy.lunge / 0.26 : 0
     ctx.save()
     ctx.translate(screen.x, screen.y)
     if (lunge > 0) ctx.scale(1 + lunge * 0.18, 1 - lunge * 0.1)
-    ctx.beginPath()
-    ctx.arc(0, 0, radius, 0, Math.PI * 2)
-    ctx.fillStyle = enemy.hitFlash > 0 ? 'rgba(254, 226, 226, 0.95)' : 'rgba(127, 29, 29, 0.6)'
-    ctx.fill()
-    ctx.strokeStyle = enemy.source.kind === 'boss' ? '#fbbf24' : '#f87171'
-    ctx.lineWidth = Math.max(1.5, radius * 0.12)
-    ctx.stroke()
-    drawEmoji(ctx, enemyEmoji(enemy.source.kind), 0, 0, radius * 1.2)
+    drawEnemyBody(ctx, radius, kind, enemy.hitFlash > 0, now)
     ctx.restore()
 
     const barW = radius * 2.3
@@ -653,60 +1094,211 @@ function drawEnemies(
     ctx.fillRect(screen.x - barW / 2, screen.y - radius - tile * 0.3, barW, Math.max(3, tile * 0.07))
     ctx.fillStyle = ratio > 0.5 ? '#4ade80' : ratio > 0.25 ? '#fbbf24' : '#f87171'
     ctx.fillRect(screen.x - barW / 2, screen.y - radius - tile * 0.3, barW * ratio, Math.max(3, tile * 0.07))
-    // 蓄力条叠在血条上，视觉上和血量共用一条宽度
     if (enemy.telegraph > 0.05) {
       ctx.fillStyle = art.accent
-      ctx.globalAlpha = 0.55
+      ctx.globalAlpha = 0.6
       ctx.fillRect(screen.x - barW / 2, screen.y - radius - tile * 0.42, barW * enemy.telegraph, Math.max(2, tile * 0.045))
       ctx.globalAlpha = 1
     }
-    ctx.fillStyle = 'rgba(248, 250, 252, 0.88)'
-    ctx.font = `${Math.max(9, tile * 0.2)}px sans-serif`
+    ctx.fillStyle = 'rgba(248, 250, 252, 0.9)'
+    ctx.font = `600 ${Math.max(9, tile * 0.19)}px "Inter", system-ui, sans-serif`
     ctx.textAlign = 'center'
     ctx.fillText(`${enemy.source.name} Lv.${enemy.source.level}`, screen.x, screen.y - radius - tile * 0.5)
   }
+}
+
+function drawEnemyBody(
+  ctx: CanvasRenderingContext2D,
+  radius: number,
+  kind: string,
+  hitFlash: boolean,
+  now: number,
+): void {
+  const boss = kind === 'boss'
+  const elite = kind === 'elite'
+  const scout = kind === 'scout'
+  const body = hitFlash ? '#ffe4e6' : boss ? '#7f1d1d' : elite ? '#78350f' : scout ? '#3f3f46' : '#7f2f2f'
+  const edge = boss ? '#fbbf24' : elite ? '#fb923c' : scout ? '#a1a1aa' : '#f87171'
+
+  if (boss) {
+    // 首领：六边形重甲 + 旋转尖刺
+    ctx.save()
+    ctx.rotate(now / 2600)
+    ctx.fillStyle = 'rgba(251, 191, 36, 0.18)'
+    for (let i = 0; i < 6; i += 1) {
+      const a = (i / 6) * Math.PI * 2
+      ctx.beginPath()
+      ctx.moveTo(Math.cos(a) * radius * 1.1, Math.sin(a) * radius * 1.1)
+      ctx.lineTo(Math.cos(a + 0.24) * radius * 1.48, Math.sin(a + 0.24) * radius * 1.48)
+      ctx.lineTo(Math.cos(a + 0.48) * radius * 1.1, Math.sin(a + 0.48) * radius * 1.1)
+      ctx.closePath()
+      ctx.fill()
+    }
+    ctx.restore()
+    ctx.beginPath()
+    for (let i = 0; i < 6; i += 1) {
+      const a = (i / 6) * Math.PI * 2 + Math.PI / 6
+      const x = Math.cos(a) * radius
+      const y = Math.sin(a) * radius
+      if (i === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    }
+    ctx.closePath()
+    ctx.fillStyle = body
+    ctx.fill()
+    ctx.strokeStyle = edge
+    ctx.lineWidth = Math.max(2, radius * 0.1)
+    ctx.stroke()
+    // 王冠
+    ctx.fillStyle = edge
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.55, -radius * 0.72)
+    ctx.lineTo(-radius * 0.3, -radius * 1.12)
+    ctx.lineTo(-radius * 0.08, -radius * 0.82)
+    ctx.lineTo(radius * 0.14, -radius * 1.18)
+    ctx.lineTo(radius * 0.36, -radius * 0.82)
+    ctx.lineTo(radius * 0.58, -radius * 1.1)
+    ctx.lineTo(radius * 0.62, -radius * 0.66)
+    ctx.closePath()
+    ctx.fill()
+  } else if (elite) {
+    // 精英：宽肩重甲
+    ctx.fillStyle = body
+    ctx.beginPath()
+    ctx.moveTo(-radius * 1.15, -radius * 0.2)
+    ctx.lineTo(-radius * 0.8, -radius * 0.95)
+    ctx.lineTo(radius * 0.8, -radius * 0.95)
+    ctx.lineTo(radius * 1.15, -radius * 0.2)
+    ctx.lineTo(radius * 0.85, radius * 0.9)
+    ctx.lineTo(-radius * 0.85, radius * 0.9)
+    ctx.closePath()
+    ctx.fill()
+    ctx.strokeStyle = edge
+    ctx.lineWidth = Math.max(1.5, radius * 0.09)
+    ctx.stroke()
+    ctx.fillStyle = 'rgba(251, 146, 60, 0.85)'
+    ctx.fillRect(-radius * 0.7, -radius * 0.62, radius * 0.45, radius * 0.16)
+    ctx.fillRect(radius * 0.25, -radius * 0.62, radius * 0.45, radius * 0.16)
+  } else if (scout) {
+    // 斥候：瘦长兜帽
+    ctx.fillStyle = body
+    ctx.beginPath()
+    ctx.ellipse(0, 0, radius * 0.8, radius, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = edge
+    ctx.lineWidth = Math.max(1.5, radius * 0.08)
+    ctx.stroke()
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'
+    ctx.beginPath()
+    ctx.ellipse(0, -radius * 0.28, radius * 0.52, radius * 0.42, 0, Math.PI, Math.PI * 2)
+    ctx.fill()
+  } else {
+    // 士兵：圆形装甲
+    ctx.fillStyle = body
+    ctx.beginPath()
+    ctx.arc(0, 0, radius, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = edge
+    ctx.lineWidth = Math.max(1.5, radius * 0.1)
+    ctx.stroke()
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.75)'
+    ctx.fillRect(-radius * 0.6, -radius * 0.22, radius * 1.2, radius * 0.3)
+    ctx.fillStyle = '#fca5a5'
+    ctx.fillRect(-radius * 0.45, -radius * 0.16, radius * 0.9, Math.max(1, radius * 0.1))
+  }
+  // 统一的红色目光
+  ctx.fillStyle = boss ? '#fde68a' : '#fecaca'
+  ctx.beginPath()
+  ctx.arc(-radius * 0.26, radius * 0.16, Math.max(1.5, radius * 0.07), 0, Math.PI * 2)
+  ctx.arc(radius * 0.26, radius * 0.16, Math.max(1.5, radius * 0.07), 0, Math.PI * 2)
+  ctx.fill()
+  // 武器
+  ctx.fillStyle = '#cbd5e1'
+  ctx.fillRect(radius * 0.7, -radius * 0.08, radius * 0.6, Math.max(1.5, radius * 0.12))
 }
 
 function drawBullets(
   ctx: CanvasRenderingContext2D,
   engine: RaidEngine,
   metrics: RaidRenderMetrics,
-  lowPerf: boolean,
+  low: boolean,
 ): void {
   const tile = metrics.tile
+  ctx.lineCap = 'round'
   for (const bullet of engine.bullets) {
     const screen = worldToScreen(metrics, bullet.x, bullet.y)
     const radius = Math.max(2, bullet.radius * tile)
     const speed = Math.hypot(bullet.vx, bullet.vy) || 1
     const tx = -bullet.vx / speed
     const ty = -bullet.vy / speed
-    // 拖尾：按元素上色，比原来一个圆点亮得多
-    if (!lowPerf) {
-      const trail = ctx.createLinearGradient(screen.x, screen.y, screen.x + tx * radius * 6, screen.y + ty * radius * 6)
-      trail.addColorStop(0, bullet.color)
-      trail.addColorStop(1, 'rgba(15, 23, 42, 0)')
-      ctx.strokeStyle = trail
-      ctx.lineWidth = radius * 1.5
+    if (!low) {
+      // 拖尾：两层线，外层淡、内层亮，不用 shadowBlur
+      ctx.strokeStyle = bullet.color
+      ctx.globalAlpha = 0.25
+      ctx.lineWidth = radius * 2.6
       ctx.beginPath()
       ctx.moveTo(screen.x, screen.y)
-      ctx.lineTo(screen.x + tx * radius * 6, screen.y + ty * radius * 6)
+      ctx.lineTo(screen.x + tx * radius * 7, screen.y + ty * radius * 7)
       ctx.stroke()
+      ctx.globalAlpha = 0.8
+      ctx.lineWidth = radius * 1.1
+      ctx.beginPath()
+      ctx.moveTo(screen.x, screen.y)
+      ctx.lineTo(screen.x + tx * radius * 5, screen.y + ty * radius * 5)
+      ctx.stroke()
+      ctx.globalAlpha = 1
     }
+    // 弹头：外圈 + 亮芯
+    ctx.fillStyle = bullet.color
     ctx.beginPath()
     ctx.arc(screen.x, screen.y, radius, 0, Math.PI * 2)
-    ctx.fillStyle = bullet.color
-    if (!lowPerf) {
-      ctx.shadowColor = bullet.color
-      ctx.shadowBlur = 10
-    }
     ctx.fill()
-    ctx.shadowBlur = 0
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+    ctx.beginPath()
+    ctx.arc(screen.x + tx * radius * 0.2, screen.y + ty * radius * 0.2, radius * 0.42, 0, Math.PI * 2)
+    ctx.fill()
     if (bullet.skill) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)'
-      ctx.lineWidth = Math.max(1, radius * 0.4)
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)'
+      ctx.lineWidth = Math.max(1, radius * 0.35)
+      ctx.beginPath()
+      ctx.arc(screen.x, screen.y, radius * 1.4, 0, Math.PI * 2)
       ctx.stroke()
     }
   }
+  ctx.lineCap = 'butt'
+}
+
+function drawAimReticle(
+  ctx: CanvasRenderingContext2D,
+  engine: RaidEngine,
+  metrics: RaidRenderMetrics,
+  art: RaidMapArt,
+): void {
+  const aim = engine.input
+  if (aim.aimX === 0 && aim.aimY === 0) return
+  const screen = worldToScreen(metrics, aim.aimX, aim.aimY)
+  const tile = metrics.tile
+  const size = Math.max(5, tile * 0.14)
+  ctx.save()
+  ctx.globalAlpha = 0.62
+  ctx.strokeStyle = art.accent
+  ctx.lineWidth = Math.max(1, tile * 0.03)
+  ctx.beginPath()
+  ctx.arc(screen.x, screen.y, size, 0, Math.PI * 2)
+  ctx.stroke()
+  for (let i = 0; i < 4; i += 1) {
+    const a = (i / 4) * Math.PI * 2
+    ctx.beginPath()
+    ctx.moveTo(screen.x + Math.cos(a) * (size + tile * 0.05), screen.y + Math.sin(a) * (size + tile * 0.05))
+    ctx.lineTo(screen.x + Math.cos(a) * (size + tile * 0.16), screen.y + Math.sin(a) * (size + tile * 0.16))
+    ctx.stroke()
+  }
+  ctx.fillStyle = art.accent
+  ctx.globalAlpha = 0.9
+  ctx.beginPath()
+  ctx.arc(screen.x, screen.y, Math.max(1.2, tile * 0.025), 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
 }
 
 function drawPlayer(
@@ -715,18 +1307,19 @@ function drawPlayer(
   metrics: RaidRenderMetrics,
   art: RaidMapArt,
   now: number,
-  lowPerf: boolean,
+  low: boolean,
+  dpr: number,
 ): void {
   const screen = worldToScreen(metrics, engine.player.x, engine.player.y)
   const tile = metrics.tile
-  const colors = SPECIES_COLORS[engine.species] ?? SPECIES_COLORS.cat!
-  const radius = tile * 0.36
+  const colors = paletteFor(engine.species)
+  const radius = tile * 0.37
   const angle = engine.player.angle
   const hpRatio = engine.maxHp > 0 ? engine.hp / engine.maxHp : 0
 
   ctx.fillStyle = 'rgba(0, 0, 0, 0.42)'
   ctx.beginPath()
-  ctx.ellipse(screen.x, screen.y + radius * 0.95, radius, radius * 0.32, 0, 0, Math.PI * 2)
+  ctx.ellipse(screen.x, screen.y + radius * 0.98, radius, radius * 0.32, 0, 0, Math.PI * 2)
   ctx.fill()
 
   // 增伤光环：双层旋转刻痕
@@ -734,13 +1327,13 @@ function drawPlayer(
     ctx.save()
     ctx.translate(screen.x, screen.y)
     ctx.rotate(now / 700)
-    ctx.strokeStyle = 'rgba(253, 224, 71, 0.85)'
-    ctx.lineWidth = Math.max(1.5, tile * 0.05)
+    ctx.strokeStyle = 'rgba(253, 224, 71, 0.9)'
+    ctx.lineWidth = Math.max(1.5, tile * 0.055)
     ctx.beginPath()
-    ctx.arc(0, 0, radius * 1.7, 0, Math.PI * 1.2)
+    ctx.arc(0, 0, radius * 1.8, 0, Math.PI * 1.2)
     ctx.stroke()
     ctx.beginPath()
-    ctx.arc(0, 0, radius * 1.7, Math.PI * 1.4, Math.PI * 2)
+    ctx.arc(0, 0, radius * 1.8, Math.PI * 1.4, Math.PI * 2)
     ctx.stroke()
     ctx.restore()
   }
@@ -754,67 +1347,45 @@ function drawPlayer(
     ctx.beginPath()
     for (let i = 0; i < 6; i += 1) {
       const a = (i / 6) * Math.PI * 2 + now / 2600
-      const x = Math.cos(a) * radius * 1.7
-      const y = Math.sin(a) * radius * 1.7
+      const x = Math.cos(a) * radius * 1.75
+      const y = Math.sin(a) * radius * 1.75
       if (i === 0) ctx.moveTo(x, y)
       else ctx.lineTo(x, y)
     }
     ctx.closePath()
     ctx.stroke()
-    ctx.fillStyle = 'rgba(96, 165, 250, 0.14)'
+    ctx.fillStyle = 'rgba(96, 165, 250, 0.15)'
     ctx.fill()
     ctx.restore()
   }
 
-  ctx.save()
-  ctx.translate(screen.x, screen.y)
-  ctx.rotate(angle)
-  ctx.beginPath()
-  ctx.ellipse(0, 0, radius * 1.05, radius * 0.9, 0, 0, Math.PI * 2)
-  ctx.fillStyle = colors.body
-  ctx.fill()
-  ctx.strokeStyle = 'rgba(15, 23, 42, 0.55)'
-  ctx.lineWidth = Math.max(1.5, radius * 0.12)
-  ctx.stroke()
-  // 耳朵
-  ctx.beginPath()
-  ctx.moveTo(-radius * 0.55, -radius * 0.5)
-  ctx.lineTo(-radius * 0.95, -radius * 1.35)
-  ctx.lineTo(-radius * 0.1, -radius * 0.8)
-  ctx.closePath()
-  ctx.fillStyle = colors.ear
-  ctx.fill()
-  ctx.beginPath()
-  ctx.moveTo(radius * 0.55, -radius * 0.5)
-  ctx.lineTo(radius * 0.95, -radius * 1.35)
-  ctx.lineTo(radius * 0.1, -radius * 0.8)
-  ctx.closePath()
-  ctx.fill()
-  ctx.beginPath()
-  ctx.arc(radius * 0.42, -radius * 0.12, radius * 0.12, 0, Math.PI * 2)
-  ctx.arc(radius * 0.42, radius * 0.22, radius * 0.12, 0, Math.PI * 2)
-  ctx.fillStyle = '#0f172a'
-  ctx.fill()
-  // 枪管 + 枪口准星
-  ctx.fillStyle = '#94a3b8'
-  ctx.fillRect(radius * 0.8, -radius * 0.1, radius * 0.75, radius * 0.2)
-  ctx.fillStyle = art.accent
-  ctx.fillRect(radius * 1.42, -radius * 0.05, radius * 0.14, radius * 0.1)
-  ctx.restore()
+  // 走动时轻微上下浮动，避免角色像贴纸
+  const bob = low ? 0 : Math.sin(now / 140) * radius * 0.05
+  drawPetBody(ctx, screen.x, screen.y + bob, radius, angle, colors)
 
-  // 低血时的角色描边泛红，比只读数字更直观
-  if (hpRatio < 0.3 && !lowPerf) {
+  // 枪口准星
+  const muzzleX = screen.x + Math.cos(angle) * radius * 1.56
+  const muzzleY = screen.y + Math.sin(angle) * radius * 1.56
+  ctx.strokeStyle = art.accent
+  ctx.globalAlpha = 0.7
+  ctx.lineWidth = Math.max(1, tile * 0.03)
+  ctx.beginPath()
+  ctx.arc(muzzleX, muzzleY, radius * 0.16, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.globalAlpha = 1
+
+  if (hpRatio < 0.3 && !low) {
     ctx.strokeStyle = `rgba(248, 113, 113, ${0.4 + 0.3 * Math.sin(now / 220)})`
     ctx.lineWidth = Math.max(2, tile * 0.06)
     ctx.beginPath()
-    ctx.arc(screen.x, screen.y, radius * 1.35, 0, Math.PI * 2)
+    ctx.arc(screen.x, screen.y, radius * 1.4, 0, Math.PI * 2)
     ctx.stroke()
   }
 
   ctx.fillStyle = 'rgba(226, 232, 240, 0.95)'
-  ctx.font = `${Math.max(10, tile * 0.22)}px sans-serif`
+  ctx.font = `600 ${Math.max(10, tile * 0.21)}px "Inter", system-ui, sans-serif`
   ctx.textAlign = 'center'
-  ctx.fillText('你', screen.x, screen.y + radius * 2)
+  ctx.fillText('你', screen.x, screen.y + radius * 2.05)
 }
 
 /* ---------- 特效 / 飘字 / 命中标记 ---------- */
@@ -824,6 +1395,7 @@ function drawEffects(
   effects: readonly RaidEffect[],
   metrics: RaidRenderMetrics,
   now: number,
+  low: boolean,
 ): void {
   const tile = metrics.tile
   for (const effect of effects) {
@@ -837,18 +1409,135 @@ function drawEffects(
       ctx.translate(screen.x, screen.y)
       ctx.rotate(effect.age * 3)
       ctx.strokeStyle = effect.color
-      ctx.globalAlpha = fade * 0.9
+      ctx.globalAlpha = fade * 0.95
       ctx.lineWidth = Math.max(1.5, tile * 0.05)
       ctx.beginPath()
       ctx.arc(0, 0, radius * (0.4 + t * 0.7), 0, Math.PI * 2)
       ctx.stroke()
+      ctx.strokeStyle = effect.accent
+      ctx.globalAlpha = fade * 0.65
+      ctx.beginPath()
+      ctx.arc(0, 0, radius * (0.2 + t * 0.45), 0, Math.PI * 2)
+      ctx.stroke()
       for (let i = 0; i < 6; i += 1) {
         const a = (i / 6) * Math.PI * 2
+        ctx.strokeStyle = effect.accent
+        ctx.globalAlpha = fade * 0.8
         ctx.beginPath()
         ctx.moveTo(Math.cos(a) * radius * 0.42, Math.sin(a) * radius * 0.42)
-        ctx.lineTo(Math.cos(a) * radius * 0.62, Math.sin(a) * radius * 0.62)
+        ctx.lineTo(Math.cos(a) * radius * (0.66 + t * 0.2), Math.sin(a) * radius * (0.66 + t * 0.2))
         ctx.stroke()
       }
+      ctx.restore()
+      ctx.globalAlpha = 1
+    } else if (effect.kind === 'nova') {
+      // 技能起手 / 爆发：亮色能量环 + 放射线
+      ctx.save()
+      ctx.translate(screen.x, screen.y)
+      ctx.globalCompositeOperation = 'lighter'
+      ctx.strokeStyle = effect.color
+      ctx.globalAlpha = fade * 0.9
+      ctx.lineWidth = Math.max(2, tile * 0.08)
+      ctx.beginPath()
+      ctx.arc(0, 0, radius * (0.25 + t * 0.95), 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.strokeStyle = effect.accent
+      ctx.globalAlpha = fade * 0.75
+      ctx.lineWidth = Math.max(1, tile * 0.035)
+      for (let i = 0; i < 8; i += 1) {
+        const a = (i / 8) * Math.PI * 2 + effect.age * 1.5
+        ctx.beginPath()
+        ctx.moveTo(Math.cos(a) * radius * 0.3, Math.sin(a) * radius * 0.3)
+        ctx.lineTo(Math.cos(a) * radius * (0.7 + t * 0.5), Math.sin(a) * radius * (0.7 + t * 0.5))
+        ctx.stroke()
+      }
+      ctx.globalCompositeOperation = 'source-over'
+      ctx.restore()
+      ctx.globalAlpha = 1
+    } else if (effect.kind === 'shards') {
+      // 冰晶 / 圣光碎片：固定角度外扩
+      ctx.save()
+      ctx.translate(screen.x, screen.y)
+      ctx.rotate(effect.angle)
+      ctx.fillStyle = effect.color
+      for (let i = 0; i < 7; i += 1) {
+        const a = (i / 7) * Math.PI * 2 + effect.id * 0.7
+        const dist = radius * (0.25 + t * 0.9)
+        const x = Math.cos(a) * dist
+        const y = Math.sin(a) * dist
+        ctx.globalAlpha = fade
+        ctx.beginPath()
+        ctx.moveTo(x, y - tile * 0.14)
+        ctx.lineTo(x + tile * 0.07, y)
+        ctx.lineTo(x, y + tile * 0.14)
+        ctx.lineTo(x - tile * 0.07, y)
+        ctx.closePath()
+        ctx.fill()
+      }
+      ctx.restore()
+      ctx.globalAlpha = 1
+    } else if (effect.kind === 'pillar') {
+      // 光柱：角色脚下的垂直能量，增益 / 治疗 / 护盾都靠它读出来
+      const width = radius * 0.9
+      const height = radius * 5
+      ctx.save()
+      ctx.translate(screen.x, screen.y)
+      ctx.globalCompositeOperation = 'lighter'
+      const grad = ctx.createLinearGradient(0, 0, 0, -height)
+      grad.addColorStop(0, effect.color)
+      grad.addColorStop(0.55, effect.accent)
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)')
+      ctx.fillStyle = grad
+      ctx.globalAlpha = fade * 0.34
+      ctx.beginPath()
+      ctx.moveTo(-width / 2, 0)
+      ctx.lineTo(-width * 0.16, -height)
+      ctx.lineTo(width * 0.16, -height)
+      ctx.lineTo(width / 2, 0)
+      ctx.closePath()
+      ctx.fill()
+      ctx.globalAlpha = fade * 0.7
+      ctx.strokeStyle = effect.accent
+      ctx.lineWidth = Math.max(1.5, tile * 0.04)
+      ctx.beginPath()
+      ctx.ellipse(0, 0, width * 0.5, width * 0.18, 0, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.globalCompositeOperation = 'source-over'
+      ctx.restore()
+      ctx.globalAlpha = 1
+    } else if (effect.kind === 'beam') {
+      const targetScreen = { x: metrics.offsetX + effect.tx * tile, y: metrics.offsetY + effect.ty * tile }
+      ctx.save()
+      ctx.globalCompositeOperation = 'lighter'
+      ctx.strokeStyle = effect.color
+      ctx.globalAlpha = fade * 0.32
+      ctx.lineWidth = Math.max(4, tile * 0.16)
+      ctx.lineCap = 'round'
+      ctx.beginPath()
+      ctx.moveTo(screen.x, screen.y)
+      ctx.lineTo(targetScreen.x, targetScreen.y)
+      ctx.stroke()
+      ctx.globalAlpha = fade
+      ctx.strokeStyle = effect.accent
+      ctx.lineWidth = Math.max(1.5, tile * 0.05)
+      ctx.beginPath()
+      ctx.moveTo(screen.x, screen.y)
+      ctx.lineTo(targetScreen.x, targetScreen.y)
+      ctx.stroke()
+      // 闪电分叉
+      ctx.strokeStyle = effect.color
+      ctx.lineWidth = Math.max(1, tile * 0.035)
+      for (let i = 1; i < 4; i += 1) {
+        const t0 = i / 4
+        const bx = screen.x + (targetScreen.x - screen.x) * t0
+        const by = screen.y + (targetScreen.y - screen.y) * t0
+        const off = (i % 2 === 0 ? 1 : -1) * tile * 0.22
+        ctx.beginPath()
+        ctx.moveTo(bx, by)
+        ctx.lineTo(bx + off, by - tile * 0.16)
+        ctx.stroke()
+      }
+      ctx.globalCompositeOperation = 'source-over'
       ctx.restore()
       ctx.globalAlpha = 1
     } else if (effect.kind === 'cone') {
@@ -859,12 +1548,21 @@ function drawEffects(
       gradient.addColorStop(0, effect.accent)
       gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
       ctx.fillStyle = gradient
-      ctx.globalAlpha = fade * 0.75
+      ctx.globalAlpha = fade * 0.8
       ctx.beginPath()
       ctx.moveTo(0, 0)
-      ctx.arc(0, 0, radius * (0.6 + t * 0.5), -0.45, 0.45)
+      ctx.arc(0, 0, radius * (0.6 + t * 0.55), -0.5, 0.5)
       ctx.closePath()
       ctx.fill()
+      ctx.strokeStyle = effect.color
+      ctx.globalAlpha = fade
+      ctx.lineWidth = Math.max(1.5, tile * 0.04)
+      for (let i = -1; i <= 1; i += 1) {
+        ctx.beginPath()
+        ctx.moveTo(0, 0)
+        ctx.lineTo(Math.cos(i * 0.32) * radius * (0.7 + t * 0.4), Math.sin(i * 0.32) * radius * (0.7 + t * 0.4))
+        ctx.stroke()
+      }
       ctx.restore()
       ctx.globalAlpha = 1
     } else if (effect.kind === 'slash') {
@@ -873,9 +1571,15 @@ function drawEffects(
       ctx.rotate(effect.angle)
       ctx.strokeStyle = effect.accent
       ctx.globalAlpha = fade
-      ctx.lineWidth = Math.max(2, tile * 0.1 * fade)
+      ctx.lineWidth = Math.max(2, tile * 0.12 * fade)
       ctx.beginPath()
-      ctx.arc(0, 0, radius, -0.7, 0.7)
+      ctx.arc(0, 0, radius, -0.75, 0.75)
+      ctx.stroke()
+      ctx.strokeStyle = effect.color
+      ctx.globalAlpha = fade * 0.6
+      ctx.lineWidth = Math.max(1, tile * 0.05)
+      ctx.beginPath()
+      ctx.arc(0, 0, radius * 0.8, -0.6, 0.9)
       ctx.stroke()
       ctx.restore()
       ctx.globalAlpha = 1
@@ -894,30 +1598,30 @@ function drawEffects(
       ctx.stroke()
       ctx.globalAlpha = 1
     } else if (effect.kind === 'mist') {
-      ctx.globalAlpha = fade * 0.5
+      ctx.globalAlpha = fade * 0.55
       ctx.fillStyle = effect.color
-      for (let i = 0; i < 6; i += 1) {
-        const a = (i / 6) * Math.PI * 2 + effect.age
+      for (let i = 0; i < 7; i += 1) {
+        const a = (i / 7) * Math.PI * 2 + effect.age
         ctx.beginPath()
-        ctx.arc(screen.x + Math.cos(a) * radius * t, screen.y + Math.sin(a) * radius * t, radius * 0.3, 0, Math.PI * 2)
+        ctx.arc(screen.x + Math.cos(a) * radius * t, screen.y + Math.sin(a) * radius * t, radius * 0.32, 0, Math.PI * 2)
         ctx.fill()
       }
       ctx.globalAlpha = 1
     } else if (effect.kind === 'aura' || effect.kind === 'shield') {
       ctx.strokeStyle = effect.color
       ctx.globalAlpha = fade
-      ctx.lineWidth = Math.max(2, tile * 0.07)
+      ctx.lineWidth = Math.max(2, tile * 0.075)
       ctx.beginPath()
-      ctx.arc(screen.x, screen.y, radius * (1 - t * 0.35), 0, Math.PI * 2)
+      ctx.arc(screen.x, screen.y, radius * (1 - t * 0.3), 0, Math.PI * 2)
       ctx.stroke()
       ctx.fillStyle = effect.accent
-      ctx.globalAlpha = fade * 0.18
+      ctx.globalAlpha = fade * 0.2
       ctx.fill()
       ctx.globalAlpha = 1
     } else if (effect.kind === 'heal') {
       ctx.fillStyle = effect.color
-      for (let i = 0; i < 7; i += 1) {
-        const a = (i / 7) * Math.PI * 2
+      for (let i = 0; i < 8; i += 1) {
+        const a = (i / 8) * Math.PI * 2
         const rise = t * radius
         ctx.globalAlpha = fade
         ctx.beginPath()
@@ -939,7 +1643,7 @@ function drawEffects(
       ctx.arc(screen.x, screen.y, radius * (0.3 + t), 0, Math.PI * 2)
       ctx.stroke()
       ctx.fillStyle = effect.accent
-      ctx.globalAlpha = fade * 0.28
+      ctx.globalAlpha = fade * 0.3
       ctx.beginPath()
       ctx.arc(screen.x, screen.y, radius * (0.2 + t * 0.8), 0, Math.PI * 2)
       ctx.fill()
@@ -952,9 +1656,18 @@ function drawEffects(
       ctx.globalAlpha = fade
       ctx.beginPath()
       ctx.moveTo(0, 0)
-      ctx.lineTo(radius * 1.2, -radius * 0.45)
-      ctx.lineTo(radius * 1.6, 0)
-      ctx.lineTo(radius * 1.2, radius * 0.45)
+      ctx.lineTo(radius * 1.3, -radius * 0.5)
+      ctx.lineTo(radius * 1.9, 0)
+      ctx.lineTo(radius * 1.3, radius * 0.5)
+      ctx.closePath()
+      ctx.fill()
+      ctx.fillStyle = effect.accent
+      ctx.globalAlpha = fade * 0.8
+      ctx.beginPath()
+      ctx.moveTo(0, 0)
+      ctx.lineTo(radius * 0.9, -radius * 0.24)
+      ctx.lineTo(radius * 1.2, 0)
+      ctx.lineTo(radius * 0.9, radius * 0.24)
       ctx.closePath()
       ctx.fill()
       ctx.restore()
@@ -1016,7 +1729,7 @@ function drawHitMarkers(
     const gap = tile * 0.14 + t * tile * 0.12
     ctx.strokeStyle = marker.crit ? '#fde68a' : '#f8fafc'
     ctx.globalAlpha = 1 - t
-    ctx.lineWidth = Math.max(1.5, tile * (marker.crit ? 0.06 : 0.04))
+    ctx.lineWidth = Math.max(1.5, tile * (marker.crit ? 0.06 : 0.045))
     for (let i = 0; i < 4; i += 1) {
       const angle = Math.PI / 4 + (i / 2) * Math.PI
       ctx.beginPath()
@@ -1039,16 +1752,44 @@ function drawFloats(
     const screen = worldToScreen(metrics, float.x, float.y)
     const size = Math.max(11, tile * 0.26 * float.size)
     ctx.globalAlpha = 1 - t * t
-    ctx.font = `700 ${size}px "Inter", system-ui, sans-serif`
+    ctx.font = `800 ${size}px "Inter", system-ui, sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.lineWidth = Math.max(2, size * 0.16)
-    ctx.strokeStyle = 'rgba(2, 6, 23, 0.85)'
+    ctx.lineWidth = Math.max(2, size * 0.18)
+    ctx.strokeStyle = 'rgba(2, 6, 23, 0.9)'
     ctx.strokeText(float.text, screen.x, screen.y - t * tile * 0.5)
     ctx.fillStyle = float.color
     ctx.fillText(float.text, screen.x, screen.y - t * tile * 0.5)
     ctx.globalAlpha = 1
   }
+}
+
+function drawSkillBanner(
+  ctx: CanvasRenderingContext2D,
+  engine: RaidEngine,
+  metrics: RaidRenderMetrics,
+): void {
+  const banner = engine.skillBanner
+  if (!banner) return
+  const t = banner.age / banner.life
+  const screen = worldToScreen(metrics, engine.player.x, engine.player.y)
+  const rise = metricTile(metrics) * (0.9 + t * 1.1)
+  const size = Math.max(14, metricTile(metrics) * 0.34)
+  ctx.save()
+  ctx.globalAlpha = Math.max(0, 1 - t * t)
+  ctx.font = `800 ${size}px "Inter", system-ui, sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.lineWidth = Math.max(3, size * 0.2)
+  ctx.strokeStyle = 'rgba(2, 6, 23, 0.9)'
+  ctx.strokeText(banner.text, screen.x, screen.y - rise)
+  ctx.fillStyle = banner.color
+  ctx.fillText(banner.text, screen.x, screen.y - rise)
+  ctx.restore()
+}
+
+function metricTile(metrics: RaidRenderMetrics): number {
+  return metrics.tile
 }
 
 function drawAmbient(
@@ -1084,20 +1825,21 @@ function drawRoomLight(
   metrics: RaidRenderMetrics,
   engine: RaidEngine,
   now: number,
-  lowPerf: boolean,
+  low: boolean,
+  dpr: number,
 ): void {
   const center = worldToScreen(metrics, engine.player.x, engine.player.y)
-  const radius = Math.max(roomRect.w, roomRect.h) * 0.7
-  // 以玩家为中心的战术手电：房间暗角由此产生，而不是全屏压黑
-  const light = ctx.createRadialGradient(center.x, center.y, radius * 0.18, center.x, center.y, radius)
-  light.addColorStop(0, 'rgba(0, 0, 0, 0)')
-  light.addColorStop(0.55, `rgba(2, 6, 20, ${0.18 + art.vignette * 0.1})`)
-  light.addColorStop(1, `rgba(2, 6, 20, ${0.42 + art.vignette * 0.4})`)
-  ctx.fillStyle = light
-  ctx.fillRect(roomRect.x, roomRect.y, roomRect.w, roomRect.h)
-  if (!lowPerf) {
+  const radius = Math.max(roomRect.w, roomRect.h) * 0.72
+  const key = `${art.key}|${Math.round(roomRect.w)}x${Math.round(roomRect.h)}|${Math.round(radius)}|${Math.round(dpr * 100)}`
+  if (lightCache.key !== key || !lightCache.canvas) {
+    lightCache = { key, canvas: buildLight(radius, art, dpr) }
+  }
+  if (lightCache.canvas) {
+    ctx.drawImage(lightCache.canvas, center.x - radius, center.y - radius, radius * 2, radius * 2)
+  }
+  if (!low) {
     ctx.fillStyle = art.light
-    ctx.globalAlpha = 0.6 + 0.12 * Math.sin(now / 1600)
+    ctx.globalAlpha = 0.55 + 0.1 * Math.sin(now / 1600)
     ctx.fillRect(roomRect.x, roomRect.y, roomRect.w, roomRect.h)
     ctx.globalAlpha = 1
   }
@@ -1108,15 +1850,15 @@ function drawVignette(
   width: number,
   height: number,
   art: RaidMapArt,
+  dpr: number,
 ): void {
-  const vignette = ctx.createRadialGradient(
-    width / 2, height / 2, Math.min(width, height) * 0.32,
-    width / 2, height / 2, Math.min(width, height) * 0.82,
-  )
-  vignette.addColorStop(0, 'rgba(0, 0, 0, 0)')
-  vignette.addColorStop(1, `rgba(0, 0, 0, ${art.vignette})`)
-  ctx.fillStyle = vignette
-  ctx.fillRect(0, 0, width, height)
+  const key = `v|${art.key}|${Math.round(width)}x${Math.round(height)}|${Math.round(dpr * 100)}`
+  if (vignetteCache.key !== key || !vignetteCache.canvas) {
+    vignetteCache = { key, canvas: buildVignette(width, height, art, dpr) }
+  }
+  if (vignetteCache.canvas) {
+    ctx.drawImage(vignetteCache.canvas, 0, 0, width, height)
+  }
 }
 
 function drawScreenFlash(
@@ -1138,7 +1880,6 @@ function drawScreenFlash(
   }
   const hpRatio = engine.maxHp > 0 ? engine.hp / engine.maxHp : 1
   if (hpRatio < 0.25 && !engine.ended) {
-    // 濒死：红色呼吸边光，提醒该喝药或撤
     const pulse = 0.12 + 0.1 * Math.sin(now / 320)
     const edge = ctx.createRadialGradient(
       width / 2, height / 2, Math.min(width, height) * 0.34,
@@ -1149,6 +1890,27 @@ function drawScreenFlash(
     ctx.fillStyle = edge
     ctx.fillRect(0, 0, width, height)
   }
+}
+
+function drawSkillFlash(
+  ctx: CanvasRenderingContext2D,
+  engine: RaidEngine,
+  width: number,
+  height: number,
+): void {
+  const flash = engine.skillFlash
+  if (!flash || flash.ms <= 0) return
+  const ratio = Math.min(1, flash.ms / flash.life)
+  ctx.save()
+  ctx.globalAlpha = ratio * 0.16
+  ctx.fillStyle = flash.color
+  ctx.fillRect(0, 0, width, height)
+  // 边框强化，技能释放瞬间整屏「闪一下」
+  ctx.globalAlpha = ratio * 0.5
+  ctx.strokeStyle = flash.color
+  ctx.lineWidth = Math.max(6, Math.min(width, height) * 0.02)
+  ctx.strokeRect(0, 0, width, height)
+  ctx.restore()
 }
 
 function drawHurtCompass(
@@ -1178,7 +1940,7 @@ function drawHurtCompass(
 }
 
 /* ============================================================
-   小地图（DOM 浮层里的独立 canvas，位置由 CSS 控制，不再占用战斗画面）
+   小地图
    ============================================================ */
 
 export function renderMinimap(
@@ -1190,7 +1952,6 @@ export function renderMinimap(
 ): void {
   const art = getMapArt(engine.map.key)
   const map = engine.map
-  // 竖屏会隐藏小地图浮层（rect 为 0），此时不画，否则格子算出负半径
   if (width < 40 || height < 40) return
   ctx.clearRect(0, 0, width, height)
   ctx.fillStyle = art.minimap.bg
@@ -1205,7 +1966,6 @@ export function renderMinimap(
 
   ctx.strokeStyle = art.minimap.grid
   ctx.lineWidth = 1
-  // 走廊：先把相邻房间连起来，形状才像「地图」而不是格子
   for (const room of map.rooms) {
     for (const neighbor of room.neighbors) {
       const other = map.rooms[neighbor]
@@ -1235,14 +1995,13 @@ export function renderMinimap(
               ? '#c084fc'
               : art.minimap.room
     ctx.fillStyle = base
-    ctx.globalAlpha = isCurrent ? 1 : cleared ? 0.6 : 0.28
+    ctx.globalAlpha = isCurrent ? 1 : cleared ? 0.65 : 0.3
     ctx.fillRect(x, y, size, size)
     ctx.globalAlpha = 1
     if (isCurrent) {
       ctx.strokeStyle = art.minimap.current
       ctx.lineWidth = 1.5
       ctx.strokeRect(x - 1, y - 1, size + 2, size + 2)
-      // 当前位置脉冲点
       ctx.fillStyle = art.minimap.current
       ctx.globalAlpha = 0.55 + 0.45 * Math.sin(now / 320)
       ctx.beginPath()
@@ -1252,20 +2011,24 @@ export function renderMinimap(
     }
   }
 
-  // 撤离点标记
   for (const extract of map.extracts) {
     const room = map.rooms[extract.roomId]
     if (!room) continue
     const x = originX + room.col * cell + cell * 0.5
     const y = originY + room.row * cell + cell * 0.5
     ctx.strokeStyle = '#bae6fd'
-    ctx.lineWidth = 1.2
+    ctx.lineWidth = 1.3
     ctx.beginPath()
-    ctx.arc(x, y, cell * 0.2, 0, Math.PI * 2)
+    ctx.arc(x, y, cell * 0.22, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(x - cell * 0.1, y)
+    ctx.lineTo(x + cell * 0.1, y)
+    ctx.moveTo(x, y - cell * 0.1)
+    ctx.lineTo(x, y + cell * 0.1)
     ctx.stroke()
   }
 
-  // 队友位置（同房间才有意义，但小地图上标房间即可）
   for (let index = 0; index < engine.teammates.length; index += 1) {
     const mate = engine.teammates[index]
     if (!mate || mate.status !== 'active') continue

@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import api, { getToken } from '../lib/api'
+import { onMediaQueryChange } from '../lib/mediaQuery'
 import type { ThemesView } from '../types/theme'
 
 type Theme = 'light' | 'dark' | 'auto'
@@ -125,16 +126,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [theme])
 
   useEffect(() => {
-    const mql = window.matchMedia('(prefers-color-scheme: dark)')
-    const handler = () => {
+    const handler = (): void => {
       if (theme === 'auto') {
         const resolved = resolveTheme('auto')
         setResolvedTheme(resolved)
         document.documentElement.setAttribute('data-theme', resolved)
       }
     }
-    mql.addEventListener('change', handler)
-    return () => mql.removeEventListener('change', handler)
+    return onMediaQueryChange('(prefers-color-scheme: dark)', handler)
   }, [theme])
 
   // 已佩戴主题变化时同步 ref 与属性（试穿中则保持试穿主题，由 startPreview/endPreview 接管）

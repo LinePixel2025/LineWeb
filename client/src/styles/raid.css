@@ -4,7 +4,8 @@
    对局视觉走独立战术暗色体系（--raid-* 变量），大厅沿用全站 --gh-* 令牌
    ============================================================= */
 
-.gh-raid-stage {
+.gh-raid-stage,
+.gh-raid-page {
   --raid-ink: #05080f;
   --raid-glass: rgba(8, 14, 26, 0.72);
   --raid-glass-soft: rgba(8, 14, 26, 0.5);
@@ -1645,4 +1646,642 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+/* =============================================================
+   2026-11 移动端 / 旧设备适配 + 战术背包
+   ============================================================= */
+
+/* ---------- 技能不可用原因 / 快捷按钮文字 ---------- */
+
+.gh-raid-skill-meta em.is-danger { color: #fca5a5; }
+.gh-raid-skill.is-lack-mp { border-color: rgba(96, 165, 250, 0.55); }
+.gh-raid-skill.is-lack-mp .gh-raid-skill-emoji { opacity: 0.72; }
+
+.gh-raid-quick-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  line-height: 1;
+}
+
+.gh-raid-quick-btn em {
+  font-style: normal;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  opacity: 0.72;
+}
+
+.gh-raid-ctainer-head {
+  width: 100%;
+  margin: 0 0 3px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+/* ---------- 战术背包入口 ---------- */
+
+.gh-raid-bag {
+  position: absolute;
+  left: max(12px, env(safe-area-inset-left));
+  top: 150px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--raid-line-strong);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(14, 30, 52, 0.92), rgba(4, 9, 18, 0.88));
+  color: var(--raid-text);
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.46);
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.gh-raid-bag:hover { border-color: var(--raid-cyan); }
+.gh-raid-bag-icon { font-size: 20px; line-height: 1; }
+.gh-raid-bag-text { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.gh-raid-bag-text b { font-size: 12px; letter-spacing: 0.06em; }
+.gh-raid-bag-text em {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--raid-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-raid-stage[data-layout='touch'] .gh-raid-bag {
+  top: auto;
+  bottom: calc(18px + 118px);
+  left: max(14px, env(safe-area-inset-left));
+  padding: 9px 12px;
+}
+
+/* ---------- 战术背包面板 ---------- */
+
+.gh-raid-inv {
+  position: fixed;
+  pointer-events: auto;
+  touch-action: auto;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(2, 6, 18, 0.76);
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+  overflow: auto;
+}
+
+.gh-raid-inv-card {
+  width: min(1080px, 96vw);
+  max-height: min(88vh, 880px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--raid-line-strong);
+  border-radius: 18px;
+  background:
+    radial-gradient(120% 90% at 12% 0%, rgba(56, 189, 248, 0.12), transparent 55%),
+    linear-gradient(180deg, #0a1220, #060a12);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(148, 163, 184, 0.08);
+  color: var(--raid-text);
+  overflow: hidden;
+}
+
+.gh-raid-inv-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.gh-raid-inv-eyebrow {
+  margin: 0 0 4px;
+  font-size: 9.5px;
+  letter-spacing: 0.2em;
+  color: var(--raid-muted);
+}
+
+.gh-raid-inv-head h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  letter-spacing: 0.02em;
+}
+
+.gh-raid-inv-sub {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--raid-muted);
+  line-height: 1.55;
+}
+
+.gh-raid-inv-close {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--raid-line);
+  background: rgba(8, 14, 26, 0.7);
+  color: var(--raid-text);
+  font-size: 16px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.gh-raid-inv-close:hover { border-color: var(--raid-danger); color: #fca5a5; }
+
+.gh-raid-inv-notice {
+  margin: 0;
+  padding: 8px 20px;
+  font-size: 12px;
+  color: #a7f3d0;
+  background: rgba(16, 185, 129, 0.1);
+  border-bottom: 1px solid rgba(16, 185, 129, 0.18);
+}
+
+.gh-raid-inv-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px 16px;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.gh-raid-inv-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 180px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: rgba(4, 9, 18, 0.62);
+}
+
+.gh-raid-inv-panel.is-safe { border-color: rgba(74, 222, 128, 0.32); background: rgba(6, 22, 16, 0.55); }
+
+.gh-raid-inv-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.gh-raid-inv-panel-head h3 { margin: 0 0 2px; font-size: 14px; }
+.gh-raid-inv-panel-head span { font-size: 10px; color: var(--raid-muted); line-height: 1.45; }
+.gh-raid-inv-count { text-align: right; flex: none; }
+.gh-raid-inv-count b { display: block; font-size: 14px; font-variant-numeric: tabular-nums; }
+.gh-raid-inv-count em { font-style: normal; font-size: 9.5px; color: var(--raid-muted); }
+
+.gh-raid-inv-empty {
+  margin: auto;
+  padding: 22px 8px;
+  font-size: 11.5px;
+  color: var(--raid-muted);
+  text-align: center;
+}
+
+.gh-raid-inv-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+  align-content: start;
+}
+
+.gh-raid-inv-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 82px;
+  padding: 8px 9px;
+  border: 1px solid var(--item-color, rgba(148, 163, 184, 0.4));
+  border-radius: 10px;
+  background: rgba(8, 14, 26, 0.8);
+  color: var(--raid-text);
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.gh-raid-inv-item:hover { transform: translateY(-1px); }
+.gh-raid-inv-item.is-active {
+  box-shadow: 0 0 0 2px var(--item-color, #7dd3fc), 0 10px 24px rgba(2, 6, 23, 0.5);
+  background: rgba(16, 30, 52, 0.9);
+}
+
+.gh-raid-inv-item-emoji { font-size: 22px; line-height: 1.1; }
+.gh-raid-inv-item-name {
+  max-width: 100%;
+  font-size: 11.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gh-raid-inv-item-meta { font-size: 9.5px; color: var(--raid-muted); }
+.gh-raid-inv-item-slot {
+  position: absolute;
+  right: 7px;
+  bottom: 6px;
+  font-size: 8.5px;
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.gh-raid-inv-actions {
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  padding: 12px 18px 16px;
+  min-height: 78px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: rgba(4, 8, 16, 0.86);
+}
+
+.gh-raid-inv-tip { margin: 0; font-size: 11.5px; color: var(--raid-muted); }
+
+.gh-raid-inv-selected {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 180px;
+}
+.gh-raid-inv-selected > span { font-size: 26px; }
+.gh-raid-inv-selected b { display: block; font-size: 13px; }
+.gh-raid-inv-selected em { font-style: normal; font-size: 10px; color: var(--raid-muted); }
+
+.gh-raid-inv-targets { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; justify-content: flex-end; }
+
+.gh-raid-inv-target {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 108px;
+  padding: 9px 14px;
+  border: 1px solid var(--raid-line-strong);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(30, 64, 108, 0.7), rgba(8, 14, 26, 0.9));
+  color: var(--raid-text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.gh-raid-inv-target em { font-style: normal; font-size: 9px; font-weight: 400; color: #fca5a5; }
+.gh-raid-inv-target:disabled { opacity: 0.45; cursor: not-allowed; }
+.gh-raid-inv-target:hover:not(:disabled) { border-color: var(--raid-cyan); }
+
+/* 平板竖屏 / 手机：单列，面板占满，目标按钮变大 */
+@media (max-width: 860px) {
+  .gh-raid-inv { padding: 0; align-items: stretch; }
+  .gh-raid-inv-card {
+    width: 100%;
+    max-height: none;
+    height: 100%;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+
+  .gh-raid-inv-grid {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+  .gh-raid-inv-panel { min-height: 0; }
+  .gh-raid-inv-slots { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+  .gh-raid-inv-actions {
+    position: sticky;
+    bottom: 0;
+    padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+  }
+  .gh-raid-inv-targets { width: 100%; justify-content: stretch; }
+  .gh-raid-inv-target { flex: 1; min-height: 52px; justify-content: center; }
+  .gh-raid-inv-selected { width: 100%; }
+}
+
+/* ---------- 低画质：关掉最贵的毛玻璃与装饰动效 ---------- */
+
+.gh-raid-stage[data-quality='low'] .gh-raid-pod,
+.gh-raid-stage[data-quality='low'] .gh-raid-stick,
+.gh-raid-stage[data-quality='low'] .gh-raid-tool,
+.gh-raid-stage[data-quality='low'] .gh-raid-bag {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(5, 10, 19, 0.92);
+  box-shadow: none;
+}
+
+.gh-raid-stage[data-quality='low']::before { display: none; }
+.gh-raid-stage[data-quality='low'] .gh-raid-log { animation: none; }
+.gh-raid-stage[data-quality='low'] .gh-raid-skill,
+.gh-raid-stage[data-quality='low'] .gh-raid-quick-btn { transition: none; }
+
+/* ---------- 旧 WebView 布局降级（Chrome < 87 / Safari < 14） ---------- */
+
+@supports not (inset: 0px) {
+  .gh-raid-stage::before { top: 8px; right: 8px; bottom: 8px; left: 8px; }
+  .gh-raid-canvas-wrap,
+  .gh-raid-overlay,
+  .gh-raid-hud,
+  .gh-raid-touch { top: 0; right: 0; bottom: 0; left: 0; }
+  .gh-raid-hint { top: 50%; left: 50%; right: auto; bottom: auto; }
+  .gh-raid-inv { top: 0; right: 0; bottom: 0; left: 0; }
+}
+
+/* 旧内核不支持 min()/max()/clamp()/dvh 时给出固定值，保证舞台不塌成 0 高 */
+.gh-raid-stage { height: 420px; height: clamp(360px, 68dvh, 760px); }
+.gh-raid-stage.is-immersive,
+.gh-raid-stage.is-fallback { height: 100vh; height: 100dvh; }
+
+.gh-raid-overlay,
+.gh-raid-hud {
+  padding: 10px 12px;
+  padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+}
+
+.gh-raid-pod--vitals { width: 292px; width: min(292px, 42vw); }
+.gh-raid-bag { left: 12px; left: max(12px, env(safe-area-inset-left)); }
+
+.gh-raid-stage[data-layout='touch'] .gh-raid-pod--vitals { width: 196px; width: min(196px, 28%); }
+.gh-raid-stage[data-layout='touch'] .gh-raid-bag {
+  left: 14px;
+  left: max(14px, env(safe-area-inset-left));
+  bottom: calc(18px + 118px);
+}
+
+@media (orientation: portrait) {
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--vitals { width: 168px; width: min(168px, 48%); }
+}
+
+.gh-raid-minimap { height: 132px; }
+
+@supports (aspect-ratio: 1.28) {
+  .gh-raid-minimap { height: auto; aspect-ratio: 1.28; }
+}
+
+@media (max-width: 760px) {
+  .gh-raid-stage { height: 420px; height: clamp(340px, 62dvh, 560px); }
+}
+
+@media (max-width: 860px) and (orientation: landscape) {
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--loot { top: 54px; }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-toolbar { top: 54px; }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--log { display: none; }
+}
+
+/* 对局进行中：隐藏全站公告条与页面大标题，把首屏留给战斗区（平板横屏尤其重要） */
+body.lineweb-raid-playing .gh-announce-bar { display: none; }
+
+.gh-raid-page.is-in-game {
+  padding-top: 8px;
+  gap: 10px;
+}
+
+.gh-raid-page.is-in-game .gh-raid-header { display: none; }
+
+.gh-raid-page.is-in-game .gh-raid-game { gap: 6px; }
+
+@media (orientation: landscape) and (max-height: 900px) {
+  .gh-raid-page.is-in-game { padding-bottom: 16px; }
+}
+
+/* 对局中把战斗区撑到首屏可用高度：平板横屏不再需要滚动才能看到技能与摇杆 */
+.gh-raid-page.is-in-game .gh-raid-stage {
+  height: calc(100vh - 118px);
+  height: calc(100dvh - 118px);
+  max-height: 780px;
+}
+
+@media (orientation: portrait) {
+  .gh-raid-page.is-in-game .gh-raid-stage {
+    height: calc(100vh - 104px);
+    height: calc(100dvh - 104px);
+  }
+  /* 竖屏没有底部空间：背包入口挪到生命盘下方，避免压住技能栏 */
+  .gh-raid-stage[data-layout='touch'] .gh-raid-bag {
+    top: 160px;
+    bottom: auto;
+  }
+}
+
+/* 旧内核的固定尺寸兜底（min()/max()/dvh 都不支持时） */
+@supports not (inset: 0px) {
+  .gh-raid-stage.is-fallback {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+  }
+  .gh-raid-inv-card {
+    width: 94vw;
+    height: 88vh;
+    max-height: 88vh;
+  }
+  .gh-raid-inv-panel + .gh-raid-inv-panel { margin-top: 10px; }
+  .gh-raid-inv-item + .gh-raid-inv-item { margin-top: 6px; }
+}
+
+/* 旧内核没有 max()/env()：HUD 面板回退到固定安全边距，避免绝对定位失去偏移 */
+@supports not (inset: 0px) {
+  .gh-raid-pod--vitals { top: 10px; left: 12px; }
+  .gh-raid-pod--mission { top: 10px; }
+  .gh-raid-pod--map { top: 10px; right: 12px; }
+  .gh-raid-pod--squad { bottom: 10px; left: 12px; }
+  .gh-raid-pod--loot { bottom: 10px; right: 12px; }
+  .gh-raid-pod--action { bottom: 10px; }
+  .gh-raid-pod--log { top: 190px; right: 12px; }
+  .gh-raid-toolbar { right: 12px; bottom: 246px; }
+  .gh-raid-stick { bottom: 18px; }
+  .gh-raid-stick--move { left: 14px; }
+  .gh-raid-stick--aim { right: 14px; }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--action { bottom: 24px; }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--map { top: 10px; right: 12px; }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--log { top: 150px; right: 12px; }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-toolbar { top: 122px; right: 12px; bottom: auto; }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-bag { bottom: 136px; left: 14px; }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--loot { top: 58px; }
+  .gh-raid-pod--mission { min-width: 208px; }
+}
+
+/* 交互按钮：桌面只在靠近容器 / 撤离点时浮出；触屏常驻在右摇杆上方 */
+.gh-raid-interact {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 116px;
+  padding: 9px 16px;
+  border: 1px solid rgba(125, 211, 252, 0.55);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(14, 116, 144, 0.85), rgba(4, 12, 24, 0.92));
+  color: #e0f2fe;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.gh-raid-interact.is-hot {
+  display: inline-flex;
+  animation: gh-raid-interact-pulse 1.6s ease-in-out infinite;
+}
+.gh-raid-interact span { font-size: 16px; }
+.gh-raid-interact em { font-style: normal; font-size: 9px; opacity: 0.7; }
+
+.gh-raid-stage[data-layout='touch'] .gh-raid-interact {
+  display: inline-flex;
+  left: auto;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: calc(18px + 118px);
+  transform: none;
+  width: 64px;
+  height: 64px;
+  min-width: 0;
+  padding: 0;
+  border-radius: 50%;
+  flex-direction: column;
+  gap: 0;
+}
+.gh-raid-stage[data-layout='touch'] .gh-raid-interact span { font-size: 20px; }
+.gh-raid-stage[data-layout='touch'] .gh-raid-interact b { font-size: 10px; }
+.gh-raid-stage[data-layout='touch'] .gh-raid-interact em { display: none; }
+
+@keyframes gh-raid-interact-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.35); }
+  50% { box-shadow: 0 0 0 8px rgba(56, 189, 248, 0); }
+}
+
+@media (orientation: portrait) {
+  .gh-raid-stage[data-layout='touch'] .gh-raid-interact {
+    right: max(14px, env(safe-area-inset-right));
+    bottom: calc(18px + 118px);
+  }
+}
+
+/* 触屏 HUD 排布修正：交互键不与技能栏/摇杆抢位置，日志与工具条避开小地图 */
+.gh-raid-stage[data-layout='touch'] .gh-raid-pod--log {
+  top: 150px;
+  left: max(12px, env(safe-area-inset-left));
+  right: auto;
+  width: 150px;
+  max-height: 96px;
+  overflow: hidden;
+}
+
+.gh-raid-stage[data-layout='touch'] .gh-raid-toolbar {
+  top: 140px;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: auto;
+}
+
+@media (orientation: portrait) {
+  /* 左侧竖排：生命 → 战术背包 → 交互；底部只留技能与摇杆 */
+  .gh-raid-stage[data-layout='touch'] .gh-raid-interact {
+    left: max(12px, env(safe-area-inset-left));
+    right: auto;
+    top: 220px;
+    bottom: auto;
+    width: 64px;
+    height: 64px;
+  }
+}
+
+@media (max-width: 430px) and (orientation: portrait) {
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--action {
+    max-width: calc(100% - 16px);
+  }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-skills {
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 6px;
+  }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-skill { width: 46px; }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-skill-meta i { max-width: 42px; font-size: 9px; }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-quick-btn { width: 40px; height: 42px; }
+}
+
+@media (max-width: 860px) and (orientation: landscape) {
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--loot { top: 52px; }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--log {
+    display: flex;
+    top: 150px;
+    left: max(12px, env(safe-area-inset-left));
+    right: auto;
+    width: 142px;
+  }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-toolbar {
+    top: 142px;
+    right: max(12px, env(safe-area-inset-right));
+    bottom: auto;
+  }
+}
+
+@media (max-width: 860px) and (orientation: landscape) {
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--log {
+    top: 94px;
+    left: 50%;
+    right: auto;
+    width: 176px;
+    max-height: 74px;
+    transform: translateX(-50%);
+  }
+}
+
+.gh-raid-stage[data-quality='low'] .gh-raid-inv {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(2, 6, 18, 0.92);
+}
+
+@media (orientation: portrait) {
+  /* 竖屏也保留一条紧凑提示流：技能冷却 / 背包满 / 服务端拒绝必须可见 */
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--log {
+    display: flex;
+    top: auto;
+    left: 50%;
+    right: auto;
+    bottom: 238px;
+    width: 200px;
+    max-height: 72px;
+    transform: translateX(-50%);
+    overflow: hidden;
+  }
+}
+
+/* 沉浸模式必须铺满屏幕，不能被对局中的首屏高度规则压回 100dvh-118px */
+.gh-raid-page.is-in-game .gh-raid-stage.is-immersive,
+.gh-raid-page.is-in-game .gh-raid-stage.is-fallback {
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
 }

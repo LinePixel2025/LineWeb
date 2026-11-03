@@ -1,15 +1,35 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import legacy from '@vitejs/plugin-legacy'
 import path from 'path'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // 旧 Android WebView / iPad Safari：生成 ES5 兼容包 + 按使用情况注入 core-js polyfill。
+    // 现代浏览器仍加载 modern chunk，不会变慢；只有旧内核走 nomodule 的传统包。
+    legacy({
+      targets: ['chrome >= 40', 'safari >= 9', 'ios >= 9', 'not dead'],
+      modernTargets: ['chrome >= 61', 'safari >= 11', 'ios >= 11'],
+      // 只补现代包里真正用到的 API，避免给所有现代浏览器多塞 140KB core-js
+      modernPolyfills: [
+        'es.promise.all-settled',
+        'es.promise.finally',
+        'es.object.from-entries',
+        'es.array.flat-map',
+        'web.queue-microtask',
+      ],
+      renderLegacyChunks: true,
+    }),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
   },
   build: {
+    // Vite 6 默认目标是 chrome107+，对旧 WebView 太新；显式降到 Safari 11 / Chrome 61 语法级别
+    target: ['chrome61', 'safari11'],
     cssCodeSplit: true,
     chunkSizeWarningLimit: 500,
     rollupOptions: {

@@ -481,8 +481,8 @@ export const RAID_TILE_HAZARD = 3
 export const RAID_EXTRACT_CHANNEL_MS = 6000
 /** 技能冷却：每「回合」折算 2500ms */
 export const RAID_SKILL_CD_MS = 2500
-/** MP 每秒回复 */
-export const RAID_MP_REGEN_PER_SEC = 2
+/** MP 每秒回复（实时对局节奏快，回复过低会让高费技能形同虚设） */
+export const RAID_MP_REGEN_PER_SEC = 4
 /** 行动日志上限 */
 export const RAID_LOG_LIMIT = 40
 /** 耐久损耗系数：每次受击掉 raw × 0.25 点耐久（约 4 发打空 1 级甲） */
@@ -1475,6 +1475,14 @@ export type RaidEvent =
   | { type: 'clearRoom'; roomId: number }
   | { type: 'openContainer'; containerId: string }
   | { type: 'takeLoot'; containerId: string; lootId: string; target: RaidContainerKind; slotIndex?: number }
+  | {
+    type: 'moveItem'
+    from: RaidContainerKind
+    to: RaidContainerKind
+    slotIndex: number
+    /** 缺省 = 整格全部移动 */
+    amount?: number
+  }
   | { type: 'useItem'; itemKey: string; from: RaidContainerKind }
   | { type: 'castSkill'; skillKey: string }
   | { type: 'damage'; amount: number; zone: 'head' | 'body' }
@@ -1635,6 +1643,38 @@ export function applyRaidEvent(
       else next.safe = updated
       next.takenLoot.push(takeId)
       makeLog(next, 'loot', `拾取 ${def.name} ×${loot.amount}`, now)
+      return { state: next }
+    }
+    case 'moveItem': {
+      if (event.from === event.to) return { state, error: '目标容器与来源相同' }
+      const source = currentContainer(next, event.from)
+      const stack = source.find((entry) => entry.slotIndex === event.slotIndex)
+      if (!stack) return { state, error: '这里没有这件物品' }
+      const def = RAID_ITEM_MAP.get(stack.itemKey)
+      if (!def) return { state, error: '未知物品' }
+      if (event.to === 'rig' && def.kind !== 'consumable') {
+        return { state, error: '胸挂只能放消耗品' }
+      }
+      const capacity = containerCapacity(next, event.to)
+      if (capacity <= 0) return { state, error: `${RAID_CONTAINER_LABELS[event.to]}已满，装不下了` }
+      const amount = clampInt(event.amount ?? stack.amount, 1, stack.amount)
+      const targetStacks = currentContainer(next, event.to)
+      const added = addItemToContainer(targetStacks, capacity, stack.itemKey, amount)
+      if (!added) return { state, error: `${RAID_CONTAINER_LABELS[event.to]}已满，装不下了` }
+      const removed = removeItemFromContainer(source, event.slotIndex, amount)
+      if (!removed) return { state, error: '移动失败' }
+      if (event.from === 'backpack') next.backpack = removed
+      else if (event.from === 'rig') next.rig = removed
+      else next.safe = removed
+      if (event.to === 'backpack') next.backpack = added
+      else if (event.to === 'rig') next.rig = added
+      else next.safe = added
+      makeLog(
+        next,
+        'info',
+        `把 ${def.name} ×${amount} 挪到${RAID_CONTAINER_LABELS[event.to]}`,
+        now,
+      )
       return { state: next }
     }
     case 'useItem': {

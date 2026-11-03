@@ -165,6 +165,13 @@ const raidEventSchema = z.discriminatedUnion('type', [
     slotIndex: z.coerce.number().int().min(0).max(200).optional(),
   }),
   z.object({
+    type: z.literal('moveItem'),
+    from: raidContainerSchema,
+    to: raidContainerSchema,
+    slotIndex: z.coerce.number().int().min(0).max(200),
+    amount: z.coerce.number().int().min(1).max(9999).optional(),
+  }),
+  z.object({
     type: z.literal('useItem'),
     itemKey: z.string().min(1).max(40),
     from: raidContainerSchema,
