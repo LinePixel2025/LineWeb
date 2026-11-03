@@ -1079,27 +1079,56 @@
   z-index: 4;
 }
 
-.gh-raid-stick {
+/* 悬浮摇杆热区：左右各半屏，按下即在触点生成底盘并跟随手指漂移（2026-11） */
+.gh-raid-stick-zone {
   position: absolute;
-  bottom: max(18px, env(safe-area-inset-bottom));
+  top: 0;
+  bottom: 0;
+  width: 46%;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.gh-raid-stick-zone--move,
+.gh-raid-stick-zone.gh-raid-stick--move { left: 0; }
+.gh-raid-stick-zone--aim,
+.gh-raid-stick-zone.gh-raid-stick--aim { right: 0; }
+
+.gh-raid-stick {
   width: 108px;
   height: 108px;
   border-radius: 50%;
   border: 1px solid rgba(125, 211, 252, 0.32);
   background: radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.12), rgba(2, 6, 23, 0.5) 70%);
   backdrop-filter: blur(6px);
-  pointer-events: auto;
+  pointer-events: none;
   touch-action: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.gh-raid-stick.is-active {
+/* 待机占位：半透明缩在角落，提示「按住这里出现摇杆」 */
+.gh-raid-stick.is-idle {
+  position: absolute;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  opacity: 0.45;
+  transition: opacity 0.15s ease;
+}
+.gh-raid-stick-zone--move .gh-raid-stick.is-idle,
+.gh-raid-stick-zone.gh-raid-stick--move .gh-raid-stick.is-idle { left: max(14px, env(safe-area-inset-left)); }
+.gh-raid-stick-zone--aim .gh-raid-stick.is-idle,
+.gh-raid-stick-zone.gh-raid-stick--aim .gh-raid-stick.is-idle { right: max(14px, env(safe-area-inset-right)); }
+
+/* 激活底盘：fixed 定位直接吃视口坐标，跟随手指漂移 */
+.gh-raid-stick.is-floating {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  z-index: 30;
+  opacity: 0.96;
+}
+
+.gh-raid-stick-zone.is-active .gh-raid-stick.is-floating {
   border-color: rgba(125, 211, 252, 0.85);
   box-shadow: 0 0 22px rgba(56, 189, 248, 0.28);
 }
-
-.gh-raid-stick--move { left: max(14px, env(safe-area-inset-left)); }
-.gh-raid-stick--aim { right: max(14px, env(safe-area-inset-right)); }
 
 .gh-raid-stick-glyph {
   position: absolute;
@@ -1191,6 +1220,27 @@
 .gh-raid-stage[data-layout='touch'] .gh-raid-quick-btn { width: 44px; height: 44px; }
 .gh-raid-stage[data-layout='touch'] .gh-raid-pod--log { top: 150px; right: max(12px, env(safe-area-inset-right)); width: 150px; }
 .gh-raid-stage[data-layout='touch'] .gh-raid-toolbar { bottom: auto; top: 122px; right: max(12px, env(safe-area-inset-right)); }
+
+/* ============================================================
+   平板（768–1279px）：HUD 简化 —— 平板横屏宽但矮，事件流/次级信息
+   全部让位给战斗画面，修复 squad 与 log 同位重叠、loot 计数带贴任务条
+   ============================================================ */
+@media (min-width: 768px) and (max-width: 1279px) {
+  /* 事件流是纯装饰信息，平板上直接隐藏（含触屏布局的覆盖规则） */
+  .gh-raid-stage .gh-raid-pod--log { display: none; }
+  /* squad 列表上移贴近 vitals，不再与 log 抢位置 */
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--squad { top: 122px; width: 148px; }
+  /* loot 计数带与任务条拉开间距 */
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--loot { top: 68px; }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-toolbar { top: 108px; }
+  /* 小地图略放大：平板横屏有空间，地图可读性优先 */
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--map { width: 148px; }
+  .gh-raid-stage[data-layout='touch'] .gh-raid-minimap { height: 118px; }
+  /* 生命盘紧凑化，给画面让位 */
+  .gh-raid-stage[data-layout='touch'] .gh-raid-pod--vitals { width: min(176px, 25%); padding: 6px 8px; }
+  /* 技能按钮略收，避免底中一行在窄横屏溢出 */
+  .gh-raid-stage[data-layout='touch'] .gh-raid-skill { width: 48px; }
+}
 
 /* 竖屏手机：战斗区太窄，只留生命与技能，其余等「请旋转横屏」提示后由横屏承载 */
 @media (orientation: portrait) {
@@ -1952,6 +2002,13 @@
 .gh-raid-inv-target em { font-style: normal; font-size: 9px; font-weight: 400; color: #fca5a5; }
 .gh-raid-inv-target:disabled { opacity: 0.45; cursor: not-allowed; }
 .gh-raid-inv-target:hover:not(:disabled) { border-color: var(--raid-cyan); }
+/* 丢弃按钮：琥珀色系与「移到容器」区分 */
+.gh-raid-inv-target.is-drop {
+  border-color: rgba(251, 191, 36, 0.55);
+  background: linear-gradient(180deg, rgba(120, 84, 12, 0.55), rgba(30, 22, 4, 0.9));
+}
+.gh-raid-inv-target.is-drop em { color: #fcd34d; }
+.gh-raid-inv-target.is-drop:hover:not(:disabled) { border-color: #fbbf24; }
 
 /* 平板竖屏 / 手机：单列，面板占满，目标按钮变大 */
 @media (max-width: 860px) {
@@ -2029,6 +2086,7 @@
 .gh-raid-stage[data-layout='touch'] .gh-raid-bag {
   left: 14px;
   left: max(14px, env(safe-area-inset-left));
+  top: auto;
   bottom: calc(18px + 118px);
 }
 

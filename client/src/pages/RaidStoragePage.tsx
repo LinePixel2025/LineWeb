@@ -15,6 +15,7 @@ import type {
   RaidGearInfo,
   RaidGearSlot,
   RaidOpenCacheResult,
+  RaidRecycleAllResult,
   RaidRecycleResult,
   RaidShopBuyResult,
   RaidShopGear,
@@ -60,7 +61,7 @@ const CONTAINER_ORDER: readonly RaidContainerKind[] = ['backpack', 'rig', 'safe'
 
 const CONTAINER_HINTS: Record<RaidContainerKind, string> = {
   backpack: '任意物品都能塞进背包，格数由已装备的背包决定。',
-  rig: '胸挂只能放消耗品，格数由已装备的胸挂决定。',
+  rig: '快取位，任意物品都能放，格数由已装备的胸挂决定。',
   safe: '安全箱里的物品阵亡也会保留，格数随仓库等级提升。',
 }
 
@@ -192,6 +193,9 @@ export default function RaidStoragePage() {
   const [sellTarget, setSellTarget] = useState<SellTarget | null>(null)
   const [sellAmount, setSellAmount] = useState('1')
   const [sellError, setSellError] = useState<string | null>(null)
+  const [recycleAllOpen, setRecycleAllOpen] = useState(false)
+  const [recycleAllKeepMaterials, setRecycleAllKeepMaterials] = useState(true)
+  const [recycleAllError, setRecycleAllError] = useState<string | null>(null)
 
   // 商店物品的快捷购买数量（按物品 key 记忆）
   const [shopAmounts, setShopAmounts] = useState<Record<string, number>>({})
@@ -280,6 +284,31 @@ export default function RaidStoragePage() {
   }
 
   /* ---------- 仓库：回收 / 升级 / 开箱 ---------- */
+
+  /** 一键回收整个仓库（可选保留升级材料，服务端按官方价逐行结算） */
+  const submitRecycleAll = async () => {
+    if (busyRef.current) return
+    busyRef.current = true
+    setBusy(true)
+    try {
+      const result = await api.post<RaidRecycleAllResult>('/pets/raid/storage/recycle-all', {
+        keepUpgradeItems: recycleAllKeepMaterials,
+      })
+      setStorage(result.view)
+      setPoints(result.balance)
+      setRecycleAllOpen(false)
+      setRecycleAllError(null)
+      setToast({
+        tone: 'success',
+        text: `已一键回收 ${result.count} 件物品，+${result.points.toLocaleString('zh-CN')} 积分`,
+      })
+    } catch (err) {
+      setRecycleAllError(errMessage(err, '一键回收失败'))
+    } finally {
+      busyRef.current = false
+      setBusy(false)
+    }
+  }
 
   const openSellFromWarehouse = (item: RaidStorageItem) => {
     setSellTarget({
@@ -662,7 +691,22 @@ export default function RaidStoragePage() {
           <section className="gh-raid-storage-panel">
             <div className="gh-raid-storage-panel-head">
               <h2>仓库物品 <span>{storage.items.length} 种</span></h2>
-              <span>回收价：材料 / 珍宝 100%、消耗品 60%、装备箱 / 技能卷轴 70%</span>
+              <div className="gh-raid-storage-panel-tools">
+                <span>回收价：材料 / 珍宝 100%、消耗品 60%、装备箱 / 技能卷轴 70%</span>
+                {storage.items.length > 0 && (
+                  <button
+                    type="button"
+                    className="gh-btn gh-btn--secondary gh-btn--sm"
+                    disabled={busy}
+                    onClick={() => {
+                      setRecycleAllOpen(true)
+                      setRecycleAllError(null)
+                    }}
+                  >
+                    ♻️ 一键回收
+                  </button>
+                )}
+              </div>
             </div>
             {storage.items.length === 0 ? (
               <div className="gh-raid-storage-empty">
@@ -1247,6 +1291,47 @@ export default function RaidStoragePage() {
                 onClick={() => void submitSell()}
               >
                 {busy ? '处理中…' : '确认卖出'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ==================== 一键回收确认对话框 ==================== */}
+      {recycleAllOpen && (
+        <div className="gh-dialog-overlay" role="dialog" aria-modal="true" aria-label="一键回收仓库">
+          <div className="gh-dialog">
+            <h2 className="gh-dialog-title">♻️ 一键回收整个仓库</h2>
+            <p className="gh-raid-storage-hint">
+              按「材料 / 珍宝 100%、消耗品 60%、箱子 70%」的官方回收价一次性卖出全部仓库物品，
+              交易不可撤销。
+            </p>
+            <label className="gh-raid-storage-field">
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={recycleAllKeepMaterials}
+                  onChange={(event) => setRecycleAllKeepMaterials(event.target.checked)}
+                />
+                保留仓库升级材料（下次升级还要用）
+              </span>
+            </label>
+            {recycleAllError && <p className="gh-raid-storage-error-text">{recycleAllError}</p>}
+            <div className="gh-dialog-actions">
+              <button
+                type="button"
+                className="gh-btn gh-btn--secondary gh-btn--md"
+                disabled={busy}
+                onClick={() => setRecycleAllOpen(false)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="gh-btn gh-btn--primary gh-btn--md"
+                disabled={busy}
+                onClick={() => void submitRecycleAll()}
+              >
+                {busy ? '回收中…' : '确认回收'}
               </button>
             </div>
           </div>

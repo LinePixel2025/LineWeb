@@ -28,6 +28,8 @@ function makeRun(map = generateRaidMap(123456, getRaidMap('wasteland')!)): RaidR
     killedEnemies: [],
     openedContainers: [],
     takenLoot: [],
+    groundLoot: [],
+    groundSeq: 0,
     backpack: [],
     rig: [],
     safe: [],

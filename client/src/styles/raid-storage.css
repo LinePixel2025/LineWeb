@@ -278,6 +278,12 @@
   font-size: var(--gh-text-xs);
   line-height: 1.5;
 }
+.gh-raid-storage-panel-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
 .gh-raid-storage-hint {
   margin: 0 0 10px;
   color: var(--gh-text-tertiary);

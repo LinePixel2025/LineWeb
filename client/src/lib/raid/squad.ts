@@ -147,6 +147,8 @@ export function useRaidSquad(options: UseRaidSquadOptions = {}): UseRaidSquadRes
             killedEnemies: event.killedEnemies,
             openedContainers: event.openedContainers,
             takenLoot: event.takenLoot,
+            groundDropped: event.groundDropped,
+            groundTaken: event.groundTaken,
           })
           break
         default:
@@ -198,8 +200,19 @@ export function useRaidSquad(options: UseRaidSquadOptions = {}): UseRaidSquadRes
   }), [run, load])
 
   const respond = useCallback((inviteId: number, accept: boolean) => run(async () => {
-    const result = await api.post<{ squad: RaidSquad | null }>(`${SQUAD_API}/respond`, { inviteId, accept })
-    if (result.squad) setSquad(result.squad)
+    let squad: RaidSquad | null = null
+    try {
+      const result = await api.post<{ squad: RaidSquad | null }>(`${SQUAD_API}/respond`, { inviteId, accept })
+      squad = result.squad
+    } catch (err) {
+      // 邀请可能已被对方在其他端接受/拒绝/撤回（404 竞态）：静默移除本地邀请，不当作失败
+      if (err instanceof ApiError && err.status === 404) {
+        setIncoming((current) => current.filter((item) => item.id !== inviteId))
+        return
+      }
+      throw err
+    }
+    if (squad) setSquad(squad)
     await load(true)
   }), [run, load])
 

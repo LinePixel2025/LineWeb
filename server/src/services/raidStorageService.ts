@@ -20,7 +20,7 @@ import {
   type RaidContainerKind,
   type RaidItemStack,
 } from '../lib/raidRun.js'
-import { nextStorageUpgrade, storageLevelInfo } from '../lib/raidStorage.js'
+import { RAID_STORAGE_LEVELS, nextStorageUpgrade, storageLevelInfo } from '../lib/raidStorage.js'
 import { awardPointsTx, spendPointsTx } from './pointsService.js'
 import { assertNoActiveRaid } from './raidRunService.js'
 import {
@@ -380,9 +380,6 @@ export async function withdrawRaidItems(userId: number, input: RaidWithdrawInput
   const amount = Math.max(1, Math.trunc(input.amount))
   const def = getRaidItem(input.itemKey)
   if (!def) throw new AppError('没有这件物品', 404)
-  if (input.container === 'rig' && def.kind !== 'consumable') {
-    throw new AppError('胸挂只能放消耗品', 400)
-  }
   await prisma.$transaction(async (tx) => {
     const loadout = await loadRaidLoadoutTx(tx, userId)
     const capacity = input.container === 'rig'
@@ -399,7 +396,7 @@ export async function withdrawRaidItems(userId: number, input: RaidWithdrawInput
     if (!next) throw new AppError(`${RAID_CONTAINER_LABELS[input.container]}已满，装不下了`, 400)
     await decrementWarehouseTx(tx, userId, input.itemKey, amount)
     await writeContainersTx(tx, userId, {
-      [input.container]: normalizeContainer(next, capacity, input.container === 'rig'),
+      [input.container]: normalizeContainer(next, capacity),
     })
   })
   return buildStorageView(userId)
@@ -452,6 +449,55 @@ export async function recycleRaidItems(userId: number, input: RaidRecycleInput):
   })
   const view = await buildStorageView(userId)
   return { points: value, balance: result.balance, view }
+}
+
+export interface RaidRecycleAllInput {
+  /** 保留仓库升级材料（默认 true，一键卖光升级料会让你升不起级） */
+  keepUpgradeItems?: boolean
+}
+
+export interface RaidRecycleAllResult {
+  points: number
+  count: number
+  balance: number
+  view: RaidStorageViewDto
+}
+
+/** 一键回收整个仓库（官方商店价逐行结算，事务内原子完成） */
+export async function recycleAllRaidItems(userId: number, input: RaidRecycleAllInput = {}): Promise<RaidRecycleAllResult> {
+  await assertNoActiveRaid(userId)
+  const keepUpgradeItems = input.keepUpgradeItems !== false
+  const result = await prisma.$transaction(async (tx) => {
+    const rows = await tx.raidInventoryItem.findMany({ where: { userId } })
+    if (rows.length === 0) throw new AppError('仓库是空的，没有可以回收的东西', 400)
+    // 升级材料白名单：所有等级的 upgradeItems 并集（保留时不回收这些 key）
+    const upgradeKeys = new Set<string>()
+    if (keepUpgradeItems) {
+      for (const level of RAID_STORAGE_LEVELS) {
+        for (const item of level.upgradeItems) upgradeKeys.add(item.itemKey)
+      }
+    }
+    const recyclable = rows.filter((row) => !upgradeKeys.has(row.itemKey))
+    if (recyclable.length === 0) throw new AppError('除升级材料外没有可回收的物品', 400)
+    let total = 0
+    let count = 0
+    for (const row of recyclable) {
+      total += raidSellPrice(row.itemKey, row.amount)
+      count += row.amount
+    }
+    if (total <= 0) throw new AppError('这些物品无法回收', 400)
+    await tx.raidInventoryItem.deleteMany({
+      where: { userId, itemKey: { in: recyclable.map((row) => row.itemKey) } },
+    })
+    const award = await awardPointsTx(tx, userId, {
+      amount: total,
+      reason: 'raid_recycle',
+      note: `一键回收 ${count} 件仓库物品`,
+    })
+    return { points: total, count, balance: award.balance }
+  })
+  const view = await buildStorageView(userId)
+  return { points: result.points, count: result.count, balance: result.balance, view }
 }
 
 /* ============================================================

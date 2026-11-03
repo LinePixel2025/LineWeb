@@ -63,6 +63,7 @@ import {
   depositRaidItems,
   getRaidStorageView,
   recycleRaidItems,
+  recycleAllRaidItems,
   upgradeRaidStorage,
   withdrawRaidItems,
 } from '../services/raidStorageService.js'
@@ -170,6 +171,19 @@ const raidEventSchema = z.discriminatedUnion('type', [
     to: raidContainerSchema,
     slotIndex: z.coerce.number().int().min(0).max(200),
     amount: z.coerce.number().int().min(1).max(9999).optional(),
+  }),
+  z.object({
+    type: z.literal('dropItem'),
+    from: raidContainerSchema,
+    slotIndex: z.coerce.number().int().min(0).max(200),
+    amount: z.coerce.number().int().min(1).max(9999).optional(),
+    x: z.coerce.number().min(0).max(400).optional(),
+    y: z.coerce.number().min(0).max(400).optional(),
+  }),
+  z.object({
+    type: z.literal('takeGround'),
+    groundId: z.string().min(1).max(40),
+    target: raidContainerSchema,
   }),
   z.object({
     type: z.literal('useItem'),
@@ -406,13 +420,14 @@ router.get('/raid/squad/state', battlePollLimiter, asyncHandler(async (req: Requ
 // POST /api/pets/raid/squad/invite — { userId } 邀请好友（无队伍时自动建队并成为房主）
 router.post('/raid/squad/invite', battleInviteLimiter, asyncHandler(async (req: Request, res: Response) => {
   const input = parseInput(raidSquadInviteSchema, req.body ?? {})
-  res.status(201).json(await inviteToSquad(currentUserId(req), input.userId))
+  res.status(201).json({ squad: await inviteToSquad(currentUserId(req), input.userId) })
 }))
 
 // POST /api/pets/raid/squad/respond — { inviteId, accept } 接受 / 拒绝邀请
+// 统一返回 { squad }：拒绝为 { squad: null }（此前裸 null 会让前端读 result.squad 抛错）
 router.post('/raid/squad/respond', battleInviteLimiter, asyncHandler(async (req: Request, res: Response) => {
   const input = parseInput(raidSquadRespondSchema, req.body ?? {})
-  res.json(await respondToInvite(currentUserId(req), input.inviteId, input.accept))
+  res.json({ squad: await respondToInvite(currentUserId(req), input.inviteId, input.accept) })
 }))
 
 // POST /api/pets/raid/squad/cancel — { inviteId } 撤回自己发出的邀请
@@ -468,6 +483,14 @@ router.post('/raid/storage/withdraw', marketWriteLimiter, asyncHandler(async (re
 router.post('/raid/storage/recycle', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
   const input = parseInput(raidRecycleSchema, req.body ?? {})
   res.json(await recycleRaidItems(currentUserId(req), input))
+}))
+
+// POST /api/pets/raid/storage/recycle-all — { keepUpgradeItems? } 一键回收整个仓库
+router.post('/raid/storage/recycle-all', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as { keepUpgradeItems?: unknown }
+  res.json(await recycleAllRaidItems(currentUserId(req), {
+    keepUpgradeItems: body.keepUpgradeItems === undefined ? undefined : body.keepUpgradeItems === true,
+  }))
 }))
 
 // POST /api/pets/raid/storage/upgrade — {} 花积分 + 消耗材料升级仓库

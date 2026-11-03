@@ -20,6 +20,7 @@ import {
   RAID_REPAIR_FLOOR_RATIO,
   RAID_SKILL_CD_MS,
   RAID_STATE_VERSION,
+  RAID_GROUND_LOOT_LIMIT,
   addItemToContainer,
   applyRaidEvent,
   applyRaidEvents,
@@ -79,17 +80,19 @@ for (const rarity of RAID_RARITY_ORDER) {
   assert(RAID_ITEMS.some((item) => item.rarity === rarity), `品质 ${rarity} 至少有一种物品`)
 }
 assert(RAID_ITEMS.filter((item) => item.rarity === 'mythic').length >= 2, '神话物品至少 2 种')
-assertEqual(RAID_ITEMS.filter((item) => item.kind === 'gear_cache').length, 4, '装备箱共 4 种')
+assertEqual(RAID_ITEMS.filter((item) => item.kind === 'gear_cache').length, 5, '装备箱共 5 种（含神话档）')
 assertEqual(RAID_ITEMS.filter((item) => item.kind === 'skill_cache').length, 3, '技能卷轴共 3 种')
 assert(RAID_ITEMS.filter((item) => item.kind === 'consumable').length >= 8, '消耗品至少 8 种')
 assert(RAID_ITEMS.filter((item) => item.rarity === 'mythic').every((item) => item.value >= 5000), '神话物品价值 ≥ 5000')
 
-assertEqual(RAID_GEARS.length, 30, '装备目录 30 件（头/甲/鞋/背包/胸挂 × 6 级）')
+assertEqual(RAID_GEARS.length, 32, '装备目录 32 件（头/甲/鞋/胸挂 × 6 级 + 背包 × 8 级）')
 assertEqual(new Set(RAID_GEARS.map((gear) => gear.key)).size, RAID_GEARS.length, '装备 key 唯一')
+const GEAR_SLOT_EXPECT: Record<string, number> = { helmet: 6, armor: 6, boots: 6, backpack: 8, rig: 6 }
 for (const slot of ['helmet', 'armor', 'boots', 'backpack', 'rig'] as const) {
   const list = RAID_GEARS.filter((gear) => gear.slot === slot)
-  assertEqual(list.length, 6, `${slot} 共 6 级`)
-  assertEqual(list.map((gear) => gear.tier).join(','), '1,2,3,4,5,6', `${slot} 等级连续`)
+  const expect = GEAR_SLOT_EXPECT[slot]
+  assertEqual(list.length, expect, `${slot} 共 ${expect} 级`)
+  assertEqual(list.map((gear) => gear.tier).join(','), Array.from({ length: expect }, (_, i) => i + 1).join(','), `${slot} 等级连续`)
   assert(list.every((gear) => gear.tier <= 3 === gear.shopable), `${slot} 只有 1–3 级可购买`)
 }
 const helmets = RAID_GEARS.filter((gear) => gear.slot === 'helmet')
@@ -103,11 +106,14 @@ assert(
   '护甲耐久上限随等级严格递增',
 )
 const backpacks = RAID_GEARS.filter((gear) => gear.slot === 'backpack')
-assertEqual(backpacks.map((gear) => gear.slots).join(','), '8,12,16,20,24,28', '背包容量 8/12/16/20/24/28')
+assertEqual(backpacks.map((gear) => gear.slots).join(','), '8,12,16,20,24,28,36,48', '背包容量 8/12/16/20/24/28/36/48')
 const rigs = RAID_GEARS.filter((gear) => gear.slot === 'rig')
 assertEqual(rigs.map((gear) => gear.slots).join(','), '2,3,4,5,6,7', '胸挂容量 2/3/4/5/6/7')
-assert(RAID_GEARS.every((gear) => gear.rarity === RAID_RARITY_ORDER[gear.tier - 1]), '装备品质与等级对应')
-assert(getRaidGear('helmet_t6')?.defense === 38, '6 级头盔减伤 38%')
+assert(RAID_GEARS.every((gear) => gear.rarity === RAID_RARITY_ORDER[Math.min(gear.tier, RAID_RARITY_ORDER.length) - 1]), '装备品质与等级对应（7/8 级为神话）')
+assert(backpacks.every((gear, index) => index === 0 || (gear.slots ?? 0) > (backpacks[index - 1]?.slots ?? 0)), '背包容量严格递增')
+assert(getRaidGear('backpack_t7')?.slots === 36 && getRaidGear('backpack_t8')?.slots === 48, '36/48 格巨型背包已入目录')
+assert(getRaidItem('gear_cache_mythic')?.cacheTierMin === 6 && getRaidItem('gear_cache_mythic')?.cacheTierMax === 8, '神话装备箱开 6–8 级装备')
+assertEqual(getRaidGear('helmet_t6')?.defense === 38, true, '6 级头盔减伤 38%')
 assert(getRaidGear('armor_t6')?.defense === 47, '6 级护甲减伤 47%')
 assertEqual(getRaidGear('nope'), null, '不存在的装备返回 null')
 
@@ -310,13 +316,14 @@ if (firstContainer) {
     assert(!!again.error, '同一件掉落不能重复拾取')
     const def = getRaidItem(loot.itemKey)
     if (def && def.kind !== 'consumable') {
-      const rigTake = applyRaidEvent(cleared.state, mapA, {
+      const rigTake = applyRaidEvent(opened.state, mapA, {
         type: 'takeLoot',
         containerId: firstContainer.id,
         lootId: loot.id,
         target: 'rig',
       }, 1_000_010)
-      assert(!!rigTake.error, '胸挂只能放消耗品')
+      assert(!rigTake.error, '非消耗品也能拾取进胸挂（2026-11 放宽）')
+      assert(rigTake.state.rig.some((entry) => entry.itemKey === loot.itemKey), '胸挂拿到非消耗品')
     }
   }
 }
@@ -450,14 +457,66 @@ const movedToRig = applyRaidEvent(movedToSafe.state, mapA, {
 }, 1_000_033)
 assertEqual(movedToRig.error, undefined, '消耗品可挪进胸挂')
 assertEqual(movedToRig.state.rig[0]?.itemKey, 'medkit', '胸挂拿到消耗品')
-const rejectRig = applyRaidEvent(moveRun, mapA, {
+const allowRigMaterial = applyRaidEvent(moveRun, mapA, {
   type: 'moveItem', from: 'backpack', to: 'rig', slotIndex: 0,
 }, 1_000_034)
-assert(!!rejectRig.error, '胸挂拒收非消耗品')
+assertEqual(allowRigMaterial.error, undefined, '非消耗品也可挪进胸挂（2026-11 放宽）')
+assertEqual(allowRigMaterial.state.rig[0]?.itemKey, 'gold_compass', '胸挂拿到黄金罗盘')
 const rejectSame = applyRaidEvent(moveRun, mapA, {
   type: 'moveItem', from: 'backpack', to: 'backpack', slotIndex: 0,
 }, 1_000_035)
 assert(!!rejectSame.error, '同容器移动被拒绝')
+
+/* ---------- 丢弃 / 捡起地面物品（2026-11 新增） ---------- */
+const dropRun = makeRun({ backpack: [{ slotIndex: 0, itemKey: 'scrap_metal', amount: 3 }] })
+const dropped = applyRaidEvent(dropRun, mapA, {
+  type: 'dropItem', from: 'backpack', slotIndex: 0, x: 10, y: 10,
+}, 1_000_070)
+assertEqual(dropped.error, undefined, '可以整格丢弃背包物品')
+assertEqual(dropped.state.backpack.length, 0, '丢弃后背包清空')
+assertEqual(dropped.state.groundLoot.length, 1, '地面多一件掉落物')
+assertEqual(dropped.state.groundLoot[0]?.itemKey, 'scrap_metal', '掉落物品种正确')
+assertEqual(dropped.state.groundLoot[0]?.amount, 3, '掉落物数量正确')
+assertEqual(dropped.state.groundLoot[0]?.roomId, dropped.state.currentRoom, '掉落物落在当前房间')
+const groundId = dropped.state.groundLoot[0]?.id as string
+const picked = applyRaidEvent(dropped.state, mapA, {
+  type: 'takeGround', groundId, target: 'rig',
+}, 1_000_071)
+assertEqual(picked.error, undefined, '可以捡起地面物品进胸挂')
+assertEqual(picked.state.rig[0]?.itemKey, 'scrap_metal', '胸挂拿到捡起物')
+assertEqual(picked.state.groundLoot.length, 0, '捡起后地面清空')
+const pickMissing = applyRaidEvent(picked.state, mapA, {
+  type: 'takeGround', groundId, target: 'backpack',
+}, 1_000_072)
+assert(!!pickMissing.error, '重复捡起同一地面物品被拒绝')
+const dropRun2 = makeRun({ backpack: [{ slotIndex: 0, itemKey: 'scrap_metal', amount: 3 }] })
+const dropPart = applyRaidEvent(dropRun2, mapA, {
+  type: 'dropItem', from: 'backpack', slotIndex: 0, amount: 1,
+}, 1_000_073)
+assertEqual(dropPart.error, undefined, '可以按数量部分丢弃')
+assertEqual(dropPart.state.backpack[0]?.amount, 2, '背包剩余 2 个')
+assertEqual(dropPart.state.groundLoot[0]?.amount, 1, '地面 1 个')
+const dropNothing = applyRaidEvent(makeRun(), mapA, {
+  type: 'dropItem', from: 'backpack', slotIndex: 0,
+}, 1_000_074)
+assert(!!dropNothing.error, '空格子不能丢弃')
+const capRun = makeRun({
+  backpack: [{ slotIndex: 0, itemKey: 'scrap_metal', amount: 1 }],
+  groundLoot: Array.from({ length: RAID_GROUND_LOOT_LIMIT }, (_, i) => ({
+    id: `gseed-${i + 1}`, roomId: 0, itemKey: 'copper_wire', amount: 1, x: 5, y: 5,
+  })),
+  groundSeq: RAID_GROUND_LOOT_LIMIT,
+})
+const capDrop = applyRaidEvent(capRun, mapA, {
+  type: 'dropItem', from: 'backpack', slotIndex: 0,
+}, 1_000_075)
+assert(!!capDrop.error, `单房掉落物达 ${RAID_GROUND_LOOT_LIMIT} 上限后拒绝继续丢弃`)
+assertEqual(capDrop.state.backpack.length, 1, '达到上限时背包不变')
+const fullBagDrop = applyRaidEvent(makeRun({
+  backpack: [{ slotIndex: 0, itemKey: 'scrap_metal', amount: 1 }],
+  capacities: { backpack: 1, rig: 0, safe: 0 },
+}), mapA, { type: 'takeGround', groundId: 'g-none', target: 'backpack' }, 1_000_076)
+assert(!!fullBagDrop.error, '地上没有该物品时捡取被拒绝')
 
 const skillRun = makeRun()
 const cast = applyRaidEvent(skillRun, mapA, { type: 'castSkill', skillKey: 'fire_claw' }, 1_000_040)

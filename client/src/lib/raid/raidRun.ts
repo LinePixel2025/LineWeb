@@ -17,7 +17,7 @@
    基础类型
    ============================================================ */
 
-export const RAID_STATE_VERSION = 2
+export const RAID_STATE_VERSION = 3
 
 export type RaidStatus = 'active' | 'extracted' | 'died' | 'mia' | 'abandoned'
 
@@ -150,6 +150,7 @@ export const RAID_ITEMS: readonly RaidItemDef[] = [
   { key: 'ancient_scroll', name: '远古卷轴', emoji: '📜', rarity: 'legendary', kind: 'skill_cache', value: 2200, weight: 1, stackMax: 1, description: '开启后随机获得一个高阶宠物技能。', cacheTierMin: 7, cacheTierMax: 10 },
 
   // ---------- 神话（红） ----------
+  { key: 'gear_cache_mythic', name: '深渊装备箱', emoji: '🧿', rarity: 'mythic', kind: 'gear_cache', value: 5600, weight: 1, stackMax: 1, description: '可能开出一件 6–8 级装备，巨型背包只在最深处出现。', cacheTierMin: 6, cacheTierMax: 8 },
   { key: 'heart_of_africa', name: '非洲之心', emoji: '💎', rarity: 'mythic', kind: 'material', value: 9999, weight: 1, stackMax: 1, description: '传说中的巨钻，只在最深处出现。' },
   { key: 'abyss_core', name: '深渊核心', emoji: '🌌', rarity: 'mythic', kind: 'material', value: 6800, weight: 1, stackMax: 1, description: '不断吞噬光线的黑色球体。' },
 ]
@@ -267,9 +268,11 @@ export const RAID_GEARS: readonly RaidGearDef[] = [
   { key: 'backpack_t4', name: '远征背包', emoji: '🎒', slot: 'backpack', tier: 4, rarity: GEAR_RARITY_BY_TIER[3], price: 2800, description: '20 格容量，适合长时间搜刮。', slots: 20, shopable: false },
   { key: 'backpack_t5', name: '重装载具', emoji: '🧳', slot: 'backpack', tier: 5, rarity: GEAR_RARITY_BY_TIER[4], price: 4500, description: '24 格容量，像个移动仓库。', slots: 24, shopable: false },
   { key: 'backpack_t6', name: '外骨骼载具', emoji: '🧳', slot: 'backpack', tier: 6, rarity: GEAR_RARITY_BY_TIER[5], price: 7000, description: '28 格容量，外骨骼直接承重。', slots: 28, shopable: false },
+  { key: 'backpack_t7', name: '深渊驮包', emoji: '🛄', slot: 'backpack', tier: 7, rarity: GEAR_RARITY_BY_TIER[5], price: 10000, description: '36 格容量，深渊实验室的秘密制式。', slots: 36, shopable: false },
+  { key: 'backpack_t8', name: '移动武库', emoji: '🧰', slot: 'backpack', tier: 8, rarity: GEAR_RARITY_BY_TIER[5], price: 15000, description: '48 格容量，一个人就是一支运输队。', slots: 48, shopable: false },
 
   // ---------- 胸挂 ----------
-  { key: 'rig_t1', name: '简易胸挂', emoji: '🎽', slot: 'rig', tier: 1, rarity: GEAR_RARITY_BY_TIER[0], price: 200, description: '2 格快取位，只能放消耗品。', slots: 2, shopable: true },
+  { key: 'rig_t1', name: '简易胸挂', emoji: '🎽', slot: 'rig', tier: 1, rarity: GEAR_RARITY_BY_TIER[0], price: 200, description: '2 格快取位，取用最顺手。', slots: 2, shopable: true },
   { key: 'rig_t2', name: '战术胸挂', emoji: '🎽', slot: 'rig', tier: 2, rarity: GEAR_RARITY_BY_TIER[1], price: 450, description: '3 格快取位，取用顺手。', slots: 3, shopable: true },
   { key: 'rig_t3', name: '突击胸挂', emoji: '🦺', slot: 'rig', tier: 3, rarity: GEAR_RARITY_BY_TIER[2], price: 900, description: '4 格快取位，突击队制式。', slots: 4, shopable: true },
   { key: 'rig_t4', name: '特战胸挂', emoji: '🦺', slot: 'rig', tier: 4, rarity: GEAR_RARITY_BY_TIER[3], price: 1700, description: '5 格快取位，模块化挂载。', slots: 5, shopable: false },
@@ -332,7 +335,7 @@ export const RAID_MAPS: readonly RaidMapDef[] = [
     difficulty: 'normal',
     cols: 3,
     rows: 3,
-    enemyBudget: 10,
+    enemyBudget: 12,
     bossRooms: 0,
     eliteRooms: 0,
     lootRooms: 2,
@@ -342,7 +345,7 @@ export const RAID_MAPS: readonly RaidMapDef[] = [
     recommendLevel: 1,
     lootTier: 1,
     color: '#6a994e',
-    enemyLevel: 1,
+    enemyLevel: 2,
     durationMs: 15 * 60_000,
   },
   {
@@ -353,7 +356,7 @@ export const RAID_MAPS: readonly RaidMapDef[] = [
     difficulty: 'normal',
     cols: 3,
     rows: 4,
-    enemyBudget: 18,
+    enemyBudget: 20,
     bossRooms: 1,
     eliteRooms: 1,
     lootRooms: 2,
@@ -363,7 +366,7 @@ export const RAID_MAPS: readonly RaidMapDef[] = [
     recommendLevel: 3,
     lootTier: 2,
     color: '#3d7ea6',
-    enemyLevel: 4,
+    enemyLevel: 5,
     durationMs: 18 * 60_000,
   },
   {
@@ -374,7 +377,7 @@ export const RAID_MAPS: readonly RaidMapDef[] = [
     difficulty: 'hard',
     cols: 4,
     rows: 4,
-    enemyBudget: 26,
+    enemyBudget: 29,
     bossRooms: 1,
     eliteRooms: 2,
     lootRooms: 3,
@@ -384,7 +387,7 @@ export const RAID_MAPS: readonly RaidMapDef[] = [
     recommendLevel: 5,
     lootTier: 3,
     color: '#8a5a44',
-    enemyLevel: 6,
+    enemyLevel: 7,
     durationMs: 20 * 60_000,
   },
   {
@@ -395,7 +398,7 @@ export const RAID_MAPS: readonly RaidMapDef[] = [
     difficulty: 'extreme',
     cols: 4,
     rows: 4,
-    enemyBudget: 32,
+    enemyBudget: 36,
     bossRooms: 1,
     eliteRooms: 3,
     lootRooms: 3,
@@ -405,7 +408,7 @@ export const RAID_MAPS: readonly RaidMapDef[] = [
     recommendLevel: 8,
     lootTier: 4,
     color: '#5b4b8a',
-    enemyLevel: 9,
+    enemyLevel: 10,
     durationMs: 22 * 60_000,
   },
   {
@@ -416,7 +419,7 @@ export const RAID_MAPS: readonly RaidMapDef[] = [
     difficulty: 'hard',
     cols: 4,
     rows: 5,
-    enemyBudget: 30,
+    enemyBudget: 34,
     bossRooms: 2,
     eliteRooms: 2,
     lootRooms: 3,
@@ -426,7 +429,7 @@ export const RAID_MAPS: readonly RaidMapDef[] = [
     recommendLevel: 6,
     lootTier: 4,
     color: '#4a7c59',
-    enemyLevel: 7,
+    enemyLevel: 8,
     durationMs: 21 * 60_000,
   },
   {
@@ -437,7 +440,7 @@ export const RAID_MAPS: readonly RaidMapDef[] = [
     difficulty: 'extreme',
     cols: 5,
     rows: 5,
-    enemyBudget: 40,
+    enemyBudget: 44,
     bossRooms: 2,
     eliteRooms: 4,
     lootRooms: 4,
@@ -447,7 +450,7 @@ export const RAID_MAPS: readonly RaidMapDef[] = [
     recommendLevel: 10,
     lootTier: 5,
     color: '#2b3a67',
-    enemyLevel: 12,
+    enemyLevel: 13,
     durationMs: 26 * 60_000,
   },
 ]
@@ -736,13 +739,14 @@ export function createRaidEnemy(
   const rng = createRaidRng(raidSubSeed(seed, `enemy:${roomId}:${index}`))
   const kindOffset = kind === 'boss' ? 6 : kind === 'elite' ? 3 : kind === 'soldier' ? 1 : 0
   const level = clampInt(enemyLevel + kindOffset + rngInt(rng, 0, 1), 1, 30)
-  const hpMult = kind === 'boss' ? 4.2 : kind === 'elite' ? 1.9 : 1
-  const damageMult = kind === 'boss' ? 1.5 : kind === 'elite' ? 1.2 : 1
+  // 2026-11-03 增强守卫战斗力：血量 / 伤害整体上调，远程占比提高，逼玩家用走位与技能周旋
+  const hpMult = kind === 'boss' ? 5.0 : kind === 'elite' ? 2.4 : 1.2
+  const damageMult = kind === 'boss' ? 1.8 : kind === 'elite' ? 1.45 : 1.15
   const maxHp = Math.round((40 + level * 10) * hpMult)
   // 实时战斗节奏：单发伤害压低、靠走位与技能周旋，避免一进房就被集火秒杀
   const damage = Math.max(2, Math.round((4 + level * 1.05) * damageMult))
-  const speed = kind === 'boss' ? 1.0 : kind === 'elite' ? 1.5 : kind === 'scout' ? 2.2 : 1.7
-  const ranged = kind === 'boss' || kind === 'elite' ? true : rng() < (kind === 'scout' ? 0.7 : 0.45)
+  const speed = kind === 'boss' ? 1.1 : kind === 'elite' ? 1.6 : kind === 'scout' ? 2.2 : 1.8
+  const ranged = kind === 'boss' || kind === 'elite' ? true : rng() < (kind === 'scout' ? 0.85 : 0.65)
   const skills = kind === 'boss'
     ? ['burst']
     : kind === 'elite'
@@ -1097,6 +1101,19 @@ export interface RaidLogEntry {
   text: string
 }
 
+/** 丢弃在地面的物品（对局内临时存在，撤离 / 阵亡即消失） */
+export interface RaidGroundStack {
+  id: string
+  roomId: number
+  itemKey: string
+  amount: number
+  x: number
+  y: number
+}
+
+/** 单个房间地面掉落物上限（防无限丢物刷屏） */
+export const RAID_GROUND_LOOT_LIMIT = 24
+
 export interface RaidRunState {
   schemaVersion: number
   seed: number
@@ -1124,6 +1141,9 @@ export interface RaidRunState {
   backpack: RaidItemStack[]
   rig: RaidItemStack[]
   safe: RaidItemStack[]
+  groundLoot: RaidGroundStack[]
+  /** 地面物品发号器（丢弃时自增，保证 id 稳定） */
+  groundSeq: number
   skills: RaidSkillRule[]
   skillUsedAt: Record<string, number>
   kills: number
@@ -1153,6 +1173,8 @@ export interface RaidStartInput {
   safe: RaidItemStack[]
   skills: RaidSkillRule[]
   startedAt: number
+  /** 组队模式：按成员序号错开的地面掉落发号基址（防各成员 g1/g2 撞 id） */
+  groundSeqBase?: number
 }
 
 function makeLog(state: RaidRunState, kind: RaidLogEntry['kind'], text: string, now: number): void {
@@ -1196,7 +1218,7 @@ export function createRaidRun(input: RaidStartInput): RaidRunState {
       safe: Math.max(0, Math.trunc(input.capacities.safe)),
     },
     backpack: normalizeContainer(input.backpack, input.capacities.backpack),
-    rig: normalizeContainer(input.rig, input.capacities.rig, true),
+    rig: normalizeContainer(input.rig, input.capacities.rig),
     safe: normalizeContainer(input.safe, input.capacities.safe),
     skills: input.skills.slice(0, 3),
     skillUsedAt: {},
@@ -1204,6 +1226,8 @@ export function createRaidRun(input: RaidStartInput): RaidRunState {
     damageTaken: 0,
     extractionStartedAt: null,
     extractionRoom: null,
+    groundLoot: [],
+    groundSeq: Math.max(0, Math.trunc(input.groundSeqBase ?? 0)),
     log: [],
     lastSyncAt: now,
     logSeq: 0,
@@ -1212,11 +1236,10 @@ export function createRaidRun(input: RaidStartInput): RaidRunState {
   return state
 }
 
-/** 清洗容器：去掉越界槽位、非法物品、超过堆叠上限与容量的部分 */
+/** 清洗容器：去掉越界槽位、非法物品、超过堆叠上限与容量的部分（2026-11 起胸挂不再限消耗品） */
 export function normalizeContainer(
   stacks: readonly RaidItemStack[],
   capacity: number,
-  consumablesOnly = false,
 ): RaidItemStack[] {
   const out: RaidItemStack[] = []
   const used = new Set<number>()
@@ -1225,7 +1248,6 @@ export function normalizeContainer(
     if (out.length >= cap) break
     const def = RAID_ITEM_MAP.get(stack.itemKey)
     if (!def) continue
-    if (consumablesOnly && def.kind !== 'consumable') continue
     const amount = clampInt(stack.amount, 0, def.stackMax)
     if (amount <= 0) continue
     const slot = clampInt(stack.slotIndex, 0, Math.max(0, cap - 1))
@@ -1483,6 +1505,17 @@ export type RaidEvent =
     /** 缺省 = 整格全部移动 */
     amount?: number
   }
+  | {
+    type: 'dropItem'
+    from: RaidContainerKind
+    slotIndex: number
+    /** 缺省 = 整格全部丢弃 */
+    amount?: number
+    /** 丢弃落点（客户端玩家坐标，服务端夹取进当前房间内部） */
+    x?: number
+    y?: number
+  }
+  | { type: 'takeGround'; groundId: string; target: RaidContainerKind }
   | { type: 'useItem'; itemKey: string; from: RaidContainerKind }
   | { type: 'castSkill'; skillKey: string }
   | { type: 'damage'; amount: number; zone: 'head' | 'body' }
@@ -1507,6 +1540,8 @@ function cloneState(state: RaidRunState): RaidRunState {
     backpack: state.backpack.map((stack) => ({ ...stack })),
     rig: state.rig.map((stack) => ({ ...stack })),
     safe: state.safe.map((stack) => ({ ...stack })),
+    groundLoot: (state.groundLoot ?? []).map((item) => ({ ...item })),
+    groundSeq: state.groundSeq ?? 0,
     skills: state.skills.map((skill) => ({ ...skill })),
     skillUsedAt: { ...state.skillUsedAt },
     log: state.log.map((entry) => ({ ...entry })),
@@ -1554,6 +1589,16 @@ export function tickRaidRun(state: RaidRunState, now: number): RaidRunState {
     makeLog(next, 'danger', '行动超时，与小队失去联系。', now)
   }
   return next
+}
+
+/** 把丢弃落点夹取进当前房间内部（客户端坐标只作参考，不能丢到墙外或别的房间） */
+function clampGroundPos(x: number | undefined, y: number | undefined, room: RaidRoomNode): { x: number; y: number } {
+  const cx = Number.isFinite(x) ? Number(x) : room.x + room.w / 2
+  const cy = Number.isFinite(y) ? Number(y) : room.y + room.h / 2
+  return {
+    x: Math.max(room.x + 1.5, Math.min(room.x + room.w - 2.5, cx)),
+    y: Math.max(room.y + 1.5, Math.min(room.y + room.h - 2.5, cy)),
+  }
 }
 
 /**
@@ -1630,9 +1675,6 @@ export function applyRaidEvent(
       if (next.takenLoot.includes(takeId)) return { state: next, error: '这件物品已经被拿走了' }
       const def = RAID_ITEM_MAP.get(loot.itemKey)
       if (!def) return { state, error: '未知物品' }
-      if (event.target === 'rig' && def.kind !== 'consumable') {
-        return { state, error: '胸挂只能放消耗品' }
-      }
       const capacity = containerCapacity(next, event.target)
       if (capacity <= 0) return { state, error: `${RAID_CONTAINER_LABELS[event.target]}已满，装不下了` }
       const target = currentContainer(next, event.target)
@@ -1652,9 +1694,6 @@ export function applyRaidEvent(
       if (!stack) return { state, error: '这里没有这件物品' }
       const def = RAID_ITEM_MAP.get(stack.itemKey)
       if (!def) return { state, error: '未知物品' }
-      if (event.to === 'rig' && def.kind !== 'consumable') {
-        return { state, error: '胸挂只能放消耗品' }
-      }
       const capacity = containerCapacity(next, event.to)
       if (capacity <= 0) return { state, error: `${RAID_CONTAINER_LABELS[event.to]}已满，装不下了` }
       const amount = clampInt(event.amount ?? stack.amount, 1, stack.amount)
@@ -1675,6 +1714,57 @@ export function applyRaidEvent(
         `把 ${def.name} ×${amount} 挪到${RAID_CONTAINER_LABELS[event.to]}`,
         now,
       )
+      return { state: next }
+    }
+    case 'dropItem': {
+      const room = map.rooms[next.currentRoom]
+      if (!room) return { state, error: '当前房间异常' }
+      const source = currentContainer(next, event.from)
+      const stack = source.find((entry) => entry.slotIndex === event.slotIndex)
+      if (!stack) return { state, error: '这里没有这件物品' }
+      const def = RAID_ITEM_MAP.get(stack.itemKey)
+      if (!def) return { state, error: '未知物品' }
+      const amount = clampInt(event.amount ?? stack.amount, 1, stack.amount)
+      const roomGroundCount = next.groundLoot.filter((item) => item.roomId === next.currentRoom).length
+      if (roomGroundCount >= RAID_GROUND_LOOT_LIMIT) {
+        return { state, error: '地上掉落物太多了，先捡一捡再丢' }
+      }
+      const removed = removeItemFromContainer(source, event.slotIndex, amount)
+      if (!removed) return { state, error: '丢弃失败' }
+      if (event.from === 'backpack') next.backpack = removed
+      else if (event.from === 'rig') next.rig = removed
+      else next.safe = removed
+      next.groundSeq += 1
+      const pos = clampGroundPos(event.x, event.y, room)
+      next.groundLoot.push({
+        id: `g${next.groundSeq}`,
+        roomId: next.currentRoom,
+        itemKey: stack.itemKey,
+        amount,
+        x: pos.x,
+        y: pos.y,
+      })
+      makeLog(next, 'info', `丢弃 ${def.name} ×${amount}`, now)
+      return { state: next }
+    }
+    case 'takeGround': {
+      const room = map.rooms[next.currentRoom]
+      if (!room) return { state, error: '当前房间异常' }
+      const ground = next.groundLoot.find((item) => item.id === event.groundId)
+      if (!ground) return { state, error: '地上没有这件物品' }
+      if (ground.roomId !== next.currentRoom) return { state, error: '物品在别的房间' }
+      const def = RAID_ITEM_MAP.get(ground.itemKey)
+      if (!def) return { state, error: '未知物品' }
+      const capacity = containerCapacity(next, event.target)
+      if (capacity <= 0) return { state, error: `${RAID_CONTAINER_LABELS[event.target]}已满，装不下了` }
+      const target = currentContainer(next, event.target)
+      const updated = addItemToContainer(target, capacity, ground.itemKey, ground.amount)
+      if (!updated) return { state, error: `${RAID_CONTAINER_LABELS[event.target]}已满，装不下了` }
+      if (event.target === 'backpack') next.backpack = updated
+      else if (event.target === 'rig') next.rig = updated
+      else next.safe = updated
+      next.groundLoot = next.groundLoot.filter((item) => item.id !== event.groundId)
+      makeLog(next, 'loot', `捡起 ${def.name} ×${ground.amount}`, now)
       return { state: next }
     }
     case 'useItem': {

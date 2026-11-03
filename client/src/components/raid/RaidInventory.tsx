@@ -20,12 +20,13 @@ interface RaidInventoryProps {
   snapshot: RaidSnapshot
   busy: boolean
   onMove: (from: RaidContainerKind, to: RaidContainerKind, slotIndex: number, amount?: number) => boolean
+  onDrop: (from: RaidContainerKind, slotIndex: number, amount?: number) => boolean
   onClose: () => void
 }
 
 const CONTAINERS: { kind: RaidContainerKind; label: string; hint: string }[] = [
   { kind: 'backpack', label: '背包', hint: '通用物资（撤离保留 · 阵亡丢失）' },
-  { kind: 'rig', label: '胸挂', hint: '只能放消耗品（撤离保留 · 阵亡丢失）' },
+  { kind: 'rig', label: '胸挂', hint: '快取位（撤离保留 · 阵亡丢失）' },
   { kind: 'safe', label: '安全箱', hint: '撤离 / 阵亡都保留' },
 ]
 
@@ -50,7 +51,7 @@ function capacityOf(snapshot: RaidSnapshot, kind: RaidContainerKind): number {
   return snapshot.capacities.backpack
 }
 
-export default function RaidInventory({ snapshot, busy, onMove, onClose }: RaidInventoryProps) {
+export default function RaidInventory({ snapshot, busy, onMove, onDrop, onClose }: RaidInventoryProps) {
   const [selected, setSelected] = useState<{ from: RaidContainerKind; slotIndex: number } | null>(null)
   const [notice, setNotice] = useState('')
 
@@ -75,7 +76,6 @@ export default function RaidInventory({ snapshot, busy, onMove, onClose }: RaidI
   const canMoveTo = (kind: RaidContainerKind): boolean => {
     if (!selected || !selectedStack || !selectedDef) return false
     if (kind === selected.from) return false
-    if (kind === 'rig' && selectedDef.kind !== 'consumable') return false
     const capacity = capacityOf(snapshot, kind)
     if (capacity <= 0) return false
     return addItemToContainer(stacksOf(snapshot, kind), capacity, selectedStack.itemKey, selectedStack.amount) !== null
@@ -89,6 +89,17 @@ export default function RaidInventory({ snapshot, busy, onMove, onClose }: RaidI
       setSelected(null)
     } else {
       setNotice('移动失败：目标容器可能已满')
+    }
+  }
+
+  const handleDrop = (): void => {
+    if (!selected || !selectedStack || busy) return
+    const ok = onDrop(selected.from, selected.slotIndex, selectedStack.amount)
+    if (ok) {
+      setNotice(`已把 ${selectedDef?.name ?? '物品'} 丢在地上（走过即可捡回）`)
+      setSelected(null)
+    } else {
+      setNotice('丢弃失败：地上的掉落物可能已经满了')
     }
   }
 
@@ -178,13 +189,11 @@ export default function RaidInventory({ snapshot, busy, onMove, onClose }: RaidI
                   const enabled = !busy && canMoveTo(container.kind)
                   const reason = busy
                     ? '同步中'
-                    : container.kind === 'rig' && selectedDef.kind !== 'consumable'
-                      ? '胸挂只能放消耗品'
-                      : capacityOf(snapshot, container.kind) <= 0
-                        ? `未装备${container.label}`
-                        : !enabled
-                          ? `${container.label}已满`
-                          : ''
+                    : capacityOf(snapshot, container.kind) <= 0
+                      ? `未装备${container.label}`
+                      : !enabled
+                        ? `${container.label}已满`
+                        : ''
                   return (
                     <button
                       key={container.kind}
@@ -198,6 +207,15 @@ export default function RaidInventory({ snapshot, busy, onMove, onClose }: RaidI
                     </button>
                   )
                 })}
+                <button
+                  type="button"
+                  className="gh-raid-inv-target is-drop"
+                  disabled={busy}
+                  onClick={handleDrop}
+                >
+                  丢在地上
+                  <em>{busy ? '同步中' : '走过可捡回'}</em>
+                </button>
               </div>
             </>
           ) : (

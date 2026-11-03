@@ -29,6 +29,7 @@ import {
   type RaidContainerKind,
   type RaidEvent,
   type RaidGearInstance,
+  type RaidGroundStack,
   type RaidItemStack,
   type RaidMapDef,
   type RaidMapNode,
@@ -91,6 +92,8 @@ export interface RaidRunDto {
   killedEnemies: string[]
   openedContainers: string[]
   takenLoot: string[]
+  groundLoot: RaidGroundStack[]
+  groundSeq: number
   backpack: RaidItemStack[]
   rig: RaidItemStack[]
   safe: RaidItemStack[]
@@ -191,6 +194,8 @@ function runDto(row: PetRaid, state: RaidRunState, now: number): RaidRunDto {
     killedEnemies: [...state.killedEnemies],
     openedContainers: [...state.openedContainers],
     takenLoot: [...state.takenLoot],
+    groundLoot: (state.groundLoot ?? []).map((item) => ({ ...item })),
+    groundSeq: state.groundSeq ?? 0,
     backpack: state.backpack,
     rig: state.rig,
     safe: state.safe,
@@ -241,6 +246,8 @@ export interface RaidStartOptions {
   /** 组队模式：全队共用同一个 seed（同一张地图），单人开局自行随机 */
   seed?: number
   squadId?: string
+  /** 组队模式：地面掉落发号基址（按成员错开，防撞 id） */
+  groundSeqBase?: number
 }
 
 export async function startRaid(
@@ -290,6 +297,7 @@ export async function startRaid(
     safe: containers.safe,
     skills: loadout.skills,
     startedAt: now,
+    groundSeqBase: options.groundSeqBase,
   })
 
   await prisma.$transaction(async (tx) => {
@@ -351,6 +359,8 @@ export async function startSquadRaid(
 
   const failed: RaidSquadStartResult['failed'] = []
   const eligible: { userId: number; name: string }[] = []
+  let memberIndex = 0
+  const groundSeqBases = new Map<number, number>()
   for (const member of squad.members) {
     const loadout = await loadRaidLoadoutTx(prisma as unknown as Db, member.userId).catch(() => null)
     if (!loadout) {
@@ -368,6 +378,8 @@ export async function startSquadRaid(
       continue
     }
     eligible.push({ userId: member.userId, name: member.name })
+    groundSeqBases.set(member.userId, (memberIndex + 1) * 100)
+    memberIndex += 1
   }
 
   if (eligible.length < 2) {
@@ -383,7 +395,7 @@ export async function startSquadRaid(
   const started: number[] = []
   for (const member of eligible) {
     try {
-      await startRaid(member.userId, mapKey, { insured, seed, squadId: squad.id })
+      await startRaid(member.userId, mapKey, { insured, seed, squadId: squad.id, groundSeqBase: groundSeqBases.get(member.userId) ?? 0 })
       started.push(member.userId)
     } catch (err) {
       failed.push({
@@ -426,10 +438,19 @@ function diffWorldDelta(before: RaidRunState, after: RaidRunState): RaidWorldDel
   const openedContainers = after.openedContainers.filter((id) => !before.openedContainers.includes(id))
   const takenLoot = after.takenLoot.filter((id) => !before.takenLoot.includes(id))
   const clearedRooms = after.clearedRooms.filter((id) => !before.clearedRooms.includes(id))
-  if (killedEnemies.length === 0 && openedContainers.length === 0 && takenLoot.length === 0 && clearedRooms.length === 0) {
+  const beforeGround = before.groundLoot ?? []
+  const afterGround = after.groundLoot ?? []
+  const groundDropped = afterGround.filter((item) => !beforeGround.some((entry) => entry.id === item.id))
+  const groundTaken = beforeGround
+    .filter((entry) => !afterGround.some((item) => item.id === entry.id))
+    .map((entry) => entry.id)
+  if (
+    killedEnemies.length === 0 && openedContainers.length === 0 && takenLoot.length === 0
+    && clearedRooms.length === 0 && groundDropped.length === 0 && groundTaken.length === 0
+  ) {
     return null
   }
-  return { killedEnemies, openedContainers, takenLoot, clearedRooms }
+  return { killedEnemies, openedContainers, takenLoot, clearedRooms, groundDropped, groundTaken }
 }
 
 /** 只并入世界集合，不给队友计击杀、不占队友背包（战利品归拾取者） */
@@ -439,6 +460,14 @@ function mergeWorldDelta(state: RaidRunState, delta: RaidWorldDelta): void {
   for (const id of delta.takenLoot) if (!state.takenLoot.includes(id)) state.takenLoot.push(id)
   // 门是否解锁由 killedEnemies 推导（roomIsClear），clearedRooms 只是房间已清的记录
   for (const roomId of delta.clearedRooms) if (!state.clearedRooms.includes(roomId)) state.clearedRooms.push(roomId)
+  if (!state.groundLoot) state.groundLoot = []
+  for (const item of delta.groundDropped ?? []) {
+    if (!state.groundLoot.some((entry) => entry.id === item.id)) state.groundLoot.push({ ...item })
+  }
+  if (delta.groundTaken?.length) {
+    const taken = new Set(delta.groundTaken)
+    state.groundLoot = state.groundLoot.filter((entry) => !taken.has(entry.id))
+  }
 }
 
 /**

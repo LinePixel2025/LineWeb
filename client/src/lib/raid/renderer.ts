@@ -340,7 +340,18 @@ function buildScene(
   return canvas
 }
 
-/** 房间类型染色 + 墙脚内阴影：让战斗房、撤离区、首领房一眼可区分 */
+/** 房间类型徽标（烙进静态场景缓存：大图标 + 文字，一眼可读） */
+const ROOM_BADGES: Record<string, { glyph: string; label: string }> = {
+  start: { glyph: '🏠', label: '起点' },
+  combat: { glyph: '⚔️', label: '战斗区' },
+  elite: { glyph: '🛡️', label: '精英区' },
+  boss: { glyph: '👑', label: '首领房' },
+  loot: { glyph: '📦', label: '物资房' },
+  hazard: { glyph: '☢️', label: '危险区' },
+  extract: { glyph: '🚁', label: '撤离区' },
+}
+
+/** 房间类型染色 + 墙脚内阴影 + 类型徽标：让战斗房、撤离区、首领房一眼可区分 */
 function drawRoomTint(
   ctx: CanvasRenderingContext2D,
   room: RaidRoomNode,
@@ -352,17 +363,37 @@ function drawRoomTint(
   const w = (room.w - 2) * tile
   const h = (room.h - 2) * tile
   const tint: Record<string, string> = {
-    combat: 'rgba(248, 113, 113, 0.035)',
-    elite: 'rgba(251, 146, 60, 0.05)',
-    boss: 'rgba(248, 113, 113, 0.07)',
-    loot: 'rgba(250, 204, 21, 0.045)',
-    hazard: 'rgba(192, 132, 252, 0.05)',
-    extract: 'rgba(56, 189, 248, 0.06)',
+    combat: 'rgba(248, 113, 113, 0.06)',
+    elite: 'rgba(251, 146, 60, 0.08)',
+    boss: 'rgba(248, 113, 113, 0.1)',
+    loot: 'rgba(250, 204, 21, 0.07)',
+    hazard: 'rgba(192, 132, 252, 0.08)',
+    extract: 'rgba(56, 189, 248, 0.09)',
+    start: 'rgba(148, 163, 184, 0.05)',
   }
   const color = tint[room.kind]
   if (color) {
     ctx.fillStyle = color
     ctx.fillRect(x, y, w, h)
+  }
+  // 房间类型徽标：大号半透明水印烙在地板上（随场景缓存，零逐帧成本）
+  const badge = ROOM_BADGES[room.kind]
+  if (badge && w > tile * 4 && h > tile * 3) {
+    const cx = x + w / 2
+    const cy = y + h / 2
+    ctx.save()
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    const glyphSize = Math.min(tile * 3.2, w * 0.34, h * 0.42)
+    ctx.globalAlpha = 0.16
+    ctx.font = `${glyphSize}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`
+    ctx.fillText(badge.glyph, cx, cy - glyphSize * 0.18)
+    ctx.globalAlpha = 0.3
+    ctx.fillStyle = '#e2e8f0'
+    ctx.font = `600 ${Math.max(11, tile * 0.52)}px "SF Pro SC", "PingFang SC", "Microsoft YaHei", sans-serif`
+    ctx.fillText(badge.label, cx, cy + glyphSize * 0.52)
+    ctx.restore()
+    ctx.globalAlpha = 1
   }
   // 四面墙脚压暗，提升房间的体积感
   const depth = Math.min(tile * 1.4, w * 0.18, h * 0.22)
@@ -598,6 +629,7 @@ export function renderRaid(
   drawExtractBeacon(ctx, engine, metrics, art, now, low, dpr)
   drawContainers(ctx, engine, metrics, art, now, low, dpr)
   drawPickups(ctx, engine, metrics, now, low, dpr)
+  drawGroundLoot(ctx, engine, metrics, now, low, dpr)
   if (!low) drawAmbient(ctx, engine, room, art, metrics, now)
   drawTeam(ctx, engine, metrics, now, low)
   drawEnemies(ctx, engine, metrics, art, now, low)
@@ -900,6 +932,38 @@ function drawPickups(
       ctx.globalAlpha = 1
     }
     drawEmoji(ctx, def.emoji, screen.x, screen.y - bob * 0.5, tile * 0.42, dpr)
+  }
+}
+
+/** 丢弃在地面的物品（自己 / 队友丢的，走过自动捡起）：虚线圈区别于容器掉落实线圈 */
+function drawGroundLoot(
+  ctx: CanvasRenderingContext2D,
+  engine: RaidEngine,
+  metrics: RaidRenderMetrics,
+  now: number,
+  low: boolean,
+  dpr: number,
+): void {
+  const tile = metrics.tile
+  for (const item of engine.groundLoot) {
+    if (item.roomId !== engine.roomId) continue
+    const def = RAID_ITEM_MAP.get(item.itemKey)
+    if (!def) continue
+    const bob = low ? 0 : Math.sin(now / 360 + item.x * 2.6) * tile * 0.07
+    const screen = worldToScreen(metrics, item.x, item.y)
+    const color = RARITY_RING[def.rarity] ?? '#94a3b8'
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.66)'
+    ctx.beginPath()
+    ctx.ellipse(screen.x, screen.y + tile * 0.2, tile * 0.3, tile * 0.12, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = color
+    ctx.lineWidth = Math.max(1.5, tile * 0.05)
+    ctx.setLineDash([tile * 0.14, tile * 0.1])
+    ctx.beginPath()
+    ctx.arc(screen.x, screen.y - bob * 0.4, tile * 0.34, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.setLineDash([])
+    drawEmoji(ctx, def.emoji, screen.x, screen.y - bob * 0.5, tile * 0.4, dpr)
   }
 }
 
@@ -1390,6 +1454,26 @@ function drawPlayer(
 
 /* ---------- 特效 / 飘字 / 命中标记 ---------- */
 
+/** 特效渐变缓存：cone / pillar 每帧新建 CanvasGradient 在平板上是可测的开销，按 ctx + 参数缓存 */
+const effectGradientCache = new WeakMap<CanvasRenderingContext2D, Map<string, CanvasGradient>>()
+function cachedGradient(
+  ctx: CanvasRenderingContext2D,
+  key: string,
+  build: () => CanvasGradient,
+): CanvasGradient {
+  let store = effectGradientCache.get(ctx)
+  if (!store) {
+    store = new Map()
+    effectGradientCache.set(ctx, store)
+  }
+  const hit = store.get(key)
+  if (hit) return hit
+  const made = build()
+  if (store.size > 64) store.clear()
+  store.set(key, made)
+  return made
+}
+
 function drawEffects(
   ctx: CanvasRenderingContext2D,
   effects: readonly RaidEffect[],
@@ -1483,11 +1567,13 @@ function drawEffects(
       ctx.save()
       ctx.translate(screen.x, screen.y)
       ctx.globalCompositeOperation = 'lighter'
-      const grad = ctx.createLinearGradient(0, 0, 0, -height)
-      grad.addColorStop(0, effect.color)
-      grad.addColorStop(0.55, effect.accent)
-      grad.addColorStop(1, 'rgba(0, 0, 0, 0)')
-      ctx.fillStyle = grad
+      ctx.fillStyle = cachedGradient(ctx, `pillar|${effect.color}|${effect.accent}|${Math.round(height)}`, () => {
+        const grad = ctx.createLinearGradient(0, 0, 0, -height)
+        grad.addColorStop(0, effect.color)
+        grad.addColorStop(0.55, effect.accent)
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0)')
+        return grad
+      })
       ctx.globalAlpha = fade * 0.34
       ctx.beginPath()
       ctx.moveTo(-width / 2, 0)
@@ -1544,10 +1630,12 @@ function drawEffects(
       ctx.save()
       ctx.translate(screen.x, screen.y)
       ctx.rotate(effect.angle)
-      const gradient = ctx.createLinearGradient(0, 0, radius, 0)
-      gradient.addColorStop(0, effect.accent)
-      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
-      ctx.fillStyle = gradient
+      ctx.fillStyle = cachedGradient(ctx, `cone|${effect.accent}|${Math.round(radius)}`, () => {
+        const gradient = ctx.createLinearGradient(0, 0, radius, 0)
+        gradient.addColorStop(0, effect.accent)
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
+        return gradient
+      })
       ctx.globalAlpha = fade * 0.8
       ctx.beginPath()
       ctx.moveTo(0, 0)
@@ -1868,27 +1956,38 @@ function drawScreenFlash(
   height: number,
   now: number,
 ): void {
+  // 渐变本体按尺寸缓存（平板上每帧 createRadialGradient 是可测开销），动态透明度走 globalAlpha
   if (engine.hurtFlash > 0) {
-    const edge = ctx.createRadialGradient(
-      width / 2, height / 2, Math.min(width, height) * 0.2,
-      width / 2, height / 2, Math.max(width, height) * 0.72,
-    )
-    edge.addColorStop(0, 'rgba(248, 113, 113, 0)')
-    edge.addColorStop(1, `rgba(220, 38, 38, ${0.55 * engine.hurtFlash})`)
+    const edge = cachedGradient(ctx, `hurt|${Math.round(width)}x${Math.round(height)}`, () => {
+      const g = ctx.createRadialGradient(
+        width / 2, height / 2, Math.min(width, height) * 0.2,
+        width / 2, height / 2, Math.max(width, height) * 0.72,
+      )
+      g.addColorStop(0, 'rgba(220, 38, 38, 0)')
+      g.addColorStop(1, 'rgba(220, 38, 38, 0.55)')
+      return g
+    })
+    ctx.globalAlpha = Math.min(1, engine.hurtFlash)
     ctx.fillStyle = edge
     ctx.fillRect(0, 0, width, height)
+    ctx.globalAlpha = 1
   }
   const hpRatio = engine.maxHp > 0 ? engine.hp / engine.maxHp : 1
   if (hpRatio < 0.25 && !engine.ended) {
     const pulse = 0.12 + 0.1 * Math.sin(now / 320)
-    const edge = ctx.createRadialGradient(
-      width / 2, height / 2, Math.min(width, height) * 0.34,
-      width / 2, height / 2, Math.max(width, height) * 0.7,
-    )
-    edge.addColorStop(0, 'rgba(0, 0, 0, 0)')
-    edge.addColorStop(1, `rgba(190, 18, 60, ${pulse})`)
+    const edge = cachedGradient(ctx, `lowhp|${Math.round(width)}x${Math.round(height)}`, () => {
+      const g = ctx.createRadialGradient(
+        width / 2, height / 2, Math.min(width, height) * 0.34,
+        width / 2, height / 2, Math.max(width, height) * 0.7,
+      )
+      g.addColorStop(0, 'rgba(190, 18, 60, 0)')
+      g.addColorStop(1, 'rgba(190, 18, 60, 1)')
+      return g
+    })
+    ctx.globalAlpha = pulse
     ctx.fillStyle = edge
     ctx.fillRect(0, 0, width, height)
+    ctx.globalAlpha = 1
   }
 }
 
@@ -1942,6 +2041,17 @@ function drawHurtCompass(
 /* ============================================================
    小地图
    ============================================================ */
+
+/** 小地图房间类型字标（一格一字，比纯色块直观） */
+const MINIMAP_ROOM_CHAR: Record<string, string> = {
+  start: '起',
+  combat: '战',
+  elite: '精',
+  boss: '王',
+  loot: '资',
+  hazard: '危',
+  extract: '撤',
+}
 
 export function renderMinimap(
   ctx: CanvasRenderingContext2D,
@@ -1998,6 +2108,16 @@ export function renderMinimap(
     ctx.globalAlpha = isCurrent ? 1 : cleared ? 0.65 : 0.3
     ctx.fillRect(x, y, size, size)
     ctx.globalAlpha = 1
+    // 房间类型字标：格子够大才画（触屏 112px 小图里也有 18px 格，可读）
+    if (cell >= 12) {
+      ctx.fillStyle = '#0b1220'
+      ctx.globalAlpha = isCurrent ? 0.92 : cleared ? 0.85 : 0.6
+      ctx.font = `700 ${Math.max(8, Math.round(cell * 0.4))}px "SF Pro SC", "PingFang SC", "Microsoft YaHei", sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(MINIMAP_ROOM_CHAR[room.kind] ?? '', x + size / 2, y + size / 2 + 0.5)
+      ctx.globalAlpha = 1
+    }
     if (isCurrent) {
       ctx.strokeStyle = art.minimap.current
       ctx.lineWidth = 1.5

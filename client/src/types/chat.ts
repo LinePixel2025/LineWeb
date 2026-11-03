@@ -15,6 +15,7 @@ import type {
 } from './game'
 import type { RaidSquad, RaidSquadInvite } from './raidSquad'
 import type { UserTitleDto } from './points'
+import type { RaidGroundStack } from '../lib/raid/raidRun'
 
 /** 实时传输模式：WebSocket 优先，失败/不支持时降级为 HTTP 轮询 */
 export type ChatTransport = 'ws' | 'polling'
@@ -175,7 +176,7 @@ export type ChatServerEvent =
   | { type: 'raid:squad:update'; squad: RaidSquad | null }
   | { type: 'raid:squad:started'; squad: RaidSquad }
   | { type: 'raid:squad:state'; squad: RaidSquad }
-  | { type: 'raid:squad:world'; squadId: string; byUserId: number; byName: string; killedEnemies: string[]; openedContainers: string[]; takenLoot: string[] }
+  | { type: 'raid:squad:world'; squadId: string; byUserId: number; byName: string; killedEnemies: string[]; openedContainers: string[]; takenLoot: string[]; groundDropped?: RaidGroundStack[]; groundTaken?: string[] }
   | { type: 'ping' }
   | { type: 'pong' }
 

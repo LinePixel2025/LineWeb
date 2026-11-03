@@ -164,19 +164,20 @@ assertEqual(raidShopGearPrice('nope'), 0, '未知装备商店价 0')
    ============================================================ */
 
 const gearCaches = RAID_ITEMS.filter((item) => item.kind === 'gear_cache')
-assertEqual(gearCaches.length, 4, '装备箱 4 种')
+assertEqual(gearCaches.length, 5, '装备箱 5 种（含神话档）')
 for (const cache of gearCaches) {
   assert((cache.cacheTierMin ?? 0) >= 1, `${cache.key} 最低档次 ≥ 1`)
-  assert((cache.cacheTierMax ?? 0) <= 6, `${cache.key} 最高档次 ≤ 6`)
+  assert((cache.cacheTierMax ?? 0) <= 8, `${cache.key} 最高档次 ≤ 8`)
   assert((cache.cacheTierMin ?? 0) <= (cache.cacheTierMax ?? 0), `${cache.key} 档次区间有效`)
   const pool = RAID_GEARS.filter(
     (gear) => gear.tier >= (cache.cacheTierMin ?? 1) && gear.tier <= (cache.cacheTierMax ?? 6),
   )
   assert(pool.length > 0, `${cache.key} 有可开出的装备`)
-  assert(pool.every((gear) => gear.tier >= 1 && gear.tier <= 6), `${cache.key} 开出的装备等级合法`)
+  assert(pool.every((gear) => gear.tier >= 1 && gear.tier <= 8), `${cache.key} 开出的装备等级合法`)
 }
 assertEqual(gearCacheTierLabel('gear_cache'), '2–3 级', '装备箱档次文案')
 assertEqual(gearCacheTierLabel('relic_cache'), '5–6 级', '遗物箱档次文案')
+assertEqual(gearCacheTierLabel('gear_cache_mythic'), '6–8 级', '神话装备箱档次文案')
 assertEqual(gearCacheTierLabel('scrap_metal'), '', '非装备箱无档次文案')
 
 const skillCaches = RAID_ITEMS.filter((item) => item.kind === 'skill_cache')

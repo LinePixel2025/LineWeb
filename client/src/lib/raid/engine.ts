@@ -9,6 +9,7 @@
 
 import {
   RAID_EXTRACT_CHANNEL_MS,
+  RAID_GROUND_LOOT_LIMIT,
   RAID_ITEM_MAP,
   RAID_MP_REGEN_PER_SEC,
   RAID_TILE_HAZARD,
@@ -25,6 +26,7 @@ import {
   type RaidEnemyNode,
   type RaidEvent,
   type RaidGearInstance,
+  type RaidGroundStack,
   type RaidItemStack,
   type RaidMapNode,
   type RaidRoomNode,
@@ -74,6 +76,9 @@ export interface LocalEnemy {
   telegraph: number
   /** 近战突进的剩余时长（秒） */
   lunge: number
+  /** 视线检测结果缓存（约 120ms 节流，平板上逐帧采样太贵） */
+  losOk?: boolean
+  losAt?: number
 }
 
 export interface LocalBullet {
@@ -185,6 +190,10 @@ export interface RaidWorldDelta {
   killedEnemies?: readonly string[]
   openedContainers?: readonly string[]
   takenLoot?: readonly string[]
+  /** 队友丢到地上的物品（2026-11 新增） */
+  groundDropped?: readonly RaidGroundStack[]
+  /** 队友从地上捡走的物品 id */
+  groundTaken?: readonly string[]
 }
 
 export interface SkillArt {
@@ -338,6 +347,13 @@ export class RaidEngine {
   dead = false
   ended = false
 
+  /** 丢弃在地面的物品（对局内临时，含队友丢的） */
+  groundLoot: RaidGroundStack[] = []
+  /** 地面物品发号器（与服务端 groundSeq 同基址同步推进） */
+  groundSeq = 0
+  /** 触屏自动锁敌：开火/瞄准时吸附最近可视敌人（桌面鼠标瞄准不受影响） */
+  aimAssist = false
+
   private events: RaidEvent[] = []
   private fireCooldown = 0
   private hazardAccum = 0
@@ -372,6 +388,8 @@ export class RaidEngine {
     this.killedEnemies = new Set(run.killedEnemies)
     this.openedContainers = new Set(run.openedContainers)
     this.takenLoot = new Set(run.takenLoot)
+    this.groundLoot = (run.groundLoot ?? []).map((item) => ({ ...item }))
+    this.groundSeq = run.groundSeq ?? 0
     this.extractStartedAt = run.extractionStartedAt
     this.loadRoom(run.currentRoom, true)
   }
@@ -475,6 +493,7 @@ export class RaidEngine {
     this.updateEnemies(dt, now)
     this.updateBullets(dt)
     this.updatePickups()
+    this.updateGroundPickups()
     this.updateHazard(dt, now)
     this.updateMp(dt)
     this.updateExtraction(now)
@@ -518,6 +537,11 @@ export class RaidEngine {
     }
     if (input.aimX !== 0 || input.aimY !== 0) {
       this.player.angle = Math.atan2(input.aimY - this.player.y, input.aimX - this.player.x)
+      // 触屏自动锁敌：开火时在朝向 ±75° 锥内吸附最近可视敌人，避免摇杆瞄不准
+      if (this.aimAssist && input.firing) {
+        const snapped = this.aimAssistAngle(this.player.angle)
+        if (snapped !== null) this.player.angle = snapped
+      }
     }
     this.fireCooldown = Math.max(0, this.fireCooldown - dt * 1000)
     if (input.firing && this.fireCooldown <= 0) {
@@ -682,11 +706,11 @@ export class RaidEngine {
           enemy.x += -ny * speed * dt * 0.5
           enemy.y += nx * speed * dt * 0.5
         }
-        const locked = dist < 9 && this.hasLineOfSight(enemy.x, enemy.y, this.player.x, this.player.y)
+        const locked = dist < 9 && this.sightCheck(enemy, now)
         // 开火预警：冷却临近时 telegraph 爬到 1，渲染器画准星与预警线
         enemy.telegraph = locked ? clamp(1 - enemy.cooldown / 480, 0, 1) : Math.max(0, enemy.telegraph - dt * 3)
         if (enemy.cooldown <= 0 && locked) {
-          enemy.cooldown = enemy.source.kind === 'boss' ? 1200 : 1700
+          enemy.cooldown = enemy.source.kind === 'boss' ? 1100 : 1500
           enemy.telegraph = 0
           this.enemyShoot(enemy, nx, ny)
         }
@@ -702,7 +726,7 @@ export class RaidEngine {
           enemy.y += ny * speed * dt
         }
         if (dist < 0.95 && enemy.cooldown <= 0) {
-          enemy.cooldown = 1000
+          enemy.cooldown = 950
           enemy.lunge = 0.26
           this.hurtPlayer(enemy.source.damage, 'body', now, Math.atan2(enemy.y - this.player.y, enemy.x - this.player.x))
           this.spawnParticles(
@@ -1066,6 +1090,57 @@ export class RaidEngine {
     return stacks.length < capacity
   }
 
+  /** 走过地面掉落物自动捡起（自己丢的或队友丢的都算，安全箱不自动收） */
+  private updateGroundPickups(): void {
+    if (this.groundLoot.length === 0) return
+    const remain: RaidGroundStack[] = []
+    for (const item of this.groundLoot) {
+      if (item.roomId !== this.roomId) {
+        remain.push(item)
+        continue
+      }
+      if (distance(item.x, item.y, this.player.x, this.player.y) > 0.7) {
+        remain.push(item)
+        continue
+      }
+      const def = RAID_ITEM_MAP.get(item.itemKey)
+      if (!def) continue
+      const target: RaidContainerKind | null = this.canFitItem('backpack', item.itemKey)
+        ? 'backpack'
+        : this.canFitItem('rig', item.itemKey) ? 'rig' : null
+      if (target === null) {
+        const now = Date.now()
+        if (now - this.lastFullToastAt > 1500) {
+          this.lastFullToastAt = now
+          this.pushToast('背包与胸挂都满了，捡不起来', 'danger', now)
+        }
+        remain.push(item)
+        continue
+      }
+      const stacks = target === 'rig' ? this.rig : this.backpack
+      const capacity = target === 'rig' ? this.capacities.rig : this.capacities.backpack
+      const next = addItemToContainer(stacks, capacity, item.itemKey, item.amount)
+      if (!next) {
+        remain.push(item)
+        continue
+      }
+      if (target === 'rig') this.rig = next
+      else this.backpack = next
+      this.groundLoot = this.groundLoot.filter((entry) => entry.id !== item.id)
+      this.events.push({ type: 'takeGround', groundId: item.id, target })
+      this.spawnParticles(item.x, item.y, 5, RARITY_SPARK[def.rarity] ?? '#e2e8f0')
+      this.pushFloat(
+        `${def.name} ×${item.amount}`,
+        item.x,
+        item.y - 0.4,
+        RARITY_SPARK[def.rarity] ?? '#e2e8f0',
+        def.rarity === 'legendary' || def.rarity === 'mythic',
+      )
+      this.pushToast(`捡起 ${def.name} ×${item.amount}`, 'info', Date.now())
+    }
+    this.groundLoot = remain
+  }
+
   /* ---------- 交互 ---------- */
 
   interact(now = Date.now()): void {
@@ -1163,7 +1238,12 @@ export class RaidEngine {
     this.skillReadyAt[skill.key] = now + skill.cooldownMs
     this.events.push({ type: 'castSkill', skillKey: skill.key })
 
-    const angle = this.player.angle
+    // 技能自动锁敌（全平台）：伤害技能朝最近可视敌人，无目标保持当前朝向
+    let angle = this.player.angle
+    if (skill.kind === 'damage') {
+      const auto = this.skillAutoTarget()
+      if (auto !== null) angle = auto
+    }
     const px = this.player.x
     const py = this.player.y
     // 技能释放的全局反馈：屏幕元素染色 + 角色上方技能名横幅
@@ -1293,6 +1373,63 @@ export class RaidEngine {
     return best
   }
 
+  /** 归一化到 (-π, π] 的角度差 */
+  private angleDiff(a: number, b: number): number {
+    let diff = (a - b) % (Math.PI * 2)
+    if (diff > Math.PI) diff -= Math.PI * 2
+    if (diff <= -Math.PI) diff += Math.PI * 2
+    return diff
+  }
+
+  /** 自动锁敌：±75° 锥内最近且视线可达的敌人；没有则返回 null（保持原朝向） */
+  private aimAssistAngle(base: number): number | null {
+    let best: number | null = null
+    let bestScore = Number.POSITIVE_INFINITY
+    const now = Date.now()
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue
+      const dist = distance(enemy.x, enemy.y, this.player.x, this.player.y)
+      if (dist > 12) continue
+      const angle = Math.atan2(enemy.y - this.player.y, enemy.x - this.player.x)
+      const diff = Math.abs(this.angleDiff(angle, base))
+      if (diff > 1.31) continue
+      if (!this.sightCheck(enemy, now)) continue
+      const score = diff * 2 + dist * 0.2
+      if (score < bestScore) {
+        bestScore = score
+        best = angle
+      }
+    }
+    return best
+  }
+
+  /** 技能全向锁敌：取最近的可视敌人（不限方向），解决「放技能容易空」 */
+  private skillAutoTarget(): number | null {
+    let best: number | null = null
+    let bestDist = Number.POSITIVE_INFINITY
+    const now = Date.now()
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue
+      const dist = distance(enemy.x, enemy.y, this.player.x, this.player.y)
+      if (dist > 11 || dist >= bestDist) continue
+      if (!this.sightCheck(enemy, now)) continue
+      bestDist = dist
+      best = Math.atan2(enemy.y - this.player.y, enemy.x - this.player.x)
+    }
+    return best
+  }
+
+  /** 视线检测（每敌 ~120ms 节流缓存，敌人数量少但逐帧射线采样在平板上很贵） */
+  private sightCheck(enemy: LocalEnemy, now: number): boolean {
+    if (enemy.losOk !== undefined && enemy.losAt !== undefined && now - enemy.losAt < 120) {
+      return enemy.losOk
+    }
+    const ok = this.hasLineOfSight(this.player.x, this.player.y, enemy.x, enemy.y)
+    enemy.losOk = ok
+    enemy.losAt = now
+    return ok
+  }
+
   useConsumable(kind: 'heal' | 'repair', now = Date.now()): boolean {
     if (this.dead) return false
     const catalog = ['medkit_plus', 'medkit', 'adrenaline', 'bandage']
@@ -1312,7 +1449,7 @@ export class RaidEngine {
         }
         const next = consumeItemFromContainer(stacks, key, 1)
         if (!next) continue
-        if (from === 'rig') this.rig = normalizeContainer(next, this.capacities.rig, true)
+        if (from === 'rig') this.rig = normalizeContainer(next, this.capacities.rig)
         else this.backpack = normalizeContainer(next, this.capacities.backpack)
         this.events.push({ type: 'useItem', itemKey: key, from })
         if (def.healPct) {
@@ -1359,10 +1496,6 @@ export class RaidEngine {
     if (!stack) return false
     const def = RAID_ITEM_MAP.get(stack.itemKey)
     if (!def) return false
-    if (to === 'rig' && def.kind !== 'consumable') {
-      this.pushToast('胸挂只能放消耗品', 'danger', now)
-      return false
-    }
     const capacity = to === 'rig' ? this.capacities.rig : to === 'safe' ? this.capacities.safe : this.capacities.backpack
     const moved = Math.max(1, Math.min(stack.amount, Math.trunc(amount ?? stack.amount)))
     const targetStacks = to === 'rig' ? this.rig : to === 'safe' ? this.safe : this.backpack
@@ -1381,6 +1514,48 @@ export class RaidEngine {
     else this.backpack = added
     this.events.push({ type: 'moveItem', from, to, slotIndex, amount: moved })
     this.pushToast(`已挪到${to === 'rig' ? '胸挂' : to === 'safe' ? '安全箱' : '背包'}`, 'success', now)
+    return true
+  }
+
+  /** 把容器里的物品丢到当前房间地面（本地立即生效，服务端按同一状态机校验） */
+  dropItem(
+    from: RaidContainerKind,
+    slotIndex: number,
+    amount?: number,
+    now = Date.now(),
+  ): boolean {
+    if (this.dead || this.ended) return false
+    const room = this.room
+    if (!room) return false
+    const source = from === 'rig' ? this.rig : from === 'safe' ? this.safe : this.backpack
+    const stack = source.find((entry) => entry.slotIndex === slotIndex)
+    if (!stack) return false
+    const def = RAID_ITEM_MAP.get(stack.itemKey)
+    if (!def) return false
+    const moved = Math.max(1, Math.min(stack.amount, Math.trunc(amount ?? stack.amount)))
+    const roomGroundCount = this.groundLoot.filter((item) => item.roomId === this.roomId).length
+    if (roomGroundCount >= RAID_GROUND_LOOT_LIMIT) {
+      this.pushToast('地上掉落物太多了，先捡一捡再丢', 'danger', now)
+      return false
+    }
+    const removed = removeItemFromContainer(source, slotIndex, moved)
+    if (!removed) return false
+    if (from === 'rig') this.rig = removed
+    else if (from === 'safe') this.safe = removed
+    else this.backpack = removed
+    this.groundSeq += 1
+    const id = `g${this.groundSeq}`
+    this.groundLoot.push({
+      id,
+      roomId: this.roomId,
+      itemKey: stack.itemKey,
+      amount: moved,
+      x: this.player.x,
+      y: this.player.y,
+    })
+    this.events.push({ type: 'dropItem', from, slotIndex, amount: moved, x: this.player.x, y: this.player.y })
+    this.spawnParticles(this.player.x, this.player.y, 6, RARITY_SPARK[def.rarity] ?? '#e2e8f0')
+    this.pushToast(`丢弃 ${def.name} ×${moved}`, 'info', now)
     return true
   }
 
@@ -1418,6 +1593,8 @@ export class RaidEngine {
     this.killedEnemies = new Set(run.killedEnemies)
     this.openedContainers = new Set(run.openedContainers)
     this.takenLoot = new Set(run.takenLoot)
+    this.groundLoot = (run.groundLoot ?? []).map((item) => ({ ...item }))
+    this.groundSeq = run.groundSeq ?? this.groundSeq
     const serverExtractStart = run.extractionStartedAt
     if (serverExtractStart !== this.extractStartedAt) {
       // 服务端时间戳才是撤离读条的权威：本地早发被拒后必须允许重试
@@ -1636,6 +1813,18 @@ export class RaidEngine {
       this.takenLoot.add(takeId)
       this.pickups = this.pickups.filter((pickup) => pickup.id !== takeId)
       changed = true
+    }
+    // 队友丢弃 / 捡走地面物品（按 id 去重合并，捡走的从本地移除）
+    for (const item of delta.groundDropped ?? []) {
+      if (this.groundLoot.some((entry) => entry.id === item.id)) continue
+      this.groundLoot.push({ ...item })
+      changed = true
+    }
+    if (delta.groundTaken?.length) {
+      const taken = new Set(delta.groundTaken)
+      const before = this.groundLoot.length
+      this.groundLoot = this.groundLoot.filter((entry) => !taken.has(entry.id))
+      if (this.groundLoot.length !== before) changed = true
     }
     if (changed) {
       this.enemies = this.enemies.filter((enemy) => !enemy.dead && !this.killedEnemies.has(enemy.id))

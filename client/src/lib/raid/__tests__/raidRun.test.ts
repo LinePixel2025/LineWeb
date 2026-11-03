@@ -40,7 +40,7 @@ describe('raidRun 双端同拷贝', () => {
 describe('raidRun 目录', () => {
   it('物品与装备目录规模正确', () => {
     expect(RAID_ITEMS.length).toBeGreaterThanOrEqual(48)
-    expect(RAID_GEARS.length).toBe(30)
+    expect(RAID_GEARS.length).toBe(32)
     expect(new Set(RAID_ITEMS.map((item) => item.key)).size).toBe(RAID_ITEMS.length)
     expect(new Set(RAID_GEARS.map((gear) => gear.key)).size).toBe(RAID_GEARS.length)
   })
@@ -254,7 +254,7 @@ describe('raidRun 状态机', () => {
     expect(moved.state.safe[0]?.itemKey).toBe('gold_compass')
   })
 
-  it('胸挂只能放消耗品，安全箱也受容量限制', () => {
+  it('胸挂不再限制消耗品，安全箱也受容量限制', () => {
     const state = makeRun({
       backpack: [
         { slotIndex: 0, itemKey: 'gold_compass', amount: 1 },
@@ -264,11 +264,11 @@ describe('raidRun 状态机', () => {
       safe: [],
       capacities: { backpack: 8, rig: 2, safe: 0 },
     })
-    const wrongKind = applyRaidEvent(state, map, {
+    const anyKind = applyRaidEvent(state, map, {
       type: 'moveItem', from: 'backpack', to: 'rig', slotIndex: 0,
     }, 1_000_101)
-    expect(wrongKind.error).toBeTruthy()
-    expect(wrongKind.state.rig).toHaveLength(0)
+    expect(anyKind.error).toBeUndefined()
+    expect(anyKind.state.rig[0]?.itemKey).toBe('gold_compass')
 
     const noSafe = applyRaidEvent(state, map, {
       type: 'moveItem', from: 'backpack', to: 'safe', slotIndex: 1,
@@ -282,6 +282,35 @@ describe('raidRun 状态机', () => {
     expect(toRig.error).toBeUndefined()
     expect(toRig.state.rig[0]?.itemKey).toBe('medkit')
     expect(toRig.state.backpack).toHaveLength(1)
+  })
+
+  it('可丢弃背包物品到地面并捡回', () => {
+    const state = makeRun({
+      backpack: [{ slotIndex: 0, itemKey: 'scrap_metal', amount: 3 }],
+      rig: [],
+      safe: [],
+    })
+    const dropped = applyRaidEvent(state, map, {
+      type: 'dropItem', from: 'backpack', slotIndex: 0, x: 10, y: 10,
+    }, 1_000_104)
+    expect(dropped.error).toBeUndefined()
+    expect(dropped.state.backpack).toHaveLength(0)
+    expect(dropped.state.groundLoot).toHaveLength(1)
+    expect(dropped.state.groundLoot[0]?.itemKey).toBe('scrap_metal')
+    expect(dropped.state.groundLoot[0]?.roomId).toBe(dropped.state.currentRoom)
+
+    const groundId = dropped.state.groundLoot[0]?.id as string
+    const picked = applyRaidEvent(dropped.state, map, {
+      type: 'takeGround', groundId, target: 'backpack',
+    }, 1_000_105)
+    expect(picked.error).toBeUndefined()
+    expect(picked.state.backpack[0]?.itemKey).toBe('scrap_metal')
+    expect(picked.state.groundLoot).toHaveLength(0)
+
+    const again = applyRaidEvent(picked.state, map, {
+      type: 'takeGround', groundId, target: 'backpack',
+    }, 1_000_106)
+    expect(again.error).toBeTruthy()
   })
 
   it('目标容器满时移动失败且来源不变', () => {

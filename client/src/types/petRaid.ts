@@ -4,6 +4,7 @@
 
 import type {
   RaidGearInstance,
+  RaidGroundStack,
   RaidItemStack,
   RaidLogEntry,
   RaidMapNode,
@@ -135,6 +136,8 @@ export interface RaidRun {
   killedEnemies: string[]
   openedContainers: string[]
   takenLoot: string[]
+  groundLoot: RaidGroundStack[]
+  groundSeq: number
   backpack: RaidItemStack[]
   rig: RaidItemStack[]
   safe: RaidItemStack[]
@@ -293,6 +296,14 @@ export interface RaidDepositAllResult extends RaidStorageView {
 
 export interface RaidRecycleResult {
   points: number
+  balance: number
+  view: RaidStorageView
+}
+
+/** 一键回收整个仓库（keepUpgradeItems 默认 true，跳过仓库升级材料） */
+export interface RaidRecycleAllResult {
+  points: number
+  count: number
   balance: number
   view: RaidStorageView
 }

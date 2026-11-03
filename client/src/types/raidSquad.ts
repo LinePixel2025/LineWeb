@@ -2,6 +2,8 @@
  * 好友组队搜打撤的客户端 DTO（与服务端 raidSquadService.ts 对齐）。
  */
 
+import type { RaidGroundStack } from '../lib/raid/raidRun'
+
 export type RaidSquadMemberStatus =
   | 'lobby'
   | 'active'
@@ -80,6 +82,10 @@ export interface RaidSquadWorldDelta {
   killedEnemies: string[]
   openedContainers: string[]
   takenLoot: string[]
+  /** 队友丢到地上的物品（2026-11 新增，按 id 去重合并） */
+  groundDropped?: RaidGroundStack[]
+  /** 队友从地上捡走的物品 id */
+  groundTaken?: string[]
 }
 
 export interface RaidSquadStartResult {

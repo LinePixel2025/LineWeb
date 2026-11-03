@@ -143,6 +143,12 @@ export default function PetRaidPage() {
     [],
   )
 
+  const dropItem = useCallback(
+    (from: 'backpack' | 'rig' | 'safe', slotIndex: number, amount?: number): boolean =>
+      engineRef.current?.dropItem(from, slotIndex, amount) ?? false,
+    [],
+  )
+
   // 进入对局后压缩页面头部与全站公告条：把可玩区域尽量留在首屏（平板横屏尤其关键）
   useEffect(() => {
     document.body.classList.toggle('lineweb-raid-playing', Boolean(gameRun))
@@ -460,6 +466,7 @@ export default function PetRaidPage() {
                 snapshot={snapshot}
                 busy={busy}
                 onMove={moveItem}
+                onDrop={dropItem}
                 onClose={() => setInventoryOpen(false)}
               />
             )}

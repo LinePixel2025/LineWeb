@@ -15,7 +15,7 @@ import { AppError } from '../middleware/errorHandler.js'
 import { areFriends, getUserBrief, listFriends } from './chatService.js'
 import { isUserOnline, sendToUser } from './chatHub.js'
 import { isUserBusyInOtherGames, registerGameModule } from './gameService.js'
-import { getRaidMap } from '../lib/raidRun.js'
+import { getRaidMap, type RaidGroundStack } from '../lib/raidRun.js'
 
 export const RAID_SQUAD_MAX_MEMBERS = 4
 const INVITE_TTL_MS = 5 * 60_000
@@ -533,6 +533,10 @@ export interface RaidWorldDelta {
   openedContainers: string[]
   takenLoot: string[]
   clearedRooms: number[]
+  /** 队友丢到地上的物品（合并端按 id 去重） */
+  groundDropped: RaidGroundStack[]
+  /** 队友从地上捡走的物品 id */
+  groundTaken: string[]
 }
 
 /** 队友造成的世界变化立刻推给全队（客户端据此免等下一次批处理） */

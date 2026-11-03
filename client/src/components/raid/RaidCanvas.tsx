@@ -66,7 +66,11 @@ function detectQuality(lowPerf: boolean): RaidRenderQuality {
     ? window.matchMedia('(pointer: coarse)').matches
     : false
   if (cores <= 4 || memory <= 3) return coarse ? 'low' : 'balanced'
-  if (coarse) return 'balanced'
+  if (coarse) {
+    // 平板（触屏 + 大屏）像素填充量约是手机 3 倍，直接走省电档；手机维持均衡档
+    const wide = window.innerWidth >= 1024 || window.innerHeight >= 1024
+    return wide ? 'low' : 'balanced'
+  }
   return 'high'
 }
 
@@ -78,37 +82,51 @@ function dprForQuality(quality: RaidRenderQuality): number {
 }
 
 function VirtualStick({ className, label, glyph, onChange }: VirtualStickProps) {
-  const ref = useRef<HTMLDivElement | null>(null)
+  const zoneRef = useRef<HTMLDivElement | null>(null)
   const [knob, setKnob] = useState({ x: 0, y: 0 })
+  const [origin, setOrigin] = useState<{ x: number; y: number } | null>(null)
   const [active, setActive] = useState(false)
   const activeRef = useRef<number | null>(null)
+  const originRef = useRef<{ x: number; y: number } | null>(null)
+  /** 摇杆有效半径（与 CSS 的底盘尺寸 112px 对应的一半再略收） */
+  const radius = 54
 
+  /** 摇杆跟随手指：手指超出半径时底盘整体向手指方向漂移，knob 始终贴在圆缘 */
   const updatePoint = (clientX: number, clientY: number): void => {
-    const element = ref.current
-    if (!element) return
-    const rect = element.getBoundingClientRect()
-    const cx = rect.left + rect.width / 2
-    const cy = rect.top + rect.height / 2
-    const dx = clientX - cx
-    const dy = clientY - cy
-    const radius = Math.max(1, rect.width * 0.38)
+    const base = originRef.current
+    if (!base) return
+    let dx = clientX - base.x
+    let dy = clientY - base.y
     const dist = Math.hypot(dx, dy)
-    const scale = dist > radius ? radius / dist : 1
-    const nx = (dx * scale) / radius
-    const ny = (dy * scale) / radius
-    setKnob({ x: nx * radius, y: ny * radius })
-    onChange(nx, ny, true)
+    if (dist > radius && dist > 0.0001) {
+      const drift = dist - radius
+      const nx = dx / dist
+      const ny = dy / dist
+      const next = { x: base.x + nx * drift, y: base.y + ny * drift }
+      originRef.current = next
+      setOrigin(next)
+      dx = nx * radius
+      dy = ny * radius
+    }
+    setKnob({ x: dx, y: dy })
+    onChange(dx / radius, dy / radius, true)
   }
 
   const reset = (): void => {
     activeRef.current = null
+    originRef.current = null
+    setOrigin(null)
     setKnob({ x: 0, y: 0 })
     setActive(false)
     onChange(0, 0, false)
   }
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (activeRef.current !== null) return
     activeRef.current = event.pointerId
+    const base = { x: event.clientX, y: event.clientY }
+    originRef.current = base
+    setOrigin(base)
     setActive(true)
     try {
       event.currentTarget.setPointerCapture?.(event.pointerId)
@@ -124,9 +142,13 @@ function VirtualStick({ className, label, glyph, onChange }: VirtualStickProps) 
   }
 
   const onTouchStart = (event: ReactTouchEvent<HTMLDivElement>): void => {
+    if (activeRef.current !== null) return
     const touch = event.changedTouches[0]
     if (!touch) return
     activeRef.current = touch.identifier
+    const base = { x: touch.clientX, y: touch.clientY }
+    originRef.current = base
+    setOrigin(base)
     setActive(true)
     updatePoint(touch.clientX, touch.clientY)
   }
@@ -142,8 +164,8 @@ function VirtualStick({ className, label, glyph, onChange }: VirtualStickProps) 
 
   return (
     <div
-      ref={ref}
-      className={`gh-raid-stick ${className ?? ''}${active ? ' is-active' : ''}`}
+      ref={zoneRef}
+      className={`gh-raid-stick-zone ${className ?? ''}${active ? ' is-active' : ''}`}
       role="presentation"
       onPointerDown={SUPPORTS_POINTER ? onPointerDown : undefined}
       onPointerMove={SUPPORTS_POINTER ? onPointerMove : undefined}
@@ -154,13 +176,25 @@ function VirtualStick({ className, label, glyph, onChange }: VirtualStickProps) 
       onTouchEnd={SUPPORTS_POINTER ? undefined : onTouchEnd}
       onTouchCancel={SUPPORTS_POINTER ? undefined : onTouchEnd}
     >
-      <span className="gh-raid-stick-glyph" aria-hidden>{glyph}</span>
-      <span className="gh-raid-stick-label" aria-hidden>{label}</span>
-      <span
-        className="gh-raid-stick-knob"
-        style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }}
-        aria-hidden
-      />
+      {active && origin ? (
+        <div
+          className="gh-raid-stick is-floating"
+          style={{ left: origin.x, top: origin.y }}
+        >
+          <span className="gh-raid-stick-glyph" aria-hidden>{glyph}</span>
+          <span className="gh-raid-stick-label" aria-hidden>{label}</span>
+          <span
+            className="gh-raid-stick-knob"
+            style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }}
+            aria-hidden
+          />
+        </div>
+      ) : (
+        <div className="gh-raid-stick is-idle">
+          <span className="gh-raid-stick-glyph" aria-hidden>{glyph}</span>
+          <span className="gh-raid-stick-label" aria-hidden>{label}</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -189,6 +223,8 @@ export default function RaidCanvas({
     const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
     return Boolean(coarse) || window.innerWidth < 900
   })
+  const touchModeRef = useRef(touchMode)
+  touchModeRef.current = touchMode
   const [immersive, setImmersive] = useState(false)
   const [lowPerf] = useLowPerformanceMode()
   const [quality, setQuality] = useState<RaidRenderQuality>(() => detectQuality(false))
@@ -219,6 +255,11 @@ export default function RaidCanvas({
       window.removeEventListener('orientationchange', update)
     }
   }, [])
+
+  // 触屏自动锁敌开关跟随触屏模式（引擎在挂载 effect 中创建，这里兜底同步）
+  useEffect(() => {
+    if (engineRef.current) engineRef.current.aimAssist = touchMode
+  }, [touchMode])
 
   // 手机竖屏时提示转横屏：竖屏里 HUD 浮层会把战斗画面压得很扁
   useEffect(() => {
@@ -306,6 +347,7 @@ export default function RaidCanvas({
 
     const engine = new RaidEngine(initialRun, species)
     engineRef.current = engine
+    engine.aimAssist = touchModeRef.current
     engine.setCosmeticLevel(qualityRef.current)
     if (import.meta.env.DEV) {
       ;(window as unknown as { __raidEngine?: RaidEngine }).__raidEngine = engine

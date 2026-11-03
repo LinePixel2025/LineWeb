@@ -1,7 +1,25 @@
-# 搜打撤 v2 API（2026-11-03）
+# 搜打撤 v2 API（2026-11-04）
 
 > 元气骑士式实时房间制搜打撤：`/api/pets/raid*`，全部需登录并挂 `requireFeature('pet')`。
 > 共享引擎 `server/src/lib/raidRun.ts` 为唯一真相源，客户端 `client/src/lib/raid/raidRun.ts` 为逐字副本。
+>
+> **2026-11-04 更新**（`RAID_STATE_VERSION` 2 → 3，旧对局读时按废弃结算）：
+> - **丢弃物品**：新增事件 `dropItem`（从容器格丢到当前房间地面，落点=玩家坐标服务端夹取）与
+>   `takeGround`（捡起地面物品进背包/胸挂）；地面物品走 `RaidRunState.groundLoot`（单房上限 24），
+>   DTO 带 `groundLoot/groundSeq`，组队世界增量新增 `groundDropped/groundTaken`
+>   （成员发号基址按出击顺序 ×100 错开防撞 id）；客户端走过地面物品自动捡起。
+> - **胸挂放宽**：不再限消耗品，任意物品可入胸挂（takeLoot / moveItem / withdraw / 容器清洗 4 处校验移除）。
+> - **背包扩容**：新增 7/8 级背包 `backpack_t7`（36 格）/`backpack_t8`（48 格），神话品质、掉落限定；
+>   掉落来源为新增神话物品「深渊装备箱 `gear_cache_mythic`」（开 6–8 级装备，仅 lootTier 5 图）。
+> - **人机增强**：`createRaidEnemy` 血量系数 1/1.9/4.2 → 1.2/2.4/5.0、伤害 1/1.2/1.5 → 1.15/1.45/1.8、
+>   远程概率 scout 70%→85% / soldier 45%→65%、速度微调；各图 `enemyLevel` +1、`enemyBudget` +2~4；
+>   客户端远程射击节奏 1700/1200ms → 1500/1100ms、近战 1000→950ms。
+> - **触屏操控**：摇杆改悬浮式（按下即在触点生成、跟随手指漂移）；开火自动锁敌（±75° 锥内最近可视敌人，
+>   仅触屏 `aimAssist`）；技能伤害类全平台自动朝最近可视敌人（`skillAutoTarget`）。
+> - **组队响应契约**：`POST /raid/squad/invite` 与 `/respond` 统一返回 `{ squad }`（拒绝为 `{ squad: null }`），
+>   客户端对 404「邀请不存在」静默移除本地邀请（双端竞态不报错）。
+> - **一键回收**：新增 `POST /raid/storage/recycle-all`（`{ keepUpgradeItems? }` 默认 true 跳过仓库升级材料），
+>   事务内按官方回收价整仓结算。
 
 ## 1. 对局
 
@@ -21,6 +39,9 @@
 { "type": "clearRoom", "roomId": 3 }
 { "type": "openContainer", "containerId": "c-3-0" }
 { "type": "takeLoot", "containerId": "c-3-0", "lootId": "loot-0", "target": "backpack" }
+{ "type": "moveItem", "from": "backpack", "to": "safe", "slotIndex": 0, "amount": 2 }
+{ "type": "dropItem", "from": "backpack", "slotIndex": 1, "amount": 1, "x": 12.5, "y": 8.2 }
+{ "type": "takeGround", "groundId": "g1", "target": "rig" }
 { "type": "useItem", "itemKey": "medkit", "from": "rig" }
 { "type": "castSkill", "skillKey": "ice_shield" }
 { "type": "damage", "amount": 12, "zone": "body" }
