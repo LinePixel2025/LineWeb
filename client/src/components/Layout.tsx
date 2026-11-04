@@ -4,6 +4,7 @@ import Header from './Header'
 import Sidebar from './Sidebar'
 import SiteAnnouncementBar from './SiteAnnouncementBar'
 import SiteAnnouncementAckGate from './SiteAnnouncementAckGate'
+import CrisisGate from './CrisisGate'
 import { SiteAnnouncementProvider } from '../contexts/SiteAnnouncementContext'
 import { useFeature } from '../contexts/FeatureContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -76,6 +77,7 @@ export default memo(function Layout() {
         <main className={`gh-content ${collapsed ? 'gh-content--collapsed' : ''} ${isChatRoute ? 'gh-content--chat' : ''} ${isAuthRoute ? 'gh-content--auth' : ''}`}>
           <SiteAnnouncementBar />
           <SiteAnnouncementAckGate />
+          <CrisisGate />
           <Outlet />
           {!isAuthRoute && (
             <footer className="gh-footer">

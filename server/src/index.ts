@@ -36,6 +36,8 @@ import readerRoutes from './routes/reader.js'
 import musicRoutes from './routes/music.js'
 import stockRoutes from './routes/stocks.js'
 import bankRoutes from './routes/bank.js'
+import crisisRoutes from './routes/crisis.js'
+import adminCrisisRoutes from './routes/adminCrisis.js'
 import lotteryRoutes from './routes/lottery.js'
 import themeRoutes from './routes/themes.js'
 import adminPointsRoutes from './routes/adminPoints.js'
@@ -48,6 +50,7 @@ import { refreshProxyBlacklist } from './services/proxyBlacklist.js'
 import { authenticate } from './middleware/auth.js'
 import { ipHardLimiter, userApiLimiter } from './middleware/rateLimits.js'
 import { requireFeature } from './middleware/featureGuard.js'
+import { requireCrisisSettled } from './middleware/crisisGuard.js'
 import { requireChatNotBanned } from './middleware/chatBanGuard.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { initStorageTunnel, isNodeConnected } from './services/storageTunnel.js'
@@ -212,6 +215,10 @@ app.use('/api', (req, res, next) => {
 // 认证后按用户限流（管理员与 apiRateLimit=0 的用户跳过；公开路径没有 req.user 时跳过）
 app.use('/api', userApiLimiter)
 
+// Lineweb 危机封锁：未按时上缴总资产约 50% 的账号，除「税单 + 筹钱查账」端点外一律 403。
+// 必须在所有 requireFeature 之前，且早于各路由内部鉴权，否则被封锁用户仍能继续玩。
+app.use('/api', requireCrisisSettled())
+
 // Routes / 功能开关
 app.use('/api/features', featuresRouter)
 app.use('/api/admin/features', adminFeaturesRouter)
@@ -262,6 +269,10 @@ app.use('/api/lottery', requireFeature('lottery'), lotteryRoutes)
 app.use('/api/themes', requireFeature('theme'), themeRoutes)
 // 积分体系管理（规则 / 商店 / 用户调分，需 points:manage 能力）
 app.use('/api/admin/points', adminPointsRoutes)
+// Lineweb 危机（每人滚动上缴总资产约 50% → 公共银行只进不出；不挂功能开关，开关在危机参数里）
+app.use('/api/crisis', crisisRoutes)
+// 危机管理（参数 / 公共银行总览 / 手动触发到期，需 points:manage 能力）
+app.use('/api/admin/crisis', adminCrisisRoutes)
 // 网页反代：站点管理（需登录令牌）
 app.use('/api/proxy', requireFeature('webProxy'), proxyApiRouter)
 // 网页反代管理（黑名单 / 统计排名 / 排队赦免，需 proxy:manage 能力）
@@ -491,6 +502,18 @@ app.get('/api', (_req, res) => {
       depositRedeem: { method: 'POST', path: '/api/bank/deposits/:id/redeem', auth: true, description: '支取存单（到期全额计息 / 提前支取按活期日利率 × 已过天数计息；重复支取 400/409）' },
       fundBuy: { method: 'POST', path: '/api/bank/funds/buy', auth: true, description: '买入基金 { code, points }（当日确定性净值成交，0.25% 手续费，可分批加仓）' },
       fundSell: { method: 'POST', path: '/api/bank/funds/sell', auth: true, description: '卖出基金 { code, shares }（当日净值成交，0.25% 手续费，支持部分卖出并等比分摊成本；份额不足 400）' },
+    },
+    crisis: {
+      note: 'Lineweb 危机（积分回收）：每个非管理员用户自上次结清起每 48 小时（管理员可调）须向「公共银行」上缴约总资产 50% 的积分。总资产 = 积分 + 搜打撤装备/仓库/容器 + 宠物装扮/装备/技能 + 股票持仓与冻结委托 + 银行活期/定期/基金。开轮时按快照冻结应缴额，允许部分缴纳（宽限期 12 小时内补齐，宽限不随缴纳延长），逾期未缴满则全站封锁——仅保留税单页与「筹钱 / 查账」端点（积分 / 银行 / 股市 / 搜打撤仓库与商店）。有进行中搜打撤对局时暂不封锁（打完这局再封）。公共银行只进不出，只显示总额。',
+      me: { method: 'GET', path: '/api/crisis/me', auth: true, description: '我的账单：状态 / 快照 / 应缴 / 已缴 / 剩余 / 宽限倒计时 / 资产分项明细 / 公共银行总额' },
+      pay: { method: 'POST', path: '/api/crisis/pay', auth: true, description: '上缴 { amount }（超额自动截到剩余应缴；CAS 按轮次守卫防并发超缴，缴满即结清并排下一轮；20 次/5min）' },
+      pool: { method: 'GET', path: '/api/crisis/pool', auth: true, description: '公共银行累计总额（BigInt，以字符串返回，永不支出）' },
+      history: { method: 'GET', path: '/api/crisis/history', auth: true, description: '本人的危机上缴流水（reason=crisis_payment）' },
+      adminOverview: { method: 'GET', path: '/api/admin/crisis', auth: 'points:manage', description: '参数 / 公共银行总额 / 欠费与逾期人数 / 欠费榜' },
+      adminConfig: { method: 'PUT', path: '/api/admin/crisis/config', auth: 'points:manage', description: '调参数 { enabled, ratio, intervalMs, graceMs, minLevy }（深合并 + 钳制；已开轮账单不重算）' },
+      adminForce: { method: 'POST', path: '/api/admin/crisis/force-due', auth: 'points:manage', description: '手动触发危机 { userId } 或 { all: true }（逐人重算总资产快照，全员按 20 人一批分页）' },
+      adminUser: { method: 'GET', path: '/api/admin/crisis/users/:userId', auth: 'points:manage', description: '查看指定用户的危机账单明细' },
+      blocked: { method: '—', path: '403 CRISIS_BLOCKED', auth: true, description: '封锁响应体含 required / paid / remaining / graceUntil，前端据此弹出危机缴纳框' },
     },
     chat: {
       note: '聊天自建（2026-10 起）：会话 / 消息 / 群聊全部落 Prisma，无外部依赖。消息走 /ws/xmpp（不可用时降级 /api/chat/xmpp/http-* 长轮询），协议与原 XMPP 中继完全兼容。好友关系以 LineWeb Prisma 为唯一真相源。',

@@ -52,6 +52,18 @@ export function setToken(token: string | null): void {
 /** 并发 401 只跳一次，避免多个 React Query 同时触发整页刷新 */
 let unauthorizedHandled = false
 
+/**
+ * 危机封锁的统一出口：任意端点回 403 + code='CRISIS_BLOCKED' 时广播一次，
+ * CrisisContext 订阅后刷新账单并弹出缴纳框。与 401 集中处理同构，
+ * 这样每个调用点不必各自 try/catch 判断「是不是因为欠费被挡了」。
+ */
+export const CRISIS_BLOCKED_EVENT = 'crisis:blocked'
+
+function notifyCrisisBlocked(status: number, code?: string): void {
+  if (status !== 403 || code !== 'CRISIS_BLOCKED') return
+  window.dispatchEvent(new CustomEvent(CRISIS_BLOCKED_EVENT))
+}
+
 /** 401 自动登出：清 token 并跳转登录页（除非请求方明确禁用） */
 function handleUnauthorized(noRedirect: boolean): void {
   setToken(null)
@@ -109,6 +121,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
         handleUnauthorized(noRedirect)
       }
       const data = await res.json().catch(() => ({}))
+      notifyCrisisBlocked(res.status, data.code)
       throw new ApiError(data.error || `请求失败 (${res.status})`, res.status, data.code)
     }
 
@@ -136,6 +149,7 @@ async function requestText(path: string): Promise<string> {
   if (!res.ok) {
     if (res.status === 401) handleUnauthorized(false)
     const data = await res.json().catch(() => ({}))
+    notifyCrisisBlocked(res.status, data.code)
     throw new ApiError(data.error || `请求失败 (${res.status})`, res.status, data.code)
   }
   return res.text()
@@ -151,6 +165,7 @@ async function requestArrayBuffer(path: string): Promise<ArrayBuffer> {
   if (!res.ok) {
     if (res.status === 401) handleUnauthorized(false)
     const data = await res.json().catch(() => ({}))
+    notifyCrisisBlocked(res.status, data.code)
     throw new ApiError(data.error || `请求失败 (${res.status})`, res.status, data.code)
   }
   return res.arrayBuffer()

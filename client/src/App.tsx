@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { FeatureProvider } from './contexts/FeatureContext'
 import { PointsProvider } from './contexts/PointsContext'
+import { CrisisProvider } from './contexts/CrisisContext'
 import { GameStatsProvider } from './contexts/GameStatsContext'
 import { ChatProvider } from './contexts/ChatContext'
 import { XmppChatProvider } from './contexts/XmppChatContext'
@@ -27,6 +28,7 @@ const PostPage = lazy(() => import('./pages/PostPage'))
 const CalculatorPage = lazy(() => import('./pages/CalculatorPage'))
 const StocksPage = lazy(() => import('./pages/StocksPage'))
 const BankPage = lazy(() => import('./pages/BankPage'))
+const CrisisPage = lazy(() => import('./pages/CrisisPage'))
 const FeaturesPage = lazy(() => import('./pages/FeaturesPage'))
 const GamesPage = lazy(() => import('./pages/GamesPage'))
 const GameLeaderboardPage = lazy(() => import('./pages/games/GameLeaderboardPage'))
@@ -81,6 +83,7 @@ const AppAdminPage = lazy(() => import('./pages/admin/AppAdminPage'))
 const ProxyAdminPage = lazy(() => import('./pages/admin/ProxyAdminPage'))
 const FeatureAdminPage = lazy(() => import('./pages/admin/FeatureAdminPage'))
 const PointsAdminPage = lazy(() => import('./pages/admin/PointsAdminPage'))
+const CrisisAdminPage = lazy(() => import('./pages/admin/CrisisAdminPage'))
 const ChatAdminPage = lazy(() => import('./pages/admin/ChatAdminPage'))
 const PersonalSpacePage = lazy(() => import('./pages/PersonalSpacePage'))
 const AuthorizePage = lazy(() => import('./pages/AuthorizePage'))
@@ -153,6 +156,8 @@ export default function App() {
         <AuthCacheReset />
         <FeatureProvider>
         <PointsProvider>
+        {/* 危机上下文要用积分余额算「能缴多少」，必须嵌在 PointsProvider 之内 */}
+        <CrisisProvider>
         <GameStatsProvider>
         <ChatProvider>
         <XmppChatProvider>
@@ -192,6 +197,10 @@ export default function App() {
                           <ProtectedRoute><BankPage /></ProtectedRoute>
                         } />
                       </Route>
+                      {/* Lineweb 危机：总资产上缴与公共银行（需登录；不受功能开关控制，开关在危机参数里） */}
+                      <Route path="/crisis" element={
+                        <ProtectedRoute><CrisisPage /></ProtectedRoute>
+                      } />
                       {/* 宠物：花积分召唤并照顾一只 2D 小宠物（需登录） */}
                       <Route element={<RequireFeature feature="pet" />}>
                         <Route path="/pets" element={
@@ -391,6 +400,8 @@ export default function App() {
                     <Route path="/admin/devices" element={<Navigate to="/admin/users?tab=devices" replace />} />
                     <Route path="/admin/features" element={<FeatureAdminPage />} />
                     <Route path="/admin/points" element={<PointsAdminPage />} />
+                    {/* 危机管理：征收参数 / 手动触发到期 / 公共银行（复用 points:manage 能力） */}
+                    <Route path="/admin/crisis" element={<CrisisAdminPage />} />
                     <Route path="/admin/chat" element={<ChatAdminPage />} />
                     <Route path="/admin/api" element={<ApiDocsPage />} />
                     {/* AI 设置二合一（AI 助手 + AI 对话）；旧地址 /admin/ai-chat → 对话 Tab */}
@@ -419,6 +430,7 @@ export default function App() {
         </XmppChatProvider>
         </ChatProvider>
         </GameStatsProvider>
+        </CrisisProvider>
         </PointsProvider>
         </FeatureProvider>
       </AuthProvider>

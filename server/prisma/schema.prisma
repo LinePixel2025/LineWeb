@@ -90,6 +90,7 @@ model User {
   farmSeedListings       FarmSeedListing[]     @relation("FarmSeedSeller") // 我挂出的种子
   farmSeedPurchases      FarmSeedListing[]     @relation("FarmSeedBuyer") // 我买下的种子
   stockOrders            StockOrder[] // 股市限价委托
+  crisisLevy             CrisisLevy? // Lineweb 危机税单（每人一行，读时惰性建行）
   personalSpace          PersonalSpace? // 个人空间（管理员私人服务，每管理员一份）
   books                  Book[] // 小说阅读器的书架（上传的书）
   musicAccount           MusicAccount? // 网易云音乐扫码绑定的账号（cookie 仅存服务端）
@@ -765,7 +766,7 @@ model PointsLedger {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   amount    Int // 正数=获得，负数=扣除
   balance   Int // 变动后余额
-  reason    String // game_result | farm_harvest | farm_steal | farm_welcome | farm_shop | farm_expand | farm_merchant | farm_protect | farm_seed_buy | farm_seed_sell | shop_purchase | checkin | leader_bonus | stock | stock_order_buy | stock_order_refund | stock_order_sell | pet_raid | pet_raid_entry | pet_raid_insurance | pet_raid_contract | raid_recycle | raid_shop | raid_market_sell | raid_market_buy | raid_storage_upgrade | redpacket_send | redpacket_receive | redpacket_refund | bank_deposit_in | bank_demand_withdraw | bank_fixed_open | bank_fixed_redeem | bank_interest | fund_buy | fund_sell | admin_adjust
+  reason    String // game_result | farm_harvest | farm_steal | farm_welcome | farm_shop | farm_expand | farm_merchant | farm_protect | farm_seed_buy | farm_seed_sell | shop_purchase | checkin | leader_bonus | stock | stock_order_buy | stock_order_refund | stock_order_sell | pet_raid | pet_raid_entry | pet_raid_insurance | pet_raid_contract | raid_recycle | raid_shop | raid_market_sell | raid_market_buy | raid_storage_upgrade | redpacket_send | redpacket_receive | redpacket_refund | bank_deposit_in | bank_demand_withdraw | bank_fixed_open | bank_fixed_redeem | bank_interest | fund_buy | fund_sell | admin_adjust | crisis_payment
   game      String? // 来源游戏 id（2048 / doudizhu / ... / farm）
   note      String?
   createdAt DateTime @default(now()) @map("created_at")
@@ -800,7 +801,7 @@ model PointsShopItem {
   name                  String
   description           String?
   cost                  Int
-  rarity                String           @default("common") // common | rare | epic | legendary
+  rarity                String           @default("common") // common | rare | epic | legendary | mythic
   payload               String? // JSON
   isActive              Boolean          @default(true) @map("is_active")
   sortOrder             Int              @default(0) @map("sort_order")
@@ -1774,4 +1775,60 @@ model RaidBagItem {
   @@unique([userId, container, slotIndex])
   @@index([userId, itemKey])
   @@map("raid_bag_items")
+}
+
+// === Lineweb 危机（周期性积分回收 + 公共银行，2026-11-04） ===
+
+/**
+ * 危机税单（每用户一行，读时惰性建行）。
+ * 状态机：clear（已结清，等 nextDueAt）→ due（已开轮，快照出 required）→ 缴满回 clear。
+ * 「是否封锁」不存真值，一律由 lib/crisisRules.ts 的 isBlockedNow 现算，status 只是缓存快照。
+ * round 是乐观锁令牌：开轮与管理员强制到期都会 +1；缴纳事务按读到的 round 守卫，抢不到就 409 重来，
+ * 保证不会出现「钱记在上一轮的税单上」。
+ */
+model CrisisLevy {
+  id         Int       @id @default(autoincrement())
+  userId     Int       @unique @map("user_id")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status     String    @default("clear") // clear | due
+  round      Int       @default(0) // 乐观锁令牌（开轮 / 强制到期递增）
+  snapshot   Int       @default(0) // 开轮时刻的总资产快照（积分）
+  required   Int       @default(0) // 本轮应缴：floor(snapshot × ratio)，未达免征门槛归零，开轮后不再重算
+  paid       Int       @default(0) // 本轮已缴累计
+  openAt     DateTime? @map("open_at") // 本轮开轮时刻
+  graceUntil DateTime? @map("grace_until") // 宽限截止（openAt + graceMs）；部分缴纳不延长
+  settledAt  DateTime? @map("settled_at") // 上次结清时刻
+  nextDueAt  DateTime? @map("next_due_at") // settledAt + intervalMs，到点开下一轮
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, graceUntil])
+  @@index([nextDueAt])
+  @@map("crisis_levies")
+}
+
+/**
+ * 公共银行（单行累加，只进不出，站内只显示总额）。
+ * total 是 BigInt，不能直接进 JSON —— 对外一律 String(pool.total)。
+ * 为什么不按 PointsLedger 的 reason 聚合：该表没有 reason 索引会全表扫，且 amount 是 Int、
+ * 求和随年限可能溢出，而且单行 increment 才是 O(1) 的原子累加。
+ */
+model CrisisPool {
+  id        Int      @id @default(1)
+  total     BigInt   @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("crisis_pool")
+}
+
+/**
+ * 危机参数（单行 JSON，照 PointsConfig 的「读旧 → 深合并 → normalize → 保存」口径）。
+ * config: { enabled, ratio, intervalMs, graceMs, minLevy }，缺失字段一律回退代码默认值。
+ */
+model CrisisConfig {
+  id        Int      @id @default(1)
+  config    String
+  updatedBy Int?     @map("updated_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("crisis_config")
 }

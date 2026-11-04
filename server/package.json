@@ -30,6 +30,7 @@
     "verify:raidstorage": "tsx scripts/verify-raid-storage.ts",
     "verify:stocks": "tsx scripts/verify-stocks.ts",
     "verify:bank": "tsx scripts/verify-bank.ts",
+    "verify:crisis": "tsx scripts/verify-crisis.ts",
     "verify:chat": "tsx scripts/verify-chat.ts",
     "verify:reader": "tsx scripts/verify-reader.ts",
     "verify:redpacket": "tsx scripts/verify-redpacket.ts",

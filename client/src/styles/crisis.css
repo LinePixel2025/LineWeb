@@ -1,0 +1,475 @@
+/* ============================================================
+   Lineweb 危机（积分回收 + 公共银行）
+   命名空间 .gh-crisis-*（用户页与弹窗）/ .gh-crisisadmin-*（管理页）
+   配色全部走设计令牌，明暗主题自动跟随；数字一律等宽，账单要能逐位对账。
+   ============================================================ */
+
+.gh-crisis-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-6);
+}
+
+.gh-crisis-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gh-space-5);
+  flex-wrap: wrap;
+}
+
+.gh-crisis-subtitle {
+  margin: var(--gh-space-2) 0 0;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-base);
+  line-height: 1.6;
+  max-width: 62ch;
+}
+
+/* —— 公共银行：只进不出，做成一张「保险柜」卡片 —— */
+.gh-crisis-pool {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  padding: var(--gh-space-3) var(--gh-space-5);
+  border: 1px solid var(--gh-border-strong);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas-inset);
+  box-shadow: var(--gh-shadow-sm);
+  min-width: 220px;
+}
+
+.gh-crisis-pool-label {
+  font-size: var(--gh-text-xs);
+  letter-spacing: 0.08em;
+  color: var(--gh-text-tertiary);
+  text-transform: uppercase;
+}
+
+.gh-crisis-pool-value {
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-2xl);
+  font-variant-numeric: tabular-nums;
+  color: var(--gh-text);
+}
+
+.gh-crisis-pool-note {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+}
+
+/* —— 账单卡 —— */
+.gh-crisis-levy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-4);
+  padding: var(--gh-space-6);
+  border: 1px solid var(--gh-border);
+  border-left: 4px solid var(--gh-border-strong);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-card);
+}
+
+.gh-crisis-levy--warning { border-left-color: var(--gh-warning); }
+.gh-crisis-levy--danger { border-left-color: var(--gh-danger); }
+.gh-crisis-levy--success { border-left-color: var(--gh-success); }
+
+.gh-crisis-levy-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+}
+
+.gh-crisis-badge {
+  padding: 3px 12px;
+  border-radius: var(--gh-radius-pill);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.gh-crisis-badge--success { background: var(--gh-success-soft); color: var(--gh-success-emphasis); }
+.gh-crisis-badge--warning { background: var(--gh-warning-soft); color: var(--gh-warning); }
+.gh-crisis-badge--danger { background: var(--gh-danger-soft); color: var(--gh-danger); }
+
+.gh-crisis-countdown {
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-crisis-figure-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--gh-space-3);
+}
+
+.gh-crisis-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--gh-space-3) var(--gh-space-4);
+  border-radius: var(--gh-radius);
+  background: var(--gh-canvas-inset);
+  border: 1px solid var(--gh-border);
+}
+
+.gh-crisis-figure-label {
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+  letter-spacing: 0.04em;
+}
+
+.gh-crisis-figure strong {
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-xl);
+  font-variant-numeric: tabular-nums;
+  color: var(--gh-text);
+}
+
+.gh-crisis-figure em {
+  font-style: normal;
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+}
+
+.gh-crisis-required { color: var(--gh-danger) !important; }
+.gh-crisis-remaining { color: var(--gh-warning); }
+
+.gh-crisis-progress {
+  position: relative;
+  height: 6px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-fill-2);
+  overflow: hidden;
+}
+
+.gh-crisis-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  background: linear-gradient(90deg, var(--gh-accent), var(--gh-success));
+  transition: width var(--gh-dur-2) var(--gh-ease-out);
+}
+
+/* —— 缴纳控件 —— */
+.gh-crisis-pay {
+  display: flex;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+}
+
+.gh-crisis-pay input {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: var(--gh-space-2) var(--gh-space-3);
+  border: 1px solid var(--gh-border-strong);
+  border-radius: var(--gh-radius);
+  background: var(--gh-bg);
+  color: var(--gh-text);
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-base);
+}
+
+.gh-crisis-pay input:focus-visible {
+  outline: none;
+  border-color: var(--gh-accent);
+  box-shadow: 0 0 0 3px var(--gh-focus-ring);
+}
+
+.gh-crisis-quick {
+  display: flex;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+.gh-crisis-hint {
+  margin: 0;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+  line-height: 1.6;
+}
+
+/* —— 章节 —— */
+.gh-crisis-section-title {
+  margin: 0 0 var(--gh-space-2);
+  font-size: var(--gh-text-lg);
+  font-weight: 600;
+  color: var(--gh-text);
+}
+
+.gh-crisis-section-hint {
+  margin: 0 0 var(--gh-space-3);
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+  line-height: 1.6;
+}
+
+.gh-crisis-muted {
+  margin: 0;
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-sm);
+}
+
+/* —— 资产明细：账本式两列对齐 —— */
+.gh-crisis-asset-list,
+.gh-crisis-history-list,
+.gh-crisis-rule-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.gh-crisis-asset-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(0, 1.6fr) auto;
+  align-items: baseline;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-2) var(--gh-space-3);
+  border-bottom: 1px solid var(--gh-border);
+}
+
+.gh-crisis-asset-row:last-child { border-bottom: none; }
+
+.gh-crisis-asset-row--total {
+  background: var(--gh-canvas-inset);
+  border-radius: var(--gh-radius);
+  border-bottom: none;
+  margin-top: var(--gh-space-2);
+}
+
+.gh-crisis-asset-name { font-size: var(--gh-text-base); color: var(--gh-text); }
+.gh-crisis-asset-hint { font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
+
+.gh-crisis-asset-value {
+  font-family: var(--gh-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--gh-text-base);
+  color: var(--gh-text);
+  text-align: right;
+}
+
+.gh-crisis-asset-row--total .gh-crisis-asset-value {
+  font-size: var(--gh-text-lg);
+  color: var(--gh-accent-emphasis);
+}
+
+.gh-crisis-assets,
+.gh-crisis-raise,
+.gh-crisis-history,
+.gh-crisis-rules {
+  padding: var(--gh-space-5) var(--gh-space-6);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+}
+
+.gh-crisis-raise-links {
+  display: flex;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--gh-space-3);
+}
+
+.gh-crisis-history-row {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) auto 1fr;
+  align-items: baseline;
+  gap: var(--gh-space-3);
+  padding: var(--gh-space-2) 0;
+  border-bottom: 1px dashed var(--gh-border);
+}
+
+.gh-crisis-history-row:last-child { border-bottom: none; }
+.gh-crisis-history-time { font-size: var(--gh-text-sm); color: var(--gh-text-tertiary); }
+.gh-crisis-history-amount { font-family: var(--gh-font-mono); color: var(--gh-danger); }
+.gh-crisis-history-balance { font-size: var(--gh-text-sm); color: var(--gh-text-secondary); text-align: right; }
+
+.gh-crisis-rule-list li {
+  padding: var(--gh-space-2) 0;
+  border-bottom: 1px dashed var(--gh-border);
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-crisis-rule-list li:last-child { border-bottom: none; }
+
+/* —— 侧边栏待缴标记：小圆点，避免与聊天未读数字抢视觉 —— */
+.gh-crisis-nav-dot {
+  width: 8px;
+  height: 8px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--gh-danger);
+  box-shadow: 0 0 0 3px var(--gh-danger-soft);
+  flex: none;
+}
+
+/* —— 封锁 / 提醒弹窗 —— */
+.gh-crisis-overlay {
+  z-index: calc(var(--gh-z-dialog) + 2);
+  background: var(--gh-scrim);
+}
+
+.gh-crisis-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-4);
+  max-width: 520px;
+  border-left: 4px solid var(--gh-danger);
+}
+
+.gh-crisis-eyebrow {
+  margin: 0;
+  font-size: var(--gh-text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gh-danger);
+  font-weight: 600;
+}
+
+.gh-crisis-lede {
+  margin: 0;
+  font-size: var(--gh-text-base);
+  line-height: 1.7;
+  color: var(--gh-text-secondary);
+}
+
+.gh-crisis-lede strong { color: var(--gh-text); font-family: var(--gh-font-mono); }
+
+.gh-crisis-actions {
+  display: flex;
+  gap: var(--gh-space-2);
+  flex-wrap: wrap;
+}
+
+/* —— 管理页 —— */
+.gh-crisisadmin-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--gh-space-3);
+}
+
+.gh-crisisadmin-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--gh-space-4);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-lg);
+  background: var(--gh-canvas);
+}
+
+.gh-crisisadmin-stat span { font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
+.gh-crisisadmin-stat strong {
+  font-family: var(--gh-font-mono);
+  font-size: var(--gh-text-xl);
+  font-variant-numeric: tabular-nums;
+}
+.gh-crisisadmin-stat em { font-style: normal; font-size: var(--gh-text-xs); color: var(--gh-text-tertiary); }
+
+.gh-crisisadmin-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-4);
+}
+
+.gh-crisisadmin-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+}
+
+.gh-crisisadmin-title { margin: 0; font-size: var(--gh-text-lg); font-weight: 600; }
+.gh-crisisadmin-hint,
+.gh-crisisadmin-muted { font-size: var(--gh-text-sm); color: var(--gh-text-tertiary); }
+
+.gh-crisisadmin-form {
+  display: flex;
+  gap: var(--gh-space-4);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.gh-crisisadmin-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-1);
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-crisisadmin-field input[type='number'] {
+  width: 130px;
+  padding: var(--gh-space-2) var(--gh-space-3);
+  border: 1px solid var(--gh-border-strong);
+  border-radius: var(--gh-radius);
+  background: var(--gh-bg);
+  color: var(--gh-text);
+  font-family: var(--gh-font-mono);
+}
+
+.gh-crisisadmin-field input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--gh-accent); }
+
+.gh-crisisadmin-debtors {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.gh-crisisadmin-debtor {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+  flex-wrap: wrap;
+  padding: var(--gh-space-2) 0;
+  border-bottom: 1px dashed var(--gh-border);
+}
+
+.gh-crisisadmin-debtor:last-child { border-bottom: none; }
+.gh-crisisadmin-debtor-name { font-weight: 600; min-width: 140px; }
+.gh-crisisadmin-remaining { font-family: var(--gh-font-mono); color: var(--gh-danger); margin-left: auto; }
+
+/* —— 响应式：窄屏把账单数字压成两列、资产行隐藏说明文字 —— */
+@media (max-width: 760px) {
+  .gh-crisis-pool { align-items: flex-start; width: 100%; }
+  .gh-crisis-levy { padding: var(--gh-space-4); }
+  .gh-crisis-figure-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gh-crisis-asset-row { grid-template-columns: 1fr auto; }
+  .gh-crisis-asset-hint { display: none; }
+  .gh-crisis-history-row { grid-template-columns: 1fr auto; }
+  .gh-crisis-history-balance { display: none; }
+  .gh-crisisadmin-remaining { margin-left: 0; }
+}
+
+/* —— 减弱动效：进度条与弹窗不做过渡 —— */
+@media (prefers-reduced-motion: reduce) {
+  .gh-crisis-progress-fill,
+  .gh-crisis-overlay,
+  .gh-crisis-dialog,
+  .gh-crisis-badge {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* —— 低性能模式：去阴影、去毛玻璃，保留全部文字与配色可读性 —— */
+html[data-perf='low'] .gh-crisis-levy,
+html[data-perf='low'] .gh-crisis-assets,
+html[data-perf='low'] .gh-crisis-raise,
+html[data-perf='low'] .gh-crisis-history,
+html[data-perf='low'] .gh-crisis-rules,
+html[data-perf='low'] .gh-crisis-pool {
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}

@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useFeature } from '../contexts/FeatureContext'
 import { useXmppChat } from '../contexts/XmppChatContext'
+import { useOptionalCrisis } from '../contexts/CrisisContext'
 import { formatUnread } from '../lib/chat'
 import { canAccessAdminPath } from '../lib/permissions'
 import Icon, { type IconName } from './ui/Icon'
@@ -41,6 +42,7 @@ const sections: { title: string; requireAuth?: boolean; items: SidebarItem[] }[]
       { path: '/lottery', label: '积分抽奖', icon: 'gift' },
       { path: '/stocks', label: '模拟股市', icon: 'chart' },
       { path: '/bank', label: '银行', icon: 'bank' },
+      { path: '/crisis', label: 'Lineweb 危机', icon: 'wallet' },
       { path: '/reader', label: '小说', icon: 'bookOpen' },
       { path: '/music', label: '音乐', icon: 'music' },
     ],
@@ -62,6 +64,8 @@ export default memo(function Sidebar({ collapsed, mobileOpen, onClose, onToggleC
   const { user } = useAuth()
   const { isEnabled } = useFeature()
   const { unreadTotal } = useXmppChat()
+  const crisis = useOptionalCrisis()
+  const crisisPending = !!crisis?.state && crisis.state.enabled && !crisis.state.exempt && crisis.state.status !== 'clear'
   const location = useLocation()
   const chatUnreadLabel = formatUnread(unreadTotal)
 
@@ -105,6 +109,7 @@ export default memo(function Sidebar({ collapsed, mobileOpen, onClose, onToggleC
               if (item.path === '/games' && !isEnabled('games')) return false
               if (item.path === '/stocks' && (!user || !isEnabled('stock'))) return false
               if (item.path === '/bank' && (!user || !isEnabled('bank'))) return false
+              if (item.path === '/crisis' && (!user || crisis?.state?.enabled === false)) return false
               if (item.path === '/pets' && (!user || !isEnabled('pet'))) return false
               if (item.path === '/lottery' && (!user || !isEnabled('lottery'))) return false
               if (item.path === '/themes' && (!user || !isEnabled('theme'))) return false
@@ -130,6 +135,9 @@ export default memo(function Sidebar({ collapsed, mobileOpen, onClose, onToggleC
                       <span className="gh-chat-nav-badge" aria-label={`${unreadTotal} 条未读消息`}>
                         {chatUnreadLabel}
                       </span>
+                    )}
+                    {item.path === '/crisis' && crisisPending && (
+                      <span className="gh-crisis-nav-dot" aria-label="危机积分待缴" title="有待缴的危机积分" />
                     )}
                   </Link>
                 ))}

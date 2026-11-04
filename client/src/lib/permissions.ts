@@ -96,6 +96,7 @@ export const ADMIN_ROUTE_CAPABILITIES: { prefix: string; capability: Capability 
   { prefix: '/admin/proxy', capability: 'proxy:manage' },
   { prefix: '/admin/features', capability: 'feature:manage' },
   { prefix: '/admin/points', capability: 'points:manage' },
+  { prefix: '/admin/crisis', capability: 'points:manage' }, // 危机征收与积分同源，复用 points:manage
   { prefix: '/admin/chat', capability: 'chat:manage' },
   { prefix: '/admin/announcements', capability: 'content:manage' }, // 旧地址（redirect 到 /admin?tab=announcements）
   { prefix: '/personal-space', capability: 'personal:manage' }, // 个人空间（管理员私人服务，非 /admin 前缀）

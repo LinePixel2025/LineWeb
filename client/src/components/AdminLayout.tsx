@@ -38,6 +38,7 @@ const adminNavSections: { title: string; items: AdminNavItem[] }[] = [
     title: '运营',
     items: [
       { path: '/admin/points', label: '积分体系', icon: 'coin' },
+      { path: '/admin/crisis', label: 'Lineweb 危机', icon: 'wallet' },
     ],
   },
   {

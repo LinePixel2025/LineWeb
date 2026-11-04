@@ -6,6 +6,7 @@ import { config } from '../config/index.js'
 import { resolveAuthContext } from '../middleware/auth.js'
 import { isFeatureEnabled } from './featureService.js'
 import { getActiveChatBan } from './chatBanService.js'
+import { isUserCrisisBlocked } from './crisisService.js'
 import { randomUUID } from 'crypto'
 import {
   closeUserSessions,
@@ -83,6 +84,11 @@ export function initChatWsGateway(server: HttpServer): WebSocketServer {
     if (auth.user.role !== 'admin') {
       const ban = await getActiveChatBan(userId)
       if (ban) {
+        rejectUpgrade(socket, '403 Forbidden')
+        return
+      }
+      // 危机未结清：聊天不在豁免名单里，握手阶段直接拒（Express 守卫管不到 upgrade）
+      if (await isUserCrisisBlocked(userId)) {
         rejectUpgrade(socket, '403 Forbidden')
         return
       }
