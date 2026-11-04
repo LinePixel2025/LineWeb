@@ -63,6 +63,7 @@ import {
   depositRaidItems,
   getRaidStorageView,
   recycleRaidItems,
+  recycleRaidItemsBatch,
   recycleAllRaidItems,
   upgradeRaidStorage,
   withdrawRaidItems,
@@ -240,6 +241,20 @@ const raidRecycleSchema = z.object({
   amount: z.coerce.number().int().min(1).max(9999),
   slotIndex: z.coerce.number().int().min(0).max(200).optional(),
 })
+/** 批量回收条目：数量缺省整行、来源缺省仓库，slotIndex 仅在回收容器物品时需要 */
+const raidRecycleBatchItemSchema = z.object({
+  key: z.string().min(1).max(40),
+  amount: z.coerce.number().int().min(1).max(9999).optional(),
+  from: z.enum(['warehouse', 'backpack', 'rig', 'safe']).optional(),
+  slotIndex: z.coerce.number().int().min(0).max(200).optional(),
+})
+const raidRecycleBatchSchema = z.object({
+  items: z.array(raidRecycleBatchItemSchema).max(100).default([]),
+  gearIds: z.array(z.coerce.number().int().min(1)).max(100).default([]),
+}).refine(
+  (value) => value.items.length + value.gearIds.length > 0,
+  { message: '没有选择任何要回收的东西' },
+)
 const raidStorageUpgradeSchema = z.object({}).strict()
 const raidGearEquipSchema = z.object({
   slot: z.enum(['helmet', 'armor', 'boots', 'backpack', 'rig']),
@@ -504,6 +519,12 @@ router.post('/raid/storage/recycle-all', marketWriteLimiter, asyncHandler(async 
   }))
 }))
 
+// POST /api/pets/raid/storage/recycle-batch — { items[], gearIds[] } 批量回收（物品 + 装备，一次事务结算）
+router.post('/raid/storage/recycle-batch', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidRecycleBatchSchema, req.body ?? {})
+  res.json(await recycleRaidItemsBatch(currentUserId(req), input))
+}))
+
 // POST /api/pets/raid/storage/upgrade — {} 花积分 + 消耗材料升级仓库
 router.post('/raid/storage/upgrade', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
   parseInput(raidStorageUpgradeSchema, req.body ?? {})
@@ -512,7 +533,7 @@ router.post('/raid/storage/upgrade', marketWriteLimiter, asyncHandler(async (req
 
 /* ---------- 搜打撤官方商店 / 装备 ---------- */
 
-// GET /api/pets/raid/shop — 官方商店（1–3 级装备 + 消耗品 + 箱子）
+// GET /api/pets/raid/shop — 官方商店（装备全档上架 + 消耗品 + 箱子；4 级及以上有仓库等级门槛与溢价）
 router.get('/raid/shop', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
   res.json(await getRaidShopView(currentUserId(req)))
 }))

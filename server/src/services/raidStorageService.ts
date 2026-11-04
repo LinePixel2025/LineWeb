@@ -12,6 +12,7 @@ import type { Prisma, RaidBagItem, RaidGear, RaidInventoryItem } from '@prisma/c
 import { AppError } from '../middleware/errorHandler.js'
 import {
   RAID_CONTAINER_LABELS,
+  RAID_GEAR_MAP,
   RAID_ITEM_MAP,
   addItemToContainer,
   getRaidItem,
@@ -498,6 +499,145 @@ export async function recycleAllRaidItems(userId: number, input: RaidRecycleAllI
   })
   const view = await buildStorageView(userId)
   return { points: result.points, count: result.count, balance: result.balance, view }
+}
+
+/* ============================================================
+   批量回收（物品 + 装备，一次事务结算）
+   ============================================================ */
+
+export interface RaidRecycleBatchItemInput {
+  /** 物品 key */
+  key: string
+  /** 回收数量，缺省回收该行全部 */
+  amount?: number
+  /** 来源，缺省仓库 */
+  from?: RaidBagContainer | 'warehouse'
+  /** 容器格位（from 为容器时用于精确定位，缺省取该容器里第一格匹配的物品） */
+  slotIndex?: number
+}
+
+export interface RaidRecycleBatchInput {
+  items: RaidRecycleBatchItemInput[]
+  gearIds: number[]
+}
+
+export interface RaidRecycleBatchResult {
+  points: number
+  /** 回收的物品件数（按数量单位计，与一键回收的 count 同口径） */
+  itemCount: number
+  /** 回收的装备件数 */
+  gearCount: number
+  balance: number
+  view: RaidStorageViewDto
+}
+
+/** 批量回收单次上限（物品条目 + 装备件数合计；路由层 zod 已限，这里兜底） */
+const RECYCLE_BATCH_LIMIT = 100
+
+/**
+ * 批量回收：物品与装备在同一个事务里逐项校验并计价，任一项失败整体回滚并指明是哪一项。
+ *
+ * 装备回收价与 raidGearService.recycleRaidGear 同口径（目录价 ×60% 向上取整、最低 1 积分），
+ * 在本文件内实现同款计算，避免仅为一个常量引入跨服务依赖（raidGearService 的既有导出不动）。
+ */
+export async function recycleRaidItemsBatch(userId: number, input: RaidRecycleBatchInput): Promise<RaidRecycleBatchResult> {
+  await assertNoActiveRaid(userId)
+  if (input.items.length + input.gearIds.length > RECYCLE_BATCH_LIMIT) {
+    throw new AppError(`一次最多回收 ${RECYCLE_BATCH_LIMIT} 项`, 400)
+  }
+  if (input.items.length + input.gearIds.length === 0) {
+    throw new AppError('没有选择任何要回收的东西', 400)
+  }
+  // gearIds 去重：同一件装备出现两次会让第二次条件删除落空（按 409 报错），直接按一件处理
+  const gearIds = Array.from(new Set(input.gearIds))
+  // 物品条目按「来源 + 格位 + key」去重，避免「缺省整行回收」在重复项上产生歧义
+  const seenItems = new Set<string>()
+  for (const entry of input.items) {
+    const dedupeKey = `${entry.from ?? 'warehouse'}:${entry.slotIndex ?? '*'}:${entry.key}`
+    if (seenItems.has(dedupeKey)) {
+      const def = RAID_ITEM_MAP.get(entry.key)
+      throw new AppError(`回收清单里有重复项：${def?.name ?? entry.key}`, 400)
+    }
+    seenItems.add(dedupeKey)
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    let total = 0
+    let itemCount = 0
+    let gearCount = 0
+
+    for (const entry of input.items) {
+      const def = getRaidItem(entry.key)
+      if (!def) throw new AppError(`回收清单里有未知物品：${entry.key}`, 400)
+      const from = entry.from ?? 'warehouse'
+      const amount = entry.amount === undefined ? null : Math.trunc(entry.amount)
+      if (amount !== null && (!Number.isInteger(amount) || amount < 1)) {
+        throw new AppError(`${def.name} 的回收数量必须是正整数`, 400)
+      }
+      if (from === 'warehouse') {
+        const row = await tx.raidInventoryItem.findUnique({
+          where: { userId_itemKey: { userId, itemKey: entry.key } },
+        })
+        if (!row) throw new AppError(`仓库里没有 ${def.name}`, 400)
+        const take = amount ?? row.amount
+        if (take > row.amount) throw new AppError(`${def.name} 仓库里只有 ${row.amount} 件`, 400)
+        const value = raidSellPrice(entry.key, take)
+        if (value <= 0) throw new AppError(`${def.name} 无法回收`, 400)
+        if (take >= row.amount) {
+          await tx.raidInventoryItem.delete({ where: { id: row.id } })
+        } else {
+          await tx.raidInventoryItem.update({ where: { id: row.id }, data: { amount: row.amount - take } })
+        }
+        total += value
+        itemCount += take
+      } else {
+        const row = entry.slotIndex !== undefined
+          ? await tx.raidBagItem.findUnique({
+              where: { userId_container_slotIndex: { userId, container: from, slotIndex: entry.slotIndex } },
+            })
+          : await tx.raidBagItem.findFirst({ where: { userId, container: from, itemKey: entry.key } })
+        if (!row || row.itemKey !== entry.key) {
+          throw new AppError(`${RAID_CONTAINER_LABELS[from]}里没有 ${def.name}`, 400)
+        }
+        const take = amount ?? row.amount
+        if (take > row.amount) {
+          throw new AppError(`${RAID_CONTAINER_LABELS[from]}里的 ${def.name} 只有 ${row.amount} 件`, 400)
+        }
+        const value = raidSellPrice(entry.key, take)
+        if (value <= 0) throw new AppError(`${def.name} 无法回收`, 400)
+        if (take >= row.amount) {
+          await tx.raidBagItem.delete({ where: { id: row.id } })
+        } else {
+          await tx.raidBagItem.update({ where: { id: row.id }, data: { amount: row.amount - take } })
+        }
+        total += value
+        itemCount += take
+      }
+    }
+
+    for (const gearId of gearIds) {
+      const row = await tx.raidGear.findFirst({ where: { id: gearId, userId } })
+      if (!row) throw new AppError(`回收清单里有不属于你的装备（id ${gearId}）`, 400)
+      const def = RAID_GEAR_MAP.get(row.gearKey)
+      if (!def) throw new AppError(`装备数据异常（${row.gearKey}），无法回收`, 400)
+      if (row.equipped) throw new AppError(`${def.name} 正在穿戴中，先卸下再回收`, 400)
+      // 条件删除：并发下同一件被抢先回收时这里抢不到行，整体回滚而不是重复发分
+      const deleted = await tx.raidGear.deleteMany({ where: { id: row.id, userId } })
+      if (deleted.count === 0) throw new AppError(`${def.name} 的状态已变化，请重试`, 409)
+      total += Math.max(1, Math.round(def.price * 0.6))
+      gearCount += 1
+    }
+
+    if (total <= 0) throw new AppError('这些物品无法回收', 400)
+    const award = await awardPointsTx(tx, userId, {
+      amount: total,
+      reason: 'raid_recycle',
+      note: `批量回收 ${itemCount + gearCount} 件（物品 ${itemCount} + 装备 ${gearCount}）`,
+    })
+    return { points: total, itemCount, gearCount, balance: award.balance }
+  })
+  const view = await buildStorageView(userId)
+  return { ...result, view }
 }
 
 /* ============================================================

@@ -326,6 +326,23 @@ export interface RaidRecycleAllResult {
   view: RaidStorageView
 }
 
+/** 批量回收（物品整行 + 装备实例，一次事务结算）入参条目 */
+export interface RaidRecycleBatchItemInput {
+  key: string
+  amount?: number
+  from?: 'warehouse' | 'backpack' | 'rig' | 'safe'
+  slotIndex?: number
+}
+
+/** 批量回收结果：itemCount 按数量单位计、gearCount 按装备件数计 */
+export interface RaidRecycleBatchResult {
+  points: number
+  itemCount: number
+  gearCount: number
+  balance: number
+  view: RaidStorageView
+}
+
 /* ---------- 官方商店 ---------- */
 
 export interface RaidShopGear {

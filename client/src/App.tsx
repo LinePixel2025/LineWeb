@@ -63,6 +63,7 @@ const PetBattlePage = lazy(() => import('./pages/PetBattlePage'))
 const PetMarketPage = lazy(() => import('./pages/PetMarketPage'))
 const PetRaidPage = lazy(() => import('./pages/PetRaidPage'))
 const RaidStoragePage = lazy(() => import('./pages/RaidStoragePage'))
+const RaidShopPage = lazy(() => import('./pages/RaidShopPage'))
 const LotteryPage = lazy(() => import('./pages/LotteryPage'))
 const ThemesPage = lazy(() => import('./pages/ThemesPage'))
 const PointsPage = lazy(() => import('./pages/PointsPage'))
@@ -231,6 +232,10 @@ export default function App() {
                         } />
                         <Route path="/pets/raid/storage" element={
                           <ProtectedRoute><RaidStoragePage /></ProtectedRoute>
+                        } />
+                        {/* 搜打撤官方商店：从仓库页拆出的独立页（2026-11-05 全站化） */}
+                        <Route path="/raid/shop" element={
+                          <ProtectedRoute><RaidShopPage /></ProtectedRoute>
                         } />
                       </Route>
                       {/* 积分抽奖：花积分抽种子 / 积分 / 稀有装扮（需登录） */}

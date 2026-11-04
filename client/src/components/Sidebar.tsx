@@ -39,6 +39,7 @@ const sections: { title: string; requireAuth?: boolean; items: SidebarItem[] }[]
       { path: '/features', label: '关于', icon: 'compass' },
       { path: '/games', label: '游戏', icon: 'gamepad' },
       { path: '/pets', label: '宠物', icon: 'paw' },
+      { path: '/raid/shop', label: '搜打撤商店', icon: 'tag' },
       { path: '/lottery', label: '积分抽奖', icon: 'gift' },
       { path: '/stocks', label: '模拟股市', icon: 'chart' },
       { path: '/bank', label: '银行', icon: 'bank' },
@@ -112,6 +113,7 @@ export default memo(function Sidebar({ collapsed, mobileOpen, onClose, onToggleC
               if (item.path === '/bank' && (!user || !isEnabled('bank'))) return false
               if (item.path === '/crisis' && (!user || crisis?.state?.enabled === false)) return false
               if (item.path === '/pets' && (!user || !isEnabled('pet'))) return false
+              if (item.path === '/raid/shop' && (!user || !isEnabled('pet'))) return false
               if (item.path === '/lottery' && (!user || !isEnabled('lottery'))) return false
               if (item.path === '/themes' && (!user || !isEnabled('theme'))) return false
               if (item.path === '/reader' && (!user || !isEnabled('reader'))) return false
