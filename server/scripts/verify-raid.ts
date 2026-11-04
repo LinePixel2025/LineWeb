@@ -5,6 +5,7 @@
  *       首领房首段保底、地图生成确定性与连通性、房间类型分配、敌人属性公式、
  *       运行状态机（进房 / 击杀 / 清房 / 开箱 / 拾取 / 使用 / 技能 / 受伤 / 撤离）、
  *       撤离故障掷骰（确定性 / 失败保持 active / 全图冷却 / 信号弹保票）、已发现撤离点、
+ *       下发地图口径（撤离点全程可见）与全失联救援队兜底（2026-11-05）、
  *       官方商店（全档上架 + 高档溢价与仓库门槛）与游戏门票经济闭环、
  *       耐久与维修、保险、结算保留规则、每日契约、丢弃落点往前抛与夹取。
  *
@@ -56,6 +57,7 @@ import {
   raidItemModeAllowed,
   raidKeptContainers,
   raidLootValue,
+  raidMapForViewer,
   raidSellPrice,
   raidShopGearPrice,
   raidShopItemPrice,
@@ -461,6 +463,20 @@ assertEqual(mapA.rooms[0]?.kind, 'start', '0 号房间是起点')
 assertEqual(mapA.rooms.filter((room) => room.kind === 'extract').length, wasteland.extractRooms, '撤离房间数量正确')
 assertEqual(mapA.doors.length >= mapA.rooms.length - 1, true, '门数量至少覆盖生成树')
 assert(mapA.extracts.length > 0 && mapA.extracts.every((point) => point.roomId >= 0), '撤离点存在')
+
+/* ---------- 下发地图口径：撤离点对小地图全程可见（2026-11-05 情报放开） ---------- */
+
+const viewerMap = raidMapForViewer(generateRaidMap(123456, wasteland))
+assertEqual(
+  JSON.stringify(viewerMap.extracts),
+  JSON.stringify(mapA.extracts),
+  '下发地图的撤离点恒全量（不再按已探明裁剪）',
+)
+assertEqual(
+  viewerMap.rooms.filter((room) => room.kind === 'extract').length,
+  wasteland.extractRooms,
+  'extract 房间下发真实 kind（不再伪装成 combat）',
+)
 
 // 连通性：从起点 BFS 能到达所有房间
 const reachable = new Set<number>([0])
@@ -1333,6 +1349,11 @@ assertEqual(
 )
 assertEqual(failDone.state.extractionStartedAt, null, '故障后读条状态清空')
 assertEqual(failDone.state.extractionRoom, null, '故障后不再挂在原撤离房间')
+assertEqual(
+  failDone.state.lastExtractFailAt,
+  1_000_100 + RAID_EXTRACT_CHANNEL_MS,
+  '撤离故障记录 lastExtractFailAt（全失联兜底的计时依据）',
+)
 assert(
   failDone.state.log.some((entry) => entry.kind === 'danger' && entry.text.includes('运输故障')),
   '故障写一条 danger 日志',
@@ -1349,10 +1370,55 @@ const disabledRoomStart = applyRaidEvent(
   failDone.state,
   mapA,
   { type: 'extractStart' },
+  1_000_100 + RAID_EXTRACT_CHANNEL_MS + RAID_EXTRACT_COOLDOWN_MS - 1,
+)
+assert(!!disabledRoomStart.error, '冷却未过时，失联的撤离点仍然拒绝起读条')
+assert((disabledRoomStart.error ?? '').includes('失联'), '失效撤离点的报错口径是「失联」')
+
+// —— 死局兜底（2026-11-05）：全部撤离点失联且冷却已过时，「救援队」重新架设信标放行 ——
+// wasteland 这类单撤离点地图此前失败一次就永远无出口，只能干等到超时判失联。
+const rescueStart = applyRaidEvent(
+  failDone.state,
+  mapA,
+  { type: 'extractStart' },
   1_000_100 + RAID_EXTRACT_CHANNEL_MS + RAID_EXTRACT_COOLDOWN_MS + 1,
 )
-assert(!!disabledRoomStart.error, '冷却结束后，已失效的撤离点本局永久不可用（不复活）')
-assert((disabledRoomStart.error ?? '').includes('失联'), '失效撤离点的报错口径是「失联」')
+assert(!rescueStart.error, '全部撤离点失联 + 冷却已过：extractStart 放行（救援队重新架设信标）')
+assertEqual(JSON.stringify(rescueStart.state.extractDisabled), '[]', '兜底放行时清空全部失效撤离点')
+assertEqual(rescueStart.state.extractionRoom, extractRoom.id, '兜底放行后正常进入撤离读条')
+assert(rescueStart.state.log.some((entry) => entry.text.includes('救援队')), '兜底放行写一条救援队日志')
+assertEqual(
+  rescueStart.state.extractionStartedAt,
+  1_000_100 + RAID_EXTRACT_CHANNEL_MS + RAID_EXTRACT_COOLDOWN_MS + 1,
+  '兜底放行的读条时刻即 extractStart 时刻',
+)
+
+// —— 兜底只救「全失联」：图上还有可用撤离点时不复活任何信标 ——
+const damRetryDef = getRaidMap('dam') as RaidMapDef
+const damMap = generateRaidMap(777, damRetryDef)
+const damExtractRoom = damMap.rooms.find((room) => room.kind === 'extract') as (typeof damMap.rooms)[number]
+assert(!!damExtractRoom, 'dam 地图存在撤离房间')
+const damRun = makeRun({
+  seed: 777,
+  mapKey: 'dam',
+  currentRoom: damExtractRoom.id,
+  clearedRooms: [damExtractRoom.id],
+  extractDisabled: [damExtractRoom.id],
+  extractBlockedUntil: 1_000_100 + RAID_EXTRACT_CHANNEL_MS + RAID_EXTRACT_COOLDOWN_MS,
+  lastExtractFailAt: 1_000_100 + RAID_EXTRACT_CHANNEL_MS,
+})
+const damRetry = applyRaidEvent(
+  damRun,
+  damMap,
+  { type: 'extractStart' },
+  1_000_100 + RAID_EXTRACT_CHANNEL_MS + RAID_EXTRACT_COOLDOWN_MS + 1,
+)
+assert(!!damRetry.error, '图上还有可用撤离点时不触发兜底：单点失联冷却过后仍拒绝')
+assertEqual(
+  JSON.stringify(damRetry.state.extractDisabled),
+  JSON.stringify([damExtractRoom.id]),
+  '部分失联不复活任何撤离点',
+)
 
 // —— 服务端重放：同一 seed + 同一批事件必然复现同一故障结果 ——
 const replayFail = applyRaidEvent(

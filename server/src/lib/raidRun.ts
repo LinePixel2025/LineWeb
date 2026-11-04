@@ -558,7 +558,11 @@ export const RAID_EXTRACT_CHANNEL_MS = 6000
  */
 export const RAID_EXTRACT_FAIL_RATE = 0.25
 
-/** 某个撤离点判定失效后，全图撤离进入的冷却（这段时间内任何撤离点都不许起读条） */
+/**
+ * 某个撤离点判定失效后，全图撤离进入的冷却（这段时间内任何撤离点都不许起读条）。
+ * 同时也是死局兜底的计时基准：当图上全部撤离点都已失联，冷却一过 extractStart 会
+ * 清空失效列表放行（救援队重新架设信标），避免单撤离点地图失败一次就永远无出口。
+ */
 export const RAID_EXTRACT_COOLDOWN_MS = 60_000
 
 /**
@@ -1184,6 +1188,21 @@ export function generateRaidMap(seed: number, map: RaidMapDef, mode: RaidLootMod
   }
 }
 
+/**
+ * 下发给观看者的地图口径（2026-11-05 情报放开）：
+ * - 撤离点对小地图全程可见：map.extracts 恒全量下发、extract 房间显示真实 kind，
+ *   玩家可以提前规划撤离路线，不再依赖「走进撤离区才发现」；
+ * - 信标在房间内的精确落点仍以进入房间为准（引擎只对当前房间取 extractPoint，
+ *   未进房前小地图上只有房间级方位，看不到信标本体）；
+ * - discoveredExtracts 字段仍在 DTO 中保留（兼容既有契约），但不再参与地图裁剪。
+ *
+ * 服务端 DTO 组装必须经由此函数收口；当前实现为恒等透传，未来若要重新收紧情报
+ * （例如按难度遮蔽撤离点），只改这一个函数即可。
+ */
+export function raidMapForViewer(map: RaidMapNode): RaidMapNode {
+  return map
+}
+
 /* ============================================================
    运行状态
    ============================================================ */
@@ -1296,6 +1315,8 @@ export interface RaidRunState {
   extractDisabled: number[]
   /** 全图撤离冷却截止（毫秒时间戳）；null = 无冷却 */
   extractBlockedUntil: number | null
+  /** 最近一次撤离故障的时刻（epoch ms，0 = 尚未失败过）。全部撤离点失联后由它判定「救援队重新架设信标」的冷却 */
+  lastExtractFailAt: number
   /** 已完成的读条次数——故障掷骰的 attempt，必须持久化才能重放 */
   extractRolls: number
   /** 已点亮撤离信号弹：本局后续撤离读条必定成功（掷骰直接返回 false） */
@@ -1385,6 +1406,7 @@ export function createRaidRun(input: RaidStartInput): RaidRunState {
     extractionRoom: null,
     extractDisabled: [],
     extractBlockedUntil: null,
+    lastExtractFailAt: 0,
     extractRolls: 0,
     extractGuaranteed: false,
     discoveredExtracts: [],
@@ -1709,6 +1731,8 @@ function cloneState(state: RaidRunState): RaidRunState {
     groundSeq: state.groundSeq ?? 0,
     extractDisabled: [...(state.extractDisabled ?? [])],
     discoveredExtracts: [...(state.discoveredExtracts ?? [])],
+    // 旧持久化状态没有该字段，按「从未失败过」兜底
+    lastExtractFailAt: state.lastExtractFailAt ?? 0,
     extractRolls: state.extractRolls ?? 0,
     mode: state.mode ?? 'normal',
     skills: state.skills.map((skill) => ({ ...skill })),
@@ -2037,7 +2061,18 @@ export function applyRaidEvent(
       if (roomContainsLivingEnemies(next, map, room.id)) return { state, error: '撤离区还有敌人' }
       if (next.extractionStartedAt !== null) return { state: next }
       if ((next.extractDisabled ?? []).includes(room.id)) {
-        return { state, error: '这个撤离点已经失联，只能另找出口' }
+        // 死局兜底（救援队重新架设信标）：全部撤离点都失联且全图冷却已过时，清空失效列表并放行。
+        // 否则 wasteland 这类单撤离点地图失败一次就永远无出口，本局只能干等到超时判失联。
+        const disabled = next.extractDisabled ?? []
+        const allDisabled = map.extracts.length > 0
+          && map.extracts.every((point) => disabled.includes(point.roomId))
+        const lastFailAt = next.lastExtractFailAt ?? 0
+        if (allDisabled && now - lastFailAt >= RAID_EXTRACT_COOLDOWN_MS) {
+          next.extractDisabled = []
+          makeLog(next, 'info', '救援队重新架设了全部撤离信标，可以再次尝试撤离。', now)
+        } else {
+          return { state, error: '这个撤离点已经失联，只能另找出口' }
+        }
       }
       if (next.extractBlockedUntil !== null && now < next.extractBlockedUntil) {
         return { state, error: `运输调度尚未恢复，还需 ${Math.ceil((next.extractBlockedUntil - now) / 1000)} 秒` }
@@ -2061,6 +2096,8 @@ export function applyRaidEvent(
         next.extractionRoom = null
         if (!next.extractDisabled.includes(roomId)) next.extractDisabled.push(roomId)
         next.extractBlockedUntil = now + RAID_EXTRACT_COOLDOWN_MS
+        // 记录故障时刻：全部撤离点失联后，冷却一过就由「救援队」重新架设信标（extractStart 的死局兜底）
+        next.lastExtractFailAt = now
         makeLog(next, 'danger', '运输故障：这个撤离点已失联。背包里一件东西都没丢，但全图撤离要停 60 秒，得另找出口。', now)
         return { state: next }
       }

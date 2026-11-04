@@ -14,6 +14,7 @@ import type { RaidEvent } from '../lib/raid/raidRun'
 import { getRaidGear } from '../lib/raid/raidRun'
 import type { RaidEngine, RaidSnapshot } from '../lib/raid/engine'
 import { useRaidSquad } from '../lib/raid/squad'
+import { onTap } from '../lib/raid/tap'
 import RaidCanvas from '../components/raid/RaidCanvas'
 import { useRaidPvp } from '../lib/raid/pvp'
 import RaidHud from '../components/raid/RaidHud'
@@ -106,6 +107,9 @@ export default function PetRaidPage() {
   const [settlement, setSettlement] = useState<RaidSettlement | null>(null)
   const [actionErrors, setActionErrors] = useState<string[]>([])
   const [inventoryOpen, setInventoryOpen] = useState(false)
+  // 撤退确认弹窗：Android WebView 无 WebChromeClient 时 window.confirm 恒返回 false（撤退静默失效），
+  // 真全屏下 confirm 还会先退全屏——改为舞台内自绘确认浮层（原生全屏只渲染 stage 子树，必须挂在那里）
+  const [exitConfirmOpen, setExitConfirmOpen] = useState(false)
 
   const engineRef = useRef<RaidEngine | null>(null)
   const runRef = useRef<RaidRun | null>(null)
@@ -321,9 +325,15 @@ export default function PetRaidPage() {
     }
   }, [busy, insured, loadOverview])
 
-  const abandon = useCallback(async (): Promise<void> => {
+  /** HUD「撤退」按钮：只打开确认浮层（不再用 window.confirm，见 exitConfirmOpen 注释） */
+  const abandon = useCallback((): void => {
+    setExitConfirmOpen(true)
+  }, [])
+
+  /** 浮层里点「放弃撤离」后才真正请求放弃 */
+  const confirmAbandon = useCallback(async (): Promise<void> => {
     if (busy) return
-    if (!window.confirm('确定放弃本次行动？背包与胸挂里的物品会丢失，安全箱保留。')) return
+    setExitConfirmOpen(false)
     setBusy(true)
     try {
       pendingRef.current = []
@@ -410,7 +420,10 @@ export default function PetRaidPage() {
         <div className="gh-raid-header-actions">
           <span className="gh-raid-points">💰 {overview.points} 积分</span>
           <Link className="gh-btn gh-btn--secondary gh-btn--sm" to="/pets/raid/storage">
-            仓库 / 背包 / 商店
+            仓库 / 背包
+          </Link>
+          <Link className="gh-btn gh-btn--secondary gh-btn--sm" to="/raid/shop">
+            商店
           </Link>
           <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets">
             宠物之家
@@ -426,9 +439,8 @@ export default function PetRaidPage() {
 
       {!gameRun && overview.pet && noBackpack && (
         <div className="gh-alert gh-alert--warning">
-          还没有装备背包，进入对局后什么都装不下。先去{' '}
-          <Link to="/pets/raid/storage">仓库 → 装备</Link>{' '}
-          买一个背包（商店 1 级背包 300 积分）。
+          还没有装备背包，进入对局后什么都装不下。先去 <Link to="/raid/shop">商店</Link>{' '}
+          买一个背包（1 级背包 300 积分），再到 <Link to="/pets/raid/storage">仓库 → 装备</Link> 装上。
         </div>
       )}
 
@@ -462,7 +474,7 @@ export default function PetRaidPage() {
                 errors={actionErrors}
                 squad={squad.members}
                 selfUserId={selfUserId}
-                onAbandon={() => void abandon()}
+                onAbandon={abandon}
                 onSkill={(index) => engineRef.current?.castSkill(index)}
                 onHeal={() => engineRef.current?.useConsumable('heal')}
                 onRepair={() => engineRef.current?.useConsumable('repair')}
@@ -528,6 +540,32 @@ export default function PetRaidPage() {
                 onDrop={dropItem}
                 onClose={() => setInventoryOpen(false)}
               />
+            )}
+            {/* 撤退确认浮层同样必须挂在舞台子树内：原生全屏时 window 层的弹窗不会渲染（见 exitConfirmOpen 注释） */}
+            {exitConfirmOpen && (
+              <div className="gh-raid-exit-confirm" role="dialog" aria-modal="true" aria-label="确认放弃行动">
+                <div className="gh-raid-exit-confirm-panel">
+                  <strong>放弃本次行动？</strong>
+                  <p>背包与胸挂里的物品会丢失，安全箱保留。</p>
+                  <div className="gh-raid-exit-confirm-actions">
+                    <button
+                      type="button"
+                      className="gh-btn gh-btn--secondary gh-btn--sm"
+                      {...onTap(() => setExitConfirmOpen(false))}
+                    >
+                      继续行动
+                    </button>
+                    <button
+                      type="button"
+                      className="gh-btn gh-btn--danger gh-btn--sm"
+                      disabled={busy}
+                      {...onTap(() => void confirmAbandon())}
+                    >
+                      放弃撤离
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
           </RaidCanvas>
           {squad.inSquad && squad.members.length > 1 && (

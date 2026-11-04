@@ -2199,6 +2199,12 @@ body.lineweb-raid-playing .gh-announce-bar { display: none; }
   .gh-raid-stage[data-layout='touch'] .gh-raid-bag { bottom: 136px; left: 14px; }
   .gh-raid-stage[data-layout='touch'] .gh-raid-pod--loot { top: 58px; }
   .gh-raid-pod--mission { min-width: 208px; }
+  .gh-raid-exit-confirm {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+  }
 }
 
 /* 交互按钮：桌面只在靠近容器 / 撤离点时浮出；触屏常驻在右摇杆上方 */
@@ -2516,4 +2522,53 @@ body.lineweb-raid-playing .gh-announce-bar { display: none; }
 html[data-perf='low'] .gh-raid-pvp-hud {
   backdrop-filter: none;
   background: rgba(12, 16, 24, 0.92);
+}
+
+/* ============================================================
+   撤退确认浮层（2026-11-05）
+   Android WebView 无 WebChromeClient 时 window.confirm 恒返回 false（撤退静默失效），
+   真全屏下 confirm 还会先退全屏——改为舞台内自绘弹窗（原生全屏只渲染 stage 子树）。
+   挂在 .gh-raid-overlay（z-index: 5）内部，z-index 与 HUD pod 同一套层级，稍高盖住面板；
+   遮罩本体 pointer-events: auto 吞掉触点，避免误穿到下面的摇杆热区。
+   ============================================================ */
+
+.gh-raid-exit-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(2, 6, 18, 0.62);
+  pointer-events: auto;
+}
+
+.gh-raid-exit-confirm-panel {
+  width: min(320px, 88%);
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(12, 16, 24, 0.96);
+  color: #e8eef8;
+  box-shadow: 0 18px 44px rgba(2, 6, 23, 0.55);
+  font-size: 12px;
+}
+
+.gh-raid-exit-confirm-panel strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.gh-raid-exit-confirm-panel p {
+  margin: 0 0 12px;
+  line-height: 1.6;
+  opacity: 0.78;
+}
+
+.gh-raid-exit-confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }

@@ -44,6 +44,15 @@ export const PLAYER_BULLET_DAMAGE_RATE = 1.2
 export const ENEMY_AGGRO_RANGE = 10
 export const HAZARD_DPS_PCT = 6
 export const INTERACT_RANGE = 1.25
+/** 全场敌方子弹数上限：超限一律不再发射，防止 boss + 精英同屏的弹幕把低端机帧率打崩 */
+export const MAX_ENEMY_BULLETS = 240
+/** 狂暴（精英 / 首领 HP < 50%）时的普射冷却除数：冷却 ×1/1.4 ≈ 射速 ×1.4 */
+const ENRAGE_COOLDOWN_DIVISOR = 1 / 1.4
+/** 精英冲锋（skills 含 charge）：预警时长 / 冲刺时长 / 冲刺速度倍率 / 冷却（毫秒） */
+const CHARGE_TELEGRAPH_S = 0.6
+const CHARGE_DASH_S = 0.35
+const CHARGE_SPEED_MULT = 6
+const CHARGE_COOLDOWN_MS = 4000
 
 /** 拾取飘字与火花按品质上色，稀有货掉出来要一眼看见 */
 export const RARITY_SPARK: Record<string, string> = {
@@ -78,6 +87,22 @@ export interface LocalEnemy {
   telegraph: number
   /** 近战突进的剩余时长（秒） */
   lunge: number
+  /** 精英冲锋：预警进度（1 → 0 递减，归零起跳），渲染器据此画预警线与读条 */
+  chargeTelegraph: number
+  /** 精英冲锋冷却（毫秒） */
+  chargeCd: number
+  /** 精英冲锋冲刺剩余时长（秒），>0 表示正在冲锋 */
+  chargeDash: number
+  /** 冲刺方向（起跳瞬间锁定的单位向量） */
+  chargeDirX: number
+  chargeDirY: number
+  /** 一次冲锋只对玩家结算一次近战同档伤害 */
+  chargeHit: boolean
+  /** 远程怪绕圈方向（1 / -1）与换向倒计时（秒）：每 2.5–4s 随机翻转一次 */
+  orbitDir: number
+  orbitTimer: number
+  /** 环形弹幕计数：起始角按次数递增（每次 +37°），让连续弹幕带螺旋感 */
+  burstCount: number
   /** 视线检测结果缓存（约 120ms 节流，平板上逐帧采样太贵） */
   losOk?: boolean
   losAt?: number
@@ -372,6 +397,11 @@ export class RaidEngine {
   private effectSeq = 0
   private floatSeq = 0
   private skillReadyAt: Record<string, number> = {}
+  /**
+   * 首领「瞄准 3 连发」的延时队列（间隔约 120ms）：由 update 循环逐帧消化，
+   * 不用 setTimeout——页面切后台 rAF 暂停时定时器不会乱序堆积，恢复后一起打出。
+   */
+  private pendingEnemyShots: { at: number; enemyId: string }[] = []
 
   constructor(run: RaidRun, species: string, now = Date.now()) {
     this.map = run.map
@@ -443,6 +473,15 @@ export class RaidEngine {
         burstCooldown: 2500,
         telegraph: 0,
         lunge: 0,
+        chargeTelegraph: 0,
+        chargeCd: 2200 + Math.random() * 1800,
+        chargeDash: 0,
+        chargeDirX: 0,
+        chargeDirY: 0,
+        chargeHit: false,
+        orbitDir: Math.random() < 0.5 ? 1 : -1,
+        orbitTimer: 2.5 + Math.random() * 1.5,
+        burstCount: 0,
       }))
     this.containers = room.containers.map((container) => ({
       id: container.id,
@@ -456,6 +495,8 @@ export class RaidEngine {
       this.spawnContainerPickups(container.id)
     }
     this.bullets = []
+    // 换房清场：连发队列与房间绑定，旧房间的后续连发作废
+    this.pendingEnemyShots = []
     this.extractStartedAt = null
     this.extractSentDone = false
     if (initial) {
@@ -500,6 +541,7 @@ export class RaidEngine {
     this.transitionLock = Math.max(0, this.transitionLock - dtMs)
     this.updatePlayer(dt, now)
     this.updateEnemies(dt, now)
+    this.processPendingEnemyShots(now)
     this.updateBullets(dt)
     this.updatePickups()
     this.updateGroundPickups()
@@ -703,23 +745,36 @@ export class RaidEngine {
       const nx = dist > 0 ? dx / dist : 0
       const ny = dist > 0 ? dy / dist : 0
       const speed = enemy.source.speed
+      // —— 精英冲锋（skills 含 charge）：预警中 / 冲刺中时整帧由冲锋状态机接管 ——
+      if (enemy.source.skills.includes('charge') && this.updateEnemyCharge(enemy, dt, now, dx, dy, dist)) {
+        this.clampEnemyToRoom(enemy, room)
+        continue
+      }
       if (enemy.source.ranged) {
         const preferred = enemy.source.kind === 'boss' ? 5.5 : 4.5
+        // 绕圈方向每 2.5–4s 随机翻转一次：固定转向会被玩家摸清节奏站桩输出
+        enemy.orbitTimer -= dt
+        if (enemy.orbitTimer <= 0) {
+          enemy.orbitTimer = 2.5 + Math.random() * 1.5
+          enemy.orbitDir = Math.random() < 0.5 ? 1 : -1
+        }
+        // 远程怪与玩家 dist < 2.5 时后撤拉开距离，其余时间维持理想射程
         let move = 0
-        if (dist > preferred + 0.6) move = 1
+        if (dist < 2.5) move = -1
+        else if (dist > preferred + 0.6) move = 1
         else if (dist < preferred - 1.2) move = -1
         if (move !== 0) {
           enemy.x += nx * move * speed * dt
           enemy.y += ny * move * speed * dt
         } else {
-          enemy.x += -ny * speed * dt * 0.5
-          enemy.y += nx * speed * dt * 0.5
+          enemy.x += -ny * speed * dt * 0.5 * enemy.orbitDir
+          enemy.y += nx * speed * dt * 0.5 * enemy.orbitDir
         }
         const locked = dist < 9 && this.sightCheck(enemy, now)
         // 开火预警：冷却临近时 telegraph 爬到 1，渲染器画准星与预警线
         enemy.telegraph = locked ? clamp(1 - enemy.cooldown / 480, 0, 1) : Math.max(0, enemy.telegraph - dt * 3)
         if (enemy.cooldown <= 0 && locked) {
-          enemy.cooldown = enemy.source.kind === 'boss' ? 1100 : 1500
+          enemy.cooldown = this.enemyFireCooldown(enemy)
           enemy.telegraph = 0
           this.enemyShoot(enemy, nx, ny)
         }
@@ -789,14 +844,37 @@ export class RaidEngine {
     return true
   }
 
-  private enemyShoot(enemy: LocalEnemy, nx: number, ny: number): void {
-    const spread = enemy.source.kind === 'elite' ? 0.12 : 0
-    const angle = Math.atan2(ny, nx) + (Math.random() - 0.5) * spread
+  /**
+   * 敌人普射冷却（毫秒），按类型差异化：首领 1100 / 精英 1350 / 普通 1500。
+   * 狂暴判定（精英 / 首领 HP < 50%）即时算、不落持久状态：冷却 ×1/1.4 ≈ 射速 ×1.4。
+   */
+  private enemyFireCooldown(enemy: LocalEnemy): number {
+    const base = enemy.source.kind === 'boss' ? 1100 : enemy.source.kind === 'elite' ? 1350 : 1500
+    const enraged = (enemy.source.kind === 'boss' || enemy.source.kind === 'elite') && enemy.hp < enemy.maxHp * 0.5
+    return base * (enraged ? ENRAGE_COOLDOWN_DIVISOR : 1)
+  }
+
+  /** 全场敌方子弹数（MAX_ENEMY_BULLETS 上限检查用） */
+  private hostileBulletCount(): number {
+    let count = 0
+    for (const bullet of this.bullets) {
+      if (!bullet.friendly) count += 1
+    }
+    return count
+  }
+
+  /**
+   * 敌方子弹统一出口：上限检查 + 枪口焰都在这里做，
+   * 直射 / 扇形 / 连发 / 环形弹幕共用，避免任何实现绕过 MAX_ENEMY_BULLETS。
+   */
+  private spawnEnemyBullet(enemy: LocalEnemy, angle: number, speed: number): void {
+    const cos = Math.cos(angle)
+    const sin = Math.sin(angle)
     this.bullets.push({
-      x: enemy.x + Math.cos(angle) * 0.5,
-      y: enemy.y + Math.sin(angle) * 0.5,
-      vx: Math.cos(angle) * 7,
-      vy: Math.sin(angle) * 7,
+      x: enemy.x + cos * 0.5,
+      y: enemy.y + sin * 0.5,
+      vx: cos * speed,
+      vy: sin * speed,
       damage: enemy.source.damage,
       friendly: false,
       life: 2.4,
@@ -804,25 +882,135 @@ export class RaidEngine {
       color: '#f87171',
       element: 'hostile',
     })
-    this.spawnEffect('muzzle', enemy.x + Math.cos(angle) * 0.55, enemy.y + Math.sin(angle) * 0.55, {
+    this.spawnEffect('muzzle', enemy.x + cos * 0.55, enemy.y + sin * 0.55, {
       color: '#fca5a5',
       accent: '#fee2e2',
       angle,
       radius: 0.45,
       life: 0.16,
     })
+  }
+
+  /**
+   * 精英冲锋状态机（只对 skills 含 charge 的敌人挂载）。
+   * 返回 true 表示本帧被冲锋状态（预警 / 冲刺）接管，跳过常规移动与开火。
+   * - 4s 冷却，与玩家 dist 在 4–9 之间时触发（太近太远都不读轨迹）；
+   * - 0.6s 预警：chargeTelegraph 从 1 → 0，渲染器画预警线与读条；
+   * - 起跳瞬间锁定当时玩家方向，0.35s 高速冲刺（速度 = 普通移动 ×6），
+   *   冲锋路径碰触玩家造成一次近战同档伤害（复用接触伤害数值），一次冲刺只结算一次。
+   */
+  private updateEnemyCharge(
+    enemy: LocalEnemy,
+    dt: number,
+    now: number,
+    dx: number,
+    dy: number,
+    dist: number,
+  ): boolean {
+    if (enemy.chargeDash > 0) {
+      enemy.chargeDash = Math.max(0, enemy.chargeDash - dt)
+      enemy.x += enemy.chargeDirX * enemy.source.speed * CHARGE_SPEED_MULT * dt
+      enemy.y += enemy.chargeDirY * enemy.source.speed * CHARGE_SPEED_MULT * dt
+      if (
+        !enemy.chargeHit
+        && distance(enemy.x, enemy.y, this.player.x, this.player.y) <= enemy.source.radius + PLAYER_RADIUS + 0.15
+      ) {
+        enemy.chargeHit = true
+        this.hurtPlayer(enemy.source.damage, 'body', now, Math.atan2(enemy.y - this.player.y, enemy.x - this.player.x))
+        this.spawnParticles(
+          (enemy.x + this.player.x) / 2,
+          (enemy.y + this.player.y) / 2,
+          6,
+          '#fca5a5',
+        )
+      }
+      if (enemy.chargeDash <= 0) enemy.chargeCd = CHARGE_COOLDOWN_MS
+      return true
+    }
+    if (enemy.chargeTelegraph > 0) {
+      enemy.chargeTelegraph = Math.max(0, enemy.chargeTelegraph - dt / CHARGE_TELEGRAPH_S)
+      if (enemy.chargeTelegraph <= 0) {
+        // 起跳瞬间锁定方向：冲向预警结束时玩家所在的位置，走位可以躲
+        const len = dist > 0.001 ? dist : 1
+        enemy.chargeDirX = dx / len
+        enemy.chargeDirY = dy / len
+        enemy.chargeDash = CHARGE_DASH_S
+        enemy.chargeHit = false
+      }
+      return true
+    }
+    enemy.chargeCd = Math.max(0, enemy.chargeCd - dt * 1000)
+    if (enemy.chargeCd <= 0 && dist >= 4 && dist <= 9) {
+      enemy.chargeTelegraph = 1
+    }
+    return false
+  }
+
+  /** 消化首领连发队列：到点后重新瞄准玩家当前位置补一发（不进狂暴扇形，保持「瞄准 3 连发」读感） */
+  private processPendingEnemyShots(now: number): void {
+    if (this.pendingEnemyShots.length === 0) return
+    const remain: { at: number; enemyId: string }[] = []
+    for (const shot of this.pendingEnemyShots) {
+      if (now < shot.at) {
+        remain.push(shot)
+        continue
+      }
+      const enemy = this.enemies.find((entry) => entry.id === shot.enemyId && !entry.dead)
+      if (!enemy) continue
+      const dx = this.player.x - enemy.x
+      const dy = this.player.y - enemy.y
+      const dist = Math.hypot(dx, dy) || 1
+      if (this.hostileBulletCount() < MAX_ENEMY_BULLETS) {
+        this.spawnEnemyBullet(enemy, Math.atan2(dy, dx), 7.8)
+        this.spawnParticles(enemy.x, enemy.y, 3, '#f87171')
+      }
+    }
+    this.pendingEnemyShots = remain
+  }
+
+  private enemyShoot(enemy: LocalEnemy, nx: number, ny: number): void {
+    const baseAngle = Math.atan2(ny, nx)
+    const spread = enemy.source.kind === 'elite' ? 0.12 : 0
+    // 精英改 3-way 扇形（中心瞄准 + ±0.22rad，保留原有随机抖动），狂暴扩为 5-way（±0.44rad）；
+    // 普通怪保持单发直线；弹速按类型差异化（首领略快，压迫感更强）
+    const enraged = enemy.source.kind === 'elite' && enemy.hp < enemy.maxHp * 0.5
+    const fan = enemy.source.kind === 'elite'
+      ? (enraged ? [-0.44, -0.22, 0, 0.22, 0.44] : [-0.22, 0, 0.22])
+      : [0]
+    const speed = enemy.source.kind === 'boss' ? 7.8 : enemy.source.kind === 'elite' ? 7.4 : 7
+    let budget = MAX_ENEMY_BULLETS - this.hostileBulletCount()
+    for (const offset of fan) {
+      if (budget <= 0) break
+      budget -= 1
+      const angle = baseAngle + offset + (Math.random() - 0.5) * spread
+      this.spawnEnemyBullet(enemy, angle, speed)
+    }
+    if (enemy.source.kind === 'boss') {
+      // 首领改瞄准 3 连发：后两发进延时队列（约 120ms 一发），由 update 循环消化
+      this.pendingEnemyShots.push({ at: Date.now() + 120, enemyId: enemy.id })
+      this.pendingEnemyShots.push({ at: Date.now() + 240, enemyId: enemy.id })
+    }
     this.spawnParticles(enemy.x, enemy.y, 3, '#f87171')
   }
 
   private enemyBurst(enemy: LocalEnemy): void {
-    const count = 10
+    const count = 12
+    // 环形 10 → 12 发，起始角按该 boss 的弹幕次数每次 +37° 递增：连续弹幕带螺旋感，
+    // 不再是每一圈都一样的正多边形
+    const start = enemy.burstCount * ((37 * Math.PI) / 180)
+    enemy.burstCount += 1
+    let budget = MAX_ENEMY_BULLETS - this.hostileBulletCount()
     for (let i = 0; i < count; i += 1) {
-      const angle = (i / count) * Math.PI * 2
+      if (budget <= 0) break
+      budget -= 1
+      const angle = start + (i / count) * Math.PI * 2
+      const cos = Math.cos(angle)
+      const sin = Math.sin(angle)
       this.bullets.push({
-        x: enemy.x + Math.cos(angle) * 0.6,
-        y: enemy.y + Math.sin(angle) * 0.6,
-        vx: Math.cos(angle) * 5.2,
-        vy: Math.sin(angle) * 5.2,
+        x: enemy.x + cos * 0.6,
+        y: enemy.y + sin * 0.6,
+        vx: cos * 5.2,
+        vy: sin * 5.2,
         damage: Math.max(4, Math.round(enemy.source.damage * 0.7)),
         friendly: false,
         life: 2.6,

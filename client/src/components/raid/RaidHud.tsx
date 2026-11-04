@@ -152,6 +152,11 @@ export default function RaidHud({
   const extractBlockedLeftMs = run.extractBlockedUntil
     ? Math.max(0, run.extractBlockedUntil - Date.now())
     : 0
+  // 撤离点失联提示口径：全部失联时是「救援队重新架设信标」的冷却期（60 秒后可重试），
+  // 只挂当前点时才引导「换一个出口」——wasteland 只有 1 个撤离点，笼统说换出口会误导
+  const extractAllDisabled = run.map.extracts.length > 0
+    && run.map.extracts.every((point) => run.extractDisabled.includes(point.roomId))
+  const extractRetryLeftS = Math.ceil(extractBlockedLeftMs / 1000)
   const prompt = snapshot.extracting
     ? `撤离读条 ${extractPct}% · 读条完成自动撤离`
     : snapshot.canExtract
@@ -237,7 +242,11 @@ export default function RaidHud({
           </span>
         )}
         {run.extractDisabled.includes(run.currentRoom) && (
-          <span className="gh-raid-mission-note is-danger">这个撤离点已失联，换一个出口</span>
+          <span className="gh-raid-mission-note is-danger">
+            {extractAllDisabled
+              ? `撤离点全部失联，救援队正在重新架设信标${extractRetryLeftS > 0 ? `（约 ${extractRetryLeftS} 秒后可重试）` : ''}`
+              : '这个撤离点已失联，换一个出口'}
+          </span>
         )}
       </section>
 

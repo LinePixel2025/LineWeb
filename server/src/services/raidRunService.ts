@@ -27,6 +27,7 @@ import {
   raidItemValue,
   raidKeptContainers,
   raidLootValue,
+  raidMapForViewer,
   resolveDropPosition,
   tickRaidRun,
   type RaidContainerKind,
@@ -37,7 +38,6 @@ import {
   type RaidLootMode,
   type RaidMapDef,
   type RaidMapNode,
-  type RaidRoomKind,
   type RaidRunState,
   type RaidSkillRule,
   type RaidStatus,
@@ -187,23 +187,11 @@ function settlementItems(
 }
 
 /**
- * 撤离点情报裁剪（必须在服务端做，别指望客户端遮罩——地图数据是下发给客户端的）。
- *
- * 未探明的撤离点连坐标都不给：房间 kind 伪装成 combat、map.extracts 只保留已探明的，
- * 玩家只能靠自己走进撤离区才发现它，这就是「撤离点的路线在地图中显示不清楚」的实现口径。
- * 当前所在房间永远保留真 kind，否则客户端无法判定这里能不能起读条。
+ * 撤离点情报口径（2026-11-05 放开）：撤离点对小地图全程可见——map.extracts 恒全量下发、
+ * extract 房间显示真实 kind；信标在房间内的精确落点仍以进入房间为准。
+ * discoveredExtracts 字段仍在 DTO 中保留（不破坏契约），但不再参与裁剪。
+ * 实现收口在 lib/raidRun.ts 的 raidMapForViewer（纯函数，verify:raid 可直接断言）。
  */
-function maskMapForViewer(map: RaidMapNode, state: RaidRunState): RaidMapNode {
-  const known = new Set<number>([...(state.discoveredExtracts ?? []), state.currentRoom])
-  return {
-    ...map,
-    rooms: map.rooms.map((room) =>
-      room.kind === 'extract' && !known.has(room.id) ? { ...room, kind: 'combat' as RaidRoomKind } : room,
-    ),
-    extracts: map.extracts.filter((point) => known.has(point.roomId)),
-  }
-}
-
 function runDto(row: PetRaid, state: RaidRunState, now: number): RaidRunDto {
   const mapDef = getRaidMap(state.mapKey)
   const mode: RaidLootMode = state.mode === 'pvp' ? 'pvp' : 'normal'
@@ -238,7 +226,7 @@ function runDto(row: PetRaid, state: RaidRunState, now: number): RaidRunDto {
     capacities: state.capacities,
     gear: state.gear,
     skills: state.skills,
-    map: maskMapForViewer(generateRaidMap(state.seed, mapDef ?? (RAID_MAPS[0] as RaidMapDef), mode), state),
+    map: raidMapForViewer(generateRaidMap(state.seed, mapDef ?? (RAID_MAPS[0] as RaidMapDef), mode)),
     log: state.log,
     extractionStartedAt: state.extractionStartedAt,
     mode,

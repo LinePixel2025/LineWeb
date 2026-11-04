@@ -1129,6 +1129,26 @@ function drawEnemies(
       ctx.restore()
     }
 
+    // 精英冲锋预警（chargeTelegraph 1 → 0）：与射击预警同款虚线 + 收缩准星，
+    // 线的方向就是起跳后要冲的方向，玩家可以据此走位
+    if (!low && enemy.chargeTelegraph > 0.05) {
+      const playerScreen = worldToScreen(metrics, engine.player.x, engine.player.y)
+      ctx.save()
+      ctx.globalAlpha = 0.18 + enemy.chargeTelegraph * 0.34
+      ctx.strokeStyle = '#fb923c'
+      ctx.lineWidth = Math.max(1, tile * 0.035)
+      ctx.setLineDash([tile * 0.16, tile * 0.16])
+      ctx.beginPath()
+      ctx.moveTo(screen.x, screen.y)
+      ctx.lineTo(playerScreen.x, playerScreen.y)
+      ctx.stroke()
+      ctx.setLineDash([])
+      ctx.beginPath()
+      ctx.arc(playerScreen.x, playerScreen.y, radius * (1.6 - enemy.chargeTelegraph), 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.restore()
+    }
+
     ctx.fillStyle = 'rgba(0, 0, 0, 0.42)'
     ctx.beginPath()
     ctx.ellipse(screen.x, screen.y + radius * 0.95, radius * 0.9, radius * 0.3, 0, 0, Math.PI * 2)
@@ -1146,9 +1166,12 @@ function drawEnemies(
     }
 
     const lunge = enemy.lunge > 0 ? enemy.lunge / 0.26 : 0
+    // 精英冲锋冲刺中的拉伸变形：和近战突进同款手法，读起来是「整只怪压过来」
+    const dash = enemy.chargeDash > 0 ? enemy.chargeDash / 0.35 : 0
     ctx.save()
     ctx.translate(screen.x, screen.y)
     if (lunge > 0) ctx.scale(1 + lunge * 0.18, 1 - lunge * 0.1)
+    else if (dash > 0) ctx.scale(1 + dash * 0.3, 1 - dash * 0.12)
     drawEnemyBody(ctx, radius, kind, enemy.hitFlash > 0, now)
     ctx.restore()
 
@@ -1162,6 +1185,18 @@ function drawEnemies(
       ctx.fillStyle = art.accent
       ctx.globalAlpha = 0.6
       ctx.fillRect(screen.x - barW / 2, screen.y - radius - tile * 0.42, barW * enemy.telegraph, Math.max(2, tile * 0.045))
+      ctx.globalAlpha = 1
+    }
+    // 精英冲锋读条（预警剩余）：与射击预警同位，颜色区分
+    if (enemy.chargeTelegraph > 0.05) {
+      ctx.fillStyle = '#fb923c'
+      ctx.globalAlpha = 0.75
+      ctx.fillRect(
+        screen.x - barW / 2,
+        screen.y - radius - tile * 0.42,
+        barW * enemy.chargeTelegraph,
+        Math.max(2, tile * 0.045),
+      )
       ctx.globalAlpha = 1
     }
     ctx.fillStyle = 'rgba(248, 250, 252, 0.9)'

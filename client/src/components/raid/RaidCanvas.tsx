@@ -297,11 +297,39 @@ export default function RaidCanvas({
   const toggleImmersive = (): void => {
     const stage = stageRef.current
     if (!stage) return
-    const isFull = Boolean(document.fullscreenElement)
-    if (isFull) {
-      void Promise.resolve(document.exitFullscreen?.()).catch(() => undefined)
+    // 双前缀判定真全屏：iPad Safari 等纯 webkit 环境只认 webkitFullscreenElement，
+    // 只看标准 API 会把「已全屏」误判成「未全屏」，导致永远退不出去。
+    const doc = document as Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => void }
+    const isFull = Boolean(document.fullscreenElement || doc.webkitFullscreenElement)
+    // CSS 降级全屏（requestFullscreen 存在但被权限策略拒绝的环境）：直接还原，
+    // 绝不重试 request——重试会再次被拒、再次进降级，形成「按退出反而刷新全屏」的死循环。
+    if (stage.classList.contains('is-fallback') || (immersive && !isFull)) {
       stage.classList.remove('is-fallback')
       setImmersive(false)
+      const orientation = (screen as unknown as { orientation?: { unlock?: () => void } }).orientation
+      try {
+        orientation?.unlock?.()
+      } catch {
+        /* 旧内核没有该 API */
+      }
+      window.setTimeout(() => requestResizeRef.current(), 60)
+      return
+    }
+    if (isFull) {
+      // 退出同样要双前缀兜底：webkit 环境没有 exitFullscreen，得走 webkitExitFullscreen
+      if (typeof document.exitFullscreen === 'function') {
+        void Promise.resolve(document.exitFullscreen()).catch(() => undefined)
+      } else {
+        doc.webkitExitFullscreen?.()
+      }
+      stage.classList.remove('is-fallback')
+      setImmersive(false)
+      const orientation = (screen as unknown as { orientation?: { unlock?: () => void } }).orientation
+      try {
+        orientation?.unlock?.()
+      } catch {
+        /* 旧内核没有该 API */
+      }
       window.setTimeout(() => requestResizeRef.current(), 60)
       return
     }
