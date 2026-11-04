@@ -653,3 +653,24 @@ cd storage-node && python main.py     # 存储节点，config.json 指向 ws://1
 - **银行系统（bank，全新功能）**：`/api/bank`（`requireFeature('bank')`，读写各 60/5min 按用户限流）。**活期**年化 2% 按自然日惰性结息直接入积分余额（`bank_interest`，game:null 不占游戏日上限，水位 `lastInterestDateKey` 封顶 365 天）；**定期** 7 天 5% / 30 天 10% / 90 天 18%，到期支取全额利息、提前支取按活期；**基金** 3 只（稳健🛟 drift 4% vol 0.4% / 均衡⚖️ 10%/1.2% / 进取🚀 18%/2.8%），NAV 自 2026-01-01=1 逐日确定性复利（mulberry32 种子 `lineweb-fund:<code>:<dateKey>`）**带均值回归**（日拉力=0.05×ln(目标线/净值)，钳 ±0.02，防纯随机游走出 ±50% 极端路径）；单笔 100–100,000、申赎费 0.25%。schema additive 4 表 `BankAccount/BankDeposit/FundHolding/FundTrade`（`prisma db push` 即可）；lib 纯函数 `bankRules.ts` + 服务 `bankService.ts`（事务用 `spendPointsTx/awardPointsTx` + 条件 updateMany 防并发）；前端 `/bank`（BankPage + Sidebar 探索组入口 + features 双份加 `bank` 键）；自检 `cd server && npm run verify:bank`（1029 断言）；文档 `docs/bank-api.md`。
 - **称号/头像框扩充（points）**：`AVATAR_FRAME_STYLES` 7→11（新增 frost/venom/royal/cyber，royal/cyber 走 premium fx 装饰层）、`TITLE_EFFECT_STYLES` 8→10（新增 meteor/blossom）；新种子商品 12 件走新标记 `points.shop.frames.v3.seeded`/`points.shop.titles.v3.seeded`（4 框 1500–3000 分 + 8 称号 800–5000 分）；前端 `types/points.ts` 拷贝、points.css 类与 reduced-motion 降级、`verify:points`（361）与 `titleEffects.test.ts` 长度断言同步。
 - **部署**：2026-11-04 按本地产物链上线（本地 build → client-dist 覆盖 → `git push deploy master` → 服务器 fetch/reset → `Dockerfile.prebuilt` 重建），生产 schema 由 docker-entrypoint.sh 自动 db push。
+
+---
+
+## 2026-11-05 搜打撤修复 + 商店全站化 + 公司信贷扩展 + 危机税款自选（实现口径）
+
+- **搜打撤修复（raid）**：
+  - **沉浸模式退出三修**（`RaidCanvas.toggleImmersive` 重写）：退出判定补 `webkitFullscreenElement`/`webkitExitFullscreen` 兜底（修 iPad Safari 退不出）；`is-fallback` 降级模式先直接还原再 return（修「点退出反而重试进入」死循环）；退出补 `screen.orientation.unlock`。撤退确认 `window.confirm` 换成舞台内浮层（`.gh-raid-exit-confirm-*`，原生全屏只渲染 stage 子树必须挂里面；WebView confirm 恒 false 的坑一并修掉）。
+  - **撤离点全程可见**：`raidMapForViewer`（lib/raidRun.ts 收口纯函数）取消情报裁剪——`map.extracts` 恒全量下发、extract 房显示真实 kind（小地图全程显示「撤」）；`discoveredExtracts` DTO 字段保留不再参与裁剪。
+  - **撤离死局兜底**：run state 新增 `lastExtractFailAt`（additive，cloneState `?? 0` 兜底不升版本）；全部撤离点失联且冷却（60s）已过时 `extractStart` 清空全部 disabled 放行重试（救援队重架信标），部分失联维持拒绝。wasteland 单撤离点 25% 故障骰不再造成永久死局。
+  - **敌人 AI/弹幕增强**（纯客户端 engine）：精英 3-way 扇形（狂暴 HP<50% 时 5-way + 射速 ×1.4）、boss 瞄准 3 连发（引擎内 `pendingEnemyShots` 延时队列）+ 环形 12 发起始角逐次 +37° 螺旋；实现 elite `charge` 冲锋（4s 冷却、telegraph 0.6s、冲刺 0.35s ×6 速、路径接触伤害）；远程怪绕圈方向 2.5–4s 翻转、dist<2.5 后撤；全场敌弹上限 240。`verify:raid` 15372 断言。
+- **搜打撤商店全站化 + 仓库改造**：
+  - 新独立页 `/raid/shop`（`RaidShopPage.tsx`，原仓库页 shop Tab 迁出；App.tsx 挂 `RequireFeature('pet')` 块、Sidebar 探索组入口 `isEnabled('pet')` 过滤）；**后端 API 不动**（仍 `/api/pets/raid/shop`）。仓库页 Tab 收窄为 仓库/背包 + 商店跳转卡片。
+  - **装备并入仓库 Tab**：当前装备五槽 + 备用装备按槽分组整体内嵌（原独立 gear Tab 删除）。
+  - **批量选择回收**：`✓ 选择`模式（物品+装备勾选、底部浮动批量条「已选 N 件 · 预计 X 积分」）；后端 `POST /api/pets/raid/storage/recycle-batch`（`raidStorageService.recycleRaidItemsBatch` 单事务、assertNoActiveRaid、逐项校验指明出错项、装备价 `max(1, round(price×0.6))` 与 raidGearService 同口径、合计一次 `awardPointsTx('raid_recycle')`、≤100 项）。
+- **公司信贷扩展（company）**：
+  - **资金池开放投资**：成员投积分入池 `POST /pool/invest`（≥100，`company_pool_invest` 流水）→ `CompanyPoolInvestment`（`@@unique([companyId,userId])`，amount=可赎回份额含并入利息、earned 只增统计）；赎回 `POST /pool/redeem` 双 CAS（份额 + 池流动性，区分「份额不足」/「池子被贷空」）。贷款结清时利息按份额 floor 分配（余数留池）；解散时 `liquidateTx` 投资人优先全额发还（`company_pool_refund`）再成员均分剩余。
+  - **CEO 放贷设置**：`Company.loanSettings` JSON `{enabled,ratePct(0–20),maxPrincipal(0=跟随档位),dueDays(1–90),membersOnly}`（null=跟随全站 CompanyConfig），`PUT /loan/settings` 仅 CEO；`effectiveLoanSettings` 公司设置非 0 优先。
+  - **跨公司贷款**：`borrowLoan` 加可选 companyId（enabled=false 403、membersOnly 校验、per-company 逾期/上限检查保持）；`GET /loan/offers` 列开放放贷公司；银行页新增「公司贷款」区（可借公司卡+借款表单+到期应还预览+跨公司还款）；银行流水白名单补 `company_loan_borrow/repay`、`company_pool_invest/redeem`。`verify:points` 538 断言（+92）。
+- **危机税款自选（crisis）**：`User.crisisTaxEnabled`（默认关）+ `CrisisRules.spendTaxPct`（默认 5，管理员可调 0–50）。**唯一挂钩点 `spendPointsTx`**（全站 26 处花费必经）：`reason=crisis_payment` 免税防循环；税=`floor(cost×pct/100)` 一次条件更新扣 `cost+tax`；台账两笔（主 reason + `crisis_tax`，税笔不带 game 防误入游戏输分上限统计）；税款同事务 increment `CrisisPool`；税率直读 `tx.crisisConfig`+pointsService 内 5s 模块缓存（**不 import crisisService 防循环依赖**）。`PUT /api/crisis/tax`（豁免名单内，被封锁也能开）；个人资料页开关行 + 危机页税款卡（taxOptIn/taxPaidTotal）。**注意 `petBattleService` 赌注结算用赌注本金而非 `|delta|`**（delta 含税，否则赢家凭空多得税款）。`verify:crisis` 563 断言。
+- **数据库**：`Company.loanSettings`、`CompanyPoolInvestment`、`User.crisisTaxEnabled` 均 additive，`prisma db push` 即可；生产由 docker-entrypoint.sh 自动执行。
+- **部署**：2026-11-05 按本地产物链上线（本地 build → client-dist 覆盖 → `git push deploy master` → 服务器 fetch/reset → `Dockerfile.prebuilt` 重建）。
