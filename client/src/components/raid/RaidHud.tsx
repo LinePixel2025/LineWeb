@@ -8,6 +8,7 @@
 
 import type { RaidSnapshot } from '../../lib/raid/engine'
 import { RAID_ITEM_MAP, RAID_RARITY_LABELS, getRaidGear } from '../../lib/raid/raidRun'
+import { onTap } from '../../lib/raid/tap'
 import type { RaidEquippedGearSnapshot, RaidRun } from '../../types/petRaid'
 import type { RaidSquadMember } from '../../types/raidSquad'
 
@@ -268,7 +269,7 @@ export default function RaidHud({
                 className={`gh-raid-skill${locked ? ' is-locked' : ''}${lackMp ? ' is-lack-mp' : ''}`}
                 disabled={locked}
                 title={`${skill.name} · ${skill.mpCost} MP · 冷却 ${Math.round(skill.cooldownMs / 1000)}s${reason ? ` · ${reason}` : ''}`}
-                onClick={() => onSkill(index)}
+                {...onTap(() => onSkill(index))}
               >
                 <span className="gh-raid-skill-sweep" style={{ height: `${Math.min(100, cdRatio * 100)}%` }} />
                 <span className="gh-raid-skill-emoji">{skill.emoji}</span>
@@ -283,15 +284,15 @@ export default function RaidHud({
             )
           })}
           <div className="gh-raid-quick">
-            <button type="button" className="gh-raid-quick-btn is-heal" disabled={busy} onClick={onHeal} title="治疗道具（Q）">
+            <button type="button" className="gh-raid-quick-btn is-heal" disabled={busy} {...onTap(onHeal)} title="治疗道具（Q）">
               <span aria-hidden>💊</span>
               <em>治疗</em>
             </button>
-            <button type="button" className="gh-raid-quick-btn is-repair" disabled={busy} onClick={onRepair} title="维修包（F）">
+            <button type="button" className="gh-raid-quick-btn is-repair" disabled={busy} {...onTap(onRepair)} title="维修包（F）">
               <span aria-hidden>🛠</span>
               <em>维修</em>
             </button>
-            <button type="button" className="gh-raid-quick-btn is-abandon" disabled={busy} onClick={onAbandon} title="放弃行动">
+            <button type="button" className="gh-raid-quick-btn is-abandon" disabled={busy} {...onTap(onAbandon)} title="放弃行动">
               <span aria-hidden>⚑</span>
               <em>撤退</em>
             </button>
@@ -300,7 +301,7 @@ export default function RaidHud({
       </section>
 
       {/* 移动端背包入口：容量 + 一键打开整理面板 */}
-      <button type="button" className="gh-raid-bag" onClick={onOpenInventory} aria-label="打开战术背包">
+      <button type="button" className="gh-raid-bag" {...onTap(onOpenInventory)} aria-label="打开战术背包">
         <span className="gh-raid-bag-icon" aria-hidden>🎒</span>
         <span className="gh-raid-bag-text">
           <b>战术背包</b>
@@ -312,7 +313,7 @@ export default function RaidHud({
       <button
         type="button"
         className={`gh-raid-interact${prompt ? ' is-hot' : ''}`}
-        onClick={onInteract}
+        {...onTap(onInteract)}
         title="交互（E）：搜索容器 / 撤离"
         aria-label="交互"
       >

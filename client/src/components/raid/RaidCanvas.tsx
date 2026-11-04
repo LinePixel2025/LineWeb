@@ -12,6 +12,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type TouchEvent as ReactTouchEvent } from 'react'
 import type { RaidEvent } from '../../lib/raid/raidRun'
 import { RaidEngine, type RaidSnapshot } from '../../lib/raid/engine'
+import { onTap } from '../../lib/raid/tap'
 import { computeMetrics, renderMinimap, renderRaid, type RaidRenderQuality } from '../../lib/raid/renderer'
 import { createRaidInput, type RaidInputController } from '../../lib/raid/input'
 import { useLowPerformanceMode } from '../../lib/performanceMode'
@@ -558,13 +559,13 @@ export default function RaidCanvas({
         {children}
 
         <div className="gh-raid-toolbar">
-          <button type="button" className="gh-raid-tool" onClick={cycleQuality}>
+          <button type="button" className="gh-raid-tool" {...onTap(cycleQuality)}>
             {QUALITY_LABELS[quality]}
           </button>
-          <button type="button" className={`gh-raid-tool${immersive ? ' is-on' : ''}`} onClick={toggleImmersive}>
+          <button type="button" className={`gh-raid-tool${immersive ? ' is-on' : ''}`} {...onTap(toggleImmersive)}>
             {immersive ? '退出横屏' : '横屏沉浸'}
           </button>
-          <button type="button" className="gh-raid-tool" onClick={() => setHint(hint === 'none' ? 'fullscreen' : 'none')}>
+          <button type="button" className="gh-raid-tool" {...onTap(() => setHint(hint === 'none' ? 'fullscreen' : 'none'))}>
             操作提示
           </button>
         </div>

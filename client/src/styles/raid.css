@@ -575,10 +575,17 @@
 
 /* ---------- 浮层容器与面板 ---------- */
 
+/* HUD 层必须浮在摇杆热区（.gh-raid-touch，z-index: 4）之上，否则技能键与右侧「画质 / 横屏沉浸 /
+   操作提示」工具条会被满高热区吃掉触点（触屏实测只有背包键能点就是这个原因）。
+   穿透仍然成立：pod 本体与 overlay 都是 pointer-events: none，只有 button/input/a 是 auto，
+   所以按在面板的非按钮区域，触点会落到下面的摇杆热区，不牺牲「按任意处出摇杆」。
+   摇杆激活底盘 .gh-raid-stick.is-floating 虽 z-index: 30，但属于 z-index: 4 父层的叠上下文，
+   整体仍在这层之下，手指漂移时不会再盖住技能与工具条。 */
 .gh-raid-overlay,
 .gh-raid-hud {
   position: absolute;
   inset: 0;
+  z-index: 5;
   pointer-events: none;
   padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
     max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
@@ -1742,6 +1749,7 @@
   position: absolute;
   left: max(12px, env(safe-area-inset-left));
   top: 150px;
+  /* HUD 层已整体浮在摇杆热区之上（见 .gh-raid-overlay 注释），这里只在 HUD 内部排序，不要再为「点得到」调高它 */
   z-index: 5;
   display: flex;
   align-items: center;
@@ -2164,6 +2172,15 @@ body.lineweb-raid-playing .gh-announce-bar { display: none; }
 
 /* 旧内核没有 max()/env()：HUD 面板回退到固定安全边距，避免绝对定位失去偏移 */
 @supports not (inset: 0px) {
+  /* 同样回退满屏铺开的四边（z-index 本身旧内核支持，层级契约不依赖 inset） */
+  .gh-raid-overlay,
+  .gh-raid-hud,
+  .gh-raid-touch {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+  }
   .gh-raid-pod--vitals { top: 10px; left: 12px; }
   .gh-raid-pod--mission { top: 10px; }
   .gh-raid-pod--map { top: 10px; right: 12px; }
