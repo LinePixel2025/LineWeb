@@ -16,7 +16,7 @@ export default function Game2048Page() {
   const [undoSnapshot, setUndoSnapshot] = useState<Game2048Snapshot | null>(null)
   const [winDismissed, setWinDismissed] = useState(false)
   const snapshotRef = useRef(snapshot)
-  const { getStat, recordResult } = useGameStats()
+  const { getStat, recordResult, ensureTicket } = useGameStats()
   const recordedRef = useRef(false)
 
   useEffect(() => {
@@ -50,7 +50,8 @@ export default function Game2048Page() {
     setWinDismissed(false)
   }, [undoSnapshot])
 
-  const handleNewGame = useCallback(() => {
+  const handleNewGame = useCallback(async () => {
+    if (!(await ensureTicket('2048'))) return
     setSnapshot(createGame())
     setUndoSnapshot(null)
     setWinDismissed(false)

@@ -61,7 +61,7 @@ interface ParkourSaveView {
 /** 霓虹跑酷单机页：3D 无尽跑酷 + 账号纪录；three.js 场景在点击开始时动态加载 */
 export default function ParkourPage() {
   const [phase, setPhase] = useState<Phase>('intro')
-  const { getStat, recordResult } = useGameStats()
+  const { getStat, recordResult, ensureTicket } = useGameStats()
   const stat = getStat('parkour', 'solo')
   const best: ParkourBestView = {
     distanceM: stat?.bestDistance ?? 0,
@@ -80,6 +80,7 @@ export default function ParkourPage() {
   const runEndedRef = useRef(false)
 
   const startRun = useCallback(async (): Promise<void> => {
+    if (!(await ensureTicket('parkour'))) return
     setError(null)
     setPhase('loading')
     try {

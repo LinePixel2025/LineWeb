@@ -369,7 +369,7 @@ function JumpBoard({ dark }: { dark: boolean }) {
   const [hud, setHud] = useState<JumpHud>(() => emptyHud(sessionRef.current))
   const [charging, setCharging] = useState(false)
   const [chargeMs, setChargeMs] = useState(0)
-  const { getStat, recordResult } = useGameStats()
+  const { getStat, recordResult, ensureTicket } = useGameStats()
   const jumpStat = getStat('jump', 'solo')
   const best = jumpStat?.bestScore ?? 0
   const stats = {
@@ -519,7 +519,8 @@ function JumpBoard({ dark }: { dark: boolean }) {
     syncHud()
   }, [best, recordResult, syncHud])
 
-  const restart = useCallback(() => {
+  const restart = useCallback(async () => {
+    if (!(await ensureTicket('jump'))) return
     sessionRef.current = createJumpSession(randomJumpSeed())
     animRef.current = { phase: 'idle' }
     particlesRef.current = []

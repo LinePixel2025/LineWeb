@@ -62,7 +62,7 @@ export default function LiarPage() {
   const [table, setTable] = useState<LiarTableState>(() => createLiarTable(3))
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
-  const { getStat, recordResult } = useGameStats()
+  const { getStat, recordResult, ensureTicket } = useGameStats()
   const stat = getStat('liar', 'solo')
   const recordedRef = useRef(false)
 
@@ -114,7 +114,8 @@ export default function LiarPage() {
     })
   }, [table.finished, table.winnerSeat, table.players, recordResult])
 
-  const newGame = useCallback((count?: number) => {
+  const newGame = useCallback(async (count?: number) => {
+    if (!(await ensureTicket('liar'))) return
     const nextCount = count ?? playerCount
     recordedRef.current = false
     setError(null)

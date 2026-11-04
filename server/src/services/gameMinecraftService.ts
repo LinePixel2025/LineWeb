@@ -1,4 +1,5 @@
 import { AppError } from '../middleware/errorHandler.js'
+import { publishGameEnd } from './gameStatsHooks.js'
 import { areFriends, getUserBrief, listFriends } from './chatService.js'
 import { sendToUser } from './chatHub.js'
 import { pruneGamePresence } from './gamePresence.js'
@@ -443,11 +444,24 @@ function finishMinecraftMatch(
   now: number,
 ): void {
   if (match.status === 'finished') return
+  // 真正进过对局的沙盒世界结束时按「完成」发布：门票要返还 20 积分。
+  // 等待房间被解散才是「没开局」——那种情况走 cancelled/abandoned，由早退监听退整张票。
+  const started = match.status === 'playing'
+  // 沙盒没有胜负：outcome 只是类型占位，我的世界不写战绩（isGameKey('minecraft') 为假），
+  // 这里的 results 只用于门票返还时按人发 20 积分。
+  const seated = match.players.map((player) => ({ userId: player.userId, outcome: 'draw' as const }))
   match.status = 'finished'
   match.reason = reason
   match.endedAt = now
   match.version += 1
   broadcastMatch(match, 'game:match:ended')
+  publishGameEnd({
+    game: 'minecraft',
+    matchId: match.id,
+    // 'completed' 刻意不在 SKIP_REASONS 里：沙盒不记战绩，但仍要结算门票返还
+    reason: started ? 'completed' : reason,
+    results: seated,
+  })
 }
 
 /**

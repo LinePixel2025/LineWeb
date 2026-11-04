@@ -22,6 +22,12 @@ import type { GameEndResult } from './gameStatsHooks.js'
 import { awardGamePointsTx, effectiveTitleDto, getPointsConfig } from './pointsService.js'
 import { leaderTitleDto } from '../lib/gameLeaderTitles.js'
 import { scheduleLeaderRecompute } from './gameLeaderTitleService.js'
+import {
+  isTicketEnforced,
+  refundMatchPointsTx,
+  settleSoloSessionTx,
+} from './gameTicketService.js'
+import { TICKET_ERROR_CODE, isTicketGame } from '../lib/gameTicketRules.js'
 
 type StatRow = {
   id: number
@@ -82,14 +88,31 @@ export async function listStats(userId: number): Promise<StatRow[]> {
   })
 }
 
+export interface SoloResultTicketOutcome {
+  /** 本局门票返还的积分（0 表示这一局没有可核销的会话） */
+  refundedPoints: number
+  /** 门票系统当前是否生效（关闭时前端不再要求会话） */
+  enforced: boolean
+}
+
 export async function recordSoloResult(
   userId: number,
   input: SoloResultInput,
-): Promise<{ stat: StatRow; points: { delta: number; balance: number; gross: number; capped: boolean } }> {
+  sessionId?: number | null,
+): Promise<{
+  stat: StatRow
+  points: { delta: number; balance: number; gross: number; capped: boolean }
+  ticket: SoloResultTicketOutcome
+}> {
   const error = validateSoloResult(input)
   if (error) throw new AppError(error, 400)
   const delta = buildSoloDelta(input)
   const pointsConfig = await getPointsConfig()
+  // 门票开关关闭时：不要求会话、不扣票、不返还 —— 与门票上线前逐字一致
+  const enforced = await isTicketEnforced()
+  if (enforced && !sessionId) {
+    throw new AppError('本局未消耗游戏门票，战绩与积分不记录', 400, TICKET_ERROR_CODE)
+  }
   const result = await prisma.$transaction(async (tx) => {
     const existing = await tx.gameStat.findUnique({
       where: { userId_game_variant: { userId, game: input.game, variant: input.variant } },
@@ -108,7 +131,12 @@ export async function recordSoloResult(
       { outcome: input.outcome, score: input.score },
       { config: pointsConfig },
     )
-    return { stat, points }
+    // 门票核销与胜负积分同一事务：赢输死都返 20，且与上面积分叠加（返还走 game: null，
+    // 不占该游戏当日上限，见 gameTicketService 文件头）
+    const settled = sessionId
+      ? await settleSoloSessionTx(tx, userId, sessionId, input.game)
+      : { refundedPoints: 0 }
+    return { stat, points, ticket: { refundedPoints: settled.refundedPoints, enforced } }
   })
   // 榜一称号在事务提交后再算（2 秒防抖），失败不影响战绩与积分
   scheduleLeaderRecompute(input.game)
@@ -152,13 +180,21 @@ export async function importStats(
   return { imported, stats: await listStats(userId) }
 }
 
-/** 联机结算写入；失败只告警，绝不向游戏 finish 流程抛错 */
+/**
+ * 联机结算写入；失败只告警，绝不向游戏 finish 流程抛错。
+ *
+ * 战绩只写给 gameStatsRules.GAME_KEYS 里的游戏，但门票那 20 分的返还对所有需要门票的
+ * 游戏都要发（我的世界不上报战绩），所以这里不能用游戏白名单提前 return。
+ */
 export async function recordOnlineMatchResult(payload: GameEndResult): Promise<void> {
-  if (!isGameKey(payload.game) || !isKnownVariant(payload.game, 'online')) return
+  const writesStats = isGameKey(payload.game) && isKnownVariant(payload.game, 'online')
+  if (!writesStats && !isTicketGame(payload.game)) return
   try {
     const pointsConfig = await getPointsConfig()
     await prisma.$transaction(async (tx) => {
-      for (const result of payload.results) {
+      // 不上报战绩的游戏（如我的世界）只跑循环体外的门票返还
+      const statResults = writesStats ? payload.results : []
+      for (const result of statResults) {
         const delta: Parameters<typeof mergeCounters>[1] = { games: 1 }
         if (result.outcome === 'win') delta.wins = 1
         else if (result.outcome === 'loss') delta.losses = 1
@@ -201,6 +237,10 @@ export async function recordOnlineMatchResult(payload: GameEndResult): Promise<v
           { config: pointsConfig },
         )
       }
+
+      // 门票返还：联机每场打完在座每人必返 20（胜/负/平/阵亡都返），
+      // 只返给开局时确实扣过票的人；未开局的对局走早退监听退票，不会进到这里。
+      await refundMatchPointsTx(tx, payload.game, payload.matchId, payload.results)
     })
   } catch (err) {
     console.warn('[gameStats] 联机战绩写入失败：', err instanceof Error ? err.message : err)

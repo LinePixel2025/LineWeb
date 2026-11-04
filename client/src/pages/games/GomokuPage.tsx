@@ -62,7 +62,7 @@ export default function GomokuPage() {
   const [playerColor, setPlayerColor] = useState<GomokuColor>(GOMOKU_BLACK)
   const [state, setState] = useState<GameState>(newGame)
   const [thinking, setThinking] = useState(false)
-  const { getStat, recordResult } = useGameStats()
+  const { getStat, recordResult, ensureTicket } = useGameStats()
   const stat = getStat('gomoku', 'solo')
   const statsRecordedRef = useRef(false)
   const aiTimerRef = useRef<number | null>(null)
@@ -184,7 +184,8 @@ export default function GomokuPage() {
 
   /** 重开一局（换边时同时重开） */
   const handleRestart = useCallback(
-    (nextColor?: GomokuColor) => {
+    async (nextColor?: GomokuColor) => {
+      if (!(await ensureTicket('gomoku'))) return
       clearAiTimer()
       statsRecordedRef.current = false
       setThinking(false)

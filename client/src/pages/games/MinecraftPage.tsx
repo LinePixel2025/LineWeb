@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useGameStats } from '../../contexts/GameStatsContext'
 import {
   MC_DEFAULT_HOTBAR,
   mcApplyEdits,
@@ -68,6 +69,8 @@ function editsFromSave(save: McSaveData): McBlockEdit[] {
 
 export default function MinecraftPage() {
   const navigate = useNavigate()
+  // 沙盒不报战绩，但门票要收：开局扣票，退出世界时关会话拿回 20 分
+  const { ensureTicket, closeTicketSession } = useGameStats()
   const [phase, setPhase] = useState<'menu' | 'loading' | 'playing'>('menu')
   const [hasSave, setHasSave] = useState<McSaveData | null>(null)
   const [seedInput, setSeedInput] = useState('')
@@ -90,7 +93,9 @@ export default function MinecraftPage() {
   }, [])
 
   /** 开始一局：seed 为 null 表示「读档」，否则开新世界 */
-  const startGame = useCallback((seed: number | null) => {
+  const startGame = useCallback(async (seed: number | null) => {
+    // 沙盒不报战绩，但同样收票：扣票在服务端（/game-stats/session/start）
+    if (!(await ensureTicket('minecraft'))) return
     setMenuError(null)
 
     if (seed === null) {
@@ -190,7 +195,8 @@ export default function MinecraftPage() {
     initialPlayerRef.current = null
     setHasSave(loadSave())
     setPhase('menu')
-  }, [handleSnapshot])
+    void closeTicketSession()
+  }, [handleSnapshot, closeTicketSession])
 
   const deleteSave = useCallback(() => {
     localStorage.removeItem(SAVE_KEY)

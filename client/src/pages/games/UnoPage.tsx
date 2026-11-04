@@ -71,7 +71,7 @@ export default function UnoPage() {
   const [table, setTable] = useState<UnoTableState>(() => createUnoTable(3))
   const [error, setError] = useState<string | null>(null)
   const [pendingWild, setPendingWild] = useState<number | null>(null)
-  const { getStat, recordResult } = useGameStats()
+  const { getStat, recordResult, ensureTicket } = useGameStats()
   const stat = getStat('uno', 'solo')
   const recordedRef = useRef(false)
 
@@ -121,7 +121,8 @@ export default function UnoPage() {
     })
   }, [table.status, table.winnerSeat, recordResult])
 
-  const newGame = useCallback((count?: number) => {
+  const newGame = useCallback(async (count?: number) => {
+    if (!(await ensureTicket('uno'))) return
     const nextCount = count ?? playerCount
     recordedRef.current = false
     setError(null)
