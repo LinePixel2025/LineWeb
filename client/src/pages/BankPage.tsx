@@ -14,6 +14,7 @@ import type {
   FundBuyResult,
   FundSellResult,
 } from '../types/bank'
+import type { CompanyLoan, CompanyLoanOffer } from '../types/company'
 
 /** 总览轮询间隔（利息按日结算，行情逐日变化，15 秒足够） */
 const OVERVIEW_POLL_MS = 15_000
@@ -29,6 +30,10 @@ const REASON_LABELS: Record<string, string> = {
   bank_interest: '利息发放',
   fund_buy: '基金买入',
   fund_sell: '基金卖出',
+  company_loan_borrow: '公司借款',
+  company_loan_repay: '公司还款',
+  company_pool_invest: '资金池投入',
+  company_pool_redeem: '资金池赎回',
 }
 
 function formatPoints(value: number): string {
@@ -75,6 +80,20 @@ function parseAmountInput(raw: string): number | null {
   const amount = Math.trunc(value)
   if (amount < 100 || amount > 100_000) return null
   return amount
+}
+
+/** 公司借款 / 还款金额解析（与 parseAmountInput 同口径，下限放宽：额度上限由服务端按公司设置卡） */
+function parseLoanAmount(raw: string): number | null {
+  const value = Number(raw)
+  if (!Number.isFinite(value)) return null
+  const amount = Math.trunc(value)
+  if (amount < 1 || amount > 1_000_000) return null
+  return amount
+}
+
+/** 借款到期应还预览：金额 + ceil(金额 × 利率 / 100)（取整口径宁多勿少，实际以服务端为准） */
+function loanDuePreview(principal: number, ratePct: number): number {
+  return principal + Math.ceil((principal * ratePct) / 100)
 }
 
 function reasonLabel(reason: string): string {
@@ -309,6 +328,14 @@ export default function BankPage() {
   const [fundModal, setFundModal] = useState<{ code: string; mode: 'buy' | 'sell' } | null>(null)
   const [fundModalError, setFundModalError] = useState<string | null>(null)
 
+  /** 公司贷款区：null = 加载失败（如 company 功能开关关闭），整块隐藏不打扰银行页 */
+  const [loanOffers, setLoanOffers] = useState<CompanyLoanOffer[] | null>(null)
+  const [myCompanyLoans, setMyCompanyLoans] = useState<CompanyLoan[]>([])
+  const [expandedOffer, setExpandedOffer] = useState<number | null>(null)
+  const [borrowInput, setBorrowInput] = useState('')
+  const [expandedLoan, setExpandedLoan] = useState<number | null>(null)
+  const [repayInput, setRepayInput] = useState('')
+
   const toastTimerRef = useRef(0)
   const requestRef = useRef(0)
 
@@ -356,6 +383,98 @@ export default function BankPage() {
   const refreshAfterAction = useCallback(async () => {
     await Promise.all([loadOverview(), refreshPoints()])
   }, [loadOverview, refreshPoints])
+
+  /** 公司贷款区数据：可借公司 + 我的贷款；请求失败（company 功能关闭等）时整块隐藏 */
+  const loadCompanyLoans = useCallback(async () => {
+    try {
+      const [offers, loans] = await Promise.all([
+        api.get<{ items: CompanyLoanOffer[] }>('/company/loan/offers'),
+        api.get<{ items: CompanyLoan[] }>('/company/loans'),
+      ])
+      setLoanOffers(offers.items ?? [])
+      setMyCompanyLoans(loans.items ?? [])
+    } catch {
+      setLoanOffers(null)
+      setMyCompanyLoans([])
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadCompanyLoans()
+  }, [loadCompanyLoans])
+
+  const toggleOffer = (companyId: number) => {
+    setExpandedOffer((prev) => (prev === companyId ? null : companyId))
+    setBorrowInput('')
+  }
+
+  const toggleLoanRepay = (loanId: number) => {
+    setExpandedLoan((prev) => (prev === loanId ? null : loanId))
+    setRepayInput('')
+  }
+
+  const submitBorrow = async (offer: CompanyLoanOffer) => {
+    if (busy) return
+    const principal = parseLoanAmount(borrowInput)
+    if (principal === null) {
+      pushNotice('danger', '借款金额需为 1–1000000 之间的整数积分')
+      return
+    }
+    setBusy(true)
+    try {
+      const result = await api.post<{ loan: CompanyLoan }>('/company/loan/borrow', {
+        companyId: offer.companyId,
+        principal,
+      })
+      pushNotice(
+        'success',
+        `已向 ${offer.name} 借入 ${formatPoints(result.loan.principal)} 积分（${result.loan.dueDays} 天内应还 ${formatPoints(result.loan.dueAmount)}）`,
+      )
+      setExpandedOffer(null)
+      setBorrowInput('')
+      await refreshAfterAction()
+      await loadCompanyLoans()
+    } catch (err) {
+      pushNotice('danger', err instanceof Error ? err.message : '借款失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const submitLoanRepay = async (loan: CompanyLoan) => {
+    if (busy) return
+    // 缺省 = 一次还清剩余应还
+    const amount = repayInput.trim() ? parseLoanAmount(repayInput) : loan.remaining
+    if (amount === null) {
+      pushNotice('danger', '还款金额需为 1–1000000 之间的整数积分')
+      return
+    }
+    if (amount > balance) {
+      pushNotice('danger', '积分不足')
+      return
+    }
+    setBusy(true)
+    try {
+      const result = await api.post<{ paid: number; remaining: number; settled: boolean; companyName: string }>(
+        '/company/loan/repay',
+        { loanId: loan.id, amount },
+      )
+      pushNotice(
+        'success',
+        result.settled
+          ? `已结清 ${result.companyName} 的贷款（本次还款 ${formatPoints(result.paid)} 积分）`
+          : `已还款 ${formatPoints(result.paid)} 积分，剩余 ${formatPoints(result.remaining)}`,
+      )
+      setExpandedLoan(null)
+      setRepayInput('')
+      await refreshAfterAction()
+      await loadCompanyLoans()
+    } catch (err) {
+      pushNotice('danger', err instanceof Error ? err.message : '还款失败')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const demandBalance = overview?.demand.balance ?? 0
   const parsedDemand = parseAmountInput(demandAmount)
@@ -730,6 +849,142 @@ export default function BankPage() {
               })}
             </div>
           </section>
+
+          {/* 公司贷款（company 功能不可用时整块隐藏） */}
+          {loanOffers !== null && (
+            <section className="gh-box gh-bank-card" aria-label="公司贷款">
+              <div className="gh-bank-card-head">
+                <h2>公司贷款</h2>
+                <span className="gh-text-tertiary">向公司资金池借款 · 利息在放款时一次算死 · 逾期影响再借</span>
+              </div>
+              {loanOffers.length === 0 ? (
+                <p className="gh-bank-empty">暂时没有开放借款的公司</p>
+              ) : (
+                <ul className="gh-bank-loan-offers">
+                  {loanOffers.map((offer) => {
+                    const expanded = expandedOffer === offer.companyId
+                    const previewAmount = parseLoanAmount(borrowInput)
+                    const due = previewAmount !== null && previewAmount > 0 ? loanDuePreview(previewAmount, offer.ratePct) : null
+                    return (
+                      <li key={offer.companyId} className="gh-bank-loan-offer">
+                        <button
+                          type="button"
+                          className="gh-bank-loan-offer-head"
+                          aria-expanded={expanded}
+                          onClick={() => toggleOffer(offer.companyId)}
+                        >
+                          <span className="gh-bank-loan-name">
+                            🏢 {offer.name}
+                            {offer.membersOnly && <small className="gh-bank-loan-flag">仅本司成员</small>}
+                          </span>
+                          <span className="gh-bank-loan-meta">
+                            利率 {offer.ratePct}% · {offer.dueDays} 天 · 池内 {formatPoints(offer.poolBalance)} ·
+                            {offer.maxPrincipal > 0 ? ` 单笔 ≤ ${formatPoints(offer.maxPrincipal)}` : ' 上限按公司等级'}
+                          </span>
+                          <span className="gh-bank-loan-toggle">{expanded ? '收起' : '借款'}</span>
+                        </button>
+                        {expanded && (
+                          <div className="gh-bank-loan-form">
+                            <div className="gh-bank-action-row">
+                              <input
+                                className="gh-input gh-bank-amount"
+                                type="number"
+                                min={1}
+                                max={1_000_000}
+                                step={1}
+                                value={borrowInput}
+                                onChange={(event) => setBorrowInput(event.target.value)}
+                                aria-label={`向 ${offer.name} 借款（积分）`}
+                                placeholder={offer.maxPrincipal > 0 ? `单笔最多 ${formatPoints(offer.maxPrincipal)}` : '借款金额（积分）'}
+                              />
+                              <button
+                                type="button"
+                                className="gh-btn gh-btn--primary gh-btn--md"
+                                disabled={busy}
+                                onClick={() => void submitBorrow(offer)}
+                              >
+                                {busy ? '处理中…' : '借款'}
+                              </button>
+                            </div>
+                            {due !== null && (
+                              <p className="gh-text-tertiary gh-bank-loan-preview">
+                                到期应还 <strong>{formatPoints(due)}</strong> 积分（本金 {formatPoints(previewAmount ?? 0)} + 利息 {formatPoints(due - (previewAmount ?? 0))}）
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+
+              <div className="gh-bank-loan-mine">
+                <h3>我的公司贷款</h3>
+                {myCompanyLoans.length === 0 ? (
+                  <p className="gh-bank-empty">还没有公司贷款</p>
+                ) : (
+                  <ul className="gh-bank-ledger">
+                    {myCompanyLoans.map((loan) => {
+                      const expanded = expandedLoan === loan.id && loan.status !== 'repaid'
+                      return (
+                        <li key={loan.id} className="gh-bank-ledger-row">
+                          <span className="gh-bank-ledger-main">
+                            <strong>
+                              {loan.companyName} · 本金 {formatPoints(loan.principal)} / 应还 {formatPoints(loan.dueAmount)}
+                            </strong>
+                            <small className="gh-text-tertiary">
+                              {loan.ratePct}% · {loan.dueDays} 天 · 到期 {formatDateTime(loan.dueAt)} · 未还 {formatPoints(loan.remaining)}
+                            </small>
+                            {expanded && (
+                              <span className="gh-bank-loan-form">
+                                <span className="gh-bank-action-row">
+                                  <input
+                                    className="gh-input gh-bank-amount"
+                                    type="number"
+                                    min={1}
+                                    max={1_000_000}
+                                    step={1}
+                                    value={repayInput}
+                                    onChange={(event) => setRepayInput(event.target.value)}
+                                    aria-label={`归还 ${loan.companyName} 贷款（积分）`}
+                                    placeholder={`缺省一次还清 ${formatPoints(loan.remaining)}`}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="gh-btn gh-btn--primary gh-btn--md"
+                                    disabled={busy}
+                                    onClick={() => void submitLoanRepay(loan)}
+                                  >
+                                    {busy ? '处理中…' : '确认还款'}
+                                  </button>
+                                </span>
+                              </span>
+                            )}
+                          </span>
+                          <span className="gh-bank-ledger-side">
+                            <strong className={loan.status === 'overdue' ? 'gh-bank-down' : 'gh-text-tertiary'}>
+                              {loan.status === 'repaid' ? '已还清' : loan.status === 'overdue' ? '已逾期' : '还款中'}
+                            </strong>
+                            {loan.status !== 'repaid' && (
+                              <button
+                                type="button"
+                                className="gh-btn gh-btn--secondary gh-btn--sm"
+                                disabled={busy}
+                                onClick={() => toggleLoanRepay(loan.id)}
+                              >
+                                {expandedLoan === loan.id ? '收起' : '还款'}
+                              </button>
+                            )}
+                          </span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
+            </section>
+          )}
 
           {/* 最近流水 */}
           <section className="gh-box gh-bank-card" aria-label="最近流水">

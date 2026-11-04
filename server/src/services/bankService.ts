@@ -172,7 +172,7 @@ export interface BankOverviewDto {
   }
 }
 
-/** 银行 / 基金相关积分流水 reason（与 schema 注释枚举一致） */
+/** 银行 / 基金 / 公司信贷相关积分流水 reason（与 schema 注释枚举一致）；银行页有「贷款」区，公司借款与资金池投资流水也在这里展示 */
 const BANK_LEDGER_REASONS = [
   'bank_deposit_in',
   'bank_demand_withdraw',
@@ -181,6 +181,10 @@ const BANK_LEDGER_REASONS = [
   'bank_interest',
   'fund_buy',
   'fund_sell',
+  'company_loan_borrow',
+  'company_loan_repay',
+  'company_pool_invest',
+  'company_pool_redeem',
 ]
 
 function depositDtoOf(

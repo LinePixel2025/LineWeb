@@ -454,6 +454,11 @@ export const COMPANY_LIMITS = {
   loanAmountMax: 10_000_000,
   donationMax: 1000,
   restockMax: 5000,
+  /** CEO 放贷设置：单笔上限字段的上限（0 = 跟随全站等级上限，不算在这个范围内） */
+  loanSettingsRateMax: 20,
+  /** CEO 放贷设置：期限天数的合法区间（0 = 跟随全站默认期限，不算在这个范围内） */
+  loanSettingsDueMin: 1,
+  loanSettingsDueMax: 90,
 } as const
 
 /**
@@ -528,6 +533,89 @@ export function loanCapFromConfig(cfg: CompanyConfig, level: number): number {
 export function loanRateFromConfig(cfg: CompanyConfig, level: number): number {
   const index = clampIndex(level, cfg.loanRatePct.length)
   return Math.max(0, Math.trunc(cfg.loanRatePct[index] ?? 0))
+}
+
+/* ============================================================
+   CEO 放贷设置（Company.loanSettings JSON，null = 跟随全站默认）
+   ============================================================ */
+
+/**
+ * 公司级放贷设置（CEO 整体保存）。
+ *
+ * **0 = 跟随全站的口径在这里写死，整个链路都不要用 null 表达「未设置」**：
+ * - `ratePct === 0` → 利率用全站档位（loanRateFromConfig），0 不是「免息」；
+ * - `maxPrincipal === 0` → 单笔上限用全站等级上限（loanCapFromConfig），0 不是「禁借」；
+ * - `dueDays === 0` → 期限用全站默认（CompanyConfig.loanDueDays）。
+ * 想表达「关闭放贷」只有一个开关：`enabled === false`。
+ */
+export interface CompanyLoanSettings {
+  /** 是否开放放贷（false 直接关闸，跨公司与本司借款一律拒绝） */
+  enabled: boolean
+  /** 整期利率百分比（0–20）；0 = 跟随全站档位利率 */
+  ratePct: number
+  /** 单笔借款上限（0–10_000_000）；0 = 用全站等级 cap */
+  maxPrincipal: number
+  /** 借款期限（天）；0 = 跟随全站默认期限，显式给值时夹到 1–90 */
+  dueDays: number
+  /** 仅本公司成员可借 */
+  membersOnly: boolean
+}
+
+/** CEO 没保存过设置时的隐含默认：全字段「跟随全站」+ 开闸 */
+export function defaultLoanSettings(): CompanyLoanSettings {
+  return { enabled: true, ratePct: 0, maxPrincipal: 0, dueDays: 0, membersOnly: false }
+}
+
+/**
+ * 脏字段清洗：缺省 / 脏值（NaN、Infinity、字符串数字）一律回退默认值，
+ * 合法数值再钳制到区间（与 normalizeCompanyConfig 的 pickNumber/clamp 同一口径）。
+ */
+export function normalizeLoanSettings(raw: unknown): CompanyLoanSettings {
+  const input = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const out = defaultLoanSettings()
+  if (typeof input.enabled === 'boolean') out.enabled = input.enabled
+  if (typeof input.membersOnly === 'boolean') out.membersOnly = input.membersOnly
+
+  const rate = pickNumber(input.ratePct, out.ratePct)
+  if (rate !== null) out.ratePct = Math.floor(Math.min(COMPANY_LIMITS.loanSettingsRateMax, Math.max(0, rate)))
+  const cap = pickNumber(input.maxPrincipal, out.maxPrincipal)
+  if (cap !== null) out.maxPrincipal = Math.max(0, Math.floor(Math.min(COMPANY_LIMITS.loanAmountMax, cap)))
+  // 期限：<=0（含脏值回退的 0）保留为「跟随全站」哨兵；显式正数才夹进 1–90
+  const days = pickNumber(input.dueDays, out.dueDays)
+  if (days !== null) {
+    out.dueDays = days <= 0
+      ? 0
+      : Math.floor(Math.min(COMPANY_LIMITS.loanSettingsDueMax, Math.max(COMPANY_LIMITS.loanSettingsDueMin, days)))
+  }
+  return out
+}
+
+/** 从 Company.loanSettings JSON 读设置：解析失败 / 空 / 非对象一律返回 null（= 未设置，跟随全站） */
+export function parseLoanSettings(json: string | null): CompanyLoanSettings | null {
+  if (!json) return null
+  try {
+    const parsed: unknown = JSON.parse(json)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    return normalizeLoanSettings(parsed)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 生效参数：公司设置里非 0 的字段优先，0 回落全站配置（按公司等级取档位）。
+ * enabled / membersOnly 不是数值，不参与合并 —— 由调用方直接读 CompanyLoanSettings。
+ */
+export function effectiveLoanSettings(
+  settings: CompanyLoanSettings | null,
+  cfg: CompanyConfig,
+  level: number,
+): { ratePct: number; dueDays: number; maxPrincipal: number } {
+  return {
+    ratePct: settings && settings.ratePct > 0 ? settings.ratePct : loanRateFromConfig(cfg, level),
+    dueDays: settings && settings.dueDays > 0 ? settings.dueDays : cfg.loanDueDays,
+    maxPrincipal: settings && settings.maxPrincipal > 0 ? settings.maxPrincipal : loanCapFromConfig(cfg, level),
+  }
 }
 
 /* ============================================================

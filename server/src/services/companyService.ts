@@ -46,6 +46,7 @@ import {
   computeLoanDue,
   crossedTiers,
   donationCapOf,
+  effectiveLoanSettings,
   foundingExpiresAtOf,
   foundingRemainingMs,
   isCompanyListingSource,
@@ -53,13 +54,13 @@ import {
   isLoanUnsettled,
   isMarketSort,
   isPriceInBand,
-  loanCapFromConfig,
   loanDueAtOf,
-  loanRateFromConfig,
   loanRemaining,
   normalizeCompanyName,
   normalizeCompanyConfig,
+  normalizeLoanSettings,
   normalizePageQuery,
+  parseLoanSettings,
   priceBandMessage,
   priceBandOf,
   rarityWeight,
@@ -69,12 +70,16 @@ import {
   validateCompanyName,
   type CompanyConfig as CompanyConfigValues,
   type CompanyLoanDto,
+  type CompanyLoanSettings,
   type CompanyListingSource,
   type PriceBand,
 } from '../lib/companyRules.js'
 
 type Db = Prisma.TransactionClient
 const userSelect = { id: true, username: true } as const
+
+/** 资金池投资单次最小投入（积分）：挡掉 1 积分式的刷流水噪音 */
+const COMPANY_POOL_INVEST_MIN = 100
 
 type CompanyRow = Prisma.CompanyGetPayload<{ include: { owner: { select: typeof userSelect } } }>
 type ListingRow = CompanyListing & {
@@ -158,6 +163,21 @@ export interface CompanyMemberDto extends CompanyUserDto {
   outstanding: number
 }
 
+/** 公司放贷设置的出口口径：数值字段为「生效值」（0 回落全站档位），开关字段取公司自身设置 */
+export interface CompanyLoanSettingsDto {
+  enabled: boolean
+  ratePct: number
+  maxPrincipal: number
+  dueDays: number
+  membersOnly: boolean
+}
+
+/** 本人在这家公司的资金池投资份额（未投资过为 null） */
+export interface CompanyPoolShareDto {
+  amount: number
+  earned: number
+}
+
 export interface CompanyDto {
   id: number
   name: string
@@ -173,6 +193,8 @@ export interface CompanyDto {
   foundingRemainingMs: number
   createdAt: string
   tier: ReturnType<typeof companyTierProgress>
+  loanSettings: CompanyLoanSettingsDto
+  myPoolInvestment: CompanyPoolShareDto | null
   members: CompanyMemberDto[]
 }
 
@@ -438,10 +460,26 @@ async function settleFoundingCompany(companyId: number, nowMs: number): Promise<
 }
 
 /**
- * 清算：所有未售条目原路退回捐入者 + 资金池按成员均分（余数归发起人）。
+ * 清算：投资人份额优先全额发还 → 所有未售条目原路退回捐入者 → 剩余资金池按成员均分（余数归发起人）。
  * 幂等由调用方的 status CAS 占位保证（只有翻到 1 行才会走到这里）。
+ *
+ * 投资人排最前面的原因：投资的钱本就计入 poolBalance，先发还并等量扣减池子，
+ * 后面「按成员均分」分到的才是没被投资占用的部分。能走到清算时公司必然没有未结清贷款
+ * （解散入口一律先拦），所以全部本金与利息都已回流，poolBalance ≥ Σ投资份额 恒成立。
  */
 async function liquidateTx(tx: Db, companyId: number): Promise<void> {
+  const investments = await tx.companyPoolInvestment.findMany({ where: { companyId, amount: { gt: 0 } } })
+  if (investments.length > 0) {
+    let refunded = 0
+    for (const inv of investments) {
+      await awardPointsTx(tx, inv.userId, { amount: inv.amount, reason: 'company_pool_refund', note: '公司解散，资金池投资份额发还' })
+      // 选 delete 而不是置 0：解散后该公司不可能再有投资行为，行留着只是死数据
+      //（Company 级联删除本身也会带走它，这里先删是为了让「清零」这一步显式可见）
+      await tx.companyPoolInvestment.delete({ where: { id: inv.id } })
+      refunded += inv.amount
+    }
+    await tx.company.updateMany({ where: { id: companyId }, data: { poolBalance: { decrement: refunded } } })
+  }
   await returnAllEscrowTx(tx, companyId)
   const company = await tx.company.findUnique({ where: { id: companyId }, select: { ownerId: true, poolBalance: true } })
   if (!company || company.poolBalance <= 0) return
@@ -540,7 +578,7 @@ async function warehouseRoomTx(tx: Db, userId: number): Promise<number> {
    ============================================================ */
 
 async function buildCompanyDto(company: CompanyRow, nowMs: number, viewerId: number): Promise<CompanyDto> {
-  const [members, loanGroups] = await Promise.all([
+  const [members, loanGroups, rules, myInvestment] = await Promise.all([
     prisma.companyMember.findMany({
       where: { companyId: company.id },
       select: { userId: true, role: true, joinedAt: true, user: { select: userSelect } },
@@ -552,15 +590,25 @@ async function buildCompanyDto(company: CompanyRow, nowMs: number, viewerId: num
       where: { companyId: company.id, status: { not: 'repaid' } },
       _sum: { principal: true },
     }),
+    // getCompanyConfig 自带 5s 缓存，重复装配视图不会放大查询
+    getCompanyConfig(),
+    prisma.companyPoolInvestment.findUnique({
+      where: { companyId_userId: { companyId: company.id, userId: viewerId } },
+      select: { amount: true, earned: true },
+    }),
   ])
   const outstandingByUser = new Map<number, number>()
   for (const group of loanGroups) outstandingByUser.set(group.userId, Math.max(0, group._sum.principal ?? 0))
+  // 放贷设置出口：数值字段统一给「生效值」（0 回落全站档位），开关字段取公司自身设置
+  const settings = parseLoanSettings(company.loanSettings)
+  const level = companyLevelOf(company.tierMask)
+  const effective = effectiveLoanSettings(settings, rules, level)
   return {
     id: company.id,
     name: company.name,
     status: company.status,
     owner: { id: company.owner.id, username: company.owner.username },
-    level: companyLevelOf(company.tierMask),
+    level,
     tierMask: company.tierMask,
     poolBalance: company.poolBalance,
     revenue: company.revenue,
@@ -572,6 +620,14 @@ async function buildCompanyDto(company: CompanyRow, nowMs: number, viewerId: num
       : 0,
     createdAt: iso(company.createdAt),
     tier: companyTierProgress(company.revenue, company.tierMask),
+    loanSettings: {
+      enabled: settings?.enabled ?? true,
+      ratePct: effective.ratePct,
+      maxPrincipal: effective.maxPrincipal,
+      dueDays: effective.dueDays,
+      membersOnly: settings?.membersOnly ?? false,
+    },
+    myPoolInvestment: myInvestment ? { amount: myInvestment.amount, earned: myInvestment.earned } : null,
     members: members.map((member) => ({
       id: member.user.id,
       username: member.user.username,
@@ -670,7 +726,9 @@ export async function getMyCompanyView(userId: number, nowMs = Date.now()): Prom
   ])
 
   const level = companyLevelOf(company.tierMask)
-  const cap = loanCapFromConfig(rules, level)
+  // 额度/利率/期限统一走「公司设置优先、0 回落全站档位」的生效值口径
+  const loanEffective = effectiveLoanSettings(parseLoanSettings(company.loanSettings), rules, level)
+  const cap = loanEffective.maxPrincipal
   const myLoans = loans.filter((loan) => loan.userId === userId)
   // 占用额度 = 未结清贷款的「已还到本金上」以外的部分（还的钱先冲利息再冲本金）
   const outstanding = myLoans
@@ -709,8 +767,8 @@ export async function getMyCompanyView(userId: number, nowMs = Date.now()): Prom
     loanSummary: {
       level,
       cap,
-      ratePct: loanRateFromConfig(rules, level),
-      dueDays: rules.loanDueDays,
+      ratePct: loanEffective.ratePct,
+      dueDays: loanEffective.dueDays,
       outstanding,
       remaining: Math.max(0, cap - outstanding),
       blockedByOverdue: myLoans.some((loan) => loan.status === 'overdue' && isLoanUnsettled(loan.status, loan.repaid, loan.dueAmount)),
@@ -1309,58 +1367,116 @@ export async function buyListing(userId: number, listingId: number, wanted: numb
    贷款
    ============================================================ */
 
-export async function borrowLoan(userId: number, requestedPrincipal: number, nowMs = Date.now()) {
+/** 借款目标公司的最小信息（两条路径统一到这里，后续校验与 CAS 不再分叉） */
+interface LoanTarget {
+  companyId: number
+  name: string
+  revenue: number
+  tierMask: number
+  settings: CompanyLoanSettings | null
+}
+
+/**
+ * 解析借款目标公司。
+ * - companyId 为 null：旧路径，向自己所在的公司借（requireMembership 保证是成员）；
+ * - companyId 显式给出：跨公司借款，不要求是成员（membersOnly 开启时再查成员关系）。
+ */
+async function resolveLoanTarget(userId: number, companyId: number | null): Promise<LoanTarget> {
+  if (companyId === null) {
+    const membership = await requireMembership(prisma, userId)
+    if (membership.company.status === COMPANY_STATUS_DISBANDED) throw new AppError('公司已解散', 409)
+    if (membership.company.status !== COMPANY_STATUS_ACTIVE) throw new AppError('公司还没开张，不能放贷', 409, 'COMPANY_NOT_ACTIVE')
+    return {
+      companyId: membership.companyId,
+      name: membership.company.name,
+      revenue: membership.company.revenue,
+      tierMask: membership.company.tierMask,
+      settings: parseLoanSettings(membership.company.loanSettings),
+    }
+  }
+  const target = Math.trunc(companyId)
+  if (!Number.isInteger(target) || target <= 0) throw new AppError('公司不存在', 404, 'COMPANY_NOT_FOUND')
+  const company = await prisma.company.findUnique({
+    where: { id: target },
+    select: { id: true, name: true, status: true, revenue: true, tierMask: true, loanSettings: true },
+  })
+  if (!company || company.status === COMPANY_STATUS_DISBANDED) throw new AppError('公司不存在或已解散', 404, 'COMPANY_NOT_FOUND')
+  if (company.status !== COMPANY_STATUS_ACTIVE) throw new AppError('这家公司还没开张，不能对外放贷', 409, 'COMPANY_NOT_ACTIVE')
+  return {
+    companyId: company.id,
+    name: company.name,
+    revenue: company.revenue,
+    tierMask: company.tierMask,
+    settings: parseLoanSettings(company.loanSettings),
+  }
+}
+
+export async function borrowLoan(userId: number, requestedPrincipal: number, companyId?: number, nowMs = Date.now()) {
   const rules = await getCompanyConfig()
-  const membership = await requireMembership(prisma, userId)
-  if (membership.company.status === COMPANY_STATUS_DISBANDED) throw new AppError('公司已解散', 409)
   await settleLoansForUser(prisma, userId, new Date(nowMs))
 
   const principal = Math.trunc(requestedPrincipal)
   if (!Number.isInteger(principal) || principal <= 0) throw new AppError('借款积分必须是正整数', 400)
 
-  const level = companyLevelOf(membership.company.tierMask)
-  const cap = loanCapFromConfig(rules, level)
+  const target = await resolveLoanTarget(userId, companyId ?? null)
+  // CEO 关闸：本司与跨公司借款一律拒绝（enabled 只有 boolean，缺省视为开启）
+  if (target.settings && !target.settings.enabled) {
+    throw new AppError('该公司已关闭对外放贷', 409, 'COMPANY_LOAN_DISABLED')
+  }
+  // 仅成员可借：跨公司路径下查一下成员关系（旧路径天然是成员，不会走到拒绝）
+  if (target.settings?.membersOnly) {
+    const member = await prisma.companyMember.findFirst({
+      where: { userId, companyId: target.companyId },
+      select: { id: true },
+    })
+    if (!member) throw new AppError('这家公司只对本司成员放贷', 403, 'COMPANY_LOAN_MEMBERS_ONLY')
+  }
+
+  // cap / rate / 期限统一走生效值：公司设置非 0 优先，0 回落全站档位
+  const level = companyLevelOf(target.tierMask)
+  const effective = effectiveLoanSettings(target.settings, rules, level)
+  const cap = effective.maxPrincipal
   if (cap <= 0) {
     const first = COMPANY_REVENUE_TIERS[0]
-    throw new AppError(`公司还没有借款额度：营业额做到 ${first.threshold} 积分解锁（当前 ${membership.company.revenue}）`, 409, 'COMPANY_LOAN_NO_CAP')
+    throw new AppError(`该公司还没有借款额度：营业额做到 ${first.threshold} 积分解锁（当前 ${target.revenue}）`, 409, 'COMPANY_LOAN_NO_CAP')
   }
+  // 额度按「目标公司 × 本人」维度检查：在 A 公司的欠款不影响在 B 公司的额度
   const openLoans = await prisma.companyLoan.findMany({
-    where: { userId, companyId: membership.companyId, status: { not: 'repaid' } },
+    where: { userId, companyId: target.companyId, status: { not: 'repaid' } },
     select: { principal: true, dueAmount: true, repaid: true, status: true },
   })
   if (openLoans.some((loan) => loan.status === 'overdue')) {
-    throw new AppError('你有逾期未还的贷款，先还清才能再借', 409, 'COMPANY_LOAN_OVERDUE')
+    throw new AppError('你在这家公司有逾期未还的贷款，先还清才能再借', 409, 'COMPANY_LOAN_OVERDUE')
   }
   const outstanding = openLoans.reduce((sum, loan) => sum + (loan.principal - repaidPrincipalOf(loan)), 0)
   const remaining = Math.max(0, cap - outstanding)
-  if (principal > remaining) throw new AppError(`本次最多还能借 ${remaining} 积分（等级 ${level} 累计上限 ${cap}，已借 ${outstanding}）`, 400, 'COMPANY_LOAN_CAP')
+  if (principal > remaining) throw new AppError(`本次最多还能借 ${remaining} 积分（累计上限 ${cap}，已借 ${outstanding}）`, 400, 'COMPANY_LOAN_CAP')
 
-  const ratePct = loanRateFromConfig(rules, level)
-  const dueAmount = computeLoanDue(principal, ratePct)
-  const dueAt = new Date(loanDueAtOf(nowMs, rules.loanDueDays))
+  const dueAmount = computeLoanDue(principal, effective.ratePct)
+  const dueAt = new Date(loanDueAtOf(nowMs, effective.dueDays))
 
   const created = await prisma.$transaction(async (tx) => {
     // 资金池偿付能力：条件更新（gte 本金），绝不 read-modify-write
     const drained = await tx.company.updateMany({
-      where: { id: membership.companyId, poolBalance: { gte: principal } },
+      where: { id: target.companyId, poolBalance: { gte: principal } },
       data: { poolBalance: { decrement: principal } },
     })
-    if (drained.count !== 1) throw new AppError('公司资金池不够了，多卖些货再来借', 409, 'COMPANY_POOL_TOO_LOW')
+    if (drained.count !== 1) throw new AppError('该公司资金池不够了，稍后再来借', 409, 'COMPANY_POOL_TOO_LOW')
     const loan = await tx.companyLoan.create({
       data: {
-        companyId: membership.companyId,
+        companyId: target.companyId,
         userId,
         principal,
         dueAmount,
-        ratePct,
-        dueDays: rules.loanDueDays,
+        ratePct: effective.ratePct,
+        dueDays: effective.dueDays,
         dueAt,
       },
     })
     const award = await awardPointsTx(tx, userId, {
       amount: principal,
       reason: 'company_loan_borrow',
-      note: `向公司「${membership.company.name}」借款 ${principal} 积分（${rules.loanDueDays} 天内应还 ${dueAmount}）`,
+      note: `向公司「${target.name}」借款 ${principal} 积分（${effective.dueDays} 天内应还 ${dueAmount}）`,
     })
     return { loan, balance: award.balance }
   })
@@ -1370,7 +1486,7 @@ export async function borrowLoan(userId: number, requestedPrincipal: number, now
     loan: buildLoanDto({
       id: created.loan.id,
       companyId: created.loan.companyId,
-      companyName: membership.company.name,
+      companyName: target.name,
       principal: created.loan.principal,
       dueAmount: created.loan.dueAmount,
       repaid: created.loan.repaid,
@@ -1428,8 +1544,212 @@ export async function repayLoan(userId: number, loanId: number, requested: numbe
     if (updated.count !== 1) throw new AppError('贷款状态刚有变化，请刷新后重试', 409, 'COMPANY_LOAN_CONFLICT')
     // 本金 + 利息一起回流资金池；利息不计入营业额（那是卖货的口径，不能靠放贷刷减免档）
     await tx.company.updateMany({ where: { id: loan.companyId }, data: { poolBalance: { increment: pay } } })
+    // 结清瞬间把这笔贷款的利息分给资金池投资人：按持有份额占比 floor 分配，
+    // floor 保证 Σshare ≤ interest（分不掉的零头留在池里）；份额直接并入 amount（可赎回），
+    // earned 只作累计展示。CAS 钉在 repaid 上 ⇒ 结清分支只可能进一次，不会重复分配。
+    if (settledNow) {
+      const interest = Math.max(0, loan.dueAmount - loan.principal)
+      if (interest > 0) {
+        const investors = await tx.companyPoolInvestment.findMany({
+          where: { companyId: loan.companyId, amount: { gt: 0 } },
+          select: { id: true, amount: true },
+        })
+        const totalInv = investors.reduce((sum, row) => sum + row.amount, 0)
+        if (totalInv > 0) {
+          for (const inv of investors) {
+            const share = Math.floor((interest * inv.amount) / totalInv)
+            if (share <= 0) continue
+            await tx.companyPoolInvestment.update({
+              where: { id: inv.id },
+              data: { amount: { increment: share }, earned: { increment: share } },
+            })
+          }
+        }
+      }
+    }
     return { balance: spend.balance, paid: pay, remaining: Math.max(0, remaining - pay), settled: settledNow, companyName: loan.company.name }
   })
+}
+
+/* ============================================================
+   资金池投资 / 赎回（利息在贷款结清时按份额并入，见 repayLoan）
+   ============================================================ */
+
+export interface PoolInvestResult {
+  balance: number
+  /** 投入后该公司的资金池总余额 */
+  poolBalance: number
+  /** 本人在该公司的累计可赎回份额（含并入利息） */
+  invested: number
+}
+
+/** 投入资金池：成员把可用积分换成公司池子里的可赎回份额 */
+export async function investPool(userId: number, rawAmount: number, nowMs = Date.now()): Promise<PoolInvestResult> {
+  const amount = Math.trunc(rawAmount)
+  if (!Number.isInteger(amount) || amount < COMPANY_POOL_INVEST_MIN) {
+    throw new AppError(`单次至少投入 ${COMPANY_POOL_INVEST_MIN} 积分`, 400, 'COMPANY_POOL_INVEST_MIN')
+  }
+  const membership = await requireMembership(prisma, userId)
+  if (membership.company.status === COMPANY_STATUS_DISBANDED) throw new AppError('公司已解散', 409)
+  if (membership.company.status === COMPANY_STATUS_FOUNDING && await settleFoundingCompany(membership.companyId, nowMs)) {
+    throw new AppError('这家公司创立期已过、已作废', 410, 'COMPANY_VOIDED')
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const spend = await spendPointsTx(tx, userId, amount, {
+      reason: 'company_pool_invest',
+      note: `投入公司「${membership.company.name}」资金池`,
+    })
+    // 条件更新钉在 status active 上：founding / disbanded 的池子不接受投资
+    const credited = await tx.company.updateMany({
+      where: { id: membership.companyId, status: COMPANY_STATUS_ACTIVE },
+      data: { poolBalance: { increment: amount } },
+    })
+    if (credited.count !== 1) throw new AppError('公司当前不接受资金池投资', 409, 'COMPANY_POOL_CLOSED')
+    const row = await tx.companyPoolInvestment.upsert({
+      where: { companyId_userId: { companyId: membership.companyId, userId } },
+      create: { companyId: membership.companyId, userId, amount },
+      update: { amount: { increment: amount } },
+    })
+    const pool = await tx.company.findUnique({ where: { id: membership.companyId }, select: { poolBalance: true } })
+    return { balance: spend.balance, poolBalance: pool?.poolBalance ?? membership.company.poolBalance, invested: row.amount }
+  })
+}
+
+/** 赎回资金池份额：双 CAS（份额够扣 + 池子够付）任一失手即 409，整个事务回滚 */
+export async function redeemPool(userId: number, rawAmount: number): Promise<PoolInvestResult> {
+  const amount = Math.trunc(rawAmount)
+  if (!Number.isInteger(amount) || amount <= 0) throw new AppError('赎回积分必须是正整数', 400, 'COMPANY_POOL_REDEEM_INVALID')
+  const membership = await requireMembership(prisma, userId)
+  if (membership.company.status === COMPANY_STATUS_DISBANDED) throw new AppError('公司已解散', 409)
+
+  return prisma.$transaction(async (tx) => {
+    const share = await tx.companyPoolInvestment.updateMany({
+      where: { companyId: membership.companyId, userId, amount: { gte: amount } },
+      data: { amount: { decrement: amount } },
+    })
+    if (share.count !== 1) throw new AppError('你的投资份额不足', 409, 'COMPANY_POOL_SHARE_LOW')
+    const drained = await tx.company.updateMany({
+      where: { id: membership.companyId, poolBalance: { gte: amount } },
+      data: { poolBalance: { decrement: amount } },
+    })
+    // 池子被贷款占用时赎回失手：抛错让整个事务回滚（份额不会真的被扣），
+    // 与「份额不足」用两种 409 文案区分，用户能知道该等的是还款回流
+    if (drained.count !== 1) {
+      throw new AppError('资金池流动性不足：钱都贷出去了，等还款回流后再赎回', 409, 'COMPANY_POOL_LIQUIDITY')
+    }
+    const award = await awardPointsTx(tx, userId, {
+      amount,
+      reason: 'company_pool_redeem',
+      note: `从公司「${membership.company.name}」资金池赎回`,
+    })
+    const row = await tx.companyPoolInvestment.findUnique({
+      where: { companyId_userId: { companyId: membership.companyId, userId } },
+      select: { amount: true },
+    })
+    const pool = await tx.company.findUnique({ where: { id: membership.companyId }, select: { poolBalance: true } })
+    return { balance: award.balance, poolBalance: pool?.poolBalance ?? membership.company.poolBalance, invested: row?.amount ?? 0 }
+  })
+}
+
+export interface PoolInvestmentDto {
+  companyId: number
+  companyName: string
+  /** 当前可赎回份额（含并入利息） */
+  amount: number
+  /** 累计分到的利息（只增，展示口径） */
+  earned: number
+}
+
+/** 本人全部资金池投资（跨公司；已解散公司的行在清算时已发还删除，这里再按状态过滤一道兜底） */
+export async function getMyPoolInvestments(userId: number): Promise<PoolInvestmentDto[]> {
+  const rows = await prisma.companyPoolInvestment.findMany({
+    where: { userId, company: { status: { not: COMPANY_STATUS_DISBANDED } } },
+    include: { company: { select: { name: true, status: true } } },
+    orderBy: { id: 'asc' },
+  })
+  return rows.map((row) => ({
+    companyId: row.companyId,
+    companyName: row.company.name,
+    amount: row.amount,
+    earned: row.earned,
+  }))
+}
+
+/* ============================================================
+   可借公司列表 / CEO 放贷设置
+   ============================================================ */
+
+export interface CompanyLoanOfferDto {
+  companyId: number
+  name: string
+  poolBalance: number
+  level: number
+  /** 生效利率（公司设置非 0 优先，否则全站档位） */
+  ratePct: number
+  /** 生效期限（天） */
+  dueDays: number
+  /** 生效单笔上限；0 = 按公司等级上限（前端显示「按公司等级」） */
+  maxPrincipal: number
+  membersOnly: boolean
+}
+
+/** 可借公司列表：active 且未关闭放贷的公司，按池子厚度排序 */
+export async function getLoanOffers(): Promise<CompanyLoanOfferDto[]> {
+  const rules = await getCompanyConfig()
+  const rows = await prisma.company.findMany({
+    where: { status: COMPANY_STATUS_ACTIVE },
+    select: { id: true, name: true, poolBalance: true, tierMask: true, loanSettings: true },
+    orderBy: [{ poolBalance: 'desc' }, { id: 'asc' }],
+  })
+  const offers: CompanyLoanOfferDto[] = []
+  for (const row of rows) {
+    const settings = parseLoanSettings(row.loanSettings)
+    // CEO 明确关闸的公司不上架；未设置（null）视为开启
+    if (settings && !settings.enabled) continue
+    const level = companyLevelOf(row.tierMask)
+    const effective = effectiveLoanSettings(settings, rules, level)
+    offers.push({
+      companyId: row.id,
+      name: row.name,
+      poolBalance: row.poolBalance,
+      level,
+      ratePct: effective.ratePct,
+      dueDays: effective.dueDays,
+      // 如实返回 0（= 按公司等级上限），不偷偷换成档位数：口径留给前端展示
+      maxPrincipal: effective.maxPrincipal,
+      membersOnly: settings?.membersOnly ?? false,
+    })
+  }
+  return offers
+}
+
+/** CEO 放贷设置整体保存：normalize 后写入 Company.loanSettings（仅 CEO，admin 路径另走管理端） */
+export async function updateLoanSettings(actorId: number, companyId: number | null, input: unknown): Promise<CompanyLoanSettingsDto> {
+  const target = companyId ?? (await requireMembership(prisma, actorId)).companyId
+  // 属主校验与 disbandCompany 同一模式：成员行 + role === 'ceo'，缺一即拒
+  const row = await prisma.companyMember.findUnique({
+    where: { companyId_userId: { companyId: target, userId: actorId } },
+    select: { role: true },
+  })
+  if (!row) throw new AppError('你不在这家公司里', 404)
+  if (row.role !== 'ceo') throw new AppError('只有发起人能修改放贷设置', 403, 'COMPANY_NOT_CEO')
+  const company = await prisma.company.findUnique({ where: { id: target }, select: { id: true, status: true } })
+  if (!company || company.status === COMPANY_STATUS_DISBANDED) throw new AppError('公司不存在或已解散', 404, 'COMPANY_NOT_FOUND')
+
+  // 整体保存：前端每次提交全量 5 字段；脏值 / 缺省按 normalizeLoanSettings 回退（0 = 跟随全站）
+  const settings: CompanyLoanSettings = normalizeLoanSettings(input)
+  await prisma.company.update({
+    where: { id: target },
+    data: { loanSettings: JSON.stringify(settings) },
+  })
+  return {
+    enabled: settings.enabled,
+    ratePct: settings.ratePct,
+    maxPrincipal: settings.maxPrincipal,
+    dueDays: settings.dueDays,
+    membersOnly: settings.membersOnly,
+  }
 }
 
 /* ============================================================

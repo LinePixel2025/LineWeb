@@ -348,6 +348,82 @@
   border-color: var(--gh-text);
 }
 
+/* ===== 公司贷款（跨公司资金池借款） ===== */
+.gh-bank-loan-offers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.gh-bank-loan-offer {
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.gh-bank-loan-offer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: background 0.15s ease;
+}
+.gh-bank-loan-offer-head:hover { background: var(--gh-canvas-subtle); }
+.gh-bank-loan-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+}
+.gh-bank-loan-flag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--gh-canvas-subtle);
+  border: 1px solid var(--gh-border-muted);
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+  font-weight: 400;
+}
+.gh-bank-loan-meta {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+.gh-bank-loan-toggle {
+  color: var(--gh-accent);
+  font-size: var(--gh-text-sm);
+  white-space: nowrap;
+}
+.gh-bank-loan-form {
+  display: block;
+  width: 100%;
+}
+.gh-bank-loan-offer .gh-bank-loan-form { padding: 0 12px 12px; }
+.gh-bank-ledger-main .gh-bank-loan-form .gh-bank-action-row {
+  /* 还款表单嵌在流水行内：宽度吃满、不再与快捷金额行抢空间 */
+  width: 100%;
+}
+.gh-bank-loan-preview {
+  margin: 6px 0 0;
+  font-size: var(--gh-text-xs);
+}
+.gh-bank-loan-preview strong { color: var(--gh-text); }
+.gh-bank-loan-mine { margin-top: 14px; }
+.gh-bank-loan-mine h3 {
+  margin: 0 0 4px;
+  font-size: var(--gh-text-sm);
+}
+
 /* ===== 响应式 ===== */
 @media (max-width: 860px) {
   .gh-bank-layout { grid-template-columns: minmax(0, 1fr); }

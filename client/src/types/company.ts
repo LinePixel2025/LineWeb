@@ -21,6 +21,25 @@ export interface CompanyTierProgress {
   reductionPct: number
 }
 
+/**
+ * 公司放贷设置出口口径：ratePct/maxPrincipal/dueDays 为「生效值」
+ * （公司设置非 0 优先，0 = 跟随全站档位，服务端已合并好）；
+ * enabled/membersOnly 取公司自身设置。
+ */
+export interface CompanyLoanSettingsView {
+  enabled: boolean
+  ratePct: number
+  maxPrincipal: number
+  dueDays: number
+  membersOnly: boolean
+}
+
+/** 本人在这家公司的资金池投资份额（未投资过为 null） */
+export interface CompanyPoolShare {
+  amount: number
+  earned: number
+}
+
 export interface Company {
   id: number
   name: string
@@ -36,6 +55,8 @@ export interface Company {
   foundingRemainingMs: number
   createdAt: string
   tier: CompanyTierProgress
+  loanSettings: CompanyLoanSettingsView
+  myPoolInvestment: CompanyPoolShare | null
   members: CompanyMember[]
 }
 
@@ -158,4 +179,25 @@ export interface CompanyDetail {
   company: Company
   listings: CompanyListing[]
   recentOrders: CompanyOrder[]
+}
+
+/** 可借公司（GET /api/company/loan/offers） */
+export interface CompanyLoanOffer {
+  companyId: number
+  name: string
+  poolBalance: number
+  level: number
+  ratePct: number
+  dueDays: number
+  /** 0 = 按公司等级上限（前端显示「按公司等级」） */
+  maxPrincipal: number
+  membersOnly: boolean
+}
+
+/** 我的资金池投资份额（GET /api/company/pool/investments，跨公司） */
+export interface CompanyPoolInvestment {
+  companyId: number
+  companyName: string
+  amount: number
+  earned: number
 }

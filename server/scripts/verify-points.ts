@@ -30,6 +30,15 @@ import {
 } from '../src/lib/pointsRules.js'
 import { DEFAULT_FRAME_ITEMS_V4, DEFAULT_TITLE_ITEMS_V4 } from '../src/lib/pointsShopCatalog.js'
 import {
+  COMPANY_LIMITS,
+  effectiveLoanSettings,
+  normalizeCompanyConfig,
+  normalizeLoanSettings,
+  loanCapFromConfig,
+  loanRateFromConfig,
+  parseLoanSettings,
+} from '../src/lib/companyRules.js'
+import {
   CROP_MAP,
   FARM_CROPS,
   FERTILIZER_COST,
@@ -497,5 +506,68 @@ assert(
   swappedDiscount.every((offer) => offer.discountPct >= 40 && offer.discountPct <= 70),
   '折扣上下限颠倒时仍落在区间内',
 )
+
+/* ============================================================
+   公司 CEO 放贷设置（companyRules 的 CompanyLoanSettings 纯函数）
+   ============================================================ */
+
+// 缺省 / 非 Object：全字段回退默认（0 = 跟随全站的哨兵值，不能用 null 表达）
+assertEqual(normalizeLoanSettings({}), { enabled: true, ratePct: 0, maxPrincipal: 0, dueDays: 0, membersOnly: false }, '空对象回退默认设置')
+assertEqual(normalizeLoanSettings(null), { enabled: true, ratePct: 0, maxPrincipal: 0, dueDays: 0, membersOnly: false }, 'null 回退默认设置')
+assertEqual(normalizeLoanSettings('垃圾输入'), { enabled: true, ratePct: 0, maxPrincipal: 0, dueDays: 0, membersOnly: false }, '非对象回退默认设置')
+assertEqual(
+  normalizeLoanSettings({ ratePct: Number.NaN, maxPrincipal: 'abc', dueDays: Number.POSITIVE_INFINITY }),
+  { enabled: true, ratePct: 0, maxPrincipal: 0, dueDays: 0, membersOnly: false },
+  '脏数值（NaN/字符串/Infinity）回退默认 0（跟随全站）',
+)
+
+// 布尔字段：只有真正的 boolean 生效，脏值回退默认
+assertEqual(normalizeLoanSettings({ enabled: false, membersOnly: true }), { enabled: false, ratePct: 0, maxPrincipal: 0, dueDays: 0, membersOnly: true }, '布尔字段正常写入')
+assertEqual(normalizeLoanSettings({ enabled: 'false', membersOnly: 1 }).enabled, true, 'enabled 脏值回退 true')
+assertEqual(normalizeLoanSettings({ membersOnly: 'yes' }).membersOnly, false, 'membersOnly 脏值回退 false')
+
+// clamp 边界：ratePct 0–20、maxPrincipal 0–10_000_000、显式正数 dueDays 1–90
+assertEqual(normalizeLoanSettings({ ratePct: 25 }).ratePct, COMPANY_LIMITS.loanSettingsRateMax, '利率 25 夹到上限 20')
+assertEqual(normalizeLoanSettings({ ratePct: -3 }).ratePct, 0, '负利率夹到 0（跟随全站）')
+assertEqual(normalizeLoanSettings({ ratePct: 3.9 }).ratePct, 3, '利率小数向下取整')
+assertEqual(normalizeLoanSettings({ maxPrincipal: 20_000_000 }).maxPrincipal, COMPANY_LIMITS.loanAmountMax, '单笔上限夹到 1000 万')
+assertEqual(normalizeLoanSettings({ maxPrincipal: -5 }).maxPrincipal, 0, '负上限夹到 0（跟随全站等级 cap，不是禁借）')
+assertEqual(normalizeLoanSettings({ dueDays: 200 }).dueDays, COMPANY_LIMITS.loanSettingsDueMax, '期限 200 夹到上限 90')
+assertEqual(normalizeLoanSettings({ dueDays: -2 }).dueDays, 0, '负期限保留 0（跟随全站默认期限）')
+assertEqual(normalizeLoanSettings({ dueDays: 7.7 }).dueDays, 7, '期限小数向下取整')
+assert(COMPANY_LIMITS.loanSettingsDueMin === 1 && COMPANY_LIMITS.loanSettingsDueMax === 90, '期限区间常量为 1–90')
+
+// parseLoanSettings：解析失败 / 空 / 非对象一律 null；成功时输出已归一化
+assertEqual(parseLoanSettings(null), null, 'loanSettings 为 null → 未设置')
+assertEqual(parseLoanSettings(''), null, 'loanSettings 为空串 → 未设置')
+assertEqual(parseLoanSettings('{not-json'), null, '坏 JSON → null')
+assertEqual(parseLoanSettings('"纯字符串"'), null, '非对象 JSON → null')
+assertEqual(parseLoanSettings('[1,2]'), null, '数组 JSON → null')
+assertEqual(
+  parseLoanSettings(JSON.stringify({ enabled: false, ratePct: 6 })),
+  { enabled: false, ratePct: 6, maxPrincipal: 0, dueDays: 0, membersOnly: false },
+  'JSON 解析后按 normalize 补全缺失字段',
+)
+
+// effectiveLoanSettings：公司非 0 优先，0 逐字段回落全站档位
+const baseCfg = normalizeCompanyConfig(null)
+assertEqual(effectiveLoanSettings(null, baseCfg, 2), { ratePct: loanRateFromConfig(baseCfg, 2), dueDays: baseCfg.loanDueDays, maxPrincipal: loanCapFromConfig(baseCfg, 2) }, '未设置时全站档位生效')
+assertEqual(
+  effectiveLoanSettings({ enabled: true, ratePct: 9, maxPrincipal: 5000, dueDays: 14, membersOnly: false }, baseCfg, 2),
+  { ratePct: 9, dueDays: 14, maxPrincipal: 5000 },
+  '公司设置非 0 字段覆盖全站',
+)
+assertEqual(
+  effectiveLoanSettings({ enabled: true, ratePct: 0, maxPrincipal: 0, dueDays: 0, membersOnly: true }, baseCfg, 1),
+  { ratePct: loanRateFromConfig(baseCfg, 1), dueDays: baseCfg.loanDueDays, maxPrincipal: loanCapFromConfig(baseCfg, 1) },
+  '0 哨兵逐字段回落全站（0 不是免息/禁借）',
+)
+assertEqual(
+  effectiveLoanSettings({ enabled: true, ratePct: 12, maxPrincipal: 0, dueDays: 3, membersOnly: false }, baseCfg, 1),
+  { ratePct: 12, dueDays: 3, maxPrincipal: loanCapFromConfig(baseCfg, 1) },
+  '覆盖与回落可以按字段混搭',
+)
+// 等级 0 的公司回落档位上限 0：没有营业额就没有额度，与全站口径一致
+assertEqual(effectiveLoanSettings(null, baseCfg, 0).maxPrincipal, 0, '等级 0 回落上限为 0')
 
 console.log(`✅ 积分与农场规则自检通过：${passed} 个断言`)

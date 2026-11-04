@@ -81,6 +81,10 @@ export default function CompanyPage() {
   const [buyAmount, setBuyAmount] = useState(1)
 
   const [borrowAmount, setBorrowAmount] = useState('')
+  const [investAmount, setInvestAmount] = useState('')
+  const [redeemAmount, setRedeemAmount] = useState('')
+  /** CEO 放贷设置草稿：随服务端数据加载对齐，保存时整体提交（0 = 跟随全站） */
+  const [loanSettingsDraft, setLoanSettingsDraft] = useState({ enabled: true, ratePct: 0, maxPrincipal: 0, dueDays: 0, membersOnly: false })
   const [detail, setDetail] = useState<CompanyDetail | null>(null)
 
   const notify = useCallback((tone: 'ok' | 'bad', text: string) => {
@@ -154,6 +158,22 @@ export default function CompanyPage() {
 
   const company = me?.company ?? null
   const isCeo = me?.myRole === 'ceo'
+  const myShare = company?.myPoolInvestment?.amount ?? 0
+
+  // 放贷设置草稿与服务端对齐：首次加载、每次动作后 loadMe 都会重置成最新生效值
+  useEffect(() => {
+    const settings = company?.loanSettings
+    if (settings) {
+      setLoanSettingsDraft({
+        enabled: settings.enabled,
+        ratePct: settings.ratePct,
+        maxPrincipal: settings.maxPrincipal,
+        dueDays: settings.dueDays,
+        membersOnly: settings.membersOnly,
+      })
+    }
+  }, [company?.id, company?.loanSettings])
+
   const selectedInvitees = useMemo(
     () => pickedInvitees.filter((id) => candidates.some((candidate) => candidate.id === id)),
     [pickedInvitees, candidates],
@@ -231,6 +251,50 @@ export default function CompanyPage() {
       await api.post('/company/loan/repay', { loanId: loan.id })
       return `已结清 ${points(loan.remaining)} 积分`
     })
+  }
+
+  const submitInvest = () => {
+    const amount = Number.parseInt(investAmount, 10)
+    if (!Number.isFinite(amount) || amount < 100) {
+      notify('bad', '单次至少投入 100 积分')
+      return
+    }
+    void run('投入资金池', async () => {
+      const result = await api.post<{ invested: number; balance: number }>('/company/pool/invest', { amount })
+      setInvestAmount('')
+      return `已投入 ${points(amount)} 积分，当前份额 ${points(result.invested)}`
+    })
+  }
+
+  const submitRedeem = () => {
+    const amount = Number.parseInt(redeemAmount, 10)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      notify('bad', '请输入要赎回的积分数')
+      return
+    }
+    void run('赎回份额', async () => {
+      const result = await api.post<{ invested: number; balance: number }>('/company/pool/redeem', { amount })
+      setRedeemAmount('')
+      return `已赎回 ${points(amount)} 积分，剩余份额 ${points(result.invested)}`
+    })
+  }
+
+  const saveLoanSettings = () => {
+    void run('保存放贷设置', async () => {
+      await api.put('/company/loan/settings', loanSettingsDraft)
+      return '放贷设置已保存'
+    })
+  }
+
+  /** 放贷设置数值输入：只留数字并夹进区间（0 = 跟随全站的哨兵值） */
+  const patchLoanSettings = (patch: Partial<typeof loanSettingsDraft>) => {
+    setLoanSettingsDraft((prev) => ({ ...prev, ...patch }))
+  }
+
+  const parseIntInput = (raw: string): number => {
+    const digits = raw.replace(/[^\d]/g, '')
+    if (!digits) return 0
+    return Number.parseInt(digits, 10) || 0
   }
 
   return (
@@ -650,12 +714,15 @@ export default function CompanyPage() {
                       <button
                         type="button"
                         className="gh-btn gh-btn--primary"
-                        disabled={busy || (me?.loanSummary?.remaining ?? 0) <= 0 || me?.loanSummary?.blockedByOverdue}
+                        disabled={busy || !company.loanSettings.enabled || (me?.loanSummary?.remaining ?? 0) <= 0 || me?.loanSummary?.blockedByOverdue}
                         onClick={submitBorrow}
                       >
                         借款
                       </button>
                     </div>
+                    {!company.loanSettings.enabled && (
+                      <p className="gh-company-hint gh-company-hint--bad">CEO 已关闭本公司放贷，恢复前谁都借不了。</p>
+                    )}
                     {me?.loanSummary?.blockedByOverdue && (
                       <p className="gh-company-hint gh-company-hint--bad">有逾期未还的贷款，先把逾期结清才能再借。</p>
                     )}
@@ -663,6 +730,96 @@ export default function CompanyPage() {
                       利息在放款时一次算死，还款时本金与利息都回流公司资金池 —— 相当于全公司在补贴自己的资金成本。
                     </p>
                   </div>
+
+                  <div className="gh-company-card">
+                    <h2>资金池投资</h2>
+                    <p className="gh-company-hint">
+                      把积分投进资金池给全公司放贷用：每笔贷款结清时，利息按持有份额自动并入你的份额。
+                      赎回受池子流动性限制 —— 钱都贷出去时要等还款回流。公司解散时投资份额优先全额发还。
+                    </p>
+                    <div className="gh-company-meta">
+                      <span>我的份额 {points(myShare)}</span>
+                      <span>累计利息 {points(company.myPoolInvestment?.earned ?? 0)}</span>
+                      <span>池内余额 {points(company.poolBalance)}</span>
+                    </div>
+                    <div className="gh-company-borrow">
+                      <input
+                        value={investAmount}
+                        inputMode="numeric"
+                        placeholder="单次 ≥100 积分"
+                        onChange={(event) => setInvestAmount(event.target.value.replace(/[^\d]/g, ''))}
+                      />
+                      <button type="button" className="gh-btn gh-btn--primary" disabled={busy} onClick={submitInvest}>
+                        投入
+                      </button>
+                    </div>
+                    <div className="gh-company-borrow">
+                      <input
+                        value={redeemAmount}
+                        inputMode="numeric"
+                        placeholder={`可赎回 ${points(myShare)}`}
+                        onChange={(event) => setRedeemAmount(event.target.value.replace(/[^\d]/g, ''))}
+                      />
+                      <button type="button" className="gh-btn gh-btn--secondary" disabled={busy || myShare <= 0} onClick={submitRedeem}>
+                        赎回
+                      </button>
+                    </div>
+                  </div>
+
+                  {isCeo && (
+                    <div className="gh-company-card">
+                      <h2>放贷设置（CEO）</h2>
+                      <p className="gh-company-hint">
+                        数值填 0 表示跟随全站档位（0 不是免息、也不是禁借）。
+                        开关只管本公司：关闭后本司成员与外人都借不了；「仅成员可借」开启后外人无法向本公司借款。
+                      </p>
+                      <div className="gh-company-meta">
+                        <button
+                          type="button"
+                          className={`gh-company-chip${loanSettingsDraft.enabled ? ' gh-company-chip--on' : ''}`}
+                          aria-pressed={loanSettingsDraft.enabled}
+                          onClick={() => patchLoanSettings({ enabled: !loanSettingsDraft.enabled })}
+                        >
+                          {loanSettingsDraft.enabled ? '开放放贷' : '已关闭放贷'}
+                        </button>
+                        <button
+                          type="button"
+                          className={`gh-company-chip${loanSettingsDraft.membersOnly ? ' gh-company-chip--on' : ''}`}
+                          aria-pressed={loanSettingsDraft.membersOnly}
+                          onClick={() => patchLoanSettings({ membersOnly: !loanSettingsDraft.membersOnly })}
+                        >
+                          {loanSettingsDraft.membersOnly ? '仅成员可借' : '对外放贷'}
+                        </button>
+                      </div>
+                      <label className="gh-company-field">
+                        <span>整期利率 %（0–20，0 = 跟随全站档位）</span>
+                        <input
+                          value={String(loanSettingsDraft.ratePct)}
+                          inputMode="numeric"
+                          onChange={(event) => patchLoanSettings({ ratePct: Math.min(20, parseIntInput(event.target.value)) })}
+                        />
+                      </label>
+                      <label className="gh-company-field">
+                        <span>单笔上限积分（0 = 按公司等级额度）</span>
+                        <input
+                          value={String(loanSettingsDraft.maxPrincipal)}
+                          inputMode="numeric"
+                          onChange={(event) => patchLoanSettings({ maxPrincipal: Math.min(10_000_000, parseIntInput(event.target.value)) })}
+                        />
+                      </label>
+                      <label className="gh-company-field">
+                        <span>借款期限天（0 = 跟随全站默认，1–90）</span>
+                        <input
+                          value={String(loanSettingsDraft.dueDays)}
+                          inputMode="numeric"
+                          onChange={(event) => patchLoanSettings({ dueDays: Math.min(90, parseIntInput(event.target.value)) })}
+                        />
+                      </label>
+                      <button type="button" className="gh-btn gh-btn--primary" disabled={busy} onClick={saveLoanSettings}>
+                        保存设置
+                      </button>
+                    </div>
+                  )}
 
                   <div className="gh-company-card">
                     <h2>我的贷款</h2>
