@@ -14,6 +14,8 @@ import type { PetRaid, Prisma } from '@prisma/client'
 import { AppError } from '../middleware/errorHandler.js'
 import {
   RAID_CONTAINER_LABELS,
+  RAID_GROUND_LOOT_LIMIT,
+  RAID_ITEM_MAP,
   RAID_MAPS,
   RAID_STATE_VERSION,
   applyRaidEvents,
@@ -25,14 +27,17 @@ import {
   raidItemValue,
   raidKeptContainers,
   raidLootValue,
+  resolveDropPosition,
   tickRaidRun,
   type RaidContainerKind,
   type RaidEvent,
   type RaidGearInstance,
   type RaidGroundStack,
   type RaidItemStack,
+  type RaidLootMode,
   type RaidMapDef,
   type RaidMapNode,
+  type RaidRoomKind,
   type RaidRunState,
   type RaidSkillRule,
   type RaidStatus,
@@ -109,6 +114,18 @@ export interface RaidRunDto {
   map: RaidMapNode
   log: RaidRunState['log']
   extractionStartedAt: number | null
+  /** 掉落模式：normal = 单人/组队，pvp = 玩家匹配（高爆率，唯一能掉非洲之心的模式） */
+  mode: RaidLootMode
+  /** 本局已判定失效的撤离点房间 id */
+  extractDisabled: number[]
+  /** 全图撤离冷却截止（毫秒时间戳），null = 无冷却 */
+  extractBlockedUntil: number | null
+  /** 已点亮撤离信号弹：本局后续撤离读条必定成功 */
+  extractGuaranteed: boolean
+  /** 已探明的撤离点房间（未探明的不会出现在下发的 map.extracts 里） */
+  discoveredExtracts: number[]
+  /** PvP 模式下击倒本人的玩家 id（NPC 击倒为 null） */
+  killedByUserId: number | null
   startedAt: string
   expiresAt: string
   remainingMs: number
@@ -169,8 +186,27 @@ function settlementItems(
   return out
 }
 
+/**
+ * 撤离点情报裁剪（必须在服务端做，别指望客户端遮罩——地图数据是下发给客户端的）。
+ *
+ * 未探明的撤离点连坐标都不给：房间 kind 伪装成 combat、map.extracts 只保留已探明的，
+ * 玩家只能靠自己走进撤离区才发现它，这就是「撤离点的路线在地图中显示不清楚」的实现口径。
+ * 当前所在房间永远保留真 kind，否则客户端无法判定这里能不能起读条。
+ */
+function maskMapForViewer(map: RaidMapNode, state: RaidRunState): RaidMapNode {
+  const known = new Set<number>([...(state.discoveredExtracts ?? []), state.currentRoom])
+  return {
+    ...map,
+    rooms: map.rooms.map((room) =>
+      room.kind === 'extract' && !known.has(room.id) ? { ...room, kind: 'combat' as RaidRoomKind } : room,
+    ),
+    extracts: map.extracts.filter((point) => known.has(point.roomId)),
+  }
+}
+
 function runDto(row: PetRaid, state: RaidRunState, now: number): RaidRunDto {
   const mapDef = getRaidMap(state.mapKey)
+  const mode: RaidLootMode = state.mode === 'pvp' ? 'pvp' : 'normal'
   return {
     id: row.id,
     version: row.version,
@@ -202,9 +238,15 @@ function runDto(row: PetRaid, state: RaidRunState, now: number): RaidRunDto {
     capacities: state.capacities,
     gear: state.gear,
     skills: state.skills,
-    map: generateRaidMap(state.seed, mapDef ?? (RAID_MAPS[0] as RaidMapDef)),
+    map: maskMapForViewer(generateRaidMap(state.seed, mapDef ?? (RAID_MAPS[0] as RaidMapDef), mode), state),
     log: state.log,
     extractionStartedAt: state.extractionStartedAt,
+    mode,
+    extractDisabled: [...(state.extractDisabled ?? [])],
+    extractBlockedUntil: state.extractBlockedUntil ?? null,
+    extractGuaranteed: state.extractGuaranteed === true,
+    discoveredExtracts: [...(state.discoveredExtracts ?? [])],
+    killedByUserId: state.killedByUserId ?? null,
     startedAt: new Date(state.startedAt).toISOString(),
     expiresAt: new Date(state.expiresAt).toISOString(),
     remainingMs: Math.max(0, state.expiresAt - now),
@@ -248,6 +290,8 @@ export interface RaidStartOptions {
   squadId?: string
   /** 组队模式：地面掉落发号基址（按成员错开，防撞 id） */
   groundSeqBase?: number
+  /** 掉落模式，缺省 normal；玩家匹配传 pvp（高爆率 + 唯一能掉非洲之心的模式） */
+  mode?: RaidLootMode
 }
 
 export async function startRaid(
@@ -282,6 +326,7 @@ export async function startRaid(
   const state = createRaidRun({
     seed,
     squadId: options.squadId,
+    mode: options.mode,
     mapKey: map.key,
     difficulty: map.difficulty,
     hp: loadout.stats.maxHp,
@@ -517,7 +562,8 @@ export async function performRaidEvents(
   }
   const mapDef = getRaidMap(state.mapKey)
   if (!mapDef) throw new AppError('地图不存在', 500)
-  const map = generateRaidMap(state.seed, mapDef)
+  // 校验用的地图必须是未裁剪的权威地图（含全部撤离点），情报裁剪只发生在 runDto 下发时
+  const map = generateRaidMap(state.seed, mapDef, state.mode ?? 'normal')
 
   const ticked = tickRaidRun(state, now)
   const { state: applied, errors } = applyRaidEvents(ticked, map, input.events, now)
@@ -634,6 +680,9 @@ async function finishRaid(
             ? state.gear.armor
             : null
         if (!instance) continue
+        // 装备是「可重复获得的实例物品」，同一个 gearKey 可以有多行、各自独立耐久，
+        // 所以写回认的是行 id；开局时没带 id 的旧快照才退回按槽位匹配。
+        if (instance.id !== undefined && instance.id !== gear.id) continue
         await tx.raidGear.update({
           where: { id: gear.id },
           data: { durability: instance.durability, maxDurability: instance.maxDurability },
@@ -694,6 +743,96 @@ async function finishRaid(
       createdAt: outcome.record.createdAt.toISOString(),
     },
   }
+}
+
+/* ============================================================
+   PvP 用到的两个对外结算原语
+   ============================================================ */
+
+export interface RaidCorpseLootResult {
+  /** 已分配好 id / 坐标的地面条目，直接下发给客户端渲染 */
+  ground: RaidGroundStack[]
+  roomId: number
+}
+
+/**
+ * 把一批战利品丢进「接收者自己」的对局地面上（PvP 击倒后的尸体爆包用）。
+ *
+ * 为什么要写进接收者的 state 而不是只广播：拾取走的是已有事件 takeGround，
+ * 服务端会校验 groundId 必须存在于该玩家自己的 state.groundLoot，所以不写进去他就捡不到。
+ * id 沿用接收者本人的 groundSeq 发号（同 seed 的同房间 id 在两队之间天然一致，
+ * 因为房间号来自地图生成、不来自玩家），并沿用每房间 RAID_GROUND_LOOT_LIMIT 的上限，
+ * 免得 PvP 变成「往别人对局里无限灌物品」的入口。
+ */
+export async function giveGroundLootToUser(
+  userId: number,
+  roomId: number,
+  stacks: readonly { itemKey: string; amount: number }[],
+  now = Date.now(),
+): Promise<RaidCorpseLootResult | null> {
+  const items = stacks
+    .map((stack) => ({
+      itemKey: String(stack.itemKey ?? ''),
+      amount: Math.max(1, Math.min(9999, Math.trunc(stack.amount ?? 1))),
+    }))
+    .filter((stack) => RAID_ITEM_MAP.has(stack.itemKey))
+  if (items.length === 0) return null
+
+  const row = await prisma.petRaid.findUnique({ where: { userId } })
+  if (!row || row.status !== 'active') return null
+  const state = parseRaidRunState(row.state)
+  if (!state) return null
+  const mapDef = getRaidMap(state.mapKey)
+  const map = generateRaidMap(state.seed, mapDef ?? (RAID_MAPS[0] as RaidMapDef), state.mode ?? 'normal')
+  const room = map.rooms[roomId] ?? map.rooms[state.currentRoom]
+  if (!room) return null
+
+  const next = cloneRaidStateForWrite(state)
+  const roomGround = () => next.groundLoot.filter((item) => item.roomId === room.id).length
+  const created: RaidGroundStack[] = []
+  for (const [index, stack] of items.entries()) {
+    if (roomGround() >= RAID_GROUND_LOOT_LIMIT) break
+    next.groundSeq += 1
+    // 用序号错开抛出角度，让一堆战利品散落在尸体周围而不是叠在同一个点
+    const pos = resolveDropPosition(undefined, undefined, (index * Math.PI) / 5, room)
+    const entry: RaidGroundStack = {
+      id: `g${next.groundSeq}`,
+      roomId: room.id,
+      itemKey: stack.itemKey,
+      amount: stack.amount,
+      x: pos.x,
+      y: pos.y,
+    }
+    next.groundLoot.push(entry)
+    created.push(entry)
+  }
+  if (created.length === 0) return null
+
+  next.version = row.version + 1
+  next.lastSyncAt = now
+  const claimed = await prisma.petRaid.updateMany({
+    where: { id: row.id, version: row.version },
+    data: { state: JSON.stringify(next), version: next.version },
+  })
+  if (claimed.count === 0) return null
+  return { ground: created, roomId: room.id }
+}
+
+/** 简化版深拷贝：只在服务端写回时用，避免污染调用方手里的 state */
+function cloneRaidStateForWrite(state: RaidRunState): RaidRunState {
+  return JSON.parse(JSON.stringify(state)) as RaidRunState
+}
+
+/**
+ * 按「阵亡」结算一局（PvP 被玩家击倒时调用）。
+ * 走的是与自杀 / 失联完全相同的链路：背包与胸挂清空、安全箱保留、随身装备必丢（有保险则保住）。
+ */
+export async function settleRaidAsDeath(
+  row: PetRaid,
+  state: RaidRunState,
+  now = Date.now(),
+): Promise<RaidSettlementDto | null> {
+  return finishRaid(row, state, now)
 }
 
 /** 惰性结算超时对局（读概览 / 开始新局前调用） */

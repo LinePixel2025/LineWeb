@@ -8,10 +8,14 @@
  */
 
 import {
+  GAME_TICKET_KEY,
+  GAME_TICKET_REFUND_POINTS,
+  RAID_GEAR_SHOP_PREMIUM,
   RAID_GEARS,
   RAID_ITEMS,
   RAID_ITEM_MAP,
   RAID_RARITY_ORDER,
+  gearStorageGate,
   raidItemValue,
   raidSellPrice,
   raidShopGearPrice,
@@ -211,9 +215,32 @@ assert(RAID_ITEMS.every((item) => raidShopItemPrice(item.key) >= item.value), '�
 assert(RAID_ITEMS.every((item) => raidSellPrice(item.key, 1) <= item.value), '回收价不高于目录价值')
 
 const shopGears = RAID_GEARS.filter((gear) => gear.shopable)
-assert(shopGears.length > 0, '商店有可售装备')
-assert(shopGears.every((gear) => gear.tier <= 3), '商店只卖 1–3 级装备')
-assert(RAID_GEARS.filter((gear) => gear.tier >= 4).every((gear) => !gear.shopable), '4–6 级装备不在商店出售')
-assert(RAID_GEARS.every((gear) => raidShopGearPrice(gear.key) === gear.price), '装备售价与目录一致')
+// 2026-11-04：商店改为全档上架 —— 档位不再决定「能不能买」，而是决定门槛与溢价
+assert(shopGears.length === RAID_GEARS.length, '全部装备都在商店上架')
+assert(
+  RAID_GEARS.filter((gear) => gear.tier <= 3).every((gear) => gearStorageGate(gear.tier) === 0),
+  '1–3 级装备没有仓库等级门槛',
+)
+assert(
+  RAID_GEARS.filter((gear) => gear.tier >= 4).every((gear) => gearStorageGate(gear.tier) > 0),
+  '4 级及以上装备都要仓库等级门槛',
+)
+assert(
+  RAID_GEARS.filter((gear) => gear.tier <= 3).every((gear) => raidShopGearPrice(gear.key) === gear.price),
+  '1–3 级装备按目录价平价出售',
+)
+assert(
+  RAID_GEARS.filter((gear) => gear.tier >= 4).every(
+    (gear) => raidShopGearPrice(gear.key) === Math.ceil(gear.price * RAID_GEAR_SHOP_PREMIUM),
+  ),
+  '4 级及以上装备按目录价 ×2 出售',
+)
+assertEqual(gearStorageGate(4), 3, '4 级需仓库 Lv.3')
+assertEqual(gearStorageGate(5), 4, '5 级需仓库 Lv.4')
+assertEqual(gearStorageGate(6), 5, '6 级需仓库 Lv.5')
+assertEqual(gearStorageGate(7), 6, 't7 巨型背包需仓库 Lv.6')
+assertEqual(gearStorageGate(8), 6, 't8 巨型背包需仓库 Lv.6（仓库满级）')
+assertEqual(raidShopItemPrice(GAME_TICKET_KEY), 40, '游戏门票一口价 40')
+assert(raidSellPrice(GAME_TICKET_KEY, 1) < GAME_TICKET_REFUND_POINTS, '门票回收价低于打完必返的 20（用票优于卖票）')
 
 console.log(`✅ 搜打撤仓库 / 官方商店自检：${passed} 个断言`)

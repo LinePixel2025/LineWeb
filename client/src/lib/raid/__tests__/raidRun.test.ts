@@ -3,12 +3,15 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
   RAID_EXTRACT_CHANNEL_MS,
+  RAID_EXTRACT_COOLDOWN_MS,
+  RAID_GEAR_SHOP_PREMIUM,
   RAID_GEARS,
   RAID_ITEMS,
   RAID_MAPS,
   addItemToContainer,
   applyRaidEvent,
   createRaidRun,
+  gearStorageGate,
   generateRaidMap,
   getRaidMap,
   raidInsuranceCost,
@@ -17,6 +20,7 @@ import {
   raidShopItemPrice,
   repairRaidGear,
   resolveRaidDamage,
+  rollExtractFailure,
   type RaidRunState,
 } from '../raidRun'
 
@@ -51,11 +55,18 @@ describe('raidRun 目录', () => {
     expect(RAID_ITEMS.filter((item) => item.rarity === 'mythic').length).toBeGreaterThanOrEqual(2)
   })
 
-  it('商店只卖 1–3 级装备', () => {
+  it('商店全档上架：1–3 级平价、4 级及以上 ×2 且要仓库等级门槛', () => {
     const shopable = RAID_GEARS.filter((gear) => gear.shopable)
-    expect(shopable.length).toBeGreaterThan(0)
-    expect(shopable.every((gear) => gear.tier <= 3)).toBe(true)
-    expect(RAID_GEARS.filter((gear) => gear.tier >= 4).every((gear) => !gear.shopable)).toBe(true)
+    // 2026-11-04：装备不再「只卖 1–3 级」，高档改为「贵 + 仓库等级门槛」
+    expect(shopable.length).toBe(RAID_GEARS.length)
+    expect(RAID_GEARS.filter((gear) => gear.tier <= 3).every((gear) => gearStorageGate(gear.tier) === 0)).toBe(true)
+    expect(RAID_GEARS.filter((gear) => gear.tier >= 4).every((gear) => gearStorageGate(gear.tier) > 0)).toBe(true)
+    expect(RAID_GEARS.filter((gear) => gear.tier <= 3).every((gear) => raidShopGearPrice(gear.key) === gear.price)).toBe(true)
+    expect(
+      RAID_GEARS.filter((gear) => gear.tier >= 4).every(
+        (gear) => raidShopGearPrice(gear.key) === Math.ceil(gear.price * RAID_GEAR_SHOP_PREMIUM),
+      ),
+    ).toBe(true)
   })
 
   it('回收价与商店价符合规则', () => {
@@ -213,8 +224,25 @@ describe('raidRun 状态机', () => {
     expect(started.error).toBeUndefined()
     const tooEarly = applyRaidEvent(started.state, map, { type: 'extractDone' }, 2_000_100)
     expect(tooEarly.error).toBeTruthy()
-    const done = applyRaidEvent(started.state, map, { type: 'extractDone' }, 2_000_000 + RAID_EXTRACT_CHANNEL_MS)
+    const done = applyRaidEvent(
+      { ...started.state, extractGuaranteed: true },
+      map,
+      { type: 'extractDone' },
+      2_000_000 + RAID_EXTRACT_CHANNEL_MS,
+    )
+    // 信号弹保障：无论 seed 掷出什么，走完读条必定撤离
     expect(done.state.status).toBe('extracted')
+    // 未打信号弹时结果由 rollExtractFailure 决定，且同一入参必须可重放
+    const roll = rollExtractFailure(started.state.seed, extractRoom.id, 1, false)
+    expect(rollExtractFailure(started.state.seed, extractRoom.id, 1, false)).toBe(roll)
+    const plain = applyRaidEvent(started.state, map, { type: 'extractDone' }, 2_000_000 + RAID_EXTRACT_CHANNEL_MS)
+    if (roll) {
+      expect(plain.state.status).toBe('active')
+      expect(plain.state.extractDisabled).toContain(extractRoom.id)
+      expect(plain.state.extractBlockedUntil).toBe(2_000_000 + RAID_EXTRACT_CHANNEL_MS + RAID_EXTRACT_COOLDOWN_MS)
+    } else {
+      expect(plain.state.status).toBe('extracted')
+    }
   })
 
   it('保险按装备价值 15% 取整', () => {

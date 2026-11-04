@@ -147,6 +147,18 @@ export interface RaidRun {
   map: RaidMapNode
   log: RaidLogEntry[]
   extractionStartedAt: number | null
+  /** 掉落模式：pvp = 玩家匹配（高爆率，唯一能掉非洲之心的模式） */
+  mode: 'normal' | 'pvp'
+  /** 本局已判定失效的撤离点房间（运输故障后会进这个列表） */
+  extractDisabled: number[]
+  /** 全图撤离冷却截止（毫秒时间戳），null = 没有冷却 */
+  extractBlockedUntil: number | null
+  /** 已点亮撤离信号弹：本局后续撤离读条必定成功 */
+  extractGuaranteed: boolean
+  /** 已探明的撤离房间（服务端只下发探明过的撤离点坐标） */
+  discoveredExtracts: number[]
+  /** PvP 模式下击倒本人的玩家 id（NPC 击倒为 null） */
+  killedByUserId: number | null
   startedAt: string
   expiresAt: string
   remainingMs: number
@@ -227,6 +239,8 @@ export interface RaidContainerView {
 }
 
 export interface RaidGearInfo {
+  /** 实例 id：装备是「同一型号可以有多件、耐久各自独立」的实例物品，穿戴/维修/回收都按它定位 */
+  id: number
   gearKey: string
   name: string
   emoji: string
@@ -234,6 +248,10 @@ export interface RaidGearInfo {
   tier: number
   rarity: string
   price: number
+  /** 官方商店售价（tier ≥ 4 为目录价 ×2） */
+  shopPrice: number
+  /** 商店购买所需仓库等级（0 = 无门槛） */
+  storageLevelRequired: number
   description: string
   defense: number
   maxDurability: number
@@ -323,7 +341,12 @@ export interface RaidShopGear {
   maxDurability: number
   speedBonus: number
   slots: number
-  owned: boolean
+  /** 已持有件数（重复购买允许，只是多一件） */
+  ownedCount: number
+  /** 购买所需仓库等级，0 = 无门槛 */
+  storageLevelRequired: number
+  /** 当前仓库等级还不够，前端置灰并提示升到几级 */
+  locked: boolean
 }
 
 export interface RaidShopItem {

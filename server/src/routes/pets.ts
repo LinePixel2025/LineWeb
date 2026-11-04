@@ -67,7 +67,7 @@ import {
   upgradeRaidStorage,
   withdrawRaidItems,
 } from '../services/raidStorageService.js'
-import { equipRaidGear, openRaidCache, repairRaidGearForUser } from '../services/raidGearService.js'
+import { equipRaidGear, openRaidCache, recycleRaidGear, repairRaidGearForUser } from '../services/raidGearService.js'
 import { buyRaidShopItem, getRaidShopView } from '../services/raidShopService.js'
 
 const router = Router()
@@ -243,9 +243,18 @@ const raidRecycleSchema = z.object({
 const raidStorageUpgradeSchema = z.object({}).strict()
 const raidGearEquipSchema = z.object({
   slot: z.enum(['helmet', 'armor', 'boots', 'backpack', 'rig']),
+  /** 实例 id（推荐）：装备是同一型号也能有多件的实例物品 */
+  gearId: z.coerce.number().int().min(1).nullable().optional(),
+  /** 旧入参，向后兼容：只提交 key 时取该型号 id 最小的那一件 */
   gearKey: z.string().min(1).max(40).nullable().optional(),
 })
-const raidGearKeySchema = z.object({ gearKey: z.string().min(1).max(40) })
+const raidGearKeySchema = z.object({
+  gearId: z.coerce.number().int().min(1).optional(),
+  gearKey: z.string().min(1).max(40).optional(),
+}).refine((value) => value.gearId !== undefined || value.gearKey !== undefined, {
+  message: '需要 gearId 或 gearKey',
+})
+const raidGearRecycleSchema = z.object({ gearId: z.coerce.number().int().min(1) })
 const raidOpenCacheSchema = z.object({ itemKey: z.string().min(1).max(40) })
 const raidShopBuySchema = z.object({
   kind: z.enum(['gear', 'item']),
@@ -514,16 +523,27 @@ router.post('/raid/shop/buy', marketWriteLimiter, asyncHandler(async (req: Reque
   res.json(await buyRaidShopItem(currentUserId(req), input))
 }))
 
-// POST /api/pets/raid/gear/equip — { slot, gearKey|null }
+// POST /api/pets/raid/gear/equip — { slot, gearId?|gearKey?|null }
 router.post('/raid/gear/equip', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
   const input = parseInput(raidGearEquipSchema, req.body ?? {})
-  res.json(await equipRaidGear(currentUserId(req), input.slot, input.gearKey ?? null))
+  res.json(await equipRaidGear(
+    currentUserId(req),
+    input.slot,
+    input.gearId ?? null,
+    input.gearKey ?? null,
+  ))
 }))
 
-// POST /api/pets/raid/gear/repair — { gearKey } 消耗头修包 / 甲修包
+// POST /api/pets/raid/gear/repair — { gearId | gearKey } 消耗头修包 / 甲修包
 router.post('/raid/gear/repair', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
   const input = parseInput(raidGearKeySchema, req.body ?? {})
-  res.json(await repairRaidGearForUser(currentUserId(req), input.gearKey))
+  res.json(await repairRaidGearForUser(currentUserId(req), input.gearId ?? 0, input.gearKey ?? null))
+}))
+
+// POST /api/pets/raid/gear/recycle — { gearId } 手动回收一件闲置装备实例（重复获得不再自动折分）
+router.post('/raid/gear/recycle', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidGearRecycleSchema, req.body ?? {})
+  res.json(await recycleRaidGear(currentUserId(req), input.gearId))
 }))
 
 // POST /api/pets/raid/gear/open-cache — { itemKey } 开启装备箱 / 技能卷轴

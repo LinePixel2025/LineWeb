@@ -437,26 +437,41 @@ export default function RaidStoragePage() {
     })
   }
 
-  /* ---------- 装备：穿戴 / 卸下 / 维修 ---------- */
+  /* ---------- 装备：穿戴 / 卸下 / 维修 / 回收 ---------- */
 
-  const equipGear = async (slot: RaidGearSlot, gearKey: string | null, name: string) => {
+  // 装备是实例物品（同一个型号可以有多件、各自独立耐久），所以一律按行 id 操作
+  const equipGear = async (slot: RaidGearSlot, gear: RaidGearInfo | null) => {
     await runAction('装备操作失败', async () => {
-      const view = await api.post<RaidStorageView>('/pets/raid/gear/equip', { slot, gearKey })
+      const view = await api.post<RaidStorageView>('/pets/raid/gear/equip', {
+        slot,
+        gearId: gear?.id ?? null,
+      })
       applyStorage(view)
-      return gearKey ? `已穿戴 ${name}` : `已卸下 ${name}`
+      return gear ? `已穿戴 ${gear.name}` : `已卸下${SLOT_LABELS[slot]}`
     })
   }
 
   const repairGear = async (gear: RaidGearInfo) => {
     await runAction('维修失败', async () => {
       const view = await api.post<RaidStorageView>('/pets/raid/gear/repair', {
-        gearKey: gear.gearKey,
+        gearId: gear.id,
       })
       applyStorage(view)
-      const next = view.gear.find((row) => row.gearKey === gear.gearKey)
+      const next = view.gear.find((row) => row.id === gear.id)
       return next
         ? `维修完成：${gear.name} 耐久 ${gear.durability} → ${next.durability} / ${next.maxDurability}`
         : `维修完成：${gear.name}`
+    })
+  }
+
+  const recycleGear = async (gear: RaidGearInfo) => {
+    await runAction('回收失败', async () => {
+      const result = await api.post<{ points: number; view: RaidStorageView }>(
+        '/pets/raid/gear/recycle',
+        { gearId: gear.id },
+      )
+      applyStorage(result.view)
+      return `已回收 ${gear.name}，换回 ${result.points} 积分`
     })
   }
 
@@ -561,11 +576,12 @@ export default function RaidStoragePage() {
     }))
     .filter((group) => group.gears.length > 0)
 
+  // 商店全档装备都上架：4 级及以上按目录价 ×2 且要相应仓库等级（locked 时置灰说明）
   const shopGearGroups = shop
     ? SLOT_ORDER
       .map((slot) => ({
         slot,
-        gears: shop.gear.filter((gear) => gear.slot === slot && gear.tier <= 3),
+        gears: shop.gear.filter((gear) => gear.slot === slot),
       }))
       .filter((group) => group.gears.length > 0)
     : []
@@ -970,7 +986,7 @@ export default function RaidStoragePage() {
                             type="button"
                             className="gh-btn gh-btn--secondary gh-btn--sm"
                             disabled={busy}
-                            onClick={() => void equipGear(slot, null, gear.name)}
+                            onClick={() => void equipGear(slot, null)}
                           >
                             卸下
                           </button>
@@ -1025,7 +1041,7 @@ export default function RaidStoragePage() {
             {gearGroups.length === 0 ? (
               <div className="gh-raid-storage-empty">
                 <span aria-hidden>🎽</span>
-                <p>没有多余的装备。商店只卖 1–3 级装备，更高级的只能靠搜打撤掉落或开箱。</p>
+                <p>没有多余的装备。商店从 1 级到 6 级（含 t7/t8 巨型背包）全都上架，高档要仓库等级达标且按目录价 ×2。</p>
                 <button type="button" className="gh-btn gh-btn--primary gh-btn--sm" onClick={() => setTab('shop')}>
                   🏪 去官方商店
                 </button>
@@ -1041,7 +1057,7 @@ export default function RaidStoragePage() {
                     <div className="gh-raid-storage-gear-grid">
                       {group.gears.map((gear) => (
                         <article
-                          key={gear.gearKey}
+                          key={gear.id}
                           className={`gh-raid-storage-gear-card gh-raid-storage-gear-card--${gear.rarity}`}
                           title={gear.description}
                         >
@@ -1059,15 +1075,30 @@ export default function RaidStoragePage() {
                           </div>
                           <div className="gh-raid-storage-gear-card-meta">
                             <span>{gearStatText(gear)}</span>
+                            {/* 装备是实例物品，同型号多件时靠耐久区分是哪一件 */}
+                            {gear.maxDurability > 0 && (
+                              <span>耐久 {gear.durability} / {gear.maxDurability}</span>
+                            )}
                           </div>
-                          <button
-                            type="button"
-                            className="gh-btn gh-btn--primary gh-btn--sm"
-                            disabled={busy}
-                            onClick={() => void equipGear(gear.slot, gear.gearKey, gear.name)}
-                          >
-                            穿戴
-                          </button>
+                          <div className="gh-raid-storage-gear-card-actions">
+                            <button
+                              type="button"
+                              className="gh-btn gh-btn--primary gh-btn--sm"
+                              disabled={busy}
+                              onClick={() => void equipGear(gear.slot, gear)}
+                            >
+                              穿戴
+                            </button>
+                            <button
+                              type="button"
+                              className="gh-btn gh-btn--ghost gh-btn--sm"
+                              disabled={busy}
+                              title={`回收这件装备换回约 ${Math.round(gear.price * 0.6)} 积分`}
+                              onClick={() => void recycleGear(gear)}
+                            >
+                              ♻️ 回收
+                            </button>
+                          </div>
                         </article>
                       ))}
                     </div>
@@ -1142,15 +1173,31 @@ export default function RaidStoragePage() {
                               <p className="gh-raid-storage-shop-card-desc">{gear.description}</p>
                               <div className="gh-raid-storage-shop-card-meta">
                                 <span>{shopGearStatText(gear)}</span>
-                                {gear.owned && <span className="gh-raid-storage-item-tag">已拥有</span>}
+                                {gear.ownedCount > 0 && (
+                                  <span className="gh-raid-storage-item-tag">已持有 {gear.ownedCount} 件</span>
+                                )}
+                                {gear.storageLevelRequired > 0 && (
+                                  <span className="gh-raid-storage-item-tag">
+                                    需仓库 Lv.{gear.storageLevelRequired}
+                                  </span>
+                                )}
                               </div>
                               <button
                                 type="button"
                                 className="gh-btn gh-btn--primary gh-btn--sm"
-                                disabled={busy || gear.owned || !affordable}
+                                disabled={busy || gear.locked || !affordable}
+                                title={
+                                  gear.locked
+                                    ? `仓库升到 Lv.${gear.storageLevelRequired} 后可购买`
+                                    : '重复购买就是多一件独立耐久的实例，可在装备页回收'
+                                }
                                 onClick={() => void buyGear(gear)}
                               >
-                                {gear.owned ? '已拥有' : affordable ? `购买（${gear.price}）` : '积分不足'}
+                                {gear.locked
+                                  ? `需仓库 Lv.${gear.storageLevelRequired}`
+                                  : affordable
+                                    ? `购买（${gear.price}）`
+                                    : '积分不足'}
                               </button>
                             </article>
                           )

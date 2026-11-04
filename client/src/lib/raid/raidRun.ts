@@ -17,9 +17,19 @@
    基础类型
    ============================================================ */
 
-export const RAID_STATE_VERSION = 3
+export const RAID_STATE_VERSION = 4
 
 export type RaidStatus = 'active' | 'extracted' | 'died' | 'mia' | 'abandoned'
+
+/**
+ * 掉落模式：normal = 单人 / 好友组队（默认），pvp = 玩家匹配。
+ * 两张品质权重表挂在它上面；「非洲之心」只在 pvp 出，普通模式（含深渊实验室）不再产神话。
+ * 模式必须落进 RaidRunState：服务端按 seed 重算地图时要用同一个 mode，否则校验不上。
+ * 2026-11-04：state 版本 3 → 4（新增 mode 与撤离故障字段）。
+ */
+export type RaidLootMode = 'normal' | 'pvp'
+
+export const RAID_LOOT_MODES: readonly RaidLootMode[] = ['normal', 'pvp']
 
 export type RaidRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'mythic'
 
@@ -60,6 +70,21 @@ export const RAID_CONTAINER_LABELS: Readonly<Record<RaidContainerKind, string>> 
 }
 
 /* ============================================================
+   游戏门票（物品侧常量；规则见 server/src/lib/gameTicketRules.ts）
+   ============================================================ */
+
+/** 门票物品 key。游戏大厅开一局要消耗一张（存在搜打撤仓库里）。 */
+export const GAME_TICKET_KEY = 'game_ticket'
+/** 官方商店一口价（积分）。回收价刻意低于它，也低于返还额，确保「用票」是唯一合理选择。 */
+export const GAME_TICKET_PRICE = 40
+/** 局终必返（积分），与胜负积分叠加。 */
+export const GAME_TICKET_REFUND_POINTS = 20
+/** 门票的目录价值：material 按 100% 回收 ⇒ 回收价就是它，必须 < 返还额，否则卖票比打一把更赚。 */
+export const GAME_TICKET_RECYCLE_VALUE = 18
+/** 撤离信号弹：使用后进本局撤离必定成功（对齐三角洲「付费撤离买确定性」）。 */
+export const RAID_EXTRACT_FLARE_KEY = 'extract_flare'
+
+/* ============================================================
    物品目录（约 50 种，6 档品质）
    ============================================================ */
 
@@ -87,6 +112,12 @@ export interface RaidItemDef {
   /** 装备箱：可开出的装备等级区间 */
   cacheTierMin?: number
   cacheTierMax?: number
+  /** 一口价（积分）：设置后覆盖「目录价值 × 1.4」，门票这类要钉死售价的商品用 */
+  shopPrice?: number
+  /** 只在玩家匹配模式掉落 */
+  pvpOnly?: boolean
+  /** 消耗品：使用后进本局撤离必定成功（撤离信号弹） */
+  guaranteeExtract?: boolean
 }
 
 export const RAID_ITEMS: readonly RaidItemDef[] = [
@@ -151,8 +182,12 @@ export const RAID_ITEMS: readonly RaidItemDef[] = [
 
   // ---------- 神话（红） ----------
   { key: 'gear_cache_mythic', name: '深渊装备箱', emoji: '🧿', rarity: 'mythic', kind: 'gear_cache', value: 5600, weight: 1, stackMax: 1, description: '可能开出一件 6–8 级装备，巨型背包只在最深处出现。', cacheTierMin: 6, cacheTierMax: 8 },
-  { key: 'heart_of_africa', name: '非洲之心', emoji: '💎', rarity: 'mythic', kind: 'material', value: 9999, weight: 1, stackMax: 1, description: '传说中的巨钻，只在最深处出现。' },
+  { key: 'heart_of_africa', name: '非洲之心', emoji: '💎', rarity: 'mythic', kind: 'material', value: 9999, weight: 1, stackMax: 1, description: '传说中的巨钻，只有玩家匹配的战场才掉。', pvpOnly: true },
   { key: 'abyss_core', name: '深渊核心', emoji: '🌌', rarity: 'mythic', kind: 'material', value: 6800, weight: 1, stackMax: 1, description: '不断吞噬光线的黑色球体。' },
+
+  // ---------- 特殊（门票 / 撤离信号弹） ----------
+  { key: GAME_TICKET_KEY, name: '游戏门票', emoji: '🎟️', rarity: 'common', kind: 'material', value: GAME_TICKET_RECYCLE_VALUE, shopPrice: GAME_TICKET_PRICE, weight: 6, stackMax: 5, description: `游戏大厅开一局要用掉一张；打完必返 ${GAME_TICKET_REFUND_POINTS} 积分，所以用票永远比卖票划算。` },
+  { key: 'extract_flare', name: '撤离信号弹', emoji: '🧨', rarity: 'rare', kind: 'consumable', value: 300, weight: 5, stackMax: 2, description: '打亮它，撤离航线就有了保障——本局撤离必定成功。', guaranteeExtract: true },
 ]
 
 export const RAID_ITEM_MAP: ReadonlyMap<string, RaidItemDef> = new Map(
@@ -182,18 +217,49 @@ export function raidSellPrice(itemKey: string, amount: number): number {
   return Math.max(0, Math.floor(def.value * rate)) * clean
 }
 
-/** 官方商店售价（物品）：消耗品 / 箱子按目录价值 140% 向上取整 */
+/** 官方商店售价（物品）：一口价优先，否则按目录价值 140% 向上取整 */
 export function raidShopItemPrice(itemKey: string): number {
   const def = RAID_ITEM_MAP.get(itemKey)
   if (!def) return 0
+  if (def.shopPrice !== undefined) return Math.max(1, Math.trunc(def.shopPrice))
   return Math.max(1, Math.ceil(def.value * 1.4))
 }
 
-/** 官方商店售价（装备）：目录价 */
+/** 装备的高档溢价倍率：4 级及以上按目录价 ×2（1–3 级维持平价，是新手的入门档位） */
+export const RAID_GEAR_SHOP_PREMIUM = 2
+
+/**
+ * 官方商店售价（装备）：
+ *   tier ≤ 3 → 目录价；tier ≥ 4 → 目录价 ×2（高级装备改为「可购买但贵」，不再是掉落独占）。
+ */
 export function raidShopGearPrice(gearKey: string): number {
   const def = RAID_GEAR_MAP.get(gearKey)
   if (!def) return 0
-  return Math.max(1, def.price)
+  const base = Math.max(1, def.price)
+  return def.tier <= 3 ? base : Math.ceil(base * RAID_GEAR_SHOP_PREMIUM)
+}
+
+/**
+ * 商店买高档装备的仓库等级门槛（返回所需 RaidStorage.level，0 = 无门槛）。
+ * 4 级→Lv.3、5 级→Lv.4、6 级→Lv.5，t7/t8 巨型背包→Lv.6（仓库满级）。
+ */
+export function gearStorageGate(tier: number): number {
+  if (tier <= 3) return 0
+  if (tier === 4) return 3
+  if (tier === 5) return 4
+  if (tier === 6) return 5
+  return 6
+}
+
+/** 装备档位 → 所需仓库等级的别名（按 gearKey 查，服务端与商店 DTO 共用） */
+export function raidGearStorageGate(gearKey: string): number {
+  const def = RAID_GEAR_MAP.get(gearKey)
+  return def ? gearStorageGate(def.tier) : 0
+}
+
+/** 该物品在当前掉落模式下是否可入池 */
+export function raidItemModeAllowed(def: RaidItemDef, mode: RaidLootMode): boolean {
+  return !def.pvpOnly || mode === 'pvp'
 }
 
 /* ============================================================
@@ -218,7 +284,10 @@ export interface RaidGearDef {
   speedBonus?: number
   /** 背包 / 胸挂：格数 */
   slots?: number
-  /** 官方商店是否出售（1–3 级） */
+  /**
+   * 官方商店是否出售。2026-11-04 起全档上架（原先只有 1–3 级）：
+   * tier ≥ 4 售价按目录价 ×2，且要 raidGearStorageGate 的仓库等级才买得到。
+   */
   shopable: boolean
 }
 
@@ -241,43 +310,43 @@ export const RAID_GEARS: readonly RaidGearDef[] = [
   { key: 'helmet_t1', name: '战术软帽', emoji: '🧢', slot: 'helmet', tier: 1, rarity: GEAR_RARITY_BY_TIER[0], price: 150, description: '聊胜于无的软质护头，能挡飞溅的碎石。', defense: 8, maxDurability: 40, shopable: true },
   { key: 'helmet_t2', name: '防弹头套', emoji: '🪖', slot: 'helmet', tier: 2, rarity: GEAR_RARITY_BY_TIER[1], price: 400, description: '带护耳的基础防弹头套。', defense: 14, maxDurability: 55, shopable: true },
   { key: 'helmet_t3', name: '钢制头盔', emoji: '⛑️', slot: 'helmet', tier: 3, rarity: GEAR_RARITY_BY_TIER[2], price: 900, description: '沉重的钢盔，挡得住手枪弹。', defense: 20, maxDurability: 70, shopable: true },
-  { key: 'helmet_t4', name: '复合防弹盔', emoji: '🪖', slot: 'helmet', tier: 4, rarity: GEAR_RARITY_BY_TIER[3], price: 1800, description: '陶瓷复合盔，重量与防护兼顾。', defense: 26, maxDurability: 90, shopable: false },
-  { key: 'helmet_t5', name: '陶瓷重盔', emoji: '🛡️', slot: 'helmet', tier: 5, rarity: GEAR_RARITY_BY_TIER[4], price: 3200, description: '重装部队的制式头盔，正面能扛步枪弹。', defense: 32, maxDurability: 110, shopable: false },
-  { key: 'helmet_t6', name: '外骨骼头盔', emoji: '🤖', slot: 'helmet', tier: 6, rarity: GEAR_RARITY_BY_TIER[5], price: 5200, description: '带神经接口的外骨骼头盔，防护拉满。', defense: 38, maxDurability: 130, shopable: false },
+  { key: 'helmet_t4', name: '复合防弹盔', emoji: '🪖', slot: 'helmet', tier: 4, rarity: GEAR_RARITY_BY_TIER[3], price: 1800, description: '陶瓷复合盔，重量与防护兼顾。', defense: 26, maxDurability: 90, shopable: true },
+  { key: 'helmet_t5', name: '陶瓷重盔', emoji: '🛡️', slot: 'helmet', tier: 5, rarity: GEAR_RARITY_BY_TIER[4], price: 3200, description: '重装部队的制式头盔，正面能扛步枪弹。', defense: 32, maxDurability: 110, shopable: true },
+  { key: 'helmet_t6', name: '外骨骼头盔', emoji: '🤖', slot: 'helmet', tier: 6, rarity: GEAR_RARITY_BY_TIER[5], price: 5200, description: '带神经接口的外骨骼头盔，防护拉满。', defense: 38, maxDurability: 130, shopable: true },
 
   // ---------- 护甲 ----------
   { key: 'armor_t1', name: '轻型防弹衣', emoji: '🦺', slot: 'armor', tier: 1, rarity: GEAR_RARITY_BY_TIER[0], price: 200, description: '薄薄一层凯夫拉，主要防流弹。', defense: 12, maxDurability: 60, shopable: true },
   { key: 'armor_t2', name: '防弹插板衣', emoji: '🦺', slot: 'armor', tier: 2, rarity: GEAR_RARITY_BY_TIER[1], price: 500, description: '前后各一块陶瓷插板。', defense: 19, maxDurability: 80, shopable: true },
   { key: 'armor_t3', name: '战术重甲', emoji: '🥋', slot: 'armor', tier: 3, rarity: GEAR_RARITY_BY_TIER[2], price: 1100, description: '覆盖躯干的重型战术甲。', defense: 26, maxDurability: 100, shopable: true },
-  { key: 'armor_t4', name: '复合装甲', emoji: '🛡️', slot: 'armor', tier: 4, rarity: GEAR_RARITY_BY_TIER[3], price: 2100, description: '多层复合装甲，兼顾灵活与防护。', defense: 33, maxDurability: 125, shopable: false },
-  { key: 'armor_t5', name: '重型战术甲', emoji: '🧱', slot: 'armor', tier: 5, rarity: GEAR_RARITY_BY_TIER[4], price: 3600, description: '重装突袭队的标志性装备。', defense: 40, maxDurability: 150, shopable: false },
-  { key: 'armor_t6', name: '外骨骼装甲', emoji: '🤖', slot: 'armor', tier: 6, rarity: GEAR_RARITY_BY_TIER[5], price: 5800, description: '与动力外骨骼一体的整块装甲。', defense: 47, maxDurability: 180, shopable: false },
+  { key: 'armor_t4', name: '复合装甲', emoji: '🛡️', slot: 'armor', tier: 4, rarity: GEAR_RARITY_BY_TIER[3], price: 2100, description: '多层复合装甲，兼顾灵活与防护。', defense: 33, maxDurability: 125, shopable: true },
+  { key: 'armor_t5', name: '重型战术甲', emoji: '🧱', slot: 'armor', tier: 5, rarity: GEAR_RARITY_BY_TIER[4], price: 3600, description: '重装突袭队的标志性装备。', defense: 40, maxDurability: 150, shopable: true },
+  { key: 'armor_t6', name: '外骨骼装甲', emoji: '🤖', slot: 'armor', tier: 6, rarity: GEAR_RARITY_BY_TIER[5], price: 5800, description: '与动力外骨骼一体的整块装甲。', defense: 47, maxDurability: 180, shopable: true },
 
   // ---------- 战靴 ----------
   { key: 'boots_t1', name: '轻便战靴', emoji: '🥾', slot: 'boots', tier: 1, rarity: GEAR_RARITY_BY_TIER[0], price: 120, description: '鞋底很软，跑起来不累。', speedBonus: 3, shopable: true },
   { key: 'boots_t2', name: '战术军靴', emoji: '🥾', slot: 'boots', tier: 2, rarity: GEAR_RARITY_BY_TIER[1], price: 320, description: '防滑、耐磨、绑带很紧。', speedBonus: 6, shopable: true },
   { key: 'boots_t3', name: '突击靴', emoji: '👟', slot: 'boots', tier: 3, rarity: GEAR_RARITY_BY_TIER[2], price: 700, description: '为快速突入设计的轻量靴。', speedBonus: 9, shopable: true },
-  { key: 'boots_t4', name: '疾行战靴', emoji: '🥿', slot: 'boots', tier: 4, rarity: GEAR_RARITY_BY_TIER[3], price: 1400, description: '鞋底藏着弹性储能结构。', speedBonus: 12, shopable: false },
-  { key: 'boots_t5', name: '磁暴战靴', emoji: '⚡', slot: 'boots', tier: 5, rarity: GEAR_RARITY_BY_TIER[4], price: 2400, description: '磁力辅助迈步，几乎感觉不到重量。', speedBonus: 15, shopable: false },
-  { key: 'boots_t6', name: '相位战靴', emoji: '✨', slot: 'boots', tier: 6, rarity: GEAR_RARITY_BY_TIER[5], price: 4000, description: '每一步都像踩在空气上。', speedBonus: 18, shopable: false },
+  { key: 'boots_t4', name: '疾行战靴', emoji: '🥿', slot: 'boots', tier: 4, rarity: GEAR_RARITY_BY_TIER[3], price: 1400, description: '鞋底藏着弹性储能结构。', speedBonus: 12, shopable: true },
+  { key: 'boots_t5', name: '磁暴战靴', emoji: '⚡', slot: 'boots', tier: 5, rarity: GEAR_RARITY_BY_TIER[4], price: 2400, description: '磁力辅助迈步，几乎感觉不到重量。', speedBonus: 15, shopable: true },
+  { key: 'boots_t6', name: '相位战靴', emoji: '✨', slot: 'boots', tier: 6, rarity: GEAR_RARITY_BY_TIER[5], price: 4000, description: '每一步都像踩在空气上。', speedBonus: 18, shopable: true },
 
   // ---------- 背包 ----------
   { key: 'backpack_t1', name: '小型背包', emoji: '🎒', slot: 'backpack', tier: 1, rarity: GEAR_RARITY_BY_TIER[0], price: 300, description: '8 格容量，装点零碎刚好。', slots: 8, shopable: true },
   { key: 'backpack_t2', name: '战术背包', emoji: '🎒', slot: 'backpack', tier: 2, rarity: GEAR_RARITY_BY_TIER[1], price: 700, description: '12 格容量，带侧袋。', slots: 12, shopable: true },
   { key: 'backpack_t3', name: '突击背包', emoji: '🎒', slot: 'backpack', tier: 3, rarity: GEAR_RARITY_BY_TIER[2], price: 1500, description: '16 格容量，突击队标准配置。', slots: 16, shopable: true },
-  { key: 'backpack_t4', name: '远征背包', emoji: '🎒', slot: 'backpack', tier: 4, rarity: GEAR_RARITY_BY_TIER[3], price: 2800, description: '20 格容量，适合长时间搜刮。', slots: 20, shopable: false },
-  { key: 'backpack_t5', name: '重装载具', emoji: '🧳', slot: 'backpack', tier: 5, rarity: GEAR_RARITY_BY_TIER[4], price: 4500, description: '24 格容量，像个移动仓库。', slots: 24, shopable: false },
-  { key: 'backpack_t6', name: '外骨骼载具', emoji: '🧳', slot: 'backpack', tier: 6, rarity: GEAR_RARITY_BY_TIER[5], price: 7000, description: '28 格容量，外骨骼直接承重。', slots: 28, shopable: false },
-  { key: 'backpack_t7', name: '深渊驮包', emoji: '🛄', slot: 'backpack', tier: 7, rarity: GEAR_RARITY_BY_TIER[5], price: 10000, description: '36 格容量，深渊实验室的秘密制式。', slots: 36, shopable: false },
-  { key: 'backpack_t8', name: '移动武库', emoji: '🧰', slot: 'backpack', tier: 8, rarity: GEAR_RARITY_BY_TIER[5], price: 15000, description: '48 格容量，一个人就是一支运输队。', slots: 48, shopable: false },
+  { key: 'backpack_t4', name: '远征背包', emoji: '🎒', slot: 'backpack', tier: 4, rarity: GEAR_RARITY_BY_TIER[3], price: 2800, description: '20 格容量，适合长时间搜刮。', slots: 20, shopable: true },
+  { key: 'backpack_t5', name: '重装载具', emoji: '🧳', slot: 'backpack', tier: 5, rarity: GEAR_RARITY_BY_TIER[4], price: 4500, description: '24 格容量，像个移动仓库。', slots: 24, shopable: true },
+  { key: 'backpack_t6', name: '外骨骼载具', emoji: '🧳', slot: 'backpack', tier: 6, rarity: GEAR_RARITY_BY_TIER[5], price: 7000, description: '28 格容量，外骨骼直接承重。', slots: 28, shopable: true },
+  { key: 'backpack_t7', name: '深渊驮包', emoji: '🛄', slot: 'backpack', tier: 7, rarity: GEAR_RARITY_BY_TIER[5], price: 10000, description: '36 格容量，深渊实验室的秘密制式。', slots: 36, shopable: true },
+  { key: 'backpack_t8', name: '移动武库', emoji: '🧰', slot: 'backpack', tier: 8, rarity: GEAR_RARITY_BY_TIER[5], price: 15000, description: '48 格容量，一个人就是一支运输队。', slots: 48, shopable: true },
 
   // ---------- 胸挂 ----------
   { key: 'rig_t1', name: '简易胸挂', emoji: '🎽', slot: 'rig', tier: 1, rarity: GEAR_RARITY_BY_TIER[0], price: 200, description: '2 格快取位，取用最顺手。', slots: 2, shopable: true },
   { key: 'rig_t2', name: '战术胸挂', emoji: '🎽', slot: 'rig', tier: 2, rarity: GEAR_RARITY_BY_TIER[1], price: 450, description: '3 格快取位，取用顺手。', slots: 3, shopable: true },
   { key: 'rig_t3', name: '突击胸挂', emoji: '🦺', slot: 'rig', tier: 3, rarity: GEAR_RARITY_BY_TIER[2], price: 900, description: '4 格快取位，突击队制式。', slots: 4, shopable: true },
-  { key: 'rig_t4', name: '特战胸挂', emoji: '🦺', slot: 'rig', tier: 4, rarity: GEAR_RARITY_BY_TIER[3], price: 1700, description: '5 格快取位，模块化挂载。', slots: 5, shopable: false },
-  { key: 'rig_t5', name: '重装胸挂', emoji: '🧥', slot: 'rig', tier: 5, rarity: GEAR_RARITY_BY_TIER[4], price: 3000, description: '6 格快取位，重装部队专供。', slots: 6, shopable: false },
-  { key: 'rig_t6', name: '外骨骼胸挂', emoji: '🤖', slot: 'rig', tier: 6, rarity: GEAR_RARITY_BY_TIER[5], price: 4800, description: '7 格快取位，与动力系统联动。', slots: 7, shopable: false },
+  { key: 'rig_t4', name: '特战胸挂', emoji: '🦺', slot: 'rig', tier: 4, rarity: GEAR_RARITY_BY_TIER[3], price: 1700, description: '5 格快取位，模块化挂载。', slots: 5, shopable: true },
+  { key: 'rig_t5', name: '重装胸挂', emoji: '🧥', slot: 'rig', tier: 5, rarity: GEAR_RARITY_BY_TIER[4], price: 3000, description: '6 格快取位，重装部队专供。', slots: 6, shopable: true },
+  { key: 'rig_t6', name: '外骨骼胸挂', emoji: '🤖', slot: 'rig', tier: 6, rarity: GEAR_RARITY_BY_TIER[5], price: 4800, description: '7 格快取位，与动力系统联动。', slots: 7, shopable: true },
 ]
 
 export const RAID_GEAR_MAP: ReadonlyMap<string, RaidGearDef> = new Map(
@@ -436,7 +505,7 @@ export const RAID_MAPS: readonly RaidMapDef[] = [
     key: 'abyss',
     name: '深渊实验室',
     emoji: '🧪',
-    description: '深埋地下的禁忌实验设施，重装守卫密布，非洲之心只在这里出现。',
+    description: '深埋地下的禁忌实验设施，重装守卫密布；神话战利品只在玩家匹配模式的这片深渊里出现。',
     difficulty: 'extreme',
     cols: 5,
     rows: 5,
@@ -482,6 +551,33 @@ export const RAID_TILE_HAZARD = 3
 
 /** 撤离读条（毫秒） */
 export const RAID_EXTRACT_CHANNEL_MS = 6000
+
+/**
+ * 撤离点「运输故障」概率（对齐三角洲：常规撤离点是最危险的静止窗口，能不能走要看运气与情报）。
+ * 信号弹（RAID_EXTRACT_FLARE_KEY）用完即 0% —— 花局内收益买确定性。
+ */
+export const RAID_EXTRACT_FAIL_RATE = 0.25
+
+/** 某个撤离点判定失效后，全图撤离进入的冷却（这段时间内任何撤离点都不许起读条） */
+export const RAID_EXTRACT_COOLDOWN_MS = 60_000
+
+/**
+ * 掷「这个撤离点这一次读条会不会故障」。
+ *
+ * 必须可重放：只吃 (seed, roomId, 第几次读条, 是否已点亮信号弹)，不吃 Math.random、也不吃墙上时钟。
+ * 服务端在 performRaidEvents 里按 seed 重算地图并重放事件，attempt 来自持久化的 state.extractRolls，
+ * 所以同一次读条在服务端与任何重放里必然得到同一个结果——这是把随机塞进「服务端权威重放」模型的唯一前提。
+ */
+export function rollExtractFailure(
+  seed: number,
+  roomId: number,
+  attempt: number,
+  guaranteed: boolean,
+): boolean {
+  if (guaranteed) return false
+  const rng = createRaidRng(raidSubSeed(seed, `extract-fail:${roomId}:${attempt}`))
+  return rng() < RAID_EXTRACT_FAIL_RATE
+}
 /** 技能冷却：每「回合」折算 2500ms */
 export const RAID_SKILL_CD_MS = 2500
 /** MP 每秒回复（实时对局节奏快，回复过低会让高费技能形同虚设） */
@@ -653,56 +749,89 @@ function roomInnerTiles(room: RaidRoomNode): Array<{ x: number; y: number }> {
   return out
 }
 
-/** 品质权重（按地图 lootTier 1–5） */
-const RARITY_TIER_WEIGHTS: Readonly<Record<RaidRarity, readonly number[]>> = {
-  common: [60, 44, 30, 20, 12],
-  uncommon: [26, 30, 28, 24, 20],
-  rare: [10, 17, 24, 26, 25],
-  epic: [3, 7, 13, 19, 24],
-  legendary: [1, 2, 5, 11, 15],
-  mythic: [0, 0, 0, 0, 4],
+/**
+ * 品质权重（按掉落模式 × 地图 lootTier 1–5），每模式每档列和恒为 100。
+ *
+ * normal 是 2026-11-04 下调过的表：相对旧表整体「下移一档」——
+ * 稀有 −3~−5、史诗 −3~−5、传说 −3~−4 个百分点全部回灌普通/优良，神话直接归零。
+ * pvp（玩家匹配）才是原来的高爆率体验，并且只有它能掉神话（非洲之心 pvpOnly）。
+ */
+const RARITY_TIER_WEIGHTS_BY_MODE: Readonly<Record<RaidLootMode, Readonly<Record<RaidRarity, readonly number[]>>>> = {
+  normal: {
+    common: [60, 60, 44, 30, 20],
+    uncommon: [26, 26, 30, 28, 24],
+    rare: [10, 10, 17, 24, 26],
+    epic: [3, 3, 7, 13, 19],
+    legendary: [1, 1, 2, 5, 11],
+    mythic: [0, 0, 0, 0, 0],
+  },
+  pvp: {
+    common: [56, 40, 26, 16, 8],
+    uncommon: [28, 31, 28, 24, 20],
+    rare: [11, 18, 25, 27, 26],
+    epic: [4, 8, 13, 19, 23],
+    legendary: [1, 3, 8, 14, 19],
+    mythic: [0, 0, 0, 0, 4],
+  },
 }
 
-export function rarityWeightAtTier(rarity: RaidRarity, tier: number): number {
+export function rarityWeightAtTier(
+  rarity: RaidRarity,
+  tier: number,
+  mode: RaidLootMode = 'normal',
+): number {
   const index = clampInt(tier, 1, 5) - 1
-  return RARITY_TIER_WEIGHTS[rarity][index] ?? 0
+  return RARITY_TIER_WEIGHTS_BY_MODE[mode][rarity]?.[index] ?? 0
 }
 
-/** 按地图档次掷一个物品（只考虑 weight > 0 且有品质权重的条目） */
-export function rollRaidItemKey(rng: RaidRng, lootTier: number): string {
-  const candidates = RAID_ITEMS.filter((item) => rarityWeightAtTier(item.rarity, lootTier) > 0)
+/** 按地图档次掷一个物品（只考虑当前模式下可掉、weight > 0 且有品质权重的条目） */
+export function rollRaidItemKey(rng: RaidRng, lootTier: number, mode: RaidLootMode = 'normal'): string {
+  const candidates = RAID_ITEMS.filter(
+    (item) => rarityWeightAtTier(item.rarity, lootTier, mode) > 0 && raidItemModeAllowed(item, mode),
+  )
   let total = 0
   for (const item of candidates) {
-    total += item.weight * rarityWeightAtTier(item.rarity, lootTier)
+    total += item.weight * rarityWeightAtTier(item.rarity, lootTier, mode)
   }
   if (total <= 0) return 'scrap_metal'
   let roll = rng() * total
   for (const item of candidates) {
-    roll -= item.weight * rarityWeightAtTier(item.rarity, lootTier)
+    roll -= item.weight * rarityWeightAtTier(item.rarity, lootTier, mode)
     if (roll <= 0) return item.key
   }
   return candidates[candidates.length - 1]?.key ?? 'scrap_metal'
 }
 
-/** 开箱：随机 1–3 段掉落（Boss 房容器至少 2 段且第一段偏高阶） */
+/** 容器掉落段数：普通模式比匹配模式少一段（出货总量下调的另一半在这里） */
+export function raidContainerLootSegments(bossRoom: boolean, mode: RaidLootMode): [number, number] {
+  if (mode === 'pvp') return bossRoom ? [2, 4] : [1, 3]
+  return bossRoom ? [2, 3] : [1, 2]
+}
+
+/**
+ * 开箱掉落。段数与保底都按模式分档：
+ *   normal —— 非 Boss 1–2 段、Boss 2–3 段，首段保底史诗+（tier≥4 图传说+）；
+ *   pvp    —— 沿用旧的高爆率（非 Boss 1–3 段、Boss 2–4 段，首段稀有+/史诗+），并且只有它能掉神话。
+ */
 export function rollRaidContainerLoot(
   seed: number,
   containerId: string,
   lootTier: number,
   bossRoom: boolean,
+  mode: RaidLootMode = 'normal',
 ): RaidLootStack[] {
   const rng = createRaidRng(raidSubSeed(seed, `loot:${containerId}`))
-  const count = bossRoom ? rngInt(rng, 2, 4) : rngInt(rng, 1, 3)
+  const [minSegments, maxSegments] = raidContainerLootSegments(bossRoom, mode)
+  const count = rngInt(rng, minSegments, maxSegments)
   const stacks: RaidLootStack[] = []
   for (let i = 0; i < count; i += 1) {
-    let itemKey = rollRaidItemKey(rng, lootTier)
+    let itemKey = rollRaidItemKey(rng, lootTier, mode)
     if (bossRoom && i === 0) {
-      // Boss 房首段保底：优先史诗以上（tier 4/5 图更容易出传说）
-      const highTier = lootTier >= 4
-      const pool = RAID_ITEMS.filter((item) => {
-        const rank = RAID_RARITY_ORDER.indexOf(item.rarity)
-        return highTier ? rank >= 3 : rank >= 2
-      })
+      // Boss 房首段保底：普通模式整体抬一档（稀有→史诗、史诗→传说）
+      const floorRank = mode === 'pvp' ? (lootTier >= 4 ? 3 : 2) : (lootTier >= 4 ? 4 : 3)
+      const pool = RAID_ITEMS.filter(
+        (item) => RAID_RARITY_ORDER.indexOf(item.rarity) >= floorRank && raidItemModeAllowed(item, mode),
+      )
       if (pool.length > 0) itemKey = rngPick(rng, pool).key
     }
     const def = RAID_ITEM_MAP.get(itemKey)
@@ -741,7 +870,7 @@ export function createRaidEnemy(
   const level = clampInt(enemyLevel + kindOffset + rngInt(rng, 0, 1), 1, 30)
   // 2026-11-03 增强守卫战斗力：血量 / 伤害整体上调，远程占比提高，逼玩家用走位与技能周旋
   const hpMult = kind === 'boss' ? 5.0 : kind === 'elite' ? 2.4 : 1.2
-  const damageMult = kind === 'boss' ? 1.8 : kind === 'elite' ? 1.45 : 1.15
+  const damageMult = kind === 'boss' ? 2.1 : kind === 'elite' ? 1.7 : 1.35
   const maxHp = Math.round((40 + level * 10) * hpMult)
   // 实时战斗节奏：单发伤害压低、靠走位与技能周旋，避免一进房就被集火秒杀
   const damage = Math.max(2, Math.round((4 + level * 1.05) * damageMult))
@@ -775,7 +904,7 @@ export function createRaidEnemy(
  * 步骤：房间网格 → 生成树连通 + 环路 → 挖房间与走廊 → 分配房间类型 →
  *       放置敌人 / 容器 / 撤离点（全部由派生随机流驱动）。
  */
-export function generateRaidMap(seed: number, map: RaidMapDef): RaidMapNode {
+export function generateRaidMap(seed: number, map: RaidMapDef, mode: RaidLootMode = 'normal'): RaidMapNode {
   const cols = clampInt(map.cols, 2, 6)
   const rows = clampInt(map.rows, 2, 6)
   const width = cols * RAID_ROOM_W
@@ -1026,7 +1155,7 @@ export function generateRaidMap(seed: number, map: RaidMapDef): RaidMapNode {
         roomId: room.id,
         x: spot.x,
         y: spot.y,
-        loot: rollRaidContainerLoot(seed, id, map.lootTier, room.kind === 'boss'),
+        loot: rollRaidContainerLoot(seed, id, map.lootTier, room.kind === 'boss', mode),
       })
     }
   }
@@ -1061,6 +1190,11 @@ export function generateRaidMap(seed: number, map: RaidMapDef): RaidMapNode {
 
 export interface RaidGearInstance {
   key: string
+  /**
+   * RaidGear 行 id。装备改成「可重复获得的实例物品」后，同一个 gearKey 可以有多行、
+   * 各自独立耐久，结算写回必须按 id 认行；缺省按 key 匹配（旧状态与自检脚本的字面量仍可解析）。
+   */
+  id?: number
   durability: number
   /** 当前耐久上限（维修会逐步降低，但不会低于初始上限的 30%） */
   maxDurability: number
@@ -1156,6 +1290,20 @@ export interface RaidRunState {
   damageTaken: number
   extractionStartedAt: number | null
   extractionRoom: number | null
+  /** 掉落模式（normal / pvp）。服务端按 seed 重算地图时要用它选权重表。 */
+  mode: RaidLootMode
+  /** 本局已判定失效、不再可用读条的撤离房间 id */
+  extractDisabled: number[]
+  /** 全图撤离冷却截止（毫秒时间戳）；null = 无冷却 */
+  extractBlockedUntil: number | null
+  /** 已完成的读条次数——故障掷骰的 attempt，必须持久化才能重放 */
+  extractRolls: number
+  /** 已点亮撤离信号弹：本局后续撤离读条必定成功（掷骰直接返回 false） */
+  extractGuaranteed: boolean
+  /** 进过的撤离房间（小地图只有进过才点亮，对应「路线显示不清」） */
+  discoveredExtracts: number[]
+  /** PvP 模式下的击倒者用户 id（结算与 HUD 归因用；NPC 击倒为 null） */
+  killedByUserId: number | null
   log: RaidLogEntry[]
   lastSyncAt: number
   logSeq: number
@@ -1165,6 +1313,8 @@ export interface RaidStartInput {
   seed: number
   mapKey: string
   squadId?: string
+  /** 掉落模式，缺省 normal；玩家匹配传 pvp（高爆率 + 唯一能掉非洲之心的模式） */
+  mode?: RaidLootMode
   difficulty: string
   hp: number
   maxHp: number
@@ -1201,6 +1351,7 @@ export function createRaidRun(input: RaidStartInput): RaidRunState {
     seed: input.seed >>> 0,
     mapKey: map.key,
     squadId: input.squadId,
+    mode: input.mode === 'pvp' ? 'pvp' : 'normal',
     difficulty: input.difficulty,
     version: 0,
     status: 'active',
@@ -1232,6 +1383,12 @@ export function createRaidRun(input: RaidStartInput): RaidRunState {
     damageTaken: 0,
     extractionStartedAt: null,
     extractionRoom: null,
+    extractDisabled: [],
+    extractBlockedUntil: null,
+    extractRolls: 0,
+    extractGuaranteed: false,
+    discoveredExtracts: [],
+    killedByUserId: null,
     groundLoot: [],
     groundSeq: Math.max(0, Math.trunc(input.groundSeqBase ?? 0)),
     log: [],
@@ -1550,6 +1707,10 @@ function cloneState(state: RaidRunState): RaidRunState {
     safe: state.safe.map((stack) => ({ ...stack })),
     groundLoot: (state.groundLoot ?? []).map((item) => ({ ...item })),
     groundSeq: state.groundSeq ?? 0,
+    extractDisabled: [...(state.extractDisabled ?? [])],
+    discoveredExtracts: [...(state.discoveredExtracts ?? [])],
+    extractRolls: state.extractRolls ?? 0,
+    mode: state.mode ?? 'normal',
     skills: state.skills.map((skill) => ({ ...skill })),
     skillUsedAt: { ...state.skillUsedAt },
     log: state.log.map((entry) => ({ ...entry })),
@@ -1656,6 +1817,10 @@ export function applyRaidEvent(
       next.currentRoom = event.roomId
       next.extractionStartedAt = null
       next.extractionRoom = null
+      // 进过撤离区才在小地图上点亮（没进过的点一律不显示，对应「撤离路线显示不清」）
+      if (room.kind === 'extract' && !next.discoveredExtracts.includes(room.id)) {
+        next.discoveredExtracts.push(room.id)
+      }
       makeLog(next, 'info', `进入 ${room.kind === 'extract' ? '撤离区' : room.kind === 'boss' ? '首领房间' : '新房间'}（${room.col + 1},${room.row + 1}）`, now)
       return { state: next }
     }
@@ -1819,12 +1984,20 @@ export function applyRaidEvent(
         else next.gear = { ...next.gear, armor: repaired.gear }
         makeLog(next, 'info', `维修完成，恢复 ${repaired.restored} 点耐久。`, now)
       }
+      if (def.guaranteeExtract && next.extractGuaranteed) {
+        return { state, error: '撤离航线已有保障，不必再点亮信号弹' }
+      }
       const consumed = consumeItemFromContainer(container, event.itemKey, 1)
       if (!consumed) return { state, error: '使用失败' }
       if (event.from === 'backpack') next.backpack = consumed
       else if (event.from === 'rig') next.rig = consumed
       else next.safe = consumed
-      makeLog(next, 'info', `使用 ${def.name}`, now)
+      if (def.guaranteeExtract) {
+        next.extractGuaranteed = true
+        makeLog(next, 'extract', '撤离信号弹已点亮，本局撤离必定成功。', now)
+      } else {
+        makeLog(next, 'info', `使用 ${def.name}`, now)
+      }
       return { state: next }
     }
     case 'castSkill': {
@@ -1863,9 +2036,15 @@ export function applyRaidEvent(
       if (!room || room.kind !== 'extract') return { state, error: '这里不能撤离' }
       if (roomContainsLivingEnemies(next, map, room.id)) return { state, error: '撤离区还有敌人' }
       if (next.extractionStartedAt !== null) return { state: next }
+      if ((next.extractDisabled ?? []).includes(room.id)) {
+        return { state, error: '这个撤离点已经失联，只能另找出口' }
+      }
+      if (next.extractBlockedUntil !== null && now < next.extractBlockedUntil) {
+        return { state, error: `运输调度尚未恢复，还需 ${Math.ceil((next.extractBlockedUntil - now) / 1000)} 秒` }
+      }
       next.extractionStartedAt = now
       next.extractionRoom = room.id
-      makeLog(next, 'extract', '开始撤离读条，站稳别动……', now)
+      makeLog(next, 'extract', next.extractGuaranteed ? '开始撤离读条，航线已有保障……' : '开始撤离读条，站稳别动……', now)
       return { state: next }
     }
     case 'extractDone': {
@@ -1873,8 +2052,20 @@ export function applyRaidEvent(
       if (now - next.extractionStartedAt < RAID_EXTRACT_CHANNEL_MS) {
         return { state, error: '撤离读条未完成' }
       }
+      const roomId = next.extractionRoom ?? next.currentRoom
+      // attempt 持久化在 state 里，掷骰只吃 (seed, roomId, attempt, 信号弹)：服务端重放必然得到同一结果
+      const attempt = (next.extractRolls ?? 0) + 1
+      next.extractRolls = attempt
+      if (rollExtractFailure(next.seed, roomId, attempt, next.extractGuaranteed)) {
+        next.extractionStartedAt = null
+        next.extractionRoom = null
+        if (!next.extractDisabled.includes(roomId)) next.extractDisabled.push(roomId)
+        next.extractBlockedUntil = now + RAID_EXTRACT_COOLDOWN_MS
+        makeLog(next, 'danger', '运输故障：这个撤离点已失联。背包里一件东西都没丢，但全图撤离要停 60 秒，得另找出口。', now)
+        return { state: next }
+      }
       next.status = 'extracted'
-      makeLog(next, 'success', '撤离成功！', now)
+      makeLog(next, 'success', next.extractGuaranteed ? '撤离成功（信号弹保住了航线）！' : '撤离成功！', now)
       return { state: next }
     }
     case 'abandon': {

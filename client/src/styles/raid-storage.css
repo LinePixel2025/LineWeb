@@ -851,6 +851,19 @@
   .gh-dialog-actions .gh-btn { flex: 1; }
 }
 
+/* 装备是「实例物品」：备用件卡片要并排放「穿戴」与「回收」两个动作，
+   宽度用 min-width + flex 撑，不用 vw（面板比窗口窄时会算错）。 */
+.gh-raid-storage-gear-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gh-raid-storage-gear-card-actions .gh-btn {
+  flex: 1;
+  min-width: 88px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .gh-raid-storage-page *,
   .gh-raid-storage-page *::before,

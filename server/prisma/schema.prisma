@@ -103,6 +103,16 @@ model User {
   chatRemarksTarget      ChatContactSetting[]  @relation("ChatContactTarget") // 别人给我的备注行（仅对方视角）
   sentRedPackets         RedPacket[]           @relation("RedPacketSender") // 我发出的聊天红包
   redPacketClaims        RedPacketClaim[] // 我领取的红包记录
+  companyOwned           Company[]             @relation("CompanyOwner") // 我发起创建的公司（CEO）
+  companyMemberships     CompanyMember[] // 我所属的公司（一人至多一司，由 service 保证）
+  companyInvitesReceived CompanyInvite[]       @relation("CompanyInviteTarget") // 我收到的入司邀请
+  companyInvitesSent     CompanyInvite[]       @relation("CompanyInviteSender") // 我发出的入司邀请
+  companyDonations       CompanyListing[]      @relation("CompanyDonor") // 我捐进公司货栈的条目
+  companyOrders          CompanyOrder[]        @relation("CompanyBuyer") // 我在公司货栈的购买记录
+  companyLoans           CompanyLoan[]         @relation("CompanyLoanBorrower") // 我向公司借的贷款
+  crisisWaivers          CrisisWaiver[] // 我吃到的危机减免档位（每人每档终身一次）
+  gameSessions           GameSession[] // 单机「已付门票开局」的会话凭证
+  gameTicketLogs         GameTicketLog[] // 门票张数台账（积分台账记不了物品件数）
   /**
    * 网页反代排队赦免：不受并发闸门限制（管理员另有 role 兜底）
    */
@@ -766,7 +776,7 @@ model PointsLedger {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   amount    Int // 正数=获得，负数=扣除
   balance   Int // 变动后余额
-  reason    String // game_result | farm_harvest | farm_steal | farm_welcome | farm_shop | farm_expand | farm_merchant | farm_protect | farm_seed_buy | farm_seed_sell | shop_purchase | checkin | leader_bonus | stock | stock_order_buy | stock_order_refund | stock_order_sell | pet_raid | pet_raid_entry | pet_raid_insurance | pet_raid_contract | raid_recycle | raid_shop | raid_market_sell | raid_market_buy | raid_storage_upgrade | redpacket_send | redpacket_receive | redpacket_refund | bank_deposit_in | bank_demand_withdraw | bank_fixed_open | bank_fixed_redeem | bank_interest | fund_buy | fund_sell | admin_adjust | crisis_payment
+  reason    String // game_result | farm_harvest | farm_steal | farm_welcome | farm_shop | farm_expand | farm_merchant | farm_protect | farm_seed_buy | farm_seed_sell | shop_purchase | checkin | leader_bonus | stock | stock_order_buy | stock_order_refund | stock_order_sell | pet_raid | pet_raid_entry | pet_raid_insurance | pet_raid_contract | raid_recycle | raid_shop | raid_market_sell | raid_market_buy | raid_storage_upgrade | redpacket_send | redpacket_receive | redpacket_refund | bank_deposit_in | bank_demand_withdraw | bank_fixed_open | bank_fixed_redeem | bank_interest | fund_buy | fund_sell | game_ticket_refund | company_purchase | company_liquidate | company_loan_in | company_loan_repay | admin_adjust | crisis_payment
   game      String? // 来源游戏 id（2048 / doudizhu / ... / farm）
   note      String?
   createdAt DateTime @default(now()) @map("created_at")
@@ -1751,7 +1761,10 @@ model RaidGear {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  @@unique([userId, gearKey])
+  /// 装备是「可重复获得的实例物品」：同一 gearKey 可以有多行，各自独立耐久。
+  /// 2026-11-04 之前这里是 @@unique([userId, gearKey])，重复装备只能自动折 60% 积分；
+  /// 改为普通索引后重复件直接落仓库，由玩家自己决定留还是回收（存量行无需去重，索引替换不丢数据）。
+  @@index([userId, gearKey])
   @@index([userId, slot])
   @@map("raid_gears")
 }
@@ -1785,6 +1798,9 @@ model RaidBagItem {
  * 「是否封锁」不存真值，一律由 lib/crisisRules.ts 的 isBlockedNow 现算，status 只是缓存快照。
  * round 是乐观锁令牌：开轮与管理员强制到期都会 +1；缴纳事务按读到的 round 守卫，抢不到就 409 重来，
  * 保证不会出现「钱记在上一轮的税单上」。
+ * 公司减免（lib/companyRules.ts 的三档营业额）在开轮时直接下调 required，并把折减前的数字留在
+ * requiredBase、把合计比例留在 waiverPct。领取记录写 crisis_waivers，唯一键是 [userId, tier]：
+ * 每人每档终身只享一次（换公司也不能重复领），防止反复跳槽刷免税。
  */
 model CrisisLevy {
   id         Int       @id @default(autoincrement())
@@ -1794,6 +1810,8 @@ model CrisisLevy {
   round      Int       @default(0) // 乐观锁令牌（开轮 / 强制到期递增）
   snapshot   Int       @default(0) // 开轮时刻的总资产快照（积分）
   required   Int       @default(0) // 本轮应缴：floor(snapshot × ratio)，未达免征门槛归零，开轮后不再重算
+  requiredBase Int     @default(0) @map("required_base") // 公司减免「之前」的应缴，用于展示折减幅度与对账
+  waiverPct  Int       @default(0) // 本轮已生效的公司减免合计百分比（10/25/50 的累乘结果，0=无减免）
   paid       Int       @default(0) // 本轮已缴累计
   openAt     DateTime? @map("open_at") // 本轮开轮时刻
   graceUntil DateTime? @map("grace_until") // 宽限截止（openAt + graceMs）；部分缴纳不延长
@@ -1831,4 +1849,253 @@ model CrisisConfig {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("crisis_config")
+}
+
+// === 公司（成员组织 + 货栈 + 资金池 + 放贷 + 危机减免，2026-11-04） ===
+
+/**
+ * 公司实体。3 人可创建、上限 7 人，发起人恒为 CEO。
+ * 状态机：founding（已发起、邀请未满 3 人，超 foundingExpiresAt 作废）→ active → disbanded。
+ * poolBalance 是资金池（积分），只由「货栈销售全额入池」与「成员还款回流」增加，由放款减少；
+ * revenue 是累计营业额（只增），lib/companyRules.ts 的三档阈值据此算危机减免。
+ * tierMask 是已达成档位的位掩码（bit0=满 1 万，bit1=满 5 万，bit2=满 20 万），只增不减，
+ * 抬档用 CAS（where tierMask = 旧值），保证并发购买不会重复发同一档减免。
+ */
+model Company {
+  id                Int       @id @default(autoincrement())
+  name              String    @unique // 公司名（2–12 字，全站唯一）
+  ownerId           Int       @map("owner_id") // CEO 用户 id
+  owner             User      @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  status            String    @default("founding") // founding | active | disbanded
+  poolBalance       Int       @default(0) @map("pool_balance") // 资金池余额（积分）
+  revenue           Int       @default(0) // 累计营业额（货栈成交总额，只增）
+  tierMask          Int       @default(0) @map("tier_mask") // 已达成的减免档位位掩码
+  foundingExpiresAt DateTime? @map("founding_expires_at") // founding 状态有效期（7 天未满 3 人作废）
+  disbandedAt       DateTime? @map("disbanded_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  members   CompanyMember[]
+  invites   CompanyInvite[]
+  listings  CompanyListing[]
+  restocks  CompanyRestock[]
+  orders    CompanyOrder[]
+  loans     CompanyLoan[]
+  waivers   CrisisWaiver[]
+
+  @@index([status, createdAt])
+  @@map("companies")
+}
+
+/** 公司成员（含 CEO）。一人至多属一司由 companyService 在事务内校验，不建库级唯一约束以免退司后留死行。 */
+model CompanyMember {
+  id        Int      @id @default(autoincrement())
+  companyId Int      @map("company_id")
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   @default("member") // ceo | member
+  joinedAt  DateTime @default(now()) @map("joined_at")
+
+  @@unique([companyId, userId])
+  @@index([userId])
+  @@map("company_members")
+}
+
+/** 入司邀请。唯一键 [companyId, targetUserId] 提供幂等（学 RedPacketClaim 的复合唯一）。 */
+model CompanyInvite {
+  id           Int      @id @default(autoincrement())
+  companyId    Int      @map("company_id")
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  targetUserId Int      @map("target_user_id")
+  target       User     @relation("CompanyInviteTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+  invitedBy    Int      @map("invited_by")
+  inviter      User     @relation("CompanyInviteSender", fields: [invitedBy], references: [id], onDelete: Cascade)
+  status       String   @default("pending") // pending | accepted | rejected | expired
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([companyId, targetUserId])
+  @@index([targetUserId, status])
+  @@map("company_invites")
+}
+
+/**
+ * 公司货栈条目（不是玩家直挂单，而是「捐入公司」后的组织库存）。
+ * 托管即物理扣除：raid_item 从 RaidInventoryItem 减量、farm_seed 从 FarmItem 减量，
+ * 完全沿用 farmSeedMarketService.createSeedListing 的口径，防止「货没到就能撤单」。
+ * amount 是捐入总量、soldAmount 是已售量，在架量 = amount - soldAmount。
+ * rarity 与 itemName 是捐入时的目录快照（目录改名/下架不影响已售出账目）。
+ */
+model CompanyListing {
+  id         Int      @id @default(autoincrement())
+  companyId  Int      @map("company_id")
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  donorId    Int      @map("donor_id") // 捐入者（退款下架时原路退回给他）
+  donor      User     @relation("CompanyDonor", fields: [donorId], references: [id], onDelete: Cascade)
+  source     String // farm_seed | raid_item
+  itemKey    String   @map("item_key")
+  itemName   String   @map("item_name") // 目录名快照
+  emoji      String   @default("📦")
+  rarity     String   @default("common") // 目录稀有度快照（farm_seed 一律按 rare 计上限）
+  unitPrice  Int      @map("unit_price") // 公司定价（须在参考价带宽内）
+  amount     Int // 捐入总量
+  soldAmount Int      @default(0) @map("sold_amount") // 已售量（CAS 递增，防超卖）
+  status     String   @default("active") // active | withdrawn | sold_out
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([companyId, status])
+  @@index([status, createdAt])
+  @@index([donorId, status]) // 危机资产扫描：本人捐入且未售出的存货要计税
+  @@map("company_listings")
+}
+
+/** 每日补货计数（按公司 × 日 × 稀有度）。「不是无限」就落在这里，dateKey 用 Asia/Shanghai 日界。 */
+model CompanyRestock {
+  id        Int     @id @default(autoincrement())
+  companyId Int     @map("company_id")
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  dateKey   String  @map("date_key") // YYYY-MM-DD（Asia/Shanghai）
+  rarity    String
+  units     Int     @default(0) // 当日已捐入件数
+
+  @@unique([companyId, dateKey, rarity])
+  @@map("company_restocks")
+}
+
+/** 成交流水（审计与「最近成交」展示用）。total 全额进公司资金池，公司不抽自己的手续费。 */
+model CompanyOrder {
+  id        Int      @id @default(autoincrement())
+  companyId Int      @map("company_id")
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  listingId Int      @map("listing_id") // 仅记录，不建外键（条目下架后流水仍要可读）
+  buyerId   Int      @map("buyer_id")
+  buyer     User     @relation("CompanyBuyer", fields: [buyerId], references: [id], onDelete: Cascade)
+  itemKey   String   @map("item_key")
+  itemName  String   @map("item_name")
+  source    String // farm_seed | raid_item
+  amount    Int
+  unitPrice Int      @map("unit_price")
+  total     Int
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([companyId, createdAt])
+  @@index([buyerId, createdAt])
+  @@map("company_orders")
+}
+
+/**
+ * 公司成员贷款（站内第一个信贷原语）。
+ * 本金来自公司资金池，dueAmount = 本金 + 利息在放款时一次算死（避免日息口径漂移），
+ * 还款时利息随 dueAmount 一并回流资金池。逾期未还（status=overdue）限制该成员再借。
+ * 逾期翻转是惰性的：任何读写前用 status='open' && dueAt < now 的 CAS 翻一次，不挂定时器
+ * （与危机 / 银行 / 宠物 / 红包的无定时器结算口径一致）。
+ */
+model CompanyLoan {
+  id         Int       @id @default(autoincrement())
+  companyId  Int       @map("company_id")
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId     Int       @map("user_id")
+  user       User      @relation("CompanyLoanBorrower", fields: [userId], references: [id], onDelete: Cascade)
+  principal  Int // 放款本金
+  dueAmount  Int       @map("due_amount") // 应还总额（本金 + 利息）
+  repaid     Int       @default(0)
+  ratePct    Int       @map("rate_pct") // 放款时的利率快照（按公司等级）
+  dueDays    Int       @map("due_days") // 放款时的期限快照
+  status     String    @default("open") // open | repaid | overdue
+  borrowedAt DateTime  @default(now()) @map("borrowed_at")
+  dueAt      DateTime  @map("due_at")
+  settledAt  DateTime? @map("settled_at")
+
+  @@index([userId, status])
+  @@index([companyId, status])
+  @@index([status, dueAt]) // 惰性逾期扫描
+  @@map("company_loans")
+}
+
+/** 公司参数（单行 JSON，照 CrisisConfig 的「读旧 → 深合并 → normalize → 保存」口径）。 */
+model CompanyConfig {
+  id        Int      @id @default(1)
+  config    String // { priceBandMin, priceBandMax, loanTierCaps, loanRatePct, loanDueDays, donationCaps, restockCaps }
+  updatedBy Int?     @map("updated_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("company_config")
+}
+
+// === 危机减免（公司业绩换免税，2026-11-04） ===
+
+/**
+ * 某人因某公司达成的减免档。唯一键 [userId, tier]：每人每档终身只享一次，
+ * 换公司也不能重复领（防跳槽刷免税）。reduction 记录实际少缴的积分，供税单页对账与审计。
+ */
+model CrisisWaiver {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId Int      @map("company_id")
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  tier      Int // 1 | 2 | 3（对应营业额 1 万 / 5 万 / 20 万）
+  reduction Int // 实际少缴的积分
+  levyRound Int      @map("levy_round") // 生效时的税单轮次
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, tier])
+  @@index([userId])
+  @@index([companyId])
+  @@map("crisis_waivers")
+}
+
+// === 游戏门票（对局入场成本，2026-11-04） ===
+
+/**
+ * 单机「已付门票开局」的会话凭证。
+ * 存在唯一的理由：单机原本没有任何服务端开局调用，终局上报可以直接伪造刷积分。
+ * 现在必须先 POST /game-stats/session/start 扣掉一张票拿到 sessionId，终局上报带着它来，
+ * 服务端在同一个事务里发战绩积分 + 返还 20 分，并把会话 CAS 成 closed（保证只返一次）。
+ * 玩家开局后直接关浏览器不会返票：悬空会话在下一次开局时被惰性关闭并补发 20 分。
+ */
+model GameSession {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game      String // lib/gameTicketRules.ts 的 TICKET_GAME_KEYS
+  variant   String    @default("single") // single | online
+  status    String    @default("open") // open | closed
+  startedAt DateTime  @default(now()) @map("started_at")
+  closedAt  DateTime? @map("closed_at")
+  refunded  Boolean   @default(false) // 是否已补发 20 分（CAS 幂等锚）
+  note      String?
+
+  @@index([userId, status])
+  @@index([status, startedAt]) // 悬空会话清理
+  @@map("game_sessions")
+}
+
+/**
+ * 门票张数台账。积分台账只记积分、记不了「物品件数」，所以门票的消耗/退券/返还要独立成账。
+ * dedupKey 是跨进程重启仍然有效的幂等锚（内存 Map 去重一重启就没了）：
+ *   扣票 c:s:<sessionId> / c:o:<game>:<matchId>:<userId>
+ *   退券 r:o:<game>:<matchId>:<userId>
+ *   返分 f:s:<sessionId> / f:o:<game>:<matchId>:<userId>
+ * 写入撞 P2002 视为「已经做过」，直接跳过而不是报错——与红包领取的幂等口径一致。
+ */
+model GameTicketLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String // consume | return | refund
+  game      String
+  variant   String   @default("single") // single | online
+  sessionId Int?     @map("session_id")
+  matchId   String?  @map("match_id") // 各游戏房间 id 类型不一律，存字符串
+  tickets   Int      @default(0) // consume=-1 / return=+1
+  points    Int      @default(0) // refund=20
+  dedupKey  String   @unique @map("dedup_key")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@index([game, createdAt])
+  @@map("game_ticket_logs")
 }

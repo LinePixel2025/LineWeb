@@ -10,7 +10,9 @@ import { AppError } from '../middleware/errorHandler.js'
 import {
   RAID_GEAR_MAP,
   RAID_SKILL_CD_MS,
+  gearStorageGate,
   getRaidGear,
+  raidShopGearPrice,
   type RaidEquippedGear,
   type RaidGearInstance,
   type RaidItemStack,
@@ -43,6 +45,9 @@ export function gearInstanceOf(row: RaidGear | null | undefined): RaidGearInstan
   if (!row) return null
   return {
     key: row.gearKey,
+    // 实例 id 必须进快照：装备现在同一 gearKey 可以有多行、各自独立耐久，
+    // 结算写回要按 id 认行，否则会把耐久写到同型号的另一件上。
+    id: row.id,
     durability: Math.max(0, Math.trunc(row.durability)),
     maxDurability: Math.max(0, Math.trunc(row.maxDurability)),
   }
@@ -92,6 +97,8 @@ export function equippedGearSnapshot(rows: readonly RaidGear[]): RaidEquippedGea
 
 /** 装备信息 DTO（仓库 / 商店 / 对局 HUD 共用） */
 export interface RaidGearDto {
+  /** RaidGear 行 id：装备是实例物品，同一型号可以有多件，穿戴/维修/回收都按它定位 */
+  id: number
   gearKey: string
   name: string
   emoji: string
@@ -99,6 +106,10 @@ export interface RaidGearDto {
   tier: number
   rarity: string
   price: number
+  /** 官方商店售价（tier ≥ 4 为目录价 ×2） */
+  shopPrice: number
+  /** 商店购买所需仓库等级（0 = 无门槛） */
+  storageLevelRequired: number
   description: string
   defense: number
   maxDurability: number
@@ -111,6 +122,7 @@ export interface RaidGearDto {
 export function gearDto(row: RaidGear): RaidGearDto {
   const def = RAID_GEAR_MAP.get(row.gearKey)
   return {
+    id: row.id,
     gearKey: row.gearKey,
     name: def?.name ?? row.gearKey,
     emoji: def?.emoji ?? '🎒',
@@ -118,6 +130,8 @@ export function gearDto(row: RaidGear): RaidGearDto {
     tier: def?.tier ?? 1,
     rarity: def?.rarity ?? 'common',
     price: def?.price ?? 0,
+    shopPrice: raidShopGearPrice(row.gearKey),
+    storageLevelRequired: gearStorageGate(def?.tier ?? 1),
     description: def?.description ?? '',
     defense: def?.defense ?? 0,
     maxDurability: row.maxDurability,

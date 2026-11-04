@@ -42,10 +42,17 @@ const CONTAINER_BY_SLOT: Partial<Record<RaidGearSlot, 'backpack' | 'rig'>> = {
    穿戴 / 卸下
    ============================================================ */
 
+/**
+ * 穿戴 / 卸下。
+ *
+ * 装备现在是「实例物品」（同一个 gearKey 可以有多件、各自独立耐久），所以定位一律用 RaidGear 行 id。
+ * gearKey 作为向后兼容入参保留：旧标签页只提交 key 时取该型号里 id 最小的那一件，不至于全线 400。
+ */
 export async function equipRaidGear(
   userId: number,
   slotInput: string,
-  gearKey: string | null,
+  gearId: number | null,
+  gearKey?: string | null,
 ): Promise<RaidStorageViewDto> {
   await assertNoActiveRaid(userId)
   const slot = assertSlot(slotInput)
@@ -54,10 +61,10 @@ export async function equipRaidGear(
     const container = CONTAINER_BY_SLOT[slot]
 
     let nextRowId: number | null = null
-    if (gearKey) {
-      const row = await tx.raidGear.findUnique({
-        where: { userId_gearKey: { userId, gearKey } },
-      })
+    if (gearId !== null || gearKey) {
+      const row = gearId !== null && gearId > 0
+        ? await tx.raidGear.findFirst({ where: { id: gearId, userId } })
+        : await tx.raidGear.findFirst({ where: { userId, gearKey: gearKey ?? '' }, orderBy: { id: 'asc' } })
       if (!row) throw new AppError('还没有这件装备', 404)
       const def = getRaidGear(row.gearKey)
       if (!def || def.slot !== slot) throw new AppError('装备槽位不匹配', 400)
@@ -66,7 +73,9 @@ export async function equipRaidGear(
 
     if (container) {
       // 换装备会改变容器容量：容量不足时禁止卸下 / 换小
-      const nextDef = gearKey ? RAID_GEAR_MAP.get(gearKey) : null
+      const nextDef = nextRowId !== null ? RAID_GEAR_MAP.get(
+        (await tx.raidGear.findUnique({ where: { id: nextRowId } }))?.gearKey ?? '',
+      ) : null
       const nextCapacity = Math.max(0, Math.trunc(nextDef?.slots ?? 0))
       const used = await tx.raidBagItem.count({ where: { userId, container } })
       if (used > nextCapacity) {
@@ -87,6 +96,45 @@ export async function equipRaidGear(
 }
 
 /* ============================================================
+   手动回收重复装备（2026-11-04：重复获得不再自动折分，改由玩家自己决定留还是卖）
+   ============================================================ */
+
+/** 装备回收比例：与「重复装备自动折分」时代保持一致，避免改变老玩家的预期 */
+export const RAID_GEAR_RECYCLE_RATE = 0.6
+
+export interface RaidGearRecycleResult {
+  points: number
+  name: string
+  view: RaidStorageViewDto
+}
+
+export async function recycleRaidGear(
+  userId: number,
+  gearId: number,
+): Promise<RaidGearRecycleResult> {
+  await assertNoActiveRaid(userId)
+  const outcome = await prisma.$transaction(async (tx) => {
+    const row = await tx.raidGear.findFirst({ where: { id: gearId, userId } })
+    if (!row) throw new AppError('还没有这件装备', 404)
+    if (row.equipped) throw new AppError('先把这件装备脱下，再回收', 400)
+    const def = RAID_GEAR_MAP.get(row.gearKey)
+    if (!def) throw new AppError('装备不存在', 404)
+    // 条件删除：同一件被并发回收时第二次抢不到行，直接报错而不是白送一次积分
+    const deleted = await tx.raidGear.deleteMany({ where: { id: row.id, userId } })
+    if (deleted.count === 0) throw new AppError('这件装备已经被回收了', 409, 'RAID_GEAR_GONE')
+    const points = Math.max(1, Math.round(def.price * RAID_GEAR_RECYCLE_RATE))
+    const mutation = await awardPointsTx(tx, userId, {
+      amount: points,
+      reason: 'raid_recycle',
+      note: `回收 ${def.name}`,
+    })
+    return { points, name: def.name, balance: mutation.balance }
+  })
+  void outcome.balance
+  return { points: outcome.points, name: outcome.name, view: await buildStorageView(userId) }
+}
+
+/* ============================================================
    维修
    ============================================================ */
 
@@ -95,15 +143,17 @@ const REPAIR_KIT_BY_SLOT: Partial<Record<RaidGearSlot, string>> = {
   armor: 'armor_repair',
 }
 
+/** 维修同样按 RaidGear 行 id 定位（同一个型号可能有几件、耐久各自独立）；gearKey 仅作向后兼容 */
 export async function repairRaidGearForUser(
   userId: number,
-  gearKey: string,
+  gearId: number,
+  gearKey?: string | null,
 ): Promise<RaidStorageViewDto> {
   await assertNoActiveRaid(userId)
   await prisma.$transaction(async (tx) => {
-    const row = await tx.raidGear.findUnique({
-      where: { userId_gearKey: { userId, gearKey } },
-    })
+    const row = gearId > 0
+      ? await tx.raidGear.findFirst({ where: { id: gearId, userId } })
+      : await tx.raidGear.findFirst({ where: { userId, gearKey: gearKey ?? '' }, orderBy: { id: 'asc' } })
     if (!row) throw new AppError('还没有这件装备', 404)
     const def = RAID_GEAR_MAP.get(row.gearKey)
     if (!def) throw new AppError('装备不存在', 404)
@@ -180,36 +230,25 @@ export async function openRaidCache(
       const pool = RAID_GEARS.filter((gear) => gear.tier >= minTier && gear.tier <= maxTier)
       const picked = pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))]
       if (!picked) throw new AppError('箱子是空的', 500)
-      let duplicatePoints = 0
-      const owned = await tx.raidGear.findUnique({
-        where: { userId_gearKey: { userId, gearKey: picked.key } },
+      // 装备是普通物品：重复开箱不再自动折 60% 积分，而是再落一行独立实例（独立耐久），
+      // 玩家想变现就到装备页手动回收。技能卷轴仍维持「重复即折分」语义（PetSkill 是拥有制）。
+      await tx.raidGear.create({
+        data: {
+          userId,
+          gearKey: picked.key,
+          slot: picked.slot,
+          durability: picked.maxDurability ?? 0,
+          maxDurability: picked.maxDurability ?? 0,
+          equipped: false,
+          acquiredVia: 'drop',
+        },
       })
-      if (owned) {
-        duplicatePoints = Math.max(1, Math.round(picked.price * 0.6))
-        await awardPointsTx(tx, userId, {
-          amount: duplicatePoints,
-          reason: 'raid_recycle',
-          note: `重复装备 ${picked.name} 折积分`,
-        })
-      } else {
-        await tx.raidGear.create({
-          data: {
-            userId,
-            gearKey: picked.key,
-            slot: picked.slot,
-            durability: picked.maxDurability ?? 0,
-            maxDurability: picked.maxDurability ?? 0,
-            equipped: false,
-            acquiredVia: 'drop',
-          },
-        })
-      }
       return {
         type: 'gear' as const,
         key: picked.key,
         name: picked.name,
         emoji: picked.emoji,
-        duplicatePoints,
+        duplicatePoints: 0,
         balance: 0,
       }
     }

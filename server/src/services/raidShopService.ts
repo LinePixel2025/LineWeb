@@ -1,20 +1,26 @@
 /**
  * 搜打撤官方商店（替代原玩家交易行）。
  *
- * 口径：
- *   - 只卖 1–3 级装备（4–6 级只能靠搜打撤掉落 / 开箱），消耗品按目录价值 140% 出售；
- *   - 买装备直接生成一件满耐久的新装备（同一 key 只能持有一件，重复购买报错）；
- *   - 买消耗品进入仓库，可再取到背包 / 胸挂 / 安全箱带进对局；
+ * 口径（2026-11-04 调整）：
+ *   - 装备全档上架：1–3 级按目录价平价出售，4 级及以上按目录价 ×2，且需要相应仓库等级
+ *     （gearStorageGate：4→Lv.3、5→Lv.4、6→Lv.5、t7/t8 背包→Lv.6）；
+ *   - 装备是「实例物品」：同一 key 可以重复购买 / 重复开箱，每次都是一行独立耐久的新实例，
+ *     不再「已拥有即拒卖」、也不再自动把重复件折成积分，想变现就在装备页手动回收；
+ *   - 游戏门票 game_ticket 也在本店出售（一口价 40，见 lib/raidRun.ts 的 GAME_TICKET_PRICE），
+ *     它属于 material 品类，所以要在可售清单里单独放行；
+ *   - 买消耗品 / 箱子 / 门票进入仓库，可再取到背包 / 胸挂 / 安全箱带进对局；
  *   - 玩家出售物品走仓库页的「回收」，按 raidSellPrice 结算（材料 100% / 消耗品 60% / 箱子 70%）。
  */
 
 import prisma from '../lib/prisma.js'
 import { AppError } from '../middleware/errorHandler.js'
 import {
+  GAME_TICKET_KEY,
   RAID_GEARS,
   RAID_GEAR_MAP,
   RAID_ITEMS,
   RAID_RARITY_LABELS,
+  gearStorageGate,
   getRaidGear,
   getRaidItem,
   raidShopGearPrice,
@@ -23,6 +29,7 @@ import {
   type RaidItemDef,
 } from '../lib/raidRun.js'
 import { spendPointsTx } from './pointsService.js'
+import { ensureRaidStorage, ensureRaidStorageTx } from './raidCommon.js'
 
 export interface RaidShopGearDto {
   key: string
@@ -37,7 +44,12 @@ export interface RaidShopGearDto {
   maxDurability: number
   speedBonus: number
   slots: number
-  owned: boolean
+  /** 已持有的实例件数（重复购买是允许的，这个数字只用来提示） */
+  ownedCount: number
+  /** 购买所需的仓库等级，0 = 无门槛 */
+  storageLevelRequired: number
+  /** 当前仓库等级还不够买（前端置灰并说明要升到几级） */
+  locked: boolean
 }
 
 export interface RaidShopItemDto {
@@ -69,32 +81,44 @@ function gearPrice(def: RaidGearDef): number {
 const SHOP_ITEM_KINDS = new Set(['consumable', 'gear_cache', 'skill_cache'])
 
 export async function getRaidShopView(userId: number): Promise<RaidShopViewDto> {
-  const [user, owned] = await Promise.all([
+  const [user, owned, storage] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { points: true } }),
     prisma.raidGear.findMany({ where: { userId }, select: { gearKey: true } }),
+    ensureRaidStorage(userId),
   ])
-  const ownedKeys = new Set(owned.map((row) => row.gearKey))
+  // 装备是实例物品：同一个 key 可以有多件，所以这里统计的是件数而不是「有没有」
+  const ownedCounts = new Map<string, number>()
+  for (const row of owned) {
+    ownedCounts.set(row.gearKey, (ownedCounts.get(row.gearKey) ?? 0) + 1)
+  }
+  const storageLevel = Math.max(1, Math.trunc(storage.level))
   return {
     points: user?.points ?? 0,
     gear: RAID_GEARS
       .filter((gear) => gear.shopable)
-      .map((gear) => ({
-        key: gear.key,
-        name: gear.name,
-        emoji: gear.emoji,
-        slot: gear.slot,
-        tier: gear.tier,
-        rarity: gear.rarity,
-        price: gearPrice(gear),
-        description: gear.description,
-        defense: gear.defense ?? 0,
-        maxDurability: gear.maxDurability ?? 0,
-        speedBonus: gear.speedBonus ?? 0,
-        slots: gear.slots ?? 0,
-        owned: ownedKeys.has(gear.key),
-      })),
+      .map((gear) => {
+        const required = gearStorageGate(gear.tier)
+        return {
+          key: gear.key,
+          name: gear.name,
+          emoji: gear.emoji,
+          slot: gear.slot,
+          tier: gear.tier,
+          rarity: gear.rarity,
+          price: gearPrice(gear),
+          description: gear.description,
+          defense: gear.defense ?? 0,
+          maxDurability: gear.maxDurability ?? 0,
+          speedBonus: gear.speedBonus ?? 0,
+          slots: gear.slots ?? 0,
+          ownedCount: ownedCounts.get(gear.key) ?? 0,
+          storageLevelRequired: required,
+          locked: storageLevel < required,
+        }
+      }),
     items: RAID_ITEMS
-      .filter((item) => SHOP_ITEM_KINDS.has(item.kind))
+      // 门票不是消耗品而是 material，但它必须能在本店买到，所以按 key 单独放行
+      .filter((item) => SHOP_ITEM_KINDS.has(item.kind) || item.key === GAME_TICKET_KEY)
       .map((item) => ({
         key: item.key,
         name: item.name,
@@ -133,15 +157,15 @@ export async function buyRaidShopItem(
   if (input.kind === 'gear') {
     const def = getRaidGear(input.key)
     if (!def) throw new AppError('商店里没有这件装备', 404)
-    if (!def.shopable || def.tier > 3) {
-      throw new AppError('高级装备只在搜打撤中掉落，商店不出售', 400)
-    }
+    if (!def.shopable) throw new AppError('这件装备不在商店出售', 400)
+    const required = gearStorageGate(def.tier)
     const price = gearPrice(def)
-    const result = await prisma.$transaction(async (tx) => {
-      const owned = await tx.raidGear.findUnique({
-        where: { userId_gearKey: { userId, gearKey: def.key } },
-      })
-      if (owned) throw new AppError('已经拥有这件装备了', 400)
+    await prisma.$transaction(async (tx) => {
+      // 门槛按仓库等级而不是「有没有买过」：装备是实例物品，重复购买就是多一件
+      const storage = await ensureRaidStorageTx(tx, userId)
+      if (Math.max(1, Math.trunc(storage.level)) < required) {
+        throw new AppError(`这件 ${def.tier} 级装备需要仓库 Lv.${required}，请先升级仓库`, 400, 'RAID_STORAGE_LOCKED')
+      }
       const mutation = await spendPointsTx(tx, userId, price, {
         reason: 'raid_shop',
         note: `购买装备 ${def.name}`,
@@ -166,7 +190,7 @@ export async function buyRaidShopItem(
       emoji: def.emoji,
       amount: 1,
       spent: price,
-      balance: result.balance,
+      balance: await balanceOf(userId),
       points: price,
       view: await getRaidShopView(userId),
     }
@@ -174,12 +198,14 @@ export async function buyRaidShopItem(
 
   const def = getRaidItem(input.key)
   if (!def) throw new AppError('商店里没有这件物品', 404)
-  if (!SHOP_ITEM_KINDS.has(def.kind)) throw new AppError('这件物品不在商店出售', 400)
+  if (!SHOP_ITEM_KINDS.has(def.kind) && def.key !== GAME_TICKET_KEY) {
+    throw new AppError('这件物品不在商店出售', 400)
+  }
   const amount = Math.max(1, Math.min(99, Math.trunc(input.amount ?? 1)))
   const unit = itemPrice(def)
   const total = unit * amount
-  const result = await prisma.$transaction(async (tx) => {
-    const mutation = await spendPointsTx(tx, userId, total, {
+  await prisma.$transaction(async (tx) => {
+    await spendPointsTx(tx, userId, total, {
       reason: 'raid_shop',
       note: `购买 ${def.name} ×${amount}`,
     })
@@ -188,7 +214,6 @@ export async function buyRaidShopItem(
       create: { userId, itemKey: def.key, amount },
       update: { amount: { increment: amount } },
     })
-    return mutation
   })
   return {
     kind: 'item',
@@ -197,10 +222,16 @@ export async function buyRaidShopItem(
     emoji: def.emoji,
     amount,
     spent: total,
-    balance: result.balance,
+    balance: await balanceOf(userId),
     points: total,
     view: await getRaidShopView(userId),
   }
+}
+
+/** 事务提交后重新读余额（事务内的 mutation.balance 在并发下可能是旧值） */
+async function balanceOf(userId: number): Promise<number> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { points: true } })
+  return user?.points ?? 0
 }
 
 /** 商店展示用品质文案（客户端可自行映射，但服务端也下发一份保证一致） */
