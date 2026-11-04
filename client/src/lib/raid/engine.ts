@@ -10,6 +10,7 @@
 import {
   RAID_EXTRACT_CHANNEL_MS,
   RAID_GROUND_LOOT_LIMIT,
+  RAID_GROUND_REARM_DISTANCE,
   RAID_ITEM_MAP,
   RAID_MP_REGEN_PER_SEC,
   RAID_TILE_HAZARD,
@@ -21,6 +22,7 @@ import {
   raidDefenseOf,
   raidTileIndex,
   removeItemFromContainer,
+  resolveDropPosition,
   resolveRaidDamage,
   type RaidContainerKind,
   type RaidEnemyNode,
@@ -351,6 +353,12 @@ export class RaidEngine {
   groundLoot: RaidGroundStack[] = []
   /** 地面物品发号器（与服务端 groundSeq 同基址同步推进） */
   groundSeq = 0
+  /**
+   * 自己丢下的地面物品 id → 是否已「走远重新武装」。
+   * 未武装的条目不参与自动捡起，否则丢在脚边的东西会被下一帧立刻捡回，丢弃等于无效操作。
+   * 队友丢的不在这里（他们的 id 由世界增量推过来），照常「走过即捡」。
+   */
+  ownDroppedGround = new Map<string, boolean>()
   /** 触屏自动锁敌：开火/瞄准时吸附最近可视敌人（桌面鼠标瞄准不受影响） */
   aimAssist = false
 
@@ -390,6 +398,7 @@ export class RaidEngine {
     this.takenLoot = new Set(run.takenLoot)
     this.groundLoot = (run.groundLoot ?? []).map((item) => ({ ...item }))
     this.groundSeq = run.groundSeq ?? 0
+    this.ownDroppedGround.clear()
     this.extractStartedAt = run.extractionStartedAt
     this.loadRoom(run.currentRoom, true)
   }
@@ -1090,7 +1099,16 @@ export class RaidEngine {
     return stacks.length < capacity
   }
 
-  /** 走过地面掉落物自动捡起（自己丢的或队友丢的都算，安全箱不自动收） */
+  /** 清掉已经不在这份地面清单里的「自己丢的」标记，避免 Map 随对局时长无界增长 */
+  private pruneOwnDropped(): void {
+    if (this.ownDroppedGround.size === 0) return
+    const alive = new Set(this.groundLoot.map((item) => item.id))
+    for (const id of this.ownDroppedGround.keys()) {
+      if (!alive.has(id)) this.ownDroppedGround.delete(id)
+    }
+  }
+
+  /** 走过地面掉落物自动捡起（安全箱不自动收；自己刚丢的要先走远才重新算「路过可捡」） */
   private updateGroundPickups(): void {
     if (this.groundLoot.length === 0) return
     const remain: RaidGroundStack[] = []
@@ -1099,7 +1117,16 @@ export class RaidEngine {
         remain.push(item)
         continue
       }
-      if (distance(item.x, item.y, this.player.x, this.player.y) > 0.7) {
+      const dist = distance(item.x, item.y, this.player.x, this.player.y)
+      // 自己丢下的：未走远到重新武装距离之前，一律原地留着（且不弹「背包已满」）
+      if (this.ownDroppedGround.get(item.id) === false) {
+        if (dist > RAID_GROUND_REARM_DISTANCE) this.ownDroppedGround.set(item.id, true)
+        else {
+          remain.push(item)
+          continue
+        }
+      }
+      if (dist > 0.7) {
         remain.push(item)
         continue
       }
@@ -1127,6 +1154,7 @@ export class RaidEngine {
       if (target === 'rig') this.rig = next
       else this.backpack = next
       this.groundLoot = this.groundLoot.filter((entry) => entry.id !== item.id)
+      this.ownDroppedGround.delete(item.id)
       this.events.push({ type: 'takeGround', groundId: item.id, target })
       this.spawnParticles(item.x, item.y, 5, RARITY_SPARK[def.rarity] ?? '#e2e8f0')
       this.pushFloat(
@@ -1545,16 +1573,27 @@ export class RaidEngine {
     else this.backpack = removed
     this.groundSeq += 1
     const id = `g${this.groundSeq}`
+    // 与服务端同一个纯函数：沿当前朝向往前抛出后再夹回房间内，双方算出的落点完全一致
+    const pos = resolveDropPosition(this.player.x, this.player.y, this.player.angle, room)
     this.groundLoot.push({
       id,
       roomId: this.roomId,
       itemKey: stack.itemKey,
       amount: moved,
+      x: pos.x,
+      y: pos.y,
+    })
+    this.ownDroppedGround.set(id, false)
+    this.events.push({
+      type: 'dropItem',
+      from,
+      slotIndex,
+      amount: moved,
       x: this.player.x,
       y: this.player.y,
+      angle: this.player.angle,
     })
-    this.events.push({ type: 'dropItem', from, slotIndex, amount: moved, x: this.player.x, y: this.player.y })
-    this.spawnParticles(this.player.x, this.player.y, 6, RARITY_SPARK[def.rarity] ?? '#e2e8f0')
+    this.spawnParticles(pos.x, pos.y, 6, RARITY_SPARK[def.rarity] ?? '#e2e8f0')
     this.pushToast(`丢弃 ${def.name} ×${moved}`, 'info', now)
     return true
   }
@@ -1595,6 +1634,7 @@ export class RaidEngine {
     this.takenLoot = new Set(run.takenLoot)
     this.groundLoot = (run.groundLoot ?? []).map((item) => ({ ...item }))
     this.groundSeq = run.groundSeq ?? this.groundSeq
+    this.pruneOwnDropped()
     const serverExtractStart = run.extractionStartedAt
     if (serverExtractStart !== this.extractStartedAt) {
       // 服务端时间戳才是撤离读条的权威：本地早发被拒后必须允许重试
@@ -1824,6 +1864,7 @@ export class RaidEngine {
       const taken = new Set(delta.groundTaken)
       const before = this.groundLoot.length
       this.groundLoot = this.groundLoot.filter((entry) => !taken.has(entry.id))
+      this.pruneOwnDropped()
       if (this.groundLoot.length !== before) changed = true
     }
     if (changed) {

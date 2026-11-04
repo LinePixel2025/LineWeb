@@ -96,7 +96,7 @@ export default function RaidInventory({ snapshot, busy, onMove, onDrop, onClose 
     if (!selected || !selectedStack || busy) return
     const ok = onDrop(selected.from, selected.slotIndex, selectedStack.amount)
     if (ok) {
-      setNotice(`已把 ${selectedDef?.name ?? '物品'} 丢在地上（走过即可捡回）`)
+      setNotice(`已把 ${selectedDef?.name ?? '物品'} 丢在脚前（走开一段再回来即可捡回）`)
       setSelected(null)
     } else {
       setNotice('丢弃失败：地上的掉落物可能已经满了')

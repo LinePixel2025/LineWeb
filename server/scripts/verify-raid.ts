@@ -3,7 +3,7 @@
  *
  * 覆盖：物品与装备目录不变量、地图生成确定性与连通性、房间类型分配、
  *       容器掉落、运行状态机（进房 / 击杀 / 清房 / 开箱 / 拾取 / 使用 / 技能 / 受伤 / 撤离）、
- *       耐久与维修、保险、结算保留规则、每日契约。
+ *       耐久与维修、保险、结算保留规则、每日契约、丢弃落点往前抛与夹取。
  *
  * 用法: cd server && npx tsx scripts/verify-raid.ts（或 npm run verify:raid）
  */
@@ -21,6 +21,8 @@ import {
   RAID_SKILL_CD_MS,
   RAID_STATE_VERSION,
   RAID_GROUND_LOOT_LIMIT,
+  RAID_GROUND_REARM_DISTANCE,
+  RAID_DROP_THROW_DISTANCE,
   addItemToContainer,
   applyRaidEvent,
   applyRaidEvents,
@@ -37,6 +39,7 @@ import {
   raidSellPrice,
   rarityWeightAtTier,
   repairRaidGear,
+  resolveDropPosition,
   resolveRaidDamage,
   rollRaidItemKey,
   tickRaidRun,
@@ -512,6 +515,55 @@ const capDrop = applyRaidEvent(capRun, mapA, {
 }, 1_000_075)
 assert(!!capDrop.error, `单房掉落物达 ${RAID_GROUND_LOOT_LIMIT} 上限后拒绝继续丢弃`)
 assertEqual(capDrop.state.backpack.length, 1, '达到上限时背包不变')
+
+/* ---------- 丢弃落点往前抛（2026-11：丢在脚边会被客户端下一帧自动捡回，等于丢不掉） ---------- */
+const dropRoom = mapA.rooms[dropNothing.state.currentRoom]
+assert(!!dropRoom, '取到丢弃校验用的房间')
+if (dropRoom) {
+  const centerX = dropRoom.x + dropRoom.w / 2
+  const centerY = dropRoom.y + dropRoom.h / 2
+  const anchor = resolveDropPosition(centerX, centerY, 0, dropRoom)
+  const north = resolveDropPosition(centerX, centerY, -Math.PI / 2, dropRoom)
+  const noAngle = resolveDropPosition(centerX, centerY, undefined, dropRoom)
+  assertClose(anchor.x, centerX + RAID_DROP_THROW_DISTANCE, 1e-9, '朝东抛出固定距离')
+  assertClose(anchor.y, centerY, 1e-9, '朝东抛出不影响纵向')
+  assertClose(noAngle.x, anchor.x, 1e-9, '缺省朝向按正东抛出，结果确定')
+  assertClose(north.y, centerY - RAID_DROP_THROW_DISTANCE, 1e-9, '朝北抛出后纵向上移同距')
+  assertClose(north.x, centerX, 1e-9, '朝北抛出不影响横向')
+  const wallEast = resolveDropPosition(dropRoom.x + dropRoom.w - 1, centerY, 0, dropRoom)
+  assert(wallEast.x <= dropRoom.x + dropRoom.w - 2.5, '贴右墙抛出被夹回房间内圈，丢不到墙外')
+  assert(
+    wallEast.x >= dropRoom.x + 1.5
+      && wallEast.y >= dropRoom.y + 1.5
+      && wallEast.y <= dropRoom.y + dropRoom.h - 2.5,
+    '夹取后落点四边都在房间内圈',
+  )
+  const bogus = resolveDropPosition(Number.NaN, Number.POSITIVE_INFINITY, Number.NaN, dropRoom)
+  assert(Number.isFinite(bogus.x) && Number.isFinite(bogus.y), '非法坐标/朝向仍回落到房间中心并返回有限值')
+  assert(RAID_DROP_THROW_DISTANCE > 0.7, `抛出距离须大于客户端自动捡起半径 0.7（实测 ${RAID_DROP_THROW_DISTANCE}）`)
+  assert(RAID_GROUND_REARM_DISTANCE > RAID_DROP_THROW_DISTANCE, '重新武装距离须大于抛出距离：丢完站着不该立刻被捡回')
+  assert(RAID_GROUND_REARM_DISTANCE > 0.7, '重新武装距离须大于捡起半径，否则走远也重新不了')
+  const thrown = applyRaidEvent(
+    makeRun({ backpack: [{ slotIndex: 0, itemKey: 'scrap_metal', amount: 2 }] }),
+    mapA,
+    { type: 'dropItem', from: 'backpack', slotIndex: 0, x: centerX, y: centerY, angle: 0 },
+    1_000_090,
+  )
+  assertEqual(thrown.error, undefined, '带朝向的丢弃事件被接受')
+  assertClose(thrown.state.groundLoot[0]?.x ?? Number.NaN, anchor.x, 1e-9, '服务端落点与纯函数逐位一致')
+  assertClose(thrown.state.groundLoot[0]?.y ?? Number.NaN, anchor.y, 1e-9, '服务端落点纵向与纯函数一致')
+  const thrownNorth = applyRaidEvent(
+    makeRun({ backpack: [{ slotIndex: 0, itemKey: 'scrap_metal', amount: 2 }] }),
+    mapA,
+    { type: 'dropItem', from: 'backpack', slotIndex: 0, x: centerX, y: centerY, angle: -Math.PI / 2 },
+    1_000_091,
+  )
+  assertEqual(thrownNorth.error, undefined, '朝北的丢弃事件被接受')
+  assert(
+    (thrownNorth.state.groundLoot[0]?.y ?? 0) < (thrown.state.groundLoot[0]?.y ?? 0),
+    '朝向确实改变落点，服务端按同一算法重算',
+  )
+}
 const fullBagDrop = applyRaidEvent(makeRun({
   backpack: [{ slotIndex: 0, itemKey: 'scrap_metal', amount: 1 }],
   capacities: { backpack: 1, rig: 0, safe: 0 },

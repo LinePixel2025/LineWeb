@@ -179,6 +179,8 @@ const raidEventSchema = z.discriminatedUnion('type', [
     amount: z.coerce.number().int().min(1).max(9999).optional(),
     x: z.coerce.number().min(0).max(400).optional(),
     y: z.coerce.number().min(0).max(400).optional(),
+    // 朝向来自 atan2，取值区间含负数
+    angle: z.coerce.number().optional(),
   }),
   z.object({
     type: z.literal('takeGround'),

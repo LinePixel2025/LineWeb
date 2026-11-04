@@ -1114,6 +1114,12 @@ export interface RaidGroundStack {
 /** 单个房间地面掉落物上限（防无限丢物刷屏） */
 export const RAID_GROUND_LOOT_LIMIT = 24
 
+/** 丢弃时沿玩家朝向抛出的距离（格）。丢在脚边会被下一帧自动捡回，等于「丢不掉」 */
+export const RAID_DROP_THROW_DISTANCE = 1.1
+
+/** 自己丢的物品要先离开到多远之外，才重新允许「走过即捡」（格）；须大于自动捡起半径 0.7 */
+export const RAID_GROUND_REARM_DISTANCE = 1.6
+
 export interface RaidRunState {
   schemaVersion: number
   seed: number
@@ -1514,6 +1520,8 @@ export type RaidEvent =
     /** 丢弃落点（客户端玩家坐标，服务端夹取进当前房间内部） */
     x?: number
     y?: number
+    /** 丢弃瞬间的玩家朝向（弧度）：服务端据此把物品往前抛，双端同式算落点 */
+    angle?: number
   }
   | { type: 'takeGround'; groundId: string; target: RaidContainerKind }
   | { type: 'useItem'; itemKey: string; from: RaidContainerKind }
@@ -1599,6 +1607,26 @@ function clampGroundPos(x: number | undefined, y: number | undefined, room: Raid
     x: Math.max(room.x + 1.5, Math.min(room.x + room.w - 2.5, cx)),
     y: Math.max(room.y + 1.5, Math.min(room.y + room.h - 2.5, cy)),
   }
+}
+
+/**
+ * 丢弃落点：先把坐标夹回房间内，再沿玩家朝向抛出若干格，最后再夹一次
+ * （贴墙时不会被抛出墙外或别的房间）。双端必须共用这一个函数，
+ * 否则客户端显示的位置与服务端记录的不一致，队友也会看到物品错位。
+ */
+export function resolveDropPosition(
+  x: number | undefined,
+  y: number | undefined,
+  angle: number | undefined,
+  room: RaidRoomNode,
+): { x: number; y: number } {
+  const anchored = clampGroundPos(x, y, room)
+  const rad = Number.isFinite(angle) ? Number(angle) : 0
+  return clampGroundPos(
+    anchored.x + Math.cos(rad) * RAID_DROP_THROW_DISTANCE,
+    anchored.y + Math.sin(rad) * RAID_DROP_THROW_DISTANCE,
+    room,
+  )
 }
 
 /**
@@ -1735,7 +1763,7 @@ export function applyRaidEvent(
       else if (event.from === 'rig') next.rig = removed
       else next.safe = removed
       next.groundSeq += 1
-      const pos = clampGroundPos(event.x, event.y, room)
+      const pos = resolveDropPosition(event.x, event.y, event.angle, room)
       next.groundLoot.push({
         id: `g${next.groundSeq}`,
         roomId: next.currentRoom,
