@@ -31,6 +31,7 @@ import {
   CRISIS_EXEMPT_RULES,
   CRISIS_LIMITS,
   CRISIS_LEDGER_REASON,
+  CRISIS_TAX_LEDGER_REASON,
   CRISIS_WAIVER_TIERS,
   EMPTY_CRISIS_ASSETS,
   EMPTY_CRISIS_LEVY_VIEW,
@@ -88,9 +89,12 @@ function levyOf(overrides: Partial<CrisisLevyView> = {}): CrisisLevyView {
    ============================================================ */
 
 assertEqual(CRISIS_LEDGER_REASON, 'crisis_payment', '台账 reason 固定')
+assertEqual(CRISIS_TAX_LEDGER_REASON, 'crisis_tax', '税款台账 reason 固定（与 crisis_payment 互免防循环）')
 assertEqual(RULES.ratio, 0.5, '默认上缴比例 50%')
 assertEqual(RULES.intervalMs, 48 * HOUR_MS, '默认每 48 小时一轮（每人各自滚动）')
 assertEqual(RULES.graceMs, 12 * HOUR_MS, '默认宽限 12 小时')
+assertEqual(RULES.spendTaxPct, 5, '默认积分税款 5%（用户自选开关，唯一挂钩 spendPointsTx）')
+assert(CRISIS_LIMITS.spendTaxMin === 0 && CRISIS_LIMITS.spendTaxMax === 50, '税款比例钳制在 0–50')
 assert(RULES.enabled, '默认启用')
 assert(CRISIS_LIMITS.intervalMinMs >= 60 * 1000, '到期间隔下界不得小于 1 分钟，防误设成秒级把全站锁死')
 assert(CRISIS_LIMITS.graceMinMs >= 60 * 1000, '宽拿下界不得小于 1 分钟')
@@ -125,6 +129,10 @@ assertEqual(
 )
 assertEqual(normalizeCrisisRules({ minLevy: 1234.9 }), { ...RULES, minLevy: 1234 }, '免征门槛取整')
 assertEqual(normalizeCrisisRules({ minLevy: -100 }), { ...RULES, minLevy: 0 }, '免征门槛不为负')
+assertEqual(normalizeCrisisRules({ spendTaxPct: -1 }), { ...RULES, spendTaxPct: 0 }, '税款比例下钳到 0')
+assertEqual(normalizeCrisisRules({ spendTaxPct: 99 }), { ...RULES, spendTaxPct: 50 }, '税款比例上钳到 50')
+assertEqual(normalizeCrisisRules({ spendTaxPct: 7.9 }), { ...RULES, spendTaxPct: 7 }, '税款比例 floor 取整（照 minLevy 口径）')
+assertEqual(normalizeCrisisRules({ spendTaxPct: 'abc' }), RULES, '脏税款比例回退默认值')
 assertEqual(normalizeCrisisRules({ enabled: false }), { ...RULES, enabled: false }, 'enabled=false 被保留')
 assertEqual(normalizeCrisisRules({ enabled: 1 }), { ...RULES, enabled: true }, 'enabled 走布尔化')
 assert(
@@ -300,6 +308,34 @@ assertEqual(dto.nextDueAt, null, 'due 期间 nextDueAt 为 null')
 assertEqual(dto.round, 0, 'DTO 透传乐观锁轮次')
 assertEqual(dto.rules, RULES, 'DTO 下发当前规则供前端显示')
 assertEqual(dto.hasLiveRaid, false, '默认无进行中对局')
+assertEqual(dto.taxOptIn, false, 'taxOptIn 缺省 false（未传 = 未开税款开关）')
+assertEqual(dto.taxPaidTotal, '0', 'taxPaidTotal 缺省 0（字符串出口口径与 poolTotal 一致）')
+assertEqual(
+  buildCrisisStateDto({
+    levy: DUE_LEVY,
+    rules: RULES,
+    parts: FULL_PARTS,
+    poolTotal: '0',
+    nowMs: T0 + HOUR_MS,
+    taxOptIn: true,
+    taxPaidTotal: '123',
+  }).taxOptIn,
+  true,
+  'taxOptIn 透传',
+)
+assertEqual(
+  buildCrisisStateDto({
+    levy: DUE_LEVY,
+    rules: RULES,
+    parts: FULL_PARTS,
+    poolTotal: '0',
+    nowMs: T0 + HOUR_MS,
+    taxOptIn: true,
+    taxPaidTotal: '123',
+  }).taxPaidTotal,
+  '123',
+  'taxPaidTotal 透传（累计缴税一律字符串出口）',
+)
 assertEqual(
   buildCrisisStateDto({ levy: DUE_LEVY, rules: RULES, parts: FULL_PARTS, poolTotal: '0', nowMs: T0 + 20 * HOUR_MS }).blocked,
   true,

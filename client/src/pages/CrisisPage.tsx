@@ -23,13 +23,15 @@ function statusTone(status: string): string {
 }
 
 export default function CrisisPage() {
-  const { state, ready, refresh, pay } = useCrisis()
+  const { state, ready, refresh, pay, setTaxEnabled } = useCrisis()
   const { balance, refresh: refreshPoints } = usePoints()
   const [amountText, setAmountText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [history, setHistory] = useState<CrisisHistoryItem[]>([])
+  const [taxBusy, setTaxBusy] = useState(false)
+  const [taxError, setTaxError] = useState('')
   const [, forceTick] = useState(0)
   const mountedRef = useRef(true)
 
@@ -91,6 +93,20 @@ export default function CrisisPage() {
       setBusy(false)
     }
   }, [balance, busy, pay, refresh, refreshPoints, state])
+
+  // 税款开关切换（与个人资料页同一 API：乐观更新失败回滚在 context 内，这里只管提示）
+  const toggleTax = useCallback(async () => {
+    if (!state || taxBusy) return
+    setTaxBusy(true)
+    setTaxError('')
+    try {
+      await setTaxEnabled(!state.taxOptIn)
+    } catch (err) {
+      setTaxError(err instanceof Error ? err.message : '切换税款开关失败，请稍后再试')
+    } finally {
+      setTaxBusy(false)
+    }
+  }, [state, taxBusy, setTaxEnabled])
 
   if (!ready || !state) {
     return <div className="gh-page-container gh-crisis-page"><p className="gh-crisis-muted">正在读取危机账单…</p></div>
@@ -227,6 +243,45 @@ export default function CrisisPage() {
         )}
         {error && <div className="gh-alert gh-alert--danger" role="alert">{error}</div>}
         {notice && <div className="gh-alert gh-alert--success" role="status">{notice}</div>}
+      </section>
+
+      <section className="gh-crisis-assets">
+        <h2 className="gh-crisis-section-title">积分税款</h2>
+        <p className="gh-crisis-section-hint">
+          自愿开启：之后每次花费积分（商店购买、转账、购买装备等）都会额外扣 {state.rules.spendTaxPct}%，
+          直接进入 Lineweb 危机公共银行；还危机账单本身不抽税，游戏输分与管理员加分也不抽税。
+          开关也可以在「个人资料 → 危机税款」里切换。
+        </p>
+        <ul className="gh-crisis-asset-list">
+          <li className="gh-crisis-asset-row">
+            <span className="gh-crisis-asset-name">当前税率</span>
+            <span className="gh-crisis-asset-hint">管理员可调（0–50%）</span>
+            <strong className="gh-crisis-asset-value">{state.rules.spendTaxPct}%</strong>
+          </li>
+          <li className="gh-crisis-asset-row">
+            <span className="gh-crisis-asset-name">我的税款开关</span>
+            <span className="gh-crisis-asset-hint">
+              {state.taxOptIn ? '已开启：每笔花费都会按税率额外扣税' : '未开启：打开开关即自愿缴税'}
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={state.taxOptIn}
+              aria-label={`积分税款：${state.taxOptIn ? '已开启' : '已关闭'}`}
+              className={`gh-feature-switch ${state.taxOptIn ? 'gh-feature-switch--on' : ''}`}
+              disabled={taxBusy}
+              onClick={() => { void toggleTax() }}
+            >
+              <span className="gh-feature-switch-knob" />
+            </button>
+          </li>
+          <li className="gh-crisis-asset-row">
+            <span className="gh-crisis-asset-name">累计已缴税款</span>
+            <span className="gh-crisis-asset-hint">全部进入公共银行，明细可在积分流水按 crisis_tax 查看</span>
+            <strong className="gh-crisis-asset-value">{formatCrisisPoints(state.taxPaidTotal)}</strong>
+          </li>
+        </ul>
+        {taxError && <div className="gh-alert gh-alert--danger" role="alert">{taxError}</div>}
       </section>
 
       <section className="gh-crisis-assets">

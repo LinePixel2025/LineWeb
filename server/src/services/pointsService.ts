@@ -31,6 +31,12 @@ import {
   leaderTitleDto,
   type LeaderTitleDto,
 } from '../lib/gameLeaderTitles.js'
+import {
+  CRISIS_DEFAULTS,
+  CRISIS_LEDGER_REASON,
+  CRISIS_TAX_LEDGER_REASON,
+  normalizeCrisisRules,
+} from '../lib/crisisRules.js'
 
 type Db = Prisma.TransactionClient
 
@@ -698,7 +704,67 @@ export async function awardPointsTx(
   return { delta, balance: updated.points }
 }
 
-/** 消费积分：余额不足直接 400（条件更新避免并发超扣） */
+/* ============================================================
+   危机积分税款（唯一挂钩点：spendPointsTx；口径定义见 lib/crisisRules.ts 的 spendTaxPct）
+   ============================================================ */
+
+/**
+ * 税率缓存：税款挂在全站每一笔花费上，不能每笔都查一次 CrisisConfig。
+ * 与 crisisService.getCrisisRules 的 5 秒参数缓存同一思路，但独立实现——
+ * 这里缓存的是 spendTaxPct 数值本身；管理员改税率后最多延迟 5 秒生效，
+ * 与危机参数其它字段的缓存延迟一致。
+ */
+const SPEND_TAX_CACHE_MS = 5000
+let spendTaxPctCache: { pct: number; at: number } | null = null
+
+/**
+ * 读取当前积分税款比例（在事务客户端上读库）。
+ *
+ * **不 import crisisService**：crisisService import 了本文件的 spendPointsTx，
+ * 反向依赖会形成循环 import。这里直读 CrisisConfig 单行 JSON，再走同一份
+ * lib/crisisRules.ts 的 normalizeCrisisRules（lib 层纯函数，无循环依赖）。
+ *
+ * 失败口径：JSON 脏数据 / 查库异常一律按 0（宁可少收，绝不因为税款把正常消费卡死）；
+ * 配置行不存在（管理员从未保存过）时按 CRISIS_DEFAULTS，与 crisisService 的默认口径一致。
+ */
+async function getSpendTaxPctTx(tx: Db): Promise<number> {
+  if (spendTaxPctCache && Date.now() - spendTaxPctCache.at < SPEND_TAX_CACHE_MS) {
+    return spendTaxPctCache.pct
+  }
+  let pct = 0
+  try {
+    const row = await tx.crisisConfig.findUnique({ where: { id: 1 } })
+    if (row?.config) {
+      try {
+        pct = normalizeCrisisRules(JSON.parse(row.config)).spendTaxPct
+      } catch {
+        pct = 0
+      }
+    } else {
+      pct = CRISIS_DEFAULTS.spendTaxPct
+    }
+  } catch {
+    pct = 0
+  }
+  spendTaxPctCache = { pct, at: Date.now() }
+  return pct
+}
+
+/**
+ * 消费积分：余额不足直接 400（条件更新避免并发超扣）。
+ *
+ * 危机积分税款（口径见 lib/crisisRules.ts 的 spendTaxPct 注释）：
+ * - 仅对开启了 User.crisisTaxEnabled 的用户生效，税额 = floor(cost × spendTaxPct / 100)；
+ * - reason 为 CRISIS_LEDGER_REASON（还危机本身）免税，防「缴税又被抽税」死循环；
+ *   管理员加分与 awardPointsTx 负数（游戏输分）不经过本函数，天然不抽税；
+ * - 一次条件更新按「cost + tax」扣减，余额不足同样 400，不会出现「扣了正税没扣到税款」；
+ * - 台账写两笔：主笔按 cost、税笔按 CRISIS_TAX_LEDGER_REASON（常量与免税口径定义在
+ *   lib/crisisRules.ts，两处注释互相引用），**两笔 balance 都写扣完后的最终余额**——
+ *   台账 balance 的语义是「这笔流水过账后的账户余额」，两笔属于同一次过账；
+ * - 税款同事务 increment 进 CrisisPool（公共银行，只进不出），「扣了分必然进了池」；
+ * - 税笔不带 game：游戏输分日上限按 [userId, game, amount<0] 统计，带上 game 会把税款误算进输分额度；
+ * - 返回的 delta 是含税总扣减（负数）、balance 为扣后余额——调用方只应消费这两个字段。
+ */
 export async function spendPointsTx(
   tx: Db,
   userId: number,
@@ -706,17 +772,26 @@ export async function spendPointsTx(
   input: { reason: string; note?: string | null; game?: string | null },
 ): Promise<PointsMutation> {
   const cost = Math.max(0, Math.trunc(amount))
-  if (cost === 0) {
-    const user = await tx.user.findUnique({ where: { id: userId }, select: { points: true } })
-    return { delta: 0, balance: user?.points ?? 0 }
-  }
+  const user = await tx.user.findUnique({
+    where: { id: userId },
+    select: { points: true, crisisTaxEnabled: true },
+  })
+  if (cost === 0) return { delta: 0, balance: user?.points ?? 0 }
+
+  const taxPct =
+    input.reason !== CRISIS_LEDGER_REASON && user?.crisisTaxEnabled === true
+      ? await getSpendTaxPctTx(tx)
+      : 0
+  const tax = taxPct > 0 ? Math.floor((cost * taxPct) / 100) : 0
+  const total = cost + tax
+
   const result = await tx.user.updateMany({
-    where: { id: userId, points: { gte: cost } },
-    data: { points: { decrement: cost } },
+    where: { id: userId, points: { gte: total } },
+    data: { points: { decrement: total } },
   })
   if (result.count === 0) throw new AppError('积分不足', 400)
-  const user = await tx.user.findUnique({ where: { id: userId }, select: { points: true } })
-  const balance = user?.points ?? 0
+  const updated = await tx.user.findUnique({ where: { id: userId }, select: { points: true } })
+  const balance = updated?.points ?? 0
   await tx.pointsLedger.create({
     data: {
       userId,
@@ -727,7 +802,23 @@ export async function spendPointsTx(
       note: input.note ?? null,
     },
   })
-  return { delta: -cost, balance }
+  if (tax > 0) {
+    await tx.pointsLedger.create({
+      data: {
+        userId,
+        amount: -tax,
+        balance,
+        reason: CRISIS_TAX_LEDGER_REASON,
+        note: `危机税款（${input.reason}）`,
+      },
+    })
+    await tx.crisisPool.upsert({
+      where: { id: 1 },
+      update: { total: { increment: BigInt(tax) } },
+      create: { id: 1, total: BigInt(tax) },
+    })
+  }
+  return { delta: -total, balance }
 }
 
 /* ============================================================

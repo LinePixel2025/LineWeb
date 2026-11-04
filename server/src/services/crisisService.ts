@@ -25,6 +25,7 @@ import { awardPointsTx, spendPointsTx } from './pointsService.js'
 import {
   CRISIS_DEFAULTS,
   CRISIS_LEDGER_REASON,
+  CRISIS_TAX_LEDGER_REASON,
   EMPTY_CRISIS_ASSETS,
   EMPTY_CRISIS_LEVY_VIEW,
   applyCrisisWaiversByTier,
@@ -623,12 +624,19 @@ export async function getCrisisState(
   const rules = await getCrisisRules()
   const exempt = opts.exempt === true
   // 管理员豁免：连开轮都不做，避免给豁免账号生成一条永远不会缴的账单
-  const [levy, parts, poolTotal] = await Promise.all([
+  const [levy, parts, poolTotal, taxUser, taxSum] = await Promise.all([
     exempt ? Promise.resolve({ ...EMPTY_CRISIS_LEVY_VIEW }) : (await resolveSnapshot(userId, nowMs, true)).levy,
     getCrisisAssetParts(userId, nowMs),
     getPoolTotal(),
+    prisma.user.findUnique({ where: { id: userId }, select: { crisisTaxEnabled: true } }),
+    prisma.pointsLedger.aggregate({
+      where: { userId, reason: CRISIS_TAX_LEDGER_REASON },
+      _sum: { amount: true },
+    }),
   ])
   const hasLiveRaid = !exempt && levy.status === 'due' ? await hasLiveRaidRun(userId, nowMs) : false
+  // taxOptIn / taxPaidTotal 在这里现查后传入 DTO，不进 levyCache（快照缓存只含 levy + hasLiveRaid），
+  // 所以 PUT /tax 改完开关，下一次读 state 立即可见，无需失效任何缓存
   return buildCrisisStateDto({
     levy,
     rules,
@@ -637,6 +645,8 @@ export async function getCrisisState(
     hasLiveRaid,
     exempt,
     nowMs,
+    taxOptIn: taxUser?.crisisTaxEnabled === true,
+    taxPaidTotal: Math.abs(taxSum._sum.amount ?? 0).toString(),
   })
 }
 

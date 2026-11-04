@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { asyncHandler } from '../lib/asyncHandler.js'
 import { AppError } from '../middleware/errorHandler.js'
 import { authenticate } from '../middleware/auth.js'
+import prisma from '../lib/prisma.js'
 import { getCrisisHistory, getCrisisState, getPoolTotal, payCrisis } from '../services/crisisService.js'
 
 /**
@@ -55,6 +56,21 @@ crisisRouter.post('/pay', payLimiter, asyncHandler(async (req: Request, res: Res
   if (!parsed.success) throw new AppError('缴纳积分必须是 1–10000000 的整数', 400)
   const result = await payCrisis(currentUserId(req), parsed.data.amount)
   res.json(result)
+}))
+
+/**
+ * 积分税款开关（用户自选，见 lib/crisisRules.ts 的 spendTaxPct 口径）。
+ * 路径在 /api/crisis/** 豁免名单内：被封锁的用户也能开关——这是设计使然
+ * （主动还税通道：税款是用户自愿的捐赠，开关本身不产生积分也不解锁任何功能）。
+ */
+crisisRouter.put('/tax', asyncHandler(async (req: Request, res: Response) => {
+  const parsed = z.object({ enabled: z.boolean() }).safeParse(req.body)
+  if (!parsed.success) throw new AppError('enabled 必须为布尔值', 400)
+  await prisma.user.update({
+    where: { id: currentUserId(req) },
+    data: { crisisTaxEnabled: parsed.data.enabled },
+  })
+  res.json({ enabled: parsed.data.enabled })
 }))
 
 export default crisisRouter

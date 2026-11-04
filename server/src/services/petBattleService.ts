@@ -653,7 +653,9 @@ async function settleBattle(battleId: number): Promise<void> {
           note: '宠物对战失败',
           game: null,
         })
-        awarded = Math.abs(spent.delta)
+        // 赢家只拿赌注本金：spendPointsTx 在对手开启危机税款时会额外扣一笔税（进公共银行），
+        // delta 是含税总额，不能用 Math.abs(delta) 当奖金，否则等于系统凭空多铸一笔税款给赢家。
+        awarded = stake
         if (awarded > 0) {
           await awardPointsTx(tx, winnerId, {
             amount: awarded,

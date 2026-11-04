@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { usePoints } from '../contexts/PointsContext'
+import { useCrisis } from '../contexts/CrisisContext'
 import UserAvatar from '../components/UserAvatar'
 import UserTitleBadge from '../components/UserTitleBadge'
 import AvatarCropDialog from '../components/AvatarCropDialog'
@@ -27,6 +28,7 @@ interface UserGrant {
 export default function ProfilePage() {
   const { user, logout, updateProfile } = useAuth()
   const { profile: pointsProfile, refresh: refreshPoints } = usePoints()
+  const { state: crisisState, setTaxEnabled } = useCrisis()
   const [lowPerformanceMode, setLowPerformanceMode] = useLowPerformanceMode()
   const navigate = useNavigate()
   const location = useLocation()
@@ -49,6 +51,23 @@ export default function ProfilePage() {
   const [grantsError, setGrantsError] = useState('')
   const [revokingId, setRevokingId] = useState<number | null>(null)
   const [equippingTitleId, setEquippingTitleId] = useState<number | null>(null)
+  const [taxBusy, setTaxBusy] = useState(false)
+
+  // 危机税款开关（税率与开关状态都来自危机 state；失败由 context 回滚，这里照页面惯例 alert）
+  const crisisTaxOptIn = crisisState?.taxOptIn === true
+  const crisisTaxPct = crisisState?.rules.spendTaxPct ?? 5
+
+  const toggleCrisisTax = async () => {
+    if (taxBusy) return
+    setTaxBusy(true)
+    try {
+      await setTaxEnabled(!crisisTaxOptIn)
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : '切换危机税款开关失败')
+    } finally {
+      setTaxBusy(false)
+    }
+  }
 
   const fetchGrants = () => {
     setGrantsLoading(true)
@@ -390,6 +409,38 @@ export default function ProfilePage() {
                       aria-label={`低性能模式：${lowPerformanceMode ? '已开启' : '已关闭'}`}
                       className={`gh-feature-switch ${lowPerformanceMode ? 'gh-feature-switch--on' : ''}`}
                       onClick={() => setLowPerformanceMode(!lowPerformanceMode)}
+                    >
+                      <span className="gh-feature-switch-knob" />
+                    </button>
+                  </label>
+                </div>
+              </section>
+
+              <section className="gh-settings-group" aria-labelledby="profile-crisis-tax-title">
+                <div className="gh-settings-head">
+                  <span className="gh-settings-icon" aria-hidden="true"><Icon name="coin" size={16} /></span>
+                  <div>
+                    <h2 className="gh-settings-title" id="profile-crisis-tax-title">危机税款</h2>
+                    <p className="gh-settings-desc">自愿向 Lineweb 危机公共银行多缴一份税，随时可关。</p>
+                  </div>
+                </div>
+                <div className="gh-settings-list">
+                  <label className="gh-settings-row gh-perf-row">
+                    <span className="gh-settings-label">
+                      <span className="gh-perf-row-title">积分税款</span>
+                      <span className="gh-perf-row-hint">
+                        开启后每次花费积分额外扣 {crisisTaxPct}%，直接进入 Lineweb 危机公共银行
+                        （还危机账单本身不抽税，游戏输分与管理员加分也不抽税）。
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={crisisTaxOptIn}
+                      aria-label={`危机积分税款：${crisisTaxOptIn ? '已开启' : '已关闭'}`}
+                      className={`gh-feature-switch ${crisisTaxOptIn ? 'gh-feature-switch--on' : ''}`}
+                      disabled={taxBusy}
+                      onClick={() => { void toggleCrisisTax() }}
                     >
                       <span className="gh-feature-switch-knob" />
                     </button>

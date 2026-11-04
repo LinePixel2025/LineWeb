@@ -41,9 +41,11 @@ adminCrisisRouter.put('/config', asyncHandler(async (req: Request, res: Response
       intervalMs: z.coerce.number().int().positive().optional(),
       graceMs: z.coerce.number().int().positive().optional(),
       minLevy: z.coerce.number().int().min(0).optional(),
+      // 积分税款比例（0–50%），与 CRISIS_LIMITS.spendTaxMin/Max 一致；normalize 里还会再钳一次
+      spendTaxPct: z.coerce.number().min(0).max(50).optional(),
     })
     .safeParse(req.body)
-  if (!parsed.success) throw new AppError('参数无效：比例须在 0–1 之间，时长与门槛须为非负整数', 400)
+  if (!parsed.success) throw new AppError('参数无效：比例须在 0–1 之间，税款须在 0–50 之间，时长与门槛须为非负整数', 400)
   const rules = await saveCrisisRules(parsed.data, currentAdminId(req))
   res.json({ rules })
 }))

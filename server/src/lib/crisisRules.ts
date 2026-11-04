@@ -18,6 +18,14 @@
 
 export const CRISIS_LEDGER_REASON = 'crisis_payment'
 
+/**
+ * 积分税款台账 reason：开启自选开关（User.crisisTaxEnabled）的用户每次花费积分
+ * 额外扣出的那笔税（唯一写入点在 pointsService.spendPointsTx）。
+ * 它与 CRISIS_LEDGER_REASON 互为免税口径——还危机本身（crisis_payment）不再抽税，
+ * 防「缴税又被抽税」的死循环；两处常量必须一起改。
+ */
+export const CRISIS_TAX_LEDGER_REASON = 'crisis_tax'
+
 export interface CrisisRules {
   /** 危机总开关：关掉后守卫一律放行 */
   enabled: boolean
@@ -29,6 +37,14 @@ export interface CrisisRules {
   graceMs: number
   /** 免征门槛：算出的应缴额低于它则归零 */
   minLevy: number
+  /**
+   * 积分税款比例（%）：自选开关开启后，每次花费积分额外扣除的百分比，直接进 CrisisPool。
+   * 口径（唯一挂钩点是 pointsService.spendPointsTx，别处不抽税）：
+   * - reason 为 crisis_payment（还危机本身）免税，防循环；
+   * - 管理员加分与 awardPointsTx 负数（游戏输分）都不经过 spendPointsTx，天然不抽税；
+   * - 该税独立于危机总开关 enabled——它是用户自愿的捐赠，不是强制征收。
+   */
+  spendTaxPct: number
 }
 
 const HOUR_MS = 60 * 60 * 1000
@@ -39,11 +55,13 @@ export const CRISIS_DEFAULTS: CrisisRules = {
   intervalMs: 48 * HOUR_MS,
   graceMs: 12 * HOUR_MS,
   minLevy: 100,
+  spendTaxPct: 5,
 }
 
 /**
  * 管理员可调范围。上下界存在的意义是防止一个误操作把全站锁死：
- * intervalMs 下限 1 小时（比它更短的周期等于持续封锁），graceMs 下限 1 分钟。
+ * intervalMs 下限 1 小时（比它更短的周期等于持续封锁），graceMs 下限 1 分钟，
+ * 积分税款上限 50%（比它更高的「自愿」税等于半价消费，必然是误操作）。
  */
 export const CRISIS_LIMITS = {
   ratioMin: 0,
@@ -54,6 +72,8 @@ export const CRISIS_LIMITS = {
   graceMaxMs: 30 * 24 * HOUR_MS,
   minLevyMin: 0,
   minLevyMax: 1_000_000,
+  spendTaxMin: 0,
+  spendTaxMax: 50,
 } as const
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
@@ -76,6 +96,10 @@ export function normalizeCrisisRules(raw: unknown): CrisisRules {
     ),
     graceMs: clampNumber(input.graceMs, CRISIS_LIMITS.graceMinMs, CRISIS_LIMITS.graceMaxMs, CRISIS_DEFAULTS.graceMs),
     minLevy: Math.floor(clampNumber(input.minLevy, CRISIS_LIMITS.minLevyMin, CRISIS_LIMITS.minLevyMax, CRISIS_DEFAULTS.minLevy)),
+    // 与 minLevy 同口径 floor：税款按分收，不出现小数百分比
+    spendTaxPct: Math.floor(
+      clampNumber(input.spendTaxPct, CRISIS_LIMITS.spendTaxMin, CRISIS_LIMITS.spendTaxMax, CRISIS_DEFAULTS.spendTaxPct),
+    ),
   }
 }
 
@@ -401,6 +425,10 @@ export interface CrisisStateDto {
   msUntilBlock: number
   /** 公共银行累计上缴总额。BigInt 不能进 JSON，一律字符串 */
   poolTotal: string
+  /** 本人是否开启了积分税款开关（User.crisisTaxEnabled） */
+  taxOptIn: boolean
+  /** 本人累计缴税（PointsLedger 按 crisis_tax 汇总取绝对值）。字符串出口口径与 poolTotal 一致 */
+  taxPaidTotal: string
 }
 
 function isoOf(ms: number | null): string | null {
@@ -415,6 +443,10 @@ export function buildCrisisStateDto(input: {
   poolTotal: string
   hasLiveRaid?: boolean
   exempt?: boolean
+  /** 本人税款开关（缺省 false） */
+  taxOptIn?: boolean
+  /** 本人累计缴税，字符串出口（缺省 '0'） */
+  taxPaidTotal?: string
   nowMs: number
 }): CrisisStateDto {
   const { levy, rules, nowMs } = input
@@ -463,6 +495,8 @@ export function buildCrisisStateDto(input: {
     nextDueAt: isoOf(levy.nextDueAt),
     msUntilBlock: status === 'due' ? msUntilBlock(levy, nowMs) : 0,
     poolTotal: input.poolTotal,
+    taxOptIn: input.taxOptIn === true,
+    taxPaidTotal: input.taxPaidTotal ?? '0',
   }
 }
 

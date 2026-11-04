@@ -24,6 +24,12 @@ interface CrisisContextValue {
   blocked: boolean
   refresh: () => Promise<CrisisStateDto | null>
   pay: (amount: number) => Promise<CrisisPayResult>
+  /**
+   * 切换积分税款开关（PUT /api/crisis/tax）。
+   * 乐观更新本地 state，失败回滚并抛出原始错误（由页面决定怎么提示）；
+   * 成功后异步重拉一次权威 state（带最新税率等），不阻塞开关交互。
+   */
+  setTaxEnabled: (enabled: boolean) => Promise<void>
 }
 
 const CrisisContext = createContext<CrisisContextValue | null>(null)
@@ -74,6 +80,28 @@ export function CrisisProvider({ children }: { children: ReactNode }) {
     return result
   }, [refreshPoints])
 
+  const setTaxEnabled = useCallback(async (enabled: boolean): Promise<void> => {
+    const prev = stateRef.current
+    // 乐观更新：开关行立即翻转（state 是开关展示的唯一真相源）
+    if (prev) {
+      const optimistic = { ...prev, taxOptIn: enabled }
+      stateRef.current = optimistic
+      setState(optimistic)
+    }
+    try {
+      await api.put<{ enabled: boolean }>('/crisis/tax', { enabled })
+      // 服务端权威数据（含累计缴税等）异步跟上；不阻塞开关交互
+      void refresh()
+    } catch (err) {
+      // 失败回滚到切换前的快照，再原样抛给页面提示
+      if (prev) {
+        stateRef.current = prev
+        setState(prev)
+      }
+      throw err
+    }
+  }, [refresh])
+
   useEffect(() => {
     setReady(false)
     void refresh()
@@ -116,7 +144,8 @@ export function CrisisProvider({ children }: { children: ReactNode }) {
     blocked: state?.blocked === true,
     refresh,
     pay,
-  }), [state, ready, refresh, pay])
+    setTaxEnabled,
+  }), [state, ready, refresh, pay, setTaxEnabled])
 
   return <CrisisContext.Provider value={value}>{children}</CrisisContext.Provider>
 }

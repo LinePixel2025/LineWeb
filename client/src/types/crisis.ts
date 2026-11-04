@@ -16,6 +16,8 @@ export interface CrisisRules {
   graceMs: number
   /** 免征门槛：算出的应缴额低于它则归零 */
   minLevy: number
+  /** 积分税款比例（%）：自选开关开启后每次花费额外扣，直接进入公共银行 */
+  spendTaxPct: number
 }
 
 /** 资产分项，键序与服务端 CrisisAssetParts 一致 */
@@ -63,6 +65,10 @@ export interface CrisisStateDto {
   msUntilBlock: number
   /** 公共银行累计总额（BigInt 以字符串出口） */
   poolTotal: string
+  /** 本人是否开启了积分税款开关 */
+  taxOptIn: boolean
+  /** 本人累计缴税（字符串出口，与服务端 poolTotal 同口径） */
+  taxPaidTotal: string
 }
 
 export interface CrisisPayResult {
