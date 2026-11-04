@@ -16,6 +16,8 @@ export const FEATURE_KEYS = [
   'games',
   'gamesSingle',
   'gamesOnline',
+  'gameTicket',
+  'company',
   'farm',
   'pet',
   'aiAssistant',
@@ -51,6 +53,8 @@ export const FEATURE_DEFINITIONS: readonly FeatureDefinition[] = [
   { key: 'games', label: '游戏（总开关）', description: '游戏大厅、单机与联机游戏', group: '游戏' },
   { key: 'gamesSingle', label: '单机游戏', description: '单机小游戏（依赖游戏总开关）', group: '游戏' },
   { key: 'gamesOnline', label: '联机游戏', description: '好友联机与联机战绩（依赖游戏总开关）', group: '游戏' },
+  { key: 'gameTicket', label: '游戏门票', description: '游戏大厅开一局消耗 1 张门票（40 积分，打完必返 20）；关闭后恢复免费开局，也不强制校验开局会话（依赖游戏总开关）', group: '游戏' },
+  { key: 'company', label: '公司', description: '3–7 人组队开工司：捐货开货栈、对外销售累积营业额、资金池内成员放贷，营业额达标可减免全体成员当期 Lineweb 危机应缴', group: '工具' },
   { key: 'farm', label: '开心农场', description: '种菜、偷菜与农场扩建（依赖游戏总开关）', group: '游戏' },
   { key: 'pet', label: '宠物', description: '花积分召唤并照顾一只 2D 小宠物：六种物种可随时更换、喂食洗澡换装升级，还能去别人的宠物之家串门撸宠', group: '游戏' },
   { key: 'aiAssistant', label: '首页 AI 助手', description: '首页站点问答助手与 AI 写作', group: 'AI' },
@@ -75,12 +79,12 @@ export function isFeatureKey(value: unknown): value is FeatureKey {
   return typeof value === 'string' && (FEATURE_KEYS as readonly string[]).includes(value)
 }
 
-/** 计算某个开关的生效值（gamesSingle / gamesOnline / farm 需要 games 总开关也开启；redpacket 需要 chat 总开关） */
+/** 计算某个开关的生效值（gamesSingle / gamesOnline / gameTicket / farm 需要 games 总开关也开启；redpacket 需要 chat 总开关） */
 export function effectiveFeatureEnabled(
   map: Readonly<Record<FeatureKey, boolean>>,
   key: FeatureKey,
 ): boolean {
-  if (key === 'gamesSingle' || key === 'gamesOnline' || key === 'farm') {
+  if (key === 'gamesSingle' || key === 'gamesOnline' || key === 'gameTicket' || key === 'farm') {
     return map.games !== false && map[key] !== false
   }
   if (key === 'redpacket') {

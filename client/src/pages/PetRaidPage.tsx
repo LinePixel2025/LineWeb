@@ -15,6 +15,7 @@ import { getRaidGear } from '../lib/raid/raidRun'
 import type { RaidEngine, RaidSnapshot } from '../lib/raid/engine'
 import { useRaidSquad } from '../lib/raid/squad'
 import RaidCanvas from '../components/raid/RaidCanvas'
+import { useRaidPvp } from '../lib/raid/pvp'
 import RaidHud from '../components/raid/RaidHud'
 import RaidInventory from '../components/raid/RaidInventory'
 import RaidResultDialog from '../components/raid/RaidResultDialog'
@@ -109,6 +110,15 @@ export default function PetRaidPage() {
   const engineRef = useRef<RaidEngine | null>(null)
   const runRef = useRef<RaidRun | null>(null)
   const pendingRef = useRef<RaidEvent[]>([])
+  // PvP：大厅排队 + 对局内位置心跳与开火（伤害仍由服务端重算）
+  const pvp = useRaidPvp({
+    inMatch: Boolean(gameRun),
+    getPosition: () => {
+      const engine = engineRef.current
+      if (!engine) return null
+      return { x: engine.player.x, y: engine.player.y, angle: engine.player.angle, roomId: engine.roomId }
+    },
+  })
   const sendingRef = useRef(false)
   const mountedRef = useRef(true)
 
@@ -460,6 +470,55 @@ export default function PetRaidPage() {
                 onInteract={() => engineRef.current?.interact()}
               />
             )}
+            {/* PvP 敌对面板：同房间的对手与敌方佣兵都可以点「开火」（伤害由服务端重算） */}
+            {run?.mode === 'pvp' && pvp.state && (
+              <div className="gh-raid-pvp-hud">
+                <div className="gh-raid-pvp-hud-head">
+                  <span aria-hidden>⚔️</span>
+                  <strong>{pvp.state.faction === 'A' ? '蓝队' : '红队'}</strong>
+                  <span>剩余 {Math.max(1, Math.ceil(pvp.state.remainingMs / 60000))} 分钟</span>
+                </div>
+                {pvp.state.hostiles.length === 0 && pvp.state.mercs.length === 0 ? (
+                  <p>本局对手已全部撤离或阵亡。</p>
+                ) : (
+                  <ul>
+                    {pvp.state.hostiles.map((peer) => {
+                      const sameRoom = peer.live?.roomId === run.currentRoom
+                      return (
+                        <li key={`peer-${peer.userId}`}>
+                          <span className={sameRoom ? 'is-near' : undefined}>
+                            🔴 {peer.username}
+                            {peer.live ? (sameRoom ? ' · 同房间' : ` · 房间 ${peer.live.roomId + 1}`) : ' · 位置未知'}
+                          </span>
+                          <button
+                            type="button"
+                            className="gh-btn gh-btn--danger gh-btn--sm"
+                            disabled={!sameRoom}
+                            title={sameRoom ? '开火（伤害由服务端按你的攻击力与对方护甲结算）' : '不在同一个房间，打不到'}
+                            onClick={() => void pvp.strike(peer.userId)}
+                          >
+                            开火
+                          </button>
+                        </li>
+                      )
+                    })}
+                    {pvp.state.mercs.map((merc) => (
+                      <li key={merc.id}>
+                        <span>🤖 {merc.name} · {merc.hp}/{merc.maxHp}</span>
+                        <button
+                          type="button"
+                          className="gh-btn gh-btn--secondary gh-btn--sm"
+                          disabled={merc.hp <= 0}
+                          onClick={() => void pvp.strikeMerc(merc.id)}
+                        >
+                          {merc.hp > 0 ? '开火' : '已倒下'}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             {/* 背包面板挂在舞台内部：原生全屏时 Fullscreen API 只渲染该子树 */}
             {inventoryOpen && snapshot && (
               <RaidInventory
@@ -649,6 +708,63 @@ export default function PetRaidPage() {
                 )
               })}
             </div>
+          </section>
+
+          {/* 玩家匹配（PvPvE）：3v3，不够人由 AI 佣兵补位；同 seed 里两队互为敌人 */}
+          <section className="gh-raid-pvp-lobby">
+            <div className="gh-raid-section-head">
+              <h2>玩家匹配（PvP）</h2>
+              <span>爆率提升 · 非洲之心仅此模式掉落 · 3v3 不足自动补 AI 佣兵</span>
+            </div>
+            {pvp.error && <div className="gh-alert gh-alert--danger">{pvp.error}</div>}
+            {pvp.queue?.matched ? (
+              <div className="gh-raid-pvp-status">
+                <p>
+                  已成局（{pvp.queue.matchId}）· 你是 <strong>{pvp.queue.faction === 'A' ? '蓝队' : '红队'}</strong> ·
+                  队友 {pvp.queue.teammates.map((mate) => mate.username).join('、') || '无'} ·
+                  对手 {pvp.queue.hostiles.map((peer) => peer.username).join('、') || '全是佣兵'}
+                </p>
+                <span>对局开始后会自动进入行动，和队友共用同一张地图。</span>
+              </div>
+            ) : pvp.queue?.queueing ? (
+              <div className="gh-raid-pvp-status">
+                <p>
+                  正在匹配… 队列第 {pvp.queue.position} 位 · 已等待 {Math.floor(pvp.queue.waitingMs / 1000)} 秒 ·
+                  满 {pvp.queue.teamSize * 2} 人立即开局，超过 {Math.floor(pvp.queue.fillMs / 1000)} 秒缺位由佣兵补上
+                </p>
+                <button type="button" className="gh-btn gh-btn--ghost" disabled={pvp.busy} onClick={() => void pvp.cancel()}>
+                  取消匹配
+                </button>
+              </div>
+            ) : (
+              <div className="gh-raid-pvp-status">
+                <p>
+                  选择地图后进入匹配。PvP 里阵亡按普通阵亡结算：背包与胸挂会掉在原地，
+                  可以被对手舔走，安全箱保留 —— 想稳赚就别带太贵的装备。
+                </p>
+                <div className="gh-raid-pvp-actions">
+                  <select
+                    className="gh-raid-pvp-select"
+                    value={squadMapKey || overview.maps[0]?.key || ''}
+                    onChange={(event) => setSquadMapKey(event.target.value)}
+                  >
+                    {overview.maps.map((map) => (
+                      <option key={map.key} value={map.key}>
+                        {map.emoji} {map.name}（T{map.lootTier} · 入场 {map.entryCost}）
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="gh-btn gh-btn--primary"
+                    disabled={pvp.busy || !overview.pet}
+                    onClick={() => void pvp.enqueue(squadMapKey || overview.maps[0]?.key || 'wasteland')}
+                  >
+                    {pvp.busy ? '匹配中…' : '进入 PvP 匹配'}
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="gh-raid-history">

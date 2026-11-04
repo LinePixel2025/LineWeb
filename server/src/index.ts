@@ -31,11 +31,14 @@ import gameStatsRoutes from './routes/gameStats.js'
 import pointsRoutes from './routes/points.js'
 import farmRoutes from './routes/farm.js'
 import petsRoutes from './routes/pets.js'
+import raidPvpRoutes from './routes/raidPvp.js'
 import personalSpaceRoutes from './routes/personalSpace.js'
 import readerRoutes from './routes/reader.js'
 import musicRoutes from './routes/music.js'
 import stockRoutes from './routes/stocks.js'
 import bankRoutes from './routes/bank.js'
+import companyRoutes from './routes/company.js'
+import adminCompanyRoutes from './routes/adminCompany.js'
 import crisisRoutes from './routes/crisis.js'
 import adminCrisisRoutes from './routes/adminCrisis.js'
 import lotteryRoutes from './routes/lottery.js'
@@ -252,6 +255,7 @@ app.use('/api/points', pointsRoutes)
 // 开心农场（种菜 / 偷菜 / 扩建），受 farm 功能开关控制
 app.use('/api/farm', requireFeature('farm'), farmRoutes)
 // 宠物（召唤 / 照顾 / 换装 / 升级），受 pet 功能开关控制
+app.use('/api/pets/raid/pvp', requireFeature('pet'), raidPvpRoutes)
 app.use('/api/pets', requireFeature('pet'), petsRoutes)
 // 小说阅读器（上传 EPUB/TXT 在线阅读 + 进度同步），受 reader 功能开关控制
 app.use('/api/reader', requireFeature('reader'), readerRoutes)
@@ -263,6 +267,10 @@ app.use('/api/personal-space', personalSpaceRoutes)
 app.use('/api/stocks', requireFeature('stock'), stockRoutes)
 // 银行系统（活期 / 定期存款 + 基金投资，利息惰性结算 / NAV 当日确定），受 bank 功能开关控制
 app.use('/api/bank', requireFeature('bank'), bankRoutes)
+// 公司（3–7 人组织：限量货栈 / 资金池 / 成员放贷 / 营业额换危机减免），受 company 功能开关控制
+app.use('/api/company', requireFeature('company'), companyRoutes)
+// 公司管理（总览 / 参数 / 强制解散，需 points:manage 能力，与危机管理同口径）
+app.use('/api/admin/company', adminCompanyRoutes)
 // 积分抽奖（种子 / 肥料 / 积分 / 稀有装扮，10 抽保底），受 lottery 功能开关控制
 app.use('/api/lottery', requireFeature('lottery'), lotteryRoutes)
 // LineWeb 主题（积分兑换 / 佩戴 / 全站生效），受 theme 功能开关控制

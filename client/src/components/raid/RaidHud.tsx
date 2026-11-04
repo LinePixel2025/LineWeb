@@ -148,6 +148,10 @@ export default function RaidHud({
   const armorMax = getRaidGear(snapshot.gear.armor?.key ?? null)?.maxDurability ?? 0
   const teammates = (squad ?? []).filter((member) => member.userId !== selfUserId)
   const extractPct = Math.round(snapshot.extractionProgress * 100)
+  // 运输故障的全局冷却：HUD 每次快照刷新都会重算，不需要额外的定时器
+  const extractBlockedLeftMs = run.extractBlockedUntil
+    ? Math.max(0, run.extractBlockedUntil - Date.now())
+    : 0
   const prompt = snapshot.extracting
     ? `撤离读条 ${extractPct}% · 读条完成自动撤离`
     : snapshot.canExtract
@@ -222,6 +226,18 @@ export default function RaidHud({
             </div>
             <b>{extractPct}%</b>
           </div>
+        )}
+        {run.mode === 'pvp' && <span className="gh-raid-mission-note">PvP 匹配 · 爆率提升</span>}
+        {run.extractGuaranteed && (
+          <span className="gh-raid-mission-note is-ok">撤离信号弹已点亮：本局撤离必定成功</span>
+        )}
+        {extractBlockedLeftMs > 0 && (
+          <span className="gh-raid-mission-note is-danger">
+            运输故障：全图撤离暂停 {Math.ceil(extractBlockedLeftMs / 1000)} 秒
+          </span>
+        )}
+        {run.extractDisabled.includes(run.currentRoom) && (
+          <span className="gh-raid-mission-note is-danger">这个撤离点已失联，换一个出口</span>
         )}
       </section>
 

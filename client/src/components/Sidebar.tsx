@@ -42,6 +42,7 @@ const sections: { title: string; requireAuth?: boolean; items: SidebarItem[] }[]
       { path: '/lottery', label: '积分抽奖', icon: 'gift' },
       { path: '/stocks', label: '模拟股市', icon: 'chart' },
       { path: '/bank', label: '银行', icon: 'bank' },
+      { path: '/company', label: '公司', icon: 'users' },
       { path: '/crisis', label: 'Lineweb 危机', icon: 'wallet' },
       { path: '/reader', label: '小说', icon: 'bookOpen' },
       { path: '/music', label: '音乐', icon: 'music' },

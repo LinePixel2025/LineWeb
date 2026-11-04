@@ -29,6 +29,7 @@ const CalculatorPage = lazy(() => import('./pages/CalculatorPage'))
 const StocksPage = lazy(() => import('./pages/StocksPage'))
 const BankPage = lazy(() => import('./pages/BankPage'))
 const CrisisPage = lazy(() => import('./pages/CrisisPage'))
+const CompanyPage = lazy(() => import('./pages/CompanyPage'))
 const FeaturesPage = lazy(() => import('./pages/FeaturesPage'))
 const GamesPage = lazy(() => import('./pages/GamesPage'))
 const GameLeaderboardPage = lazy(() => import('./pages/games/GameLeaderboardPage'))
@@ -84,6 +85,7 @@ const ProxyAdminPage = lazy(() => import('./pages/admin/ProxyAdminPage'))
 const FeatureAdminPage = lazy(() => import('./pages/admin/FeatureAdminPage'))
 const PointsAdminPage = lazy(() => import('./pages/admin/PointsAdminPage'))
 const CrisisAdminPage = lazy(() => import('./pages/admin/CrisisAdminPage'))
+const CompanyAdminPage = lazy(() => import('./pages/admin/CompanyAdminPage'))
 const ChatAdminPage = lazy(() => import('./pages/admin/ChatAdminPage'))
 const PersonalSpacePage = lazy(() => import('./pages/PersonalSpacePage'))
 const AuthorizePage = lazy(() => import('./pages/AuthorizePage'))
@@ -201,6 +203,12 @@ export default function App() {
                       <Route path="/crisis" element={
                         <ProtectedRoute><CrisisPage /></ProtectedRoute>
                       } />
+                      {/* 公司：3–7 人组织（货栈 / 资金池 / 放贷 / 营业额换危机减免），受 company 开关控制 */}
+                      <Route element={<RequireFeature feature="company" />}>
+                        <Route path="/company" element={
+                          <ProtectedRoute><CompanyPage /></ProtectedRoute>
+                        } />
+                      </Route>
                       {/* 宠物：花积分召唤并照顾一只 2D 小宠物（需登录） */}
                       <Route element={<RequireFeature feature="pet" />}>
                         <Route path="/pets" element={
@@ -402,6 +410,8 @@ export default function App() {
                     <Route path="/admin/points" element={<PointsAdminPage />} />
                     {/* 危机管理：征收参数 / 手动触发到期 / 公共银行（复用 points:manage 能力） */}
                     <Route path="/admin/crisis" element={<CrisisAdminPage />} />
+                    {/* 公司管理：总览 / 参数 / 强制解散（同样复用 points:manage） */}
+                    <Route path="/admin/company" element={<CompanyAdminPage />} />
                     <Route path="/admin/chat" element={<ChatAdminPage />} />
                     <Route path="/admin/api" element={<ApiDocsPage />} />
                     {/* AI 设置二合一（AI 助手 + AI 对话）；旧地址 /admin/ai-chat → 对话 Tab */}
