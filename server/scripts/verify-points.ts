@@ -28,6 +28,7 @@ import {
   sanitizeTitleIcon,
   TITLE_EFFECT_STYLES,
 } from '../src/lib/pointsRules.js'
+import { DEFAULT_FRAME_ITEMS_V4, DEFAULT_TITLE_ITEMS_V4 } from '../src/lib/pointsShopCatalog.js'
 import {
   CROP_MAP,
   FARM_CROPS,
@@ -207,27 +208,105 @@ assertEqual(sanitizeTitleIcon('🐣'), '🐣', '单个 emoji 称号图标保留'
 assertEqual(sanitizeTitleIcon('🐣🐣🐣'), '🐣🐣', '图标最多两个字符')
 assertEqual(sanitizeTitleIcon(123), '', '非字符串图标回退空')
 
-assertEqual(AVATAR_FRAME_STYLES.length, 11, '头像框共 11 种样式')
+assertEqual(AVATAR_FRAME_STYLES.length, 16, '头像框共 16 种样式')
+assertEqual(
+  [...AVATAR_FRAME_STYLES],
+  [
+    'gold', 'neon', 'sakura', 'galaxy', 'inferno', 'storm', 'supernova',
+    'frost', 'venom', 'royal', 'cyber',
+    'abyss', 'eclipse', 'quantum', 'draconis', 'immortal',
+  ],
+  '头像框白名单依次为 基础 4 + 炸裂 3 + 幻彩 4 + 神话 5',
+)
 assertEqual(sanitizeAvatarFrame('gold'), 'gold', 'gold 头像框合法')
 assertEqual(sanitizeAvatarFrame('galaxy'), 'galaxy', 'galaxy 头像框合法')
 assertEqual(sanitizeAvatarFrame('frost'), 'frost', 'frost 头像框合法')
 assertEqual(sanitizeAvatarFrame('cyber'), 'cyber', 'cyber 头像框合法')
+for (const style of ['abyss', 'eclipse', 'quantum', 'draconis', 'immortal']) {
+  assertEqual(sanitizeAvatarFrame(style), style, `神话头像框 ${style} 合法`)
+}
 assertEqual(sanitizeAvatarFrame('rainbow'), null, '未知头像框样式回退 null')
 assertEqual(sanitizeAvatarFrame(''), null, '空头像框样式回退 null')
 assertEqual(sanitizeAvatarFrame(123), null, '非字符串头像框回退 null')
 
-assertEqual(TITLE_EFFECT_STYLES.length, 10, '传说特效共 10 种样式')
+assertEqual(TITLE_EFFECT_STYLES.length, 15, '传说 / 神话特效共 15 种样式')
 assertEqual(
   [...TITLE_EFFECT_STYLES],
-  ['classic', 'stardust', 'flame', 'aurora', 'thunder', 'nova', 'prism', 'void', 'meteor', 'blossom'],
-  '传说特效白名单依次为 classic/stardust/flame/aurora/thunder/nova/prism/void/meteor/blossom',
+  [
+    'classic', 'stardust', 'flame', 'aurora', 'thunder', 'nova', 'prism', 'void', 'meteor', 'blossom',
+    'singularity', 'zenith', 'eternity', 'chaos', 'firmament',
+  ],
+  '特效白名单依次为 既有 8 + 幻彩 2 + 神话 5',
 )
 for (const style of TITLE_EFFECT_STYLES) {
   assertEqual(sanitizeTitleEffect(style), style, `特效 ${style} 白名单内原样返回`)
 }
+for (const style of ['singularity', 'zenith', 'eternity', 'chaos', 'firmament']) {
+  assertEqual(sanitizeTitleEffect(style), style, `神话特效 ${style} 合法`)
+}
 assertEqual(sanitizeTitleEffect('nope'), null, '未知特效回退 null')
 assertEqual(sanitizeTitleEffect(123), null, '非字符串特效回退 null')
 assertEqual(sanitizeTitleEffect(null), null, 'null 特效回退 null')
+
+/* --- 商店种子 v4（神话系列）：稀有度合法 / 价格区间 / payload 命中新 key --- */
+const SHOP_RARITIES = ['common', 'rare', 'epic', 'legendary', 'mythic']
+
+const v4FrameKeys = new Set<string>()
+for (const item of DEFAULT_FRAME_ITEMS_V4) {
+  assert(item.type === 'avatar_frame', `v4 头像框 ${item.key} 类型为 avatar_frame`)
+  assert(item.key.startsWith('frame_'), `v4 头像框 ${item.key} 沿用 frame_ 前缀`)
+  assert(!v4FrameKeys.has(item.key), `v4 头像框 key 唯一：${item.key}`)
+  v4FrameKeys.add(item.key)
+  assert(SHOP_RARITIES.includes(item.rarity), `v4 头像框 ${item.key} 稀有度在合法集合内`)
+  assert(item.rarity === 'epic' || item.rarity === 'mythic', `v4 头像框 ${item.key} 只用 epic / mythic`)
+  assert(item.cost >= 3500 && item.cost <= 8000, `v4 头像框 ${item.key} 价格落在 3500–8000`)
+  assert(item.sortOrder >= 310, `v4 头像框 ${item.key} 排序接在 v3 之后`)
+  assert(sanitizeAvatarFrame(item.payload.frame) !== null, `v4 头像框 ${item.key} 的 frame 命中白名单`)
+  assert(
+    typeof item.payload.color === 'string' && sanitizeTitleColor(item.payload.color) === item.payload.color,
+    `v4 头像框 ${item.key} 主题色合法`,
+  )
+}
+assertEqual(v4FrameKeys.size, 5, 'v4 新增 5 款头像框')
+assertEqual(
+  DEFAULT_FRAME_ITEMS_V4.filter((item) => item.rarity === 'mythic').length,
+  3,
+  'v4 头像框里有 3 款 mythic（最高档）',
+)
+
+const v4TitleKeys = new Set<string>()
+const v4TitleEffects = new Set<string>()
+for (const item of DEFAULT_TITLE_ITEMS_V4) {
+  assert(item.type === 'title', `v4 称号 ${item.key} 类型为 title`)
+  assert(item.key.startsWith('title_'), `v4 称号 ${item.key} 沿用 title_ 前缀`)
+  assert(!v4TitleKeys.has(item.key), `v4 称号 key 唯一：${item.key}`)
+  v4TitleKeys.add(item.key)
+  assert(SHOP_RARITIES.includes(item.rarity), `v4 称号 ${item.key} 稀有度在合法集合内`)
+  assert(item.rarity === 'legendary' || item.rarity === 'mythic', `v4 称号 ${item.key} 只用 legendary / mythic`)
+  if (item.rarity === 'legendary') {
+    assert(item.cost >= 2000 && item.cost <= 5000, `v4 传说称号 ${item.key} 价格落在 2000–5000`)
+  } else {
+    assert(item.cost >= 8000 && item.cost <= 15000, `v4 神话称号 ${item.key} 价格落在 8000–15000`)
+  }
+  assert(item.sortOrder >= 102, `v4 称号 ${item.key} 排序接在 v3 之后`)
+  const effect = sanitizeTitleEffect(item.payload.effect)
+  assert(effect !== null, `v4 称号 ${item.key} 的 effect 命中白名单`)
+  v4TitleEffects.add(effect as string)
+  assert(sanitizeTitleIcon(item.payload.icon) !== '', `v4 称号 ${item.key} 有图标`)
+  assert(
+    typeof item.payload.color === 'string' && sanitizeTitleColor(item.payload.color) === item.payload.color,
+    `v4 称号 ${item.key} 颜色合法`,
+  )
+}
+assertEqual(v4TitleKeys.size, 8, 'v4 新增 8 条称号')
+assertEqual(
+  DEFAULT_TITLE_ITEMS_V4.filter((item) => item.rarity === 'mythic').length,
+  5,
+  'v4 称号里有 5 条 mythic',
+)
+for (const effect of ['singularity', 'zenith', 'eternity', 'chaos', 'firmament']) {
+  assert(v4TitleEffects.has(effect), `v4 称号覆盖新特效 ${effect}`)
+}
 
 assertEqual(EMOJI_PACK_KEYS, ['nailong', 'felyne', 'twemoji'], '付费表情包 key 与客户端商店一致')
 

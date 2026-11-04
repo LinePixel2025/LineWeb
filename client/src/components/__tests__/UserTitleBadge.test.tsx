@@ -12,6 +12,15 @@ const legendary: UserTitleDto = {
   effect: 'void',
 }
 
+const mythic: UserTitleDto = {
+  id: 33,
+  name: '奇点',
+  color: '#a371f7',
+  icon: '🌀',
+  rarity: 'mythic',
+  effect: 'singularity',
+}
+
 describe('UserTitleBadge', () => {
   it('传说称号完整模式渲染光环 / 粒子 / 爆发层', () => {
     const { container } = render(<UserTitleBadge title={legendary} />)
@@ -20,6 +29,23 @@ describe('UserTitleBadge', () => {
     expect(badge.querySelectorAll('.gh-title-badge-sparks i')).toHaveLength(8)
     expect(badge.querySelector('.gh-title-badge-aura')).not.toBeNull()
     expect(badge.querySelector('.gh-title-badge-burst')).not.toBeNull()
+  })
+
+  it('神话称号同时挂传说特效与 --mythic 专属翼饰层', () => {
+    const { container } = render(<UserTitleBadge title={mythic} />)
+    const badge = container.querySelector('.gh-title-badge--mythic')!
+    expect(badge.classList.contains('gh-title-badge--legendary')).toBe(true)
+    expect(badge.classList.contains('gh-title-badge--fx-singularity')).toBe(true)
+    expect(badge.getAttribute('data-rarity')).toBe('mythic')
+    expect(badge.querySelector('.gh-title-badge-mythic')).not.toBeNull()
+    expect(badge.querySelector('.gh-title-badge-burst')).not.toBeNull()
+  })
+
+  it('神话称号 compact 模式不渲染翼饰层', () => {
+    const { container } = render(<UserTitleBadge title={mythic} variant="compact" />)
+    const badge = container.querySelector('.gh-title-badge--mythic')!
+    expect(badge.querySelector('.gh-title-badge-mythic')).toBeNull()
+    expect(badge.children).toHaveLength(2)
   })
 
   it('compact 模式只保留图标与文字（聊天高密度场景零动画）', () => {

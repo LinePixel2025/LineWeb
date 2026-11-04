@@ -41,7 +41,7 @@ function itemId(raw: string): number {
   return id
 }
 
-const raritySchema = z.enum(['common', 'rare', 'epic', 'legendary'])
+const raritySchema = z.enum(['common', 'rare', 'epic', 'legendary', 'mythic'])
 
 const payloadSchema = z.object({
   icon: z.string().max(8).optional(),

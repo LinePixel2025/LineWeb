@@ -1,7 +1,8 @@
 /**
- * 传说称号动态特效白名单（与服务端 TITLE_EFFECT_STYLES 一致，顺序一致）。
- * 炸裂系列：nova 超新星 / prism 棱镜虹光 / void 虚空黑洞。
- * 幻彩系列：meteor 流星拖尾 / blossom 花瓣飘落。
+ * 传说称号动态特效白名单（与服务端 TITLE_EFFECT_STYLES 一致，顺序一致，共 15 种）。
+ * 炸裂系列：nova 超新星 / prism 棱镜虹光 / void 虚空黑洞 / singularity 奇点坍缩。
+ * 幻彩系列：meteor 流星拖尾 / blossom 花瓣飘落 / zenith 极巅光柱 / eternity 永恒之环 /
+ *          chaos 混沌碎片 / firmament 苍穹星海。
  */
 export const TITLE_EFFECTS = [
   'classic',
@@ -14,6 +15,11 @@ export const TITLE_EFFECTS = [
   'void',
   'meteor',
   'blossom',
+  'singularity',
+  'zenith',
+  'eternity',
+  'chaos',
+  'firmament',
 ] as const
 export type TitleEffectStyle = typeof TITLE_EFFECTS[number]
 
@@ -23,9 +29,9 @@ export interface UserTitleDto {
   name: string
   color: string
   icon: string
-  /** 商品稀有度：legendary 会触发炸裂特效 */
+  /** 商品稀有度：legendary / mythic 都会触发炸裂特效（mythic 额外挂专属装饰层） */
   rarity: string
-  /** 传说特效（legendary 时的动态特效 key，非 legendary 忽略；非法值回退 classic） */
+  /** 传说特效（legendary / mythic 时的动态特效 key，其余稀有度忽略；非法值回退 classic） */
   effect: string
 }
 
@@ -80,12 +86,13 @@ export interface LeaderTitleDto {
 }
 
 export type ShopItemType = 'title' | 'emoji' | 'avatar_frame'
-export type ShopRarity = 'common' | 'rare' | 'epic' | 'legendary'
+export type ShopRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic'
 
 /**
- * 头像框样式白名单（与服务端 AVATAR_FRAME_STYLES 一致，顺序一致）。
+ * 头像框样式白名单（与服务端 AVATAR_FRAME_STYLES 一致，顺序一致，共 16 种）。
  * 炸裂系列：inferno 炽焰 / storm 雷霆 / supernova 星爆。
  * 幻彩系列：frost 冰晶 / venom 翠毒（普通框）、royal 紫金 / cyber 赛博（装饰层框）。
+ * 神话系列：abyss 深渊 / eclipse 蚀月（普通框）、quantum 量子 / draconis 龙裔 / immortal 不朽（装饰层框）。
  */
 export const AVATAR_FRAMES = [
   'gold',
@@ -99,11 +106,19 @@ export const AVATAR_FRAMES = [
   'venom',
   'royal',
   'cyber',
+  'abyss',
+  'eclipse',
+  'quantum',
+  'draconis',
+  'immortal',
 ] as const
 export type AvatarFrameStyle = typeof AVATAR_FRAMES[number]
 
-/** 需要额外装饰层（gh-avatar-frame-fx）的炸裂 / 幻彩头像框；其余框只用外圈伪元素 */
-export const PREMIUM_AVATAR_FRAMES = ['inferno', 'storm', 'supernova', 'royal', 'cyber'] as const
+/** 需要额外装饰层（gh-avatar-frame-fx）的炸裂 / 幻彩 / 神话头像框；其余框只用外圈伪元素 */
+export const PREMIUM_AVATAR_FRAMES = [
+  'inferno', 'storm', 'supernova', 'royal', 'cyber',
+  'quantum', 'draconis', 'immortal',
+] as const
 export type PremiumAvatarFrameStyle = typeof PREMIUM_AVATAR_FRAMES[number]
 
 /** 头像框（LineWeb 站内展示，不同步 neko） */

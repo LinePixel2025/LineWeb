@@ -304,14 +304,17 @@ export function sanitizeTitleIcon(value: unknown): string {
 export const EMOJI_PACK_KEYS = ['nailong', 'felyne', 'twemoji'] as const
 
 /**
- * 头像框样式（客户端 CSS 类名后缀 gh-avatar-frame--<key>）。
+ * 头像框样式（客户端 CSS 类名后缀 gh-avatar-frame--<key>，共 16 种）。
+ * 基础系列：gold / neon / sakura / galaxy。
  * 炸裂系列：inferno（炽焰）/ storm（雷霆）/ supernova（星爆）。
  * 幻彩系列：frost（冰晶）/ venom（翠毒）为普通框；royal（紫金）/ cyber（赛博）为装饰层框。
+ * 神话系列：abyss（深渊）/ eclipse（蚀月）为普通框；quantum（量子）/ draconis（龙裔）/ immortal（不朽）为装饰层框。
  * 客户端 types/points.ts 保留一份顺序一致的拷贝，titleEffects.test.ts 会断言两边一致。
  */
 export const AVATAR_FRAME_STYLES = [
   'gold', 'neon', 'sakura', 'galaxy', 'inferno', 'storm', 'supernova',
   'frost', 'venom', 'royal', 'cyber',
+  'abyss', 'eclipse', 'quantum', 'draconis', 'immortal',
 ] as const
 export type AvatarFrameStyle = typeof AVATAR_FRAME_STYLES[number]
 
@@ -322,14 +325,16 @@ export function sanitizeAvatarFrame(value: unknown): AvatarFrameStyle | null {
 }
 
 /**
- * 传说称号动态特效（classic＝现有金色流光默认特效；客户端 CSS 类名后缀 gh-title-badge--fx-*）。
- * 炸裂系列：nova（超新星爆发）/ prism（棱镜虹光）/ void（虚空黑洞）。
- * 幻彩系列：meteor（流星拖尾）/ blossom（花瓣飘落）。
+ * 传说称号动态特效（classic＝现有金色流光默认特效；客户端 CSS 类名后缀 gh-title-badge--fx-*，共 15 种）。
+ * 炸裂系列：nova（超新星爆发）/ prism（棱镜虹光）/ void（虚空黑洞）/ singularity（奇点坍缩）。
+ * 幻彩系列：meteor（流星拖尾）/ blossom（花瓣飘落）/ zenith（极巅光柱）/ eternity（永恒之环）/
+ *          chaos（混沌碎片）/ firmament（苍穹星海）。
  * 客户端 types/points.ts 保留一份顺序一致的拷贝，titleEffects.test.ts 会断言两边一致。
  */
 export const TITLE_EFFECT_STYLES = [
   'classic', 'stardust', 'flame', 'aurora', 'thunder', 'nova', 'prism', 'void',
   'meteor', 'blossom',
+  'singularity', 'zenith', 'eternity', 'chaos', 'firmament',
 ] as const
 export type TitleEffectStyle = typeof TITLE_EFFECT_STYLES[number]
 

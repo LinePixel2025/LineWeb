@@ -39,6 +39,7 @@ const RARITY_LABELS: Record<ShopRarity, string> = {
   rare: '稀有',
   epic: '史诗',
   legendary: '传说',
+  mythic: '神话',
 }
 
 const SHOP_TYPE_LABELS: Record<ShopItemType, string> = {
@@ -56,6 +57,15 @@ const AVATAR_FRAME_OPTIONS: ReadonlyArray<readonly [AvatarFrameStyle, string]> =
   ['inferno', '炽焰'],
   ['storm', '雷霆'],
   ['supernova', '星爆'],
+  ['frost', '冰晶'],
+  ['venom', '翠毒'],
+  ['royal', '紫金'],
+  ['cyber', '赛博'],
+  ['abyss', '深渊'],
+  ['eclipse', '蚀月'],
+  ['quantum', '量子'],
+  ['draconis', '龙裔'],
+  ['immortal', '不朽'],
 ]
 
 /** 传说称号特效白名单（与服务端 TITLE_EFFECT_STYLES 一致） */
@@ -68,6 +78,13 @@ const TITLE_EFFECT_OPTIONS: ReadonlyArray<readonly [TitleEffectStyle, string]> =
   ['nova', '超新星'],
   ['prism', '棱镜虹光'],
   ['void', '虚空黑洞'],
+  ['meteor', '流星拖尾'],
+  ['blossom', '花瓣飘落'],
+  ['singularity', '奇点坍缩'],
+  ['zenith', '极巅光柱'],
+  ['eternity', '永恒之环'],
+  ['chaos', '混沌碎片'],
+  ['firmament', '苍穹星海'],
 ]
 
 const RULE_FIELDS: Array<{ key: keyof GamePointRule; label: string; hint?: string }> = [
@@ -944,10 +961,10 @@ function ShopPanel({
                 </label>
               )}
 
-              {form.type === 'title' && form.rarity === 'legendary' && (
+              {form.type === 'title' && (form.rarity === 'legendary' || form.rarity === 'mythic') && (
                 <div className="gh-points-shop-form-row">
                   <label className="gh-form-field">
-                    传说特效
+                    {form.rarity === 'mythic' ? '神话特效' : '传说特效'}
                     <select
                       className="gh-input"
                       value={form.effect}
@@ -967,7 +984,7 @@ function ShopPanel({
                           name: form.name.trim() || '称号预览',
                           color: form.color,
                           icon: form.icon,
-                          rarity: 'legendary',
+                          rarity: form.rarity,
                           effect: form.effect,
                         }}
                       />

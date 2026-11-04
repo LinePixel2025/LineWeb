@@ -37,6 +37,7 @@ const RARITY_LABELS: Record<string, string> = {
   rare: '稀有',
   epic: '史诗',
   legendary: '传说',
+  mythic: '神话',
 }
 
 const REASON_LABELS: Record<string, string> = {
@@ -80,6 +81,7 @@ const REASON_LABELS: Record<string, string> = {
   pet_battle_lose: '宠物对战失败',
   pet_market_buy: '交易行买入',
   pet_market_sell: '交易行卖出',
+  crisis_payment: 'Lineweb 危机上缴',
   lottery_draw: '抽奖消耗',
   lottery_prize: '抽奖奖励',
   theme_purchase: '购买主题',
@@ -472,7 +474,15 @@ function ShopTab({
                     {RARITY_LABELS[item.rarity] ?? item.rarity}
                   </span>
                 </div>
-                <h3 className={`gh-points-shop-card-name ${item.type === 'title' && item.rarity === 'legendary' ? 'gh-points-shop-name--legendary' : ''}`}>
+                <h3 className={`gh-points-shop-card-name ${
+                  item.type !== 'title'
+                    ? ''
+                    : item.rarity === 'mythic'
+                      ? 'gh-points-shop-name--mythic'
+                      : item.rarity === 'legendary'
+                        ? 'gh-points-shop-name--legendary'
+                        : ''
+                }`}>
                   {item.type === 'title' ? (
                     <span style={{ color: typeof item.payload.color === 'string' ? item.payload.color : undefined }}>
                       {item.name}

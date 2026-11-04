@@ -20,6 +20,11 @@ import {
   type CheckinRule,
   type PointsConfigDto,
 } from '../lib/pointsRules.js'
+import {
+  DEFAULT_FRAME_ITEMS_V4,
+  DEFAULT_TITLE_ITEMS_V4,
+  type DefaultShopItem,
+} from '../lib/pointsShopCatalog.js'
 import type { GameKey } from '../lib/gameStatsRules.js'
 import {
   leaderTitleAsTitleDto,
@@ -41,9 +46,9 @@ export interface UserTitleDto {
   name: string
   color: string
   icon: string
-  /** 商品稀有度：legendary 在客户端触发炸裂特效 */
+  /** 商品稀有度：legendary / mythic 在客户端触发炸裂特效（mythic 额外挂专属装饰层） */
   rarity: string
-  /** 传说特效：classic/stardust/flame/aurora/thunder/nova/prism/void，非 legendary 忽略 */
+  /** 传说特效：classic/stardust/flame/aurora/thunder/nova/prism/void/meteor/blossom/singularity/zenith/eternity/chaos/firmament，非 legendary/mythic 忽略 */
   effect: string
 }
 
@@ -112,17 +117,15 @@ const DEFAULT_FRAME_SEED_FLAG_V3 = 'points.shop.frames.v3.seeded'
  * 幻彩系列称号（meteor / blossom 新特效 + 现有特效新配色）同样用独立 flag 补种。
  */
 const DEFAULT_TITLE_SEED_FLAG_V3 = 'points.shop.titles.v3.seeded'
-
-interface DefaultShopItem {
-  key: string
-  type: 'title' | 'emoji' | 'avatar_frame'
-  name: string
-  description: string
-  cost: number
-  rarity: 'common' | 'rare' | 'epic' | 'legendary'
-  payload: Record<string, unknown>
-  sortOrder: number
-}
+/**
+ * 第四批（神话系列）头像框：abyss / eclipse / quantum / draconis / immortal。
+ * 仍用独立 flag：旧 flag 已在生产置位，只补这批新 key，不复活管理员删掉的旧商品。
+ */
+const DEFAULT_FRAME_SEED_FLAG_V4 = 'points.shop.frames.v4.seeded'
+/**
+ * 神话系列称号：singularity / zenith / eternity / chaos / firmament 五个新特效的传说与神话称号。
+ */
+const DEFAULT_TITLE_SEED_FLAG_V4 = 'points.shop.titles.v4.seeded'
 
 /** 默认商店目录：只在首次初始化时写入一次，之后管理员可自由增删改 */
 const DEFAULT_SHOP_ITEMS: readonly DefaultShopItem[] = [
@@ -261,6 +264,8 @@ async function ensureDefaultShop(): Promise<void> {
   await seedShopItems(DEFAULT_PREMIUM_TITLE_SEED_FLAG, DEFAULT_PREMIUM_TITLE_ITEMS)
   await seedShopItems(DEFAULT_FRAME_SEED_FLAG_V3, DEFAULT_FRAME_ITEMS_V3)
   await seedShopItems(DEFAULT_TITLE_SEED_FLAG_V3, DEFAULT_TITLE_ITEMS_V3)
+  await seedShopItems(DEFAULT_FRAME_SEED_FLAG_V4, DEFAULT_FRAME_ITEMS_V4)
+  await seedShopItems(DEFAULT_TITLE_SEED_FLAG_V4, DEFAULT_TITLE_ITEMS_V4)
 }
 
 /** 幂等播种：同一批商品只补一次，已存在（或被管理员删掉）的 key 不受影响 */

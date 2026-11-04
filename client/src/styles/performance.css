@@ -23,18 +23,28 @@
 
 /* ---- 称号：粒子 / 光环 / 旋转伪元素全部隐藏，保留静态底 + 一次慢速柔光 ---- */
 html[data-perf='low'] .gh-title-badge--legendary,
+html[data-perf='low'] .gh-title-badge--mythic,
 html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-stardust,
 html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-flame,
 html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-aurora,
 html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-thunder,
 html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-nova,
 html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-prism,
-html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-void {
+html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-void,
+html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-meteor,
+html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-blossom,
+html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-singularity,
+html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-zenith,
+html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-eternity,
+html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-chaos,
+html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-firmament {
   animation: none;
 }
-html[data-perf='low'] .gh-title-badge--legendary::before { display: none; }
+html[data-perf='low'] .gh-title-badge--legendary::before,
+html[data-perf='low'] .gh-title-badge--mythic::before { display: none; }
 html[data-perf='low'] .gh-title-badge-sparks,
-html[data-perf='low'] .gh-title-badge-burst { display: none; }
+html[data-perf='low'] .gh-title-badge-burst,
+html[data-perf='low'] .gh-title-badge-mythic { display: none; }
 /* 内层扫光只保留 opacity 呼吸：合成器动画，代价远低于背景位移 / 阴影脉冲。
    各 fx 变体的 aura 动画是「双类 + 后代类」特异性，这里用 !important 统一压成呼吸，
    但保留各自的扫光配色渐变（辨识度不变）。 */
@@ -60,7 +70,19 @@ html[data-perf='low'] .gh-avatar-frame--inferno::after,
 html[data-perf='low'] .gh-avatar-frame--storm::before,
 html[data-perf='low'] .gh-avatar-frame--storm::after,
 html[data-perf='low'] .gh-avatar-frame--supernova::before,
-html[data-perf='low'] .gh-avatar-frame--supernova::after {
+html[data-perf='low'] .gh-avatar-frame--supernova::after,
+html[data-perf='low'] .gh-avatar-frame--royal::before,
+html[data-perf='low'] .gh-avatar-frame--royal::after,
+html[data-perf='low'] .gh-avatar-frame--cyber::before,
+html[data-perf='low'] .gh-avatar-frame--cyber::after,
+html[data-perf='low'] .gh-avatar-frame--abyss::after,
+html[data-perf='low'] .gh-avatar-frame--eclipse::after,
+html[data-perf='low'] .gh-avatar-frame--quantum::before,
+html[data-perf='low'] .gh-avatar-frame--quantum::after,
+html[data-perf='low'] .gh-avatar-frame--draconis::before,
+html[data-perf='low'] .gh-avatar-frame--draconis::after,
+html[data-perf='low'] .gh-avatar-frame--immortal::before,
+html[data-perf='low'] .gh-avatar-frame--immortal::after {
   animation: none;
 }
 
@@ -73,7 +95,8 @@ html[data-perf='low'] .gh-msg-toast {
 }
 
 /* ---- 称号商品卡等处的流光文字 ---- */
-html[data-perf='low'] .gh-points-shop-name--legendary {
+html[data-perf='low'] .gh-points-shop-name--legendary,
+html[data-perf='low'] .gh-points-shop-name--mythic {
   animation: none;
 }
 
