@@ -91,6 +91,7 @@ model User {
   farmSeedPurchases      FarmSeedListing[]     @relation("FarmSeedBuyer") // 我买下的种子
   stockOrders            StockOrder[] // 股市限价委托
   crisisLevy             CrisisLevy? // Lineweb 危机税单（每人一行，读时惰性建行）
+  crisisTaxEnabled       Boolean               @default(false) @map("crisis_tax_enabled") // 危机积分税款自选开关：开启后每次花费积分额外扣 spendTaxPct% 进危机公共银行
   personalSpace          PersonalSpace? // 个人空间（管理员私人服务，每管理员一份）
   books                  Book[] // 小说阅读器的书架（上传的书）
   musicAccount           MusicAccount? // 网易云音乐扫码绑定的账号（cookie 仅存服务端）
@@ -110,6 +111,7 @@ model User {
   companyDonations       CompanyListing[]      @relation("CompanyDonor") // 我捐进公司货栈的条目
   companyOrders          CompanyOrder[]        @relation("CompanyBuyer") // 我在公司货栈的购买记录
   companyLoans           CompanyLoan[]         @relation("CompanyLoanBorrower") // 我向公司借的贷款
+  companyPoolInvestments CompanyPoolInvestment[] // 我投入公司资金池的份额
   crisisWaivers          CrisisWaiver[] // 我吃到的危机减免档位（每人每档终身一次）
   gameSessions           GameSession[] // 单机「已付门票开局」的会话凭证
   gameTicketLogs         GameTicketLog[] // 门票张数台账（积分台账记不了物品件数）
@@ -776,7 +778,7 @@ model PointsLedger {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   amount    Int // 正数=获得，负数=扣除
   balance   Int // 变动后余额
-  reason    String // game_result | farm_harvest | farm_steal | farm_welcome | farm_shop | farm_expand | farm_merchant | farm_protect | farm_seed_buy | farm_seed_sell | shop_purchase | checkin | leader_bonus | stock | stock_order_buy | stock_order_refund | stock_order_sell | pet_raid | pet_raid_entry | pet_raid_insurance | pet_raid_contract | raid_recycle | raid_shop | raid_market_sell | raid_market_buy | raid_storage_upgrade | redpacket_send | redpacket_receive | redpacket_refund | bank_deposit_in | bank_demand_withdraw | bank_fixed_open | bank_fixed_redeem | bank_interest | fund_buy | fund_sell | game_ticket_refund | company_purchase | company_liquidate | company_loan_in | company_loan_repay | admin_adjust | crisis_payment
+  reason    String // game_result | farm_harvest | farm_steal | farm_welcome | farm_shop | farm_expand | farm_merchant | farm_protect | farm_seed_buy | farm_seed_sell | shop_purchase | checkin | leader_bonus | stock | stock_order_buy | stock_order_refund | stock_order_sell | pet_raid | pet_raid_entry | pet_raid_insurance | pet_raid_contract | raid_recycle | raid_shop | raid_market_sell | raid_market_buy | raid_storage_upgrade | redpacket_send | redpacket_receive | redpacket_refund | bank_deposit_in | bank_demand_withdraw | bank_fixed_open | bank_fixed_redeem | bank_interest | fund_buy | fund_sell | game_ticket_refund | company_purchase | company_liquidate | company_loan_in | company_loan_repay | admin_adjust | crisis_payment | crisis_tax
   game      String? // 来源游戏 id（2048 / doudizhu / ... / farm）
   note      String?
   createdAt DateTime @default(now()) @map("created_at")
@@ -1840,7 +1842,7 @@ model CrisisPool {
 
 /**
  * 危机参数（单行 JSON，照 PointsConfig 的「读旧 → 深合并 → normalize → 保存」口径）。
- * config: { enabled, ratio, intervalMs, graceMs, minLevy }，缺失字段一律回退代码默认值。
+ * config: { enabled, ratio, intervalMs, graceMs, minLevy, spendTaxPct }，缺失字段一律回退代码默认值。
  */
 model CrisisConfig {
   id        Int      @id @default(1)
@@ -1868,6 +1870,7 @@ model Company {
   owner             User      @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   status            String    @default("founding") // founding | active | disbanded
   poolBalance       Int       @default(0) @map("pool_balance") // 资金池余额（积分）
+  loanSettings      String? // JSON {enabled,ratePct,maxPrincipal,dueDays,membersOnly}：CEO 放贷设置，null = 跟随全站 CompanyConfig 默认
   revenue           Int       @default(0) // 累计营业额（货栈成交总额，只增）
   tierMask          Int       @default(0) @map("tier_mask") // 已达成的减免档位位掩码
   foundingExpiresAt DateTime? @map("founding_expires_at") // founding 状态有效期（7 天未满 3 人作废）
@@ -1881,6 +1884,7 @@ model Company {
   restocks  CompanyRestock[]
   orders    CompanyOrder[]
   loans     CompanyLoan[]
+  poolInvestments CompanyPoolInvestment[] // 资金池投资人份额
   waivers   CrisisWaiver[]
 
   @@index([status, createdAt])
@@ -2012,6 +2016,28 @@ model CompanyLoan {
   @@index([companyId, status])
   @@index([status, dueAt]) // 惰性逾期扫描
   @@map("company_loans")
+}
+
+/**
+ * 公司资金池投资份额（2026-11-04）。成员把积分投进公司资金池供放贷生息：
+ * amount 是「当前可赎回份额」（利息结清时按占比直接并入），earned 只是累计利息收益的统计口径。
+ * 赎回受资金池流动性约束（poolBalance CAS）；公司解散时投资人按 amount 优先全额发还，
+ * 剩余池子才按成员均分。唯一键 [companyId, userId] 一人一司一行。
+ */
+model CompanyPoolInvestment {
+  id        Int      @id @default(autoincrement())
+  companyId Int      @map("company_id")
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Int      @default(0) // 当前份额（含并入的利息，可赎回上限）
+  earned    Int      @default(0) // 累计分到的利息（只增，展示口径）
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([companyId, userId])
+  @@index([userId])
+  @@map("company_pool_investments")
 }
 
 /** 公司参数（单行 JSON，照 CrisisConfig 的「读旧 → 深合并 → normalize → 保存」口径）。 */
