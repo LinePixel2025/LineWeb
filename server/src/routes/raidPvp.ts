@@ -23,6 +23,7 @@ import {
   strikeMerc,
   strikePlayer,
   sweepPvp,
+  tryFormMatch,
 } from '../services/raidPvpService.js'
 
 const router = Router()
@@ -85,7 +86,10 @@ router.post('/cancel', writeLimiter, asyncHandler(async (req: Request, res: Resp
 }))
 
 // GET /api/pets/raid/pvp/queue — 排队状态（含成局后的阵营与队友）
+// 成局判定也在这里顺手触发：客户端排队时轮询的就是这个端点，
+// 如果只在 /state 里成局，大厅里的人会一直等下去（冒烟时实测踩过）。
 router.get('/queue', pollLimiter, asyncHandler(async (req: Request, res: Response) => {
+  await tryFormMatch()
   res.json(await getQueueView(currentUserId(req)))
 }))
 
