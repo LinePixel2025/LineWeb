@@ -32,6 +32,8 @@ export interface CrisisAssetParts {
   bankDemand: number
   bankDeposits: number
   funds: number
+  /** 本人捐入公司货栈、尚未售出的存货（按回收价计税，防止「捐进公司就免税」） */
+  companyStock: number
 }
 
 export interface CrisisStateDto {
@@ -45,6 +47,10 @@ export interface CrisisStateDto {
   round: number
   snapshot: number
   required: number
+  /** 公司减免之前的应缴（required === requiredBase 时无减免） */
+  requiredBase: number
+  /** 本轮生效的公司减免比例（0–100，展示用） */
+  waiverPct: number
   paid: number
   remaining: number
   assets: { total: number; parts: CrisisAssetParts }
@@ -103,6 +109,7 @@ export const CRISIS_ASSET_LABELS: { key: keyof CrisisAssetParts; label: string; 
   { key: 'bankDemand', label: '银行活期', hint: '活期本金（未结利息不计）' },
   { key: 'bankDeposits', label: '银行定期', hint: '未到期存单的本金' },
   { key: 'funds', label: '基金持仓', hint: '份额 × 当日净值' },
+  { key: 'companyStock', label: '公司货栈（本人捐入）', hint: '捐给公司但还没卖掉的存货，按回收价计税' },
 ]
 
 export const CRISIS_STATUS_LABELS: Record<CrisisStatus, string> = {

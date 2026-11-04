@@ -1,0 +1,441 @@
+/**
+ * 公司页面（2026-11-04）
+ *
+ * 布局只用 min/max-width + flex/grid，**不用 vw**（主内容区比窗口窄，vw 会算错宽度）。
+ * 动效统一在文末关闭（reduced-motion），低性能模式由 performance.css 统一降级。
+ */
+
+.gh-company-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.gh-company-hero {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 22px 24px;
+  border-radius: 18px;
+  border: 1px solid var(--gh-border, rgba(0, 0, 0, 0.08));
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(88, 166, 255, 0.16), transparent 60%),
+    var(--gh-bg-secondary, rgba(0, 0, 0, 0.03));
+}
+
+.gh-company-hero h1 {
+  margin: 0 0 6px;
+  font-size: 24px;
+  letter-spacing: -0.01em;
+}
+
+.gh-company-hero p {
+  margin: 0;
+  max-width: 620px;
+  color: var(--gh-text-secondary, #57606a);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.gh-company-hero-stats {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+
+.gh-company-hero-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 96px;
+}
+
+.gh-company-hero-stats span {
+  color: var(--gh-text-secondary, #57606a);
+  font-size: 12px;
+}
+
+.gh-company-hero-stats strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-company-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--gh-bg-secondary, rgba(0, 0, 0, 0.04));
+}
+
+.gh-company-tab {
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--gh-text-secondary, #57606a);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.gh-company-tab:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.gh-company-tab--active {
+  background: var(--gh-bg-primary, #fff);
+  color: var(--gh-text-primary, #1f2328);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.gh-company-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.gh-company-card {
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid var(--gh-border, rgba(0, 0, 0, 0.08));
+  background: var(--gh-bg-primary, #fff);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.gh-company-card h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.gh-company-card h3 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--gh-text-secondary, #57606a);
+}
+
+.gh-company-meta {
+  display: flex;
+  gap: 8px 18px;
+  flex-wrap: wrap;
+  color: var(--gh-text-secondary, #57606a);
+  font-size: 12px;
+}
+
+.gh-company-hint {
+  margin: 0;
+  color: var(--gh-text-secondary, #57606a);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.gh-company-hint--bad {
+  color: #cf222e;
+}
+
+.gh-company-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gh-company-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--gh-text-secondary, #57606a);
+}
+
+.gh-company-progress-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.gh-company-progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0969da, #54aeff);
+  transition: width 260ms ease;
+}
+
+.gh-company-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gh-company-list li {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-top: 1px solid var(--gh-border-muted, rgba(0, 0, 0, 0.06));
+}
+
+.gh-company-list li:first-child {
+  border-top: 0;
+}
+
+.gh-company-list li > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.gh-company-list strong {
+  font-size: 13px;
+  word-break: break-word;
+}
+
+.gh-company-list small {
+  color: var(--gh-text-secondary, #57606a);
+  font-size: 11px;
+}
+
+.gh-company-amount {
+  font-variant-numeric: tabular-nums;
+  color: #1a7f37;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.gh-company-row-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.gh-company-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--gh-text-secondary, #57606a);
+}
+
+.gh-company-field input,
+.gh-company-borrow input,
+.gh-company-filters input,
+.gh-company-filters select {
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--gh-border, rgba(0, 0, 0, 0.12));
+  background: var(--gh-bg-primary, #fff);
+  color: inherit;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.gh-company-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gh-company-fieldset legend {
+  padding: 0;
+  font-size: 12px;
+  color: var(--gh-text-secondary, #57606a);
+}
+
+.gh-company-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gh-company-chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--gh-border, rgba(0, 0, 0, 0.12));
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.gh-company-chip--on {
+  border-color: #0969da;
+  background: rgba(9, 105, 218, 0.1);
+  color: #0969da;
+  font-weight: 600;
+}
+
+.gh-company-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+
+.gh-company-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 13px;
+  border: 1px solid var(--gh-border, rgba(0, 0, 0, 0.1));
+  background: var(--gh-bg-secondary, rgba(0, 0, 0, 0.03));
+  text-align: left;
+  cursor: pointer;
+  font-size: 12px;
+  color: inherit;
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+
+.gh-company-tile:not(:disabled):hover {
+  border-color: #0969da;
+  transform: translateY(-1px);
+}
+
+.gh-company-tile:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gh-company-tile > span {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.gh-company-tile strong {
+  font-size: 13px;
+}
+
+.gh-company-tile small {
+  color: var(--gh-text-secondary, #57606a);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.gh-company-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.gh-company-filters input {
+  flex: 1 1 180px;
+  min-width: 140px;
+}
+
+.gh-company-borrow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gh-company-borrow input {
+  flex: 1 1 160px;
+  min-width: 120px;
+}
+
+.gh-company-tag {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--gh-text-secondary, #57606a);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.gh-company-tag--bad {
+  background: rgba(207, 34, 46, 0.12);
+  color: #cf222e;
+}
+
+.gh-company-invite {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--gh-border-muted, rgba(0, 0, 0, 0.06));
+}
+
+.gh-company-empty {
+  padding: 40px 20px;
+  border-radius: 16px;
+  border: 1px dashed var(--gh-border, rgba(0, 0, 0, 0.12));
+  color: var(--gh-text-secondary, #57606a);
+  text-align: center;
+  font-size: 13px;
+}
+
+.gh-company-dialog {
+  width: min(520px, calc(100% - 32px));
+}
+
+.gh-company-dialog .gh-dialog-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.gh-company-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  z-index: 60;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: #fff;
+  background: #1f2328;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
+  max-width: min(560px, calc(100% - 32px));
+}
+
+.gh-company-toast--bad {
+  background: #cf222e;
+}
+
+@media (max-width: 767px) {
+  .gh-company-hero {
+    padding: 18px;
+  }
+
+  .gh-company-hero-stats {
+    gap: 14px;
+  }
+
+  .gh-company-card {
+    padding: 16px;
+  }
+
+  .gh-company-toast {
+    bottom: 84px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-company-page *,
+  .gh-company-page *::before,
+  .gh-company-page *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

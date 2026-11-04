@@ -151,7 +151,11 @@ export default function CrisisPage() {
           <div className="gh-crisis-figure">
             <span className="gh-crisis-figure-label">本轮应缴</span>
             <strong className="gh-crisis-required">{formatCrisisPoints(state.required)}</strong>
-            <em>低于 {formatCrisisPoints(state.rules.minLevy)} 免征</em>
+            <em>
+              {state.waiverPct > 0
+                ? `公司减免 ${state.waiverPct}%（原 ${formatCrisisPoints(state.requiredBase)}）`
+                : `低于 ${formatCrisisPoints(state.rules.minLevy)} 免征`}
+            </em>
           </div>
           <div className="gh-crisis-figure">
             <span className="gh-crisis-figure-label">已缴</span>
@@ -164,6 +168,20 @@ export default function CrisisPage() {
             <em>{state.nextDueAt ? `下一轮 ${new Date(state.nextDueAt).toLocaleString('zh-CN', { hour12: false })}` : '缴清后排下一轮'}</em>
           </div>
         </div>
+
+        {state.waiverPct > 0 && (
+          <div className="gh-crisis-waiver">
+            <span aria-hidden>🏢</span>
+            <p>
+              你所在公司的业绩已经达标，本轮应缴下调 <strong>{state.waiverPct}%</strong>：
+              {formatCrisisPoints(state.requiredBase)} → {formatCrisisPoints(state.required)}。
+              每个档位每人终身只享一次，下一档要靠更高的累计营业额解锁。
+            </p>
+            <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/company">
+              看公司进度
+            </Link>
+          </div>
+        )}
 
         <div className="gh-crisis-progress" role="presentation">
           <span className="gh-crisis-progress-fill" style={{ width: `${Math.round(paidRatio * 100)}%` }} />

@@ -9,22 +9,39 @@
  *   due 过宽限 / due 过宽限但有进行中搜打撤对局 / due 已缴满；
  * - 倒计时：msUntilBlock 仅在 due 时给出且不为负；
  * - 资产求和：NaN / 负数 / 小数按 0 或向下取整处理，绝不让 NaN 进账单；
- * - DTO 契约：blocked 与 status 一致、BigInt 总额必须是字符串、日期必须 ISO 或 null；
+ * - **公司业绩减免**：档位目录不变量、tierMask 解析、单/双/三档乘算与取整、
+ *   档位越多应缴越小（单调）、无减免逐字返回 base、减免后允许低于免征门槛、
+ *   base 低于门槛时不减免不消费、逐档归因望远镜求和、waiverPctOf 幂等与脏入参；
+ * - **与 lib/companyRules.ts 的档位阈值交叉断言**（源码读取，文件不在时跳过，
+ *   与 client/src/lib/__tests__/permissions.test.ts 跨端断言同一套路）；
+ * - DTO 契约：blocked 与 status 一致、BigInt 总额必须是字符串、日期必须 ISO 或 null、
+ *   requiredBase / waiverPct 出口口径（legacy 行不画折减）、companyStock 计入税基；
  * - 豁免名单：筹钱与查账端点放行，对局 / 宠物对战 / 交易行 / 游戏 / 聊天 / 网盘一律封锁，
+ *   **公司端点也一律封锁**（减免由成交侧推送，不需要给欠费成员开后门），
  *   末尾斜杠与 '/api' 自描述端点的行为固定。
  *
  * 用法: cd server && npm run verify:crisis
  */
+
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 import {
   CRISIS_DEFAULTS,
   CRISIS_EXEMPT_RULES,
   CRISIS_LIMITS,
   CRISIS_LEDGER_REASON,
+  CRISIS_WAIVER_TIERS,
   EMPTY_CRISIS_ASSETS,
   EMPTY_CRISIS_LEVY_VIEW,
+  applyCrisisWaivers,
+  applyCrisisWaiversByTier,
   buildCrisisStateDto,
   computeRequired,
+  crisisTiersFromMask,
+  crisisWaiverPctOf,
+  crisisWaiverPcts,
+  crisisWaiverTiersOf,
   graceUntilOf,
   isCrisisBlocked,
   isCrisisExempt,
@@ -35,6 +52,7 @@ import {
   remainingOf,
   resolveCrisisStatus,
   sumCrisisAssets,
+  waiverPctOf,
   type CrisisAssetParts,
   type CrisisLevyView,
   type CrisisRules,
@@ -241,15 +259,21 @@ const FULL_PARTS: CrisisAssetParts = {
   bankDemand: 1500,
   bankDeposits: 5000,
   funds: 1800,
+  companyStock: 700,
 }
-assertEqual(sumCrisisAssets(FULL_PARTS), 16_320, '十二项资产全部相加')
+assertEqual(sumCrisisAssets(FULL_PARTS), 17_020, '十三项资产全部相加')
 assertEqual(sumCrisisAssets(EMPTY_CRISIS_ASSETS), 0, '空分项求和为 0')
 assertEqual(
   sumCrisisAssets({ ...EMPTY_CRISIS_ASSETS, points: Number.NaN, stocks: -500, funds: 9.9 }),
   9,
   'NaN 与负数按 0，小数向下取整（脏值不进账单）',
 )
-assertEqual(computeRequired(sumCrisisAssets(FULL_PARTS), RULES), 8160, '应缴额直接建立在求和结果上')
+assertEqual(
+  sumCrisisAssets({ ...EMPTY_CRISIS_ASSETS, companyStock: 700 }),
+  700,
+  '本人捐入公司货栈的未售存货必须计入税基（否则把资产搬进货栈就能避税）',
+)
+assertEqual(computeRequired(sumCrisisAssets(FULL_PARTS), RULES), 8510, '应缴额直接建立在求和结果上')
 assert(
   sumCrisisAssets({ ...EMPTY_CRISIS_ASSETS, stockOrders: 400 }) > sumCrisisAssets(EMPTY_CRISIS_ASSETS),
   '冻结在限价委托里的资产必须计入（否则把钱停在委托单就能避税）',
@@ -265,7 +289,7 @@ const dto = buildCrisisStateDto({
 assertEqual(dto.status, 'due', 'DTO 状态与真值表一致')
 assertEqual(dto.blocked, false, '宽限内 blocked=false')
 assertEqual(dto.remaining, 500, 'DTO 剩余应缴')
-assertEqual(dto.assets.total, 16_320, 'DTO 总资产')
+assertEqual(dto.assets.total, 17_020, 'DTO 总资产（含公司货栈）')
 assertEqual(dto.poolTotal, '12345', '公共银行总额必须是字符串（BigInt 不能进 JSON）')
 assertEqual(typeof dto.poolTotal, 'string', '池总额类型固定')
 assertEqual(dto.msUntilBlock, 11 * HOUR_MS, 'DTO 倒计时')
@@ -323,8 +347,259 @@ assertEqual(
   '脏资产分项在 DTO 出口被洗成 0',
 )
 
+/* —— DTO 的公司减免两个字段 —— */
+const WAIVERED_LEVY = levyOf({
+  status: 'due',
+  snapshot: 2000,
+  required: 675,
+  requiredBase: 1000,
+  waiverPct: 33,
+  paid: 0,
+  openAt: T0,
+  graceUntil: T0 + 12 * HOUR_MS,
+})
+const waiverDto = buildCrisisStateDto({ levy: WAIVERED_LEVY, rules: RULES, parts: FULL_PARTS, poolTotal: '0', nowMs: T0 })
+assertEqual(waiverDto.required, 675, 'DTO 的 required 是折减后的实数')
+assertEqual(waiverDto.requiredBase, 1000, 'DTO 透出减免前的基数供前端画折减对照')
+assertEqual(waiverDto.waiverPct, 33, 'DTO 的 waiverPct 由 base 与 required 反推（1000→675 即 32.5%，四舍五入 33）')
+assertEqual(waiverDto.remaining, 675, '剩余应缴按折减后的 required 算')
+// 老行（改造之前开的轮）两列都是 0：必须表现成「没有减免」，而不是「减免了 100%」
+const legacyDto = buildCrisisStateDto({
+  levy: levyOf({ status: 'due', required: 500, paid: 0, openAt: T0, graceUntil: T0 + 12 * HOUR_MS }),
+  rules: RULES,
+  parts: FULL_PARTS,
+  poolTotal: '0',
+  nowMs: T0,
+})
+assertEqual(legacyDto.requiredBase, 500, 'legacy 行（requiredBase=0）出口回退成 required')
+assertEqual(legacyDto.waiverPct, 0, 'legacy 行不能画出折减')
+assertEqual(dto.requiredBase, 500, '未折减账单的 base 恒等于 required（前端可无条件按 base→required 画）')
+assertEqual(dto.waiverPct, 0, '未折减账单的百分比为 0')
+assert(
+  buildCrisisStateDto({
+    levy: levyOf({ status: 'due', required: 675, requiredBase: 100 }),
+    rules: RULES,
+    parts: FULL_PARTS,
+    poolTotal: '0',
+    nowMs: T0,
+  }).requiredBase >= 675,
+  '脏数据里 base 小于 required 时按 required 兜底：折减只能让账单变小，不能反过来',
+)
+
 /* ============================================================
-   7. 豁免名单（deny-by-default）
+   7. 公司业绩减免（纯函数口径）
+   ============================================================ */
+
+/* —— 档位目录不变量 —— */
+assertEqual(CRISIS_WAIVER_TIERS.length, 3, '减免共三档')
+assertEqual(
+  CRISIS_WAIVER_TIERS.map((entry) => entry.tier),
+  [1, 2, 3],
+  '档位号连续且从 1 开始（tierMask 的位序就是 tier-1）',
+)
+assertEqual(
+  CRISIS_WAIVER_TIERS.map((entry) => entry.threshold),
+  [10_000, 50_000, 200_000],
+  '阈值 1 万 / 5 万 / 20 万',
+)
+assertEqual(
+  CRISIS_WAIVER_TIERS.map((entry) => entry.pct),
+  [10, 25, 50],
+  '折减 10% / 25% / 50%',
+)
+assert(
+  CRISIS_WAIVER_TIERS.every((entry, index) => index === 0 || CRISIS_WAIVER_TIERS[index - 1].threshold < entry.threshold),
+  '阈值严格递增（高位达成必然低位也达成，抬档才不会漏发低档）',
+)
+assert(
+  CRISIS_WAIVER_TIERS.every((entry, index) => index === 0 || CRISIS_WAIVER_TIERS[index - 1].pct < entry.pct),
+  '折减幅度随档位递增（越高的营业额换越大的免税）',
+)
+assert(
+  CRISIS_WAIVER_TIERS.every((entry) => entry.pct > 0 && entry.pct < 100),
+  '任何一档都不能是 0% 或 100%（前者等于没有这一档，后者等于赦免）',
+)
+assertEqual(crisisWaiverPctOf(1), 10, '按档位号取折减百分比')
+assertEqual(crisisWaiverPctOf(3), 50, '第三档 50%')
+assertEqual(crisisWaiverPctOf(4), 0, '目录外的档位不减税')
+assertEqual(crisisWaiverPctOf(0), 0, '档位 0 不存在')
+
+/* —— tierMask 解析 —— */
+assertEqual(crisisTiersFromMask(0), [], '掩码 0 = 一档未达')
+assertEqual(crisisTiersFromMask(1), [1], 'bit0 = 档 1')
+assertEqual(crisisTiersFromMask(2), [2], 'bit1 = 档 2')
+assertEqual(crisisTiersFromMask(4), [3], 'bit2 = 档 3')
+assertEqual(crisisTiersFromMask(3), [1, 2], 'bit0+bit1 = 档 1、2（升序）')
+assertEqual(crisisTiersFromMask(7), [1, 2, 3], '全档达成')
+assertEqual(crisisTiersFromMask(8), [], '高位脏比特一律忽略（掩码只认目录里的三位）')
+assertEqual(crisisTiersFromMask(-1), [], '负掩码按未达成')
+assertEqual(crisisTiersFromMask(Number.NaN), [], 'NaN 掩码按未达成')
+assertEqual(crisisTiersFromMask(1.9), [1], '小数掩码向下取整后解析')
+assertEqual(crisisWaiverTiersOf([3, 1, 9, 1, 0, -2]), [1, 3], '档位去噪 + 去重 + 升序')
+assertEqual(crisisWaiverPcts([3, 1]), [10, 50], '档位列表 → 百分比列表（按档位升序，不是按百分比）')
+assertEqual(crisisWaiverPcts([9]), [], '目录外档位不产生任何折减')
+
+/* —— 单档乘算与取整 —— */
+assertEqual(applyCrisisWaivers(1000, []), 1000, '无减免：逐字返回 base（与改造前的开轮完全等价）')
+assertEqual(applyCrisisWaivers(1000, [], 100), 1000, '无减免 + 门槛：仍逐字返回 base')
+assertEqual(applyCrisisWaivers(0, [50]), 0, 'base 为 0（本轮免征）时没有可减的东西')
+assertEqual(applyCrisisWaivers(-500, [50]), 0, '负 base 归零')
+assertEqual(applyCrisisWaivers(Number.NaN, [50]), 0, 'NaN base 归零')
+assertEqual(applyCrisisWaivers(1000, [10]), 900, '一档 10% → 900')
+assertEqual(applyCrisisWaivers(1000, [25]), 750, '一档 25% → 750')
+assertEqual(applyCrisisWaivers(1000, [50]), 500, '一档 50% → 500')
+assertEqual(applyCrisisWaivers(999, [50]), 499, '向下取整（499.5 → 499）')
+assertEqual(applyCrisisWaivers(1000, [10, 25]), 675, '两档乘算 1000 × 0.9 × 0.75')
+assertEqual(applyCrisisWaivers(1000, [10, 25, 50]), 337, '三档乘算 1000 × 0.9 × 0.75 × 0.5 = 337.5 → 337')
+assertEqual(applyCrisisWaivers(2000, [10, 25, 50]), 675, '两千元三档后 675')
+assertEqual(applyCrisisWaivers(999, [10, 25, 50]), 337, '999 × 0.3375 = 337.16 → 337')
+// 这是「只在最后取整一次」的可观察证据：逐档取整会因为 0.9 的小数先被截掉而多减 1 分
+assertEqual(applyCrisisWaivers(101, [10, 25]), 68, '只在最后取整一次（逐档取整会得到 67）')
+assertEqual(applyCrisisWaivers(1, [50]), 0, '1 分账单被 50% 折到 0（折减允许清零，不产生负数）')
+assertEqual(applyCrisisWaivers(1000, [100]), 0, '100% 档（目录里不存在，但口径要固定）等于赦免')
+assertEqual(applyCrisisWaivers(1000, [Number.NaN]), 1000, '脏百分比按 0% 处理，不影响账单')
+assertEqual(applyCrisisWaivers(1000, [-30]), 1000, '负百分比下钳到 0')
+assertEqual(applyCrisisWaivers(1000, [300]), 0, '超额百分比上钳到 100%，绝不变负')
+
+/* —— 单调性与边界 —— */
+let waiverMonotonic = true
+for (let base = 0; base <= 60_000; base += 37) {
+  const none = applyCrisisWaivers(base, [], 0)
+  const one = applyCrisisWaivers(base, [10], 0)
+  const two = applyCrisisWaivers(base, [10, 25], 0)
+  const three = applyCrisisWaivers(base, [10, 25, 50], 0)
+  if (three > two || two > one || one > none) waiverMonotonic = false
+  if (three < 0 || three > base) waiverMonotonic = false
+}
+assert(waiverMonotonic, '档位越多应缴只可能更小或相等，且恒在 [0, base] 内')
+assert(
+  applyCrisisWaivers(5000, [10, 25, 50]) <= applyCrisisWaivers(5000, [50]),
+  '高档组合不会反低于单档',
+)
+
+/* —— 与免征门槛的相互作用（本次最容易改错的一处）—— */
+assertEqual(applyCrisisWaivers(240, [50], 200), 120, '折减后的数字允许低于 minLevy（120 < 200 也照收 120）')
+assertEqual(applyCrisisWaivers(1000, [10, 25, 50], 900), 337, '折减到门槛以下不会因为 minLevy 被抬回去')
+assertEqual(applyCrisisWaivers(100, [50], 200), 100, 'base 本身就低于当前门槛时不减免、不消费档位')
+assertEqual(applyCrisisWaivers(100, [50], 0), 50, 'minLevy=0（管理员取消免征门槛）时正常折减')
+assertEqual(applyCrisisWaivers(100, [50]), 50, 'minLevy 缺省为 0')
+assert(
+  applyCrisisWaivers(240, [50], 200) < 200 && applyCrisisWaivers(240, [50], 200) > 0,
+  'minLevy 只当门槛、不当账单下界：既没有把小额欠款赦成 0，也没有抬回门槛',
+)
+
+/* —— 逐档归因（crisis_waivers.reduction 的口径）—— */
+for (const tiers of [[1], [2], [3], [1, 2], [1, 3], [2, 3], [1, 2, 3]] as const) {
+  for (const base of [0, 1, 99, 101, 1000, 8510, 999_999]) {
+    const plan = applyCrisisWaiversByTier(base, tiers, 0)
+    const totalCut = plan.steps.reduce((sum, step) => sum + step.reduction, 0)
+    if (base > 0 && plan.required !== base) {
+      if (totalCut !== base - plan.required) throw new Error(`断言失败：档位 ${tiers.join('/')} base=${base} 各档减免相加必须等于总减免`)
+      passed += 1
+    }
+    if (plan.required !== applyCrisisWaivers(base, crisisWaiverPcts(tiers), 0)) {
+      throw new Error(`断言失败：档位 ${tiers.join('/')} base=${base} 的归因结果与 applyCrisisWaivers 不一致`)
+    }
+    passed += 1
+    if (plan.requiredBase !== (base > 0 ? Math.floor(base) : 0)) {
+      throw new Error(`断言失败：档位 ${tiers.join('/')} base=${base} 的 requiredBase 必须等于减免前基数`)
+    }
+    passed += 1
+    if (plan.steps.length !== tiers.length) throw new Error(`断言失败：档位 ${tiers.join('/')} 每一档都要有一条归因`)
+    passed += 1
+    if (plan.steps.some((step, index) => step.reduction < 0)) throw new Error(`断言失败：档位 ${tiers.join('/')} 出现负减免`)
+    passed += 1
+    if (plan.steps.some((step, index) => step.pct !== crisisWaiverPctOf(step.tier))) {
+      throw new Error(`断言失败：档位 ${tiers.join('/')} 的百分比与目录不符`)
+    }
+    passed += 1
+  }
+}
+
+const tierPlan = applyCrisisWaiversByTier(1000, [1, 2, 3], 100)
+assertEqual(tierPlan.required, 337, '三档归因后的应缴与直接乘算一致')
+assertEqual(
+  tierPlan.steps.map((step) => step.reduction),
+  [100, 225, 338],
+  '逐档减免：档 1 减 100、档 2 再减 225、档 3 再减 338（合计 663 = 1000 − 337）',
+)
+assertEqual(tierPlan.waiverPct, 66, '三档合计的展示百分比（66.25% → 66）')
+assertEqual(
+  applyCrisisWaiversByTier(100, [1, 2], 200).required,
+  100,
+  '门槛退化时逐档归因也不改账单',
+)
+assertEqual(applyCrisisWaiversByTier(100, [1, 2], 200).steps.length, 2, '归因仍逐档给出（服务层按 reduction>0 决定是否消费档位）')
+assert(
+  applyCrisisWaiversByTier(100, [1, 2], 200).steps.every((step) => step.reduction === 0),
+  '门槛退化时每档减免为 0，服务层据此不消费档位',
+)
+assertEqual(applyCrisisWaiversByTier(1000, [9], 0).required, 1000, '目录外档位不产生折减')
+assertEqual(applyCrisisWaiversByTier(1000, [9], 0).steps, [], '目录外档位不产生归因行')
+
+/* —— waiverPctOf —— */
+assertEqual(waiverPctOf(1000, 1000), 0, '没有折减 → 0%')
+assertEqual(waiverPctOf(1000, 900), 10, '一档 10%')
+assertEqual(waiverPctOf(1000, 750), 25, '一档 25%')
+assertEqual(waiverPctOf(1000, 500), 50, '一档 50%')
+assertEqual(waiverPctOf(1000, 675), 33, '两档 32.5% 四舍五入到 33（展示口径，精确数字由 base→required 给出）')
+assertEqual(waiverPctOf(1000, 337), 66, '三档 66.3% → 66')
+assertEqual(waiverPctOf(1000, 0), 100, '全额减免 → 100')
+assertEqual(waiverPctOf(0, 500), 0, '脏 base 回 0，绝不做除零')
+assertEqual(waiverPctOf(Number.NaN, 500), 0, 'NaN base 回 0')
+assertEqual(waiverPctOf(1000, -20), 100, 'required 为负按 0 夹住 → 100%')
+assertEqual(waiverPctOf(1000, 2000), 0, 'required 反而大于 base（脏数据）时按无减免，绝不报成负百分比')
+assertEqual(waiverPctOf(1000, Number.NaN), 0, 'NaN required 按 0 折减处理')
+assertEqual(waiverPctOf(999, 999), 0, '同值必为 0（幂等锚）')
+assertEqual(
+  waiverPctOf(800, applyCrisisWaivers(800, [10, 25], 0)),
+  waiverPctOf(800, applyCrisisWaivers(800, [10, 25], 0)),
+  '同一入参重复调用结果一致（纯函数）',
+)
+const waiverOnce = applyCrisisWaivers(1000, [10], 0)
+const waiverTwice = applyCrisisWaivers(waiverOnce, [25], 0)
+assert(
+  waiverTwice <= waiverOnce,
+  '再叠加一档只会更低，不会把账单算大（推送路径可重复调用）',
+)
+assertEqual(
+  waiverPctOf(1000, waiverTwice) >= waiverPctOf(1000, waiverOnce),
+  true,
+  '折减比例只增不减（展示口径与账单同向）',
+)
+// 折减后的账单再折一次（把它的 base 当作新的 base、档位为空）必须逐字不变：幂等
+assertEqual(
+  applyCrisisWaivers(applyCrisisWaivers(1000, [10, 25], 0), [], 0),
+  applyCrisisWaivers(1000, [10, 25], 0),
+  '无档位时二次应用不改账单（幂等）',
+)
+
+/* —— 与 lib/companyRules.ts 的阈值交叉断言（源码读取，文件还没落盘就跳过）—— */
+const COMPANY_RULES_FILE = resolve(process.cwd(), 'src/lib/companyRules.ts')
+if (existsSync(COMPANY_RULES_FILE)) {
+  const companySource = readFileSync(COMPANY_RULES_FILE, 'utf8')
+  const block = /COMPANY_REVENUE_TIERS[^=]*=\s*\[([\s\S]*?)\]/.exec(companySource)?.[1]
+  if (!block) throw new Error('断言失败：未能从 src/lib/companyRules.ts 解析出 COMPANY_REVENUE_TIERS')
+  const companyTiers = [...block.matchAll(/\{\s*tier:\s*(\d+),\s*threshold:\s*([\d_]+),\s*reductionPct:\s*(\d+)\s*\}/g)].map(
+    (match) => ({
+      tier: Number(match[1]),
+      threshold: Number(match[2].replace(/_/g, '')),
+      pct: Number(match[3]),
+    }),
+  )
+  assert(companyTiers.length === CRISIS_WAIVER_TIERS.length, '两份档位目录档数一致（公司抬档与危机折减必须同一清单）')
+  for (const entry of CRISIS_WAIVER_TIERS) {
+    const counterpart = companyTiers.find((row) => row.tier === entry.tier)
+    if (!counterpart) throw new Error(`断言失败：companyRules.ts 缺少档 ${entry.tier}`)
+    assertEqual(counterpart.threshold, entry.threshold, `档 ${entry.tier} 的营业额阈值与 companyRules.ts 一致`)
+    assertEqual(counterpart.pct, entry.pct, `档 ${entry.tier} 的折减百分比与 companyRules.ts 一致`)
+  }
+} else {
+  console.log('（提示：src/lib/companyRules.ts 还不存在，跳过与公司的阈值交叉断言）')
+}
+
+/* ============================================================
+   8. 豁免名单（deny-by-default）
    ============================================================ */
 
 const EXEMPT_POSITIVE = [
