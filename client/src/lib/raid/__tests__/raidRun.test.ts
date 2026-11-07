@@ -3,11 +3,11 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
   RAID_EXTRACT_CHANNEL_MS,
-  RAID_EXTRACT_COOLDOWN_MS,
   RAID_GEAR_SHOP_PREMIUM,
   RAID_GEARS,
   RAID_ITEMS,
   RAID_MAPS,
+  RAID_TILE_WALL,
   addItemToContainer,
   applyRaidEvent,
   createRaidRun,
@@ -18,9 +18,9 @@ import {
   raidSellPrice,
   raidShopGearPrice,
   raidShopItemPrice,
+  rarityWeightAtTier,
   repairRaidGear,
   resolveRaidDamage,
-  rollExtractFailure,
   type RaidRunState,
 } from '../raidRun'
 
@@ -53,6 +53,25 @@ describe('raidRun 目录', () => {
     const rarities = new Set(RAID_ITEMS.map((item) => item.rarity))
     expect(rarities.size).toBe(6)
     expect(RAID_ITEMS.filter((item) => item.rarity === 'mythic').length).toBeGreaterThanOrEqual(2)
+    expect(rarityWeightAtTier('mythic', 4, 'normal')).toBe(0)
+    expect(rarityWeightAtTier('mythic', 5, 'normal')).toBeGreaterThan(0)
+    expect(rarityWeightAtTier('mythic', 5, 'pvp')).toBeGreaterThan(0)
+  })
+
+  it('非洲之心两种模式都能掉：权重 0.25、价值 30000、不进首领保底池', () => {
+    const heart = RAID_ITEMS.find((item) => item.key === 'heart_of_africa')
+    expect(heart).toBeTruthy()
+    expect((heart as unknown as Record<string, unknown>).pvpOnly).toBeUndefined()
+    expect(heart?.retired).toBeUndefined()
+    expect(heart?.weight).toBe(0.25)
+    expect(heart?.value).toBe(30000)
+    expect(heart?.pityEligible).toBe(false)
+  })
+
+  it('旧撤离信号弹已停产：保留目录数据但不再掉落', () => {
+    const flare = RAID_ITEMS.find((item) => item.key === 'extract_flare')
+    expect(flare?.retired).toBe(true)
+    expect((flare as unknown as Record<string, unknown>).guaranteeExtract).toBeUndefined()
   })
 
   it('商店全档上架：1–3 级平价、4 级及以上 ×2 且要仓库等级门槛', () => {
@@ -122,12 +141,57 @@ describe('raidRun 地图生成', () => {
     }
   })
 
-  it('六张地图都能生成', () => {
+  it('七张地图都能生成', () => {
+    expect(RAID_MAPS).toHaveLength(7)
     for (const def of RAID_MAPS) {
       const generated = generateRaidMap(42, def)
       expect(generated.rooms.length).toBe(def.cols * def.rows)
       expect(generated.tiles.length).toBe(generated.width * generated.height)
     }
+  })
+
+  it('日蚀要塞：室内隔断存在，且全图地板（含隔断房）完全连通', () => {
+    const citadel = getRaidMap('citadel')!
+    expect(citadel.difficulty).toBe('nightmare')
+    expect(citadel.interior).toBe('fortress')
+    expect(citadel.gimmick?.kind).toBe('orbital')
+    const generated = generateRaidMap(20261107, citadel)
+    let interiorWalls = 0
+    for (const room of generated.rooms) {
+      for (let y = room.y + 2; y < room.y + room.h - 2; y += 1) {
+        for (let x = room.x + 2; x < room.x + room.w - 2; x += 1) {
+          if (generated.tiles[y * generated.width + x] === RAID_TILE_WALL) interiorWalls += 1
+        }
+      }
+      for (const enemy of room.enemies) {
+        expect(generated.tiles[enemy.y * generated.width + enemy.x]).not.toBe(RAID_TILE_WALL)
+      }
+      for (const container of room.containers) {
+        expect(generated.tiles[container.y * generated.width + container.x]).not.toBe(RAID_TILE_WALL)
+      }
+    }
+    expect(interiorWalls).toBeGreaterThan(40)
+    // 整个地图的可走瓦片必须是一个连通分量：从起点房间中心 BFS
+    const start = generated.rooms[generated.startRoom]!
+    const startX = start.x + Math.floor(start.w / 2)
+    const startY = start.y + Math.floor(start.h / 2)
+    const seen = new Set<number>([startY * generated.width + startX])
+    const queue: Array<[number, number]> = [[startX, startY]]
+    while (queue.length > 0) {
+      const [x, y] = queue.shift() as [number, number]
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = x + dx
+        const ny = y + dy
+        if (nx < 0 || ny < 0 || nx >= generated.width || ny >= generated.height) continue
+        const index = ny * generated.width + nx
+        if (seen.has(index)) continue
+        if (generated.tiles[index] === RAID_TILE_WALL) continue
+        seen.add(index)
+        queue.push([nx, ny])
+      }
+    }
+    const walkable = generated.tiles.filter((tile) => tile !== RAID_TILE_WALL).length
+    expect(seen.size).toBe(walkable)
   })
 })
 
@@ -212,7 +276,7 @@ describe('raidRun 状态机', () => {
     expect(result.error).toBeTruthy()
   })
 
-  it('撤离读条未完成不能撤离', () => {
+  it('撤离读条未完成不能撤离，走完 6 秒必定成功', () => {
     const extractRoom = map.rooms.find((room) => room.kind === 'extract')
     if (!extractRoom) return
     const state = makeRun({
@@ -224,25 +288,16 @@ describe('raidRun 状态机', () => {
     expect(started.error).toBeUndefined()
     const tooEarly = applyRaidEvent(started.state, map, { type: 'extractDone' }, 2_000_100)
     expect(tooEarly.error).toBeTruthy()
+    // 2026-11-07：不再有随机运输故障，读条满 6 秒必定撤离
     const done = applyRaidEvent(
-      { ...started.state, extractGuaranteed: true },
+      started.state,
       map,
       { type: 'extractDone' },
       2_000_000 + RAID_EXTRACT_CHANNEL_MS,
     )
-    // 信号弹保障：无论 seed 掷出什么，走完读条必定撤离
+    expect(done.error).toBeUndefined()
     expect(done.state.status).toBe('extracted')
-    // 未打信号弹时结果由 rollExtractFailure 决定，且同一入参必须可重放
-    const roll = rollExtractFailure(started.state.seed, extractRoom.id, 1, false)
-    expect(rollExtractFailure(started.state.seed, extractRoom.id, 1, false)).toBe(roll)
-    const plain = applyRaidEvent(started.state, map, { type: 'extractDone' }, 2_000_000 + RAID_EXTRACT_CHANNEL_MS)
-    if (roll) {
-      expect(plain.state.status).toBe('active')
-      expect(plain.state.extractDisabled).toContain(extractRoom.id)
-      expect(plain.state.extractBlockedUntil).toBe(2_000_000 + RAID_EXTRACT_CHANNEL_MS + RAID_EXTRACT_COOLDOWN_MS)
-    } else {
-      expect(plain.state.status).toBe('extracted')
-    }
+    expect(done.state.log.some((entry) => entry.kind === 'success')).toBe(true)
   })
 
   it('保险按装备价值 15% 取整', () => {

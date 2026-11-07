@@ -374,6 +374,11 @@
     repeating-linear-gradient(0deg, rgba(34, 211, 238, 0.14) 0 2px, transparent 2px 22px);
 }
 
+.gh-raid-map-card[data-map='citadel'] {
+  --map-pattern: repeating-linear-gradient(45deg, rgba(245, 158, 11, 0.24) 0 6px, transparent 6px 18px),
+    repeating-linear-gradient(-45deg, rgba(180, 83, 9, 0.18) 0 4px, transparent 4px 14px);
+}
+
 .gh-raid-map-card:hover {
   border-color: color-mix(in srgb, var(--map-color, #64748b) 55%, var(--gh-border));
   transform: translateY(-2px);
@@ -429,6 +434,16 @@
   background: var(--gh-canvas-inset);
   font-size: var(--gh-text-caption);
   color: var(--gh-text-secondary);
+}
+
+.gh-raid-map-meta span.is-gimmick {
+  color: #b45309;
+  background: color-mix(in srgb, #f59e0b 14%, var(--gh-canvas-inset));
+  font-weight: 600;
+}
+
+html[data-theme='dark'] .gh-raid-map-meta span.is-gimmick {
+  color: #fbbf24;
 }
 
 .gh-raid-map-foot {
@@ -2490,7 +2505,7 @@ body.lineweb-raid-playing .gh-announce-bar { display: none; }
   font-size: 11px;
 }
 
-/* 任务 pod 里的状态行（pvp 模式 / 信号弹 / 运输故障） */
+/* 任务 pod 里的状态行（pvp 模式 / 轨道炮火） */
 .gh-raid-mission-note {
   display: block;
   margin-top: 4px;

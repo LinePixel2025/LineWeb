@@ -38,6 +38,8 @@ export interface RaidMapListItemDto {
   color: string
   durationMs: number
   enemyBudget: number
+  /** 地图独有机制名（没有则不显示） */
+  gimmickLabel?: string
 }
 
 export interface RaidHistoryLootDto {
@@ -118,6 +120,7 @@ function mapListItem(map: RaidMapDef): RaidMapListItemDto {
     color: map.color,
     durationMs: map.durationMs,
     enemyBudget: map.enemyBudget,
+    gimmickLabel: map.gimmick?.label,
   }
 }
 

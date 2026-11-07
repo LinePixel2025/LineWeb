@@ -18,7 +18,7 @@ import {
   shouldFormMatch,
   splitIntoFactions,
 } from '../src/services/raidPvpService.js'
-import { rarityWeightAtTier, raidItemModeAllowed, RAID_ITEM_MAP } from '../src/lib/raidRun.js'
+import { rarityWeightAtTier, RAID_ITEM_MAP } from '../src/lib/raidRun.js'
 
 let passed = 0
 
@@ -116,17 +116,18 @@ assert(canStrike({ ...base, lastStrikeAt: 10_000 - RAID_PVP_STRIKE_COOLDOWN_MS }
 assertEqual(pvpLootMode(), 'pvp', 'PvP 用 pvp 掉落表')
 assert(RAID_PVP_SHOT_MULT > 1, '玩家一枪倍率高于 1（但仍受目标护甲减伤）')
 assert(rarityWeightAtTier('mythic', 5, 'pvp') > 0, 'pvp 模式 5 档会出神话')
-assertEqual(rarityWeightAtTier('mythic', 5, 'normal'), 0, '普通模式 5 档也不出神话')
+assert(rarityWeightAtTier('mythic', 5, 'normal') > 0, '普通模式 5 档也会出神话（2026-11-07 回调）')
 assertEqual(rarityWeightAtTier('mythic', 4, 'pvp'), 0, 'pvp 4 档仍不出神话')
 
 const heart = RAID_ITEM_MAP.get('heart_of_africa')
 assert(!!heart, '非洲之心在目录里')
-assert(heart?.pvpOnly === true, '非洲之心标了 pvpOnly')
-assert(!raidItemModeAllowed(heart!, 'normal'), '普通模式永远不掉非洲之心')
-assert(raidItemModeAllowed(heart!, 'pvp'), 'pvp 模式允许掉非洲之心')
+assertEqual((heart as unknown as Record<string, unknown>)?.pvpOnly, undefined, '非洲之心不再标 pvpOnly')
+assertEqual(heart?.weight, 0.25, '非洲之心权重下调到 0.25')
+assertEqual(heart?.value, 30000, '非洲之心价值上调到 30000')
+assertEqual(heart?.pityEligible, false, '非洲之心不进首领保底池')
 
 const abyssCore = RAID_ITEM_MAP.get('abyss_core')
 assert(!!abyssCore, '深渊核心在目录里')
-assert(raidItemModeAllowed(abyssCore!, 'normal'), '深渊核心本身没被 pvpOnly 限制（只是权重为 0）')
+assertEqual(abyssCore?.retired, undefined, '深渊核心没有停产')
 
 console.log(`✅ 搜打撤 PvP 自检：${passed} 个断言`)

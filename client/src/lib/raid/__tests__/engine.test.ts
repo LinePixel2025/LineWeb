@@ -53,9 +53,6 @@ function makeRun(map = generateRaidMap(123456, getRaidMap('wasteland')!)): RaidR
     log: [],
     extractionStartedAt: null,
     mode: 'normal',
-    extractDisabled: [],
-    extractBlockedUntil: null,
-    extractGuaranteed: false,
     discoveredExtracts: [],
     killedByUserId: null,
     startedAt: new Date(1_000_000).toISOString(),
@@ -66,6 +63,19 @@ function makeRun(map = generateRaidMap(123456, getRaidMap('wasteland')!)): RaidR
     insuranceRate: 0.15,
   }
 }
+
+describe('RaidEngine 日蚀要塞轨道炮火', () => {
+  it('进图 12 秒后出现锁定警告，快照带倒计时', () => {
+    const map = generateRaidMap(20261107, getRaidMap('citadel')!)
+    const engine = new RaidEngine(makeRun(map), 'cat', 1_000_000)
+    engine.update(16, 1_000_000 + 12_100)
+    expect(engine.barrageWarning).toBeTruthy()
+    const snapshot = engine.snapshot(1_000_000 + 12_100)
+    expect(snapshot.gimmick?.kind).toBe('orbital')
+    expect(snapshot.gimmick?.warningProgress).not.toBeNull()
+    expect(snapshot.gimmick?.nextStrikeInMs).toBeGreaterThan(0)
+  })
+})
 
 describe('RaidEngine 换房', () => {
   it('从门洞侧格（非正中门格）也能进入相邻房间', () => {

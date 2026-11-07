@@ -117,8 +117,9 @@ export async function getRaidShopView(userId: number): Promise<RaidShopViewDto> 
         }
       }),
     items: RAID_ITEMS
-      // 门票不是消耗品而是 material，但它必须能在本店买到，所以按 key 单独放行
-      .filter((item) => SHOP_ITEM_KINDS.has(item.kind) || item.key === GAME_TICKET_KEY)
+      // 门票不是消耗品而是 material，但它必须能在本店买到，所以按 key 单独放行；
+      // 退役物品（旧型号撤离信号弹）只为旧库存保留目录数据，不再出现在商店。
+      .filter((item) => !item.retired && (SHOP_ITEM_KINDS.has(item.kind) || item.key === GAME_TICKET_KEY))
       .map((item) => ({
         key: item.key,
         name: item.name,
@@ -198,6 +199,7 @@ export async function buyRaidShopItem(
 
   const def = getRaidItem(input.key)
   if (!def) throw new AppError('商店里没有这件物品', 404)
+  if (def.retired) throw new AppError('这件物品已停产，不再出售', 400)
   if (!SHOP_ITEM_KINDS.has(def.kind) && def.key !== GAME_TICKET_KEY) {
     throw new AppError('这件物品不在商店出售', 400)
   }

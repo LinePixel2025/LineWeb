@@ -32,6 +32,8 @@ export interface RaidMapListItem {
   color: string
   durationMs: number
   enemyBudget: number
+  /** 地图独有机制名（没有则不显示） */
+  gimmickLabel?: string
 }
 
 export interface RaidHistoryLoot {
@@ -147,15 +149,9 @@ export interface RaidRun {
   map: RaidMapNode
   log: RaidLogEntry[]
   extractionStartedAt: number | null
-  /** 掉落模式：pvp = 玩家匹配（高爆率，唯一能掉非洲之心的模式） */
+  /** 掉落模式：pvp = 玩家匹配（高爆率）；非洲之心两种模式都能掉（极稀有） */
   mode: 'normal' | 'pvp'
-  /** 本局已判定失效的撤离点房间（运输故障后会进这个列表） */
-  extractDisabled: number[]
-  /** 全图撤离冷却截止（毫秒时间戳），null = 没有冷却 */
-  extractBlockedUntil: number | null
-  /** 已点亮撤离信号弹：本局后续撤离读条必定成功 */
-  extractGuaranteed: boolean
-  /** 已探明的撤离房间（服务端只下发探明过的撤离点坐标） */
+  /** 已探明的撤离房间（兼容字段；撤离点对地图全程可见后不再用于裁剪） */
   discoveredExtracts: number[]
   /** PvP 模式下击倒本人的玩家 id（NPC 击倒为 null） */
   killedByUserId: number | null

@@ -13,13 +13,17 @@ import {
   RAID_GROUND_REARM_DISTANCE,
   RAID_ITEM_MAP,
   RAID_MP_REGEN_PER_SEC,
+  RAID_ORBITAL_START_DELAY_MS,
   RAID_TILE_HAZARD,
   RAID_TILE_WALL,
   addItemToContainer,
   consumeItemFromContainer,
+  createRaidRng,
   getRaidGear,
   normalizeContainer,
   raidDefenseOf,
+  raidFindWalkableSpot,
+  raidSubSeed,
   raidTileIndex,
   removeItemFromContainer,
   resolveDropPosition,
@@ -30,6 +34,7 @@ import {
   type RaidGearInstance,
   type RaidGroundStack,
   type RaidItemStack,
+  type RaidMapGimmick,
   type RaidMapNode,
   type RaidRoomNode,
   type RaidSkillRule,
@@ -277,6 +282,32 @@ export interface RaidHudSkill {
   affordable: boolean
 }
 
+export interface RaidHudGimmick {
+  kind: 'orbital'
+  label: string
+  /** 距离下一次锁定 / 当前锁定结束还有多少毫秒 */
+  nextStrikeInMs: number
+  /** 锁定读条 0–1；没有锁定中为 null */
+  warningProgress: number | null
+}
+
+export interface RaidBarrageWarning {
+  roomId: number
+  x: number
+  y: number
+  radius: number
+  startedAt: number
+  endsAt: number
+  shells: { x: number; y: number }[]
+}
+
+export interface RaidBarrageScorch {
+  roomId: number
+  x: number
+  y: number
+  at: number
+}
+
 export interface RaidSnapshot {
   hp: number
   mp: number
@@ -304,6 +335,7 @@ export interface RaidSnapshot {
   dead: boolean
   shield: number
   atkBuffMs: number
+  gimmick: RaidHudGimmick | null
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -387,6 +419,18 @@ export class RaidEngine {
   /** 触屏自动锁敌：开火/瞄准时吸附最近可视敌人（桌面鼠标瞄准不受影响） */
   aimAssist = false
 
+  /** 地图独有机制（目前只有日蚀要塞的轨道炮火） */
+  readonly gimmick: RaidMapGimmick | null
+  barrageWarning: RaidBarrageWarning | null = null
+  barrageNextAt = 0
+  barrageIndex = 0
+  barrageScorches: RaidBarrageScorch[] = []
+
+  /** 玩家表现层状态（渲染器读取，避免每帧自己算速度） */
+  playerMoving = false
+  playerStepPhase = 0
+  playerRecoil = 0
+
   private events: RaidEvent[] = []
   private fireCooldown = 0
   private hazardAccum = 0
@@ -410,6 +454,8 @@ export class RaidEngine {
     this.seed = run.seed
     this.startedAt = now
     this.expiresAt = new Date(run.expiresAt).getTime()
+    this.gimmick = run.map.gimmick ?? null
+    if (this.gimmick) this.barrageNextAt = now + RAID_ORBITAL_START_DELAY_MS
     this.roomId = run.currentRoom
     this.maxHp = run.maxHp
     this.maxMp = run.maxMp
@@ -499,6 +545,7 @@ export class RaidEngine {
     this.pendingEnemyShots = []
     this.extractStartedAt = null
     this.extractSentDone = false
+    this.barrageWarning = null
     if (initial) {
       const center = {
         x: room.x + room.w / 2,
@@ -546,6 +593,7 @@ export class RaidEngine {
     this.updatePickups()
     this.updateGroundPickups()
     this.updateHazard(dt, now)
+    this.updateGimmick(now)
     this.updateMp(dt)
     this.updateExtraction(now)
     this.updateToasts(now)
@@ -581,6 +629,9 @@ export class RaidEngine {
     const speedBonus = gearBoots?.speedBonus ?? 0
     const speed = PLAYER_SPEED * (1 + speedBonus / 100)
     const len = Math.hypot(input.moveX, input.moveY)
+    this.playerMoving = len > 0.001
+    this.playerStepPhase += dt * (this.playerMoving ? 9 : 2.2)
+    this.playerRecoil = Math.max(0, this.playerRecoil - dt * 6)
     if (len > 0.001) {
       const vx = (input.moveX / len) * speed * dt
       const vy = (input.moveY / len) * speed * dt
@@ -679,6 +730,10 @@ export class RaidEngine {
       this.player.y = targetRoom.y + targetRoom.h - margin
       this.player.x = clamp(fromX, targetRoom.x + margin, targetRoom.x + targetRoom.w - margin)
     }
+    // 日蚀要塞门边可能有隔断，落点吸附到最近可站立瓦片，避免卡进墙里
+    const spot = raidFindWalkableSpot(this.map, this.player.x, this.player.y, targetRoom)
+    this.player.x = spot.x
+    this.player.y = spot.y
     this.events.push({ type: 'enterRoom', roomId: target })
     this.transitionLock = 700
     this.spawnEffect('door', this.player.x, this.player.y, {
@@ -695,6 +750,7 @@ export class RaidEngine {
   private fireBullet(): void {
     const angle = this.player.angle
     const buff = this.player.atkBuffUntil > Date.now() ? 1.4 : 1
+    this.playerRecoil = 1
     const damage = Math.max(1, Math.round(this.atk * PLAYER_BULLET_DAMAGE_RATE * buff))
     const tipX = this.player.x + Math.cos(angle) * 0.62
     const tipY = this.player.y + Math.sin(angle) * 0.62
@@ -736,17 +792,20 @@ export class RaidEngine {
       const dy = this.player.y - enemy.y
       const dist = Math.hypot(dx, dy)
       if (dist > ENEMY_AGGRO_RANGE) {
-        // 轻微巡逻，避免完全静止
-        enemy.x += Math.sin((now / 900) + enemy.source.level) * dt * 0.4
-        enemy.y += Math.cos((now / 1100) + enemy.source.level) * dt * 0.4
-        this.clampEnemyToRoom(enemy, room)
+        // 轻微巡逻，避免完全静止（隔断房里撞墙就停，不穿墙）
+        this.moveEnemy(
+          enemy,
+          Math.sin((now / 900) + enemy.source.level) * dt * 0.4,
+          Math.cos((now / 1100) + enemy.source.level) * dt * 0.4,
+          room,
+        )
         continue
       }
       const nx = dist > 0 ? dx / dist : 0
       const ny = dist > 0 ? dy / dist : 0
       const speed = enemy.source.speed
       // —— 精英冲锋（skills 含 charge）：预警中 / 冲刺中时整帧由冲锋状态机接管 ——
-      if (enemy.source.skills.includes('charge') && this.updateEnemyCharge(enemy, dt, now, dx, dy, dist)) {
+      if (enemy.source.skills.includes('charge') && this.updateEnemyCharge(enemy, dt, now, dx, dy, dist, room)) {
         this.clampEnemyToRoom(enemy, room)
         continue
       }
@@ -764,11 +823,14 @@ export class RaidEngine {
         else if (dist > preferred + 0.6) move = 1
         else if (dist < preferred - 1.2) move = -1
         if (move !== 0) {
-          enemy.x += nx * move * speed * dt
-          enemy.y += ny * move * speed * dt
+          this.moveEnemy(enemy, nx * move * speed * dt, ny * move * speed * dt, room)
         } else {
-          enemy.x += -ny * speed * dt * 0.5 * enemy.orbitDir
-          enemy.y += nx * speed * dt * 0.5 * enemy.orbitDir
+          this.moveEnemy(
+            enemy,
+            -ny * speed * dt * 0.5 * enemy.orbitDir,
+            nx * speed * dt * 0.5 * enemy.orbitDir,
+            room,
+          )
         }
         const locked = dist < 9 && this.sightCheck(enemy, now)
         // 开火预警：冷却临近时 telegraph 爬到 1，渲染器画准星与预警线
@@ -778,7 +840,7 @@ export class RaidEngine {
           enemy.telegraph = 0
           this.enemyShoot(enemy, nx, ny)
         }
-        if (enemy.source.kind === 'boss' && enemy.burstCooldown <= 0 && dist < 10) {
+        if (enemy.source.kind === 'boss' && enemy.burstCooldown <= 0 && dist < 10 && locked) {
           enemy.burstCooldown = 4200
           this.enemyBurst(enemy)
         }
@@ -786,8 +848,7 @@ export class RaidEngine {
         enemy.telegraph = Math.max(0, enemy.telegraph - dt * 3)
         enemy.lunge = Math.max(0, enemy.lunge - dt)
         if (dist > 0.75) {
-          enemy.x += nx * speed * dt
-          enemy.y += ny * speed * dt
+          this.moveEnemy(enemy, nx * speed * dt, ny * speed * dt, room)
         }
         if (dist < 0.95 && enemy.cooldown <= 0) {
           enemy.cooldown = 950
@@ -818,10 +879,8 @@ export class RaidEngine {
           const push = (min - dist) / 2
           const nx = dx / dist
           const ny = dy / dist
-          a.x -= nx * push
-          a.y -= ny * push
-          b.x += nx * push
-          b.y += ny * push
+          this.moveEnemy(a, -nx * push, -ny * push, room)
+          this.moveEnemy(b, nx * push, ny * push, room)
         }
       }
       this.clampEnemyToRoom(a, room)
@@ -831,6 +890,69 @@ export class RaidEngine {
   private clampEnemyToRoom(enemy: LocalEnemy, room: RaidRoomNode): void {
     enemy.x = clamp(enemy.x, room.x + 1.6, room.x + room.w - 1.6)
     enemy.y = clamp(enemy.y, room.y + 1.6, room.y + room.h - 1.6)
+  }
+
+  /** 敌人圆形碰撞的简化采样：四角只要有一格是墙就站不住（与玩家 canStand 同口径） */
+  private enemyCanStand(x: number, y: number, radius: number): boolean {
+    for (const [ox, oy] of [[-radius, -radius], [radius, -radius], [-radius, radius], [radius, radius]] as const) {
+      if (tileAt(this.map, Math.floor(x + ox), Math.floor(y + oy)) === RAID_TILE_WALL) return false
+    }
+    return true
+  }
+
+  /**
+   * 敌人移动：分轴尝试，撞墙时保留能走的那个轴（沿墙滑动）；两个轴都被挡住时，
+   * 再试一次垂直于移动方向的绕行，避免隔断房里一直顶着墙发呆。
+   * 日蚀要塞的短墙/孤立掩体没有闭环，这套简化绕行足够把敌人带到玩家侧翼。
+   */
+  private moveEnemy(enemy: LocalEnemy, dx: number, dy: number, room: RaidRoomNode): void {
+    const radius = Math.max(0.2, enemy.source.radius)
+    const prevX = enemy.x
+    const prevY = enemy.y
+    const step = Math.hypot(dx, dy)
+    let moved = false
+    if (dx !== 0) {
+      const nx = enemy.x + dx
+      if (this.enemyCanStand(nx, enemy.y, radius)) {
+        enemy.x = nx
+        moved = true
+      }
+    }
+    if (dy !== 0) {
+      const ny = enemy.y + dy
+      if (this.enemyCanStand(enemy.x, ny, radius)) {
+        enemy.y = ny
+        moved = true
+      }
+    }
+    if (!moved && step > 0.0001) {
+      const signX = Math.sign(dx) || 1
+      const signY = Math.sign(dy) || 1
+      const candidates: Array<[number, number]> = [
+        [-signY * step, signX * step],
+        [signY * step, -signX * step],
+        [signX * step, 0],
+        [0, signY * step],
+      ]
+      let best: { x: number; y: number; dist: number } | null = null
+      for (const [sx, sy] of candidates) {
+        const tx = enemy.x + sx
+        const ty = enemy.y + sy
+        if (!this.enemyCanStand(tx, ty, radius)) continue
+        const dist = distance(tx, ty, this.player.x, this.player.y)
+        if (!best || dist < best.dist) best = { x: tx, y: ty, dist }
+      }
+      if (best) {
+        enemy.x = best.x
+        enemy.y = best.y
+        moved = true
+      }
+    }
+    this.clampEnemyToRoom(enemy, room)
+    if (!moved || !this.enemyCanStand(enemy.x, enemy.y, radius)) {
+      enemy.x = prevX
+      enemy.y = prevY
+    }
   }
 
   private hasLineOfSight(ax: number, ay: number, bx: number, by: number): boolean {
@@ -906,11 +1028,24 @@ export class RaidEngine {
     dx: number,
     dy: number,
     dist: number,
+    room: RaidRoomNode,
   ): boolean {
     if (enemy.chargeDash > 0) {
       enemy.chargeDash = Math.max(0, enemy.chargeDash - dt)
-      enemy.x += enemy.chargeDirX * enemy.source.speed * CHARGE_SPEED_MULT * dt
-      enemy.y += enemy.chargeDirY * enemy.source.speed * CHARGE_SPEED_MULT * dt
+      const prevX = enemy.x
+      const prevY = enemy.y
+      this.moveEnemy(
+        enemy,
+        enemy.chargeDirX * enemy.source.speed * CHARGE_SPEED_MULT * dt,
+        enemy.chargeDirY * enemy.source.speed * CHARGE_SPEED_MULT * dt,
+        room,
+      )
+      // 撞墙立即结束冲锋：不会穿墙撞到墙后的玩家
+      if (enemy.x === prevX && enemy.y === prevY) {
+        enemy.chargeDash = 0
+        enemy.chargeCd = CHARGE_COOLDOWN_MS
+        return true
+      }
       if (
         !enemy.chargeHit
         && distance(enemy.x, enemy.y, this.player.x, this.player.y) <= enemy.source.radius + PLAYER_RADIUS + 0.15
@@ -960,6 +1095,7 @@ export class RaidEngine {
       const dx = this.player.x - enemy.x
       const dy = this.player.y - enemy.y
       const dist = Math.hypot(dx, dy) || 1
+      if (!this.hasLineOfSight(enemy.x, enemy.y, this.player.x, this.player.y)) continue
       if (this.hostileBulletCount() < MAX_ENEMY_BULLETS) {
         this.spawnEnemyBullet(enemy, Math.atan2(dy, dx), 7.8)
         this.spawnParticles(enemy.x, enemy.y, 3, '#f87171')
@@ -1215,6 +1351,105 @@ export class RaidEngine {
       const damage = Math.max(1, Math.round(this.maxHp * HAZARD_DPS_PCT / 100 / 2))
       this.hurtPlayer(damage, 'body', now)
     }
+  }
+
+  /**
+   * 日蚀要塞的「轨道炮火」：
+   *   - 每 intervalMs 锁定一次玩家当前位置，warnMs 后结算；
+   *   - 3 发炮弹落在目标点和周围，命中判定同时检查半径与视线（墙体后免伤）；
+   *   - 纯客户端表现，伤害最终仍通过 damage 事件走服务端权威。
+   */
+  private updateGimmick(now: number): void {
+    const gimmick = this.gimmick
+    if (!gimmick) return
+    this.barrageScorches = this.barrageScorches.filter((scorch) => now - scorch.at < 12_000)
+    if (this.barrageWarning) {
+      if (this.barrageWarning.roomId !== this.roomId) {
+        this.barrageWarning = null
+        return
+      }
+      if (now >= this.barrageWarning.endsAt) this.resolveBarrage(now)
+      return
+    }
+    if (now < this.barrageNextAt) return
+    const interval = Math.max(1000, gimmick.intervalMs)
+    if (now - this.barrageNextAt > interval) {
+      // 切后台 / 暂停太久：丢掉错过的轮次，不在恢复瞬间连爆
+      const skipped = Math.floor((now - this.barrageNextAt) / interval)
+      this.barrageIndex += Math.max(0, skipped)
+      this.barrageNextAt += Math.max(0, skipped) * interval
+    }
+    this.beginBarrage(now)
+  }
+
+  private beginBarrage(now: number): void {
+    const gimmick = this.gimmick
+    const room = this.room
+    if (!gimmick || !room) return
+    const rng = createRaidRng(raidSubSeed(this.seed, `barrage:${this.barrageIndex}`))
+    const shells: { x: number; y: number }[] = []
+    for (let i = 0; i < Math.max(1, Math.trunc(gimmick.shells)); i += 1) {
+      if (i === 0) {
+        shells.push({ x: this.player.x, y: this.player.y })
+        continue
+      }
+      const angle = rng() * Math.PI * 2
+      const dist = 1.2 + rng() * 1.8
+      const spot = raidFindWalkableSpot(
+        this.map,
+        this.player.x + Math.cos(angle) * dist,
+        this.player.y + Math.sin(angle) * dist,
+        room,
+      )
+      shells.push({ x: spot.x, y: spot.y })
+    }
+    this.barrageWarning = {
+      roomId: this.roomId,
+      x: this.player.x,
+      y: this.player.y,
+      radius: gimmick.radius,
+      startedAt: now,
+      endsAt: now + gimmick.warnMs,
+      shells,
+    }
+    this.barrageIndex += 1
+    this.barrageNextAt = now + gimmick.intervalMs
+    this.pushToast(`${gimmick.label}锁定，进掩体！`, 'danger', now)
+  }
+
+  private resolveBarrage(now: number): void {
+    const gimmick = this.gimmick
+    const warning = this.barrageWarning
+    if (!gimmick || !warning) return
+    const hitAngleBase = Math.atan2(this.player.y - warning.y, this.player.x - warning.x)
+    for (const shell of warning.shells) {
+      this.barrageScorches.push({ roomId: warning.roomId, x: shell.x, y: shell.y, at: now })
+      this.spawnEffect('nova', shell.x, shell.y, {
+        color: '#f97316',
+        accent: '#fef3c7',
+        radius: warning.radius * 1.15,
+        life: 0.9,
+      })
+      this.spawnEffect('ring', shell.x, shell.y, {
+        color: '#fbbf24',
+        accent: '#fff7ed',
+        radius: warning.radius * 1.35,
+        life: 0.7,
+      })
+      this.spawnParticles(shell.x, shell.y, 16, '#fbbf24')
+      const dist = distance(shell.x, shell.y, this.player.x, this.player.y)
+      const exposed = dist <= warning.radius + PLAYER_RADIUS
+        && this.hasLineOfSight(shell.x, shell.y, this.player.x, this.player.y)
+      if (!exposed) continue
+      const raw = Math.max(1, Math.round(this.maxHp * gimmick.damagePct / 100))
+      this.hurtPlayer(raw, 'body', now, hitAngleBase)
+      this.pushFloat('炮击命中', this.player.x, this.player.y - 1.1, '#fbbf24', true)
+    }
+    if (this.barrageScorches.length > 16) {
+      this.barrageScorches.splice(0, this.barrageScorches.length - 16)
+    }
+    this.addShake(280, 0.1)
+    this.barrageWarning = null
   }
 
   private updateMp(dt: number): void {
@@ -1762,7 +1997,8 @@ export class RaidEngine {
     this.groundSeq += 1
     const id = `g${this.groundSeq}`
     // 与服务端同一个纯函数：沿当前朝向往前抛出后再夹回房间内，双方算出的落点完全一致
-    const pos = resolveDropPosition(this.player.x, this.player.y, this.player.angle, room)
+    const resolved = resolveDropPosition(this.player.x, this.player.y, this.player.angle, room)
+    const pos = raidFindWalkableSpot(this.map, resolved.x, resolved.y, room)
     this.groundLoot.push({
       id,
       roomId: this.roomId,
@@ -1843,6 +2079,9 @@ export class RaidEngine {
           this.player.x = room.x + room.w / 2
           this.player.y = room.y + room.h / 2
         }
+        const spot = raidFindWalkableSpot(this.map, this.player.x, this.player.y, room)
+        this.player.x = spot.x
+        this.player.y = spot.y
       }
     }
     // 服务端已判定死亡的敌人不要继续留在本地攻击（世界增量丢包时自愈）
@@ -2070,6 +2309,23 @@ export class RaidEngine {
       ? 0
       : clamp((now - this.extractStartedAt) / RAID_EXTRACT_CHANNEL_MS, 0, 1)
     const container = this.nearestContainer()
+    const gimmick = this.gimmick
+      ? {
+          kind: this.gimmick.kind,
+          label: this.gimmick.label,
+          nextStrikeInMs: this.barrageWarning
+            ? Math.max(0, this.barrageWarning.endsAt - now)
+            : Math.max(0, this.barrageNextAt - now),
+          warningProgress: this.barrageWarning
+            ? clamp(
+                (now - this.barrageWarning.startedAt)
+                  / Math.max(1, this.barrageWarning.endsAt - this.barrageWarning.startedAt),
+                0,
+                1,
+              )
+            : null,
+        }
+      : null
     return {
       hp: this.hp,
       mp: this.mp,
@@ -2105,6 +2361,7 @@ export class RaidEngine {
       dead: this.dead,
       shield: this.player.shield,
       atkBuffMs: Math.max(0, this.player.atkBuffUntil - now),
+      gimmick,
     }
   }
 }

@@ -5,7 +5,7 @@
  * 保证离线可用、包体积可控，同时让 6 张地图在视觉上真正区分开。
  */
 
-export type RaidTextureKind = 'plank' | 'concrete' | 'rock' | 'panel' | 'mycelium' | 'steel'
+export type RaidTextureKind = 'plank' | 'concrete' | 'rock' | 'panel' | 'mycelium' | 'steel' | 'riveted'
 
 export type RaidPropKind =
   | 'crate' | 'barrel' | 'rock' | 'hay' | 'pipe' | 'valve'
@@ -159,6 +159,26 @@ export const RAID_MAP_ART: Record<string, RaidMapArt> = {
     propDensity: 6,
     minimap: { bg: 'rgba(6, 10, 20, 0.92)', grid: 'rgba(34, 211, 238, 0.18)', room: '#0e7490', cleared: '#22d3ee', current: '#ecfeff' },
   },
+  // 日蚀要塞：锈红铆接装甲 + 琥珀警示灯 + 余烬，室内隔断让掩体成为主视觉
+  citadel: {
+    key: 'citadel',
+    floor: ['#2d241d', '#352a21'],
+    grout: 'rgba(180, 120, 58, 0.36)',
+    wallFace: '#1b1410',
+    wallTop: '#a05a1e',
+    wallEdge: '#fbbf24',
+    accent: '#f59e0b',
+    accentSoft: 'rgba(245, 158, 11, 0.26)',
+    light: 'rgba(251, 191, 36, 0.10)',
+    vignette: 0.58,
+    texture: 'riveted',
+    ambient: { kind: 'ember', color: 'rgba(251, 146, 60, 0.75)', count: 26, speed: 0.45 },
+    hazard: { base: 'rgba(180, 83, 9, 0.52)', glow: '#f97316' },
+    door: { locked: '#4a2f1c', open: '#f59e0b', frame: '#2a1c12' },
+    props: ['crate', 'barrel', 'rubble', 'pipe', 'pillar'],
+    propDensity: 7,
+    minimap: { bg: 'rgba(24, 16, 10, 0.9)', grid: 'rgba(245, 158, 11, 0.18)', room: '#92400e', cleared: '#f59e0b', current: '#fef3c7' },
+  },
 }
 
 const FALLBACK_ART: RaidMapArt = RAID_MAP_ART.dam!
@@ -271,6 +291,31 @@ function paintSurface(ctx: CanvasRenderingContext2D, px: number, kind: RaidTextu
       ctx.arc(((i * 7 + seedSalt) % 16) / 16 * px, ((i * 13 + seedSalt * 5) % 16) / 16 * px, unit * (2 + i), 0, Math.PI * 1.4)
       ctx.stroke()
     }
+  } else if (kind === 'riveted') {
+    // 铆接装甲板：横向板缝 + 四角铆钉 + 一条斜向警示涂装
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.38)'
+    ctx.lineWidth = Math.max(1, unit * 0.7)
+    for (let i = 1; i < 4; i += 1) {
+      const y = (px / 4) * i
+      ctx.beginPath()
+      ctx.moveTo(0, y)
+      ctx.lineTo(px, y)
+      ctx.stroke()
+    }
+    ctx.strokeStyle = 'rgba(245, 158, 11, 0.12)'
+    ctx.lineWidth = Math.max(1, unit * 0.35)
+    ctx.beginPath()
+    ctx.moveTo(0, px)
+    ctx.lineTo(px, 0)
+    ctx.stroke()
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.10)'
+    for (const [rx, ry] of [[2, 2], [13, 2], [2, 13], [13, 13]] as const) {
+      ctx.beginPath()
+      ctx.arc((rx / 16) * px, (ry / 16) * px, unit * 0.55, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.22)'
+    ctx.fillRect(0, px * 0.72, px, px * 0.28)
   } else {
     // steel：格栅 + 拉丝
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.36)'
@@ -305,7 +350,7 @@ export function buildTextures(art: RaidMapArt, px: number): RaidTextureSet {
   const b = makeTile(size)
   paintSurface(b.ctx, size, art.texture, art.floor[1], 7)
   const wall = makeTile(size)
-  paintSurface(wall.ctx, size, art.texture === 'plank' || art.texture === 'rock' ? art.texture : 'concrete', art.wallFace, 3)
+  paintSurface(wall.ctx, size, art.texture === 'plank' || art.texture === 'rock' || art.texture === 'riveted' ? art.texture : 'concrete', art.wallFace, 3)
   // 墙面顶部收边：主题强调的一条高光
   wall.ctx.fillStyle = art.wallTop
   wall.ctx.fillRect(0, 0, size, Math.max(2, size * 0.22))

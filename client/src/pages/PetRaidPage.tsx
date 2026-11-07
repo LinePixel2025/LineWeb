@@ -11,7 +11,7 @@ import { Link } from 'react-router-dom'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import type { RaidEvent } from '../lib/raid/raidRun'
-import { getRaidGear } from '../lib/raid/raidRun'
+import { RAID_DIFFICULTY_LABELS, getRaidGear } from '../lib/raid/raidRun'
 import type { RaidEngine, RaidSnapshot } from '../lib/raid/engine'
 import { useRaidSquad } from '../lib/raid/squad'
 import { onTap } from '../lib/raid/tap'
@@ -88,6 +88,7 @@ function initialSnapshot(run: RaidRun): RaidSnapshot {
     dead: run.hp <= 0,
     shield: 0,
     atkBuffMs: 0,
+    gimmick: null,
   }
 }
 
@@ -714,13 +715,14 @@ export default function PetRaidPage() {
                       <span className="gh-raid-map-emoji">{map.emoji}</span>
                       <div>
                         <h3>{map.name}</h3>
-                        <span className="gh-raid-map-difficulty">{map.difficulty}</span>
+                        <span className="gh-raid-map-difficulty">{RAID_DIFFICULTY_LABELS[map.difficulty as keyof typeof RAID_DIFFICULTY_LABELS] ?? map.difficulty}</span>
                       </div>
                     </div>
                     <p className="gh-raid-map-desc">{map.description}</p>
                     <div className="gh-raid-map-meta">
                       <span>推荐 Lv.{map.recommendLevel}</span>
                       <span>战利品 T{map.lootTier}</span>
+                      {map.gimmickLabel && <span className="is-gimmick">⛓ {map.gimmickLabel}</span>}
                       <span>{formatDuration(map.durationMs)}</span>
                       <span>{map.entryCost > 0 ? `门票 ${map.entryCost}` : '免费'}</span>
                     </div>
@@ -752,7 +754,7 @@ export default function PetRaidPage() {
           <section className="gh-raid-pvp-lobby">
             <div className="gh-raid-section-head">
               <h2>玩家匹配（PvP）</h2>
-              <span>爆率提升 · 非洲之心仅此模式掉落 · 3v3 不足自动补 AI 佣兵</span>
+              <span>爆率提升 · 非洲之心两种模式均可掉落（极稀有） · 3v3 不足自动补 AI 佣兵</span>
             </div>
             {pvp.error && <div className="gh-alert gh-alert--danger">{pvp.error}</div>}
             {pvp.queue?.matched ? (

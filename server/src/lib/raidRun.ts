@@ -23,9 +23,9 @@ export type RaidStatus = 'active' | 'extracted' | 'died' | 'mia' | 'abandoned'
 
 /**
  * 掉落模式：normal = 单人 / 好友组队（默认），pvp = 玩家匹配。
- * 两张品质权重表挂在它上面；「非洲之心」只在 pvp 出，普通模式（含深渊实验室）不再产神话。
+ * 两张品质权重表挂在它上面；2026-11-07 起 normal 恢复 v4 下调前的爆率，
+ * 神话与「非洲之心」两种模式都能出（不再是 PvP 独占）。
  * 模式必须落进 RaidRunState：服务端按 seed 重算地图时要用同一个 mode，否则校验不上。
- * 2026-11-04：state 版本 3 → 4（新增 mode 与撤离故障字段）。
  */
 export type RaidLootMode = 'normal' | 'pvp'
 
@@ -43,7 +43,14 @@ export type RaidEnemyKind = 'scout' | 'soldier' | 'elite' | 'boss'
 
 export type RaidRoomKind = 'start' | 'combat' | 'elite' | 'boss' | 'loot' | 'hazard' | 'extract'
 
-export type RaidDifficulty = 'normal' | 'hard' | 'extreme'
+export type RaidDifficulty = 'normal' | 'hard' | 'extreme' | 'nightmare'
+
+export const RAID_DIFFICULTY_LABELS: Readonly<Record<RaidDifficulty, string>> = {
+  normal: '普通',
+  hard: '困难',
+  extreme: '极难',
+  nightmare: '噩梦',
+}
 
 export const RAID_RARITY_LABELS: Readonly<Record<RaidRarity, string>> = {
   common: '普通',
@@ -81,7 +88,11 @@ export const GAME_TICKET_PRICE = 40
 export const GAME_TICKET_REFUND_POINTS = 20
 /** 门票的目录价值：material 按 100% 回收 ⇒ 回收价就是它，必须 < 返还额，否则卖票比打一把更赚。 */
 export const GAME_TICKET_RECYCLE_VALUE = 18
-/** 撤离信号弹：使用后进本局撤离必定成功（对齐三角洲「付费撤离买确定性」）。 */
+/**
+ * 旧型号撤离信号弹的 key。
+ * 2026-11-07 删除撤离失败机制后它不再有任何效果：停售 / 停掉 / 不可使用，
+ * 只为旧仓库与旧对局里已有的物品保留目录数据（仍可回收）。
+ */
 export const RAID_EXTRACT_FLARE_KEY = 'extract_flare'
 
 /* ============================================================
@@ -114,10 +125,13 @@ export interface RaidItemDef {
   cacheTierMax?: number
   /** 一口价（积分）：设置后覆盖「目录价值 × 1.4」，门票这类要钉死售价的商品用 */
   shopPrice?: number
-  /** 只在玩家匹配模式掉落 */
-  pvpOnly?: boolean
-  /** 消耗品：使用后进本局撤离必定成功（撤离信号弹） */
-  guaranteeExtract?: boolean
+  /** 已停产：不再进入任何掉落池 / 商店，只为旧库存保留目录数据（仍可回收） */
+  retired?: boolean
+  /**
+   * 是否参与首领房「首段保底」的候选池。默认 true；
+   * 非洲之心设为 false，避免保底池把它的实际出货率放大到不可控。
+   */
+  pityEligible?: boolean
 }
 
 export const RAID_ITEMS: readonly RaidItemDef[] = [
@@ -182,12 +196,12 @@ export const RAID_ITEMS: readonly RaidItemDef[] = [
 
   // ---------- 神话（红） ----------
   { key: 'gear_cache_mythic', name: '深渊装备箱', emoji: '🧿', rarity: 'mythic', kind: 'gear_cache', value: 5600, weight: 1, stackMax: 1, description: '可能开出一件 6–8 级装备，巨型背包只在最深处出现。', cacheTierMin: 6, cacheTierMax: 8 },
-  { key: 'heart_of_africa', name: '非洲之心', emoji: '💎', rarity: 'mythic', kind: 'material', value: 9999, weight: 1, stackMax: 1, description: '传说中的巨钻，只有玩家匹配的战场才掉。', pvpOnly: true },
+  { key: 'heart_of_africa', name: '非洲之心', emoji: '💎', rarity: 'mythic', kind: 'material', value: 30000, weight: 0.25, stackMax: 1, description: '传说中的巨钻，全游戏最高价值的战利品；只在最高档地图的最深处出现。', pityEligible: false },
   { key: 'abyss_core', name: '深渊核心', emoji: '🌌', rarity: 'mythic', kind: 'material', value: 6800, weight: 1, stackMax: 1, description: '不断吞噬光线的黑色球体。' },
 
   // ---------- 特殊（门票 / 撤离信号弹） ----------
   { key: GAME_TICKET_KEY, name: '游戏门票', emoji: '🎟️', rarity: 'common', kind: 'material', value: GAME_TICKET_RECYCLE_VALUE, shopPrice: GAME_TICKET_PRICE, weight: 6, stackMax: 5, description: `游戏大厅开一局要用掉一张；打完必返 ${GAME_TICKET_REFUND_POINTS} 积分，所以用票永远比卖票划算。` },
-  { key: 'extract_flare', name: '撤离信号弹', emoji: '🧨', rarity: 'rare', kind: 'consumable', value: 300, weight: 5, stackMax: 2, description: '打亮它，撤离航线就有了保障——本局撤离必定成功。', guaranteeExtract: true },
+  { key: 'extract_flare', name: '撤离信号弹', emoji: '🧨', rarity: 'rare', kind: 'consumable', value: 300, weight: 5, stackMax: 2, description: '已停产的旧型号撤离信号弹，现在只能卖给官方商店。', retired: true },
 ]
 
 export const RAID_ITEM_MAP: ReadonlyMap<string, RaidItemDef> = new Map(
@@ -257,9 +271,9 @@ export function raidGearStorageGate(gearKey: string): number {
   return def ? gearStorageGate(def.tier) : 0
 }
 
-/** 该物品在当前掉落模式下是否可入池 */
-export function raidItemModeAllowed(def: RaidItemDef, mode: RaidLootMode): boolean {
-  return !def.pvpOnly || mode === 'pvp'
+/** 该物品是否还能进任何掉落池（退役物品只为旧库存保留目录数据） */
+export function raidItemDropEligible(def: RaidItemDef): boolean {
+  return def.retired !== true
 }
 
 /* ============================================================
@@ -367,6 +381,29 @@ export function raidGearsOf(slot: RaidGearSlot, tiers?: readonly number[]): read
    地图定义
    ============================================================ */
 
+/**
+ * 房间内部布局：
+ *   - open：v4 前的平坦房间（其余地图保持原样，避免旧对局重算地形漂移）
+ *   - fortress：日蚀要塞的隔断房（保护带 + 四象限短墙/掩体，详见 generateRaidMap）
+ */
+export type RaidInteriorKind = 'open' | 'fortress'
+
+/** 地图独有机制（目前只有轨道炮火；纯客户端模拟，服务端只校验伤害事件） */
+export interface RaidMapGimmick {
+  kind: 'orbital'
+  label: string
+  /** 两轮锁定之间的间隔（毫秒） */
+  intervalMs: number
+  /** 锁定预警时长（毫秒） */
+  warnMs: number
+  /** 单发炮弹半径（瓦片） */
+  radius: number
+  /** 每发命中的伤害：最大生命百分比 */
+  damagePct: number
+  /** 每轮炮弹数量 */
+  shells: number
+}
+
 export interface RaidMapDef {
   key: string
   name: string
@@ -393,6 +430,10 @@ export interface RaidMapDef {
   enemyLevel: number
   /** 单局时间上限（毫秒） */
   durationMs: number
+  /** 房间内部布局，缺省 open */
+  interior?: RaidInteriorKind
+  /** 地图独有机制，缺省无 */
+  gimmick?: RaidMapGimmick
 }
 
 export const RAID_MAPS: readonly RaidMapDef[] = [
@@ -505,7 +546,7 @@ export const RAID_MAPS: readonly RaidMapDef[] = [
     key: 'abyss',
     name: '深渊实验室',
     emoji: '🧪',
-    description: '深埋地下的禁忌实验设施，重装守卫密布；神话战利品只在玩家匹配模式的这片深渊里出现。',
+    description: '深埋地下的禁忌实验设施，重装守卫密布；神话战利品在最高档地图都有机会出现。',
     difficulty: 'extreme',
     cols: 5,
     rows: 5,
@@ -521,6 +562,37 @@ export const RAID_MAPS: readonly RaidMapDef[] = [
     color: '#2b3a67',
     enemyLevel: 13,
     durationMs: 26 * 60_000,
+  },
+  {
+    key: 'citadel',
+    name: '日蚀要塞',
+    emoji: '🏰',
+    description: '被轨道炮火封锁的要塞废墟：房间被隔断与掩体切成多段，每 24 秒天基火力会锁定你的位置——躲到墙后，或者赌命跑出去。',
+    difficulty: 'nightmare',
+    cols: 6,
+    rows: 5,
+    enemyBudget: 58,
+    bossRooms: 3,
+    eliteRooms: 5,
+    lootRooms: 5,
+    hazardRooms: 4,
+    extractRooms: 3,
+    entryCost: 1500,
+    recommendLevel: 13,
+    lootTier: 5,
+    color: '#b45309',
+    enemyLevel: 16,
+    durationMs: 28 * 60_000,
+    interior: 'fortress',
+    gimmick: {
+      kind: 'orbital',
+      label: '轨道炮火',
+      intervalMs: 24_000,
+      warnMs: 3_600,
+      radius: 2.4,
+      damagePct: 10,
+      shells: 3,
+    },
   },
 ]
 
@@ -549,39 +621,12 @@ export const RAID_TILE_FLOOR = 1
 export const RAID_TILE_DOOR = 2
 export const RAID_TILE_HAZARD = 3
 
-/** 撤离读条（毫秒） */
+/** 撤离读条（毫秒）。2026-11-07 起读条走完必定撤离，不再有随机运输故障。 */
 export const RAID_EXTRACT_CHANNEL_MS = 6000
 
-/**
- * 撤离点「运输故障」概率（对齐三角洲：常规撤离点是最危险的静止窗口，能不能走要看运气与情报）。
- * 信号弹（RAID_EXTRACT_FLARE_KEY）用完即 0% —— 花局内收益买确定性。
- */
-export const RAID_EXTRACT_FAIL_RATE = 0.25
+/** 轨道炮火首轮锁定延迟（毫秒）：进图先给玩家一点熟悉房间隔断的时间 */
+export const RAID_ORBITAL_START_DELAY_MS = 12_000
 
-/**
- * 某个撤离点判定失效后，全图撤离进入的冷却（这段时间内任何撤离点都不许起读条）。
- * 同时也是死局兜底的计时基准：当图上全部撤离点都已失联，冷却一过 extractStart 会
- * 清空失效列表放行（救援队重新架设信标），避免单撤离点地图失败一次就永远无出口。
- */
-export const RAID_EXTRACT_COOLDOWN_MS = 60_000
-
-/**
- * 掷「这个撤离点这一次读条会不会故障」。
- *
- * 必须可重放：只吃 (seed, roomId, 第几次读条, 是否已点亮信号弹)，不吃 Math.random、也不吃墙上时钟。
- * 服务端在 performRaidEvents 里按 seed 重算地图并重放事件，attempt 来自持久化的 state.extractRolls，
- * 所以同一次读条在服务端与任何重放里必然得到同一个结果——这是把随机塞进「服务端权威重放」模型的唯一前提。
- */
-export function rollExtractFailure(
-  seed: number,
-  roomId: number,
-  attempt: number,
-  guaranteed: boolean,
-): boolean {
-  if (guaranteed) return false
-  const rng = createRaidRng(raidSubSeed(seed, `extract-fail:${roomId}:${attempt}`))
-  return rng() < RAID_EXTRACT_FAIL_RATE
-}
 /** 技能冷却：每「回合」折算 2500ms */
 export const RAID_SKILL_CD_MS = 2500
 /** MP 每秒回复（实时对局节奏快，回复过低会让高费技能形同虚设） */
@@ -628,6 +673,21 @@ function rngInt(rng: RaidRng, min: number, max: number): number {
 
 function rngPick<T>(rng: RaidRng, list: readonly T[]): T {
   return list[Math.min(list.length - 1, Math.floor(rng() * list.length))] as T
+}
+
+/** 按 item.weight 加权抽取；权重全部非法时退回均匀抽取 */
+function rngPickWeighted(
+  rng: RaidRng,
+  list: readonly RaidItemDef[],
+): RaidItemDef {
+  const total = list.reduce((sum, item) => sum + Math.max(0, item.weight), 0)
+  if (total <= 0) return rngPick(rng, list)
+  let roll = rng() * total
+  for (const item of list) {
+    roll -= Math.max(0, item.weight)
+    if (roll <= 0) return item
+  }
+  return list[list.length - 1] as RaidItemDef
 }
 
 function clampInt(value: number, min: number, max: number): number {
@@ -714,6 +774,8 @@ export interface RaidMapNode {
   doors: RaidDoorNode[]
   extracts: RaidExtractPoint[]
   startRoom: number
+  /** 地图独有机制（缺省无） */
+  gimmick?: RaidMapGimmick
 }
 
 export function raidTileIndex(width: number, x: number, y: number): number {
@@ -743,10 +805,15 @@ function roomCenter(room: RaidRoomNode): { x: number; y: number } {
   }
 }
 
-function roomInnerTiles(room: RaidRoomNode): Array<{ x: number; y: number }> {
+function roomInnerTiles(
+  room: RaidRoomNode,
+  tiles: readonly number[],
+  width: number,
+): Array<{ x: number; y: number }> {
   const out: Array<{ x: number; y: number }> = []
   for (let y = room.y + 2; y < room.y + room.h - 2; y += 1) {
     for (let x = room.x + 2; x < room.x + room.w - 2; x += 1) {
+      if (tiles[raidTileIndex(width, x, y)] === RAID_TILE_WALL) continue
       out.push({ x, y })
     }
   }
@@ -754,20 +821,112 @@ function roomInnerTiles(room: RaidRoomNode): Array<{ x: number; y: number }> {
 }
 
 /**
+ * 日蚀要塞的房间隔断。
+ *
+ * 生成口径（保证连通、不做闭环）：
+ *   - 房间内圈 1 格永远留空（进门不会直接撞墙）；
+ *   - 中央 3 格宽十字（对齐四个方向的门/走廊）与中央 3×3 永远留空；
+ *   - 隔断只落在四象限内，使用孤立掩体 / 短横墙 / 短竖墙 / 2×2 掩体，
+ *     任意墙段两端都至少留 1 格地面，因此不会把房间切成不可达死区。
+ * 起点房不生成隔断；撤离房只放四角掩体，保证信标周围可站立。
+ */
+function carveFortressInterior(
+  tiles: number[],
+  width: number,
+  room: RaidRoomNode,
+  seed: number,
+): void {
+  const rng = createRaidRng(raidSubSeed(seed, `interior:${room.id}`))
+  const cx = room.x + Math.floor(room.w / 2)
+  const cy = room.y + Math.floor(room.h / 2)
+  const put = (x: number, y: number): void => {
+    if (x <= room.x + 1 || x >= room.x + room.w - 2) return
+    if (y <= room.y + 1 || y >= room.y + room.h - 2) return
+    if (Math.abs(x - cx) <= 1 || Math.abs(y - cy) <= 1) return
+    tiles[raidTileIndex(width, x, y)] = RAID_TILE_WALL
+  }
+  if (room.kind === 'start') {
+    // 起点房也放四角掩体：出生点中央 3×3 仍为空地，但房间不再是完全平坦的一整块
+    put(room.x + 2, room.y + 2)
+    put(room.x + room.w - 3, room.y + 2)
+    put(room.x + 2, room.y + room.h - 3)
+    put(room.x + room.w - 3, room.y + room.h - 3)
+    return
+  }
+  const corner = room.kind === 'extract'
+  if (corner) {
+    put(room.x + 2, room.y + 2)
+    put(room.x + room.w - 3, room.y + 2)
+    put(room.x + 2, room.y + room.h - 3)
+    put(room.x + room.w - 3, room.y + room.h - 3)
+    return
+  }
+  if (room.kind === 'boss') {
+    // 首领房：四角掩体 + 两条短侧墙，中央区域留给 Boss 与玩家周旋
+    put(room.x + 2, room.y + 2)
+    put(room.x + room.w - 3, room.y + 2)
+    put(room.x + 2, room.y + room.h - 3)
+    put(room.x + room.w - 3, room.y + room.h - 3)
+    const bossLen = rngInt(rng, 2, 3)
+    for (let i = 0; i < bossLen; i += 1) {
+      put(room.x + 3 + i, room.y + 4)
+      put(room.x + room.w - 4 - i, room.y + room.h - 5)
+    }
+    return
+  }
+  const quadrants = [
+    { x0: room.x + 2, x1: cx - 2, y0: room.y + 2, y1: cy - 2 },
+    { x0: cx + 2, x1: room.x + room.w - 3, y0: room.y + 2, y1: cy - 2 },
+    { x0: room.x + 2, x1: cx - 2, y0: cy + 2, y1: room.y + room.h - 3 },
+    { x0: cx + 2, x1: room.x + room.w - 3, y0: cy + 2, y1: room.y + room.h - 3 },
+  ] as const
+  for (const quadrant of quadrants) {
+    const pattern = rngInt(rng, 0, 3)
+    if (pattern === 0) {
+      // 孤立掩体：1–3 个单格/2 格
+      const count = rngInt(rng, 1, 3)
+      for (let i = 0; i < count; i += 1) {
+        put(rngInt(rng, quadrant.x0, quadrant.x1), rngInt(rng, quadrant.y0, quadrant.y1))
+      }
+    } else if (pattern === 1) {
+      // 短横墙：两端靠 put 的边界与随机长度自然留缝
+      const len = rngInt(rng, 2, 3)
+      const y = rngInt(rng, quadrant.y0, quadrant.y1)
+      const start = rngInt(rng, quadrant.x0, Math.max(quadrant.x0, quadrant.x1 - len))
+      for (let i = 0; i < len; i += 1) put(start + i, y)
+    } else if (pattern === 2) {
+      // 短竖墙
+      const len = rngInt(rng, 2, 3)
+      const x = rngInt(rng, quadrant.x0, quadrant.x1)
+      const start = rngInt(rng, quadrant.y0, Math.max(quadrant.y0, quadrant.y1 - len))
+      for (let i = 0; i < len; i += 1) put(x, start + i)
+    } else {
+      // 2×2 掩体
+      const x = rngInt(rng, quadrant.x0, Math.max(quadrant.x0, quadrant.x1 - 1))
+      const y = rngInt(rng, quadrant.y0, Math.max(quadrant.y0, quadrant.y1 - 1))
+      put(x, y)
+      put(x + 1, y)
+      put(x, y + 1)
+      put(x + 1, y + 1)
+    }
+  }
+}
+
+/**
  * 品质权重（按掉落模式 × 地图 lootTier 1–5），每模式每档列和恒为 100。
  *
- * normal 是 2026-11-04 下调过的表：相对旧表整体「下移一档」——
- * 稀有 −3~−5、史诗 −3~−5、传说 −3~−4 个百分点全部回灌普通/优良，神话直接归零。
- * pvp（玩家匹配）才是原来的高爆率体验，并且只有它能掉神话（非洲之心 pvpOnly）。
+ * 2026-11-07：normal 恢复 v4 下调前的表（T5 神话重新为 4），普通模式重新产出神话；
+ * pvp 仍保留更高的高爆率体验。两种模式都能掉「非洲之心」，但它的 item.weight 只有 0.25，
+ * 且被排除在首领保底池之外，整体比 v4 前更稀有。
  */
 const RARITY_TIER_WEIGHTS_BY_MODE: Readonly<Record<RaidLootMode, Readonly<Record<RaidRarity, readonly number[]>>>> = {
   normal: {
-    common: [60, 60, 44, 30, 20],
-    uncommon: [26, 26, 30, 28, 24],
-    rare: [10, 10, 17, 24, 26],
-    epic: [3, 3, 7, 13, 19],
-    legendary: [1, 1, 2, 5, 11],
-    mythic: [0, 0, 0, 0, 0],
+    common: [60, 44, 30, 20, 12],
+    uncommon: [26, 30, 28, 24, 20],
+    rare: [10, 17, 24, 26, 25],
+    epic: [3, 7, 13, 19, 24],
+    legendary: [1, 2, 5, 11, 15],
+    mythic: [0, 0, 0, 0, 4],
   },
   pvp: {
     common: [56, 40, 26, 16, 8],
@@ -788,10 +947,10 @@ export function rarityWeightAtTier(
   return RARITY_TIER_WEIGHTS_BY_MODE[mode][rarity]?.[index] ?? 0
 }
 
-/** 按地图档次掷一个物品（只考虑当前模式下可掉、weight > 0 且有品质权重的条目） */
+/** 按地图档次掷一个物品（只考虑未停产、weight > 0 且有品质权重的条目） */
 export function rollRaidItemKey(rng: RaidRng, lootTier: number, mode: RaidLootMode = 'normal'): string {
   const candidates = RAID_ITEMS.filter(
-    (item) => rarityWeightAtTier(item.rarity, lootTier, mode) > 0 && raidItemModeAllowed(item, mode),
+    (item) => raidItemDropEligible(item) && rarityWeightAtTier(item.rarity, lootTier, mode) > 0,
   )
   let total = 0
   for (const item of candidates) {
@@ -806,16 +965,17 @@ export function rollRaidItemKey(rng: RaidRng, lootTier: number, mode: RaidLootMo
   return candidates[candidates.length - 1]?.key ?? 'scrap_metal'
 }
 
-/** 容器掉落段数：普通模式比匹配模式少一段（出货总量下调的另一半在这里） */
+/** 容器掉落段数：2026-11-07 起 normal 也恢复到 v4 前的高产出（非 Boss 1–3 / Boss 2–4） */
 export function raidContainerLootSegments(bossRoom: boolean, mode: RaidLootMode): [number, number] {
   if (mode === 'pvp') return bossRoom ? [2, 4] : [1, 3]
-  return bossRoom ? [2, 3] : [1, 2]
+  return bossRoom ? [2, 4] : [1, 3]
 }
 
 /**
  * 开箱掉落。段数与保底都按模式分档：
- *   normal —— 非 Boss 1–2 段、Boss 2–3 段，首段保底史诗+（tier≥4 图传说+）；
- *   pvp    —— 沿用旧的高爆率（非 Boss 1–3 段、Boss 2–4 段，首段稀有+/史诗+），并且只有它能掉神话。
+ *   normal —— 非 Boss 1–3 段、Boss 2–4 段，首段保底稀有+（tier≥4 图史诗+）；
+ *   pvp    —— 同样的段数，但品质表更偏高阶。
+ * 首领首段保底池按 item.weight 加权抽取，并排除退役物品与 pityEligible:false（非洲之心）。
  */
 export function rollRaidContainerLoot(
   seed: number,
@@ -831,12 +991,15 @@ export function rollRaidContainerLoot(
   for (let i = 0; i < count; i += 1) {
     let itemKey = rollRaidItemKey(rng, lootTier, mode)
     if (bossRoom && i === 0) {
-      // Boss 房首段保底：普通模式整体抬一档（稀有→史诗、史诗→传说）
-      const floorRank = mode === 'pvp' ? (lootTier >= 4 ? 3 : 2) : (lootTier >= 4 ? 4 : 3)
+      // Boss 房首段保底：低档图稀有+、高档图史诗+；只从当前模式权重非 0 的可掉落池里抽
+      const floorRank = lootTier >= 4 ? 3 : 2
       const pool = RAID_ITEMS.filter(
-        (item) => RAID_RARITY_ORDER.indexOf(item.rarity) >= floorRank && raidItemModeAllowed(item, mode),
+        (item) => RAID_RARITY_ORDER.indexOf(item.rarity) >= floorRank
+          && rarityWeightAtTier(item.rarity, lootTier, mode) > 0
+          && raidItemDropEligible(item)
+          && item.pityEligible !== false,
       )
-      if (pool.length > 0) itemKey = rngPick(rng, pool).key
+      if (pool.length > 0) itemKey = rngPickWeighted(rng, pool).key
     }
     const def = RAID_ITEM_MAP.get(itemKey)
     const stackMax = def?.stackMax ?? 1
@@ -1074,11 +1237,19 @@ export function generateRaidMap(seed: number, map: RaidMapDef, mode: RaidLootMod
   }
   // 剩余房间保持 combat
 
-  // —— 危险房间铺危险瓦片（内部四角留安全区）——
+  // —— 日蚀要塞：房间内部隔断（其余地图保持 v4 前的平坦房，避免旧对局地形漂移）——
+  if (map.interior === 'fortress') {
+    for (const room of rooms) {
+      carveFortressInterior(tiles, width, room, seed)
+    }
+  }
+
+  // —— 危险房间铺危险瓦片（内部四角留安全区；不覆盖隔断墙）——
   for (const room of rooms) {
     if (room.kind !== 'hazard') continue
     for (let y = room.y + 3; y < room.y + room.h - 3; y += 1) {
       for (let x = room.x + 3; x < room.x + room.w - 3; x += 1) {
+        if (tiles[raidTileIndex(width, x, y)] !== RAID_TILE_FLOOR) continue
         if (typeRng() < 0.55) tiles[raidTileIndex(width, x, y)] = RAID_TILE_HAZARD
       }
     }
@@ -1087,7 +1258,7 @@ export function generateRaidMap(seed: number, map: RaidMapDef, mode: RaidLootMod
   // —— 敌人分配 ——
   let enemyBudget = Math.max(0, map.enemyBudget)
   const placeEnemies = (room: RaidRoomNode, kinds: readonly RaidEnemyKind[], forceFirst = false): void => {
-    const tilesPool = roomInnerTiles(room)
+    const tilesPool = roomInnerTiles(room, tiles, width)
     for (let i = 0; i < kinds.length; i += 1) {
       const kind = kinds[i] as RaidEnemyKind
       const mustPlace = forceFirst && i === 0
@@ -1145,7 +1316,7 @@ export function generateRaidMap(seed: number, map: RaidMapDef, mode: RaidLootMod
             : room.kind === 'combat'
               ? rngInt(typeRng, 1, 2)
               : 1
-    const tilesPool = roomInnerTiles(room)
+    const tilesPool = roomInnerTiles(room, tiles, width)
     for (let i = 0; i < count; i += 1) {
       const spot = tilesPool.length > 0
         ? tilesPool[Math.floor(typeRng() * tilesPool.length)]
@@ -1185,6 +1356,7 @@ export function generateRaidMap(seed: number, map: RaidMapDef, mode: RaidLootMod
     doors,
     extracts,
     startRoom,
+    gimmick: map.gimmick,
   }
 }
 
@@ -1311,16 +1483,6 @@ export interface RaidRunState {
   extractionRoom: number | null
   /** 掉落模式（normal / pvp）。服务端按 seed 重算地图时要用它选权重表。 */
   mode: RaidLootMode
-  /** 本局已判定失效、不再可用读条的撤离房间 id */
-  extractDisabled: number[]
-  /** 全图撤离冷却截止（毫秒时间戳）；null = 无冷却 */
-  extractBlockedUntil: number | null
-  /** 最近一次撤离故障的时刻（epoch ms，0 = 尚未失败过）。全部撤离点失联后由它判定「救援队重新架设信标」的冷却 */
-  lastExtractFailAt: number
-  /** 已完成的读条次数——故障掷骰的 attempt，必须持久化才能重放 */
-  extractRolls: number
-  /** 已点亮撤离信号弹：本局后续撤离读条必定成功（掷骰直接返回 false） */
-  extractGuaranteed: boolean
   /** 进过的撤离房间（小地图只有进过才点亮，对应「路线显示不清」） */
   discoveredExtracts: number[]
   /** PvP 模式下的击倒者用户 id（结算与 HUD 归因用；NPC 击倒为 null） */
@@ -1334,7 +1496,7 @@ export interface RaidStartInput {
   seed: number
   mapKey: string
   squadId?: string
-  /** 掉落模式，缺省 normal；玩家匹配传 pvp（高爆率 + 唯一能掉非洲之心的模式） */
+  /** 掉落模式，缺省 normal；玩家匹配传 pvp（高爆率，但非洲之心两种模式都能掉） */
   mode?: RaidLootMode
   difficulty: string
   hp: number
@@ -1404,11 +1566,6 @@ export function createRaidRun(input: RaidStartInput): RaidRunState {
     damageTaken: 0,
     extractionStartedAt: null,
     extractionRoom: null,
-    extractDisabled: [],
-    extractBlockedUntil: null,
-    lastExtractFailAt: 0,
-    extractRolls: 0,
-    extractGuaranteed: false,
     discoveredExtracts: [],
     killedByUserId: null,
     groundLoot: [],
@@ -1729,11 +1886,7 @@ function cloneState(state: RaidRunState): RaidRunState {
     safe: state.safe.map((stack) => ({ ...stack })),
     groundLoot: (state.groundLoot ?? []).map((item) => ({ ...item })),
     groundSeq: state.groundSeq ?? 0,
-    extractDisabled: [...(state.extractDisabled ?? [])],
     discoveredExtracts: [...(state.discoveredExtracts ?? [])],
-    // 旧持久化状态没有该字段，按「从未失败过」兜底
-    lastExtractFailAt: state.lastExtractFailAt ?? 0,
-    extractRolls: state.extractRolls ?? 0,
     mode: state.mode ?? 'normal',
     skills: state.skills.map((skill) => ({ ...skill })),
     skillUsedAt: { ...state.skillUsedAt },
@@ -1812,6 +1965,46 @@ export function resolveDropPosition(
     anchored.y + Math.sin(rad) * RAID_DROP_THROW_DISTANCE,
     room,
   )
+}
+
+/**
+ * 把坐标吸附到房间内最近的可站立瓦片。
+ *
+ * 日蚀要塞的房间内部有隔断，丢弃落点 / 换房落点 / 服务端回包夹取都可能落进墙体；
+ * 客户端与服务端必须共用这一个函数，否则玩家会卡在墙里或物品掉进墙里。
+ * 目标点本身可站立时原样返回；否则按半径 1..6 的环搜索最近非墙瓦片，兜底返回房间中心。
+ */
+export function raidFindWalkableSpot(
+  map: RaidMapNode,
+  x: number,
+  y: number,
+  room: RaidRoomNode,
+): { x: number; y: number } {
+  const cx = Number.isFinite(x) ? Number(x) : room.x + room.w / 2
+  const cy = Number.isFinite(y) ? Number(y) : room.y + room.h / 2
+  const minX = room.x + 1
+  const maxX = room.x + room.w - 2
+  const minY = room.y + 1
+  const maxY = room.y + room.h - 2
+  const walkable = (tx: number, ty: number): boolean => {
+    if (tx < minX || tx > maxX || ty < minY || ty > maxY) return false
+    return map.tiles[raidTileIndex(map.width, tx, ty)] !== RAID_TILE_WALL
+  }
+  const startX = Math.floor(cx)
+  const startY = Math.floor(cy)
+  if (walkable(startX, startY)) return { x: cx, y: cy }
+  for (let radius = 1; radius <= 6; radius += 1) {
+    for (let dy = -radius; dy <= radius; dy += 1) {
+      for (let dx = -radius; dx <= radius; dx += 1) {
+        if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue
+        const tx = startX + dx
+        const ty = startY + dy
+        if (!walkable(tx, ty)) continue
+        return { x: tx + 0.5, y: ty + 0.5 }
+      }
+    }
+  }
+  return { x: room.x + room.w / 2, y: room.y + room.h / 2 }
 }
 
 /**
@@ -1952,7 +2145,8 @@ export function applyRaidEvent(
       else if (event.from === 'rig') next.rig = removed
       else next.safe = removed
       next.groundSeq += 1
-      const pos = resolveDropPosition(event.x, event.y, event.angle, room)
+      const resolved = resolveDropPosition(event.x, event.y, event.angle, room)
+      const pos = raidFindWalkableSpot(map, resolved.x, resolved.y, room)
       next.groundLoot.push({
         id: `g${next.groundSeq}`,
         roomId: next.currentRoom,
@@ -1987,6 +2181,7 @@ export function applyRaidEvent(
     case 'useItem': {
       const def = RAID_ITEM_MAP.get(event.itemKey)
       if (!def || def.kind !== 'consumable') return { state, error: '这不是可用道具' }
+      if (def.retired) return { state, error: '这件道具已停产，只能卖给官方商店' }
       const container = currentContainer(next, event.from)
       if (!container.some((stack) => stack.itemKey === event.itemKey)) {
         return { state, error: '这里没有这件道具' }
@@ -2008,20 +2203,12 @@ export function applyRaidEvent(
         else next.gear = { ...next.gear, armor: repaired.gear }
         makeLog(next, 'info', `维修完成，恢复 ${repaired.restored} 点耐久。`, now)
       }
-      if (def.guaranteeExtract && next.extractGuaranteed) {
-        return { state, error: '撤离航线已有保障，不必再点亮信号弹' }
-      }
       const consumed = consumeItemFromContainer(container, event.itemKey, 1)
       if (!consumed) return { state, error: '使用失败' }
       if (event.from === 'backpack') next.backpack = consumed
       else if (event.from === 'rig') next.rig = consumed
       else next.safe = consumed
-      if (def.guaranteeExtract) {
-        next.extractGuaranteed = true
-        makeLog(next, 'extract', '撤离信号弹已点亮，本局撤离必定成功。', now)
-      } else {
-        makeLog(next, 'info', `使用 ${def.name}`, now)
-      }
+      makeLog(next, 'info', `使用 ${def.name}`, now)
       return { state: next }
     }
     case 'castSkill': {
@@ -2060,26 +2247,9 @@ export function applyRaidEvent(
       if (!room || room.kind !== 'extract') return { state, error: '这里不能撤离' }
       if (roomContainsLivingEnemies(next, map, room.id)) return { state, error: '撤离区还有敌人' }
       if (next.extractionStartedAt !== null) return { state: next }
-      if ((next.extractDisabled ?? []).includes(room.id)) {
-        // 死局兜底（救援队重新架设信标）：全部撤离点都失联且全图冷却已过时，清空失效列表并放行。
-        // 否则 wasteland 这类单撤离点地图失败一次就永远无出口，本局只能干等到超时判失联。
-        const disabled = next.extractDisabled ?? []
-        const allDisabled = map.extracts.length > 0
-          && map.extracts.every((point) => disabled.includes(point.roomId))
-        const lastFailAt = next.lastExtractFailAt ?? 0
-        if (allDisabled && now - lastFailAt >= RAID_EXTRACT_COOLDOWN_MS) {
-          next.extractDisabled = []
-          makeLog(next, 'info', '救援队重新架设了全部撤离信标，可以再次尝试撤离。', now)
-        } else {
-          return { state, error: '这个撤离点已经失联，只能另找出口' }
-        }
-      }
-      if (next.extractBlockedUntil !== null && now < next.extractBlockedUntil) {
-        return { state, error: `运输调度尚未恢复，还需 ${Math.ceil((next.extractBlockedUntil - now) / 1000)} 秒` }
-      }
       next.extractionStartedAt = now
       next.extractionRoom = room.id
-      makeLog(next, 'extract', next.extractGuaranteed ? '开始撤离读条，航线已有保障……' : '开始撤离读条，站稳别动……', now)
+      makeLog(next, 'extract', '开始撤离读条，站稳别动……', now)
       return { state: next }
     }
     case 'extractDone': {
@@ -2087,22 +2257,9 @@ export function applyRaidEvent(
       if (now - next.extractionStartedAt < RAID_EXTRACT_CHANNEL_MS) {
         return { state, error: '撤离读条未完成' }
       }
-      const roomId = next.extractionRoom ?? next.currentRoom
-      // attempt 持久化在 state 里，掷骰只吃 (seed, roomId, attempt, 信号弹)：服务端重放必然得到同一结果
-      const attempt = (next.extractRolls ?? 0) + 1
-      next.extractRolls = attempt
-      if (rollExtractFailure(next.seed, roomId, attempt, next.extractGuaranteed)) {
-        next.extractionStartedAt = null
-        next.extractionRoom = null
-        if (!next.extractDisabled.includes(roomId)) next.extractDisabled.push(roomId)
-        next.extractBlockedUntil = now + RAID_EXTRACT_COOLDOWN_MS
-        // 记录故障时刻：全部撤离点失联后，冷却一过就由「救援队」重新架设信标（extractStart 的死局兜底）
-        next.lastExtractFailAt = now
-        makeLog(next, 'danger', '运输故障：这个撤离点已失联。背包里一件东西都没丢，但全图撤离要停 60 秒，得另找出口。', now)
-        return { state: next }
-      }
+      // 2026-11-07：删除随机运输故障。走完读条必定撤离，背包/胸挂/安全箱原样保留。
       next.status = 'extracted'
-      makeLog(next, 'success', next.extractGuaranteed ? '撤离成功（信号弹保住了航线）！' : '撤离成功！', now)
+      makeLog(next, 'success', '撤离成功！', now)
       return { state: next }
     }
     case 'abandon': {

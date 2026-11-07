@@ -114,15 +114,9 @@ export interface RaidRunDto {
   map: RaidMapNode
   log: RaidRunState['log']
   extractionStartedAt: number | null
-  /** 掉落模式：normal = 单人/组队，pvp = 玩家匹配（高爆率，唯一能掉非洲之心的模式） */
+  /** 掉落模式：normal = 单人/组队，pvp = 玩家匹配（高爆率）；非洲之心两种模式都能掉 */
   mode: RaidLootMode
-  /** 本局已判定失效的撤离点房间 id */
-  extractDisabled: number[]
-  /** 全图撤离冷却截止（毫秒时间戳），null = 无冷却 */
-  extractBlockedUntil: number | null
-  /** 已点亮撤离信号弹：本局后续撤离读条必定成功 */
-  extractGuaranteed: boolean
-  /** 已探明的撤离点房间（未探明的不会出现在下发的 map.extracts 里） */
+  /** 已探明的撤离点房间（兼容字段；撤离点对地图全程可见后不再用于裁剪） */
   discoveredExtracts: number[]
   /** PvP 模式下击倒本人的玩家 id（NPC 击倒为 null） */
   killedByUserId: number | null
@@ -230,9 +224,6 @@ function runDto(row: PetRaid, state: RaidRunState, now: number): RaidRunDto {
     log: state.log,
     extractionStartedAt: state.extractionStartedAt,
     mode,
-    extractDisabled: [...(state.extractDisabled ?? [])],
-    extractBlockedUntil: state.extractBlockedUntil ?? null,
-    extractGuaranteed: state.extractGuaranteed === true,
     discoveredExtracts: [...(state.discoveredExtracts ?? [])],
     killedByUserId: state.killedByUserId ?? null,
     startedAt: new Date(state.startedAt).toISOString(),
@@ -278,7 +269,7 @@ export interface RaidStartOptions {
   squadId?: string
   /** 组队模式：地面掉落发号基址（按成员错开，防撞 id） */
   groundSeqBase?: number
-  /** 掉落模式，缺省 normal；玩家匹配传 pvp（高爆率 + 唯一能掉非洲之心的模式） */
+  /** 掉落模式，缺省 normal；玩家匹配传 pvp（高爆率，但非洲之心两种模式都能掉） */
   mode?: RaidLootMode
 }
 

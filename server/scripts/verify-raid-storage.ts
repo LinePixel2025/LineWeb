@@ -153,7 +153,7 @@ assertEqual(raidRecycleUnitPrice('medkit'), 72, '消耗品回收 60%')
 assertEqual(raidRecycleUnitPrice('gear_cache'), 182, '装备箱回收 70%')
 assertEqual(raidRecycleValue('scrap_metal', 3), 105, '整组回收价')
 assertEqual(raidRecycleValue('nope', 3), 0, '未知物品回收 0')
-assertEqual(raidSellPrice('heart_of_africa', 1), 9999, '神话材料全额回收')
+assertEqual(raidSellPrice('heart_of_africa', 1), 30000, '神话材料全额回收（非洲之心已上调到 30000）')
 assertEqual(raidSellPrice('medkit_plus', 2), 384, '强效医疗箱回收 60% × 2')
 
 assertEqual(raidShopItemPrice('medkit'), 168, '急救包商店价 = 120 × 1.4')

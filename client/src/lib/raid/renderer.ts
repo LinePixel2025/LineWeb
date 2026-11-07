@@ -15,6 +15,7 @@
  */
 
 import {
+  RAID_GEAR_MAP,
   RAID_ITEM_MAP,
   RAID_TILE_DOOR,
   RAID_TILE_HAZARD,
@@ -33,6 +34,34 @@ const SPECIES_COLORS: Record<string, { body: string; belly: string; ear: string;
   rabbit: { body: '#eec4fa', belly: '#fbe8ff', ear: '#cf9be8', accent: '#fdf4ff' },
   fox: { body: '#f07f2c', belly: '#ffd0a1', ear: '#c85a12', accent: '#fff7ed' },
   panda: { body: '#d9dde4', belly: '#f4f6f9', ear: '#3f4650', accent: '#f9fafb' },
+}
+
+/** 眼睛基色：和宠物页立绘保持同一套气质（熊猫单独走白眼球 + 黑瞳） */
+const SPECIES_EYE: Record<string, string> = {
+  cat: '#8a5316',
+  dog: '#6b4423',
+  bird: '#1f6f9c',
+  rabbit: '#a4586f',
+  fox: '#9a5626',
+  panda: '#3a3a44',
+}
+
+/** 未知物种兜底：cat 的配色与轮廓 */
+function normalizePetSpecies(raw: string): string {
+  return raw in SPECIES_COLORS ? raw : 'cat'
+}
+
+function shadeColor(hex: string, amount: number): string {
+  const match = /^#([0-9a-f]{6})$/i.exec(hex)
+  if (!match) return hex
+  const value = parseInt(match[1] as string, 16)
+  const target = amount >= 0 ? 255 : 0
+  const ratio = Math.abs(amount)
+  const r = (value >> 16) & 0xff
+  const g = (value >> 8) & 0xff
+  const b = value & 0xff
+  const mix = (channel: number): number => Math.round(channel + (target - channel) * ratio)
+  return `#${[mix(r), mix(g), mix(b)].map((channel) => channel.toString(16).padStart(2, '0')).join('')}`
 }
 
 const TEAMMATE_RING = ['#34d399', '#fbbf24', '#f472b6', '#60a5fa']
@@ -333,8 +362,9 @@ function buildScene(
   ctx.clip()
 
   drawFloorStatic(ctx, engine, room, art, metrics, textures, low)
-  drawWallsStatic(ctx, engine, room, art, metrics, textures, low)
+  // 先染色/徽标再画墙：日蚀要塞的室内隔断会自然遮住房间水印，不会出现文字压墙
   drawRoomTint(ctx, room, metrics)
+  drawWallsStatic(ctx, engine, room, art, metrics, textures, low)
 
   ctx.restore()
   return canvas
@@ -627,6 +657,8 @@ export function renderRaid(
   // 出口箭头即使低画质也保留：这是玩家能不能继续推进的关键信息
   drawExitGuides(ctx, engine, art, metrics, now, low)
   drawExtractBeacon(ctx, engine, metrics, art, now, low, dpr)
+  drawBarrageScorches(ctx, engine, metrics, now, low)
+  drawBarrageWarning(ctx, engine, metrics, art, now, low)
   drawContainers(ctx, engine, metrics, art, now, low, dpr)
   drawPickups(ctx, engine, metrics, now, low, dpr)
   drawGroundLoot(ctx, engine, metrics, now, low, dpr)
@@ -855,6 +887,103 @@ function drawExtractBeacon(
   ctx.stroke()
 }
 
+/* ---------- 轨道炮火：焦痕 + 锁定预警 ---------- */
+
+function drawBarrageScorches(
+  ctx: CanvasRenderingContext2D,
+  engine: RaidEngine,
+  metrics: RaidRenderMetrics,
+  now: number,
+  low: boolean,
+): void {
+  if (engine.barrageScorches.length === 0) return
+  const tile = metrics.tile
+  for (const scorch of engine.barrageScorches) {
+    if (scorch.roomId !== engine.roomId) continue
+    const age = (now - scorch.at) / 12000
+    if (age >= 1) continue
+    const screen = worldToScreen(metrics, scorch.x, scorch.y)
+    ctx.save()
+    ctx.globalAlpha = (1 - age) * 0.5
+    ctx.fillStyle = '#1c1917'
+    ctx.beginPath()
+    ctx.ellipse(screen.x, screen.y, tile * 0.62, tile * 0.4, 0, 0, Math.PI * 2)
+    ctx.fill()
+    if (!low) {
+      ctx.globalAlpha = (1 - age) * 0.35
+      ctx.strokeStyle = '#f97316'
+      ctx.lineWidth = Math.max(1, tile * 0.035)
+      ctx.beginPath()
+      ctx.ellipse(screen.x, screen.y, tile * 0.5, tile * 0.3, 0, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+    ctx.restore()
+  }
+}
+
+function drawBarrageWarning(
+  ctx: CanvasRenderingContext2D,
+  engine: RaidEngine,
+  metrics: RaidRenderMetrics,
+  art: RaidMapArt,
+  now: number,
+  low: boolean,
+): void {
+  const warning = engine.barrageWarning
+  if (!warning || warning.roomId !== engine.roomId) return
+  const tile = metrics.tile
+  const progress = Math.max(0, Math.min(1, (now - warning.startedAt) / Math.max(1, warning.endsAt - warning.startedAt)))
+  const pulse = low ? 0.8 : 0.55 + 0.35 * Math.sin(now / 120)
+  warning.shells.forEach((shell, index) => {
+    const screen = worldToScreen(metrics, shell.x, shell.y)
+    const radius = warning.radius * tile
+    ctx.save()
+    ctx.translate(screen.x, screen.y)
+    ctx.globalAlpha = 0.14 + progress * 0.3
+    ctx.fillStyle = index === 0 ? '#ef4444' : '#f97316'
+    ctx.beginPath()
+    ctx.arc(0, 0, radius, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.globalAlpha = 1
+    ctx.strokeStyle = index === 0 ? '#fca5a5' : '#fdba74'
+    ctx.lineWidth = Math.max(1.5, tile * (index === 0 ? 0.08 : 0.05))
+    ctx.setLineDash([tile * 0.24, tile * 0.18])
+    ctx.beginPath()
+    ctx.arc(0, 0, radius, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.setLineDash([])
+    // 收缩读条：外圈实线走完即炮击
+    ctx.globalAlpha = pulse
+    ctx.strokeStyle = art.accent
+    ctx.lineWidth = Math.max(2, tile * 0.09)
+    ctx.beginPath()
+    ctx.arc(0, 0, radius * (1 - progress * 0.18), -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2)
+    ctx.stroke()
+    // 十字准星
+    ctx.globalAlpha = 0.75
+    ctx.strokeStyle = '#fecaca'
+    ctx.lineWidth = Math.max(1, tile * 0.04)
+    for (const angle of [0, Math.PI / 2]) {
+      ctx.beginPath()
+      ctx.moveTo(Math.cos(angle) * radius * 0.18, Math.sin(angle) * radius * 0.18)
+      ctx.lineTo(Math.cos(angle) * radius * 0.86, Math.sin(angle) * radius * 0.86)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(-Math.cos(angle) * radius * 0.18, -Math.sin(angle) * radius * 0.18)
+      ctx.lineTo(-Math.cos(angle) * radius * 0.86, -Math.sin(angle) * radius * 0.86)
+      ctx.stroke()
+    }
+    if (index === 0 && radius > tile * 0.9) {
+      ctx.globalAlpha = 0.9
+      ctx.fillStyle = '#fecaca'
+      ctx.font = `700 ${Math.max(10, tile * 0.32)}px "Inter", "PingFang SC", system-ui, sans-serif`
+      ctx.textAlign = 'center'
+      ctx.fillText('轨道锁定', 0, -radius - tile * 0.2)
+    }
+    ctx.restore()
+  })
+}
+
 /* ---------- 容器 / 掉落 ---------- */
 
 function drawContainers(
@@ -990,7 +1119,13 @@ function drawTeam(
     ctx.beginPath()
     ctx.ellipse(screen.x, screen.y + radius * 0.95, radius * 0.9, radius * 0.3, 0, 0, Math.PI * 2)
     ctx.fill()
-    drawPetBody(ctx, screen.x, screen.y, radius, mate.angle, colors, ring)
+    drawPetBody(ctx, screen.x, screen.y, radius, mate.angle, colors, ring, {
+      species: mate.species,
+      moving: true,
+      stepPhase: now / 95 + index * 1.7,
+      now,
+      low,
+    })
     if (!low) {
       const ping = 0.3 + 0.25 * Math.sin(now / 380 + index)
       ctx.strokeStyle = ring
@@ -1017,7 +1152,504 @@ function shortName(name: string): string {
   return name.length > 6 ? `${name.slice(0, 5)}…` : name
 }
 
-/** 宠物正面/俯视身体：耳朵、尾巴、枪与眼睛都按朝向旋转 */
+/** 宠物局内模型参数：物种 / 装备 / 行走相位 / 后坐力 / 画质 */
+interface RaidPetDrawOptions {
+  species: string
+  gear?: RaidEngine['gear'] | null
+  moving?: boolean
+  stepPhase?: number
+  recoil?: number
+  now: number
+  low: boolean
+  alpha?: number
+}
+
+const PET_OUTLINE = 'rgba(15, 23, 42, 0.62)'
+
+function petStroke(radius: number): number {
+  return Math.max(1, radius * 0.09)
+}
+
+function gearTint(key: string | null | undefined): string {
+  const def = key ? RAID_GEAR_MAP.get(key) : null
+  return def ? RARITY_RING[def.rarity] ?? '#94a3b8' : '#94a3b8'
+}
+
+function drawPetEars(
+  ctx: CanvasRenderingContext2D,
+  species: string,
+  radius: number,
+  colors: { body: string; belly: string; ear: string; accent: string },
+  headX: number,
+  twitch: number,
+): void {
+  const dark = shadeColor(colors.ear, -0.18)
+  const inner = shadeColor(colors.ear, 0.42)
+  const stroke = petStroke(radius)
+  for (const side of [-1, 1] as const) {
+    const baseY = side * radius * 0.42
+    if (species === 'dog') {
+      ctx.save()
+      ctx.translate(headX - radius * 0.16, baseY + twitch * side * 0.4)
+      ctx.rotate(side * 0.38)
+      ctx.beginPath()
+      ctx.ellipse(0, 0, radius * 0.17, radius * 0.31, 0, 0, Math.PI * 2)
+      ctx.fillStyle = dark
+      ctx.fill()
+      ctx.strokeStyle = PET_OUTLINE
+      ctx.lineWidth = stroke
+      ctx.stroke()
+      ctx.restore()
+      continue
+    }
+    if (species === 'rabbit') {
+      ctx.save()
+      ctx.translate(headX - radius * 0.08, baseY)
+      ctx.rotate(side * 0.16)
+      ctx.beginPath()
+      ctx.ellipse(0, 0, radius * 0.13, radius * 0.38, 0, 0, Math.PI * 2)
+      ctx.fillStyle = colors.body
+      ctx.fill()
+      ctx.strokeStyle = PET_OUTLINE
+      ctx.lineWidth = stroke
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.ellipse(0, 0, radius * 0.06, radius * 0.28, 0, 0, Math.PI * 2)
+      ctx.fillStyle = inner
+      ctx.fill()
+      ctx.restore()
+      continue
+    }
+    if (species === 'panda') {
+      ctx.beginPath()
+      ctx.arc(headX - radius * 0.08, baseY, radius * 0.2, 0, Math.PI * 2)
+      ctx.fillStyle = dark
+      ctx.fill()
+      ctx.strokeStyle = PET_OUTLINE
+      ctx.lineWidth = stroke
+      ctx.stroke()
+      continue
+    }
+    if (species === 'bird') continue
+    // 猫 / 狐：尖耳；狐耳更大、耳尖压深
+    const big = species === 'fox' ? 1.22 : 1.08
+    ctx.beginPath()
+    ctx.moveTo(headX - radius * 0.24, baseY * 0.72)
+    ctx.lineTo(headX - radius * 0.04, baseY + side * radius * 0.5 * big)
+    ctx.lineTo(headX + radius * 0.24, baseY * 0.82)
+    ctx.closePath()
+    ctx.fillStyle = colors.body
+    ctx.fill()
+    ctx.strokeStyle = PET_OUTLINE
+    ctx.lineWidth = stroke
+    ctx.stroke()
+    if (species === 'fox') {
+      // 狐耳深色耳尖
+      ctx.beginPath()
+      ctx.moveTo(headX - radius * 0.16, baseY * 0.72)
+      ctx.lineTo(headX - radius * 0.06, baseY + side * radius * 0.48 * big)
+      ctx.lineTo(headX + radius * 0.04, baseY * 0.8)
+      ctx.closePath()
+      ctx.fillStyle = dark
+      ctx.fill()
+    }
+    ctx.beginPath()
+    ctx.moveTo(headX - radius * 0.16, baseY * 0.82)
+    ctx.lineTo(headX - radius * 0.04, baseY + side * radius * 0.32 * big)
+    ctx.lineTo(headX + radius * 0.13, baseY * 0.9)
+    ctx.closePath()
+    ctx.fillStyle = inner
+    ctx.globalAlpha = 0.85
+    ctx.fill()
+    ctx.globalAlpha = 1
+  }
+}
+
+function drawPetTail(
+  ctx: CanvasRenderingContext2D,
+  species: string,
+  radius: number,
+  colors: { body: string; belly: string; ear: string; accent: string },
+  swing: number,
+): void {
+  const dark = shadeColor(colors.ear, -0.12)
+  const stroke = Math.max(1.4, radius * 0.14)
+  ctx.lineCap = 'round'
+  if (species === 'fox') {
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.72, radius * 0.05)
+    ctx.quadraticCurveTo(
+      -radius * 1.5,
+      radius * (0.28 + swing),
+      -radius * 1.25,
+      -radius * (0.48 - swing),
+    )
+    ctx.quadraticCurveTo(-radius * 0.95, -radius * 0.2, -radius * 0.72, radius * 0.05)
+    ctx.closePath()
+    ctx.fillStyle = dark
+    ctx.fill()
+    ctx.strokeStyle = PET_OUTLINE
+    ctx.lineWidth = petStroke(radius)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.ellipse(-radius * 1.24, -radius * (0.42 - swing), radius * 0.2, radius * 0.28, 0.5, 0, Math.PI * 2)
+    ctx.fillStyle = colors.accent
+    ctx.fill()
+    return
+  }
+  if (species === 'rabbit') {
+    ctx.beginPath()
+    ctx.arc(-radius * 0.95, radius * 0.05 + swing * radius * 0.2, radius * 0.19, 0, Math.PI * 2)
+    ctx.fillStyle = colors.belly
+    ctx.fill()
+    ctx.strokeStyle = PET_OUTLINE
+    ctx.lineWidth = petStroke(radius)
+    ctx.stroke()
+    return
+  }
+  if (species === 'bird') {
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.72, -radius * 0.06)
+    ctx.lineTo(-radius * 1.35, -radius * (0.4 + swing * 0.5))
+    ctx.lineTo(-radius * 1.18, radius * 0.02)
+    ctx.lineTo(-radius * 1.35, radius * (0.36 + swing * 0.5))
+    ctx.closePath()
+    ctx.fillStyle = shadeColor(colors.body, -0.12)
+    ctx.fill()
+    ctx.strokeStyle = PET_OUTLINE
+    ctx.lineWidth = petStroke(radius)
+    ctx.stroke()
+    return
+  }
+  // 猫 / 狗 / 熊猫：圆润或上翘的尾巴
+  ctx.strokeStyle = species === 'panda' ? shadeColor(colors.ear, -0.05) : colors.ear
+  ctx.lineWidth = stroke
+  ctx.beginPath()
+  ctx.moveTo(-radius * 0.72, radius * 0.02)
+  if (species === 'dog') {
+    ctx.quadraticCurveTo(-radius * 1.22, -radius * (0.18 + swing), -radius * 1.08, -radius * 0.55)
+  } else if (species === 'panda') {
+    ctx.quadraticCurveTo(-radius * 1.15, radius * 0.1, -radius * 1.05, radius * (0.3 + swing))
+  } else {
+    ctx.quadraticCurveTo(-radius * 1.3, radius * (0.18 + swing), -radius * 1.18, -radius * 0.42)
+  }
+  ctx.stroke()
+  if (species === 'cat') {
+    // 环纹
+    ctx.strokeStyle = dark
+    ctx.lineWidth = Math.max(1, radius * 0.06)
+    ctx.beginPath()
+    ctx.arc(-radius * 1.05, -radius * 0.1, radius * 0.16, -1.9, -0.4)
+    ctx.stroke()
+  }
+}
+
+function drawPetMarkings(
+  ctx: CanvasRenderingContext2D,
+  species: string,
+  radius: number,
+  colors: { body: string; belly: string; ear: string; accent: string },
+): void {
+  const dark = shadeColor(colors.body, -0.24)
+  if (species === 'cat') {
+    ctx.strokeStyle = shadeColor(colors.ear, -0.12)
+    ctx.lineWidth = Math.max(1, radius * 0.06)
+    ctx.lineCap = 'round'
+    for (let i = 0; i < 3; i += 1) {
+      ctx.beginPath()
+      ctx.moveTo(-radius * (0.42 - i * 0.2), -radius * 0.5)
+      ctx.lineTo(-radius * (0.32 - i * 0.2), -radius * 0.2)
+      ctx.stroke()
+    }
+  } else if (species === 'dog') {
+    ctx.fillStyle = shadeColor(colors.ear, 0.05)
+    ctx.beginPath()
+    ctx.ellipse(-radius * 0.25, radius * 0.32, radius * 0.16, radius * 0.1, -0.4, 0, Math.PI * 2)
+    ctx.fill()
+  } else if (species === 'panda') {
+    ctx.fillStyle = colors.ear
+    ctx.beginPath()
+    ctx.ellipse(-radius * 0.1, -radius * 0.45, radius * 0.28, radius * 0.16, 0.2, 0, Math.PI * 2)
+    ctx.ellipse(-radius * 0.1, radius * 0.45, radius * 0.28, radius * 0.16, -0.2, 0, Math.PI * 2)
+    ctx.fill()
+  } else if (species === 'fox') {
+    ctx.fillStyle = colors.accent
+    ctx.beginPath()
+    ctx.ellipse(radius * 0.1, radius * 0.12, radius * 0.45, radius * 0.34, 0, 0, Math.PI * 2)
+    ctx.globalAlpha = 0.9
+    ctx.fill()
+    ctx.globalAlpha = 1
+  } else if (species === 'bird') {
+    ctx.fillStyle = shadeColor(colors.body, -0.16)
+    ctx.beginPath()
+    ctx.ellipse(-radius * 0.18, -radius * 0.42, radius * 0.34, radius * 0.17, -0.5, 0, Math.PI * 2)
+    ctx.ellipse(-radius * 0.18, radius * 0.42, radius * 0.34, radius * 0.17, 0.5, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.2)'
+  ctx.lineWidth = Math.max(1, radius * 0.04)
+  ctx.beginPath()
+  ctx.ellipse(-radius * 0.5, radius * 0.2, radius * 0.3, radius * 0.1, 0.2, 0, Math.PI)
+  ctx.stroke()
+  void dark
+}
+
+function drawPetFace(
+  ctx: CanvasRenderingContext2D,
+  species: string,
+  radius: number,
+  colors: { body: string; belly: string; ear: string; accent: string },
+  headX: number,
+  blink: boolean,
+  low: boolean,
+): void {
+  const eyeColor = SPECIES_EYE[species] ?? '#3f4650'
+  const stroke = petStroke(radius)
+  // 面部浅色区（狐 / 狗 / 熊猫 / 兔）
+  if (species === 'fox') {
+    ctx.beginPath()
+    ctx.moveTo(headX + radius * 0.02, -radius * 0.38)
+    ctx.quadraticCurveTo(headX + radius * 0.58, -radius * 0.12, headX + radius * 0.02, radius * 0.38)
+    ctx.quadraticCurveTo(headX - radius * 0.16, 0, headX + radius * 0.02, -radius * 0.38)
+    ctx.closePath()
+    ctx.fillStyle = '#fffaf2'
+    ctx.fill()
+  } else if (species === 'dog') {
+    ctx.beginPath()
+    ctx.ellipse(headX + radius * 0.34, 0, radius * 0.25, radius * 0.19, 0, 0, Math.PI * 2)
+    ctx.fillStyle = colors.belly
+    ctx.fill()
+  } else if (species === 'panda') {
+    ctx.fillStyle = '#1f2937'
+    ctx.beginPath()
+    ctx.ellipse(headX + radius * 0.04, -radius * 0.22, radius * 0.17, radius * 0.21, -0.2, 0, Math.PI * 2)
+    ctx.ellipse(headX + radius * 0.04, radius * 0.22, radius * 0.17, radius * 0.21, 0.2, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  // 眼睛（放回头部中段，避免被伸出的枪遮住）
+  for (const side of [-1, 1] as const) {
+    const ex = headX + radius * 0.14
+    const ey = side * radius * 0.22
+    if (blink) {
+      ctx.strokeStyle = '#1f2937'
+      ctx.lineWidth = Math.max(1, radius * 0.045)
+      ctx.beginPath()
+      ctx.moveTo(ex - radius * 0.07, ey)
+      ctx.lineTo(ex + radius * 0.07, ey)
+      ctx.stroke()
+      continue
+    }
+    ctx.beginPath()
+    ctx.arc(ex, ey, radius * 0.105, 0, Math.PI * 2)
+    ctx.fillStyle = species === 'panda' ? '#fffdf9' : eyeColor
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(15, 23, 42, 0.45)'
+    ctx.lineWidth = Math.max(1, radius * 0.025)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(ex + radius * 0.012, ey, radius * 0.055, 0, Math.PI * 2)
+    ctx.fillStyle = '#0f172a'
+    ctx.fill()
+    if (!low) {
+      ctx.beginPath()
+      ctx.arc(ex + radius * 0.035, ey - radius * 0.035, radius * 0.022, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+      ctx.fill()
+    }
+  }
+  // 口鼻 / 喙
+  if (species === 'bird') {
+    ctx.beginPath()
+    ctx.moveTo(headX + radius * 0.48, -radius * 0.08)
+    ctx.lineTo(headX + radius * 0.7, 0)
+    ctx.lineTo(headX + radius * 0.48, radius * 0.08)
+    ctx.closePath()
+    ctx.fillStyle = '#e79a2c'
+    ctx.fill()
+    ctx.strokeStyle = PET_OUTLINE
+    ctx.lineWidth = Math.max(1, radius * 0.035)
+    ctx.stroke()
+  } else {
+    ctx.beginPath()
+    ctx.moveTo(headX + radius * 0.48, -radius * 0.045)
+    ctx.lineTo(headX + radius * 0.57, radius * 0.02)
+    ctx.lineTo(headX + radius * 0.48, radius * 0.07)
+    ctx.closePath()
+    ctx.fillStyle = species === 'panda' ? '#1f2937' : shadeColor(colors.ear, -0.25)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(15, 23, 42, 0.4)'
+    ctx.lineWidth = Math.max(1, radius * 0.02)
+    ctx.stroke()
+  }
+  if (species === 'rabbit') {
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'
+    ctx.lineWidth = Math.max(1, radius * 0.04)
+    ctx.beginPath()
+    ctx.moveTo(headX + radius * 0.52, radius * 0.07)
+    ctx.lineTo(headX + radius * 0.52, radius * 0.16)
+    ctx.stroke()
+  }
+  if (species === 'cat' || species === 'fox') {
+    ctx.strokeStyle = 'rgba(226, 232, 240, 0.55)'
+    ctx.lineWidth = Math.max(0.8, radius * 0.022)
+    for (const side of [-1, 1] as const) {
+      for (let i = 0; i < 3; i += 1) {
+        ctx.beginPath()
+        ctx.moveTo(headX + radius * 0.52, side * radius * 0.1)
+        ctx.lineTo(headX + radius * (0.78 + i * 0.03), side * radius * (0.18 + i * 0.08))
+        ctx.stroke()
+      }
+    }
+  }
+  void stroke
+}
+
+function drawPetGear(
+  ctx: CanvasRenderingContext2D,
+  radius: number,
+  gear: RaidEngine['gear'] | null | undefined,
+  headX: number,
+  low: boolean,
+  layer: 'back' | 'body' | 'head',
+): void {
+  if (!gear) return
+  const stroke = petStroke(radius)
+  const backpack = gear.backpack ? RAID_GEAR_MAP.get(gear.backpack) : null
+  if (layer === 'back' && backpack) {
+    const tier = Math.min(8, Math.max(1, backpack.tier))
+    const packW = radius * (0.5 + tier * 0.045)
+    const packH = radius * (0.5 + tier * 0.04)
+    roundedRect(ctx, -radius * 0.95 - packW * 0.42, -packH * 0.5, packW, packH, radius * 0.16)
+    ctx.fillStyle = gearTint(backpack.key)
+    ctx.globalAlpha = 0.92
+    ctx.fill()
+    ctx.globalAlpha = 1
+    ctx.strokeStyle = PET_OUTLINE
+    ctx.lineWidth = stroke
+    ctx.stroke()
+    ctx.strokeStyle = 'rgba(15, 23, 42, 0.32)'
+    ctx.lineWidth = Math.max(1, radius * 0.04)
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.95 - packW * 0.3, -packH * 0.5)
+    ctx.lineTo(-radius * 0.95 - packW * 0.3, packH * 0.5)
+    ctx.stroke()
+  }
+  const armor = gear.armor ? RAID_GEAR_MAP.get(gear.armor.key) : null
+  if (layer === 'body' && armor) {
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.18, -radius * 0.56)
+    ctx.lineTo(radius * 0.42, -radius * 0.42)
+    ctx.lineTo(radius * 0.5, 0)
+    ctx.lineTo(radius * 0.42, radius * 0.42)
+    ctx.lineTo(-radius * 0.18, radius * 0.56)
+    ctx.lineTo(-radius * 0.42, 0)
+    ctx.closePath()
+    ctx.fillStyle = gearTint(armor.key)
+    ctx.globalAlpha = 0.8
+    ctx.fill()
+    ctx.globalAlpha = 1
+    ctx.strokeStyle = PET_OUTLINE
+    ctx.lineWidth = stroke
+    ctx.stroke()
+    if (gear.armor && gear.armor.maxDurability > 0
+      && gear.armor.durability / gear.armor.maxDurability < 0.35) {
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.75)'
+      ctx.lineWidth = Math.max(1, radius * 0.035)
+      ctx.beginPath()
+      ctx.moveTo(-radius * 0.1, -radius * 0.3)
+      ctx.lineTo(radius * 0.02, -radius * 0.08)
+      ctx.lineTo(-radius * 0.06, radius * 0.12)
+      ctx.lineTo(radius * 0.08, radius * 0.32)
+      ctx.stroke()
+    }
+  }
+  const rig = gear.rig ? RAID_GEAR_MAP.get(gear.rig) : null
+  if (layer === 'body' && rig) {
+    ctx.fillStyle = gearTint(rig.key)
+    ctx.globalAlpha = 0.75
+    for (const side of [-1, 1] as const) {
+      roundedRect(
+        ctx,
+        radius * 0.05,
+        side * radius * 0.24 - radius * 0.09,
+        radius * 0.34,
+        radius * 0.18,
+        radius * 0.05,
+      )
+      ctx.fill()
+      ctx.globalAlpha = 1
+      ctx.strokeStyle = PET_OUTLINE
+      ctx.lineWidth = Math.max(1, radius * 0.03)
+      ctx.stroke()
+      ctx.globalAlpha = 0.75
+    }
+    ctx.globalAlpha = 1
+  }
+  const helmet = gear.helmet ? RAID_GEAR_MAP.get(gear.helmet.key) : null
+  if (layer === 'head' && helmet) {
+    // 俯视头盔：盖住后脑，前脸（眼睛/口鼻）保持露出
+    ctx.beginPath()
+    ctx.ellipse(headX - radius * 0.4, 0, radius * 0.32, radius * 0.44, 0, 0, Math.PI * 2)
+    ctx.fillStyle = gearTint(helmet.key)
+    ctx.globalAlpha = 0.92
+    ctx.fill()
+    ctx.globalAlpha = 1
+    ctx.strokeStyle = PET_OUTLINE
+    ctx.lineWidth = stroke
+    ctx.stroke()
+    ctx.strokeStyle = 'rgba(15, 23, 42, 0.55)'
+    ctx.lineWidth = Math.max(1, radius * 0.045)
+    ctx.beginPath()
+    ctx.moveTo(headX - radius * 0.68, -radius * 0.26)
+    ctx.lineTo(headX - radius * 0.14, -radius * 0.3)
+    ctx.stroke()
+    if (!low) {
+      ctx.fillStyle = 'rgba(226, 240, 255, 0.55)'
+      roundedRect(ctx, headX - radius * 0.56, -radius * 0.14, radius * 0.2, radius * 0.1, radius * 0.04)
+      ctx.fill()
+    }
+  }
+  // 战靴：脚部护片（没有战靴时保留自然爪子）
+  if (layer === 'body' && gear.boots) {
+    ctx.fillStyle = gearTint(gear.boots)
+    ctx.globalAlpha = 0.85
+    for (const side of [-1, 1] as const) {
+      roundedRect(ctx, radius * 0.36, side * radius * 0.5 - radius * 0.08, radius * 0.26, radius * 0.16, radius * 0.05)
+      ctx.fill()
+      ctx.globalAlpha = 1
+    }
+    ctx.globalAlpha = 1
+  }
+}
+
+function drawPetWeapon(
+  ctx: CanvasRenderingContext2D,
+  radius: number,
+  colors: { body: string; belly: string; ear: string; accent: string },
+  recoil: number,
+): void {
+  // 枪持在身体一侧（俯视时从肩侧探出），避免覆盖眼睛与口鼻
+  ctx.save()
+  ctx.translate(0, -radius * 0.46)
+  const kick = recoil * radius * 0.12
+  ctx.fillStyle = '#64748b'
+  ctx.fillRect(radius * 0.7 - kick, -radius * 0.13, radius * 0.72, radius * 0.26)
+  ctx.fillStyle = '#475569'
+  ctx.fillRect(radius * 0.58 - kick, -radius * 0.07, radius * 0.2, radius * 0.14)
+  ctx.fillStyle = '#cbd5e1'
+  ctx.fillRect(radius * 0.82 - kick, -radius * 0.045, radius * 0.62, radius * 0.09)
+  ctx.fillStyle = '#94a3b8'
+  ctx.fillRect(radius * 0.92 - kick, -radius * 0.17, radius * 0.24, radius * 0.06)
+  ctx.fillStyle = '#f8fafc'
+  ctx.fillRect(radius * 0.98 - kick, -radius * 0.15, radius * 0.08, radius * 0.04)
+  ctx.fillStyle = colors.accent
+  ctx.fillRect(radius * 1.46 - kick, -radius * 0.07, radius * 0.15, radius * 0.14)
+  ctx.fillStyle = '#0f172a'
+  ctx.fillRect(radius * 0.84 - kick, radius * 0.14, radius * 0.08, radius * 0.16)
+  ctx.restore()
+}
+
+/** 宠物局内模型：物种轮廓 + 装备外观 + 行走 / 待机 / 后坐力动画 */
 function drawPetBody(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -1026,33 +1658,118 @@ function drawPetBody(
   angle: number,
   colors: { body: string; belly: string; ear: string; accent: string },
   ring?: string,
+  options?: RaidPetDrawOptions,
 ): void {
+  const species = normalizePetSpecies(options?.species ?? 'cat')
+  const gear = options?.gear ?? null
+  const moving = options?.moving ?? false
+  const phase = options?.stepPhase ?? 0
+  const recoil = options?.recoil ?? 0
+  const low = options?.low ?? false
+  const now = options?.now ?? 0
+  const walk = moving ? Math.sin(phase) : 0
+  const bob = moving
+    ? Math.abs(walk) * radius * 0.045
+    : Math.sin(now / 900) * radius * 0.014
+  const swing = Math.sin(now / 320 + phase * 0.5) * (moving ? 0.16 : 0.08)
+  const twitch = Math.sin(now / 680 + phase * 0.4) * radius * 0.035
+  const blink = (now + species.charCodeAt(0) * 97) % 3800 > 3660
+  const bodyDark = shadeColor(colors.body, -0.26)
+  const bodyLight = shadeColor(colors.body, 0.18)
+  const headX = radius * 0.48
+  const stroke = petStroke(radius)
+
   ctx.save()
-  ctx.translate(x, y)
+  ctx.translate(x, y + bob)
   ctx.rotate(angle)
-  // 尾巴（朝后）
-  ctx.strokeStyle = colors.ear
-  ctx.lineWidth = Math.max(1.5, radius * 0.16)
+  if (options?.alpha !== undefined) ctx.globalAlpha = Math.max(0, Math.min(1, options.alpha))
+  ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
-  ctx.beginPath()
-  ctx.moveTo(-radius * 0.85, 0)
-  ctx.quadraticCurveTo(-radius * 1.35, -radius * 0.1, -radius * 1.25, -radius * 0.55)
-  ctx.stroke()
+
+  drawPetGear(ctx, radius, gear, headX, low, 'back')
+  drawPetTail(ctx, species, radius, colors, swing)
+
+  // 腿 / 爪：行走时交替前后，静止时收在身侧
+  const legOffset = walk * radius * 0.13
+  const legColor = species === 'panda' ? colors.ear : shadeColor(colors.body, -0.18)
+  for (const side of [-1, 1] as const) {
+    for (const front of [false, true] as const) {
+      const lx = (front ? 1 : -1) * radius * (0.42 + legOffset * (side === 1 ? 1 : -1))
+      const ly = side * radius * 0.52
+      ctx.beginPath()
+      ctx.ellipse(lx, ly, radius * 0.14, radius * 0.1, side * 0.2, 0, Math.PI * 2)
+      ctx.fillStyle = front ? legColor : bodyDark
+      ctx.fill()
+      ctx.strokeStyle = PET_OUTLINE
+      ctx.lineWidth = Math.max(1, radius * 0.035)
+      ctx.stroke()
+    }
+  }
+
   // 身体
   ctx.beginPath()
-  ctx.ellipse(0, 0, radius * 1.08, radius * 0.9, 0, 0, Math.PI * 2)
+  ctx.ellipse(-radius * 0.02, radius * 0.05, radius * 0.96, radius * 0.82, 0, 0, Math.PI * 2)
   ctx.fillStyle = colors.body
   ctx.fill()
-  // 腹部高光
+  ctx.strokeStyle = PET_OUTLINE
+  ctx.lineWidth = stroke
+  ctx.stroke()
+  // 腹部 / 胸毛
   ctx.beginPath()
-  ctx.ellipse(radius * 0.18, radius * 0.12, radius * 0.62, radius * 0.5, 0, 0, Math.PI * 2)
+  ctx.ellipse(radius * 0.1, radius * 0.13, radius * 0.58, radius * 0.46, 0, 0, Math.PI * 2)
   ctx.fillStyle = colors.belly
-  ctx.globalAlpha = 0.55
+  ctx.globalAlpha = 0.72
   ctx.fill()
   ctx.globalAlpha = 1
-  ctx.strokeStyle = 'rgba(15, 23, 42, 0.6)'
-  ctx.lineWidth = Math.max(1.5, radius * 0.12)
+  // 顶部高光
+  if (!low) {
+    ctx.beginPath()
+    ctx.ellipse(-radius * 0.1, -radius * 0.3, radius * 0.52, radius * 0.2, -0.18, 0, Math.PI * 2)
+    ctx.fillStyle = bodyLight
+    ctx.globalAlpha = 0.42
+    ctx.fill()
+    ctx.globalAlpha = 1
+  }
+  drawPetMarkings(ctx, species, radius, colors)
+  drawPetGear(ctx, radius, gear, headX, low, 'body')
+  // 狗的垂耳要盖在头两侧，放在头之后画才不会被大头盖住；其余物种耳朵在头后
+  const earsBeforeHead = species !== 'dog'
+  if (earsBeforeHead) drawPetEars(ctx, species, radius, colors, headX, twitch)
+
+  // 头
+  ctx.beginPath()
+  ctx.arc(headX, 0, radius * 0.6, 0, Math.PI * 2)
+  ctx.fillStyle = colors.body
+  ctx.fill()
+  ctx.strokeStyle = PET_OUTLINE
+  ctx.lineWidth = stroke
   ctx.stroke()
+  if (!low) {
+    ctx.beginPath()
+    ctx.arc(headX - radius * 0.12, -radius * 0.2, radius * 0.28, 0, Math.PI * 2)
+    ctx.fillStyle = bodyLight
+    ctx.globalAlpha = 0.28
+    ctx.fill()
+    ctx.globalAlpha = 1
+  }
+  if (species === 'bird') {
+    // 羽冠
+    ctx.fillStyle = shadeColor(colors.body, -0.05)
+    for (let i = 0; i < 3; i += 1) {
+      ctx.save()
+      ctx.translate(headX - radius * 0.12, 0)
+      ctx.rotate((i - 1) * 0.45)
+      ctx.beginPath()
+      ctx.ellipse(-radius * 0.26, 0, radius * 0.08, radius * 0.28, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.restore()
+    }
+  }
+  drawPetFace(ctx, species, radius, colors, headX, blink, low)
+  if (!earsBeforeHead) drawPetEars(ctx, species, radius, colors, headX, twitch)
+  drawPetGear(ctx, radius, gear, headX, low, 'head')
+  drawPetWeapon(ctx, radius, colors, recoil)
+
   if (ring) {
     ctx.strokeStyle = ring
     ctx.lineWidth = Math.max(1.5, radius * 0.08)
@@ -1060,38 +1777,6 @@ function drawPetBody(
     ctx.ellipse(0, 0, radius * 1.18, radius * 0.98, 0, 0, Math.PI * 2)
     ctx.stroke()
   }
-  // 耳朵
-  ctx.fillStyle = colors.ear
-  ctx.beginPath()
-  ctx.moveTo(-radius * 0.52, -radius * 0.52)
-  ctx.lineTo(-radius * 0.9, -radius * 1.3)
-  ctx.lineTo(-radius * 0.08, -radius * 0.76)
-  ctx.closePath()
-  ctx.fill()
-  ctx.beginPath()
-  ctx.moveTo(radius * 0.52, -radius * 0.52)
-  ctx.lineTo(radius * 0.9, -radius * 1.3)
-  ctx.lineTo(radius * 0.08, -radius * 0.76)
-  ctx.closePath()
-  ctx.fill()
-  // 眼睛
-  ctx.fillStyle = '#0f172a'
-  ctx.beginPath()
-  ctx.arc(radius * 0.48, -radius * 0.16, radius * 0.12, 0, Math.PI * 2)
-  ctx.arc(radius * 0.48, radius * 0.22, radius * 0.12, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'
-  ctx.beginPath()
-  ctx.arc(radius * 0.52, -radius * 0.2, radius * 0.04, 0, Math.PI * 2)
-  ctx.arc(radius * 0.52, radius * 0.18, radius * 0.04, 0, Math.PI * 2)
-  ctx.fill()
-  // 枪
-  ctx.fillStyle = '#94a3b8'
-  ctx.fillRect(radius * 0.72, -radius * 0.12, radius * 0.78, radius * 0.24)
-  ctx.fillStyle = '#e2e8f0'
-  ctx.fillRect(radius * 0.82, -radius * 0.04, radius * 0.55, radius * 0.08)
-  ctx.fillStyle = colors.accent
-  ctx.fillRect(radius * 1.42, -radius * 0.08, radius * 0.16, radius * 0.16)
   ctx.restore()
 }
 
@@ -1458,9 +2143,16 @@ function drawPlayer(
     ctx.restore()
   }
 
-  // 走动时轻微上下浮动，避免角色像贴纸
-  const bob = low ? 0 : Math.sin(now / 140) * radius * 0.05
-  drawPetBody(ctx, screen.x, screen.y + bob, radius, angle, colors)
+  // 走动 / 待机动画由宠物模型内部处理，外部只负责阴影与枪口准星
+  drawPetBody(ctx, screen.x, screen.y, radius, angle, colors, undefined, {
+    species: engine.species,
+    gear: engine.gear,
+    moving: engine.playerMoving,
+    stepPhase: engine.playerStepPhase,
+    recoil: engine.playerRecoil,
+    now,
+    low,
+  })
 
   // 枪口准星
   const muzzleX = screen.x + Math.cos(angle) * radius * 1.56

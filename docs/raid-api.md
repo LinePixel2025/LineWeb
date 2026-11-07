@@ -3,6 +3,18 @@
 > 元气骑士式实时房间制搜打撤：`/api/pets/raid*`，全部需登录并挂 `requireFeature('pet')`。
 > 共享引擎 `server/src/lib/raidRun.ts` 为唯一真相源，客户端 `client/src/lib/raid/raidRun.ts` 为逐字副本。
 >
+> **2026-11-07 更新**（`RAID_STATE_VERSION` 保持 4，删除的字段向后兼容）：
+> - **非 PvP 爆率回调**：`normal` 品质权重恢复 v4 下调前（T5 神话重新为 4），容器段数恢复非 Boss 1–3 / Boss 2–4；
+>   boss 首段保底恢复 rare+/epic+，并按 `item.weight` 加权、过滤退役与 `pityEligible:false` 物品。
+> - **非洲之心**（`heart_of_africa`，即「非洲之星」）解除 `pvpOnly`，两种模式均可掉落；单件权重 1 → 0.25、
+>   目录价 9999 → 30000，并排除在首领首段保底池之外。
+> - **删除撤离失败机制**：删除 25% 运输故障、60 秒冷却、失效撤离点与救援队兜底；`extractDone` 读条满 6 秒必定
+>   `extracted`。对局 DTO 删除 `extractDisabled` / `extractBlockedUntil` / `extractGuaranteed`。
+> - **撤离信号弹停产**：目录数据保留（旧仓库仍可回收 180），但不再掉落 / 出售 / 可使用。
+> - **新地图「日蚀要塞」`citadel`**：6×5、nightmare、T5、1500 入场；房间内生成隔断与掩体；独有「轨道炮火」——
+>   每 24 秒锁定玩家位置，3.6 秒后 3 发炮弹落下，墙体阻断视线可免伤（纯客户端模拟，伤害仍走 `damage` 事件）。
+>   地图列表项新增可选 `gimmickLabel`，地图节点新增可选 `gimmick`。
+>
 > **2026-11-04 更新**（`RAID_STATE_VERSION` 2 → 3，旧对局读时按废弃结算）：
 > - **丢弃物品**：新增事件 `dropItem`（从容器格丢到当前房间地面，落点=玩家坐标服务端夹取）与
 >   `takeGround`（捡起地面物品进背包/胸挂）；地面物品走 `RaidRunState.groundLoot`（单房上限 24），
@@ -54,9 +66,9 @@
 
 - 地图由 seed 在服务端重算，容器 / 掉落 / 敌人 id 均来自该地图，客户端无法伪造；
 - 只能进入相邻房间，且当前房间必须清场；开箱要求房间无存活敌人；
-- `takeLoot` 的 `target` 容量为 0 或已满时拒绝；`rig` 只能放消耗品；
+- `takeLoot` 的 `target` 容量为 0 或已满时拒绝；胸挂容量由装备决定（不再限制只能放消耗品）；
 - `damage` 由服务端按头盔 / 护甲减伤并扣耐久，HP ≤ 0 判阵亡；
-- `extractStart` 只在撤离房间、清场后可开始，`extractDone` 需满 6 秒读条；
+- `extractStart` 只在撤离房间、清场后可开始；`extractDone` 需满 6 秒读条，**读条完成必定撤离成功**；
 - 版本号只拒绝「客户端比服务端更新」的情况：队友造成的世界同步会推进本行 `version`，
   客户端落后时照常接受并在响应里回权威状态（`applyServerRun` 自愈）；超前则 409 `RAID_VERSION`。
 

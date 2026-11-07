@@ -4,8 +4,8 @@
  * 覆盖：物品与装备目录不变量、掉落模式（normal / pvp）双权重表、按模式的容器掉落段数与
  *       首领房首段保底、地图生成确定性与连通性、房间类型分配、敌人属性公式、
  *       运行状态机（进房 / 击杀 / 清房 / 开箱 / 拾取 / 使用 / 技能 / 受伤 / 撤离）、
- *       撤离故障掷骰（确定性 / 失败保持 active / 全图冷却 / 信号弹保票）、已发现撤离点、
- *       下发地图口径（撤离点全程可见）与全失联救援队兜底（2026-11-05）、
+ *       撤离读条必定成功（2026-11-07 删除随机运输故障）、已发现撤离点、
+ *       下发地图口径（撤离点全程可见）、日蚀要塞隔断与轨道炮火数据、
  *       官方商店（全档上架 + 高档溢价与仓库门槛）与游戏门票经济闭环、
  *       耐久与维修、保险、结算保留规则、每日契约、丢弃落点往前抛与夹取。
  *
@@ -19,9 +19,7 @@ import {
   GAME_TICKET_REFUND_POINTS,
   RAID_CONTRACTS,
   RAID_CONTRACT_MAP,
-  RAID_EXTRACT_COOLDOWN_MS,
   RAID_EXTRACT_CHANNEL_MS,
-  RAID_EXTRACT_FAIL_RATE,
   RAID_EXTRACT_FLARE_KEY,
   RAID_GEAR_MAP,
   RAID_GEAR_SHOP_PREMIUM,
@@ -54,7 +52,7 @@ import {
   raidExpired,
   raidGearStorageGate,
   raidInsuranceCost,
-  raidItemModeAllowed,
+  raidItemDropEligible,
   raidKeptContainers,
   raidLootValue,
   raidMapForViewer,
@@ -66,7 +64,6 @@ import {
   repairRaidGear,
   resolveDropPosition,
   resolveRaidDamage,
-  rollExtractFailure,
   rollRaidContainerLoot,
   rollRaidItemKey,
   tickRaidRun,
@@ -137,37 +134,31 @@ assertEqual(ticket?.stackMax, 5, '门票单格堆叠 5 张')
 assertEqual(ticket?.weight, 6, '门票掉落权重 6')
 assertEqual(ticket?.value, GAME_TICKET_RECYCLE_VALUE, '门票目录价值 = 回收常量')
 assertEqual(ticket?.shopPrice, GAME_TICKET_PRICE, '门票一口价覆盖「目录价值 × 1.4」')
-assertEqual(ticket?.pvpOnly, undefined, '门票两种模式都能出现（不是 pvp 专属）')
-assertEqual(ticket?.guaranteeExtract, undefined, '门票没有撤离保障标记')
+assertEqual((ticket as unknown as Record<string, unknown>)?.pvpOnly, undefined, '门票没有模式限定字段')
 const flare = getRaidItem(RAID_EXTRACT_FLARE_KEY)
-assert(!!flare, '撤离信号弹在目录里')
+assert(!!flare, '撤离信号弹在目录里（旧库存兼容）')
 assertEqual(flare?.kind, 'consumable', '信号弹是消耗品')
 assertEqual(flare?.rarity, 'rare', '信号弹为稀有品质')
 assertEqual(flare?.value, 300, '信号弹目录价值 300')
-assertEqual(flare?.guaranteeExtract, true, '信号弹带「本局撤离必定成功」标记')
+assertEqual(flare?.retired, true, '信号弹已停产：不再掉落 / 不再出售')
 assertEqual(flare?.healPct, undefined, '信号弹不回血')
 assertEqual(flare?.mpGain, undefined, '信号弹不回能量')
 assertEqual(flare?.repairSlot, undefined, '信号弹不是维修工具')
-assertEqual(
-  RAID_ITEMS.filter((item) => item.guaranteeExtract).length,
-  1,
-  '全站只有撤离信号弹能购买撤离确定性',
-)
+assertEqual(raidItemDropEligible(flare!), false, '停产的信号弹不进任何掉落池')
 const heart = getRaidItem('heart_of_africa')
 assert(!!heart, '非洲之心在目录里')
 assertEqual(heart?.rarity, 'mythic', '非洲之心是神话品质')
-assertEqual(heart?.pvpOnly, true, '非洲之心标记为仅玩家匹配掉落')
-assertEqual(RAID_ITEMS.filter((item) => item.pvpOnly === true).length, 1, '模式限定品只有非洲之心一种')
-assertEqual(RAID_ITEMS.filter((item) => item.shopPrice !== undefined).length, 1, '一口价商品只有门票一种')
-// raidItemModeAllowed 是掉落池的唯一模式闸门
-assertEqual(raidItemModeAllowed(heart!, 'normal'), false, 'normal 模式池排除非洲之心')
-assertEqual(raidItemModeAllowed(heart!, 'pvp'), true, 'pvp 模式池包含非洲之心')
-assert(
-  RAID_ITEMS.filter((item) => !item.pvpOnly).every(
-    (item) => raidItemModeAllowed(item, 'normal') && raidItemModeAllowed(item, 'pvp'),
-  ),
-  '非 pvpOnly 物品在两种模式下都可入池',
+assertEqual((heart as unknown as Record<string, unknown>)?.pvpOnly, undefined, '非洲之心不再是 PvP 独占')
+assertEqual(heart?.weight, 0.25, '非洲之心单件权重降到 0.25')
+assertEqual(heart?.value, 30000, '非洲之心目录价值上调到 30000')
+assertEqual(heart?.pityEligible, false, '非洲之心不进首领首段保底池')
+assertEqual(
+  RAID_ITEMS.filter((item) => (item as unknown as Record<string, unknown>).pvpOnly === true).length,
+  0,
+  '没有 PvP 模式限定物品',
 )
+assertEqual(RAID_ITEMS.filter((item) => item.shopPrice !== undefined).length, 1, '一口价商品只有门票一种')
+assert(RAID_ITEMS.filter((item) => !item.retired).every((item) => raidItemDropEligible(item)), '未停产物品都可入池')
 assertEqual(getRaidItem('nope'), null, '不存在的物品返回 null')
 
 assertEqual(RAID_GEARS.length, 32, '装备目录 32 件（头/甲/鞋/胸挂 × 6 级 + 背包 × 8 级）')
@@ -284,15 +275,15 @@ assert(
    品质权重（按掉落模式分表）
    ============================================================ */
 
-/** 两张表的钉死值：normal 是 2026-11-04 下调档（神话全 0），pvp 保留旧的高爆率并且唯一能掉神话 */
+/** 两张表的钉死值：normal 已回调到 v4 前的高产出（T5 神话 4），pvp 保留更高的高爆率 */
 const EXPECT_WEIGHTS: Record<RaidLootMode, Record<string, readonly number[]>> = {
   normal: {
-    common: [60, 60, 44, 30, 20],
-    uncommon: [26, 26, 30, 28, 24],
-    rare: [10, 10, 17, 24, 26],
-    epic: [3, 3, 7, 13, 19],
-    legendary: [1, 1, 2, 5, 11],
-    mythic: [0, 0, 0, 0, 0],
+    common: [60, 44, 30, 20, 12],
+    uncommon: [26, 30, 28, 24, 20],
+    rare: [10, 17, 24, 26, 25],
+    epic: [3, 7, 13, 19, 24],
+    legendary: [1, 2, 5, 11, 15],
+    mythic: [0, 0, 0, 0, 4],
   },
   pvp: {
     common: [56, 40, 26, 16, 8],
@@ -352,14 +343,13 @@ assertEqual(rarityWeightAtTier('no_such_rarity' as never, 3, 'pvp'), 0, '未知�
 // 说明：mode 参数是闭合联合类型 RaidLootMode，非法值在编译期就被挡住，
 // 引擎对未知模式是直接下标取表（会抛错），因此这里不去构造运行时脏模式。
 
-// 神话只在 pvp 模式存在，且只在最高档地图
-for (let tier = 1; tier <= 5; tier += 1) {
-  assertEqual(rarityWeightAtTier('mythic', tier, 'normal'), 0, `normal 模式 lootTier ${tier} 权重为 0（普通模式不产神话）`)
-}
+// 神话只在最高档地图；两种模式都能掉
 for (let tier = 1; tier <= 4; tier += 1) {
+  assertEqual(rarityWeightAtTier('mythic', tier, 'normal'), 0, `normal 模式 lootTier ${tier} 不掉神话`)
   assertEqual(rarityWeightAtTier('mythic', tier, 'pvp'), 0, `pvp 模式 lootTier ${tier} 不掉神话`)
 }
-assert(rarityWeightAtTier('mythic', 5, 'pvp') > 0, 'pvp 模式 lootTier 5 才可能掉神话')
+assert(rarityWeightAtTier('mythic', 5, 'normal') > 0, 'normal 模式 lootTier 5 恢复掉神话')
+assert(rarityWeightAtTier('mythic', 5, 'pvp') > 0, 'pvp 模式 lootTier 5 掉神话')
 
 /* ---------- rollRaidItemKey 落池与分布 ---------- */
 
@@ -369,7 +359,7 @@ function expectedRarityShare(rarity: (typeof RAID_RARITY_ORDER)[number], tier: n
   let hit = 0
   for (const item of RAID_ITEMS) {
     const w = rarityWeightAtTier(item.rarity, tier, mode)
-    if (w <= 0 || !raidItemModeAllowed(item, mode)) continue
+    if (w <= 0 || !raidItemDropEligible(item)) continue
     total += item.weight * w
     if (item.rarity === rarity) hit += item.weight * w
   }
@@ -393,7 +383,7 @@ function sweepRarity(tier: number, mode: RaidLootMode, samples: number, seed: nu
       bad += 1
       continue
     }
-    if (!raidItemModeAllowed(def, mode) || rarityWeightAtTier(def.rarity, tier, mode) <= 0) bad += 1
+    if (!raidItemDropEligible(def) || rarityWeightAtTier(def.rarity, tier, mode) <= 0) bad += 1
     counts[def.rarity] = (counts[def.rarity] ?? 0) + 1
   }
   assertEqual(bad, 0, `${mode} 模式 lootTier ${tier} 的掷骰全部合法（在目录内 / 模式允许 / 品质有权重）`)
@@ -416,24 +406,27 @@ for (const mode of RAID_LOOT_MODES) {
 }
 
 const normalTier5 = sweepRarity(5, 'normal', SWEEP_SAMPLES, 777)
-assertEqual(normalTier5.mythic ?? -1, 0, 'normal 模式 lootTier 5（含深渊实验室）权重路径 20000 抽 0 神话')
+assert((normalTier5.mythic ?? 0) > 0, 'normal 模式 lootTier 5 恢复产出神话')
 assert((normalTier5.legendary ?? 0) > 0, 'normal 模式 lootTier 5 仍会出传说')
 const pvpTier5 = sweepRarity(5, 'pvp', SWEEP_SAMPLES, 777)
 assert((pvpTier5.mythic ?? 0) > 0, 'pvp 模式 lootTier 5 会出神话')
 let pvpHeartHits = 0
 let normalHeartHits = 0
 {
+  // 0.25 权重下单抽约 0.0135%，2 万抽期望只有 2–3 次；用 20 万抽保证固定种子稳定命中
+  const HEART_SAMPLES = 200_000
   const rng = createRaidRng(20261104)
-  for (let i = 0; i < SWEEP_SAMPLES; i += 1) {
+  for (let i = 0; i < HEART_SAMPLES; i += 1) {
     if (rollRaidItemKey(rng, 5, 'pvp') === 'heart_of_africa') pvpHeartHits += 1
   }
   const rng2 = createRaidRng(20261104)
-  for (let i = 0; i < SWEEP_SAMPLES; i += 1) {
+  for (let i = 0; i < HEART_SAMPLES; i += 1) {
     if (rollRaidItemKey(rng2, 5, 'normal') === 'heart_of_africa') normalHeartHits += 1
   }
 }
 assert(pvpHeartHits > 0, `pvp 模式 lootTier 5 固定种子能刷出非洲之心（实测 ${pvpHeartHits} 次）`)
-assertEqual(normalHeartHits, 0, 'normal 模式永远刷不出非洲之心（pvpOnly 闸门生效）')
+assert(normalHeartHits > 0, `normal 模式 lootTier 5 固定种子也能刷出非洲之心（实测 ${normalHeartHits} 次）`)
+assert(pvpHeartHits < SWEEP_SAMPLES, '非洲之心不会成为常见掉落（远比普通物品稀有）')
 
 const tier1Counts = sweepRarity(1, 'normal', 6000, 4242)
 assertEqual(tier1Counts.mythic ?? -1, 0, 'tier 1 固定种子不产出神话')
@@ -445,7 +438,8 @@ assert((tier1Counts.common ?? 0) > 0, 'tier 1 会产出普通物品')
 
 const wasteland = getRaidMap('wasteland') as RaidMapDef
 const abyss = getRaidMap('abyss') as RaidMapDef
-assertEqual(RAID_MAPS.length, 6, '6 张地图')
+const citadel = getRaidMap('citadel') as RaidMapDef
+assertEqual(RAID_MAPS.length, 7, '7 张地图')
 assertEqual(new Set(RAID_MAPS.map((map) => map.key)).size, RAID_MAPS.length, '地图 key 唯一')
 
 const mapA = generateRaidMap(123456, wasteland)
@@ -519,18 +513,81 @@ assertEqual(abyssMap.rooms.filter((room) => room.kind === 'elite').length, abyss
 assert(abyssMap.rooms.filter((room) => room.kind === 'boss').every((room) => room.enemies.some((enemy) => enemy.kind === 'boss')), '首领房间有 Boss')
 assert(abyssMap.rooms.filter((room) => room.kind === 'boss').every((room) => room.containers.length >= 2), '首领房间至少 2 个容器')
 
+/* ---------- 新地图：日蚀要塞（隔断 + 轨道炮火） ---------- */
+
+assertEqual(citadel.difficulty, 'nightmare', '日蚀要塞是噩梦难度')
+assertEqual(citadel.interior, 'fortress', '日蚀要塞使用室内隔断布局')
+assertEqual(citadel.gimmick?.kind, 'orbital', '日蚀要塞带轨道炮火机制')
+assertEqual(citadel.cols * citadel.rows, 30, '日蚀要塞 6×5 共 30 个房间')
+const citadelMap = generateRaidMap(20261107, citadel)
+assertEqual(citadelMap.gimmick?.label, '轨道炮火', '地图节点透传轨道炮火配置')
+assertEqual(
+  JSON.stringify(raidMapForViewer(citadelMap).gimmick),
+  JSON.stringify(citadelMap.gimmick),
+  '下发地图保留轨道炮火配置',
+)
+let citadelInteriorWalls = 0
+for (const room of citadelMap.rooms) {
+  for (let y = room.y + 2; y < room.y + room.h - 2; y += 1) {
+    for (let x = room.x + 2; x < room.x + room.w - 2; x += 1) {
+      if (citadelMap.tiles[y * citadelMap.width + x] === 0) citadelInteriorWalls += 1
+    }
+  }
+  for (const enemy of room.enemies) {
+    assert(
+      citadelMap.tiles[enemy.y * citadelMap.width + enemy.x] !== 0,
+      `${room.id} 号房间敌人不生成在隔断上`,
+    )
+  }
+  for (const container of room.containers) {
+    assert(
+      citadelMap.tiles[container.y * citadelMap.width + container.x] !== 0,
+      `${room.id} 号房间容器不生成在隔断上`,
+    )
+  }
+}
+assert(citadelInteriorWalls > 40, `日蚀要塞室内隔断足够多（实测 ${citadelInteriorWalls} 格）`)
+assertEqual(
+  citadelMap.rooms[0]?.enemies.length,
+  0,
+  '日蚀要塞起点房不刷怪（也不生成隔断）',
+)
+// 瓦片级连通：整个地图的非墙瓦片必须是一个连通分量
+const citadelStart = citadelMap.rooms[citadelMap.startRoom] as (typeof citadelMap.rooms)[number]
+const startTileX = citadelStart.x + Math.floor(citadelStart.w / 2)
+const startTileY = citadelStart.y + Math.floor(citadelStart.h / 2)
+const walkSeen = new Set<number>([startTileY * citadelMap.width + startTileX])
+const walkQueue: Array<[number, number]> = [[startTileX, startTileY]]
+while (walkQueue.length > 0) {
+  const [x, y] = walkQueue.shift() as [number, number]
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+    const nx = x + dx
+    const ny = y + dy
+    if (nx < 0 || ny < 0 || nx >= citadelMap.width || ny >= citadelMap.height) continue
+    const index = ny * citadelMap.width + nx
+    if (walkSeen.has(index) || citadelMap.tiles[index] === 0) continue
+    walkSeen.add(index)
+    walkQueue.push([nx, ny])
+  }
+}
+assertEqual(
+  walkSeen.size,
+  citadelMap.tiles.filter((tile) => tile !== 0).length,
+  '日蚀要塞全图可走瓦片连通（隔断没有制造死区）',
+)
+assert(
+  citadelMap.extracts.every((point) => citadelMap.tiles[point.y * citadelMap.width + point.x] !== 0),
+  '日蚀要塞撤离信标都落在可站立瓦片',
+)
+
 /* ============================================================
    掉落模式 × 容器段数 / 首领保底 / 敌人属性
    ============================================================ */
 
-assertEqual(raidContainerLootSegments(false, 'normal').join(','), '1,2', 'normal 非首领容器 1–2 段')
-assertEqual(raidContainerLootSegments(true, 'normal').join(','), '2,3', 'normal 首领容器 2–3 段')
+assertEqual(raidContainerLootSegments(false, 'normal').join(','), '1,3', 'normal 非首领容器 1–3 段（已回调）')
+assertEqual(raidContainerLootSegments(true, 'normal').join(','), '2,4', 'normal 首领容器 2–4 段（已回调）')
 assertEqual(raidContainerLootSegments(false, 'pvp').join(','), '1,3', 'pvp 非首领容器 1–3 段')
 assertEqual(raidContainerLootSegments(true, 'pvp').join(','), '2,4', 'pvp 首领容器 2–4 段')
-assert(
-  raidContainerLootSegments(true, 'pvp')[1] > raidContainerLootSegments(true, 'normal')[1],
-  'pvp 首领容器上限段数高于 normal（高爆率体验）',
-)
 
 // 模式只改掉落，不改地形；缺省参数等于 normal
 const damDef = getRaidMap('dam') as RaidMapDef
@@ -550,17 +607,19 @@ assert(
   '同一 seed 换模式掉落确实不同（模式进了掉落骰子）',
 )
 
-/** 首领房首段保底档位（与引擎同口径，写在这里当钉死值而不是重新推导一遍代码） */
-function bossFloorRank(mode: RaidLootMode, lootTier: number): number {
-  return mode === 'pvp' ? (lootTier >= 4 ? 3 : 2) : lootTier >= 4 ? 4 : 3
+/** 首领房首段保底档位（与引擎同口径，两种模式一致） */
+function bossFloorRank(_mode: RaidLootMode, lootTier: number): number {
+  return lootTier >= 4 ? 3 : 2
 }
 
 const MAP_SEEDS = [123456, 654321, 999, 424242, 777, 20261104]
 let scannedContainers = 0
 let normalBossMythicFirst = 0
 let pvpBossMythicFirst = 0
-let normalMythicOutsideBoss = 0
+let normalMythicOutsideBossT5 = 0
+let normalMythicOutsideBossLow = 0
 const normalMythicKeys = new Set<string>()
+const pvpMythicKeys = new Set<string>()
 for (const mode of RAID_LOOT_MODES) {
   for (const def of RAID_MAPS) {
     for (const seed of MAP_SEEDS) {
@@ -627,7 +686,10 @@ for (const mode of RAID_LOOT_MODES) {
               if (mode === 'normal') {
                 normalBossMythicFirst += 1
                 normalMythicKeys.add(first.key)
-              } else pvpBossMythicFirst += 1
+              } else {
+                pvpBossMythicFirst += 1
+                pvpMythicKeys.add(first.key)
+              }
             }
           }
           for (const loot of container.loot) {
@@ -638,7 +700,8 @@ for (const mode of RAID_LOOT_MODES) {
               `${container.id} 掉落数量不超堆叠上限`,
             )
             if (mode === 'normal' && room.kind !== 'boss' && lootDef?.rarity === 'mythic') {
-              normalMythicOutsideBoss += 1
+              if (def.lootTier >= 5) normalMythicOutsideBossT5 += 1
+              else normalMythicOutsideBossLow += 1
             }
           }
         }
@@ -647,23 +710,13 @@ for (const mode of RAID_LOOT_MODES) {
   }
 }
 assert(scannedContainers > 500, `地图扫描覆盖到足够多的容器（实测 ${scannedContainers} 个）`)
-assertEqual(normalMythicOutsideBoss, 0, 'normal 模式非首领容器永不产神话（权重表路径干净）')
+assertEqual(normalMythicOutsideBossLow, 0, 'normal 模式 T1–T4 容器不产神话')
+assert(normalMythicOutsideBossT5 > 0, `normal 模式 T5 非首领容器也会产神话（实测 ${normalMythicOutsideBossT5} 次）`)
 assert(pvpBossMythicFirst > 0, `pvp 模式首领房首段会掉神话（实测 ${pvpBossMythicFirst} 次）`)
-// ⚠️ 特征断言（不是期望语义）：normal 模式首领房首段仍会掉神话。
-// 首领房「首段保底」的候选池只筛了品质档位 + raidItemModeAllowed，没有筛模式权重表，
-// 于是 abyss_core / gear_cache_mythic（非 pvpOnly、权重在 normal 全为 0）被保底池直接捞了进来，
-// 与 2026-11-04 发布口径「normal 模式（含深渊实验室）完全不产神话」矛盾。
-// 引擎侧修法：池过滤补一条 rarityWeightAtTier(item.rarity, lootTier, mode) > 0。
-// 修复后请把下面两条改成 assertEqual(normalBossMythicFirst, 0, ...) 与 0 个神话 key。
-assert(
-  normalBossMythicFirst > 0,
-  `⚠️ 已知引擎缺陷特征断言：normal 首领房首段仍产出神话 ${normalBossMythicFirst} 次（修复保底池后应改为 0）`,
-)
-assertEqual(
-  [...normalMythicKeys].sort().join(','),
-  'abyss_core,gear_cache_mythic',
-  '⚠️ normal 漏出的神话正是权重为 0 的那两件（漏筛模式权重的直接证据）',
-)
+assert(normalBossMythicFirst > 0, `normal 模式首领房首段会掉神话（实测 ${normalBossMythicFirst} 次）`)
+// 非洲之心 pityEligible:false：首领首段保底池永远不会捞到它
+assert(!normalMythicKeys.has('heart_of_africa'), 'normal 首领首段保底池排除非洲之心')
+assert(!pvpMythicKeys.has('heart_of_africa'), 'pvp 首领首段保底池排除非洲之心')
 
 /* ---------- rollRaidContainerLoot 纯函数：确定性 + 段数极值 ---------- */
 
@@ -795,14 +848,10 @@ assertEqual(run.hp, 200, '初始 HP 正确')
 assertEqual(run.capacities.safe, 2, '安全箱容量来自传入值')
 assertEqual(run.log.length, 1, '开局写一条日志')
 
-/* ---------- v4 新增字段与掉落模式 ---------- */
+/* ---------- 状态字段与掉落模式 ---------- */
 
-assertEqual(RAID_STATE_VERSION, 4, '状态 schema 版本升到 4（新增 mode 与撤离故障字段）')
+assertEqual(RAID_STATE_VERSION, 4, '状态 schema 版本保持 4（删除的撤离失败字段向后兼容）')
 assertEqual(run.mode, 'normal', '缺省掉落模式为 normal')
-assertEqual(JSON.stringify(run.extractDisabled), '[]', '开局没有失效撤离点')
-assertEqual(run.extractBlockedUntil, null, '开局没有撤离冷却')
-assertEqual(run.extractRolls, 0, '开局读条次数 0')
-assertEqual(run.extractGuaranteed, false, '开局没有撤离保障')
 assertEqual(JSON.stringify(run.discoveredExtracts), '[]', '开局未发现任何撤离点')
 assertEqual(run.killedByUserId, null, '开局没有击倒者')
 const pvpRun = makeRun({ mode: 'pvp' })
@@ -854,9 +903,7 @@ assertEqual(
   300,
   '组队开局的发号基址写入 groundSeq',
 )
-assertEqual(RAID_EXTRACT_FAIL_RATE, 0.25, '撤离故障概率 25%')
-assertEqual(RAID_EXTRACT_COOLDOWN_MS, 60_000, '撤离冷却 60 秒')
-assert(RAID_EXTRACT_CHANNEL_MS > 0, '撤离读条时长为正')
+assertEqual(RAID_EXTRACT_CHANNEL_MS, 6000, '撤离读条固定 6 秒')
 
 // 进房：不相邻拒绝；起点无敌人，可直接进入相邻房间
 const neighbor = mapA.rooms[0]?.neighbors[0] as number
@@ -1255,59 +1302,9 @@ assertEqual(reEnter.state.discoveredExtracts.join(','), String(extractRoom.id), 
 const sameRoom = applyRaidEvent(reEnter.state, mapA, { type: 'enterRoom', roomId: extractRoom.id }, 1_000_153)
 assertEqual(sameRoom.state.discoveredExtracts.length, 1, '原地重复 enterRoom 也不会重复记录')
 
-/* ---------- 撤离：掷骰纯函数的确定性、故障率与信号弹（2026-11-04） ---------- */
+/* ---------- 撤离：读条 6 秒后必定成功（2026-11-07 删除随机运输故障） ---------- */
 
-assertEqual(RAID_EXTRACT_FAIL_RATE, 0.25, '撤离故障概率钉死 25%')
-
-/** 找一个能让 (房间, 第 N 次读条) 判成期望结果的种子（纯函数、可重放，所以搜索是确定的） */
-function findExtractSeed(roomId: number, attempt: number, wantFail: boolean, upto = 20000): number {
-  for (let seed = 1; seed <= upto; seed += 1) {
-    if (rollExtractFailure(seed, roomId, attempt, false) === wantFail) return seed
-  }
-  throw new Error(`断言失败：找不到撤离掷骰种子（房间 ${roomId} / 第 ${attempt} 次 / 期望 ${wantFail ? '故障' : '成功'}）`)
-}
-
-const extractFailSeed = findExtractSeed(extractRoom.id, 1, true)
-const extractPassSeed = findExtractSeed(extractRoom.id, 1, false)
-assert(extractFailSeed !== extractPassSeed, '同一房间同一 attempt 既能找到故障种子也能找到成功种子')
-assertEqual(rollExtractFailure(extractFailSeed, extractRoom.id, 1, false), true, `种子 ${extractFailSeed} 的首次读条判故障`)
-assertEqual(rollExtractFailure(extractPassSeed, extractRoom.id, 1, false), false, `种子 ${extractPassSeed} 的首次读条判成功`)
-
-// 确定性：同参数重复调用一致；不吃墙上时钟，因此服务端按 seed 重放必然同结果
-let rollStability = 0
-for (let roomId = 0; roomId < 24; roomId += 1) {
-  for (let attempt = 1; attempt <= 4; attempt += 1) {
-    const first = rollExtractFailure(extractFailSeed, roomId, attempt, false)
-    for (let k = 0; k < 3; k += 1) {
-      if (rollExtractFailure(extractFailSeed, roomId, attempt, false) !== first) rollStability += 1
-    }
-  }
-}
-assertEqual(rollStability, 0, 'rollExtractFailure 同参数重复调用结果恒定（无 Math.random / 无墙上时钟）')
-
-// 实测故障率贴近 25%
-let rateFails = 0
-const RATE_SAMPLES = 400 * 25
-for (let seed = 1; seed <= 400; seed += 1) {
-  for (let roomId = 0; roomId < 25; roomId += 1) {
-    if (rollExtractFailure(seed, roomId, 1, false)) rateFails += 1
-  }
-}
-assertClose(rateFails / RATE_SAMPLES, RAID_EXTRACT_FAIL_RATE, 0.03, `撤离故障实测占比 ≈ 25%（${rateFails}/${RATE_SAMPLES}）`)
-
-// 信号弹把概率直接钉成 0
-let guaranteedFails = 0
-for (let seed = 1; seed <= 200; seed += 1) {
-  for (let roomId = 0; roomId < 20; roomId += 1) {
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      if (rollExtractFailure(seed, roomId, attempt, true)) guaranteedFails += 1
-    }
-  }
-}
-assertEqual(guaranteedFails, 0, 'guaranteed = true 时掷骰永远返回「不故障」')
-
-// —— 成功分支 ——
-const atExtract = makeRun({ seed: extractPassSeed, currentRoom: extractRoom.id, clearedRooms: [extractRoom.id] })
+const atExtract = makeRun({ currentRoom: extractRoom.id, clearedRooms: [extractRoom.id] })
 const wrongRoom = applyRaidEvent(makeRun(), mapA, { type: 'extractStart' }, 1_000_070)
 assert(!!wrongRoom.error, '非撤离房间不能开始撤离')
 const startExtract = applyRaidEvent(atExtract, mapA, { type: 'extractStart' }, 1_000_071)
@@ -1316,216 +1313,22 @@ assertEqual(startExtract.state.extractionRoom, extractRoom.id, '读条记下所�
 const tooEarly = applyRaidEvent(startExtract.state, mapA, { type: 'extractDone' }, 1_000_071 + RAID_EXTRACT_CHANNEL_MS - 1)
 assert(!!tooEarly.error, '读条未完成不能撤离')
 assertEqual(tooEarly.state.status, 'active', '提前点撤离不影响对局继续')
-assertEqual(tooEarly.state.extractRolls, 0, '被拒的撤离不计数（不烧掉一次掷骰）')
 const reStart = applyRaidEvent(startExtract.state, mapA, { type: 'extractStart' }, 1_000_071 + 100)
 assertEqual(reStart.state.extractionStartedAt, startExtract.state.extractionStartedAt, '重复起读条不重置计时（防刷）')
 const done = applyRaidEvent(startExtract.state, mapA, { type: 'extractDone' }, 1_000_071 + RAID_EXTRACT_CHANNEL_MS)
-assertEqual(done.state.status, 'extracted', '掷骰判成功时读条完成即撤离成功')
-assertEqual(done.state.extractRolls, 1, '一次读条计一次掷骰')
-assertEqual(JSON.stringify(done.state.extractDisabled), '[]', '成功撤离不封任何撤离点')
-assertEqual(done.state.extractBlockedUntil, null, '成功撤离不触发冷却')
+assertEqual(done.state.status, 'extracted', '读条完成必定撤离成功（无随机故障）')
+assertEqual(done.state.extractionStartedAt, 1_000_071, '成功后读条时间戳保持原值（结算可追溯）')
 assert(done.state.log.some((entry) => entry.kind === 'success'), '成功撤离写 success 日志')
+const afterDoneAgain = applyRaidEvent(done.state, mapA, { type: 'extractDone' }, 1_000_071 + RAID_EXTRACT_CHANNEL_MS * 2)
+assert(!!afterDoneAgain.error, '已撤离的对局不能再刷撤离事件')
 
-// —— 失败分支（对齐三角洲：能不能走要看运气，且失败不吞背包） ——
-const failBefore = makeRun({
-  seed: extractFailSeed,
-  currentRoom: extractRoom.id,
-  clearedRooms: [extractRoom.id],
-  backpack: [{ slotIndex: 0, itemKey: 'scrap_metal', amount: 2 }],
-  rig: [{ slotIndex: 0, itemKey: 'medkit', amount: 1 }],
-  safe: [{ slotIndex: 0, itemKey: 'gold_compass', amount: 1 }],
-})
-const failStarted = applyRaidEvent(failBefore, mapA, { type: 'extractStart' }, 1_000_100)
-assert(!failStarted.error, '会故障的种子照样能起读条（事前不可知）')
-const failDone = applyRaidEvent(failStarted.state, mapA, { type: 'extractDone' }, 1_000_100 + RAID_EXTRACT_CHANNEL_MS)
-assertEqual(failDone.error, undefined, '撤离故障不是非法请求，而是读条失败')
-assertEqual(failDone.state.status, 'active', '撤离故障后对局继续，不判撤离也不判死')
-assertEqual(failDone.state.extractRolls, 1, '失败的读条同样计入次数（下一次换 attempt）')
-assertEqual(failDone.state.extractDisabled.join(','), String(extractRoom.id), '故障撤离点记入失效列表')
-assertEqual(
-  failDone.state.extractBlockedUntil,
-  1_000_100 + RAID_EXTRACT_CHANNEL_MS + RAID_EXTRACT_COOLDOWN_MS,
-  '故障后全图撤离冷却 = 完成时刻 + 60 秒',
-)
-assertEqual(failDone.state.extractionStartedAt, null, '故障后读条状态清空')
-assertEqual(failDone.state.extractionRoom, null, '故障后不再挂在原撤离房间')
-assertEqual(
-  failDone.state.lastExtractFailAt,
-  1_000_100 + RAID_EXTRACT_CHANNEL_MS,
-  '撤离故障记录 lastExtractFailAt（全失联兜底的计时依据）',
-)
-assert(
-  failDone.state.log.some((entry) => entry.kind === 'danger' && entry.text.includes('运输故障')),
-  '故障写一条 danger 日志',
-)
-assertEqual(JSON.stringify(failDone.state.backpack), JSON.stringify(failBefore.backpack), '故障不丢背包')
-assertEqual(JSON.stringify(failDone.state.rig), JSON.stringify(failBefore.rig), '故障不丢胸挂')
-assertEqual(JSON.stringify(failDone.state.safe), JSON.stringify(failBefore.safe), '故障不丢安全箱')
-assertEqual(JSON.stringify(failDone.state.clearedRooms), JSON.stringify(failBefore.clearedRooms), '故障不回退清房进度')
-assertEqual(JSON.stringify(failDone.state.discoveredExtracts), JSON.stringify(failBefore.discoveredExtracts), '故障不改已发现撤离点')
-const afterFailAgain = applyRaidEvent(failDone.state, mapA, { type: 'extractDone' }, 1_000_100 + RAID_EXTRACT_CHANNEL_MS * 2)
-assert(!!afterFailAgain.error, '没有读条就不能直接喊撤离完成')
-assertEqual(afterFailAgain.state.extractRolls, 1, '被拒的 extractDone 不追加掷骰次数')
-const disabledRoomStart = applyRaidEvent(
-  failDone.state,
-  mapA,
-  { type: 'extractStart' },
-  1_000_100 + RAID_EXTRACT_CHANNEL_MS + RAID_EXTRACT_COOLDOWN_MS - 1,
-)
-assert(!!disabledRoomStart.error, '冷却未过时，失联的撤离点仍然拒绝起读条')
-assert((disabledRoomStart.error ?? '').includes('失联'), '失效撤离点的报错口径是「失联」')
-
-// —— 死局兜底（2026-11-05）：全部撤离点失联且冷却已过时，「救援队」重新架设信标放行 ——
-// wasteland 这类单撤离点地图此前失败一次就永远无出口，只能干等到超时判失联。
-const rescueStart = applyRaidEvent(
-  failDone.state,
-  mapA,
-  { type: 'extractStart' },
-  1_000_100 + RAID_EXTRACT_CHANNEL_MS + RAID_EXTRACT_COOLDOWN_MS + 1,
-)
-assert(!rescueStart.error, '全部撤离点失联 + 冷却已过：extractStart 放行（救援队重新架设信标）')
-assertEqual(JSON.stringify(rescueStart.state.extractDisabled), '[]', '兜底放行时清空全部失效撤离点')
-assertEqual(rescueStart.state.extractionRoom, extractRoom.id, '兜底放行后正常进入撤离读条')
-assert(rescueStart.state.log.some((entry) => entry.text.includes('救援队')), '兜底放行写一条救援队日志')
-assertEqual(
-  rescueStart.state.extractionStartedAt,
-  1_000_100 + RAID_EXTRACT_CHANNEL_MS + RAID_EXTRACT_COOLDOWN_MS + 1,
-  '兜底放行的读条时刻即 extractStart 时刻',
-)
-
-// —— 兜底只救「全失联」：图上还有可用撤离点时不复活任何信标 ——
-const damRetryDef = getRaidMap('dam') as RaidMapDef
-const damMap = generateRaidMap(777, damRetryDef)
-const damExtractRoom = damMap.rooms.find((room) => room.kind === 'extract') as (typeof damMap.rooms)[number]
-assert(!!damExtractRoom, 'dam 地图存在撤离房间')
-const damRun = makeRun({
-  seed: 777,
-  mapKey: 'dam',
-  currentRoom: damExtractRoom.id,
-  clearedRooms: [damExtractRoom.id],
-  extractDisabled: [damExtractRoom.id],
-  extractBlockedUntil: 1_000_100 + RAID_EXTRACT_CHANNEL_MS + RAID_EXTRACT_COOLDOWN_MS,
-  lastExtractFailAt: 1_000_100 + RAID_EXTRACT_CHANNEL_MS,
-})
-const damRetry = applyRaidEvent(
-  damRun,
-  damMap,
-  { type: 'extractStart' },
-  1_000_100 + RAID_EXTRACT_CHANNEL_MS + RAID_EXTRACT_COOLDOWN_MS + 1,
-)
-assert(!!damRetry.error, '图上还有可用撤离点时不触发兜底：单点失联冷却过后仍拒绝')
-assertEqual(
-  JSON.stringify(damRetry.state.extractDisabled),
-  JSON.stringify([damExtractRoom.id]),
-  '部分失联不复活任何撤离点',
-)
-
-// —— 服务端重放：同一 seed + 同一批事件必然复现同一故障结果 ——
-const replayFail = applyRaidEvent(
-  applyRaidEvent(failBefore, mapA, { type: 'extractStart' }, 1_000_100).state,
-  mapA,
-  { type: 'extractDone' },
-  1_000_100 + RAID_EXTRACT_CHANNEL_MS,
-)
-assertEqual(replayFail.state.status, failDone.state.status, '重放得到同样的对局状态')
-assertEqual(
-  JSON.stringify(replayFail.state.extractDisabled),
-  JSON.stringify(failDone.state.extractDisabled),
-  '重放得到同样的失效撤离点（掷骰只吃 seed/房间/次数/信号弹）',
-)
-assertEqual(replayFail.state.extractBlockedUntil, failDone.state.extractBlockedUntil, '重放冷却截止一致')
-
-// —— 冷却期内换别的撤离点也不行（用两张撤离点的零号大坝） ——
-const damExtracts = damNormal.rooms.filter((entry) => entry.kind === 'extract')
-assertEqual(damExtracts.length, 2, '零号大坝有 2 个撤离房间')
-const [extractA, extractB] = damExtracts as [(typeof damExtracts)[number], (typeof damExtracts)[number]]
-assert(extractA.neighbors.includes(extractB.id), '两个撤离房间相邻，可以走去找别的出口')
-let coolSeed = 0
-for (let seed = 1; seed <= 20000; seed += 1) {
-  if (rollExtractFailure(seed, extractA.id, 1, false) && !rollExtractFailure(seed, extractB.id, 2, false)) {
-    coolSeed = seed
-    break
-  }
-}
-assert(coolSeed > 0, '找到「A 点首掷故障 + B 点二掷成功」的种子（冷却链路可确定性验证）')
-const coolRun = makeRun({ seed: coolSeed, currentRoom: extractA.id, clearedRooms: [extractA.id] })
-const coolStart = applyRaidEvent(coolRun, damNormal, { type: 'extractStart' }, 2_000_000)
-assert(!coolStart.error, '撤离房间 A 可以起读条')
-const coolFail = applyRaidEvent(coolStart.state, damNormal, { type: 'extractDone' }, 2_000_000 + RAID_EXTRACT_CHANNEL_MS)
-assertEqual(coolFail.state.status, 'active', 'A 点运输故障，对局继续')
-const moveToB = applyRaidEvent(coolFail.state, damNormal, { type: 'enterRoom', roomId: extractB.id }, 2_000_000 + RAID_EXTRACT_CHANNEL_MS + 500)
-assert(!moveToB.error, '可以从失效的 A 点走到相邻的 B 点')
-assertEqual(moveToB.state.discoveredExtracts.join(','), String(extractB.id), 'B 点首次进入被记录')
-const duringCooldown = applyRaidEvent(
-  moveToB.state,
-  damNormal,
-  { type: 'extractStart' },
-  2_000_000 + RAID_EXTRACT_CHANNEL_MS + RAID_EXTRACT_COOLDOWN_MS - 1000,
-)
-assert(!!duringCooldown.error, '冷却期内任何撤离点都不能起读条')
-assert((duringCooldown.error ?? '').includes('运输调度'), '冷却期报错口径是「运输调度」')
-assertEqual(duringCooldown.state.extractionStartedAt, null, '冷却期内起不了读条')
-const cooldownEnd = applyRaidEvent(
-  moveToB.state,
-  damNormal,
-  { type: 'extractStart' },
-  2_000_000 + RAID_EXTRACT_CHANNEL_MS + RAID_EXTRACT_COOLDOWN_MS,
-)
-assert(!cooldownEnd.error, '冷却截止当刻（now === 截止）恢复可撤离')
-const secondDone = applyRaidEvent(
-  cooldownEnd.state,
-  damNormal,
-  { type: 'extractDone' },
-  2_000_000 + RAID_EXTRACT_CHANNEL_MS * 2 + RAID_EXTRACT_COOLDOWN_MS,
-)
-assertEqual(secondDone.state.status, 'extracted', '换撤离点并按 attempt = 2 重掷，本例判成功')
-assertEqual(secondDone.state.extractRolls, 2, '两次读条累计 2 次掷骰')
-assertEqual(secondDone.state.extractDisabled.join(','), String(extractA.id), '失效列表仍只有 A 点')
-
-// —— 信号弹：已知会故障的 (seed, 房间) 点亮后必定走成 ——
-const flareRun = makeRun({
-  seed: extractFailSeed,
-  currentRoom: extractRoom.id,
-  clearedRooms: [extractRoom.id],
-  backpack: [{ slotIndex: 0, itemKey: RAID_EXTRACT_FLARE_KEY, amount: 1 }],
-})
-assertEqual(rollExtractFailure(extractFailSeed, extractRoom.id, 1, false), true, '这一发不加保障必定故障（对照）')
-const flareUsed = applyRaidEvent(flareRun, mapA, { type: 'useItem', itemKey: RAID_EXTRACT_FLARE_KEY, from: 'backpack' }, 1_000_200)
-assert(!flareUsed.error, '可以使用撤离信号弹')
-assertEqual(flareUsed.state.extractGuaranteed, true, '使用后本局撤离获得保障')
-assertEqual(flareUsed.state.backpack.some((entry) => entry.itemKey === RAID_EXTRACT_FLARE_KEY), false, '信号弹被消耗掉')
-assert(flareUsed.state.log.some((entry) => entry.kind === 'extract' && entry.text.includes('必定成功')), '点亮信号弹写 extract 日志')
-assertEqual(flareUsed.state.hp, flareRun.hp, '信号弹不回血（不是治疗品）')
-assertEqual(flareUsed.state.mp, flareRun.mp, '信号弹不回能量（不是能量饮料）')
-const flareStart = applyRaidEvent(flareUsed.state, mapA, { type: 'extractStart' }, 1_000_210)
-assert(!flareStart.error, '点亮信号弹后照常起读条')
-assert(flareStart.state.log.some((entry) => entry.text.includes('航线已有保障')), '起读条日志体现航线已有保障')
-const flareDone = applyRaidEvent(flareStart.state, mapA, { type: 'extractDone' }, 1_000_210 + RAID_EXTRACT_CHANNEL_MS)
-assertEqual(flareDone.state.status, 'extracted', '同一 seed / 同一房间在点亮信号弹后撤离必定成功')
-assertEqual(flareDone.state.extractGuaranteed, true, '保障标记随状态保留（结算可据此展示）')
-assertEqual(flareDone.state.extractBlockedUntil, null, '信号弹路径不触发冷却')
-const doubleFlare = makeRun({ backpack: [{ slotIndex: 0, itemKey: RAID_EXTRACT_FLARE_KEY, amount: 2 }] })
-const firstFlare = applyRaidEvent(doubleFlare, mapA, { type: 'useItem', itemKey: RAID_EXTRACT_FLARE_KEY, from: 'backpack' }, 1_000_220)
-assert(!firstFlare.error, '双发信号弹可以先点亮一发')
-assertEqual(firstFlare.state.backpack[0]?.amount, 1, '第一发消耗后还剩 1')
-const secondFlare = applyRaidEvent(firstFlare.state, mapA, { type: 'useItem', itemKey: RAID_EXTRACT_FLARE_KEY, from: 'backpack' }, 1_000_221)
-assert(!!secondFlare.error, '航线已有保障时不允许重复点亮信号弹')
-assertEqual(secondFlare.state.backpack[0]?.amount, 1, '被拒的第二次不消耗信号弹')
-assertEqual(secondFlare.state.extractGuaranteed, true, '被拒后保障标记不变')
-const flareFromSafe = makeRun({ safe: [{ slotIndex: 0, itemKey: RAID_EXTRACT_FLARE_KEY, amount: 1 }] })
-assert(
-  !applyRaidEvent(flareFromSafe, mapA, { type: 'useItem', itemKey: RAID_EXTRACT_FLARE_KEY, from: 'safe' }, 1_000_222).error,
-  '安全箱里的信号弹也能点亮（保命底牌不受背包挤压）',
-)
-assert(
-  !!applyRaidEvent(makeRun(), mapA, { type: 'useItem', itemKey: RAID_EXTRACT_FLARE_KEY, from: 'backpack' }, 1_000_223).error,
-  '没有信号弹时不能使用',
-)
-assert(
-  !!applyRaidEvent(makeRun({ backpack: [{ slotIndex: 0, itemKey: 'scrap_metal', amount: 1 }] }), mapA,
-    { type: 'useItem', itemKey: 'scrap_metal', from: 'backpack' }, 1_000_224).error,
-  '材料不是消耗品，不能使用',
-)
+// 旧型号信号弹已停产：不能再使用，只能回收
+const retiredFlareRun = makeRun({ backpack: [{ slotIndex: 0, itemKey: RAID_EXTRACT_FLARE_KEY, amount: 1 }] })
+const retiredFlareUse = applyRaidEvent(retiredFlareRun, mapA, { type: 'useItem', itemKey: RAID_EXTRACT_FLARE_KEY, from: 'backpack' }, 1_000_200)
+assert(!!retiredFlareUse.error, '停产的撤离信号弹不能使用')
+assert((retiredFlareUse.error ?? '').includes('停产'), '停产提示口径正确')
+assertEqual(retiredFlareUse.state.backpack[0]?.amount, 1, '被拒的使用不消耗信号弹')
+assertEqual(raidSellPrice(RAID_EXTRACT_FLARE_KEY, 1), 180, '旧信号弹仍可按 60% 回收')
 
 // 放弃 / 超时
 assertEqual(applyRaidEvent(makeRun(), mapA, { type: 'abandon' }, 1_000_080).state.status, 'abandoned', '主动放弃')
@@ -1557,11 +1360,6 @@ assertEqual(
   raidLootValue([{ slotIndex: 0, itemKey: GAME_TICKET_KEY, amount: 3 }]),
   GAME_TICKET_RECYCLE_VALUE * 3,
   '带出的门票按目录价值计价（仓库/结算展示口径一致）',
-)
-assertEqual(
-  raidKeptContainers({ ...failDone.state }).backpack.length,
-  0,
-  '撤离故障（仍 active）期间结算只保安全箱，不给整套背包',
 )
 const pvpExtracted = { ...extractedState, mode: 'pvp' as const }
 assertEqual(raidKeptContainers(pvpExtracted).backpack.length, 1, 'pvp 模式撤离同样保留全部容器（模式不改结算）')
@@ -1616,44 +1414,28 @@ assert(!!applyRaidEvent(done.state, mapA, { type: 'extractDone' }, 1_000_094).er
 // 旧对局首次读取按放弃结算。引擎本身不偷偷迁移版本号，所以这里必须钉死「版本号原样保留」。
 const legacyRaw = { ...makeRun(), schemaVersion: 1 } as Record<string, unknown>
 delete legacyRaw.mode
-delete legacyRaw.extractDisabled
-delete legacyRaw.extractBlockedUntil
-delete legacyRaw.extractRolls
-delete legacyRaw.extractGuaranteed
 delete legacyRaw.discoveredExtracts
 delete legacyRaw.killedByUserId
 const legacyState = legacyRaw as unknown as RaidRunState
 assertEqual(legacyState.schemaVersion, 1, '旧 schema 可构造（服务层按放弃处理）')
 assert(
   legacyState.schemaVersion !== RAID_STATE_VERSION,
-  '旧版本不等于 RAID_STATE_VERSION，服务层据此拒绝（否则会把没有 mode / 撤离字段的局当新局跑）',
+  '旧版本不等于 RAID_STATE_VERSION，服务层据此拒绝（否则会把没有 mode 的局当新局跑）',
 )
 const legacyAbandon = applyRaidEvent(legacyState, mapA, { type: 'abandon' }, 1_000_300)
 assertEqual(legacyAbandon.state.status, 'abandoned', '缺字段的旧状态仍可处理事件（cloneState 兜底）')
 assertEqual(legacyAbandon.state.schemaVersion, 1, '引擎不改写旧状态的 schemaVersion（拒绝口径依赖它）')
 assertEqual(legacyAbandon.state.mode, 'normal', '缺失 mode 兜底为 normal')
-assertEqual(JSON.stringify(legacyAbandon.state.extractDisabled ?? []), '[]', '缺失失效列表兜底为空')
-assertEqual(legacyAbandon.state.extractRolls, 0, '缺失读条次数兜底为 0')
-assertEqual(legacyAbandon.state.extractGuaranteed ?? false, false, '缺失保障标记兜底为无保障')
 const legacyAtExtract = applyRaidEvent(
   { ...legacyState, currentRoom: extractRoom.id, clearedRooms: [extractRoom.id] },
   mapA,
   { type: 'extractStart' },
   1_000_301,
 )
-assert(!legacyAtExtract.error, '旧状态没有冷却字段也能起读条')
+assert(!legacyAtExtract.error, '旧状态也能起读条')
 const legacyDone = applyRaidEvent(legacyAtExtract.state, mapA, { type: 'extractDone' }, 1_000_301 + RAID_EXTRACT_CHANNEL_MS)
-assertEqual(legacyDone.state.extractRolls, 1, '旧状态从 0 起算读条次数')
-assert(
-  legacyDone.state.status === 'extracted' || legacyDone.state.status === 'active',
-  '旧状态的撤离结果只有「成功」或「故障继续」两种，不会卡死',
-)
-assertEqual(
-  legacyDone.state.status,
-  rollExtractFailure(legacyDone.state.seed, extractRoom.id, 1, false) ? 'active' : 'extracted',
-  '旧状态同样走确定掷骰（重放可复现）',
-)
+assertEqual(legacyDone.state.status, 'extracted', '旧状态走完读条同样必定撤离成功')
 // 装备实例 id 是可选字段：旧状态里的 gear 字面量没有 id 也必须能用
 assertEqual(legacyState.gear.armor?.id, undefined, '旧 gear 字面量没有 id 字段仍可解析')
 
-console.log(`✅ 搜打撤 v4 引擎自检：${passed} 个断言`)
+console.log(`✅ 搜打撤 v5 引擎自检：${passed} 个断言`)
