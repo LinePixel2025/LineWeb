@@ -43,6 +43,8 @@ adminCrisisRouter.put('/config', asyncHandler(async (req: Request, res: Response
       minLevy: z.coerce.number().int().min(0).optional(),
       // 积分税款比例（0–50%），与 CRISIS_LIMITS.spendTaxMin/Max 一致；normalize 里还会再钳一次
       spendTaxPct: z.coerce.number().min(0).max(50).optional(),
+      // 公共银行每日分红开关（normalizeCrisisRules 布尔化处理；zod 默认剥未知键，必须显式放行）
+      dividendEnabled: z.boolean().optional(),
     })
     .safeParse(req.body)
   if (!parsed.success) throw new AppError('参数无效：比例须在 0–1 之间，税款须在 0–50 之间，时长与门槛须为非负整数', 400)

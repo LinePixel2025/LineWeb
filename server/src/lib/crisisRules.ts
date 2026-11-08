@@ -1,10 +1,18 @@
 /**
  * Lineweb 危机（纯函数，禁止 import prisma / 网络依赖）。
+ * 允许 import 其它纯函数 lib（mulberry32 / seedFromString 来自 stockMarket.ts，同为无 IO 的确定性工具）。
  *
  * 机制：站内积分长期只增不减，需要一条全局回收阀。每个非管理员用户每 `intervalMs`
  * （默认 48 小时，从**自己上次结清**的时刻起滚动计算）要向「Lineweb 公共银行」上缴
  * 约总资产 `ratio`（默认 50%）的积分；未缴清且过了宽限，就封锁全站功能，
- * 只留下筹钱与查账需要的端点。公共银行只进不出，站内只显示总额。
+ * 只留下筹钱与查账需要的端点。
+ *
+ * 公共银行（CrisisPool）现在是「三条流」的资金池，不再是单向只进不出：
+ * 1. **流入**：危机缴款（crisis_payment）+ 自选消费税款（crisis_tax）；
+ * 2. **流出 · 官方贷款**：以「全站最差民间利率 + 风险溢价」放贷给个人（见下方
+ *    OFFICIAL_LOAN_* 常量与 officialLoanRateOf），本金放款时扣池、还清时本息全额回流；
+ * 3. **流出 · 每日随机分红**：按日确定的 5–15% 比例从池里抽取积分，平均分给全站
+ *    active 用户（见 DIVIDEND_* 常量与 dividendPctOf / dividendDrawOf）。
  *
  * 四条容易做错的口径，都在这里定死：
  * 1. **应缴额在开轮瞬间按总资产快照冻结**，此后资产涨跌不改本轮账单（否则就是移动球门）；
@@ -16,6 +24,8 @@
  *    折减后的数字允许低于 `minLevy`。
  */
 
+import { mulberry32, seedFromString } from './stockMarket.js'
+
 export const CRISIS_LEDGER_REASON = 'crisis_payment'
 
 /**
@@ -25,6 +35,15 @@ export const CRISIS_LEDGER_REASON = 'crisis_payment'
  * 防「缴税又被抽税」的死循环；两处常量必须一起改。
  */
 export const CRISIS_TAX_LEDGER_REASON = 'crisis_tax'
+
+/**
+ * 公共银行官方贷款与每日分红的台账 reason（PointsLedger 统一台账，不另建表）。
+ * 与 CRISIS_LEDGER_REASON 互不免税：官方贷款放款是加分不是花费（awardPointsTx 不抽税），
+ * 还款走 spendPointsTx 会被抽税——这是「还款也是一笔消费」的既定口径，不在免税名单里豁免。
+ */
+export const OFFICIAL_LOAN_BORROW_REASON = 'official_loan_borrow'
+export const OFFICIAL_LOAN_REPAY_REASON = 'official_loan_repay'
+export const CRISIS_DIVIDEND_REASON = 'crisis_dividend'
 
 export interface CrisisRules {
   /** 危机总开关：关掉后守卫一律放行 */
@@ -45,6 +64,8 @@ export interface CrisisRules {
    * - 该税独立于危机总开关 enabled——它是用户自愿的捐赠，不是强制征收。
    */
   spendTaxPct: number
+  /** 公共银行每日分红开关：开启后每天（Asia/Shanghai 日界）按 5–15% 随机抽池分红给全站 active 用户 */
+  dividendEnabled: boolean
 }
 
 const HOUR_MS = 60 * 60 * 1000
@@ -56,6 +77,7 @@ export const CRISIS_DEFAULTS: CrisisRules = {
   graceMs: 12 * HOUR_MS,
   minLevy: 100,
   spendTaxPct: 5,
+  dividendEnabled: true,
 }
 
 /**
@@ -100,6 +122,9 @@ export function normalizeCrisisRules(raw: unknown): CrisisRules {
     spendTaxPct: Math.floor(
       clampNumber(input.spendTaxPct, CRISIS_LIMITS.spendTaxMin, CRISIS_LIMITS.spendTaxMax, CRISIS_DEFAULTS.spendTaxPct),
     ),
+    // 每日分红开关：与 enabled 同口径布尔化（undefined 回默认 true，脏值一律 Boolean()）
+    dividendEnabled:
+      input.dividendEnabled === undefined ? CRISIS_DEFAULTS.dividendEnabled : Boolean(input.dividendEnabled),
   }
 }
 
@@ -114,6 +139,70 @@ export function computeRequired(snapshot: number, rules: CrisisRules): number {
   const raw = Math.floor(snapshot * rules.ratio)
   if (raw <= 0 || raw < rules.minLevy) return 0
   return Math.min(raw, Math.floor(snapshot))
+}
+
+/* ============================================================
+   官方贷款（资金来源 = 公共银行 CrisisPool）
+   ============================================================ */
+
+/**
+ * 官方贷款口径（服务层在 services/officialLoanService.ts，这里定死全部数字）：
+ * - 同一时间每人仅一笔未结清贷款（open | overdue 都算未结清）；
+ * - 单笔额度 [OFFICIAL_LOAN_MIN, OFFICIAL_LOAN_MAX]，期限固定 OFFICIAL_LOAN_DUE_DAYS 天；
+ * - 利率在**放款时快照冻结**：官方利率 = 全站最差民间利率（CompanyConfig.loanRatePct
+ *   里非 0 的最大值）+ OFFICIAL_RATE_PREMIUM_PCT 的风险溢价，此后民间利率怎么调都不影响存量贷款；
+ * - 资金来源是公共银行：放款 CAS 扣池（池子余额不足直接拒绝），还款本息全额 increment 回池——
+ *   池子在这里第一次有了「流出」通道，利息是池子除了缴款之外唯一的自然增值来源。
+ */
+export const OFFICIAL_LOAN_MIN = 100
+export const OFFICIAL_LOAN_MAX = 20_000
+export const OFFICIAL_LOAN_DUE_DAYS = 30
+export const OFFICIAL_RATE_PREMIUM_PCT = 5
+
+/** 官方贷款整期利率（%）：非负整数基准 + 固定溢价 */
+export function officialLoanRateOf(baseRatePct: number): number {
+  const base = Number.isFinite(baseRatePct) ? Math.max(0, Math.trunc(baseRatePct)) : 0
+  return base + OFFICIAL_RATE_PREMIUM_PCT
+}
+
+/**
+ * 全站最差民间利率：取各档利率里非 0 值的最大值（「借不到便宜钱的人面对的利率」）。
+ * 全 0 / 空数组返回 0 → 官方利率退化为纯溢价；负数 / 非有限值是脏数据，一律不计入
+ * （负利率不可能是「最差利率」，把它算进 max 反而会拉低官方利率）。
+ */
+export function officialLoanBaseRateOf(tiers: readonly number[]): number {
+  let worst = 0
+  for (const tier of tiers) {
+    if (!Number.isFinite(tier) || tier <= 0) continue
+    if (tier > worst) worst = tier
+  }
+  return worst
+}
+
+/* ============================================================
+   每日随机分红（公共银行 → 全站 active 用户）
+   ============================================================ */
+
+/**
+ * 每日分红口径（服务层在 services/crisisDividendService.ts）：
+ * - 当天抽取比例由 dateKey 确定性生成（同一天任何时刻读到的比例都一致，重放也不会变）；
+ * - 抽取额 = floor(池总额 × 比例 / 100)，人均不足 1 分的当天跳过发放但照常记录；
+ * - 发放对象是全站 status='active' 用户（含管理员），每人金额相同。
+ */
+export const DIVIDEND_PCT_MIN = 5
+export const DIVIDEND_PCT_MAX = 15
+
+/** 当天分红比例（%）：5–15 的连续值，种子锚定 dateKey，同日恒定 */
+export function dividendPctOf(dateKey: string): number {
+  const rng = mulberry32(seedFromString(`lineweb-crisis-dividend:${dateKey}`))
+  return DIVIDEND_PCT_MIN + rng() * (DIVIDEND_PCT_MAX - DIVIDEND_PCT_MIN)
+}
+
+/** 分红抽取额：floor 取整（积分不出现小数），脏入参一律不为负 */
+export function dividendDrawOf(poolTotal: number, pct: number): number {
+  const total = Number.isFinite(poolTotal) ? Math.max(0, poolTotal) : 0
+  const rate = Number.isFinite(pct) ? Math.max(0, pct) : 0
+  return Math.max(0, Math.floor((total * rate) / 100))
 }
 
 /**

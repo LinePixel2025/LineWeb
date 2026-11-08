@@ -18,7 +18,12 @@
  *   requiredBase / waiverPct 出口口径（legacy 行不画折减）、companyStock 计入税基；
  * - 豁免名单：筹钱与查账端点放行，对局 / 宠物对战 / 交易行 / 游戏 / 聊天 / 网盘一律封锁，
  *   **公司端点也一律封锁**（减免由成交侧推送，不需要给欠费成员开后门），
- *   末尾斜杠与 '/api' 自描述端点的行为固定。
+ *   末尾斜杠与 '/api' 自描述端点的行为固定；
+ * - **官方贷款**：额度 / 期限 / 溢价常量、officialLoanRateOf 的取整与脏入参、
+ *   officialLoanBaseRateOf 的「非 0 最大值」口径（空 / 全 0 / 负数 / NaN 回退）；
+ * - **每日随机分红**：dividendPctOf 确定性（同 dateKey 同结果）与 5–15 连续区间、
+ *   dividendDrawOf 边界（0 池 / 负池 / floor 不足 1 分 / NaN）、
+ *   normalizeCrisisRules 对 dividendEnabled 的缺省与布尔化透传。
  *
  * 用法: cd server && npm run verify:crisis
  */
@@ -33,8 +38,14 @@ import {
   CRISIS_LEDGER_REASON,
   CRISIS_TAX_LEDGER_REASON,
   CRISIS_WAIVER_TIERS,
+  DIVIDEND_PCT_MAX,
+  DIVIDEND_PCT_MIN,
   EMPTY_CRISIS_ASSETS,
   EMPTY_CRISIS_LEVY_VIEW,
+  OFFICIAL_LOAN_DUE_DAYS,
+  OFFICIAL_LOAN_MAX,
+  OFFICIAL_LOAN_MIN,
+  OFFICIAL_RATE_PREMIUM_PCT,
   applyCrisisWaivers,
   applyCrisisWaiversByTier,
   buildCrisisStateDto,
@@ -43,6 +54,8 @@ import {
   crisisWaiverPctOf,
   crisisWaiverPcts,
   crisisWaiverTiersOf,
+  dividendDrawOf,
+  dividendPctOf,
   graceUntilOf,
   isCrisisBlocked,
   isCrisisExempt,
@@ -50,6 +63,8 @@ import {
   msUntilBlock,
   nextDueAtOf,
   normalizeCrisisRules,
+  officialLoanBaseRateOf,
+  officialLoanRateOf,
   remainingOf,
   resolveCrisisStatus,
   sumCrisisAssets,
@@ -58,6 +73,7 @@ import {
   type CrisisLevyView,
   type CrisisRules,
 } from '../src/lib/crisisRules.js'
+import { COMPANY_LOAN_RATE_PCT } from '../src/lib/companyRules.js'
 
 let passed = 0
 
@@ -734,5 +750,94 @@ assert(
   CRISIS_EXEMPT_RULES.every((rule) => rule.pattern.source.startsWith('^')),
   '每条豁免正则都必须锚定开头，避免中间匹配放大暴露面',
 )
+
+/* ============================================================
+   9. 官方贷款与每日分红（纯函数口径）
+   ============================================================ */
+
+/* —— 官方贷款常量与利率 —— */
+assertEqual(OFFICIAL_LOAN_MIN, 100, '官方贷款单笔下限 100')
+assertEqual(OFFICIAL_LOAN_MAX, 20_000, '官方贷款单笔上限 20000')
+assertEqual(OFFICIAL_LOAN_DUE_DAYS, 30, '官方贷款期限 30 天')
+assertEqual(OFFICIAL_RATE_PREMIUM_PCT, 5, '官方利率溢价 5%')
+assert(OFFICIAL_LOAN_MIN > 0 && OFFICIAL_LOAN_MAX > OFFICIAL_LOAN_MIN, '贷款额度区间有效')
+assertEqual(officialLoanRateOf(0), 5, '民间利率全 0 时官方利率退化为纯溢价')
+assertEqual(officialLoanRateOf(3), 8, '基准 3% + 溢价 5% = 8%')
+assertEqual(officialLoanRateOf(7.9), 12, '基准先取整再加溢价（7.9 → 7 + 5）')
+assertEqual(officialLoanRateOf(-2), 5, '负基准按 0 处理，绝不出现低于溢价的官方利率')
+assertEqual(officialLoanRateOf(Number.NaN), 5, 'NaN 基准按 0 处理')
+assertEqual(officialLoanRateOf(50), 55, '高基准照常加溢价（服务层没有上限钳制，管理员把民间利率调多高官方就多高）')
+
+/* —— 全站最差民间利率 —— */
+assertEqual(officialLoanBaseRateOf([]), 0, '空档位表回退 0')
+assertEqual(officialLoanBaseRateOf([0, 0, 0]), 0, '全 0 档位表回退 0（全站免息 → 官方利率只剩溢价）')
+assertEqual(officialLoanBaseRateOf([0, 5, 4, 3]), 5, '取非 0 值的最大值（等级 0 的 0 不参与）')
+assertEqual(officialLoanBaseRateOf([3, 4]), 4, '最差利率 = 最大值')
+assertEqual(officialLoanBaseRateOf([10]), 10, '单档取该档')
+assertEqual(officialLoanBaseRateOf([0, -2, 7]), 7, '负利率是脏数据，不计入最差利率')
+assertEqual(officialLoanBaseRateOf([Number.NaN, 2]), 2, 'NaN 档位忽略')
+assertEqual(officialLoanBaseRateOf([Number.POSITIVE_INFINITY]), 0, '无穷档位忽略（脏配置不放贷）')
+assertEqual(
+  officialLoanRateOf(officialLoanBaseRateOf(COMPANY_LOAN_RATE_PCT)),
+  10,
+  '默认公司档位利率 [0,5,4,3] → 官方利率 10%（最差民间 5% + 溢价 5%）',
+)
+assertEqual(
+  officialLoanRateOf(officialLoanBaseRateOf([0, 5, 4, 3].map((rate) => rate * 2))),
+  15,
+  '档位整体翻倍时官方利率同步抬升（10% + 溢价 5%）',
+)
+
+/* —— 每日分红：确定性 / 区间 / 抽取额 —— */
+assertEqual(DIVIDEND_PCT_MIN, 5, '分红比例下限 5%')
+assertEqual(DIVIDEND_PCT_MAX, 15, '分红比例上限 15%')
+assert(DIVIDEND_PCT_MIN < DIVIDEND_PCT_MAX, '分红比例区间有效')
+assertEqual(dividendPctOf('2026-11-07'), dividendPctOf('2026-11-07'), '同 dateKey 结果恒定（当日任何时刻读到同一比例）')
+assertEqual(
+  dividendPctOf('2026-11-07'),
+  dividendPctOf('2026-11-07'),
+  '重复调用仍一致（纯函数，重放不会改变当天比例）',
+)
+
+let dividendInRange = true
+let dividendDeterministic = true
+for (let offset = 0; offset < 2000; offset += 1) {
+  const dateKey = new Date(Date.UTC(2026, 0, 1) + offset * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const first = dividendPctOf(dateKey)
+  if (!(first >= DIVIDEND_PCT_MIN && first <= DIVIDEND_PCT_MAX)) dividendInRange = false
+  if (first !== dividendPctOf(dateKey)) dividendDeterministic = false
+}
+assert(dividendInRange, `2000 天的分红比例全部落在 [${DIVIDEND_PCT_MIN}, ${DIVIDEND_PCT_MAX}]（连续值，含边界）`)
+assert(dividendDeterministic, '分红比例对同一 dateKey 确定性（2000 天抽查）')
+
+assertEqual(dividendDrawOf(0, 10), 0, '空池抽 0')
+assertEqual(dividendDrawOf(-500, 10), 0, '负池（脏数据）抽 0，绝不为负')
+assertEqual(dividendDrawOf(100, 0.4), 0, '比例 × 池子不足 1 分时 floor 归 0（触发「人均不足 1 分跳过」的前提）')
+assertEqual(dividendDrawOf(1000, 10), 100, '1000 池 × 10% = 100')
+assertEqual(dividendDrawOf(999, 12.345), 123, '向下取整（123.3255 → 123）')
+assertEqual(dividendDrawOf(10_000, 5), 500, '下限比例 5%')
+assertEqual(dividendDrawOf(10_000, 15), 1500, '上限比例 15%')
+assertEqual(dividendDrawOf(1000, Number.NaN), 0, 'NaN 比例抽 0')
+assertEqual(dividendDrawOf(Number.NaN, 10), 0, 'NaN 池子抽 0')
+assert(
+  dividendDrawOf(100_000, dividendPctOf('2026-11-07')) >= dividendDrawOf(100_000, DIVIDEND_PCT_MIN) &&
+    dividendDrawOf(100_000, dividendPctOf('2026-11-07')) <= dividendDrawOf(100_000, DIVIDEND_PCT_MAX),
+  '抽取额与比例同向：确定性比例算出的抽取额必在 5%–15% 的抽取额之间',
+)
+
+/* —— normalizeCrisisRules 对 dividendEnabled 的缺省 / 透传 —— */
+assert(CRISIS_DEFAULTS.dividendEnabled === true, '每日分红默认开启')
+assertEqual(normalizeCrisisRules(undefined).dividendEnabled, true, 'undefined 归一化后分红默认开启')
+assertEqual(normalizeCrisisRules({}).dividendEnabled, true, '缺字段回默认开启（深合并语义）')
+assertEqual(normalizeCrisisRules({ dividendEnabled: false }).dividendEnabled, false, '显式 false 被保留')
+assertEqual(normalizeCrisisRules({ dividendEnabled: 1 }).dividendEnabled, true, '布尔化：1 → true（与 enabled 同口径）')
+assertEqual(normalizeCrisisRules({ dividendEnabled: 0 }).dividendEnabled, false, '布尔化：0 → false')
+assertEqual(normalizeCrisisRules({ dividendEnabled: 'x' }).dividendEnabled, true, '布尔化：真值字符串 → true')
+assertEqual(
+  normalizeCrisisRules({ enabled: false, dividendEnabled: false }).dividendEnabled,
+  false,
+  '与危机总开关互相独立（关危机不等于关分红，两者各自成开关）',
+)
+assertEqual(RULES.dividendEnabled, true, '本脚本基准 RULES（全套默认值）分红开启')
 
 console.log(`✅ Lineweb 危机纯函数自检通过：${passed} 个断言`)

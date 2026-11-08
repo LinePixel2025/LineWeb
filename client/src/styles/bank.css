@@ -424,6 +424,58 @@
   font-size: var(--gh-text-sm);
 }
 
+/* ===== 官方贷款（公共银行放贷） ===== */
+.gh-bank-loan-facts {
+  display: flex;
+  align-items: stretch;
+  gap: 8px 22px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 10px;
+  background: var(--gh-canvas-subtle);
+}
+.gh-bank-loan-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.gh-bank-loan-fact span {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+.gh-bank-loan-fact strong {
+  font-size: var(--gh-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+/* 贷款状态徽标：还款中（蓝）/ 已还清（绿）/ 已逾期（红） */
+.gh-bank-loan-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 999px;
+  font-size: var(--gh-text-xs);
+  white-space: nowrap;
+}
+.gh-bank-loan-badge--open {
+  color: var(--gh-accent);
+  border-color: color-mix(in srgb, var(--gh-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--gh-accent) 8%, transparent);
+}
+.gh-bank-loan-badge--repaid {
+  color: var(--gh-success);
+  border-color: color-mix(in srgb, var(--gh-success) 35%, transparent);
+  background: color-mix(in srgb, var(--gh-success) 8%, transparent);
+}
+.gh-bank-loan-badge--overdue {
+  color: var(--gh-danger);
+  border-color: color-mix(in srgb, var(--gh-danger) 35%, transparent);
+  background: color-mix(in srgb, var(--gh-danger) 8%, transparent);
+}
+
 /* ===== 响应式 ===== */
 @media (max-width: 860px) {
   .gh-bank-layout { grid-template-columns: minmax(0, 1fr); }

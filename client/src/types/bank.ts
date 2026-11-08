@@ -4,7 +4,7 @@
  * 金额一律是整数积分；净值保留 4 位小数；涨跌幅是「百分比数值」（1.23 表示 +1.23%）。
  */
 
-/** 活期账户（年化 2%，利息按日惰性结算） */
+/** 活期账户（年化 2%，利息按 40 分钟槽惰性结算、不足 1 分滚存） */
 export interface BankDemand {
   balance: number
   annualRate: number
@@ -139,4 +139,52 @@ export interface FundSellResult {
   costPoints: number
   remainingShares: number
   closed: boolean
+}
+
+/** 官方贷款单（公共银行 CrisisPool 放贷，利率 = 民间最高档利率 + 5%，30 天期，全额还清制） */
+export interface OfficialLoan {
+  id: number
+  principal: number
+  /** 借款时一次算死的到期应还（本金 + 利息） */
+  dueAmount: number
+  /** 借款时锁定的年利率（百分数，10 表示 10%） */
+  ratePct: number
+  dueDays: number
+  /** 已还金额（官方贷款只支持全额还清，仅 0 或 dueAmount） */
+  repaid: number
+  remaining: number
+  status: 'open' | 'repaid' | 'overdue'
+  borrowedAt: string
+  dueAt: string
+  /** 结清时刻（未结清为 null） */
+  settledAt: string | null
+}
+
+/** 官方贷款页信息（GET /api/bank/loans/official） */
+export interface OfficialLoanInfo {
+  /** 当前官方年利率（百分数） */
+  ratePct: number
+  /** 民间贷款最高档利率（官方利率 = baseRatePct + premiumPct） */
+  baseRatePct: number
+  /** 官方上浮（固定 5） */
+  premiumPct: number
+  dueDays: number
+  /** 公共银行可贷余额（字符串数字，与服务端 BigInt/大整数口径兼容） */
+  poolAvailable: string
+  minAmount: number
+  maxAmount: number
+  /** 我的官方贷款（含已结清，倒序） */
+  loans: OfficialLoan[]
+}
+
+/** 官方借款结果（POST /api/bank/loans/official） */
+export interface OfficialLoanBorrowResult {
+  loan: OfficialLoan
+  poolAvailable: string
+}
+
+/** 官方贷款还清结果（POST /api/bank/loans/official/:id/repay，全额还清） */
+export interface OfficialLoanRepayResult {
+  loan: OfficialLoan
+  poolAvailable: string
 }

@@ -8,8 +8,6 @@
  */
 
 import {
-  GAME_TICKET_KEY,
-  GAME_TICKET_REFUND_POINTS,
   RAID_GEAR_SHOP_PREMIUM,
   RAID_GEARS,
   RAID_ITEMS,
@@ -240,7 +238,5 @@ assertEqual(gearStorageGate(5), 4, '5 级需仓库 Lv.4')
 assertEqual(gearStorageGate(6), 5, '6 级需仓库 Lv.5')
 assertEqual(gearStorageGate(7), 6, 't7 巨型背包需仓库 Lv.6')
 assertEqual(gearStorageGate(8), 6, 't8 巨型背包需仓库 Lv.6（仓库满级）')
-assertEqual(raidShopItemPrice(GAME_TICKET_KEY), 40, '游戏门票一口价 40')
-assert(raidSellPrice(GAME_TICKET_KEY, 1) < GAME_TICKET_REFUND_POINTS, '门票回收价低于打完必返的 20（用票优于卖票）')
 
 console.log(`✅ 搜打撤仓库 / 官方商店自检：${passed} 个断言`)

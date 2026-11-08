@@ -2,8 +2,10 @@
  * 银行系统服务：活期 / 定期存款与基金投资，全部走统一积分。
  *
  * 口径：
- * - 活期利息在读时惰性结算（无定时器）：每次进事务先 settle，把利息发进积分余额
- *   并把结算水位推进到今天；水位落后超 365 天按 365 封顶（防补天量利息）；
+ * - 活期利息在读时惰性结算（无定时器，每 40 分钟一期槽位）：每次进事务先 settle，把利息发进
+ *   积分余额；利息 ≥ 1 才把结算水位推进到当前槽，不足 1 分不推进（小数利息滚存到下槽）；
+ *   水位落后超过一年槽数（365×36）按一年封顶并强制推进（防补天量利息）；
+ *   lastInterestSlot = 0 是「未初始化」哨兵（迁移回填前的旧行），只推进不补息；
  * - 活期存取用条件更新防并发（withdraw 需 demandBalance ≥ amount，count=0 报余额不足）；
  * - 定期存单开单锁定利率，到期全额计息、提前支取按活期计息，支取用条件更新防重复支取；
  * - 基金 NAV 当日确定（bankRules.fundNavOn），买入 / 卖出各收 0.25% 手续费，
@@ -31,6 +33,7 @@ import {
   calcEarlyWithdrawInterest,
   calcFixedInterest,
   clampBankAmount,
+  currentSettlementSlot,
   fundNavOn,
   fundNavSeries,
   quoteFundBuy,
@@ -50,39 +53,48 @@ const DAY_MS = 86_400_000
    账户与利息结算
    ============================================================ */
 
-/** 取（或惰性建）银行账户行；水位初始为建行当天（首日不计息） */
+/** 取（或惰性建）银行账户行；水位初始为当前槽（首期不计息） */
 export async function ensureBankAccountTx(tx: Db, userId: number) {
   return tx.bankAccount.upsert({
     where: { userId },
     update: {},
-    create: { userId, demandBalance: 0, lastInterestDateKey: getTodayDateKey() },
+    create: { userId, demandBalance: 0, lastInterestSlot: currentSettlementSlot(Date.now()) },
   })
 }
 
 /**
- * 活期利息惰性结算（必须在事务内调用）：
- * - 利息 > 0 → awardPointsTx(reason=bank_interest, game=null) 并推进水位；
- * - 利息 = 0（无余额 / 已结到今天 / 水位无效）→ 只推进水位（无效水位重置为今天）。
- * 返回本次结算出的利息（用于 DTO 展示「今日利息」）。
+ * 活期利息惰性结算（必须在事务内调用，40 分钟槽位制）：
+ * - lastInterestSlot = 0（未初始化哨兵，迁移回填前的旧行）→ 只推进水位到当前槽，不补息；
+ * - 利息 > 0 → awardPointsTx(reason=bank_interest, game=null)；利息 ≥ 1 时推进水位，
+ *   不足 1 分不推进（小数利息滚存，下槽一并结算）；封顶计息时强制推进。
+ * 返回本次结算出的利息（用于 DTO 展示「本次读取结算利息」）。
  */
 export async function settleDemandInterestTx(tx: Db, userId: number): Promise<number> {
   const account = await ensureBankAccountTx(tx, userId)
-  const today = getTodayDateKey()
-  if (account.lastInterestDateKey === today) return 0
+  const currentSlot = currentSettlementSlot(Date.now())
+  if (!Number.isFinite(account.lastInterestSlot) || account.lastInterestSlot <= 0) {
+    await tx.bankAccount.update({
+      where: { userId },
+      data: { lastInterestSlot: currentSlot },
+    })
+    return 0
+  }
 
-  const settlement = calcDemandSettlement(account.demandBalance, account.lastInterestDateKey, today)
+  const settlement = calcDemandSettlement(account.demandBalance, account.lastInterestSlot, currentSlot)
   if (settlement.interest > 0) {
     await awardPointsTx(tx, userId, {
       amount: settlement.interest,
       reason: 'bank_interest',
       game: null,
-      note: `活期利息（${settlement.days} 天，年化 ${Math.round(DEMAND_ANNUAL_RATE * 1000) / 10}%）`,
+      note: `活期利息（${settlement.slots} 槽，年化 ${Math.round(DEMAND_ANNUAL_RATE * 1000) / 10}%）`,
     })
   }
-  await tx.bankAccount.update({
-    where: { userId },
-    data: { lastInterestDateKey: today },
-  })
+  if (settlement.advance) {
+    await tx.bankAccount.update({
+      where: { userId },
+      data: { lastInterestSlot: currentSlot },
+    })
+  }
   return settlement.interest
 }
 
@@ -172,7 +184,7 @@ export interface BankOverviewDto {
   }
 }
 
-/** 银行 / 基金 / 公司信贷相关积分流水 reason（与 schema 注释枚举一致）；银行页有「贷款」区，公司借款与资金池投资流水也在这里展示 */
+/** 银行 / 基金 / 信贷相关积分流水 reason（与 schema 注释枚举一致）；银行页有「贷款」区，官方贷款、公司借款与资金池投资流水也在这里展示 */
 const BANK_LEDGER_REASONS = [
   'bank_deposit_in',
   'bank_demand_withdraw',
@@ -185,6 +197,8 @@ const BANK_LEDGER_REASONS = [
   'company_loan_repay',
   'company_pool_invest',
   'company_pool_redeem',
+  'official_loan_borrow',
+  'official_loan_repay',
 ]
 
 function depositDtoOf(
@@ -203,7 +217,7 @@ function depositDtoOf(
   // 目录里没有该档时（后期改目录）用起止时刻推算全额天数兜底
   const termDays = term?.days ?? Math.max(1, Math.round((row.maturityAt.getTime() - row.startAt.getTime()) / DAY_MS))
   const matured = now >= row.maturityAt.getTime()
-  const elapsedDays = Math.max(0, Math.floor((now - row.startAt.getTime()) / DAY_MS))
+  const elapsedMs = Math.max(0, now - row.startAt.getTime())
   const matureInterest = calcFixedInterest(row.principal, row.annualRate, termDays)
   return {
     id: row.id,
@@ -219,7 +233,7 @@ function depositDtoOf(
     matureInterest,
     currentInterestEstimate: matured
       ? matureInterest
-      : calcEarlyWithdrawInterest(row.principal, elapsedDays),
+      : calcEarlyWithdrawInterest(row.principal, elapsedMs),
   }
 }
 
@@ -453,9 +467,10 @@ export async function redeemFixedDeposit(userId: number, depositId: number): Pro
     const termDays = term?.days
       ?? Math.max(1, Math.round((deposit.maturityAt.getTime() - deposit.startAt.getTime()) / DAY_MS))
     const elapsedDays = Math.max(0, Math.floor((now - deposit.startAt.getTime()) / DAY_MS))
+    // 提前支取按实际经过毫秒连续计息（elapsedDays 仅用于流水文案展示）
     const interest = matured
       ? calcFixedInterest(deposit.principal, deposit.annualRate, termDays)
-      : calcEarlyWithdrawInterest(deposit.principal, elapsedDays)
+      : calcEarlyWithdrawInterest(deposit.principal, now - deposit.startAt.getTime())
     const total = deposit.principal + interest
 
     const award = await awardPointsTx(tx, userId, {

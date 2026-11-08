@@ -6,16 +6,13 @@
  *     （gearStorageGate：4→Lv.3、5→Lv.4、6→Lv.5、t7/t8 背包→Lv.6）；
  *   - 装备是「实例物品」：同一 key 可以重复购买 / 重复开箱，每次都是一行独立耐久的新实例，
  *     不再「已拥有即拒卖」、也不再自动把重复件折成积分，想变现就在装备页手动回收；
- *   - 游戏门票 game_ticket 也在本店出售（一口价 40，见 lib/raidRun.ts 的 GAME_TICKET_PRICE），
- *     它属于 material 品类，所以要在可售清单里单独放行；
- *   - 买消耗品 / 箱子 / 门票进入仓库，可再取到背包 / 胸挂 / 安全箱带进对局；
+ *   - 买消耗品 / 箱子进入仓库，可再取到背包 / 胸挂 / 安全箱带进对局；
  *   - 玩家出售物品走仓库页的「回收」，按 raidSellPrice 结算（材料 100% / 消耗品 60% / 箱子 70%）。
  */
 
 import prisma from '../lib/prisma.js'
 import { AppError } from '../middleware/errorHandler.js'
 import {
-  GAME_TICKET_KEY,
   RAID_GEARS,
   RAID_GEAR_MAP,
   RAID_ITEMS,
@@ -117,9 +114,8 @@ export async function getRaidShopView(userId: number): Promise<RaidShopViewDto> 
         }
       }),
     items: RAID_ITEMS
-      // 门票不是消耗品而是 material，但它必须能在本店买到，所以按 key 单独放行；
       // 退役物品（旧型号撤离信号弹）只为旧库存保留目录数据，不再出现在商店。
-      .filter((item) => !item.retired && (SHOP_ITEM_KINDS.has(item.kind) || item.key === GAME_TICKET_KEY))
+      .filter((item) => !item.retired && SHOP_ITEM_KINDS.has(item.kind))
       .map((item) => ({
         key: item.key,
         name: item.name,
@@ -200,7 +196,7 @@ export async function buyRaidShopItem(
   const def = getRaidItem(input.key)
   if (!def) throw new AppError('商店里没有这件物品', 404)
   if (def.retired) throw new AppError('这件物品已停产，不再出售', 400)
-  if (!SHOP_ITEM_KINDS.has(def.kind) && def.key !== GAME_TICKET_KEY) {
+  if (!SHOP_ITEM_KINDS.has(def.kind)) {
     throw new AppError('这件物品不在商店出售', 400)
   }
   const amount = Math.max(1, Math.min(99, Math.trunc(input.amount ?? 1)))

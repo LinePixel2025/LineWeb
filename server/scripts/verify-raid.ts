@@ -6,17 +6,13 @@
  *       运行状态机（进房 / 击杀 / 清房 / 开箱 / 拾取 / 使用 / 技能 / 受伤 / 撤离）、
  *       撤离读条必定成功（2026-11-07 删除随机运输故障）、已发现撤离点、
  *       下发地图口径（撤离点全程可见）、日蚀要塞隔断与轨道炮火数据、
- *       官方商店（全档上架 + 高档溢价与仓库门槛）与游戏门票经济闭环、
+ *       官方商店（全档上架 + 高档溢价与仓库门槛）、
  *       耐久与维修、保险、结算保留规则、每日契约、丢弃落点往前抛与夹取。
  *
  * 用法: cd server && npx tsx scripts/verify-raid.ts（或 npm run verify:raid）
  */
 
 import {
-  GAME_TICKET_KEY,
-  GAME_TICKET_PRICE,
-  GAME_TICKET_RECYCLE_VALUE,
-  GAME_TICKET_REFUND_POINTS,
   RAID_CONTRACTS,
   RAID_CONTRACT_MAP,
   RAID_EXTRACT_CHANNEL_MS,
@@ -100,7 +96,7 @@ function assertClose(actual: number, expected: number, tolerance: number, messag
    目录不变量
    ============================================================ */
 
-assertEqual(RAID_ITEMS.length, 54, '物品目录 54 种（含神话 3 种与新增的门票 / 撤离信号弹）')
+assertEqual(RAID_ITEMS.length, 53, '物品目录 53 种（含神话 3 种与停产的撤离信号弹）')
 assertEqual(new Set(RAID_ITEMS.map((item) => item.key)).size, RAID_ITEMS.length, '物品 key 唯一')
 assertEqual(RAID_ITEM_MAP.size, RAID_ITEMS.length, '物品索引与目录同规模')
 assert(RAID_ITEMS.every((item) => item.value > 0), '所有物品目录价值 > 0')
@@ -121,20 +117,7 @@ assert(RAID_ITEMS.filter((item) => item.rarity === 'mythic').every((item) => ite
 
 assertEqual(RAID_LOOT_MODES.length, 2, '掉落模式两种（normal / pvp）')
 assert(RAID_LOOT_MODES.includes('normal') && RAID_LOOT_MODES.includes('pvp'), '模式清单含 normal 与 pvp')
-assertEqual(GAME_TICKET_KEY, 'game_ticket', '门票 key 固定为 game_ticket')
-assertEqual(GAME_TICKET_PRICE, 40, '门票商店一口价 40 积分')
-assertEqual(GAME_TICKET_REFUND_POINTS, 20, '局终必返 20 积分')
-assertEqual(GAME_TICKET_RECYCLE_VALUE, 18, '门票目录价值（= 回收价）18 积分')
 assertEqual(RAID_EXTRACT_FLARE_KEY, 'extract_flare', '撤离信号弹 key 固定为 extract_flare')
-const ticket = getRaidItem(GAME_TICKET_KEY)
-assert(!!ticket, '门票在目录里')
-assertEqual(ticket?.kind, 'material', '门票按材料计（回收 100%）')
-assertEqual(ticket?.rarity, 'common', '门票为普通品质，任何档次地图都能凑量')
-assertEqual(ticket?.stackMax, 5, '门票单格堆叠 5 张')
-assertEqual(ticket?.weight, 6, '门票掉落权重 6')
-assertEqual(ticket?.value, GAME_TICKET_RECYCLE_VALUE, '门票目录价值 = 回收常量')
-assertEqual(ticket?.shopPrice, GAME_TICKET_PRICE, '门票一口价覆盖「目录价值 × 1.4」')
-assertEqual((ticket as unknown as Record<string, unknown>)?.pvpOnly, undefined, '门票没有模式限定字段')
 const flare = getRaidItem(RAID_EXTRACT_FLARE_KEY)
 assert(!!flare, '撤离信号弹在目录里（旧库存兼容）')
 assertEqual(flare?.kind, 'consumable', '信号弹是消耗品')
@@ -157,7 +140,7 @@ assertEqual(
   0,
   '没有 PvP 模式限定物品',
 )
-assertEqual(RAID_ITEMS.filter((item) => item.shopPrice !== undefined).length, 1, '一口价商品只有门票一种')
+assertEqual(RAID_ITEMS.filter((item) => item.shopPrice !== undefined).length, 0, '目录里不再有一口价商品（门票机制已下线）')
 assert(RAID_ITEMS.filter((item) => !item.retired).every((item) => raidItemDropEligible(item)), '未停产物品都可入池')
 assertEqual(getRaidItem('nope'), null, '不存在的物品返回 null')
 
@@ -242,27 +225,10 @@ assert(
   '背包商店价随档位严格递增（溢价不改变排序）',
 )
 
-assertEqual(raidShopItemPrice(GAME_TICKET_KEY), GAME_TICKET_PRICE, '门票走一口价 40')
-assert(
-  raidShopItemPrice(GAME_TICKET_KEY) !== Math.ceil(GAME_TICKET_RECYCLE_VALUE * 1.4),
-  '门票一口价确实覆盖了「目录价值 × 1.4」的默认算法',
-)
 assertEqual(raidShopItemPrice('medkit'), 168, '无一口价的商品仍按目录价值 140% 向上取整')
 assertEqual(raidShopItemPrice(RAID_EXTRACT_FLARE_KEY), 420, '撤离信号弹商店价 = 300 × 1.4 向上取整')
 assertEqual(raidShopItemPrice('nope'), 0, '未知物品商店价 0')
-assertEqual(raidSellPrice(GAME_TICKET_KEY, 1), GAME_TICKET_RECYCLE_VALUE, '门票按材料 100% 回收 = 18')
-assertEqual(raidSellPrice(GAME_TICKET_KEY, 3), GAME_TICKET_RECYCLE_VALUE * 3, '门票回收按数量线性')
 assertEqual(raidSellPrice(RAID_EXTRACT_FLARE_KEY, 1), 180, '撤离信号弹按消耗品 60% 回收')
-// 经济闭环（刻意的定价）：回收门票不如打一把，买票也不如白嫖返还，门票不是积分永动机
-assert(
-  raidSellPrice(GAME_TICKET_KEY, 1) < GAME_TICKET_REFUND_POINTS,
-  '门票回收价必须低于局终返还（卖票比打一把更赚 = 定价事故）',
-)
-assert(GAME_TICKET_PRICE > GAME_TICKET_REFUND_POINTS, '门票商店价必须高于局终返还（否则可无限刷分）')
-assert(
-  raidShopItemPrice(GAME_TICKET_KEY) > raidSellPrice(GAME_TICKET_KEY, 1),
-  '门票买价高于回收价，不能刷买卖差价',
-)
 assert(
   RAID_ITEMS.every(
     (item) => item.kind === 'consumable' || item.kind === 'gear_cache' || item.kind === 'skill_cache'
@@ -1356,11 +1322,6 @@ assertEqual(keptSafe.rig.length, 0, '阵亡丢失胸挂')
 assertEqual(keptSafe.safe.length, 1, '阵亡保留安全箱')
 assertEqual(raidLootValue(keptAll.backpack), 70, '战利品价值 = 35 × 2')
 assertEqual(raidTotalUnits(keptAll.backpack), 2, '按件数汇总')
-assertEqual(
-  raidLootValue([{ slotIndex: 0, itemKey: GAME_TICKET_KEY, amount: 3 }]),
-  GAME_TICKET_RECYCLE_VALUE * 3,
-  '带出的门票按目录价值计价（仓库/结算展示口径一致）',
-)
 const pvpExtracted = { ...extractedState, mode: 'pvp' as const }
 assertEqual(raidKeptContainers(pvpExtracted).backpack.length, 1, 'pvp 模式撤离同样保留全部容器（模式不改结算）')
 const diedByPeer = { ...diedState, killedByUserId: 99 }

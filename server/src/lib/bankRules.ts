@@ -2,12 +2,13 @@
  * 银行系统规则（纯函数，禁止 import prisma / 网络依赖）。
  *
  * 三块业务：
- * - 活期存款：年化 2%，按自然日计息、向下取整；利息在读时惰性结算（无定时器），
- *   结算水位 lastInterestDateKey 落后超过 365 天按 365 封顶（防补天量利息）；
+ * - 活期存款：年化 2%，每 40 分钟一期槽位计息、向下取整（每天 36 期）；利息在读时惰性结算
+ *   （无定时器），结算水位 lastInterestSlot 落后超过一年槽数（365×36）按一年封顶（防补天量利息）；
+ *   不足 1 积分的利息不推进水位、自动滚存到下一槽（40 分钟粒度下不丢小数利息的关键）；
  * - 定期存款：7d / 30d / 90d 三档，开单锁定年化利率；到期按 `floor(本金 × 年化 × 天数/365)`
- *   全额计息，提前支取按活期日利率 × 已过天数计息（利息为 0 也不亏本金）；
- * - 基金投资：3 只虚构基金，NAV 从固定纪元起逐日复利（同日恒定、跨日确定），
- *   买入 / 卖出各收 0.25% 手续费，份额允许小数。
+ *   全额计息，提前支取按活期年化 × 实际经过毫秒连续计息（利息为 0 也不亏本金）；
+ * - 基金投资：3 只虚构基金，NAV 从固定纪元起逐日复利（同日恒定、跨日确定、日收益率恒 ≥ 0，
+ *   净值只涨不跌），买入 / 卖出各收 0.25% 手续费，份额允许小数。
  *
  * 确定性随机数（mulberry32 / seedFromString）与日期键工具复用股市的 stockMarket.ts。
  * 交易纯函数风格向 stockTrading.ts 看齐；dateKey 复用 pointsRules 的 getTodayDateKey。
@@ -21,8 +22,12 @@ import { dateKeyToUtc, mulberry32, seedFromString, utcToDateKey } from './stockM
 
 /** 活期年化利率（2%） */
 export const DEMAND_ANNUAL_RATE = 0.02
-/** 活期日利率（年化 ÷ 365） */
-export const DEMAND_DAILY_RATE = DEMAND_ANNUAL_RATE / 365
+/** 活期结算周期：40 分钟一期（每天 36 期，epoch 槽号 = floor(unixMs / SETTLEMENT_PERIOD_MS)） */
+export const SETTLEMENT_PERIOD_MS = 40 * 60 * 1000
+/** 活期每槽利率（年化 ÷ (365 × 36)，年化 2% 不变） */
+export const DEMAND_PERIOD_RATE = DEMAND_ANNUAL_RATE / (365 * 36)
+/** 一年的毫秒数（365 天，定期提前支取按毫秒连续计息用） */
+export const YEAR_MS = 365 * 86_400_000
 
 export interface BankFixedTerm {
   key: string
@@ -44,8 +49,8 @@ export const FUND_FEE_RATE = 0.0025
 export const BANK_MIN_AMOUNT = 100
 /** 单笔存款 / 基金投入的最多积分 */
 export const BANK_MAX_AMOUNT = 100_000
-/** 活期利息水位封顶天数（水位落后超过该值时按该值计息，防补天量利息） */
-export const DEMAND_INTEREST_MAX_DAYS = 365
+/** 活期利息水位封顶槽数（一年 = 365 × 36 槽；水位落后超过该值时按该值计息，防补天量利息） */
+export const DEMAND_INTEREST_MAX_SLOTS = 365 * 36
 
 /** 基金净值纪元：从这天起逐日复利，起始 NAV = 1 */
 export const FUND_EPOCH_DATE_KEY = '2026-01-01'
@@ -133,14 +138,21 @@ export function clampBankAmount(input: unknown): number {
    ============================================================ */
 
 /**
- * 活期利息：自然日差 × 余额 × 日利率，向下取整。
- * 天数非法 / ≤ 0 或余额 ≤ 0 时利息为 0。
+ * 当前结算槽号：epoch 起每 40 分钟一槽（floor(unixMs / 2_400_000)）。
+ * 槽号与墙上时钟无关、全服一致，是活期利息的惰性结算水位。
  */
-export function calcDemandInterest(balance: number, fromKey: string, toKey: string): number {
-  const days = diffDateKeys(fromKey, toKey)
-  if (!Number.isFinite(days) || days <= 0) return 0
+export function currentSettlementSlot(nowMs: number): number {
+  return Math.floor(nowMs / SETTLEMENT_PERIOD_MS)
+}
+
+/**
+ * 活期利息：槽数 × 余额 × 每槽利率，向下取整。
+ * 槽数非法 / ≤ 0 或余额 ≤ 0 时利息为 0。
+ */
+export function calcDemandInterest(balance: number, slots: number): number {
+  if (!Number.isFinite(slots) || slots <= 0) return 0
   if (!Number.isFinite(balance) || balance <= 0) return 0
-  return Math.floor(Math.trunc(balance) * DEMAND_DAILY_RATE * days)
+  return Math.floor(Math.trunc(balance) * DEMAND_PERIOD_RATE * Math.trunc(slots))
 }
 
 /**
@@ -155,45 +167,51 @@ export function calcFixedInterest(principal: number, annualRate: number, days: n
 }
 
 /**
- * 定期提前支取利息：floor(本金 × 活期日利率 × 已过天数)。
- * elapsedDays 小于等于 0 按 0 处理（当天开单当天取 = 无利息，本金不受影响）。
+ * 定期提前支取利息：按实际经过毫秒连续计息 floor(本金 × 活期年化 × elapsedMs / 一年毫秒数)。
+ * elapsedMs ≤ 0 按 0 处理（当天开单当天取 = 无利息，本金不受影响）；
+ * 不足 1 积分的尾巴自然丢弃（与到期计息同为 floor 口径）。
  */
-export function calcEarlyWithdrawInterest(principal: number, elapsedDays: number): number {
+export function calcEarlyWithdrawInterest(principal: number, elapsedMs: number): number {
   if (!Number.isFinite(principal) || principal <= 0) return 0
-  if (!Number.isFinite(elapsedDays) || elapsedDays <= 0) return 0
-  return Math.floor(Math.trunc(principal) * DEMAND_DAILY_RATE * Math.trunc(elapsedDays))
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return 0
+  return Math.floor(Math.trunc(principal) * DEMAND_ANNUAL_RATE * elapsedMs / YEAR_MS)
 }
 
 export interface DemandSettlement {
-  /** 实际计息天数（水位落后超过 365 天时封顶为 365） */
-  days: number
+  /** 实际计息槽数（水位落后超过一年槽数时封顶为 DEMAND_INTEREST_MAX_SLOTS） */
+  slots: number
   /** 本次应发利息（向下取整，可能为 0） */
   interest: number
-  /** 参与计息的起始水位（封顶时已前移到 today − 365 天） */
-  fromKey: string
+  /**
+   * 是否把结算水位推进到当前槽：
+   * - 利息 ≥ 1 → true（照常入账并推进）；
+   * - 利息 = 0 → false（不足 1 分继续滚存，service 不推进水位，下槽一并结算）；
+   * - 封顶计息 → 强制 true（防止水位永远落后）。
+   */
+  advance: boolean
 }
 
 /**
- * 活期利息惰性结算（纯函数，service 层在事务内调用后把水位推进到今天）：
- * - 水位非法（空串 / 坏数据）→ 不补息，service 把水位重置为今天；
- * - 水位 ≥ 今天 → 天数 0，无需结算；
- * - 水位落后 > 365 天 → 按 365 天封顶，fromKey 前移到 today − 365。
- * 注意：interest 为 0 时水位同样要推进（service 负责推进）。
+ * 活期利息惰性结算（纯函数，service 层在事务内调用）：
+ * - 水位 / 当前槽非法（非有限数、≤ 0）或当前槽 ≤ 水位 → 不结算且不推进；
+ * - 槽差 > DEMAND_INTEREST_MAX_SLOTS → 按封顶槽数计息并强制推进（advance = true）；
+ * - 利息 ≥ 1 → 照常计息并推进；利息 = 0（含 0 余额）→ 不推进（小数利息滚存）。
+ * 注意：lastInterestSlot = 0 是「未初始化」哨兵，service 层须先行处理（只推进不补息）。
  */
-export function calcDemandSettlement(balance: number, lastKey: string, todayKey: string): DemandSettlement {
-  const days = diffDateKeys(lastKey, todayKey)
-  if (!Number.isFinite(days) || days <= 0) {
-    return { days: 0, interest: 0, fromKey: lastKey }
+export function calcDemandSettlement(balance: number, lastSlot: number, currentSlot: number): DemandSettlement {
+  if (
+    !Number.isFinite(lastSlot) || !Number.isFinite(currentSlot)
+    || lastSlot <= 0 || currentSlot <= 0 || currentSlot <= lastSlot
+  ) {
+    return { slots: 0, interest: 0, advance: false }
   }
-  if (days <= DEMAND_INTEREST_MAX_DAYS) {
-    return { days, interest: calcDemandInterest(balance, lastKey, todayKey), fromKey: lastKey }
+  const diff = Math.trunc(currentSlot) - Math.trunc(lastSlot)
+  if (diff <= DEMAND_INTEREST_MAX_SLOTS) {
+    const interest = calcDemandInterest(balance, diff)
+    return { slots: diff, interest, advance: interest >= 1 }
   }
-  const fromKey = shiftDateKey(todayKey, -DEMAND_INTEREST_MAX_DAYS)
-  return {
-    days: DEMAND_INTEREST_MAX_DAYS,
-    interest: calcDemandInterest(balance, fromKey, todayKey),
-    fromKey,
-  }
+  // 槽差超过一年：按封顶槽数计息并强制推进水位，防止水位永远落后
+  return { slots: DEMAND_INTEREST_MAX_SLOTS, interest: calcDemandInterest(balance, DEMAND_INTEREST_MAX_SLOTS), advance: true }
 }
 
 /* ============================================================
@@ -212,11 +230,12 @@ export interface FundNavPoint {
 }
 
 /**
- * 某只基金某天的日收益率：drift/365 + 对称随机冲击 + 均值回归拉力。
+ * 某只基金某天的日收益率：drift/365 + 对称随机冲击 + 均值回归拉力，下限 0。
  * 种子 `lineweb-fund:<code>:<dateKey>`，同一天多次调用结果完全一致；
  * 冲击 clamp 在 ±3×日波动内（单日涨跌有界）。
  * `anchorDeviation`（可选）= ln(目标线 / 当前净值)：偏离 drift 目标线越远，
  * 向目标线拉力越强，避免纯随机游走长期复利走出 ±50% 的极端路径（玩家会当成 bug）。
+ * 负收益日一律按 0 横盘（Math.max 下限）→ NAV 单调不减、长期随年化漂移上涨。
  */
 export function fundDailyReturn(code: string, dateKey: string, anchorDeviation = 0): number {
   const fund = bankFundOf(code)
@@ -226,7 +245,7 @@ export function fundDailyReturn(code: string, dateKey: string, anchorDeviation =
   const bound = 3 * fund.dailyVolatility
   const bounded = Math.max(-bound, Math.min(bound, shock))
   const pull = Math.max(-FUND_ANCHOR_MAX_PULL, Math.min(FUND_ANCHOR_MAX_PULL, FUND_MEAN_REVERSION * anchorDeviation))
-  return fund.annualDrift / 365 + bounded + pull
+  return Math.max(0, fund.annualDrift / 365 + bounded + pull)
 }
 
 /**

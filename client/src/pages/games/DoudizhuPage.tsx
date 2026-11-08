@@ -230,7 +230,7 @@ export default function DoudizhuPage() {
   const navigate = useNavigate()
   const [state, setState] = useState<GameState>(() => createInitialState(true))
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
-  const { getStat, recordResult, ensureTicket } = useGameStats()
+  const { getStat, recordResult } = useGameStats()
   const settledRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [hintIndex, setHintIndex] = useState(0)
@@ -255,7 +255,6 @@ export default function DoudizhuPage() {
   }, [])
 
   const newGame = useCallback(async () => {
-    if (!(await ensureTicket('doudizhu'))) return
     clearTimers()
     settledRef.current = false
     setSelectedIds(new Set())

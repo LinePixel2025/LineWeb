@@ -32,6 +32,8 @@ export interface FarmSeedStack {
   name: string
   emoji: string
   count: number
+  /** 单件官方回收价（积分），「回收」按钮展示用 */
+  sellUnit: number
 }
 
 export interface StealQuota {
@@ -184,6 +186,15 @@ export interface MerchantPurchaseResult {
   view: FarmView
   offer: MerchantOffer
   balance: number
+}
+
+/** POST /api/farm/recycle — 官方回收种子（按 seedCost 的 60% 折价） */
+export interface FarmRecycleResult {
+  /** 本次回收得到的积分 */
+  points: number
+  /** 回收后的积分余额 */
+  balance: number
+  view: FarmView
 }
 
 /** POST /api/farm/plots/:index/harvest */

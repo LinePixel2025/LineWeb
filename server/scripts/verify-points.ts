@@ -49,6 +49,7 @@ import {
   INITIAL_SEEDS,
   MAX_PLOT_COUNT,
   PLOT_EXPANSION_COSTS,
+  SEED_RECYCLE_RATE,
   computeStealPoints,
   cropUnitsValue,
   fertilizablePlotIndexes,
@@ -61,6 +62,7 @@ import {
   pickWeighted,
   rollStealSuccess,
   seedDropWeight,
+  seedRecyclePrice,
 } from '../src/lib/farmCrops.js'
 
 let passed = 0
@@ -506,6 +508,26 @@ assert(
   swappedDiscount.every((offer) => offer.discountPct >= 40 && offer.discountPct <= 70),
   '折扣上下限颠倒时仍落在区间内',
 )
+
+// 种子官方回收：单件价 = max(1, floor(seedCost × 60%))，恒低于买入价防「买入 → 回收」套利
+assertEqual(SEED_RECYCLE_RATE, 0.6, '种子回收折价 60%')
+assertEqual(seedRecyclePrice(carrot, 1), 6, '胡萝卜单件回收 floor(10×0.6) = 6')
+assertEqual(seedRecyclePrice(getCrop('goldenapple')!, 2), 780, '金苹果单件回收 390，两颗 780')
+for (const crop of FARM_CROPS) {
+  const unit = seedRecyclePrice(crop, 1)
+  assert(unit >= 1, `${crop.key} 单件回收价至少 1 分`)
+  assert(unit <= crop.seedCost, `${crop.key} 单件回收价不超过种子成本（防买卖套利）`)
+  assertEqual(seedRecyclePrice(crop, 0), 0, `${crop.key} 回收 0 颗得 0 分`)
+  assertEqual(seedRecyclePrice(crop, 7), unit * 7, `${crop.key} 批量回收 = 单件价 × 数量`)
+  assertEqual(
+    seedRecyclePrice(crop, 7),
+    Math.max(1, Math.floor(crop.seedCost * SEED_RECYCLE_RATE)) * 7,
+    `${crop.key} 回收价按固定公式确定性复现`,
+  )
+}
+assertEqual(seedRecyclePrice(carrot, Number.NaN), 0, '非有限数量按 0 计')
+assertEqual(seedRecyclePrice(carrot, -5), 0, '负数数量按 0 计')
+assertEqual(seedRecyclePrice(carrot, 2.9), 12, '非整数数量先截断再计价')
 
 /* ============================================================
    公司 CEO 放贷设置（companyRules 的 CompanyLoanSettings 纯函数）

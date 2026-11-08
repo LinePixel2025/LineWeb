@@ -21,6 +21,7 @@ import {
   markTutorialDone,
   plantAllCrops,
   plantCrop,
+  recycleSeeds,
   renameFarm,
   stealCrop,
 } from '../services/farmService.js'
@@ -77,6 +78,10 @@ const buySchema = z.object({
   key: z.string().min(1).max(30),
   count: z.number().int().min(1).max(99),
 })
+const recycleSchema = z.object({
+  key: z.string().min(1).max(30),
+  count: z.number().int().min(1).max(99),
+})
 const plantSchema = z.object({ crop: z.string().min(1).max(30) })
 const plantAllSchema = z.object({ crop: z.string().min(1).max(30).optional() })
 const protectSchema = z.object({ hours: z.coerce.number().int().min(1).max(48) })
@@ -120,6 +125,12 @@ router.post('/protect', actionLimiter, asyncHandler(async (req: Request, res: Re
 router.post('/shop', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
   const input = parseInput(buySchema, req.body)
   res.json(await buyFarmItem(currentUserId(req), input))
+}))
+
+// POST /api/farm/recycle — 官方回收多余种子（按 seedCost 的 60% 折价）
+router.post('/recycle', actionLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(recycleSchema, req.body)
+  res.json(await recycleSeeds(currentUserId(req), input.key, input.count))
 }))
 
 // POST /api/farm/merchant/:offerId/buy — 购买随机商人特价商品（仅当天、限购一次）

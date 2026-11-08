@@ -14,16 +14,9 @@ vi.mock('../../contexts/FeatureContext', () => ({
   }),
 }))
 
-// 大厅只用到门票状态（余票 / 开关 / 价格），这里给一份假数据即可
+// 大厅已不再使用 GameStatsContext，mock 一份空实现兜底即可
 vi.mock('../../contexts/GameStatsContext', () => ({
   useGameStats: () => ({
-    tickets: 3,
-    ticketEnabled: true,
-    ticketPrice: 40,
-    ticketRefund: 20,
-    ticketReady: true,
-    ensureTicket: async () => true,
-    closeTicketSession: async () => {},
     recordResult: () => {},
     getStat: () => null,
     refresh: async () => {},

@@ -7,6 +7,7 @@ import type {
   FarmCrop,
   FarmNeighbor,
   FarmPlot,
+  FarmRecycleResult,
   FarmProtectionPackage,
   FarmView,
   FertilizeAllResult,
@@ -104,6 +105,8 @@ export default function FarmPage() {
   const [stealFlash, setStealFlash] = useState<string | null>(null)
   const [seedToast, setSeedToast] = useState<string | null>(null)
   const seedToastTimerRef = useRef<number | null>(null)
+  /** 仓库里展开「回收」数量选择的种子 key（同时只开一行） */
+  const [recycleKey, setRecycleKey] = useState<string | null>(null)
 
   const mountedRef = useRef(true)
   useEffect(() => {
@@ -351,6 +354,25 @@ export default function FarmPage() {
     )
   }
 
+  /** 官方回收种子：按服务端折价结算，成功后用返回的 view 刷新并提示到手积分 */
+  const handleRecycleSeed = async (key: string, count: number, seedName: string) => {
+    if (busy) return
+    setBusy(`recycle-${key}-${count}`)
+    setError('')
+    setNotice('')
+    try {
+      const result = await api.post<FarmRecycleResult>('/farm/recycle', { key, count })
+      setView(result.view)
+      setRecycleKey(null)
+      setNotice(`已回收 ${count} 颗 ${seedName}种子，+${result.points} 积分`)
+      await refreshPoints()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '回收失败，请稍后再试')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const nextExpansion = farm
     ? view?.economy.expansions.find((row) => row.plotCount > farm.plotCount) ?? null
     : null
@@ -574,10 +596,54 @@ export default function FarmPage() {
                     <li className="gh-farm-empty-line">还没有种子，去商店买一些吧</li>
                   )}
                   {(view?.inventory.seeds ?? []).map((seed) => (
-                    <li key={seed.key} className="gh-farm-seed-row">
+                    <li
+                      key={seed.key}
+                      className={`gh-farm-seed-row ${recycleKey === seed.key ? 'gh-farm-seed-row--recycle-open' : ''}`}
+                    >
                       <span className="gh-farm-seed-emoji" aria-hidden>{seed.emoji}</span>
                       <span className="gh-farm-seed-name">{seed.name}</span>
                       <span className="gh-farm-seed-count">×{seed.count}</span>
+                      <button
+                        type="button"
+                        className="gh-farm-seed-recycle"
+                        title={`官方回收价 ${seed.sellUnit} 积分/颗`}
+                        disabled={busy !== null}
+                        aria-expanded={recycleKey === seed.key}
+                        onClick={() => setRecycleKey(recycleKey === seed.key ? null : seed.key)}
+                      >
+                        回收
+                      </button>
+                      {recycleKey === seed.key && (
+                        <div className="gh-farm-seed-recycle-pop">
+                          <span className="gh-farm-seed-recycle-price">官方回收 {seed.sellUnit} 积分/颗</span>
+                          <div className="gh-farm-seed-recycle-actions">
+                            <button
+                              type="button"
+                              className="gh-btn gh-btn--secondary gh-btn--sm"
+                              disabled={busy !== null}
+                              onClick={() => void handleRecycleSeed(seed.key, 1, seed.name)}
+                            >
+                              卖 1
+                            </button>
+                            <button
+                              type="button"
+                              className="gh-btn gh-btn--secondary gh-btn--sm"
+                              disabled={busy !== null || seed.count < 5}
+                              onClick={() => void handleRecycleSeed(seed.key, 5, seed.name)}
+                            >
+                              卖 5
+                            </button>
+                            <button
+                              type="button"
+                              className="gh-btn gh-btn--primary gh-btn--sm"
+                              disabled={busy !== null}
+                              onClick={() => void handleRecycleSeed(seed.key, Math.min(seed.count, 99), seed.name)}
+                            >
+                              全部
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>

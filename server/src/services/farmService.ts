@@ -25,6 +25,7 @@ import {
   protectionRemainingMs,
   protectionUntilAfter,
   rollStealSuccess,
+  seedRecyclePrice,
   type CropDef,
 } from '../lib/farmCrops.js'
 import { getTodayDateKey, getTodayDayStart, type PointsConfigDto } from '../lib/pointsRules.js'
@@ -85,7 +86,16 @@ function seedsOf(items: FarmItem[]) {
     .filter((item) => item.kind === 'seed' && item.count > 0)
     .map((item) => {
       const crop = getCrop(item.itemKey)
-      return crop ? { key: crop.key, name: crop.name, emoji: crop.emoji, count: item.count } : null
+      return crop
+        ? {
+            key: crop.key,
+            name: crop.name,
+            emoji: crop.emoji,
+            count: item.count,
+            /** 单件官方回收价（积分），前端展示「回收」按钮时提示可得积分 */
+            sellUnit: seedRecyclePrice(crop, 1),
+          }
+        : null
     })
     .filter((item): item is NonNullable<typeof item> => item !== null)
     .sort((a, b) => (getCrop(a.key)?.tier ?? 0) - (getCrop(b.key)?.tier ?? 0))
@@ -534,6 +544,48 @@ export async function buyFarmItem(
     })
   })
   return getFarmView(userId)
+}
+
+export interface FarmRecycleResult {
+  /** 本次回收得到的积分 */
+  points: number
+  /** 回收后的积分余额 */
+  balance: number
+  view: FarmView
+}
+
+/** 官方回收种子：按 seedCost 的 60% 折价结算（防套利口径见 seedRecyclePrice） */
+export async function recycleSeeds(userId: number, key: string, count: number): Promise<FarmRecycleResult> {
+  const clean = Math.trunc(count)
+  if (!Number.isInteger(clean) || clean < 1 || clean > 99) throw new AppError('回收数量需在 1–99 之间', 400)
+  const crop = getCrop(key)
+  if (!crop) throw new AppError('未知的种子', 404)
+
+  const result = await prisma.$transaction(async (tx) => {
+    const farm = await tx.farm.findUnique({ where: { userId } })
+    if (!farm) throw new AppError('还没有农场，先开一块地吧', 404)
+    const seed = await tx.farmItem.findUnique({
+      where: { farmId_kind_itemKey: { farmId: farm.id, kind: 'seed', itemKey: crop.key } },
+    })
+    if (!seed || seed.count < clean) throw new AppError('种子数量不足', 400)
+
+    // 条件更新扣库存（对齐 spendPointsTx 口径）：并发双发时后到者 count 不满足 → 0 行命中 → 400，
+    // 防止「读—查—减」竞态把库存减成负数 / 重复发分；扣到 0 后顺手清行（对齐 plantCrop 的删 0 行风格）
+    const deducted = await tx.farmItem.updateMany({
+      where: { id: seed.id, count: { gte: clean } },
+      data: { count: { decrement: clean } },
+    })
+    if (deducted.count !== 1) throw new AppError('种子数量不足', 400)
+    await tx.farmItem.deleteMany({ where: { id: seed.id, count: 0 } })
+    return awardPointsTx(tx, userId, {
+      amount: seedRecyclePrice(crop, clean),
+      reason: 'farm_recycle',
+      game: 'farm',
+      note: `官方回收${crop.name}种子 ×${clean}`,
+    })
+  })
+
+  return { points: seedRecyclePrice(crop, clean), balance: result.balance, view: await getFarmView(userId) }
 }
 
 export interface MerchantPurchaseResult {

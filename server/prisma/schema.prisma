@@ -112,9 +112,10 @@ model User {
   companyOrders          CompanyOrder[]        @relation("CompanyBuyer") // 我在公司货栈的购买记录
   companyLoans           CompanyLoan[]         @relation("CompanyLoanBorrower") // 我向公司借的贷款
   companyPoolInvestments CompanyPoolInvestment[] // 我投入公司资金池的份额
+  officialLoans          OfficialLoan[] // 我向公共银行借的官方贷款
   crisisWaivers          CrisisWaiver[] // 我吃到的危机减免档位（每人每档终身一次）
-  gameSessions           GameSession[] // 单机「已付门票开局」的会话凭证
-  gameTicketLogs         GameTicketLog[] // 门票张数台账（积分台账记不了物品件数）
+  gameSessions           GameSession[] // [废弃] 门票会话凭证（机制已下线，表保留避免生产 db push 破坏性失败）
+  gameTicketLogs         GameTicketLog[] // [废弃] 门票张数台账（机制已下线，表保留避免生产 db push 破坏性失败）
   /**
    * 网页反代排队赦免：不受并发闸门限制（管理员另有 role 兜底）
    */
@@ -1029,15 +1030,19 @@ model StockHolding {
 
 /**
  * 银行账户（每用户一行，读时惰性建）：活期余额 + 利息结算水位。
- * lastInterestDateKey 为上次结息的 Asia/Shanghai 日期键（YYYY-MM-DD），
- * 惰性结算时按自然日差计息并把水位推进到当天（差值 > 365 天按 365 封顶，防止补天量利息）。
+ * lastInterestSlot 为上次结息的 40 分钟结算槽号（epoch 槽号 = floor(unixMs / 2_400_000)，每天 36 期），
+ * 惰性结算时按槽差计息并把水位推进到当前槽（差值 > 13140 槽按 13140 封顶，防止补天量利息）；
+ * 利息不足 1 分时不推进水位，让小数利息滚存到下次凑整入账。
+ * lastInterestDateKey 是旧版按自然日结算水位（YYYY-MM-DD），2026-11-07 起废弃——仅保留字段供
+ * 启动迁移（systemMigrations 的 system.bank.slotBackfill）回填 lastInterestSlot，避免生产 db push 破坏性失败。
  */
 model BankAccount {
   id                  Int      @id @default(autoincrement())
   userId              Int      @unique @map("user_id")
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   demandBalance       Int      @default(0) @map("demand_balance") // 活期本金（存入的积分，不含未结利息）
-  lastInterestDateKey String   @default("") @map("last_interest_date_key") // 利息结算水位（YYYY-MM-DD，空串 = 建行当天）
+  lastInterestSlot    Int      @default(0) @map("last_interest_slot") // 40 分钟结算槽号（0 = 未初始化，迁移/首次结算回填）
+  lastInterestDateKey String   @default("") @map("last_interest_date_key") // [废弃] 旧按日结算水位，仅迁移回填用
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
@@ -1853,6 +1858,33 @@ model CrisisConfig {
   @@map("crisis_config")
 }
 
+/**
+ * 官方贷款（2026-11-07）：公共银行（CrisisPool）作为放贷资金源的银行官方贷款，
+ * 与 CompanyLoan（民间借贷）平行。利率在放款时快照冻结 = 全站最差民间利率档 + 5 个百分点
+ * （crisisRules.officialLoanRateOf 动态计算，管理员调民间利率档位即跟随变化），期限 30 天。
+ * 借款时 CAS 扣 CrisisPool.total（池子就是可贷资金）；还款时本金 + 利息全额 increment 回公共银行；
+ * 每日分红（crisisDividendService）也从该池抽取，三者共同构成公共银行的进出闭环。
+ * 逾期翻转与 CompanyLoan 同款惰性 CAS（读写前 updateMany，不挂定时器）。
+ */
+model OfficialLoan {
+  id         Int       @id @default(autoincrement())
+  userId     Int       @map("user_id")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  principal  Int // 放款本金
+  dueAmount  Int       @map("due_amount") // 应还总额（本金 + 利息，放款时算死）
+  repaid     Int       @default(0)
+  ratePct    Int       @map("rate_pct") // 放款时的利率快照
+  dueDays    Int       @map("due_days") // 放款时的期限快照（固定 30 天）
+  status     String    @default("open") // open | repaid | overdue
+  borrowedAt DateTime  @default(now()) @map("borrowed_at")
+  dueAt      DateTime  @map("due_at")
+  settledAt  DateTime? @map("settled_at")
+
+  @@index([userId, status])
+  @@index([status, dueAt]) // 惰性逾期扫描
+  @@map("official_loans")
+}
+
 // === 公司（成员组织 + 货栈 + 资金池 + 放贷 + 危机减免，2026-11-04） ===
 
 /**
@@ -2073,7 +2105,8 @@ model CrisisWaiver {
   @@map("crisis_waivers")
 }
 
-// === 游戏门票（对局入场成本，2026-11-04） ===
+// === 游戏门票（2026-11-04 上线；2026-11-07 机制整体下线——表与 User 反向关系保留仅避免生产
+// db push 破坏性失败（先例：搜打撤交易行表），全部代码引用已删除，存量门票由启动迁移按原价退还） ===
 
 /**
  * 单机「已付门票开局」的会话凭证。

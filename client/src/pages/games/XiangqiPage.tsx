@@ -85,7 +85,7 @@ export default function XiangqiPage() {
   const [state, setState] = useState<GameState>(newGame)
   const [selected, setSelected] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const { getStat, recordResult, ensureTicket } = useGameStats()
+  const { getStat, recordResult } = useGameStats()
   const stat = getStat('xiangqi', 'solo')
   const [rulesOpen, setRulesOpen] = useState(false)
   const stateRef = useRef(state)
@@ -110,7 +110,6 @@ export default function XiangqiPage() {
   }, [state.playing, state.winner, playerSide, recordResult])
 
   const restart = useCallback(async (side?: XiangqiSide) => {
-    if (!(await ensureTicket('xiangqi'))) return
     recordedRef.current = false
     setError(null)
     setSelected(null)

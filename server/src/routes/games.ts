@@ -196,48 +196,13 @@ import {
  *   - 其它写操作（邀请 / 响应 / 取消 / 认输）：60 次 / 5 分钟
  * 上述三个高频端点同时在 index.ts 的全局 apiLimiter 中按精确路径豁免（否则会被 600/15min 卡住）。
  */
-import { setGameAbortListener, setGameResultListener } from '../services/gameStatsHooks.js'
+import { setGameResultListener } from '../services/gameStatsHooks.js'
 import { recordOnlineMatchResult } from '../services/gameStatsService.js'
-import {
-  consumeTicketsForMatch,
-  returnTicketsForMatch,
-  seatedUserIdsFromMatchDto,
-} from '../services/gameTicketService.js'
 
 // 联机结算落库：仅在加载路由时注册（verify 脚本不加载本文件，保持纯内存）
 setGameResultListener((payload) => {
   void recordOnlineMatchResult(payload)
 })
-
-// 没真正开局的早退（取消 / 解散）：整张门票退还给在座玩家，不返 20 积分
-setGameAbortListener((payload) => {
-  const seated = payload.results.map((result) => result.userId)
-  void returnTicketsForMatch(payload.game, payload.matchId, seated)
-})
-
-/**
- * 开局扣票：先按在座名单全量预检 + 扣票，start 抛错时把刚扣的票退回去。
- *
- * 为什么放在路由层而不是每个 game service 里：联机服务是纯内存态、不认识 prisma，
- * 门票是 DB 侧的事；三处 start 端点共用这一个包装，语义就只有一个。
- * 门票开关关闭 / 该玩法不收票时 consumeTicketsForMatch 直接 skipped，行为与上线前逐字一致。
- */
-async function chargeMatchTickets<T>(
-  game: string,
-  matchId: number,
-  loadMatch: () => unknown,
-  start: () => T,
-): Promise<T> {
-  const seated = seatedUserIdsFromMatchDto(loadMatch())
-  if (seated.length === 0) throw new AppError('对局里没有可扣票的玩家', 400)
-  await consumeTicketsForMatch(game, matchId, seated)
-  try {
-    return start()
-  } catch (error) {
-    await returnTicketsForMatch(game, matchId, seated)
-    throw error
-  }
-}
 
 const router = Router()
 router.use(authenticate)
@@ -412,17 +377,11 @@ router.get('/2048/matches/:id', (req, res) => {
   res.json({ match: getGameMatch(currentUserId(req), matchId) })
 })
 
-router.post('/2048/matches/:id/start', gameWriteLimiter, asyncHandler(async (req: Request, res) => {
+router.post('/2048/matches/:id/start', gameWriteLimiter, (req, res) => {
   const matchId = parseIdParam(req.params.id, '对局 ID')
   const body = parseInput(gameStartSchema, req.body ?? {})
-  const userId = currentUserId(req)
-  res.json(await chargeMatchTickets(
-    '2048',
-    matchId,
-    () => getGameMatch(userId, matchId),
-    () => startGameMatch(userId, matchId, body.durationMinutes),
-  ))
-}))
+  res.json(startGameMatch(currentUserId(req), matchId, body.durationMinutes))
+})
 
 router.post('/2048/matches/:id/leave', gameWriteLimiter, (req, res) => {
   const matchId = parseIdParam(req.params.id, '对局 ID')
@@ -498,16 +457,10 @@ router.get('/doudizhu/matches/:id', (req, res) => {
   res.json({ match: getDoudizhuMatch(currentUserId(req), matchId) })
 })
 
-router.post('/doudizhu/matches/:id/start', gameWriteLimiter, asyncHandler(async (req: Request, res) => {
+router.post('/doudizhu/matches/:id/start', gameWriteLimiter, (req, res) => {
   const matchId = parseIdParam(req.params.id, '对局 ID')
-  const userId = currentUserId(req)
-  res.json(await chargeMatchTickets(
-    'doudizhu',
-    matchId,
-    () => getDoudizhuMatch(userId, matchId),
-    () => startDoudizhuMatch(userId, matchId),
-  ))
-}))
+  res.json(startDoudizhuMatch(currentUserId(req), matchId))
+})
 
 router.post('/doudizhu/matches/:id/leave', gameWriteLimiter, (req, res) => {
   const matchId = parseIdParam(req.params.id, '对局 ID')
@@ -603,18 +556,10 @@ function mountGameEndpoints<A>(bundle: GameEndpointBundle<A>): void {
     res.json({ match: bundle.getMatch(currentUserId(req), matchId) })
   })
 
-  router.post(`${base}/matches/:id/start`, gameWriteLimiter, asyncHandler(async (req: Request, res) => {
+  router.post(`${base}/matches/:id/start`, gameWriteLimiter, (req, res) => {
     const matchId = parseIdParam(req.params.id, '对局 ID')
-    const userId = currentUserId(req)
-    // base 形如 '/snake'，去掉前导斜杠正好就是门票清单里的游戏 key
-    const gameKey = base.replace(/^\//, '')
-    res.json(await chargeMatchTickets(
-      gameKey,
-      matchId,
-      () => bundle.getMatch(userId, matchId),
-      () => bundle.startMatch(userId, matchId),
-    ))
-  }))
+    res.json(bundle.startMatch(currentUserId(req), matchId))
+  })
 
   router.post(`${base}/matches/:id/leave`, gameWriteLimiter, (req, res) => {
     const matchId = parseIdParam(req.params.id, '对局 ID')
@@ -820,17 +765,10 @@ router.get('/minecraft/matches/:id', (req, res) => {
   res.json({ match: getMinecraftMatch(currentUserId(req), matchId) })
 })
 
-router.post('/minecraft/matches/:id/start', gameWriteLimiter, asyncHandler(async (req: Request, res) => {
+router.post('/minecraft/matches/:id/start', gameWriteLimiter, (req, res) => {
   const matchId = parseIdParam(req.params.id, '对局 ID')
-  const userId = currentUserId(req)
-  // 我的世界不报战绩，但同样要收票：它的 20 积分返还靠 finishMinecraftMatch 发的 publishGameEnd
-  res.json(await chargeMatchTickets(
-    'minecraft',
-    matchId,
-    () => getMinecraftMatch(userId, matchId),
-    () => startMinecraftMatch(userId, matchId),
-  ))
-}))
+  res.json(startMinecraftMatch(currentUserId(req), matchId))
+})
 
 // 沙盒世界允许随时离开（房主离开会把房主位移交给剩余玩家）
 router.post('/minecraft/matches/:id/leave', gameWriteLimiter, (req, res) => {

@@ -76,18 +76,6 @@ export const RAID_CONTAINER_LABELS: Readonly<Record<RaidContainerKind, string>> 
   safe: '安全箱',
 }
 
-/* ============================================================
-   游戏门票（物品侧常量；规则见 server/src/lib/gameTicketRules.ts）
-   ============================================================ */
-
-/** 门票物品 key。游戏大厅开一局要消耗一张（存在搜打撤仓库里）。 */
-export const GAME_TICKET_KEY = 'game_ticket'
-/** 官方商店一口价（积分）。回收价刻意低于它，也低于返还额，确保「用票」是唯一合理选择。 */
-export const GAME_TICKET_PRICE = 40
-/** 局终必返（积分），与胜负积分叠加。 */
-export const GAME_TICKET_REFUND_POINTS = 20
-/** 门票的目录价值：material 按 100% 回收 ⇒ 回收价就是它，必须 < 返还额，否则卖票比打一把更赚。 */
-export const GAME_TICKET_RECYCLE_VALUE = 18
 /**
  * 旧型号撤离信号弹的 key。
  * 2026-11-07 删除撤离失败机制后它不再有任何效果：停售 / 停掉 / 不可使用，
@@ -123,7 +111,7 @@ export interface RaidItemDef {
   /** 装备箱：可开出的装备等级区间 */
   cacheTierMin?: number
   cacheTierMax?: number
-  /** 一口价（积分）：设置后覆盖「目录价值 × 1.4」，门票这类要钉死售价的商品用 */
+  /** 一口价（积分）：设置后覆盖「目录价值 × 1.4」，需要钉死售价的商品用 */
   shopPrice?: number
   /** 已停产：不再进入任何掉落池 / 商店，只为旧库存保留目录数据（仍可回收） */
   retired?: boolean
@@ -199,8 +187,7 @@ export const RAID_ITEMS: readonly RaidItemDef[] = [
   { key: 'heart_of_africa', name: '非洲之心', emoji: '💎', rarity: 'mythic', kind: 'material', value: 30000, weight: 0.25, stackMax: 1, description: '传说中的巨钻，全游戏最高价值的战利品；只在最高档地图的最深处出现。', pityEligible: false },
   { key: 'abyss_core', name: '深渊核心', emoji: '🌌', rarity: 'mythic', kind: 'material', value: 6800, weight: 1, stackMax: 1, description: '不断吞噬光线的黑色球体。' },
 
-  // ---------- 特殊（门票 / 撤离信号弹） ----------
-  { key: GAME_TICKET_KEY, name: '游戏门票', emoji: '🎟️', rarity: 'common', kind: 'material', value: GAME_TICKET_RECYCLE_VALUE, shopPrice: GAME_TICKET_PRICE, weight: 6, stackMax: 5, description: `游戏大厅开一局要用掉一张；打完必返 ${GAME_TICKET_REFUND_POINTS} 积分，所以用票永远比卖票划算。` },
+  // ---------- 特殊（已停产的撤离信号弹） ----------
   { key: 'extract_flare', name: '撤离信号弹', emoji: '🧨', rarity: 'rare', kind: 'consumable', value: 300, weight: 5, stackMax: 2, description: '已停产的旧型号撤离信号弹，现在只能卖给官方商店。', retired: true },
 ]
 

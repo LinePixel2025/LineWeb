@@ -83,7 +83,7 @@ function shopGearStatText(gear: RaidShopGear): string {
  *   - 装备全档上架：1–3 级按目录价平价出售，4 级及以上按目录价 ×2，且需要相应仓库等级
  *     （4 级→Lv.3、5 级→Lv.4、6 级→Lv.5、t7/t8 巨型背包→Lv.6）；
  *   - 装备是「实例物品」：可重复购买，每次都是一行独立耐久的新实例，想变现去仓库页的装备区回收；
- *   - 消耗品按目录价 140%、游戏门票一口价 40，购买后直接进入仓库；
+ *   - 消耗品按目录价 140% 出售，购买后直接进入仓库；
  *   - 回收价（玩家卖出的钱）见仓库页：材料 / 珍宝 100%、消耗品 60%、箱子 70%。
  */
 export default function RaidShopPage() {
@@ -254,7 +254,7 @@ export default function RaidShopPage() {
           <p>
             装备全档上架：1–3 级按目录价平价出售，4 级及以上按目录价 ×2 且需要相应仓库等级
             （4 级→Lv.3、5 级→Lv.4、6 级→Lv.5、t7/t8 巨型背包→Lv.6）；
-            消耗品按目录价 140% 出售，游戏门票一口价 40。
+            消耗品按目录价 140% 出售。
           </p>
         </div>
         <span className="gh-raid-storage-points" title="当前积分">

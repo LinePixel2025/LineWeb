@@ -320,23 +320,6 @@
 .gh-stocks-amount-presets { display: flex; gap: 4px; flex-wrap: wrap; }
 .gh-stocks-preview { margin: 8px 0 0; font-size: var(--gh-text-xs); }
 
-/* ===== 首屏提示弹窗 ===== */
-.gh-stocks-notice { max-width: 460px; }
-.gh-stocks-notice p { margin: 10px 0 16px; line-height: 1.6; }
-.gh-stocks-notice-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--gh-text-sm);
-  color: var(--gh-text-secondary);
-  cursor: pointer;
-}
-.gh-stocks-notice-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 18px;
-}
-
 /* ===== 图表模式切换（分时 / 日线） ===== */
 .gh-stocks-chart-head {
   display: flex;

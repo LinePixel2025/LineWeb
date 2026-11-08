@@ -13,9 +13,15 @@ import {
   buyFund,
   sellFund,
 } from '../services/bankService.js'
+import {
+  borrowOfficialLoan,
+  listOfficialLoans,
+  repayOfficialLoan,
+} from '../services/officialLoanService.js'
 
 /**
- * 银行系统：活期 / 定期存款（利息按日惰性结算）与基金投资（当日净值申赎）。
+ * 银行系统：活期 / 定期存款（利息按日惰性结算）与基金投资（当日净值申赎），
+ * 以及公共银行官方贷款（放款扣 CrisisPool、还款本息回流，资金来源 = 危机缴款池）。
  * 全部需登录；开关关闭时由 /api/bank 外层 requireFeature('bank') 拦截。
  */
 const router = Router()
@@ -75,6 +81,11 @@ const fundSellSchema = fundCodeSchema.extend({
   shares: z.coerce.number().min(0.0001).max(1e12),
 })
 
+/** 官方贷款借款金额（service 层钳制到 100–20000 的整数） */
+const officialLoanAmountSchema = z.object({
+  amount: z.coerce.number(),
+})
+
 function parseInput<S extends z.ZodTypeAny>(schema: S, data: unknown): z.infer<S> {
   const parsed = schema.safeParse(data)
   if (!parsed.success) {
@@ -123,6 +134,23 @@ router.post('/funds/buy', writeLimiter, asyncHandler(async (req: Request, res: R
 router.post('/funds/sell', writeLimiter, asyncHandler(async (req: Request, res: Response) => {
   const input = parseInput(fundSellSchema, req.body ?? {})
   res.json(await sellFund(currentUserId(req), input.code, input.shares))
+}))
+
+// GET /api/bank/loans/official — 官方贷款：利率（基准 + 溢价）/ 期限 / 限额 / 公共银行可贷余额 / 本人贷款列表
+router.get('/loans/official', readLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await listOfficialLoans(currentUserId(req)))
+}))
+
+// POST /api/bank/loans/official — { amount } 借款（资金来源 = 公共银行，CAS 扣池；同一时间仅一笔未结清）
+router.post('/loans/official', writeLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(officialLoanAmountSchema, req.body ?? {})
+  res.status(201).json(await borrowOfficialLoan(currentUserId(req), input.amount))
+}))
+
+// POST /api/bank/loans/official/:id/repay — 全额还清（本息回流公共银行）
+router.post('/loans/official/:id/repay', writeLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = parseInput(depositIdSchema, req.params)
+  res.json(await repayOfficialLoan(currentUserId(req), id))
 }))
 
 export default router

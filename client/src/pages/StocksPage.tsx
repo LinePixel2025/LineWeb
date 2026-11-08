@@ -26,8 +26,6 @@ import type {
   StockTrend,
 } from '../types/stock'
 
-/** 只在本次浏览器会话内记住「不再提示」，刷新页面仍会再次提示 */
-const NOTICE_KEY = 'lineweb_stocks_notice_ack'
 /** 自选股（本机）：字符串数组的股票代码 */
 const WATCHLIST_KEY = 'lineweb_stock_watchlist_v1'
 /** 价格提醒（本机）：{ id, code, target, direction }[] */
@@ -598,14 +596,6 @@ export default function StocksPage() {
   const [selectedCode, setSelectedCode] = useState<string | null>(null)
   const [amount, setAmount] = useState('500')
   const [busy, setBusy] = useState(false)
-  const [dontRemind, setDontRemind] = useState(false)
-  const [noticeOpen, setNoticeOpen] = useState(() => {
-    try {
-      return sessionStorage.getItem(NOTICE_KEY) !== '1'
-    } catch {
-      return true
-    }
-  })
   const [trend, setTrend] = useState<StockTrend | null>(null)
   const [trendCode, setTrendCode] = useState<string | null>(null)
   const [trendLoading, setTrendLoading] = useState(false)
@@ -899,17 +889,6 @@ export default function StocksPage() {
     return { fee, shares: net / selected.price }
   }, [rule, selected, investAmount])
 
-  const dismissNotice = () => {
-    if (dontRemind) {
-      try {
-        sessionStorage.setItem(NOTICE_KEY, '1')
-      } catch {
-        // 隐私模式下忽略
-      }
-    }
-    setNoticeOpen(false)
-  }
-
   const toggleWatch = (code: string) => {
     setWatchlist((prev) => {
       const next = prev.includes(code) ? prev.filter((item) => item !== code) : [...prev, code]
@@ -1195,9 +1174,6 @@ export default function StocksPage() {
             <span className="gh-header-points-icon" aria-hidden><Icon name="coin" size={15} /></span>
             <span className="gh-header-points-value">{formatPoints(balance)}</span>
           </Link>
-          <button type="button" className="gh-btn gh-btn--ghost gh-btn--sm" onClick={() => setNoticeOpen(true)}>
-            风险提示
-          </button>
         </div>
       </header>
 
@@ -1865,39 +1841,6 @@ export default function StocksPage() {
             )}
           </section>
         </>
-      )}
-
-      {noticeOpen && (
-        <div
-          className="gh-dialog-overlay"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) dismissNotice()
-          }}
-        >
-          <div className="gh-dialog gh-stocks-notice" role="dialog" aria-modal="true" aria-label="模拟股市提示">
-            <h2 className="gh-dialog-title">这是模拟行情</h2>
-            <p className="gh-text-secondary">
-              本页面展示的股票与价格全部是虚构的模拟行情，每 3 秒跳动一次，玩家的买入卖出会明显推动价格，与真实证券市场无关。
-              页面支持用站内积分投资：买入后按实时行情计算市值，择机卖出结算盈亏（买卖各收 0.3% 手续费）。
-              行情由对称随机波动驱动，AI 每 40 分钟生成一批虚构快讯；玩家大额交易会明显推动价格，成交价含冲击滑点，短线往返大概率亏损。
-              收益仅限站内积分，不能兑换成真实货币。
-            </p>
-            <label className="gh-stocks-notice-check">
-              <input
-                type="checkbox"
-                checked={dontRemind}
-                onChange={(event) => setDontRemind(event.target.checked)}
-              />
-              本次会话不再提示
-            </label>
-            <div className="gh-stocks-notice-actions">
-              <button type="button" className="gh-btn gh-btn--primary" onClick={dismissNotice}>
-                我知道了
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {sellOpen && selected && holding && (

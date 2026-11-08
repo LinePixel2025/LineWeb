@@ -2,7 +2,6 @@ import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
 import GameCard from '../components/games/lobby/GameCard'
 import { useFeature } from '../contexts/FeatureContext'
-import { useGameStats } from '../contexts/GameStatsContext'
 import api from '../lib/api'
 import { COMING_SOON_GAMES, PLAYABLE_GAMES } from '../lib/games/catalog'
 
@@ -18,7 +17,6 @@ export default function GamesPage() {
   const showSingle = isEnabled('gamesSingle')
   const showOnline = isEnabled('gamesOnline')
   const showFarm = isEnabled('farm')
-  const { tickets, ticketEnabled, ticketPrice, ticketRefund } = useGameStats()
   const playableGames = PLAYABLE_GAMES.filter((game) => {
     // 开心农场为独立子开关，关闭时不出现在大厅
     if (game.id === 'farm' && !showFarm) return false
@@ -73,19 +71,6 @@ export default function GamesPage() {
           )}
         </div>
       </header>
-
-      {ticketEnabled && (
-        <div className="gh-games-ticket-bar" role="status">
-          <span className="gh-games-ticket-bar-icon" aria-hidden>🎟️</span>
-          <p>
-            每局消耗 1 张门票（{ticketPrice} 积分），打完无论胜负必返 {ticketRefund} 积分；
-            门票可在搜打撤商店购买，也能在搜打撤里摸到。
-          </p>
-          <span className={`gh-games-ticket-bar-count${tickets < 1 ? ' gh-games-ticket-bar-count--empty' : ''}`}>
-            余票 {tickets} 张
-          </span>
-        </div>
-      )}
 
       <section className="gh-games-section" aria-labelledby="gh-games-playable-title">
         <div className="gh-games-section-head">

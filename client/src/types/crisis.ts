@@ -18,6 +18,8 @@ export interface CrisisRules {
   minLevy: number
   /** 积分税款比例（%）：自选开关开启后每次花费额外扣，直接进入公共银行 */
   spendTaxPct: number
+  /** 公共银行每日分红开关：开启后每天按 5%–15% 随机比例抽池分红给全站用户 */
+  dividendEnabled: boolean
 }
 
 /** 资产分项，键序与服务端 CrisisAssetParts 一致 */
@@ -83,6 +85,27 @@ export interface CrisisHistoryItem {
   balance: number
   note: string | null
   createdAt: string
+}
+
+/**
+ * 公共银行每日随机分红的最近一次明细（GET /api/crisis/pool 的 dividend 字段；
+ * 与 server/src/services/crisisDividendService.ts 的 CrisisDividendRecord 对应）。
+ */
+export interface CrisisDividendRecord {
+  /** 发放日（Asia/Shanghai YYYY-MM-DD） */
+  dateKey: string
+  /** 当日抽取比例（%，一位小数） */
+  pct: number
+  /** 从公共银行抽出的总积分（0 = 当日人均不足 1 分未发放） */
+  total: number
+  /** 每人发放积分（0 = 未发放） */
+  perUser: number
+  /** 参与人数（全站 active 用户，含管理员） */
+  userCount: number
+  /** 落库时刻（ISO） */
+  at: string
+  /** true = 当日人均不足 1 分，跳过发放 */
+  skipped?: boolean
 }
 
 export interface CrisisAdminOverview {

@@ -12,6 +12,7 @@ import {
 import {
   CRISIS_ASSET_LABELS,
   CRISIS_STATUS_LABELS,
+  type CrisisDividendRecord,
   type CrisisHistoryItem,
 } from '../types/crisis'
 
@@ -30,6 +31,7 @@ export default function CrisisPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [history, setHistory] = useState<CrisisHistoryItem[]>([])
+  const [dividend, setDividend] = useState<CrisisDividendRecord | null>(null)
   const [taxBusy, setTaxBusy] = useState(false)
   const [taxError, setTaxError] = useState('')
   const [, forceTick] = useState(0)
@@ -47,6 +49,13 @@ export default function CrisisPage() {
       .then((data) => { if (mountedRef.current) setHistory(data.items ?? []) })
       .catch(() => { /* 流水读不到不影响缴税本身 */ })
   }, [state?.paid, state?.status])
+
+  // 公共银行动态：最近一次每日随机分红（读不到时保持 null，页面显示「暂无发放记录」）
+  useEffect(() => {
+    void api.get<{ total: string; dividend: CrisisDividendRecord | null }>('/crisis/pool')
+      .then((data) => { if (mountedRef.current) setDividend(data.dividend ?? null) })
+      .catch(() => { /* 分红动态读不到不影响账单本身 */ })
+  }, [])
 
   // 宽限倒计时逐秒跳动（只在待缴时挂定时器，clear 状态不空转）
   useEffect(() => {
@@ -128,10 +137,10 @@ export default function CrisisPage() {
             须向公共银行上缴约总资产 {ratioPercent}% 的积分。
           </p>
         </div>
-        <div className="gh-crisis-pool" title="公共银行只进不出，任何人都无法提取">
+        <div className="gh-crisis-pool" title="公共银行：危机缴款与消费税款流入；官方贷款放贷（利息回流）与每日随机分红流出">
           <span className="gh-crisis-pool-label">Lineweb 公共银行</span>
           <strong className="gh-crisis-pool-value">{formatCrisisPoints(state.poolTotal)}</strong>
-          <span className="gh-crisis-pool-note">累计上缴 · 不可提取</span>
+          <span className="gh-crisis-pool-note">缴款税款流入 · 贷款分红流出</span>
         </div>
       </header>
 
@@ -246,6 +255,45 @@ export default function CrisisPage() {
       </section>
 
       <section className="gh-crisis-assets">
+        <h2 className="gh-crisis-section-title">公共银行动态</h2>
+        <p className="gh-crisis-section-hint">
+          公共银行每天都在缴款税款流入、官方贷款与分红流出之间滚动；下面是最近一次每日随机分红
+          （每天按 5%–15% 的随机比例从池里抽取，平均分给全站用户）。
+        </p>
+        {dividend ? (
+          <ul className="gh-crisis-asset-list">
+            <li className="gh-crisis-asset-row">
+              <span className="gh-crisis-asset-name">发放日期</span>
+              <span className="gh-crisis-asset-hint">{dividend.skipped ? '当日人均不足 1 分，未发放' : 'Asia/Shanghai 日界，每天最多一次'}</span>
+              <strong className="gh-crisis-asset-value">{dividend.dateKey}</strong>
+            </li>
+            <li className="gh-crisis-asset-row">
+              <span className="gh-crisis-asset-name">抽取比例</span>
+              <span className="gh-crisis-asset-hint">按日随机（5%–15%）</span>
+              <strong className="gh-crisis-asset-value">{dividend.pct}%</strong>
+            </li>
+            <li className="gh-crisis-asset-row">
+              <span className="gh-crisis-asset-name">分红总额</span>
+              <span className="gh-crisis-asset-hint">从公共银行抽取的积分</span>
+              <strong className="gh-crisis-asset-value">{formatCrisisPoints(dividend.total)}</strong>
+            </li>
+            <li className="gh-crisis-asset-row">
+              <span className="gh-crisis-asset-name">每人到账</span>
+              <span className="gh-crisis-asset-hint">已自动发进积分余额，可在积分流水查看</span>
+              <strong className="gh-crisis-asset-value">{formatCrisisPoints(dividend.perUser)}</strong>
+            </li>
+            <li className="gh-crisis-asset-row">
+              <span className="gh-crisis-asset-name">参与人数</span>
+              <span className="gh-crisis-asset-hint">全站正常状态用户（含管理员）</span>
+              <strong className="gh-crisis-asset-value">{formatCrisisPoints(dividend.userCount)}</strong>
+            </li>
+          </ul>
+        ) : (
+          <p className="gh-crisis-muted">暂无发放记录。</p>
+        )}
+      </section>
+
+      <section className="gh-crisis-assets">
         <h2 className="gh-crisis-section-title">积分税款</h2>
         <p className="gh-crisis-section-hint">
           自愿开启：之后每次花费积分（商店购买、转账、购买装备等）都会额外扣 {state.rules.spendTaxPct}%，
@@ -344,7 +392,7 @@ export default function CrisisPage() {
           <li>免征门槛：按 {ratioPercent}% 算出来不足 {formatCrisisPoints(state.rules.minLevy)} 积分则本轮不收</li>
           <li>封锁范围：除危机页与「筹钱 / 查账」入口外，全站功能一律 403</li>
           <li>对局保护：正在打搜打撤时暂不封锁，撤离结算后再封</li>
-          <li>公共银行：只进不出，任何人都不能提取，只显示累计总额</li>
+          <li>公共银行：危机缴款与消费税款流入；官方贷款放贷（利息回流）与每日随机分红流出</li>
         </ul>
       </section>
     </div>

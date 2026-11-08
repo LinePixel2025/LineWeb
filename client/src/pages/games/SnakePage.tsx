@@ -386,7 +386,7 @@ function SoloBoard({ speedMs, dark }: { speedMs: number; dark: boolean }) {
 
   const [hud, setHud] = useState<SoloHud>(() => snapshotSoloHud(stateRef.current))
   const [paused, setPaused] = useState(false)
-  const { getStat, recordResult, ensureTicket } = useGameStats()
+  const { getStat, recordResult } = useGameStats()
   const best = getStat('snake', 'solo')?.bestScore ?? 0
   const [isRecord, setIsRecord] = useState(false)
   const runReportedRef = useRef(false)
@@ -414,8 +414,6 @@ function SoloBoard({ speedMs, dark }: { speedMs: number; dark: boolean }) {
   }, [])
 
   const restart = useCallback(async () => {
-    // 同屏双人是纯前端玩法，不收门票；这里只管单机局
-    if (!(await ensureTicket('snake'))) return
     stateRef.current = createSoloSnakeState({
       size: stateRef.current.size,
       speedMs,

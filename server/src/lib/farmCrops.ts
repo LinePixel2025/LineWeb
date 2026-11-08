@@ -91,6 +91,26 @@ export const INITIAL_SEEDS: Readonly<Record<string, number>> = {
 }
 export const INITIAL_FERTILIZER = 2
 
+/* ============================================================
+   种子官方回收（把多余种子直接卖给官方）
+   ============================================================ */
+
+/** 种子回收折价比例：回收价按种子原价的 60% 结算 */
+export const SEED_RECYCLE_RATE = 0.6
+
+/**
+ * 种子官方回收总价（单件价 × 数量）。
+ *
+ * 防套利口径（对齐 raidRun.ts 的 raidSellPrice）：单件回收价固定取
+ * `max(1, floor(seedCost × SEED_RECYCLE_RATE))`，恒 ≤ seedCost，
+ * 因此「买入 → 立刻回收」必亏差价，无法用买卖循环刷积分；
+ * count 非法（非有限数/负数）按 0 计，结果恒 ≥ 0。
+ */
+export function seedRecyclePrice(crop: CropDef, count: number): number {
+  const clean = Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : 0
+  return Math.max(1, Math.floor(crop.seedCost * SEED_RECYCLE_RATE)) * clean
+}
+
 /** 生长进度 0–1 */
 export function growthProgress(plantedAt: Date | null, readyAt: Date | null, now: number = Date.now()): number {
   if (!plantedAt || !readyAt) return 0

@@ -1098,6 +1098,61 @@
   white-space: nowrap;
 }
 
+/* 仓库种子行的「回收」入口与数量选择浮层 */
+.gh-farm-seed-recycle {
+  flex: 0 0 auto;
+  padding: 2px 9px;
+  border: 1px solid var(--farm-line);
+  border-radius: 999px;
+  background: var(--farm-paper);
+  color: var(--farm-ink-2);
+  font-family: var(--gh-font);
+  font-size: 10.5px;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.gh-farm-seed-recycle:hover:not(:disabled) {
+  border-color: var(--farm-tomato);
+  background: var(--farm-paper-2);
+  color: var(--farm-tomato);
+}
+
+.gh-farm-seed-recycle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* 展开回收选择时行内换行，让浮层独占一行 */
+.gh-farm-seed-row--recycle-open {
+  flex-wrap: wrap;
+}
+
+.gh-farm-seed-recycle-pop {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  margin: 4px 0 6px;
+  padding: 8px 10px;
+  border: 1px dashed var(--farm-line-strong);
+  border-radius: 10px;
+  background: var(--farm-paper-2);
+}
+
+.gh-farm-seed-recycle-price {
+  color: var(--farm-ink-2);
+  font-size: 10.5px;
+}
+
+.gh-farm-seed-recycle-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
 .gh-farm-inventory-foot {
   display: flex;
   align-items: center;

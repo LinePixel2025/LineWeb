@@ -87,7 +87,7 @@ function SoloBoard({ level }: { level: MsLevel }) {
   const [tick, setTick] = useState(0)
   const [status, setStatus] = useState<MsStatus>('ready')
   const [elapsed, setElapsed] = useState(0)
-  const { getStat, recordResult, ensureTicket } = useGameStats()
+  const { getStat, recordResult } = useGameStats()
   const stat = getStat('minesweeper', level)
   const best = stat?.bestTimeMs ?? 0
   const [isRecord, setIsRecord] = useState(false)
@@ -160,7 +160,6 @@ function SoloBoard({ level }: { level: MsLevel }) {
   )
 
   const restart = useCallback(async () => {
-    if (!(await ensureTicket('minesweeper'))) return
     const fresh = createMsSession(level, randomMsSeed())
     sessionRef.current = fresh
     reportedRef.current = false

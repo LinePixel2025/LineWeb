@@ -6,9 +6,11 @@ import { AppError } from '../middleware/errorHandler.js'
 import { authenticate } from '../middleware/auth.js'
 import prisma from '../lib/prisma.js'
 import { getCrisisHistory, getCrisisState, getPoolTotal, payCrisis } from '../services/crisisService.js'
+import { getCrisisDividendRecord } from '../services/crisisDividendService.js'
 
 /**
- * Lineweb 危机（每人滚动 48 小时上缴约 50% 总资产；公共银行只进不出）。
+ * Lineweb 危机（每人滚动 48 小时上缴约 50% 总资产；公共银行由危机缴款 / 消费税款流入，
+ * 由官方贷款放贷（利息回流）与每日随机分红流出）。
  *
  * 全部端点都在守卫的豁免名单里（/api/crisis/**）：被封锁的用户必须始终能查账单、
  * 缴积分，否则就是把自己锁死在站外。
@@ -39,10 +41,10 @@ crisisRouter.get('/me', asyncHandler(async (req: Request, res: Response) => {
   res.json(await getCrisisState(currentUserId(req), Date.now(), { exempt: req.user?.role === 'admin' }))
 }))
 
-/** 公共银行只读总额（BigInt 一律字符串出口） */
+/** 公共银行只读总额（BigInt 一律字符串出口）+ 最近一次每日随机分红明细（无记录为 null） */
 crisisRouter.get('/pool', asyncHandler(async (_req: Request, res: Response) => {
-  const total = await getPoolTotal()
-  res.json({ total: total.toString() })
+  const [total, dividend] = await Promise.all([getPoolTotal(), getCrisisDividendRecord()])
+  res.json({ total: total.toString(), dividend })
 }))
 
 /** 本人的上缴流水（读统一台账，不另建表） */

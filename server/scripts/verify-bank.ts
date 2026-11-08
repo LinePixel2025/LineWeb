@@ -2,13 +2,15 @@
  * 银行系统纯函数自检（不依赖数据库 / 环境变量 / 网络 / prisma）
  *
  * 覆盖：
- * - 常量与目录不变量：活期利率 / 定期三档（天数与利率递增）/ 基金三只（代码唯一、参数有界）；
+ * - 常量与目录不变量：活期利率 / 40 分钟结算槽 / 定期三档（天数与利率递增）/ 基金三只（代码唯一、参数有界）；
  * - 日期键：diffDateKeys（跨月 / 闰年 / 跨年 / 非法输入 NaN）、shiftDateKey、与 getTodayDateKey 同格式；
  * - 金额钳制：clampBankAmount（范围 / 取整 / 非法输入 NaN）；
- * - 活期利息：向下取整、0 余额、非法水位、365 天封顶（calcDemandSettlement）；
- * - 定期利息：到期全额 vs 提前支取（提前 < 到期）、利率单调、非法输入；
- * - 基金 NAV：同日恒定（两次调用相等）、跨日确定（逐日手算一致）、日收益有界（≤ 3×波动 + 漂移）、
- *   序列窗口（14 天 / 30 天封顶 / 纪元前收紧 / 空序列）、未知代码抛错；
+ * - 活期利息（40 分钟槽位制）：槽号边界、向下取整、0 余额、advance 语义（interest=0 不推进 /
+ *   interest≥1 推进 / 封顶强制推进）、一年槽数封顶（calcDemandSettlement）；
+ * - 定期利息：到期全额 vs 提前支取（提前 < 到期、毫秒连续计息精确值）、利率单调、非法输入；
+ * - 基金 NAV：同日恒定（两次调用相等）、跨日确定（逐日手算一致）、日收益率恒 ≥ 0（只涨不跌）、
+ *   NAV 序列单调不减、日收益有界（≤ 3×波动 + 漂移）、序列窗口（14 天 / 30 天封顶 / 纪元前收紧 /
+ *   空序列）、未知代码抛错；
  * - 申赎费用数学：买入手续费 / 份额折算、卖出 proceeds 向下取整、往返必亏手续费、成本分摊。
  *
  * 用法: cd server && npm run verify:bank
@@ -19,14 +21,16 @@ import {
   BANK_MAX_AMOUNT,
   BANK_MIN_AMOUNT,
   DEMAND_ANNUAL_RATE,
-  DEMAND_DAILY_RATE,
-  DEMAND_INTEREST_MAX_DAYS,
+  DEMAND_INTEREST_MAX_SLOTS,
+  DEMAND_PERIOD_RATE,
   FIXED_TERMS,
   FUND_ANCHOR_MAX_PULL,
   FUND_EPOCH_DATE_KEY,
   FUND_FEE_RATE,
   FUND_MEAN_REVERSION,
   FUND_NAV_FLOOR,
+  SETTLEMENT_PERIOD_MS,
+  YEAR_MS,
   bankFixedTermOf,
   bankFundOf,
   calcDemandInterest,
@@ -34,6 +38,7 @@ import {
   calcEarlyWithdrawInterest,
   calcFixedInterest,
   clampBankAmount,
+  currentSettlementSlot,
   diffDateKeys,
   fundDailyReturn,
   fundNavOn,
@@ -63,9 +68,9 @@ function assertEqual(actual: unknown, expected: unknown, label: string): void {
   passed += 1
 }
 
-/** 活期利息的参照公式（与规则同一定义：floor(余额 × 日利率 × 天数)） */
-function manualDemandInterest(balance: number, days: number): number {
-  return Math.floor(balance * DEMAND_DAILY_RATE * days)
+/** 活期利息的参照公式（与规则同一定义：floor(余额 × 每槽利率 × 槽数)） */
+function manualDemandInterest(balance: number, slots: number): number {
+  return Math.floor(balance * DEMAND_PERIOD_RATE * slots)
 }
 
 /* ============================================================
@@ -73,11 +78,13 @@ function manualDemandInterest(balance: number, days: number): number {
    ============================================================ */
 
 assertEqual(DEMAND_ANNUAL_RATE, 0.02, '活期年化利率为 2%')
-assertEqual(DEMAND_DAILY_RATE, DEMAND_ANNUAL_RATE / 365, '活期日利率 = 年化 / 365')
+assertEqual(SETTLEMENT_PERIOD_MS, 2_400_000, '活期结算周期 40 分钟')
+assertEqual(DEMAND_PERIOD_RATE, DEMAND_ANNUAL_RATE / (365 * 36), '活期每槽利率 = 年化 / (365 × 36)')
+assertEqual(DEMAND_INTEREST_MAX_SLOTS, 13_140, '活期利息水位封顶一年槽数（365 × 36）')
+assertEqual(YEAR_MS, 31_536_000_000, '一年毫秒数 = 365 天')
 assertEqual(FUND_FEE_RATE, 0.0025, '基金单边手续费率 0.25%')
 assertEqual(BANK_MIN_AMOUNT, 100, '单笔最少 100 积分')
 assertEqual(BANK_MAX_AMOUNT, 100_000, '单笔最多 100000 积分')
-assertEqual(DEMAND_INTEREST_MAX_DAYS, 365, '活期利息水位封顶 365 天')
 assertEqual(FUND_EPOCH_DATE_KEY, '2026-01-01', '基金净值纪元 2026-01-01')
 assert(FUND_NAV_FLOOR > 0, 'NAV 下限为正')
 
@@ -167,66 +174,118 @@ assert(Number.isNaN(clampBankAmount(true)), '布尔为 NaN')
 assert(Number.isNaN(clampBankAmount({})), '对象为 NaN')
 
 /* ============================================================
-   4. 活期利息
+   4. 活期利息（40 分钟槽位制）
    ============================================================ */
 
-assertEqual(calcDemandInterest(0, '2026-11-01', '2026-11-10'), 0, '0 余额利息为 0')
-assertEqual(calcDemandInterest(-100, '2026-11-01', '2026-11-10'), 0, '负余额利息为 0')
-assertEqual(calcDemandInterest(10_000, '2026-11-01', '2026-11-01'), 0, '同日无利息')
-assertEqual(calcDemandInterest(10_000, '2026-11-02', '2026-11-01'), 0, '反向区间无利息')
-assertEqual(calcDemandInterest(10_000, '2026-11-01', 'x'), 0, '非法 key 利息为 0')
-// 10000 × 0.02/365 = 0.5479…，单日向下取整为 0
-assertEqual(calcDemandInterest(10_000, '2026-11-01', '2026-11-02'), 0, '单日利息不足 1 积分为 0')
-assertEqual(calcDemandInterest(10_000, '2026-11-01', '2026-11-03'), 1, '两日利息 1 积分（floor 1.09）')
-assertEqual(calcDemandInterest(10_000, '2026-11-01', '2026-12-01'), manualDemandInterest(10_000, 30), '30 天利息符合公式')
-assertEqual(calcDemandInterest(100_000, '2026-01-01', '2027-01-01'), 2_000, '满 365 天年利息 = 2% 本金')
+// 槽号边界：epoch 起每 40 分钟一槽
+assertEqual(currentSettlementSlot(0), 0, 'epoch 0 = 槽 0')
+assertEqual(currentSettlementSlot(2_399_999), 0, '不足 40 分钟 = 槽 0')
+assertEqual(currentSettlementSlot(2_400_000), 1, '恰好 40 分钟 = 槽 1')
+assertEqual(currentSettlementSlot(SETTLEMENT_PERIOD_MS * 36), 36, '一天 36 槽')
+assertEqual(currentSettlementSlot(SETTLEMENT_PERIOD_MS * 365 * 36), 13_140, '一年 13140 槽')
+assertEqual(currentSettlementSlot(SETTLEMENT_PERIOD_MS * 365 * 36 - 1), 13_139, '一年差 1 毫秒落上一槽')
+assert(currentSettlementSlot(SETTLEMENT_PERIOD_MS * 101 + 1) >= currentSettlementSlot(SETTLEMENT_PERIOD_MS * 101), '槽号随时间单调不减')
+
+assertEqual(calcDemandInterest(0, 10), 0, '0 余额利息为 0')
+assertEqual(calcDemandInterest(-100, 10), 0, '负余额利息为 0')
+assertEqual(calcDemandInterest(10_000, 0), 0, '0 槽无利息')
+assertEqual(calcDemandInterest(10_000, -5), 0, '负槽数利息为 0')
+assertEqual(calcDemandInterest(10_000, Number.NaN), 0, 'NaN 槽数利息为 0')
+// 10000 × 0.02/13140 = 0.0152…，单槽向下取整为 0
+assertEqual(calcDemandInterest(10_000, 1), 0, '单槽利息不足 1 积分为 0')
+// 余额 10 万约每 7 槽入账 1 分（floor 1.065）
+assertEqual(calcDemandInterest(100_000, 7), 1, '10 万余额 7 槽入账 1 分')
+assertEqual(calcDemandInterest(10_000, 180), 2, '5 天（180 槽）利息 2 分（floor 2.74）')
+assertEqual(calcDemandInterest(100_000, DEMAND_INTEREST_MAX_SLOTS), 2_000, '满一年槽数利息 = 2% 本金')
 for (const balance of [100, 1234, 50_000, 100_000]) {
-  for (const days of [1, 2, 7, 30, 90, 200, 365]) {
-    const from = '2026-01-01'
-    const to = shiftDateKey(from, days)
+  for (const slots of [1, 2, 7, 36, 1080, 6570, 13_140]) {
     assertEqual(
-      calcDemandInterest(balance, from, to),
-      manualDemandInterest(balance, days),
-      `活期利息符合公式（${balance} × ${days} 天）`,
+      calcDemandInterest(balance, slots),
+      manualDemandInterest(balance, slots),
+      `活期利息符合公式（${balance} × ${slots} 槽）`,
     )
-    assert(Number.isInteger(calcDemandInterest(balance, from, to)), `活期利息为整数（${balance} × ${days} 天）`)
+    assert(Number.isInteger(calcDemandInterest(balance, slots)), `活期利息为整数（${balance} × ${slots} 槽）`)
   }
+}
+// 利息随槽数单调不减
+let prevSlotInterest = 0
+for (let slots = 1; slots <= DEMAND_INTEREST_MAX_SLOTS; slots += 1) {
+  const interest = manualDemandInterest(80_000, slots)
+  assert(interest >= prevSlotInterest, `活期利息随槽数单调不减（${slots} 槽）`)
+  prevSlotInterest = interest
 }
 
 /* ============================================================
-   5. 活期惰性结算（365 天封顶）
+   5. 活期惰性结算（槽位水位 / 滚存 / 封顶）
    ============================================================ */
 
 const BALANCE = 80_000
-assertEqual(calcDemandSettlement(BALANCE, TODAY, TODAY).days, 0, '水位 = 今天：无需结算')
-assertEqual(calcDemandSettlement(BALANCE, TODAY, TODAY).interest, 0, '水位 = 今天：利息 0')
-assertEqual(calcDemandSettlement(BALANCE, '', TODAY).interest, 0, '空水位：不补息（service 重置水位）')
-assertEqual(calcDemandSettlement(BALANCE, 'bad-key', TODAY).interest, 0, '坏水位：不补息')
+// 非法水位 / 无进展：不结算、不推进
+assertEqual(
+  calcDemandSettlement(BALANCE, 5_000, 5_000),
+  { slots: 0, interest: 0, advance: false },
+  '当前槽 = 水位：无需结算',
+)
+assertEqual(
+  calcDemandSettlement(BALANCE, 5_001, 5_000),
+  { slots: 0, interest: 0, advance: false },
+  '当前槽落后水位：不结算不推进',
+)
+assertEqual(
+  calcDemandSettlement(BALANCE, 0, 5_000),
+  { slots: 0, interest: 0, advance: false },
+  '未初始化哨兵 0：不结算（service 层先行只推进不补息）',
+)
+assertEqual(
+  calcDemandSettlement(BALANCE, Number.NaN, 5_000),
+  { slots: 0, interest: 0, advance: false },
+  'NaN 水位：不结算',
+)
+assertEqual(
+  calcDemandSettlement(BALANCE, 5_000, Number.NaN),
+  { slots: 0, interest: 0, advance: false },
+  'NaN 当前槽：不结算',
+)
 
-const settled1 = calcDemandSettlement(BALANCE, shiftDateKey(TODAY, -1), TODAY)
-assertEqual(settled1.days, 1, '昨日水位：1 天')
-assertEqual(settled1.interest, calcDemandInterest(BALANCE, shiftDateKey(TODAY, -1), TODAY), '昨日水位利息符合公式')
-assertEqual(settled1.fromKey, shiftDateKey(TODAY, -1), '未封顶时 fromKey = 原水位')
+// 正常结算：利息 ≥ 1 → 入账并推进
+const settled36 = calcDemandSettlement(BALANCE, 5_000, 5_036)
+assertEqual(settled36.slots, 36, '一天（36 槽）槽数')
+assertEqual(settled36.interest, manualDemandInterest(BALANCE, 36), '一天利息符合公式（floor 4.38 = 4）')
+assertEqual(settled36.advance, true, '利息 ≥ 1 推进水位')
 
-const settled365 = calcDemandSettlement(BALANCE, shiftDateKey(TODAY, -365), TODAY)
-assertEqual(settled365.days, 365, '恰好 365 天不截断')
-assertEqual(settled365.interest, manualDemandInterest(BALANCE, 365), '365 天利息符合公式')
+// 滚存：利息 = 0 → 不推进，小数利息留给下槽一并结算
+const settled1 = calcDemandSettlement(BALANCE, 5_000, 5_001)
+assertEqual(settled1.slots, 1, '单槽槽数为 1')
+assertEqual(settled1.interest, 0, '8 万余额单槽利息 floor 0.12 = 0')
+assertEqual(settled1.advance, false, '利息 = 0 不推进（滚存）')
+const settled7 = calcDemandSettlement(100_000, 5_000, 5_007)
+assertEqual(settled7.interest, 1, '10 万余额 7 槽累计利息 1 分')
+assertEqual(settled7.advance, true, '累计利息 ≥ 1 推进水位')
+assertEqual(calcDemandSettlement(0, 5_000, 5_036).interest, 0, '0 余额结算利息为 0')
+assertEqual(calcDemandSettlement(0, 5_000, 5_036).slots, 36, '0 余额仍计槽数')
+assertEqual(calcDemandSettlement(0, 5_000, 5_036).advance, false, '0 余额利息 = 0 不推进')
 
-const settled366 = calcDemandSettlement(BALANCE, shiftDateKey(TODAY, -366), TODAY)
-assertEqual(settled366.days, 365, '366 天封顶为 365')
-assertEqual(settled366.interest, manualDemandInterest(BALANCE, 365), '封顶利息 = 365 天利息')
-assertEqual(settled366.fromKey, shiftDateKey(TODAY, -365), '封顶时 fromKey 前移')
+// 封顶：槽差超过一年槽数 → 按封顶计息并强制推进（防止水位永远落后）
+const CURRENT_SLOT = 2_000_000
+const settledCap = calcDemandSettlement(BALANCE, CURRENT_SLOT - (DEMAND_INTEREST_MAX_SLOTS + 1), CURRENT_SLOT)
+assertEqual(settledCap.slots, DEMAND_INTEREST_MAX_SLOTS, '槽差超一年封顶为 13140')
+assertEqual(settledCap.interest, manualDemandInterest(BALANCE, DEMAND_INTEREST_MAX_SLOTS), '封顶利息 = 一年利息（1600）')
+assertEqual(settledCap.advance, true, '封顶强制推进水位')
+const tinyCap = calcDemandSettlement(10, CURRENT_SLOT - (DEMAND_INTEREST_MAX_SLOTS + 5), CURRENT_SLOT)
+assertEqual(tinyCap.interest, 0, '10 积分一年利息不足 1 分')
+assertEqual(tinyCap.advance, true, '封顶路径即使利息为 0 也强制推进')
 
-const settled400 = calcDemandSettlement(BALANCE, shiftDateKey(TODAY, -4000), TODAY)
-assertEqual(settled400.days, 365, '超长欠息封顶为 365')
-assertEqual(settled400.interest, settled366.interest, '封顶后利息与 366 天一致')
-assert(settled400.interest < manualDemandInterest(BALANCE, 4000), '封顶避免了天量补息')
+// 恰好一年槽数不截断
+const settledMax = calcDemandSettlement(BALANCE, CURRENT_SLOT - DEMAND_INTEREST_MAX_SLOTS, CURRENT_SLOT)
+assertEqual(settledMax.slots, DEMAND_INTEREST_MAX_SLOTS, '恰好一年槽数不截断')
+assertEqual(settledMax.interest, manualDemandInterest(BALANCE, DEMAND_INTEREST_MAX_SLOTS), '一年利息符合公式')
+assertEqual(settledMax.advance, true, '一年利息 ≥ 1 推进水位')
 
-const settled100 = calcDemandSettlement(BALANCE, shiftDateKey(TODAY, -100), TODAY)
-assertEqual(settled100.days, 100, '未超封顶按实际天数')
-assertEqual(settled100.interest, manualDemandInterest(BALANCE, 100), '未封顶利息符合公式')
-assertEqual(calcDemandSettlement(0, shiftDateKey(TODAY, -10), TODAY).interest, 0, '0 余额结算利息为 0')
-assertEqual(calcDemandSettlement(0, shiftDateKey(TODAY, -10), TODAY).days, 10, '0 余额仍推进天数')
+// 超长欠息（水位落后十年）同样封顶
+const settledDecade = calcDemandSettlement(BALANCE, CURRENT_SLOT - 13_140 * 10, CURRENT_SLOT)
+assertEqual(settledDecade.slots, DEMAND_INTEREST_MAX_SLOTS, '超长欠息封顶为 13140')
+assertEqual(settledDecade.interest, settledCap.interest, '封顶后利息与超一年一致')
+assert(settledDecade.interest < BALANCE * DEMAND_ANNUAL_RATE * 10, '封顶避免了天量补息')
 
 /* ============================================================
    6. 定期利息
@@ -250,28 +309,38 @@ for (let days = 1; days <= 90; days += 1) {
   )
 }
 
+// 提前支取：按实际经过毫秒连续计息 floor(本金 × 活期年化 × elapsedMs / 一年毫秒)
+const DAY_MS = 86_400_000
+const HOUR_MS = 3_600_000
 assertEqual(calcEarlyWithdrawInterest(10_000, 0), 0, '当天支取无利息')
-assertEqual(calcEarlyWithdrawInterest(10_000, -3), 0, '负天数按 0 处理')
-assertEqual(calcEarlyWithdrawInterest(10_000, 1), 0, '10000 元活期单日利息 floor 0.54 = 0')
-assertEqual(calcEarlyWithdrawInterest(100_000, 10), manualDemandInterest(100_000, 10), '提前支取 = 活期日利率 × 天数')
+assertEqual(calcEarlyWithdrawInterest(10_000, -HOUR_MS), 0, '负毫秒按 0 处理')
+assertEqual(calcEarlyWithdrawInterest(10_000, Number.NaN), 0, 'NaN 毫秒利息为 0')
+assertEqual(calcEarlyWithdrawInterest(100_000, DAY_MS), 5, '10 万存 1 天利息 5 分（floor 5.48）')
+assertEqual(calcEarlyWithdrawInterest(100_000, 12 * HOUR_MS), 2, '10 万存半天利息 2 分（floor 2.74）')
+assertEqual(calcEarlyWithdrawInterest(100_000, 30 * DAY_MS), 164, '10 万存 30 天利息 164（floor 164.38）')
+assertEqual(calcEarlyWithdrawInterest(100_000, YEAR_MS), 2_000, '存满整年按活期 = 2% 本金')
+assertEqual(calcEarlyWithdrawInterest(100_000, 30 * HOUR_MS), 6, '10 万存 30 小时利息 6 分（floor 6.85）')
+// 连续计息消除按日截断损失：6.9 天按毫秒算 18 分，按日截断只能算 6 天（16 分）
+assertEqual(calcEarlyWithdrawInterest(50_000, 596_160_000), 18, '6.9 天按毫秒连续计息 18 分')
+// 同一时间跨度下毫秒计息与槽位计息同口径（5 天 = 180 槽）
 assertEqual(
-  calcEarlyWithdrawInterest(10_000, 5),
-  calcDemandInterest(10_000, '2026-01-01', '2026-01-06'),
-  '提前支取与活期同口径',
+  calcEarlyWithdrawInterest(10_000, 5 * DAY_MS),
+  calcDemandInterest(10_000, 5 * 36),
+  '毫秒连续计息与槽位计息同跨度同值（5 天）',
 )
-// 每一档：提前支取利息（任意已过天数）都低于到期全额利息
+// 每一档：提前支取利息（任意已过时长，6 小时步进）都低于到期全额利息
 for (const term of FIXED_TERMS) {
-  for (let elapsed = 0; elapsed < term.days; elapsed += 1) {
-    const early = calcEarlyWithdrawInterest(50_000, elapsed)
+  for (let elapsedMs = 0; elapsedMs < term.days * DAY_MS; elapsedMs += 6 * HOUR_MS) {
+    const early = calcEarlyWithdrawInterest(50_000, elapsedMs)
     const full = calcFixedInterest(50_000, term.annualRate, term.days)
-    assert(early < full, `提前支取少于到期（${term.key}，第 ${elapsed} 天）`)
-    assert(Number.isInteger(early), `提前支取利息为整数（${term.key}，第 ${elapsed} 天）`)
+    assert(early < full, `提前支取少于到期（${term.key}，第 ${elapsedMs / HOUR_MS} 小时）`)
+    assert(Number.isInteger(early), `提前支取利息为整数（${term.key}，第 ${elapsedMs / HOUR_MS} 小时）`)
   }
 }
-// 定期到期利息必须优于活期同期限
+// 定期到期利息必须优于活期同期限（期限天数 × 每天 36 槽）
 for (const term of FIXED_TERMS) {
   const fixed = calcFixedInterest(10_000, term.annualRate, term.days)
-  const demand = calcDemandInterest(10_000, TODAY, shiftDateKey(TODAY, term.days))
+  const demand = calcDemandInterest(10_000, term.days * 36)
   assert(fixed > demand, `定期优于活期（${term.key}: ${fixed} > ${demand}）`)
 }
 
@@ -284,7 +353,8 @@ for (const fund of BANK_FUNDS) {
   assertEqual(fundNavOn(fund.code, '2025-12-31'), 1, `纪元前 NAV = 1（${fund.code}）`)
   // 同日恒定：两次调用完全一致
   assertEqual(fundNavOn(fund.code, TODAY), fundNavOn(fund.code, TODAY), `同日两次调用一致（${fund.code}）`)
-  // 手动逐日复利核对前两天（与实现同口径：日收益带均值回归拉力，shock 由同种子重现）
+  // 手动逐日复利核对前两天（与实现同口径：日收益带均值回归拉力，shock 由同种子重现；
+  // 负收益日的 0 下限在复利处套 Math.max，replicate 返回未截断的原始收益）
   const day1 = FUND_EPOCH_DATE_KEY
   const day2 = shiftDateKey(day1, 1)
   const day3 = shiftDateKey(day1, 2)
@@ -297,13 +367,36 @@ for (const fund of BANK_FUNDS) {
     const pull = Math.max(-FUND_ANCHOR_MAX_PULL, Math.min(FUND_ANCHOR_MAX_PULL, FUND_MEAN_REVERSION * deviation))
     return fund.annualDrift / 365 + Math.max(-bound, Math.min(bound, shock)) + pull
   }
-  const m2 = Math.max(FUND_NAV_FLOOR, 1 * (1 + replicate(fund.code, day2, 1, 1)))
+  const m2 = Math.max(FUND_NAV_FLOOR, 1 * (1 + Math.max(0, replicate(fund.code, day2, 1, 1))))
   assertEqual(fundNavOn(fund.code, day2), m2, `第 1 日 NAV 与手算一致（${fund.code}）`)
-  const m3 = Math.max(FUND_NAV_FLOOR, m2 * (1 + replicate(fund.code, day3, 2, m2)))
+  const m3 = Math.max(FUND_NAV_FLOOR, m2 * (1 + Math.max(0, replicate(fund.code, day3, 2, m2))))
   assertEqual(fundNavOn(fund.code, day3), m3, `第 2 日 NAV 与手算一致（${fund.code}）`)
-  // 跨日不同（连续两天的日收益率不可能完全相等）
-  assert(fundDailyReturn(fund.code, day2) !== fundDailyReturn(fund.code, day3), `相邻两日收益不同（${fund.code}）`)
-  assert(fundNavOn(fund.code, day3) !== fundNavOn(fund.code, day2), `相邻两日 NAV 不同（${fund.code}）`)
+  // NAV 单调不减（负收益日按 0 横盘，净值只涨不跌）
+  assert(fundNavOn(fund.code, day3) >= fundNavOn(fund.code, day2), `相邻两日 NAV 单调不减（${fund.code}）`)
+  // 跨日确定但并非恒定（30 天窗口内日收益率不可能全部相等）
+  const windowReturns: number[] = []
+  for (let index = 1; index <= 30; index += 1) {
+    windowReturns.push(fundDailyReturn(fund.code, shiftDateKey(day1, index)))
+  }
+  assert(new Set(windowReturns).size > 1, `跨日收益率并非恒定（${fund.code}）`)
+}
+
+// 日收益率恒 ≥ 0（净值永不下跌）：3 只基金 × 纪元前后 430 天全遍历
+for (const fund of BANK_FUNDS) {
+  for (let index = -30; index <= 400; index += 1) {
+    const dayKey = shiftDateKey(FUND_EPOCH_DATE_KEY, index)
+    assert(fundDailyReturn(fund.code, dayKey) >= 0, `日收益率恒 ≥ 0（${fund.code} 第 ${index} 天）`)
+  }
+}
+
+// NAV 单调不减：连续 400 天逐日 walk（从起始净值 1 出发只会横盘或上涨）
+for (const fund of BANK_FUNDS) {
+  let prevNav = fundNavOn(fund.code, FUND_EPOCH_DATE_KEY)
+  for (let index = 1; index <= 400; index += 1) {
+    const nav = fundNavOn(fund.code, shiftDateKey(FUND_EPOCH_DATE_KEY, index))
+    assert(nav >= prevNav, `NAV 序列单调不减（${fund.code} 第 ${index} 天）`)
+    prevNav = nav
+  }
 }
 
 // 日收益率有界：|收益 − 漂移项| ≤ 3 × 日波动（逐日，覆盖 90 天 × 3 只）
@@ -321,12 +414,13 @@ for (const fund of BANK_FUNDS) {
   }
 }
 
-// NAV 为正、且长期高于下限（漂移为正，400 天不应触及地板）
+// NAV 为正、长期不低于起始净值（只涨不跌 + 漂移为正，400 天不应触及地板）
 for (const fund of BANK_FUNDS) {
   const far = shiftDateKey(FUND_EPOCH_DATE_KEY, 400)
   const nav = fundNavOn(fund.code, far)
   assert(Number.isFinite(nav), `NAV 有限（${fund.code}）`)
   assert(nav >= FUND_NAV_FLOOR, `NAV 不低于地板（${fund.code}）`)
+  assert(nav >= 1, `400 天 NAV 不低于起始净值（${fund.code}）`)
   assert(nav > 0, `NAV 为正（${fund.code}）`)
 }
 
@@ -339,6 +433,7 @@ for (const fund of BANK_FUNDS) {
   for (let index = 1; index < series.length; index += 1) {
     assertEqual(diffDateKeys(series[index - 1].date, series[index].date), 1, `序列日期连续（${fund.code} #${index}）`)
     assert(series[index].nav > 0, `序列 NAV 为正（${fund.code} #${index}）`)
+    assert(series[index].nav >= series[index - 1].nav, `序列 NAV 单调不减（${fund.code} #${index}）`)
   }
   // 序列每天与 fundNavOn 一致（同日恒定）
   for (const point of series) {

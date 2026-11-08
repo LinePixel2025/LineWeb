@@ -13,10 +13,14 @@ import type {
   BankDemandResult,
   FundBuyResult,
   FundSellResult,
+  OfficialLoan,
+  OfficialLoanBorrowResult,
+  OfficialLoanInfo,
+  OfficialLoanRepayResult,
 } from '../types/bank'
 import type { CompanyLoan, CompanyLoanOffer } from '../types/company'
 
-/** 总览轮询间隔（利息按日结算，行情逐日变化，15 秒足够） */
+/** 总览轮询间隔（利息按 40 分钟槽惰性结算，行情逐日变化，15 秒足够） */
 const OVERVIEW_POLL_MS = 15_000
 /** 页面内轻提示停留时长 */
 const TOAST_MS = 5_000
@@ -34,6 +38,8 @@ const REASON_LABELS: Record<string, string> = {
   company_loan_repay: '公司还款',
   company_pool_invest: '资金池投入',
   company_pool_redeem: '资金池赎回',
+  official_loan_borrow: '官方借款',
+  official_loan_repay: '官方还款',
 }
 
 function formatPoints(value: number): string {
@@ -98,6 +104,12 @@ function loanDuePreview(principal: number, ratePct: number): number {
 
 function reasonLabel(reason: string): string {
   return REASON_LABELS[reason] ?? reason
+}
+
+/** 可贷余额等字符串数字展示（异常数据原样回显，不显示 NaN） */
+function formatPoolAmount(raw: string): string {
+  const value = Number(raw)
+  return Number.isFinite(value) ? formatPoints(value) : raw
 }
 
 /** 近 14 日净值迷你走势（纯 SVG polyline，不引第三方库） */
@@ -336,6 +348,10 @@ export default function BankPage() {
   const [expandedLoan, setExpandedLoan] = useState<number | null>(null)
   const [repayInput, setRepayInput] = useState('')
 
+  /** 官方贷款区：利率 / 池子余额 + 我的贷款；null = 加载失败（接口暂不可用），整块隐藏 */
+  const [officialLoanInfo, setOfficialLoanInfo] = useState<OfficialLoanInfo | null>(null)
+  const [officialBorrowInput, setOfficialBorrowInput] = useState('')
+
   const toastTimerRef = useRef(0)
   const requestRef = useRef(0)
 
@@ -403,6 +419,20 @@ export default function BankPage() {
     void loadCompanyLoans()
   }, [loadCompanyLoans])
 
+  /** 官方贷款区数据：利率 / 公共银行可贷余额 + 我的贷款；请求失败时整块隐藏 */
+  const loadOfficialLoans = useCallback(async () => {
+    try {
+      const data = await api.get<OfficialLoanInfo>('/bank/loans/official')
+      setOfficialLoanInfo(data)
+    } catch {
+      setOfficialLoanInfo(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadOfficialLoans()
+  }, [loadOfficialLoans])
+
   const toggleOffer = (companyId: number) => {
     setExpandedOffer((prev) => (prev === companyId ? null : companyId))
     setBorrowInput('')
@@ -469,6 +499,54 @@ export default function BankPage() {
       setRepayInput('')
       await refreshAfterAction()
       await loadCompanyLoans()
+    } catch (err) {
+      pushNotice('danger', err instanceof Error ? err.message : '还款失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** 官方借款：金额由服务端按 min/max / 池子余额权威校验（错误码 400/409 文案直接透传） */
+  const submitOfficialBorrow = async () => {
+    if (busy || !officialLoanInfo) return
+    const amount = parseLoanAmount(officialBorrowInput)
+    if (amount === null || amount < officialLoanInfo.minAmount || amount > officialLoanInfo.maxAmount) {
+      pushNotice('danger', `借款金额需为 ${officialLoanInfo.minAmount}–${officialLoanInfo.maxAmount} 之间的整数积分`)
+      return
+    }
+    setBusy(true)
+    try {
+      const result = await api.post<OfficialLoanBorrowResult>('/bank/loans/official', { amount })
+      pushNotice(
+        'success',
+        `已借入官方贷款 ${formatPoints(result.loan.principal)} 积分（${result.loan.dueDays} 天内应还 ${formatPoints(result.loan.dueAmount)}）`,
+      )
+      setOfficialBorrowInput('')
+      await refreshAfterAction()
+      await loadOfficialLoans()
+    } catch (err) {
+      pushNotice('danger', err instanceof Error ? err.message : '借款失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** 官方贷款一键还清：服务端只支持全额结清 */
+  const repayOfficialLoan = async (loan: OfficialLoan) => {
+    if (busy) return
+    if (loan.remaining > balance) {
+      pushNotice('danger', '积分不足，无法还清这笔官方贷款')
+      return
+    }
+    setBusy(true)
+    try {
+      const result = await api.post<OfficialLoanRepayResult>(`/bank/loans/official/${loan.id}/repay`)
+      pushNotice(
+        'success',
+        `已还清官方贷款（本次还款 ${formatPoints(result.loan.repaid)} 积分，应还 ${formatPoints(result.loan.dueAmount)}）`,
+      )
+      await refreshAfterAction()
+      await loadOfficialLoans()
     } catch (err) {
       pushNotice('danger', err instanceof Error ? err.message : '还款失败')
     } finally {
@@ -619,6 +697,13 @@ export default function BankPage() {
 
   const activeDeposits = overview?.deposits.filter((row) => row.status === 'active') ?? []
 
+  /** 官方借款预览：金额在 min/max 内时按「本金 + ceil(本金 × 利率/100)」预估到期应还（实际以服务端为准） */
+  const officialBorrowParsed = officialLoanInfo ? parseLoanAmount(officialBorrowInput) : null
+  const officialBorrowDue = officialLoanInfo && officialBorrowParsed !== null
+    && officialBorrowParsed >= officialLoanInfo.minAmount && officialBorrowParsed <= officialLoanInfo.maxAmount
+    ? loanDuePreview(officialBorrowParsed, officialLoanInfo.ratePct)
+    : null
+
   return (
     <div className="gh-page-container gh-bank-page">
       <header className="gh-bank-header">
@@ -626,8 +711,8 @@ export default function BankPage() {
           <p className="gh-bank-eyebrow"><Link to="/">← 返回首页</Link></p>
           <h1 className="gh-page-title">🏦 LineWeb 银行</h1>
           <p className="gh-text-secondary">
-            积分存入银行获取利息：活期随存随取（年化 2%），定期锁定更高利率（提前支取按活期计息）；
-            基金净值每日波动，投资有风险，入市需谨慎。
+            积分存入银行获取利息：活期随存随取（年化 2% · 每 40 分钟结算一期），定期锁定更高利率（提前支取按活期计息）；
+            基金净值只涨不跌，长期随年化漂移上涨。
           </p>
         </div>
         <Link to="/points" className="gh-header-points" title="积分中心">
@@ -650,7 +735,7 @@ export default function BankPage() {
             <section className="gh-box gh-bank-card" aria-label="活期存款">
               <div className="gh-bank-card-head">
                 <h2>活期存款</h2>
-                <span className="gh-text-tertiary">年化 {(overview.demand.annualRate * 100).toFixed(1)}% · 按日计息</span>
+                <span className="gh-text-tertiary">年化 {(overview.demand.annualRate * 100).toFixed(1)}% · 每 40 分钟结算一期</span>
               </div>
               <p className="gh-bank-demand-balance">
                 <span>活期余额</span>
@@ -711,7 +796,7 @@ export default function BankPage() {
                   {busy ? '处理中…' : demandMode === 'deposit' ? '存入' : '取出'}
                 </button>
               </div>
-              {!demandValid && <p className="gh-text-tertiary gh-bank-hint">单笔 100–100000 积分，利息按自然日结算、向下取整</p>}
+              {!demandValid && <p className="gh-text-tertiary gh-bank-hint">单笔 100–100000 积分，利息每 40 分钟结算一期、向下取整，不足 1 分自动滚存</p>}
             </section>
 
             {/* 定期 */}
@@ -795,7 +880,7 @@ export default function BankPage() {
           <section className="gh-box gh-bank-card" aria-label="基金投资">
             <div className="gh-bank-card-head">
               <h2>基金投资</h2>
-              <span className="gh-text-tertiary">净值每日波动 · 买卖各收 0.25% 手续费</span>
+              <span className="gh-text-tertiary">净值只涨不跌 · 买卖各收 0.25% 手续费</span>
             </div>
             <div className="gh-bank-funds">
               {overview.funds.map((fund) => {
@@ -849,6 +934,103 @@ export default function BankPage() {
               })}
             </div>
           </section>
+
+          {/* 官方贷款（公共银行 CrisisPool 放贷，随银行功能常驻；接口异常时整块隐藏） */}
+          {officialLoanInfo && (
+            <section className="gh-box gh-bank-card" aria-label="官方贷款">
+              <div className="gh-bank-card-head">
+                <h2>官方贷款</h2>
+                <span className="gh-text-tertiary">公共银行放贷 · 到期一次还清 · 未结清（含逾期）期间不能再借</span>
+              </div>
+              <div className="gh-bank-loan-facts">
+                <div className="gh-bank-loan-fact">
+                  <span>当前年利率</span>
+                  <strong className="gh-bank-up">{officialLoanInfo.ratePct}%</strong>
+                </div>
+                <div className="gh-bank-loan-fact">
+                  <span>利率来源</span>
+                  <strong>民间最高档 {officialLoanInfo.baseRatePct}% + {officialLoanInfo.premiumPct}%</strong>
+                </div>
+                <div className="gh-bank-loan-fact">
+                  <span>期限</span>
+                  <strong>{officialLoanInfo.dueDays} 天</strong>
+                </div>
+                <div className="gh-bank-loan-fact">
+                  <span>公共银行可贷余额</span>
+                  <strong>{formatPoolAmount(officialLoanInfo.poolAvailable)}</strong>
+                </div>
+                <div className="gh-bank-loan-fact">
+                  <span>单笔限额</span>
+                  <strong>{formatPoints(officialLoanInfo.minAmount)} – {formatPoints(officialLoanInfo.maxAmount)}</strong>
+                </div>
+              </div>
+              <div className="gh-bank-action-row">
+                <input
+                  className="gh-input gh-bank-amount"
+                  type="number"
+                  min={officialLoanInfo.minAmount}
+                  max={officialLoanInfo.maxAmount}
+                  step={1}
+                  value={officialBorrowInput}
+                  onChange={(event) => setOfficialBorrowInput(event.target.value)}
+                  aria-label="向官方借款（积分）"
+                  placeholder={`单笔 ${formatPoints(officialLoanInfo.minAmount)} – ${formatPoints(officialLoanInfo.maxAmount)}`}
+                />
+                <button
+                  type="button"
+                  className="gh-btn gh-btn--primary gh-btn--md"
+                  disabled={busy || officialBorrowParsed === null}
+                  onClick={() => void submitOfficialBorrow()}
+                >
+                  {busy ? '处理中…' : '借款'}
+                </button>
+              </div>
+              {officialBorrowDue !== null && (
+                <p className="gh-text-tertiary gh-bank-loan-preview">
+                  到期应还 <strong>{formatPoints(officialBorrowDue)}</strong> 积分（本金 {formatPoints(officialBorrowParsed ?? 0)} + 利息 {formatPoints(officialBorrowDue - (officialBorrowParsed ?? 0))}，放款时一次算死）
+                </p>
+              )}
+
+              <div className="gh-bank-loan-mine">
+                <h3>我的官方贷款</h3>
+                {officialLoanInfo.loans.length === 0 ? (
+                  <p className="gh-bank-empty">还没有官方贷款</p>
+                ) : (
+                  <ul className="gh-bank-ledger">
+                    {officialLoanInfo.loans.map((loan) => (
+                      <li key={loan.id} className="gh-bank-ledger-row">
+                        <span className="gh-bank-ledger-main">
+                          <strong>
+                            官方贷款 · 本金 {formatPoints(loan.principal)} / 应还 {formatPoints(loan.dueAmount)}
+                          </strong>
+                          <small className="gh-text-tertiary">
+                            年利率 {loan.ratePct}% · {loan.dueDays} 天 · 到期 {formatDateTime(loan.dueAt)} · 剩余 {formatPoints(loan.remaining)}
+                            {loan.settledAt ? ` · 结清于 ${formatDateTime(loan.settledAt)}` : ''}
+                          </small>
+                        </span>
+                        <span className="gh-bank-ledger-side">
+                          <span className={`gh-bank-loan-badge gh-bank-loan-badge--${loan.status}`}>
+                            {loan.status === 'repaid' ? '已还清' : loan.status === 'overdue' ? '已逾期' : '还款中'}
+                          </span>
+                          {loan.status !== 'repaid' && (
+                            <button
+                              type="button"
+                              className="gh-btn gh-btn--secondary gh-btn--sm"
+                              disabled={busy}
+                              title={`一次还清 ${formatPoints(loan.remaining)} 积分`}
+                              onClick={() => void repayOfficialLoan(loan)}
+                            >
+                              一键还清
+                            </button>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </section>
+          )}
 
           {/* 公司贷款（company 功能不可用时整块隐藏） */}
           {loanOffers !== null && (
