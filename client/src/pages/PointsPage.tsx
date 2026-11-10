@@ -38,6 +38,7 @@ const RARITY_LABELS: Record<string, string> = {
   epic: '史诗',
   legendary: '传说',
   mythic: '神话',
+  transcendent: '至臻',
 }
 
 const REASON_LABELS: Record<string, string> = {
@@ -486,11 +487,13 @@ function ShopTab({
                 <h3 className={`gh-points-shop-card-name ${
                   item.type !== 'title'
                     ? ''
-                    : item.rarity === 'mythic'
-                      ? 'gh-points-shop-name--mythic'
-                      : item.rarity === 'legendary'
-                        ? 'gh-points-shop-name--legendary'
-                        : ''
+                    : item.rarity === 'transcendent'
+                      ? 'gh-points-shop-name--transcendent'
+                      : item.rarity === 'mythic'
+                        ? 'gh-points-shop-name--mythic'
+                        : item.rarity === 'legendary'
+                          ? 'gh-points-shop-name--legendary'
+                          : ''
                 }`}>
                   {item.type === 'title' ? (
                     <span style={{ color: typeof item.payload.color === 'string' ? item.payload.color : undefined }}>

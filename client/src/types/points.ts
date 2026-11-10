@@ -1,8 +1,9 @@
 /**
- * 传说称号动态特效白名单（与服务端 TITLE_EFFECT_STYLES 一致，顺序一致，共 15 种）。
+ * 传说称号动态特效白名单（与服务端 TITLE_EFFECT_STYLES 一致，顺序一致，共 17 种）。
  * 炸裂系列：nova 超新星 / prism 棱镜虹光 / void 虚空黑洞 / singularity 奇点坍缩。
  * 幻彩系列：meteor 流星拖尾 / blossom 花瓣飘落 / zenith 极巅光柱 / eternity 永恒之环 /
  *          chaos 混沌碎片 / firmament 苍穹星海。
+ * 至臻系列：genesis 创世星环 / oblivion 湮灭奇点（只给至臻稀有度称号使用）。
  */
 export const TITLE_EFFECTS = [
   'classic',
@@ -20,18 +21,23 @@ export const TITLE_EFFECTS = [
   'eternity',
   'chaos',
   'firmament',
+  'genesis',
+  'oblivion',
 ] as const
 export type TitleEffectStyle = typeof TITLE_EFFECTS[number]
 
-/** 站内称号（只在 LineWeb 内部展示，不写入 neko / 聊天服务） */
+/**
+ * 商品稀有度：legendary / mythic / transcendent 都会触发炸裂特效：
+ * mythic 额外挂黑金翼饰层，transcendent（至臻，2026-11-10 新增最高档）再叠一层至臻星环。
+ */
 export interface UserTitleDto {
   id: number
   name: string
   color: string
   icon: string
-  /** 商品稀有度：legendary / mythic 都会触发炸裂特效（mythic 额外挂专属装饰层） */
+  /** 商品稀有度：legendary / mythic / transcendent 都会触发炸裂特效 */
   rarity: string
-  /** 传说特效（legendary / mythic 时的动态特效 key，其余稀有度忽略；非法值回退 classic） */
+  /** 传说特效（legendary / mythic / transcendent 时的动态特效 key，其余稀有度忽略；非法值回退 classic） */
   effect: string
 }
 
@@ -86,7 +92,7 @@ export interface LeaderTitleDto {
 }
 
 export type ShopItemType = 'title' | 'emoji' | 'avatar_frame'
-export type ShopRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic'
+export type ShopRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic' | 'transcendent'
 
 /**
  * 头像框样式白名单（与服务端 AVATAR_FRAME_STYLES 一致，顺序一致，共 16 种）。

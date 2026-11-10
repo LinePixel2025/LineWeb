@@ -23,6 +23,7 @@ import {
 import {
   DEFAULT_FRAME_ITEMS_V4,
   DEFAULT_TITLE_ITEMS_V4,
+  DEFAULT_TITLE_ITEMS_V5,
   type DefaultShopItem,
 } from '../lib/pointsShopCatalog.js'
 import type { GameKey } from '../lib/gameStatsRules.js'
@@ -54,7 +55,7 @@ export interface UserTitleDto {
   icon: string
   /** 商品稀有度：legendary / mythic 在客户端触发炸裂特效（mythic 额外挂专属装饰层） */
   rarity: string
-  /** 传说特效：classic/stardust/flame/aurora/thunder/nova/prism/void/meteor/blossom/singularity/zenith/eternity/chaos/firmament，非 legendary/mythic 忽略 */
+  /** 传说特效：classic/stardust/flame/aurora/thunder/nova/prism/void/meteor/blossom/singularity/zenith/eternity/chaos/firmament/genesis/oblivion，非 legendary/mythic/transcendent 忽略 */
   effect: string
 }
 
@@ -132,6 +133,11 @@ const DEFAULT_FRAME_SEED_FLAG_V4 = 'points.shop.frames.v4.seeded'
  * 神话系列称号：singularity / zenith / eternity / chaos / firmament 五个新特效的传说与神话称号。
  */
 const DEFAULT_TITLE_SEED_FLAG_V4 = 'points.shop.titles.v4.seeded'
+/**
+ * 第五批（至臻系列）称号：新增最高稀有度 transcendent（至臻）+ genesis / oblivion 两个新特效。
+ * 独立 flag 补种，不复活管理员删掉的旧商品。
+ */
+const DEFAULT_TITLE_SEED_FLAG_V5 = 'points.shop.titles.v5.seeded'
 
 /** 默认商店目录：只在首次初始化时写入一次，之后管理员可自由增删改 */
 const DEFAULT_SHOP_ITEMS: readonly DefaultShopItem[] = [
@@ -272,6 +278,7 @@ async function ensureDefaultShop(): Promise<void> {
   await seedShopItems(DEFAULT_TITLE_SEED_FLAG_V3, DEFAULT_TITLE_ITEMS_V3)
   await seedShopItems(DEFAULT_FRAME_SEED_FLAG_V4, DEFAULT_FRAME_ITEMS_V4)
   await seedShopItems(DEFAULT_TITLE_SEED_FLAG_V4, DEFAULT_TITLE_ITEMS_V4)
+  await seedShopItems(DEFAULT_TITLE_SEED_FLAG_V5, DEFAULT_TITLE_ITEMS_V5)
 }
 
 /** 幂等播种：同一批商品只补一次，已存在（或被管理员删掉）的 key 不受影响 */

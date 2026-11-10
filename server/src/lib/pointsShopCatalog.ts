@@ -13,7 +13,7 @@ export interface DefaultShopItem {
   name: string
   description: string
   cost: number
-  rarity: 'common' | 'rare' | 'epic' | 'legendary' | 'mythic'
+  rarity: 'common' | 'rare' | 'epic' | 'legendary' | 'mythic' | 'transcendent'
   payload: Record<string, unknown>
   sortOrder: number
 }
@@ -43,4 +43,22 @@ export const DEFAULT_TITLE_ITEMS_V4: readonly DefaultShopItem[] = [
   { key: 'title_v4_singularity', type: 'title', name: '奇点', description: '所有光都朝名字中心坍缩，只留一圈马上要熄灭的吸积盘。', cost: 12000, rarity: 'mythic', payload: { icon: '🌀', color: '#a371f7', effect: 'singularity' }, sortOrder: 107 },
   { key: 'title_v4_chaos', type: 'title', name: '混沌深渊', description: '规则在称号里碎成五彩的碎片，一边飞散一边重新拼合。', cost: 14000, rarity: 'mythic', payload: { icon: '🎭', color: '#ff5fae', effect: 'chaos' }, sortOrder: 108 },
   { key: 'title_v4_firmament', type: 'title', name: '苍穹主宰', description: '整片星海随你的名字缓慢旋转，抬头就是自己的夜空。', cost: 15000, rarity: 'mythic', payload: { icon: '🌌', color: '#5b8cff', effect: 'firmament' }, sortOrder: 109 },
+]
+
+/**
+ * 至臻系列称号（第五批，2026-11-10）。
+ *
+ * 新增最高稀有度 `transcendent`（至臻）——比神话再高一档：徽章在神话黑金翼饰之外再叠一层
+ * 至臻星环（`.gh-title-badge-transcendent`），商店卡与名字也有独立配色。
+ * 新特效 genesis（创世星环）与 oblivion（湮灭奇点）只在这批里使用。
+ */
+export const DEFAULT_TITLE_ITEMS_V5: readonly DefaultShopItem[] = [
+  { key: 'title_v5_dawn', type: 'title', name: '破晓之翼', description: '天际线裂开第一道光，金色羽翼在名字两侧缓缓展开。', cost: 5600, rarity: 'legendary', payload: { icon: '🌅', color: '#f6b73c', effect: 'aurora' }, sortOrder: 110 },
+  { key: 'title_v5_tide', type: 'title', name: '潮汐君王', description: '蓝绿色的潮水一遍遍漫过称号，退去时留下细碎的盐晶光。', cost: 6200, rarity: 'legendary', payload: { icon: '🌊', color: '#3ec6c6', effect: 'blossom' }, sortOrder: 111 },
+  { key: 'title_v5_throne', type: 'title', name: '永恒王座', description: '一座金色王座从名字背后升起，扶手两侧的光柱永不熄灭。', cost: 16000, rarity: 'mythic', payload: { icon: '👑', color: '#f5c542', effect: 'zenith' }, sortOrder: 112 },
+  { key: 'title_v5_starforge', type: 'title', name: '星铸', description: '把你名字的每一笔都重铸成星辰，锤落之处溅起一整圈星屑。', cost: 18000, rarity: 'mythic', payload: { icon: '⚒️', color: '#8ecaff', effect: 'genesis' }, sortOrder: 113 },
+  { key: 'title_v5_void_emperor', type: 'title', name: '虚空帝皇', description: '所有光在称号中心坍缩成一枚安静的黑色王印，边缘仍有吸积盘在燃烧。', cost: 20000, rarity: 'mythic', payload: { icon: '🕳️', color: '#a371f7', effect: 'singularity' }, sortOrder: 114 },
+  { key: 'title_v5_genesis', type: 'title', name: '创世者', description: '一圈金白色的创世星环绕名旋转，星环内侧不断诞生又熄灭微小的恒星。', cost: 30000, rarity: 'transcendent', payload: { icon: '🌐', color: '#ffd76a', effect: 'genesis' }, sortOrder: 115 },
+  { key: 'title_v5_oblivion', type: 'title', name: '湮灭之主', description: '名字周围的空间被缓慢抹去又重写，紫黑色的湮灭奇点像一只不肯闭上的眼睛。', cost: 36000, rarity: 'transcendent', payload: { icon: '♾️', color: '#c084fc', effect: 'oblivion' }, sortOrder: 116 },
+  { key: 'title_v5_zenith_of_all', type: 'title', name: '万象归一', description: '整片星海、极光与潮汐同时在你名字背后归位——LineWeb 称号的最高一档。', cost: 50000, rarity: 'transcendent', payload: { icon: '🌠', color: '#7aa7ff', effect: 'firmament' }, sortOrder: 117 },
 ]

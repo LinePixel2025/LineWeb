@@ -1351,11 +1351,173 @@
   100% { background-position: -90% 50%; opacity: 0; }
 }
 
+/* ===== 至臻稀有度 transcendent（2026-11-10 新增最高档）：紫白星野底色 + 至臻星环 =====
+   根节点同时带 --legendary（复用 fx 规则）与 --transcendent；双类 fx 规则特异性更高，
+   仍然可以覆盖这里的底色。节点预算与 mythic 相同（只多一个装饰层）。 */
+.gh-title-badge--transcendent {
+  background:
+    linear-gradient(100deg, #120a24 0%, #2a1150 20%, #4c2a8f 38%, #efe6ff 50%, #4c2a8f 62%, #2a1150 80%, #120a24 100%);
+  background-size: 280% 100%;
+  color: #f4ecff !important;
+  text-shadow:
+    0 0 9px rgba(226, 214, 255, .9),
+    0 0 18px rgba(150, 100, 255, .6),
+    0 0 30px rgba(120, 170, 255, .35);
+  animation:
+    gh-title-badge-mythic-shine 6.4s linear infinite,
+    gh-title-badge-transcendent-pulse 3s ease-in-out infinite;
+}
+.gh-title-badge--transcendent::before {
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(239, 230, 255, .65) 0deg 2deg,
+    rgba(140, 200, 255, .5) 2deg 4deg,
+    rgba(255, 215, 90, .35) 4deg 6deg,
+    rgba(140, 200, 255, 0) 6deg 28deg
+  );
+  filter: blur(2px);
+  opacity: .95;
+  animation: gh-title-badge-rays 7.4s linear infinite;
+}
+.gh-title-badge--transcendent .gh-title-badge-aura {
+  background: linear-gradient(115deg, transparent 26%, rgba(255, 255, 255, .95) 44%, rgba(190, 160, 255, .75) 56%, transparent 74%);
+  background-size: 250% 100%;
+  animation: gh-title-badge-mythic-sweep 3.6s ease-in-out infinite;
+}
+/* 至臻星环：双环反向旋转 + 四向星芒（全部画在伪元素上，不新增节点） */
+.gh-title-badge-transcendent {
+  position: absolute;
+  inset: -13px;
+  z-index: -1;
+  border-radius: 999px;
+  pointer-events: none;
+}
+.gh-title-badge-transcendent::before,
+.gh-title-badge-transcendent::after {
+  content: '';
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+}
+.gh-title-badge-transcendent::before {
+  inset: 0;
+  border: 1.5px solid transparent;
+  border-top-color: rgba(255, 255, 255, .9);
+  border-left-color: rgba(160, 120, 255, .8);
+  box-shadow: 0 0 14px rgba(170, 130, 255, .6), inset 0 0 12px rgba(120, 170, 255, .35);
+  animation: gh-title-badge-transcendent-spin 9s linear infinite;
+}
+.gh-title-badge-transcendent::after {
+  inset: -6px;
+  border: 1px dashed rgba(255, 215, 90, .55);
+  box-shadow: 0 0 10px rgba(255, 215, 90, .35);
+  animation: gh-title-badge-transcendent-spin 16s linear infinite reverse;
+}
+@keyframes gh-title-badge-transcendent-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(239, 230, 255, .55),
+      0 0 16px rgba(150, 100, 255, .55);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, .95),
+      0 0 26px rgba(190, 160, 255, .8),
+      0 0 52px rgba(120, 170, 255, .5);
+  }
+}
+@keyframes gh-title-badge-transcendent-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ===== 至臻系列特效：genesis 创世星环 / oblivion 湮灭奇点 =====
+   只给至臻稀有度称号使用；复用 mythic 的三条关键帧（shine / pulse / sweep），
+   只覆盖底色、光带与粒子配色，避免再堆十几条重复 @keyframes。 */
+.gh-title-badge--legendary.gh-title-badge--fx-genesis {
+  background:
+    linear-gradient(100deg, #16100a 0%, #3b2a12 20%, #6b4a17 38%, #fff2c8 50%, #6b4a17 62%, #3b2a12 80%, #16100a 100%);
+  background-size: 260% 100%;
+  color: #fff4d6 !important;
+  text-shadow: 0 0 9px rgba(255, 236, 180, .9), 0 0 20px rgba(255, 196, 80, .55);
+  animation:
+    gh-title-badge-mythic-shine 5.6s linear infinite,
+    gh-title-badge-fx-genesis-glow 3.6s ease-in-out infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-genesis::before {
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(255, 244, 210, .8) 0deg 2deg,
+    rgba(255, 196, 80, .45) 2deg 4deg,
+    rgba(255, 196, 80, 0) 4deg 22deg
+  );
+  filter: blur(2px);
+  opacity: .95;
+  animation: gh-title-badge-rays 5.4s linear infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-genesis .gh-title-badge-aura {
+  background: linear-gradient(115deg, transparent 28%, rgba(255, 250, 230, .98) 46%, rgba(255, 208, 110, .8) 56%, transparent 72%);
+  background-size: 240% 100%;
+  animation: gh-title-badge-mythic-sweep 3s ease-in-out infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-genesis .gh-title-badge-sparks i {
+  background: #ffe9a8;
+  box-shadow: 0 0 8px rgba(255, 220, 140, .9);
+}
+@keyframes gh-title-badge-fx-genesis-glow {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(255, 220, 140, .5), 0 0 16px rgba(255, 190, 70, .45); }
+  50% { box-shadow: 0 0 0 1px rgba(255, 250, 230, .95), 0 0 28px rgba(255, 214, 120, .75), 0 0 50px rgba(255, 170, 40, .35); }
+}
+
+.gh-title-badge--legendary.gh-title-badge--fx-oblivion {
+  background:
+    linear-gradient(100deg, #06030b 0%, #170a2a 22%, #340f55 40%, #b489ff 50%, #340f55 60%, #170a2a 78%, #06030b 100%);
+  background-size: 260% 100%;
+  color: #dccbff !important;
+  text-shadow: 0 0 10px rgba(180, 140, 255, .85), 0 0 22px rgba(90, 30, 160, .7);
+  animation:
+    gh-title-badge-mythic-shine 7.2s linear infinite,
+    gh-title-badge-fx-oblivion-collapse 2.8s ease-in-out infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-oblivion::before {
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(200, 170, 255, .55) 0deg 2deg,
+    rgba(80, 20, 140, .5) 2deg 4deg,
+    rgba(20, 0, 40, 0) 4deg 20deg
+  );
+  filter: blur(3px);
+  opacity: .9;
+  animation: gh-title-badge-transcendent-spin 5s linear infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-oblivion .gh-title-badge-aura {
+  background: linear-gradient(115deg, transparent 30%, rgba(214, 190, 255, .8) 48%, rgba(70, 20, 130, .9) 58%, transparent 74%);
+  background-size: 240% 100%;
+  animation: gh-title-badge-fx-oblivion-sweep 2.6s ease-in-out infinite;
+}
+.gh-title-badge--legendary.gh-title-badge--fx-oblivion .gh-title-badge-sparks i {
+  background: #c8a8ff;
+  box-shadow: 0 0 8px rgba(160, 110, 255, .9);
+  animation-duration: 1.8s;
+  animation-direction: reverse;
+}
+@keyframes gh-title-badge-fx-oblivion-collapse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(180, 140, 255, .45), 0 0 16px rgba(90, 30, 160, .55); }
+  50% { box-shadow: 0 0 0 1px rgba(230, 210, 255, .9), 0 0 26px rgba(140, 80, 220, .8), inset 0 0 18px rgba(20, 0, 40, .8); }
+}
+@keyframes gh-title-badge-fx-oblivion-sweep {
+  0% { background-position: -90% 50%; opacity: 0; }
+  30% { opacity: .9; }
+  70% { background-position: 190% 50%; opacity: .7; }
+  100% { background-position: 190% 50%; opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   /* fx 双类特异性高于单类基础规则，必须逐个显式关闭，否则会绕过降级；
      动画关闭后各特效的静态底色渐变保留（辨识度），粒子与光环直接隐藏 */
   .gh-title-badge--legendary,
   .gh-title-badge--mythic,
+  .gh-title-badge--transcendent,
   .gh-title-badge--legendary.gh-title-badge--fx-stardust,
   .gh-title-badge--legendary.gh-title-badge--fx-flame,
   .gh-title-badge--legendary.gh-title-badge--fx-aurora,
@@ -1369,11 +1531,14 @@
   .gh-title-badge--legendary.gh-title-badge--fx-zenith,
   .gh-title-badge--legendary.gh-title-badge--fx-eternity,
   .gh-title-badge--legendary.gh-title-badge--fx-chaos,
-  .gh-title-badge--legendary.gh-title-badge--fx-firmament {
+  .gh-title-badge--legendary.gh-title-badge--fx-firmament,
+  .gh-title-badge--legendary.gh-title-badge--fx-genesis,
+  .gh-title-badge--legendary.gh-title-badge--fx-oblivion {
     animation: none;
   }
   .gh-title-badge--legendary::before,
   .gh-title-badge--mythic::before,
+  .gh-title-badge--transcendent::before,
   .gh-title-badge--legendary.gh-title-badge--fx-stardust::before,
   .gh-title-badge--legendary.gh-title-badge--fx-flame::before,
   .gh-title-badge--legendary.gh-title-badge--fx-aurora::before,
@@ -1388,9 +1553,12 @@
   .gh-title-badge--legendary.gh-title-badge--fx-eternity::before,
   .gh-title-badge--legendary.gh-title-badge--fx-chaos::before,
   .gh-title-badge--legendary.gh-title-badge--fx-firmament::before,
+  .gh-title-badge--legendary.gh-title-badge--fx-genesis::before,
+  .gh-title-badge--legendary.gh-title-badge--fx-oblivion::before,
   .gh-title-badge-aura,
   .gh-title-badge-burst,
   .gh-title-badge-mythic,
+  .gh-title-badge-transcendent,
   .gh-title-badge-sparks {
     display: none;
   }
@@ -2209,9 +2377,27 @@
   filter: drop-shadow(0 0 7px rgba(212, 167, 44, .6));
   animation: gh-title-badge-shine 4.4s linear infinite;
 }
+/* 至臻档：紫白金三色、更慢的扫光，卡边与稀有度胶囊另有一套配色 */
+.gh-points-shop-card--transcendent {
+  border-left-color: #b489ff;
+  background:
+    radial-gradient(120% 100% at 100% 0%, rgba(180, 137, 255, 0.16), transparent 62%),
+    radial-gradient(90% 120% at 0% 100%, rgba(255, 215, 90, 0.10), transparent 64%),
+    var(--gh-canvas);
+}
+.gh-points-shop-name--transcendent {
+  background: linear-gradient(100deg, #efe6ff, #b489ff 26%, #ffd75a 50%, #9ad8ff 72%, #efe6ff 92%);
+  background-size: 280% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent !important;
+  filter: drop-shadow(0 0 8px rgba(180, 137, 255, .65));
+  animation: gh-title-badge-shine 5.6s linear infinite;
+}
 @media (prefers-reduced-motion: reduce) {
   .gh-points-shop-name--legendary,
-  .gh-points-shop-name--mythic { animation: none; }
+  .gh-points-shop-name--mythic,
+  .gh-points-shop-name--transcendent { animation: none; }
 }
 .gh-points-shop-card-desc { margin: 0; min-height: 2.4em; font-size: var(--gh-text-xs); color: var(--gh-text-secondary); line-height: 1.5; }
 .gh-points-shop-card-foot {
@@ -2239,6 +2425,11 @@
   background: linear-gradient(100deg, rgba(255, 215, 90, 0.26), rgba(139, 60, 200, 0.24));
   color: color-mix(in srgb, #d4a72c 62%, var(--gh-text));
   box-shadow: inset 0 0 0 1px rgba(212, 167, 44, 0.45);
+}
+.gh-points-rarity--transcendent {
+  background: linear-gradient(100deg, rgba(180, 137, 255, 0.3), rgba(255, 215, 90, 0.26), rgba(154, 216, 255, 0.3));
+  color: color-mix(in srgb, #9a6bff 58%, var(--gh-text));
+  box-shadow: inset 0 0 0 1px rgba(180, 137, 255, 0.55);
 }
 
 .gh-points-titles { margin-top: var(--gh-space-5); padding: var(--gh-space-4); }

@@ -28,7 +28,11 @@ import {
   sanitizeTitleIcon,
   TITLE_EFFECT_STYLES,
 } from '../src/lib/pointsRules.js'
-import { DEFAULT_FRAME_ITEMS_V4, DEFAULT_TITLE_ITEMS_V4 } from '../src/lib/pointsShopCatalog.js'
+import {
+  DEFAULT_FRAME_ITEMS_V4,
+  DEFAULT_TITLE_ITEMS_V4,
+  DEFAULT_TITLE_ITEMS_V5,
+} from '../src/lib/pointsShopCatalog.js'
 import {
   COMPANY_LIMITS,
   effectiveLoanSettings,
@@ -240,14 +244,14 @@ assertEqual(sanitizeAvatarFrame('rainbow'), null, '未知头像框样式回退 n
 assertEqual(sanitizeAvatarFrame(''), null, '空头像框样式回退 null')
 assertEqual(sanitizeAvatarFrame(123), null, '非字符串头像框回退 null')
 
-assertEqual(TITLE_EFFECT_STYLES.length, 15, '传说 / 神话特效共 15 种样式')
+assertEqual(TITLE_EFFECT_STYLES.length, 17, '传说 / 神话 / 至臻特效共 17 种样式')
 assertEqual(
   [...TITLE_EFFECT_STYLES],
   [
     'classic', 'stardust', 'flame', 'aurora', 'thunder', 'nova', 'prism', 'void', 'meteor', 'blossom',
-    'singularity', 'zenith', 'eternity', 'chaos', 'firmament',
+    'singularity', 'zenith', 'eternity', 'chaos', 'firmament', 'genesis', 'oblivion',
   ],
-  '特效白名单依次为 既有 8 + 幻彩 2 + 神话 5',
+  '特效白名单依次为 既有 8 + 幻彩 2 + 神话 5 + 至臻 2',
 )
 for (const style of TITLE_EFFECT_STYLES) {
   assertEqual(sanitizeTitleEffect(style), style, `特效 ${style} 白名单内原样返回`)
@@ -255,12 +259,15 @@ for (const style of TITLE_EFFECT_STYLES) {
 for (const style of ['singularity', 'zenith', 'eternity', 'chaos', 'firmament']) {
   assertEqual(sanitizeTitleEffect(style), style, `神话特效 ${style} 合法`)
 }
+for (const style of ['genesis', 'oblivion']) {
+  assertEqual(sanitizeTitleEffect(style), style, `至臻特效 ${style} 合法`)
+}
 assertEqual(sanitizeTitleEffect('nope'), null, '未知特效回退 null')
 assertEqual(sanitizeTitleEffect(123), null, '非字符串特效回退 null')
 assertEqual(sanitizeTitleEffect(null), null, 'null 特效回退 null')
 
 /* --- 商店种子 v4（神话系列）：稀有度合法 / 价格区间 / payload 命中新 key --- */
-const SHOP_RARITIES = ['common', 'rare', 'epic', 'legendary', 'mythic']
+const SHOP_RARITIES = ['common', 'rare', 'epic', 'legendary', 'mythic', 'transcendent']
 
 const v4FrameKeys = new Set<string>()
 for (const item of DEFAULT_FRAME_ITEMS_V4) {
@@ -318,6 +325,44 @@ assertEqual(
 for (const effect of ['singularity', 'zenith', 'eternity', 'chaos', 'firmament']) {
   assert(v4TitleEffects.has(effect), `v4 称号覆盖新特效 ${effect}`)
 }
+
+/* --- 商店种子 v5（至臻系列）：新增最高稀有度 transcendent + genesis / oblivion 特效 --- */
+const v5TitleKeys = new Set<string>()
+const v5TitleEffects = new Set<string>()
+const v5RarityCount = { legendary: 0, mythic: 0, transcendent: 0 }
+for (const item of DEFAULT_TITLE_ITEMS_V5) {
+  assert(item.type === 'title', `v5 称号 ${item.key} 类型为 title`)
+  assert(item.key.startsWith('title_v5_'), `v5 称号 ${item.key} 沿用 title_v5_ 前缀`)
+  assert(!v5TitleKeys.has(item.key), `v5 称号 key 唯一：${item.key}`)
+  v5TitleKeys.add(item.key)
+  assert(SHOP_RARITIES.includes(item.rarity), `v5 称号 ${item.key} 稀有度在合法集合内`)
+  assert(
+    item.rarity === 'legendary' || item.rarity === 'mythic' || item.rarity === 'transcendent',
+    `v5 称号 ${item.key} 只用 legendary / mythic / transcendent`,
+  )
+  assert(item.sortOrder >= 110, `v5 称号 ${item.key} 排序接在 v4 之后`)
+  const effect = sanitizeTitleEffect(item.payload.effect)
+  assert(effect !== null, `v5 称号 ${item.key} 的 effect 命中白名单`)
+  v5TitleEffects.add(effect as string)
+  assert(sanitizeTitleIcon(item.payload.icon) !== '', `v5 称号 ${item.key} 有图标`)
+  assert(
+    typeof item.payload.color === 'string' && sanitizeTitleColor(item.payload.color) === item.payload.color,
+    `v5 称号 ${item.key} 颜色合法`,
+  )
+  if (item.rarity === 'legendary') v5RarityCount.legendary += 1
+  else if (item.rarity === 'mythic') v5RarityCount.mythic += 1
+  else v5RarityCount.transcendent += 1
+}
+assertEqual(v5TitleKeys.size, 8, 'v5 新增 8 条称号')
+assertEqual(v5RarityCount.transcendent, 3, 'v5 有 3 条至臻（transcendent）称号——新增最高档')
+assertEqual(v5RarityCount.mythic, 3, 'v5 有 3 条神话称号')
+assertEqual(v5RarityCount.legendary, 2, 'v5 有 2 条传说称号')
+assert(v5TitleEffects.has('genesis'), 'v5 覆盖新特效 genesis')
+assert(v5TitleEffects.has('oblivion'), 'v5 覆盖新特效 oblivion')
+assert(
+  DEFAULT_TITLE_ITEMS_V5.every((item) => item.rarity !== 'transcendent' || item.cost >= 20000),
+  '至臻称号价格明显高于神话档（≥20000）',
+)
 
 assertEqual(EMOJI_PACK_KEYS, ['nailong', 'felyne', 'twemoji'], '付费表情包 key 与客户端商店一致')
 

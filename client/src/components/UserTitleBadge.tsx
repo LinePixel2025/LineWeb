@@ -43,14 +43,17 @@ const BURST_EFFECTS: ReadonlySet<TitleEffectStyle> = new Set<TitleEffectStyle>([
  * 聊天里通过 LineWeb 自己的接口（bootstrap / directory）附带的 title 字段渲染，
  * 不写入 neko 聊天账号，因此不会出现在 neko 原生客户端。
  *
- * 传说 / 神话品质（rarity 为 legendary 或 mythic，含商店称号与榜一称号）统一挂
+ * 传说 / 神话 / 至臻品质（legendary / mythic / transcendent）统一挂
  * `gh-title-badge--legendary`：金色流光 + 旋转光晕 + 8 颗火花粒子；
  * mythic 再追加 `gh-title-badge--mythic` 换一套黑金配色，并渲染 `.gh-title-badge-mythic`
  * 专属翼饰层（一对金色羽翼 + 中心光环），比 legendary 更高一档但仍复用同一套节点预算；
+ * transcendent（至臻，最高档）改用 `gh-title-badge--transcendent` 紫白星野配色，并渲染
+ * `.gh-title-badge-transcendent` 至臻星环（双环 + 四向星芒），节点预算与 mythic 相同；
  * `effect` 非 classic 时追加 `gh-title-badge--fx-<key>` 切换星尘 / 烈焰 /
- * 极光 / 雷霆 / 超新星 / 棱镜 / 虚空 / 奇点 / 极巅 / 永恒 / 混沌 / 苍穹等动态特效（样式见 points.css）；
- * nova/prism/void/singularity 额外渲染 `.gh-title-badge-burst` 爆发层。非法或缺省回退 classic，
- * `prefers-reduced-motion` / 低性能模式下动画降级，粒子与光环隐藏，静态底色保留。
+ * 极光 / 雷霆 / 超新星 / 棱镜 / 虚空 / 奇点 / 极巅 / 永恒 / 混沌 / 苍穹 / 创世 / 湮灭等动态特效
+ * （样式见 points.css）；nova/prism/void/singularity 额外渲染 `.gh-title-badge-burst` 爆发层。
+ * 非法或缺省回退 classic，`prefers-reduced-motion` / 低性能模式下动画降级，
+ * 粒子与光环隐藏，静态底色保留。
  *
  * 聊天界面用 variant="compact"：同屏可能有几十个徽章，每个传说徽章原本要跑
  * 7~13 个合成层动画（旋转光晕 + 扫光 + 8 颗粒子），老设备直接掉帧。compact
@@ -60,8 +63,9 @@ const BURST_EFFECTS: ReadonlySet<TitleEffectStyle> = new Set<TitleEffectStyle>([
 function UserTitleBadge({ title, size = 'sm', className = '', variant = 'full' }: Props) {
   if (!title) return null
   const compact = variant === 'compact'
-  const mythic = title.rarity === 'mythic'
-  const legendary = mythic || title.rarity === 'legendary'
+  const transcendent = title.rarity === 'transcendent'
+  const mythic = !transcendent && title.rarity === 'mythic'
+  const legendary = transcendent || mythic || title.rarity === 'legendary'
   const gameName = (title as BadgeTitle).gameName
   const label = gameName ? `${title.name}（${gameName}单机榜一）` : title.name
   const effect = legendary ? legendaryEffectOf(title) : null
@@ -71,6 +75,7 @@ function UserTitleBadge({ title, size = 'sm', className = '', variant = 'full' }
     `gh-title-badge--${size}`,
     legendary ? 'gh-title-badge--legendary' : '',
     mythic ? 'gh-title-badge--mythic' : '',
+    transcendent ? 'gh-title-badge--transcendent' : '',
     legendary && effect !== 'classic' ? `gh-title-badge--fx-${effect}` : '',
     compact ? 'gh-title-badge--compact' : '',
     className,
@@ -80,12 +85,13 @@ function UserTitleBadge({ title, size = 'sm', className = '', variant = 'full' }
       className={classes}
       style={{ color: title.color, borderColor: title.color }}
       title={`称号：${label}`}
-      data-rarity={legendary ? (mythic ? 'mythic' : 'legendary') : undefined}
+      data-rarity={legendary ? (transcendent ? 'transcendent' : mythic ? 'mythic' : 'legendary') : undefined}
       data-variant={compact ? 'compact' : undefined}
     >
       {legendary && !compact && <span className="gh-title-badge-aura" aria-hidden />}
       {legendary && !compact && burst && <span className="gh-title-badge-burst" aria-hidden />}
       {mythic && !compact && <span className="gh-title-badge-mythic" aria-hidden />}
+      {transcendent && !compact && <span className="gh-title-badge-transcendent" aria-hidden />}
       {title.icon && <span className="gh-title-badge-icon" aria-hidden>{title.icon}</span>}
       <span className="gh-title-badge-name">{title.name}</span>
       {legendary && !compact && (

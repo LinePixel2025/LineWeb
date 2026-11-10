@@ -40,6 +40,7 @@ const RARITY_LABELS: Record<ShopRarity, string> = {
   epic: '史诗',
   legendary: '传说',
   mythic: '神话',
+  transcendent: '至臻',
 }
 
 const SHOP_TYPE_LABELS: Record<ShopItemType, string> = {
@@ -85,6 +86,8 @@ const TITLE_EFFECT_OPTIONS: ReadonlyArray<readonly [TitleEffectStyle, string]> =
   ['eternity', '永恒之环'],
   ['chaos', '混沌碎片'],
   ['firmament', '苍穹星海'],
+  ['genesis', '创世星环'],
+  ['oblivion', '湮灭奇点'],
 ]
 
 const RULE_FIELDS: Array<{ key: keyof GamePointRule; label: string; hint?: string }> = [
@@ -961,10 +964,10 @@ function ShopPanel({
                 </label>
               )}
 
-              {form.type === 'title' && (form.rarity === 'legendary' || form.rarity === 'mythic') && (
+              {form.type === 'title' && (form.rarity === 'legendary' || form.rarity === 'mythic' || form.rarity === 'transcendent') && (
                 <div className="gh-points-shop-form-row">
                   <label className="gh-form-field">
-                    {form.rarity === 'mythic' ? '神话特效' : '传说特效'}
+                    {form.rarity === 'transcendent' ? '至臻特效' : form.rarity === 'mythic' ? '神话特效' : '传说特效'}
                     <select
                       className="gh-input"
                       value={form.effect}
