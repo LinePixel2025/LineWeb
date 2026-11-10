@@ -11,7 +11,7 @@ import {
 import api from '../lib/api'
 import { useAuth } from './AuthContext'
 import { usePoints } from './PointsContext'
-import type { CrisisPayResult, CrisisStateDto } from '../types/crisis'
+import type { CrisisPayResult, CrisisSkipResult, CrisisStateDto } from '../types/crisis'
 
 /** 任意 API 请求被危机守卫挡下时，lib/api.ts 会派发这个事件（与 401 集中处理同构） */
 export const CRISIS_BLOCKED_EVENT = 'crisis:blocked'
@@ -24,6 +24,8 @@ interface CrisisContextValue {
   blocked: boolean
   refresh: () => Promise<CrisisStateDto | null>
   pay: (amount: number) => Promise<CrisisPayResult>
+  /** 每周免费跳过一轮（POST /api/crisis/skip）：成功直接用返回的权威 state 覆盖本地 */
+  skip: () => Promise<CrisisSkipResult>
   /**
    * 切换积分税款开关（PUT /api/crisis/tax）。
    * 乐观更新本地 state，失败回滚并抛出原始错误（由页面决定怎么提示）；
@@ -79,6 +81,13 @@ export function CrisisProvider({ children }: { children: ReactNode }) {
     void refreshPoints()
     return result
   }, [refreshPoints])
+
+  const skip = useCallback(async (): Promise<CrisisSkipResult> => {
+    const result = await api.post<CrisisSkipResult>('/crisis/skip')
+    stateRef.current = result.state
+    setState(result.state)
+    return result
+  }, [])
 
   const setTaxEnabled = useCallback(async (enabled: boolean): Promise<void> => {
     const prev = stateRef.current
@@ -144,8 +153,9 @@ export function CrisisProvider({ children }: { children: ReactNode }) {
     blocked: state?.blocked === true,
     refresh,
     pay,
+    skip,
     setTaxEnabled,
-  }), [state, ready, refresh, pay, setTaxEnabled])
+  }), [state, ready, refresh, pay, skip, setTaxEnabled])
 
   return <CrisisContext.Provider value={value}>{children}</CrisisContext.Provider>
 }

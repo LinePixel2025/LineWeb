@@ -11,6 +11,7 @@ import {
   invalidateCrisisCache,
   saveCrisisRules,
 } from '../services/crisisService.js'
+import { runManualDividend } from '../services/crisisDividendService.js'
 
 /**
  * 危机管理端（管理员）。
@@ -45,11 +46,27 @@ adminCrisisRouter.put('/config', asyncHandler(async (req: Request, res: Response
       spendTaxPct: z.coerce.number().min(0).max(50).optional(),
       // 公共银行每日分红开关（normalizeCrisisRules 布尔化处理；zod 默认剥未知键，必须显式放行）
       dividendEnabled: z.boolean().optional(),
+      // 分红抽取比例（%，0–100），每日自动与手动触发共用；normalize 里还会再钳一次
+      dividendPct: z.coerce.number().min(0).max(100).optional(),
     })
     .safeParse(req.body)
-  if (!parsed.success) throw new AppError('参数无效：比例须在 0–1 之间，税款须在 0–50 之间，时长与门槛须为非负整数', 400)
+  if (!parsed.success) throw new AppError('参数无效：比例须在 0–1 之间，税款须在 0–50 之间，分红比例须在 0–100 之间，时长与门槛须为非负整数', 400)
   const rules = await saveCrisisRules(parsed.data, currentAdminId(req))
   res.json({ rules })
+}))
+
+/**
+ * 手动触发一次公共银行分红：按当前分红比例抽池发给全站 active 用户。
+ * 与每日自动分红共用当天额度（一天最多一次），失败直接把错误抛给管理端。
+ */
+adminCrisisRouter.post('/dividend', asyncHandler(async (req: Request, res: Response) => {
+  const adminId = currentAdminId(req)
+  const record = await runManualDividend(adminId)
+  console.log(
+    `[crisis] 管理员 ${adminId} 手动触发分红：比例 ${record.pct}%，` +
+      `${record.skipped ? '人均不足 1 分未发放' : `发放 ${record.total} 分`}`,
+  )
+  res.json({ record })
 }))
 
 /**

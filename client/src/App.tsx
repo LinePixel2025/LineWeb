@@ -17,6 +17,7 @@ import { ProtectedRoute, AdminRoute, RequireAuth, RequireFeature } from './compo
 import DownloadToast from './components/drive/DownloadToast'
 import GameInviteToast from './components/games/GameInviteToast'
 import ChatMessageToast from './components/chat/ChatMessageToast'
+import CrisisDividendNotifier from './components/CrisisDividendNotifier'
 
 // 路由级代码分割 — 所有页面和布局懒加载，减少首屏包体积
 const HomePage = lazy(() => import('./pages/HomePage'))
@@ -437,6 +438,8 @@ export default function App() {
               <GameInviteToast />
               {/* 新消息提示 — 任意页面（含游戏对局）都能收到聊天消息提醒 */}
               <ChatMessageToast />
+              {/* 公共银行分红弹窗 — 每次发放（每日自动 / 管理员手动）全站弹一次 */}
+              <CrisisDividendNotifier />
               {/* 音乐播放器已并入顶栏（Header），不再悬浮在页面底部遮挡内容 */}
             </MusicProvider>
             </DownloadProvider>

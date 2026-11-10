@@ -21,9 +21,12 @@
  *   末尾斜杠与 '/api' 自描述端点的行为固定；
  * - **官方贷款**：额度 / 期限 / 溢价常量、officialLoanRateOf 的取整与脏入参、
  *   officialLoanBaseRateOf 的「非 0 最大值」口径（空 / 全 0 / 负数 / NaN 回退）；
- * - **每日随机分红**：dividendPctOf 确定性（同 dateKey 同结果）与 5–15 连续区间、
+ * - **公共银行分红**：管理员可配比例 dividendPct 的默认值 / 归一化钳制（含字符串与脏值）、
  *   dividendDrawOf 边界（0 池 / 负池 / floor 不足 1 分 / NaN）、
- *   normalizeCrisisRules 对 dividendEnabled 的缺省与布尔化透传。
+ *   normalizeCrisisRules 对 dividendEnabled 的缺省与布尔化透传；
+ * - **每周跳过**：crisisSkipWeekKey 的周一翻周与上海时区换算、crisisSkipResetAt 精确到
+ *   下周一 0 点、canSkipCrisisThisWeek 的额度判定，以及 DTO 的 skipAvailable 口径
+ *   （exempt / 已结清 / 本周已用 / 上周用过）。
  *
  * 用法: cd server && npm run verify:crisis
  */
@@ -38,8 +41,6 @@ import {
   CRISIS_LEDGER_REASON,
   CRISIS_TAX_LEDGER_REASON,
   CRISIS_WAIVER_TIERS,
-  DIVIDEND_PCT_MAX,
-  DIVIDEND_PCT_MIN,
   EMPTY_CRISIS_ASSETS,
   EMPTY_CRISIS_LEVY_VIEW,
   OFFICIAL_LOAN_DUE_DAYS,
@@ -49,13 +50,15 @@ import {
   applyCrisisWaivers,
   applyCrisisWaiversByTier,
   buildCrisisStateDto,
+  canSkipCrisisThisWeek,
   computeRequired,
+  crisisSkipResetAt,
+  crisisSkipWeekKey,
   crisisTiersFromMask,
   crisisWaiverPctOf,
   crisisWaiverPcts,
   crisisWaiverTiersOf,
   dividendDrawOf,
-  dividendPctOf,
   graceUntilOf,
   isCrisisBlocked,
   isCrisisExempt,
@@ -326,6 +329,50 @@ assertEqual(dto.rules, RULES, 'DTO 下发当前规则供前端显示')
 assertEqual(dto.hasLiveRaid, false, '默认无进行中对局')
 assertEqual(dto.taxOptIn, false, 'taxOptIn 缺省 false（未传 = 未开税款开关）')
 assertEqual(dto.taxPaidTotal, '0', 'taxPaidTotal 缺省 0（字符串出口口径与 poolTotal 一致）')
+assertEqual(dto.skipAvailable, true, '有未缴账单且本周未用过 → 跳过可用')
+assertEqual(dto.skipWeekKey, crisisSkipWeekKey(T0 + HOUR_MS), 'DTO 下发本周周键')
+assertEqual(dto.skipUsedWeek, null, 'skipUsedWeek 缺省 null（从未用过）')
+assertEqual(
+  dto.skipResetAt,
+  new Date(crisisSkipResetAt(T0 + HOUR_MS)).toISOString(),
+  'skipResetAt 输出下周一 0 点的 ISO 字符串',
+)
+assertEqual(
+  buildCrisisStateDto({
+    levy: DUE_LEVY,
+    rules: RULES,
+    parts: FULL_PARTS,
+    poolTotal: '0',
+    nowMs: T0 + HOUR_MS,
+    skipUsedWeek: crisisSkipWeekKey(T0 + HOUR_MS),
+  }).skipAvailable,
+  false,
+  '本周已用过跳过额度 → skipAvailable=false',
+)
+assertEqual(
+  buildCrisisStateDto({
+    levy: DUE_LEVY,
+    rules: RULES,
+    parts: FULL_PARTS,
+    poolTotal: '0',
+    nowMs: T0 + HOUR_MS,
+    skipUsedWeek: '2000-01-03',
+  }).skipAvailable,
+  true,
+  '上周用的额度不影响本周（skipUsedWeek 与本周周键不同即可用）',
+)
+assertEqual(
+  buildCrisisStateDto({ levy: DUE_LEVY, rules: RULES, parts: FULL_PARTS, poolTotal: '0', nowMs: T0 + HOUR_MS, exempt: true })
+    .skipAvailable,
+  false,
+  '管理员豁免 → 跳过不可用（没有账单可跳）',
+)
+assertEqual(
+  buildCrisisStateDto({ levy: levyOf(), rules: RULES, parts: FULL_PARTS, poolTotal: '0', nowMs: T0 + HOUR_MS })
+    .skipAvailable,
+  false,
+  '已结清 → 跳过不可用',
+)
 assertEqual(
   buildCrisisStateDto({
     levy: DUE_LEVY,
@@ -788,42 +835,28 @@ assertEqual(
   '档位整体翻倍时官方利率同步抬升（10% + 溢价 5%）',
 )
 
-/* —— 每日分红：确定性 / 区间 / 抽取额 —— */
-assertEqual(DIVIDEND_PCT_MIN, 5, '分红比例下限 5%')
-assertEqual(DIVIDEND_PCT_MAX, 15, '分红比例上限 15%')
-assert(DIVIDEND_PCT_MIN < DIVIDEND_PCT_MAX, '分红比例区间有效')
-assertEqual(dividendPctOf('2026-11-07'), dividendPctOf('2026-11-07'), '同 dateKey 结果恒定（当日任何时刻读到同一比例）')
-assertEqual(
-  dividendPctOf('2026-11-07'),
-  dividendPctOf('2026-11-07'),
-  '重复调用仍一致（纯函数，重放不会改变当天比例）',
-)
-
-let dividendInRange = true
-let dividendDeterministic = true
-for (let offset = 0; offset < 2000; offset += 1) {
-  const dateKey = new Date(Date.UTC(2026, 0, 1) + offset * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-  const first = dividendPctOf(dateKey)
-  if (!(first >= DIVIDEND_PCT_MIN && first <= DIVIDEND_PCT_MAX)) dividendInRange = false
-  if (first !== dividendPctOf(dateKey)) dividendDeterministic = false
-}
-assert(dividendInRange, `2000 天的分红比例全部落在 [${DIVIDEND_PCT_MIN}, ${DIVIDEND_PCT_MAX}]（连续值，含边界）`)
-assert(dividendDeterministic, '分红比例对同一 dateKey 确定性（2000 天抽查）')
+/* —— 公共银行分红：管理员可配比例 + 抽取额边界 —— */
+assertEqual(CRISIS_DEFAULTS.dividendPct, 10, '默认分红比例 10%（管理员可调）')
+assertEqual(CRISIS_LIMITS.dividendPctMin, 0, '分红比例下钳到 0（0 = 不发）')
+assertEqual(CRISIS_LIMITS.dividendPctMax, 100, '分红比例上钳到 100（最多把池子抽空）')
+assertEqual(normalizeCrisisRules(undefined).dividendPct, 10, 'undefined 归一化后分红比例回默认')
+assertEqual(normalizeCrisisRules({}).dividendPct, 10, '缺字段回默认 10%')
+assertEqual(normalizeCrisisRules({ dividendPct: 25 }).dividendPct, 25, '管理员设置 25% 被保留')
+assertEqual(normalizeCrisisRules({ dividendPct: 150 }).dividendPct, 100, '越界 150% 上钳到 100%')
+assertEqual(normalizeCrisisRules({ dividendPct: -5 }).dividendPct, 0, '负比例下钳到 0')
+assertEqual(normalizeCrisisRules({ dividendPct: 7.8 }).dividendPct, 7, '分红比例 floor 取整（照税款口径）')
+assertEqual(normalizeCrisisRules({ dividendPct: 'abc' }).dividendPct, 10, '脏比例回退默认 10%')
 
 assertEqual(dividendDrawOf(0, 10), 0, '空池抽 0')
 assertEqual(dividendDrawOf(-500, 10), 0, '负池（脏数据）抽 0，绝不为负')
 assertEqual(dividendDrawOf(100, 0.4), 0, '比例 × 池子不足 1 分时 floor 归 0（触发「人均不足 1 分跳过」的前提）')
 assertEqual(dividendDrawOf(1000, 10), 100, '1000 池 × 10% = 100')
 assertEqual(dividendDrawOf(999, 12.345), 123, '向下取整（123.3255 → 123）')
-assertEqual(dividendDrawOf(10_000, 5), 500, '下限比例 5%')
-assertEqual(dividendDrawOf(10_000, 15), 1500, '上限比例 15%')
+assertEqual(dividendDrawOf(10_000, 5), 500, '比例 5%')
+assertEqual(dividendDrawOf(10_000, 100), 10_000, '比例 100% 等于把池子抽空')
+assertEqual(dividendDrawOf(10_000, 0), 0, '比例 0 = 不发')
 assertEqual(dividendDrawOf(1000, Number.NaN), 0, 'NaN 比例抽 0')
 assertEqual(dividendDrawOf(Number.NaN, 10), 0, 'NaN 池子抽 0')
-assert(
-  dividendDrawOf(100_000, dividendPctOf('2026-11-07')) >= dividendDrawOf(100_000, DIVIDEND_PCT_MIN) &&
-    dividendDrawOf(100_000, dividendPctOf('2026-11-07')) <= dividendDrawOf(100_000, DIVIDEND_PCT_MAX),
-  '抽取额与比例同向：确定性比例算出的抽取额必在 5%–15% 的抽取额之间',
-)
 
 /* —— normalizeCrisisRules 对 dividendEnabled 的缺省 / 透传 —— */
 assert(CRISIS_DEFAULTS.dividendEnabled === true, '每日分红默认开启')
@@ -839,5 +872,38 @@ assertEqual(
   '与危机总开关互相独立（关危机不等于关分红，两者各自成开关）',
 )
 assertEqual(RULES.dividendEnabled, true, '本脚本基准 RULES（全套默认值）分红开启')
+
+/* —— 每周跳过的周键（Asia/Shanghai 自然周，周一 0 点翻周） —— */
+// 2026-11-09 是周一（对应 UTC 2026-11-08T16:00Z）
+assertEqual(crisisSkipWeekKey(Date.parse('2026-11-02T00:00:00+08:00')), '2026-11-02', '周一 0 点即进入该周')
+assertEqual(crisisSkipWeekKey(Date.parse('2026-11-08T23:59:59+08:00')), '2026-11-02', '周日深夜仍属于上一周')
+assertEqual(crisisSkipWeekKey(Date.parse('2026-11-09T00:00:00+08:00')), '2026-11-09', '跨过周一 0 点翻到新周键')
+assertEqual(crisisSkipWeekKey(Date.parse('2026-11-10T12:00:00+08:00')), '2026-11-09', '周中任意时刻读取同一周键')
+assertEqual(
+  crisisSkipWeekKey(Date.parse('2026-11-09T07:59:59Z')),
+  '2026-11-09',
+  'UTC 2026-11-09T07:59Z = 上海 15:59，仍在同一周',
+)
+assertEqual(
+  crisisSkipResetAt(Date.parse('2026-11-08T23:59:59+08:00')),
+  Date.parse('2026-11-09T00:00:00+08:00'),
+  '周日 23:59 的下次恢复时刻 = 周一 0 点',
+)
+assertEqual(
+  crisisSkipResetAt(Date.parse('2026-11-02T00:00:00+08:00')),
+  Date.parse('2026-11-09T00:00:00+08:00'),
+  '周一 0 点读到的恢复时刻 = 下周一 0 点（一整周后）',
+)
+assertEqual(canSkipCrisisThisWeek(null, Date.parse('2026-11-10T12:00:00+08:00')), true, '从未用过 → 可用')
+assertEqual(
+  canSkipCrisisThisWeek('2026-11-09', Date.parse('2026-11-10T12:00:00+08:00')),
+  false,
+  '本周已用 → 不可用',
+)
+assertEqual(
+  canSkipCrisisThisWeek('2026-11-02', Date.parse('2026-11-10T12:00:00+08:00')),
+  true,
+  '上周用的不影响本周额度',
+)
 
 console.log(`✅ Lineweb 危机纯函数自检通过：${passed} 个断言`)

@@ -92,6 +92,7 @@ model User {
   stockOrders            StockOrder[] // 股市限价委托
   crisisLevy             CrisisLevy? // Lineweb 危机税单（每人一行，读时惰性建行）
   crisisTaxEnabled       Boolean               @default(false) @map("crisis_tax_enabled") // 危机积分税款自选开关：开启后每次花费积分额外扣 spendTaxPct% 进危机公共银行
+  crisisSkipWeek         String?               @map("crisis_skip_week") // 最近一次使用「每周跳过危机」的周键（上海时区周一日期 YYYY-MM-DD，null = 从未用过）
   personalSpace          PersonalSpace? // 个人空间（管理员私人服务，每管理员一份）
   books                  Book[] // 小说阅读器的书架（上传的书）
   musicAccount           MusicAccount? // 网易云音乐扫码绑定的账号（cookie 仅存服务端）

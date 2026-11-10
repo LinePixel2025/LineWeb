@@ -24,10 +24,12 @@ function statusTone(status: string): string {
 }
 
 export default function CrisisPage() {
-  const { state, ready, refresh, pay, setTaxEnabled } = useCrisis()
+  const { state, ready, refresh, pay, skip, setTaxEnabled } = useCrisis()
   const { balance, refresh: refreshPoints } = usePoints()
   const [amountText, setAmountText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [skipBusy, setSkipBusy] = useState(false)
+  const [skipConfirm, setSkipConfirm] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [history, setHistory] = useState<CrisisHistoryItem[]>([])
@@ -50,7 +52,7 @@ export default function CrisisPage() {
       .catch(() => { /* 流水读不到不影响缴税本身 */ })
   }, [state?.paid, state?.status])
 
-  // 公共银行动态：最近一次每日随机分红（读不到时保持 null，页面显示「暂无发放记录」）
+  // 公共银行动态：最近一次分红（读不到时保持 null，页面显示「暂无发放记录」）
   useEffect(() => {
     void api.get<{ total: string; dividend: CrisisDividendRecord | null }>('/crisis/pool')
       .then((data) => { if (mountedRef.current) setDividend(data.dividend ?? null) })
@@ -117,6 +119,27 @@ export default function CrisisPage() {
     }
   }, [state, taxBusy, setTaxEnabled])
 
+  // 每周跳过：二次确认后调用；成功直接用服务端返回的权威账单覆盖（context 内完成）
+  const handleSkip = useCallback(async () => {
+    if (!state || skipBusy) return
+    setSkipBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const result = await skip()
+      setSkipConfirm(false)
+      setNotice(
+        `已跳过第 ${result.skippedRound} 轮危机，豁免 ${formatCrisisPoints(result.waived)} 积分；` +
+          '本周额度已用，下周一 0 点自动恢复。',
+      )
+    } catch (err) {
+      setSkipConfirm(false)
+      setError(err instanceof Error ? err.message : '跳过失败，请稍后再试')
+    } finally {
+      setSkipBusy(false)
+    }
+  }, [skip, skipBusy, state])
+
   if (!ready || !state) {
     return <div className="gh-page-container gh-crisis-page"><p className="gh-crisis-muted">正在读取危机账单…</p></div>
   }
@@ -137,7 +160,7 @@ export default function CrisisPage() {
             须向公共银行上缴约总资产 {ratioPercent}% 的积分。
           </p>
         </div>
-        <div className="gh-crisis-pool" title="公共银行：危机缴款与消费税款流入；官方贷款放贷（利息回流）与每日随机分红流出">
+        <div className="gh-crisis-pool" title="公共银行：危机缴款与消费税款流入；官方贷款放贷（利息回流）与分红流出">
           <span className="gh-crisis-pool-label">Lineweb 公共银行</span>
           <strong className="gh-crisis-pool-value">{formatCrisisPoints(state.poolTotal)}</strong>
           <span className="gh-crisis-pool-note">缴款税款流入 · 贷款分红流出</span>
@@ -250,6 +273,52 @@ export default function CrisisPage() {
             ))}
           </div>
         )}
+        {state.status !== 'clear' && !state.exempt && (
+          <div className={`gh-crisis-skip${state.skipAvailable ? '' : ' gh-crisis-skip--used'}`}>
+            <div className="gh-crisis-skip-text">
+              <strong>每周跳过机会</strong>
+              <span>
+                {state.skipAvailable
+                  ? '本周还可以免费跳过这一轮：不扣积分，账单直接结清。下周恢复时间 '
+                  : '本周的跳过额度已经用过了，下周一 0 点恢复；恢复时间 '}
+                {new Date(state.skipResetAt).toLocaleString('zh-CN', { hour12: false })}
+              </span>
+            </div>
+            {state.skipAvailable ? (
+              skipConfirm ? (
+                <div className="gh-crisis-skip-actions">
+                  <button
+                    type="button"
+                    className="gh-btn gh-btn--danger gh-btn--sm"
+                    onClick={() => { void handleSkip() }}
+                    disabled={skipBusy}
+                  >
+                    {skipBusy ? '跳过中…' : '确认跳过本轮'}
+                  </button>
+                  <button
+                    type="button"
+                    className="gh-btn gh-btn--ghost gh-btn--sm"
+                    onClick={() => setSkipConfirm(false)}
+                    disabled={skipBusy}
+                  >
+                    取消
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="gh-btn gh-btn--secondary gh-btn--sm"
+                  onClick={() => { setError(''); setNotice(''); setSkipConfirm(true) }}
+                  disabled={busy}
+                >
+                  跳过本轮（本周 1 次）
+                </button>
+              )
+            ) : (
+              <span className="gh-crisis-skip-used-tag">本周已使用</span>
+            )}
+          </div>
+        )}
         {error && <div className="gh-alert gh-alert--danger" role="alert">{error}</div>}
         {notice && <div className="gh-alert gh-alert--success" role="status">{notice}</div>}
       </section>
@@ -257,8 +326,9 @@ export default function CrisisPage() {
       <section className="gh-crisis-assets">
         <h2 className="gh-crisis-section-title">公共银行动态</h2>
         <p className="gh-crisis-section-hint">
-          公共银行每天都在缴款税款流入、官方贷款与分红流出之间滚动；下面是最近一次每日随机分红
-          （每天按 5%–15% 的随机比例从池里抽取，平均分给全站用户）。
+          公共银行每天都在缴款税款流入、官方贷款与分红流出之间滚动；下面是最近一次分红发放
+          （按管理员设置的 {state.rules.dividendPct}% 比例从池里抽取，平均分给全站用户；
+          每天自动发一次，管理员也可以手动补发，每次发放都会弹窗提示发放金额）。
         </p>
         {dividend ? (
           <ul className="gh-crisis-asset-list">
@@ -269,8 +339,17 @@ export default function CrisisPage() {
             </li>
             <li className="gh-crisis-asset-row">
               <span className="gh-crisis-asset-name">抽取比例</span>
-              <span className="gh-crisis-asset-hint">按日随机（5%–15%）</span>
+              <span className="gh-crisis-asset-hint">管理员设置（每日自动与手动补发共用）</span>
               <strong className="gh-crisis-asset-value">{dividend.pct}%</strong>
+            </li>
+            <li className="gh-crisis-asset-row">
+              <span className="gh-crisis-asset-name">发放方式</span>
+              <span className="gh-crisis-asset-hint">{dividend.manual ? '管理员手动触发' : '每日自动发放'}</span>
+              <strong className="gh-crisis-asset-value">
+                {dividend.at
+                  ? new Date(dividend.at).toLocaleString('zh-CN', { hour12: false })
+                  : '—'}
+              </strong>
             </li>
             <li className="gh-crisis-asset-row">
               <span className="gh-crisis-asset-name">分红总额</span>
@@ -392,7 +471,8 @@ export default function CrisisPage() {
           <li>免征门槛：按 {ratioPercent}% 算出来不足 {formatCrisisPoints(state.rules.minLevy)} 积分则本轮不收</li>
           <li>封锁范围：除危机页与「筹钱 / 查账」入口外，全站功能一律 403</li>
           <li>对局保护：正在打搜打撤时暂不封锁，撤离结算后再封</li>
-          <li>公共银行：危机缴款与消费税款流入；官方贷款放贷（利息回流）与每日随机分红流出</li>
+          <li>每周跳过：每人每自然周（上海时区周一 0 点重置）可免费跳过一轮，不扣积分</li>
+          <li>公共银行：危机缴款与消费税款流入；官方贷款放贷（利息回流）与每日 / 手动分红流出</li>
         </ul>
       </section>
     </div>

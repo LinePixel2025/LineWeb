@@ -1,6 +1,6 @@
 /**
  * Lineweb 危机（纯函数，禁止 import prisma / 网络依赖）。
- * 允许 import 其它纯函数 lib（mulberry32 / seedFromString 来自 stockMarket.ts，同为无 IO 的确定性工具）。
+ * 允许 import 其它纯函数 lib（如需确定性工具，从 stockMarket.ts 取 mulberry32 / seedFromString）。
  *
  * 机制：站内积分长期只增不减，需要一条全局回收阀。每个非管理员用户每 `intervalMs`
  * （默认 48 小时，从**自己上次结清**的时刻起滚动计算）要向「Lineweb 公共银行」上缴
@@ -11,10 +11,11 @@
  * 1. **流入**：危机缴款（crisis_payment）+ 自选消费税款（crisis_tax）；
  * 2. **流出 · 官方贷款**：以「全站最差民间利率 + 风险溢价」放贷给个人（见下方
  *    OFFICIAL_LOAN_* 常量与 officialLoanRateOf），本金放款时扣池、还清时本息全额回流；
- * 3. **流出 · 每日随机分红**：按日确定的 5–15% 比例从池里抽取积分，平均分给全站
- *    active 用户（见 DIVIDEND_* 常量与 dividendPctOf / dividendDrawOf）。
+ * 3. **流出 · 公共银行分红**：按管理员配置的固定比例（`dividendPct`）从池里抽取积分，
+ *    平均分给全站 active 用户。每天自动发一次（Asia/Shanghai 日界），管理员也可以随时
+ *    手动再发一次（见 crisisDividendService 与 dividendDrawOf）。
  *
- * 四条容易做错的口径，都在这里定死：
+ * 五条容易做错的口径，都在这里定死：
  * 1. **应缴额在开轮瞬间按总资产快照冻结**，此后资产涨跌不改本轮账单（否则就是移动球门）；
  * 2. **部分缴纳不延长宽限**：`graceUntil` 只由开轮时刻决定，否则「每次缴 1 分」能无限续命；
  * 3. **未达免征门槛一律归零**：算出来的应缴额小于 `minLevy` 就当没有税，
@@ -22,9 +23,9 @@
  * 4. **公司业绩可以折减账单，但只折减、不赦免**：见下方 `CRISIS_WAIVER_TIERS` 与
  *    `applyCrisisWaivers`。减免档位每人每档终身只享一次（`crisis_waivers` 的唯一键），
  *    折减后的数字允许低于 `minLevy`。
+ * 5. **每人每自然周（Asia/Shanghai 周一 0 点重置）可以免费跳过一轮危机**：只清掉当前这张
+ *    待缴账单，不扣积分、不发积分；周键落 `User.crisisSkipWeek`（见 crisisSkipWeekKey）。
  */
-
-import { mulberry32, seedFromString } from './stockMarket.js'
 
 export const CRISIS_LEDGER_REASON = 'crisis_payment'
 
@@ -64,11 +65,16 @@ export interface CrisisRules {
    * - 该税独立于危机总开关 enabled——它是用户自愿的捐赠，不是强制征收。
    */
   spendTaxPct: number
-  /** 公共银行每日分红开关：开启后每天（Asia/Shanghai 日界）按 5–15% 随机抽池分红给全站 active 用户 */
+  /** 公共银行分红开关：开启后每天（Asia/Shanghai 日界）按 `dividendPct` 抽池分红给全站 active 用户 */
   dividendEnabled: boolean
+  /** 公共银行分红抽取比例（%，0–100 整数，管理员可调；每日自动与手动触发共用） */
+  dividendPct: number
 }
 
 const HOUR_MS = 60 * 60 * 1000
+const DAY_MS = 24 * HOUR_MS
+/** Asia/Shanghai 无夏令时，固定 +8 时区 */
+const SHANGHAI_OFFSET_MS = 8 * HOUR_MS
 
 export const CRISIS_DEFAULTS: CrisisRules = {
   enabled: true,
@@ -78,6 +84,7 @@ export const CRISIS_DEFAULTS: CrisisRules = {
   minLevy: 100,
   spendTaxPct: 5,
   dividendEnabled: true,
+  dividendPct: 10,
 }
 
 /**
@@ -96,6 +103,8 @@ export const CRISIS_LIMITS = {
   minLevyMax: 1_000_000,
   spendTaxMin: 0,
   spendTaxMax: 50,
+  dividendPctMin: 0,
+  dividendPctMax: 100,
 } as const
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
@@ -125,6 +134,15 @@ export function normalizeCrisisRules(raw: unknown): CrisisRules {
     // 每日分红开关：与 enabled 同口径布尔化（undefined 回默认 true，脏值一律 Boolean()）
     dividendEnabled:
       input.dividendEnabled === undefined ? CRISIS_DEFAULTS.dividendEnabled : Boolean(input.dividendEnabled),
+    // 分红比例：与 spendTaxPct 同口径 floor，按分抽取不出现小数百分比
+    dividendPct: Math.floor(
+      clampNumber(
+        input.dividendPct,
+        CRISIS_LIMITS.dividendPctMin,
+        CRISIS_LIMITS.dividendPctMax,
+        CRISIS_DEFAULTS.dividendPct,
+      ),
+    ),
   }
 }
 
@@ -180,29 +198,68 @@ export function officialLoanBaseRateOf(tiers: readonly number[]): number {
 }
 
 /* ============================================================
-   每日随机分红（公共银行 → 全站 active 用户）
+   公共银行分红（公共银行 → 全站 active 用户）
    ============================================================ */
 
 /**
- * 每日分红口径（服务层在 services/crisisDividendService.ts）：
- * - 当天抽取比例由 dateKey 确定性生成（同一天任何时刻读到的比例都一致，重放也不会变）；
+ * 分红口径（服务层在 services/crisisDividendService.ts）：
+ * - 抽取比例由管理员在危机参数里设置（`dividendPct`，0–100 整数），每日自动分红与
+ *   管理员手动触发共用同一个比例；比例改为固定值后，前端不再有「今日随机比例」的说法；
  * - 抽取额 = floor(池总额 × 比例 / 100)，人均不足 1 分的当天跳过发放但照常记录；
  * - 发放对象是全站 status='active' 用户（含管理员），每人金额相同。
  */
-export const DIVIDEND_PCT_MIN = 5
-export const DIVIDEND_PCT_MAX = 15
-
-/** 当天分红比例（%）：5–15 的连续值，种子锚定 dateKey，同日恒定 */
-export function dividendPctOf(dateKey: string): number {
-  const rng = mulberry32(seedFromString(`lineweb-crisis-dividend:${dateKey}`))
-  return DIVIDEND_PCT_MIN + rng() * (DIVIDEND_PCT_MAX - DIVIDEND_PCT_MIN)
-}
 
 /** 分红抽取额：floor 取整（积分不出现小数），脏入参一律不为负 */
 export function dividendDrawOf(poolTotal: number, pct: number): number {
   const total = Number.isFinite(poolTotal) ? Math.max(0, poolTotal) : 0
   const rate = Number.isFinite(pct) ? Math.max(0, pct) : 0
   return Math.max(0, Math.floor((total * rate) / 100))
+}
+
+/* ============================================================
+   每周跳过（每人每自然周一次免费豁免）
+   ============================================================ */
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0')
+}
+
+function shanghaiDateParts(epochMs: number): { y: number; m: number; d: number; weekday: number } {
+  const shifted = new Date(epochMs + SHANGHAI_OFFSET_MS)
+  return {
+    y: shifted.getUTCFullYear(),
+    m: shifted.getUTCMonth() + 1,
+    d: shifted.getUTCDate(),
+    // 0 = 周日，1 = 周一 … 6 = 周六（按上海本地日期算）
+    weekday: shifted.getUTCDay(),
+  }
+}
+
+/**
+ * 本周周键：取该周**周一**的上海日期（YYYY-MM-DD）。周一 0 点（Asia/Shanghai）翻周，
+ * 所以周一下午用掉与周日深夜用掉落在同一个键上，而周一 00:00 起自动恢复额度。
+ * 与 getTodayDateKey 同一套「先加 8 小时再读 UTC」的算法，不依赖运行环境时区。
+ */
+export function crisisSkipWeekKey(nowMs: number = Date.now()): string {
+  const { y, m, d, weekday } = shanghaiDateParts(nowMs)
+  // 以「上海本地日」为单位回退到周一：周日（0）回退 6 天
+  const sinceMonday = (weekday + 6) % 7
+  const mondayShifted = Date.UTC(y, m - 1, d) - sinceMonday * DAY_MS
+  const monday = new Date(mondayShifted)
+  return `${monday.getUTCFullYear()}-${pad2(monday.getUTCMonth() + 1)}-${pad2(monday.getUTCDate())}`
+}
+
+/** 下一次周键切换的时刻（下周一 00:00 Asia/Shanghai 的 epoch 毫秒） */
+export function crisisSkipResetAt(nowMs: number = Date.now()): number {
+  const { y, m, d, weekday } = shanghaiDateParts(nowMs)
+  const sinceMonday = (weekday + 6) % 7
+  const nextMondayShifted = Date.UTC(y, m - 1, d) - sinceMonday * DAY_MS + 7 * DAY_MS
+  return nextMondayShifted - SHANGHAI_OFFSET_MS
+}
+
+/** 本周的跳过额度是否还在用：已用周键与当前周键不同（或从未用过）即可用 */
+export function canSkipCrisisThisWeek(usedWeek: string | null | undefined, nowMs: number = Date.now()): boolean {
+  return (usedWeek ?? '') !== crisisSkipWeekKey(nowMs)
 }
 
 /**
@@ -518,6 +575,14 @@ export interface CrisisStateDto {
   taxOptIn: boolean
   /** 本人累计缴税（PointsLedger 按 crisis_tax 汇总取绝对值）。字符串出口口径与 poolTotal 一致 */
   taxPaidTotal: string
+  /** 本周免费跳过额度是否可用（有我行待缴账单 + 本周还没用过） */
+  skipAvailable: boolean
+  /** 本周周键（上海时区周一日期 YYYY-MM-DD） */
+  skipWeekKey: string
+  /** 本周额度的已用周键；null = 从未使用过 */
+  skipUsedWeek: string | null
+  /** 下次跳过额度恢复时刻（下周一 00:00 Asia/Shanghai，ISO） */
+  skipResetAt: string
 }
 
 function isoOf(ms: number | null): string | null {
@@ -536,6 +601,8 @@ export function buildCrisisStateDto(input: {
   taxOptIn?: boolean
   /** 本人累计缴税，字符串出口（缺省 '0'） */
   taxPaidTotal?: string
+  /** 本周跳过的已用周键（User.crisisSkipWeek，缺省 null） */
+  skipUsedWeek?: string | null
   nowMs: number
 }): CrisisStateDto {
   const { levy, rules, nowMs } = input
@@ -563,6 +630,14 @@ export function buildCrisisStateDto(input: {
   // - base 恒不小于 required（减免只会把账单变小），前端可以无条件按「base → required」画折减。
   const required = safeInt(levy.required)
   const requiredBase = Math.max(safeInt(levy.requiredBase), required)
+  const skipWeekKey = crisisSkipWeekKey(nowMs)
+  const skipUsedWeek = input.skipUsedWeek ?? null
+  // 跳过只对「有未缴账单」的人有意义：已结清时按钮不该亮，管理员豁免更不参与
+  const skipAvailable =
+    !exempt &&
+    status !== 'clear' &&
+    remainingOf(levy) > 0 &&
+    canSkipCrisisThisWeek(skipUsedWeek, nowMs)
   return {
     enabled: rules.enabled,
     exempt,
@@ -586,6 +661,10 @@ export function buildCrisisStateDto(input: {
     poolTotal: input.poolTotal,
     taxOptIn: input.taxOptIn === true,
     taxPaidTotal: input.taxPaidTotal ?? '0',
+    skipAvailable,
+    skipWeekKey,
+    skipUsedWeek,
+    skipResetAt: new Date(crisisSkipResetAt(nowMs)).toISOString(),
   }
 }
 

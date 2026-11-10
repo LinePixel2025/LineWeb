@@ -516,13 +516,15 @@ app.get('/api', (_req, res) => {
       officialLoanRepay: { method: 'POST', path: '/api/bank/loans/official/:id/repay', auth: true, description: '官方贷款全额还清（本息一次性回流公共银行；余额不足 400，已还清 409）' },
     },
     crisis: {
-      note: 'Lineweb 危机（积分回收）：每个非管理员用户自上次结清起每 48 小时（管理员可调）须向「公共银行」上缴约总资产 50% 的积分。总资产 = 积分 + 搜打撤装备/仓库/容器 + 宠物装扮/装备/技能 + 股票持仓与冻结委托 + 银行活期/定期/基金。开轮时按快照冻结应缴额，允许部分缴纳（宽限期 12 小时内补齐，宽限不随缴纳延长），逾期未缴满则全站封锁——仅保留税单页与「筹钱 / 查账」端点（积分 / 银行 / 股市 / 搜打撤仓库与商店）。有进行中搜打撤对局时暂不封锁（打完这局再封）。公共银行是三条流的资金池：危机缴款与消费税款流入，官方贷款放贷（利息回流）与每日随机分红流出。',
+      note: 'Lineweb 危机（积分回收）：每个非管理员用户自上次结清起每 48 小时（管理员可调）须向「公共银行」上缴约总资产 50% 的积分。总资产 = 积分 + 搜打撤装备/仓库/容器 + 宠物装扮/装备/技能 + 股票持仓与冻结委托 + 银行活期/定期/基金。开轮时按快照冻结应缴额，允许部分缴纳（宽限期 12 小时内补齐，宽限不随缴纳延长），逾期未缴满则全站封锁——仅保留税单页与「筹钱 / 查账」端点（积分 / 银行 / 股市 / 搜打撤仓库与商店）。有进行中搜打撤对局时暂不封锁（打完这局再封）。公共银行是三条流的资金池：危机缴款与消费税款流入，官方贷款放贷（利息回流）与分红（每日自动 / 管理员手动）流出。',
       me: { method: 'GET', path: '/api/crisis/me', auth: true, description: '我的账单：状态 / 快照 / 应缴 / 已缴 / 剩余 / 宽限倒计时 / 资产分项明细 / 公共银行总额' },
       pay: { method: 'POST', path: '/api/crisis/pay', auth: true, description: '上缴 { amount }（超额自动截到剩余应缴；CAS 按轮次守卫防并发超缴，缴满即结清并排下一轮；20 次/5min）' },
-      pool: { method: 'GET', path: '/api/crisis/pool', auth: true, description: '公共银行累计总额（BigInt，以字符串返回）+ dividend 字段（最近一次每日随机分红的明细 JSON，无记录为 null）' },
+      pool: { method: 'GET', path: '/api/crisis/pool', auth: true, description: '公共银行累计总额（BigInt，以字符串返回）+ dividend 字段（最近一次分红明细 JSON，含本次发放总额 / 人均 / 人数 / 是否手动，无记录为 null）' },
+      skip: { method: 'POST', path: '/api/crisis/skip', auth: true, description: '每周免费跳过一轮危机（每人每自然周 1 次，上海时区周一 0 点恢复；不扣积分直接把当前账单结清）' },
       history: { method: 'GET', path: '/api/crisis/history', auth: true, description: '本人的危机上缴流水（reason=crisis_payment）' },
       adminOverview: { method: 'GET', path: '/api/admin/crisis', auth: 'points:manage', description: '参数 / 公共银行总额 / 欠费与逾期人数 / 欠费榜' },
-      adminConfig: { method: 'PUT', path: '/api/admin/crisis/config', auth: 'points:manage', description: '调参数 { enabled, ratio, intervalMs, graceMs, minLevy, spendTaxPct, dividendEnabled }（深合并 + 钳制；已开轮账单不重算）' },
+      adminConfig: { method: 'PUT', path: '/api/admin/crisis/config', auth: 'points:manage', description: '调参数 { enabled, ratio, intervalMs, graceMs, minLevy, spendTaxPct, dividendEnabled, dividendPct }（深合并 + 钳制；已开轮账单不重算）' },
+      adminDividend: { method: 'POST', path: '/api/admin/crisis/dividend', auth: 'points:manage', description: '手动触发一次公共银行分红（按 dividendPct 抽池，与每日自动分红共用当天额度，返回发放明细）' },
       adminForce: { method: 'POST', path: '/api/admin/crisis/force-due', auth: 'points:manage', description: '手动触发危机 { userId } 或 { all: true }（逐人重算总资产快照，全员按 20 人一批分页）' },
       adminUser: { method: 'GET', path: '/api/admin/crisis/users/:userId', auth: 'points:manage', description: '查看指定用户的危机账单明细' },
       blocked: { method: '—', path: '403 CRISIS_BLOCKED', auth: true, description: '封锁响应体含 required / paid / remaining / graceUntil，前端据此弹出危机缴纳框' },
@@ -884,7 +886,7 @@ const redPacketTimer = setInterval(() => {
 }, 60_000)
 redPacketTimer.unref()  // 不阻止进程退出
 
-// 公共银行每日随机分红：每分钟尝试一次（函数内部按 Asia/Shanghai 日界幂等，当天发过即跳过；
+// 公共银行分红（每日自动）：每分钟尝试一次（函数内部按 Asia/Shanghai 日界幂等，当天发过即跳过；
 // 整体失败只记日志不抛出——定时器兜底，下一分钟自然重试）
 const crisisDividendTimer = setInterval(() => {
   void runDailyDividend()

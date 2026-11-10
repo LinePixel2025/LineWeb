@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import api from '../../lib/api'
 import Badge from '../../components/ui/Badge'
 import { formatCrisisPoints } from '../../lib/crisis'
-import type { CrisisAdminOverview } from '../../types/crisis'
+import type { CrisisAdminOverview, CrisisDividendRecord } from '../../types/crisis'
 
 const HOUR_MS = 3_600_000
 
@@ -12,6 +12,8 @@ interface ConfigForm {
   intervalHours: string
   graceHours: string
   minLevy: string
+  dividendEnabled: boolean
+  dividendPct: string
 }
 
 function formOf(rules: CrisisAdminOverview['rules']): ConfigForm {
@@ -21,6 +23,8 @@ function formOf(rules: CrisisAdminOverview['rules']): ConfigForm {
     intervalHours: String(Math.round(rules.intervalMs / HOUR_MS)),
     graceHours: String(Math.round(rules.graceMs / HOUR_MS)),
     minLevy: String(rules.minLevy),
+    dividendEnabled: rules.dividendEnabled,
+    dividendPct: String(rules.dividendPct),
   }
 }
 
@@ -38,6 +42,7 @@ export default function CrisisAdminPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [dividendRecord, setDividendRecord] = useState<CrisisDividendRecord | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -63,6 +68,7 @@ export default function CrisisAdminPage() {
     const intervalHours = Number.parseFloat(form.intervalHours)
     const graceHours = Number.parseFloat(form.graceHours)
     const minLevy = Number.parseInt(form.minLevy, 10)
+    const dividendPct = Number.parseInt(form.dividendPct, 10)
     if (!Number.isFinite(ratio) || ratio < 0 || ratio > 100) {
       setError('征收比例必须是 0–100 之间的百分数')
       return
@@ -79,6 +85,10 @@ export default function CrisisAdminPage() {
       setError('免征门槛必须是非负整数')
       return
     }
+    if (!Number.isFinite(dividendPct) || dividendPct < 0 || dividendPct > 100) {
+      setError('分红比例必须是 0–100 之间的整数（0 = 不发放）')
+      return
+    }
     setBusy(true)
     setError('')
     setNotice('')
@@ -89,6 +99,8 @@ export default function CrisisAdminPage() {
         intervalMs: Math.round(intervalHours * HOUR_MS),
         graceMs: Math.round(graceHours * HOUR_MS),
         minLevy,
+        dividendEnabled: form.dividendEnabled,
+        dividendPct,
       })
       setForm(formOf(data.rules))
       setNotice('参数已保存。已开轮的账单不会重算，需要重征请用「强制到期」。')
@@ -128,8 +140,30 @@ export default function CrisisAdminPage() {
     }
   }, [load, targetUserId])
 
-  if (loading && !overview) {
-    return <div className="gh-page-container"><p className="gh-crisisadmin-muted">正在读取危机总览…</p></div>
+  const triggerDividend = useCallback(async () => {
+    if (!window.confirm('立即按当前分红比例从公共银行抽积分发给全站用户？手动发放会占用今天的自动分红额度（今天不会再自动发）。')) {
+      return
+    }
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const data = await api.post<{ record: CrisisDividendRecord }>('/admin/crisis/dividend')
+      setDividendRecord(data.record)
+      setNotice(
+        data.record.skipped
+          ? '分红未发放：按当前比例抽取后人均不足 1 分，已记录本次开奖。'
+          : `本次分红已发放 ${formatCrisisPoints(data.record.total)} 积分，人均 ${formatCrisisPoints(data.record.perUser)} 积分 × ${data.record.userCount} 人。`,
+      )
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '手动分红失败')
+    } finally {
+      setBusy(false)
+    }
+  }, [load])
+
+  if (loading && !overview) {    return <div className="gh-page-container"><p className="gh-crisisadmin-muted">正在读取危机总览…</p></div>
   }
 
   return (
@@ -155,7 +189,7 @@ export default function CrisisAdminPage() {
           <div className="gh-crisisadmin-stat">
             <span>公共银行累计</span>
             <strong>{formatCrisisPoints(overview.poolTotal)}</strong>
-            <em>只进不出</em>
+            <em>缴款 / 税款流入 · 贷款 / 分红流出</em>
           </div>
           <div className="gh-crisisadmin-stat">
             <span>参与征收的账号</span>
@@ -236,12 +270,63 @@ export default function CrisisAdminPage() {
                 onChange={(event) => setForm({ ...form, minLevy: event.target.value })}
               />
             </label>
+            <label className="gh-crisisadmin-field">
+              <span>每日自动分红</span>
+              <input
+                type="checkbox"
+                checked={form.dividendEnabled}
+                onChange={(event) => setForm({ ...form, dividendEnabled: event.target.checked })}
+              />
+            </label>
+            <label className="gh-crisisadmin-field">
+              <span>分红抽取比例（%）</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={1}
+                value={form.dividendPct}
+                onChange={(event) => setForm({ ...form, dividendPct: event.target.value })}
+              />
+            </label>
             <button type="button" className="gh-btn gh-btn--primary" onClick={() => void saveConfig()} disabled={busy}>
               保存参数
             </button>
           </div>
         </section>
       )}
+
+      <section className="gh-box gh-crisisadmin-section">
+        <div className="gh-crisisadmin-section-head">
+          <h2 className="gh-crisisadmin-title">公共银行分红</h2>
+          <span className="gh-crisisadmin-hint">
+            按「分红抽取比例」从现在池子里抽 {overview ? formatCrisisPoints(overview.poolTotal) : '—'} 积分的对应比例，
+            人均分给全站 active 用户（含管理员）；手动发放与每日自动分红共用当天额度，一天最多发一次。
+          </span>
+        </div>
+        <div className="gh-crisisadmin-form">
+          <button type="button" className="gh-btn gh-btn--primary" onClick={() => void triggerDividend()} disabled={busy}>
+            {busy ? '发放中…' : '立即手动发放分红'}
+          </button>
+          <span className="gh-crisisadmin-muted">
+            每次发放全站用户都会看到「本次发放了多少」的弹窗提示。
+          </span>
+        </div>
+        {dividendRecord && (
+          <ul className="gh-crisisadmin-debtors gh-crisisadmin-dividend-result">
+            <li className="gh-crisisadmin-debtor">
+              <span className="gh-crisisadmin-debtor-name">
+                {dividendRecord.dateKey} · {dividendRecord.manual ? '管理员手动发放' : '每日自动发放'}
+              </span>
+              <span className="gh-crisisadmin-muted">比例 {dividendRecord.pct}%</span>
+              <span className="gh-crisisadmin-muted">发放 {formatCrisisPoints(dividendRecord.total)}</span>
+              <span className="gh-crisisadmin-muted">人均 {formatCrisisPoints(dividendRecord.perUser)}</span>
+              <span className="gh-crisisadmin-muted">{dividendRecord.userCount} 人</span>
+              {dividendRecord.skipped && <Badge variant="warning">人均不足 1 分</Badge>}
+            </li>
+          </ul>
+        )}
+      </section>
 
       <section className="gh-box gh-crisisadmin-section">
         <div className="gh-crisisadmin-section-head">

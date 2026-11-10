@@ -5,12 +5,12 @@ import { asyncHandler } from '../lib/asyncHandler.js'
 import { AppError } from '../middleware/errorHandler.js'
 import { authenticate } from '../middleware/auth.js'
 import prisma from '../lib/prisma.js'
-import { getCrisisHistory, getCrisisState, getPoolTotal, payCrisis } from '../services/crisisService.js'
+import { getCrisisHistory, getCrisisState, getPoolTotal, payCrisis, skipCrisis } from '../services/crisisService.js'
 import { getCrisisDividendRecord } from '../services/crisisDividendService.js'
 
 /**
  * Lineweb 危机（每人滚动 48 小时上缴约 50% 总资产；公共银行由危机缴款 / 消费税款流入，
- * 由官方贷款放贷（利息回流）与每日随机分红流出）。
+ * 由官方贷款放贷（利息回流）与每日 / 手动分红流出）。
  *
  * 全部端点都在守卫的豁免名单里（/api/crisis/**）：被封锁的用户必须始终能查账单、
  * 缴积分，否则就是把自己锁死在站外。
@@ -41,7 +41,7 @@ crisisRouter.get('/me', asyncHandler(async (req: Request, res: Response) => {
   res.json(await getCrisisState(currentUserId(req), Date.now(), { exempt: req.user?.role === 'admin' }))
 }))
 
-/** 公共银行只读总额（BigInt 一律字符串出口）+ 最近一次每日随机分红明细（无记录为 null） */
+/** 公共银行只读总额（BigInt 一律字符串出口）+ 最近一次分红明细（无记录为 null） */
 crisisRouter.get('/pool', asyncHandler(async (_req: Request, res: Response) => {
   const [total, dividend] = await Promise.all([getPoolTotal(), getCrisisDividendRecord()])
   res.json({ total: total.toString(), dividend })
@@ -53,11 +53,30 @@ crisisRouter.get('/history', asyncHandler(async (req: Request, res: Response) =>
   res.json({ items: await getCrisisHistory(currentUserId(req), limit) })
 }))
 
+/** 每周跳过：10 次 / 5 分钟足够（正常一周只点一次），防误触与脚本刷 */
+const skipLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => String(req.user?.userId ?? ipKeyGenerator(req.ip ?? '')),
+  message: { error: '操作过于频繁，请稍后再试' },
+  skip: (req) => req.user?.role === 'admin',
+})
+
 crisisRouter.post('/pay', payLimiter, asyncHandler(async (req: Request, res: Response) => {
   const parsed = z.object({ amount: z.coerce.number().int().min(1).max(10_000_000) }).safeParse(req.body)
   if (!parsed.success) throw new AppError('缴纳积分必须是 1–10000000 的整数', 400)
   const result = await payCrisis(currentUserId(req), parsed.data.amount)
   res.json(result)
+}))
+
+/**
+ * 每周免费跳过一轮（每人每自然周 1 次，上海时区周一 0 点恢复）。
+ * 被封锁的用户同样可用——这是设计使然：跳过是脱离封锁的合法出口之一。
+ */
+crisisRouter.post('/skip', skipLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await skipCrisis(currentUserId(req)))
 }))
 
 /**

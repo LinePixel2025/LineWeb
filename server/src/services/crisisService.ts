@@ -31,6 +31,7 @@ import {
   applyCrisisWaiversByTier,
   buildCrisisStateDto,
   computeRequired,
+  crisisSkipWeekKey,
   crisisTiersFromMask,
   graceUntilOf,
   isLevyDue,
@@ -628,7 +629,7 @@ export async function getCrisisState(
     exempt ? Promise.resolve({ ...EMPTY_CRISIS_LEVY_VIEW }) : (await resolveSnapshot(userId, nowMs, true)).levy,
     getCrisisAssetParts(userId, nowMs),
     getPoolTotal(),
-    prisma.user.findUnique({ where: { id: userId }, select: { crisisTaxEnabled: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { crisisTaxEnabled: true, crisisSkipWeek: true } }),
     prisma.pointsLedger.aggregate({
       where: { userId, reason: CRISIS_TAX_LEDGER_REASON },
       _sum: { amount: true },
@@ -647,6 +648,7 @@ export async function getCrisisState(
     nowMs,
     taxOptIn: taxUser?.crisisTaxEnabled === true,
     taxPaidTotal: Math.abs(taxSum._sum.amount ?? 0).toString(),
+    skipUsedWeek: taxUser?.crisisSkipWeek ?? null,
   })
 }
 
@@ -740,6 +742,77 @@ export async function payCrisis(userId: number, requestedAmount: number, nowMs =
   invalidateCrisisCache(userId)
   const state = await getCrisisState(userId, Date.now())
   return { state, charged, settled: settledNow }
+}
+
+/* ============================================================
+   每周免费跳过（每人每自然周一次）
+   ============================================================ */
+
+export interface CrisisSkipResult {
+  state: CrisisStateDto
+  /** 被豁免的那一轮轮次 */
+  skippedRound: number
+  /** 被豁免的积分（就等于跳过的剩余应缴，不产生积分流水） */
+  waived: number
+  /** 本次使用的周键（上海时区周一日期） */
+  weekKey: string
+}
+
+/**
+ * 跳过当前这一轮危机：不扣积分、也不发积分，直接把账单置为已结清并排下一轮。
+ *
+ * 并发口径（同一事务）：
+ * 1. 先按 `User.crisisSkipWeek` 做 CAS 抢占本周额度——两次点击只会成功一次；
+ * 2. 再按读到的 round + status='due' 做 CAS 结清账单；抢不到就抛错回滚第一步，
+ *    额度不会被白白消费；
+ * 3. paid 补到 required（账单视觉上「已缴满」），但不写任何 PointsLedger 流水——
+ *    豁免不是收入，不能出现在积分流水里被误读成「赚了」。
+ */
+export async function skipCrisis(userId: number, nowMs = Date.now()): Promise<CrisisSkipResult> {
+  const target = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } })
+  if (!target) throw new AppError('用户不存在', 404)
+  if (target.role === 'admin') throw new AppError('管理员豁免危机，无需跳过', 400)
+  const rules = await getCrisisRules()
+  if (!rules.enabled) throw new AppError('Lineweb 危机当前未开启', 409, 'CRISIS_DISABLED')
+
+  const snapshot = await resolveSnapshot(userId, nowMs, true)
+  const levy = snapshot.levy
+  if (levy.status !== 'due') throw new AppError('当前没有待缴的危机账单', 409, 'CRISIS_NO_LEVY')
+  const remaining = remainingOf(levy)
+  if (remaining <= 0) throw new AppError('本轮账单已经结清', 409, 'CRISIS_SETTLED')
+
+  const weekKey = crisisSkipWeekKey(nowMs)
+  await prisma.$transaction(async (tx) => {
+    const claimed = await tx.user.updateMany({
+      where: {
+        id: userId,
+        OR: [{ crisisSkipWeek: null }, { crisisSkipWeek: { not: weekKey } }],
+      },
+      data: { crisisSkipWeek: weekKey },
+    })
+    if (claimed.count === 0) {
+      throw new AppError('本周的跳过额度已经用过了，下周一 0 点恢复', 409, 'CRISIS_SKIP_USED')
+    }
+    const settled = await tx.crisisLevy.updateMany({
+      where: { userId, round: levy.round, status: 'due' },
+      data: {
+        status: 'clear',
+        round: { increment: 1 },
+        paid: levy.required,
+        openAt: null,
+        graceUntil: null,
+        settledAt: new Date(nowMs),
+        nextDueAt: new Date(nextDueAtOf(nowMs, rules)),
+      },
+    })
+    if (settled.count === 0) {
+      throw new AppError('危机账单状态已变化，请刷新后重试', 409, 'CRISIS_STALE')
+    }
+  })
+
+  invalidateCrisisCache(userId)
+  const state = await getCrisisState(userId, Date.now())
+  return { state, skippedRound: levy.round, waived: remaining, weekKey }
 }
 
 /* ============================================================

@@ -18,8 +18,10 @@ export interface CrisisRules {
   minLevy: number
   /** 积分税款比例（%）：自选开关开启后每次花费额外扣，直接进入公共银行 */
   spendTaxPct: number
-  /** 公共银行每日分红开关：开启后每天按 5%–15% 随机比例抽池分红给全站用户 */
+  /** 公共银行每日分红开关：开启后每天按 dividendPct 抽池分红给全站用户 */
   dividendEnabled: boolean
+  /** 公共银行分红抽取比例（%，管理员可调，每日自动与手动触发共用） */
+  dividendPct: number
 }
 
 /** 资产分项，键序与服务端 CrisisAssetParts 一致 */
@@ -71,6 +73,14 @@ export interface CrisisStateDto {
   taxOptIn: boolean
   /** 本人累计缴税（字符串出口，与服务端 poolTotal 同口径） */
   taxPaidTotal: string
+  /** 本周免费跳过额度是否可用（有待缴账单且本周还没用过） */
+  skipAvailable: boolean
+  /** 本周周键（上海时区周一日期 YYYY-MM-DD） */
+  skipWeekKey: string
+  /** 本周额度的已用周键；null = 从未使用过 */
+  skipUsedWeek: string | null
+  /** 下次跳过额度恢复时刻（下周一 0 点，ISO） */
+  skipResetAt: string
 }
 
 export interface CrisisPayResult {
@@ -88,15 +98,17 @@ export interface CrisisHistoryItem {
 }
 
 /**
- * 公共银行每日随机分红的最近一次明细（GET /api/crisis/pool 的 dividend 字段；
+ * 公共银行最近一次分红的明细（GET /api/crisis/pool 的 dividend 字段；
  * 与 server/src/services/crisisDividendService.ts 的 CrisisDividendRecord 对应）。
  */
 export interface CrisisDividendRecord {
+  /** 发放流水号（毫秒时间戳；前端据此判断是否弹窗） */
+  id: string
   /** 发放日（Asia/Shanghai YYYY-MM-DD） */
   dateKey: string
-  /** 当日抽取比例（%，一位小数） */
+  /** 本次抽取比例（%，管理员配置） */
   pct: number
-  /** 从公共银行抽出的总积分（0 = 当日人均不足 1 分未发放） */
+  /** 实际发放总积分（0 = 人均不足 1 分未发放） */
   total: number
   /** 每人发放积分（0 = 未发放） */
   perUser: number
@@ -104,8 +116,20 @@ export interface CrisisDividendRecord {
   userCount: number
   /** 落库时刻（ISO） */
   at: string
-  /** true = 当日人均不足 1 分，跳过发放 */
+  /** true = 人均不足 1 分，跳过发放 */
   skipped?: boolean
+  /** true = 管理员手动触发 */
+  manual?: boolean
+  /** 手动触发时的管理员 userId */
+  by?: number | null
+}
+
+/** POST /api/crisis/skip */
+export interface CrisisSkipResult {
+  state: CrisisStateDto
+  skippedRound: number
+  waived: number
+  weekKey: string
 }
 
 export interface CrisisAdminOverview {
