@@ -141,7 +141,7 @@ export default function CrisisAdminPage() {
   }, [load, targetUserId])
 
   const triggerDividend = useCallback(async () => {
-    if (!window.confirm('立即按当前分红比例从公共银行抽积分发给全站用户？手动发放会占用今天的自动分红额度（今天不会再自动发）。')) {
+    if (!window.confirm('立即按当前分红比例从公共银行抽积分发给全站用户？手动发放不限次数，每次都会真实从池子里扣款。')) {
       return
     }
     setBusy(true)
@@ -301,7 +301,7 @@ export default function CrisisAdminPage() {
           <h2 className="gh-crisisadmin-title">公共银行分红</h2>
           <span className="gh-crisisadmin-hint">
             按「分红抽取比例」从现在池子里抽 {overview ? formatCrisisPoints(overview.poolTotal) : '—'} 积分的对应比例，
-            人均分给全站 active 用户（含管理员）；手动发放与每日自动分红共用当天额度，一天最多发一次。
+            人均分给全站 active 用户（含管理员）；手动发放不限次数，每日自动分红仍保持每天一次。
           </span>
         </div>
         <div className="gh-crisisadmin-form">

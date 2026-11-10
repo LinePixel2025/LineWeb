@@ -524,7 +524,7 @@ app.get('/api', (_req, res) => {
       history: { method: 'GET', path: '/api/crisis/history', auth: true, description: '本人的危机上缴流水（reason=crisis_payment）' },
       adminOverview: { method: 'GET', path: '/api/admin/crisis', auth: 'points:manage', description: '参数 / 公共银行总额 / 欠费与逾期人数 / 欠费榜' },
       adminConfig: { method: 'PUT', path: '/api/admin/crisis/config', auth: 'points:manage', description: '调参数 { enabled, ratio, intervalMs, graceMs, minLevy, spendTaxPct, dividendEnabled, dividendPct }（深合并 + 钳制；已开轮账单不重算）' },
-      adminDividend: { method: 'POST', path: '/api/admin/crisis/dividend', auth: 'points:manage', description: '手动触发一次公共银行分红（按 dividendPct 抽池，与每日自动分红共用当天额度，返回发放明细）' },
+      adminDividend: { method: 'POST', path: '/api/admin/crisis/dividend', auth: 'points:manage', description: '手动触发一次公共银行分红（按 dividendPct 抽池，可无限次触发；与每日自动分红互不占用额度，返回发放明细）' },
       adminForce: { method: 'POST', path: '/api/admin/crisis/force-due', auth: 'points:manage', description: '手动触发危机 { userId } 或 { all: true }（逐人重算总资产快照，全员按 20 人一批分页）' },
       adminUser: { method: 'GET', path: '/api/admin/crisis/users/:userId', auth: 'points:manage', description: '查看指定用户的危机账单明细' },
       blocked: { method: '—', path: '403 CRISIS_BLOCKED', auth: true, description: '封锁响应体含 required / paid / remaining / graceUntil，前端据此弹出危机缴纳框' },

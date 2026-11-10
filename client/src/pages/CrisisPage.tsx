@@ -328,7 +328,7 @@ export default function CrisisPage() {
         <p className="gh-crisis-section-hint">
           公共银行每天都在缴款税款流入、官方贷款与分红流出之间滚动；下面是最近一次分红发放
           （按管理员设置的 {state.rules.dividendPct}% 比例从池里抽取，平均分给全站用户；
-          每天自动发一次，管理员也可以手动补发，每次发放都会弹窗提示发放金额）。
+          每天自动发一次，管理员也可以随时手动发放、不限次数，每次发放都会弹窗提示发放金额）。
         </p>
         {dividend ? (
           <ul className="gh-crisis-asset-list">

@@ -57,7 +57,7 @@ adminCrisisRouter.put('/config', asyncHandler(async (req: Request, res: Response
 
 /**
  * 手动触发一次公共银行分红：按当前分红比例抽池发给全站 active 用户。
- * 与每日自动分红共用当天额度（一天最多一次），失败直接把错误抛给管理端。
+ * 不限次数（每日自动分红仍保持每天一次），失败直接把错误抛给管理端。
  */
 adminCrisisRouter.post('/dividend', asyncHandler(async (req: Request, res: Response) => {
   const adminId = currentAdminId(req)

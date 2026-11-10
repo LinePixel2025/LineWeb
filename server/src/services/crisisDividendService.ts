@@ -5,13 +5,14 @@
  * 1. 读危机参数：自动路径要求 dividendEnabled 开启且 dividendPct > 0；手动路径只要求
  *    dividendPct > 0（管理员显式操作，不受「每日自动分红开关」限制）；
  * 2. Asia/Shanghai 日界：SiteSetting `crisis.dividend.lastDate` 已是今天 → 今天已发过
- *    （**手动触发同样占用当天额度**，避免同一天被点两次把池子抽穿）；
+ *    （**只约束每日自动分红**；管理员手动发放不读写这个标记，因此一天可以发无限次，
+ *    也不会把当天还没跑过的自动分红提前吃掉）；
  * 3. 事务内 CAS 抢锁（把 lastDate 翻成今天）防并发双发 → 读池 → 按管理员配置的比例抽取
- *    → 人均不足 1 分跳过（锁照抢、明细照写，当天不再试）→ 逐人发分 → 写明细 JSON。
+ *    → 人均不足 1 分跳过（自动路径锁照抢、明细照写，当天不再试）→ 逐人发分 → 写明细 JSON。
  *
  * 并发口径：
- * - 抢锁失败 / create 撞 P2002 = 别的实例（或并发的手动点击）已经发过，自动路径静默返回、
- *   手动路径抛 409 让管理员知道今天已经发过；
+ * - 抢锁失败 / create 撞 P2002 = 别的实例已经发过，自动路径静默返回；
+ * - 手动发放之间互不排斥（各自独立事务，靠扣池 CAS 保证余额不透支）；
  * - 扣池 CAS 不中 → 抛错回滚整个事务（含锁），下一分钟自然重试（手动路径直接把错误抛给接口）；
  * - 自动路径（定时器）整体不抛出，任何异常只 console.error。
  */
@@ -94,10 +95,17 @@ async function writeLastResultTx(tx: Prisma.TransactionClient, record: CrisisDiv
 }
 
 interface DividendOptions {
-  /** 手动触发：不受 dividendEnabled 开关限制，但今天已发过会直接报错 */
+  /** 手动触发：不受 dividendEnabled 开关限制，也不占用当天自动分红额度（每日可无限次） */
   manual: boolean
   /** 手动触发时的管理员 userId */
   operatorId?: number
+}
+
+/** 发放流水号：毫秒时间戳 + 进程内自增序号，保证同一毫秒内连续手动发放也不会撞号 */
+let dividendSeq = 0
+function newDividendId(nowMs = Date.now()): string {
+  dividendSeq = (dividendSeq + 1) % 10_000
+  return `${nowMs}-${dividendSeq}`
 }
 
 async function executeDividend(options: DividendOptions): Promise<CrisisDividendRecord | null> {
@@ -111,7 +119,7 @@ async function executeDividend(options: DividendOptions): Promise<CrisisDividend
   if (!options.manual && !rules.dividendEnabled) return null
 
   const today = getTodayDateKey()
-  // 快速路径：当天已发过直接返回，省一次事务
+  // 快速路径：当天已发过直接返回，省一次事务（只看每日自动分红，手动路径不读写该标记）
   if (!options.manual) {
     const marker = await prisma.siteSetting.findUnique({ where: { key: LAST_DATE_KEY } })
     if (marker?.value === today) return null
@@ -121,26 +129,21 @@ async function executeDividend(options: DividendOptions): Promise<CrisisDividend
   // 下分钟重试再超时，当天永远发不出）——放宽到 120s，当前站点规模（百人级）远够
   return prisma.$transaction(
     async (tx): Promise<CrisisDividendRecord | null> => {
-      // a. CAS 抢锁：把标记翻成今天；count === 0 说明行不存在（首次运行），create 撞 P2002 = 别人已发
-      const claim = await tx.siteSetting.updateMany({
-        where: { key: LAST_DATE_KEY, value: { not: today } },
-        data: { value: today },
-      })
-      if (claim.count === 0) {
-        try {
-          await tx.siteSetting.create({ data: { key: LAST_DATE_KEY, value: today } })
-        } catch (err) {
-          if (isUniqueViolation(err)) {
-            if (options.manual) {
-              throw new AppError(
-                '今天已经发放过一次分红，明天 0 点后自动发放（或明天再手动触发）',
-                409,
-                'DIVIDEND_DONE_TODAY',
-              )
-            }
-            return null
+      if (!options.manual) {
+        // a. CAS 抢锁：把「每日自动分红」标记翻成今天；count === 0 说明行不存在（首次运行），
+        //    create 撞 P2002 = 别人已发。手动发放**不碰这个标记**，因此可以一天发无限次，
+        //    也不会把当天还没跑过的自动分红提前吃掉。
+        const claim = await tx.siteSetting.updateMany({
+          where: { key: LAST_DATE_KEY, value: { not: today } },
+          data: { value: today },
+        })
+        if (claim.count === 0) {
+          try {
+            await tx.siteSetting.create({ data: { key: LAST_DATE_KEY, value: today } })
+          } catch (err) {
+            if (isUniqueViolation(err)) return null
+            throw err
           }
-          throw err
         }
       }
 
@@ -153,13 +156,14 @@ async function executeDividend(options: DividendOptions): Promise<CrisisDividend
       const pct = rules.dividendPct
       const draw = dividendDrawOf(Number(pool.total), pct)
 
-      // d. 全站 active 用户（含管理员）；人均不足 1 分（draw < 人数）跳过发放但锁已抢，当天不再试
+      // d. 全站 active 用户（含管理员）；人均不足 1 分（draw < 人数）跳过发放
+      //    （自动路径此时锁已抢，当天不再试；手动路径只是记下本次未发放，可继续再发）
       const users = await tx.user.findMany({ where: { status: 'active' }, select: { id: true } })
       const perUser = users.length > 0 ? Math.floor(draw / users.length) : 0
       const at = new Date().toISOString()
       if (perUser < 1) {
         const record: CrisisDividendRecord = {
-          id: String(Date.now()),
+          id: newDividendId(),
           dateKey: today,
           pct,
           total: 0,
@@ -199,7 +203,7 @@ async function executeDividend(options: DividendOptions): Promise<CrisisDividend
       // f. 写明细（前端弹窗与「公共银行动态」卡、/api/crisis/pool 的 dividend 字段共用）；
       //    total 记实际发放总额（= perUser × 人数），pct 即管理员配置的抽取比例
       const record: CrisisDividendRecord = {
-        id: String(Date.now()),
+        id: newDividendId(),
         dateKey: today,
         pct,
         total: issuedTotal,
@@ -238,8 +242,9 @@ export async function runDailyDividend(): Promise<CrisisDividendRecord | null> {
 }
 
 /**
- * 管理员手动触发分红：无视 dividendEnabled 开关，但仍占用当天额度（一天最多发一次，
- * 防止连点把池子抽穿）。失败直接抛 AppError 给接口层。
+ * 管理员手动触发分红：无视 dividendEnabled 开关，也**不占用当天自动分红额度**——
+ * 一天可以发无限次，每次都会按当前比例真实从池子里抽钱。
+ * 失败直接抛 AppError 给接口层；重复点击只会多扣几次池子，不会绕过扣池 CAS。
  */
 export async function runManualDividend(operatorId: number): Promise<CrisisDividendRecord> {
   const issued = await executeDividend({ manual: true, operatorId })
