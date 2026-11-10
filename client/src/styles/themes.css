@@ -1194,6 +1194,445 @@ html[data-lw-theme="royal"][data-theme="dark"] {
   --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(217, 180, 90, 0.30);
 }
 
+/* ------------------------------------------------------------
+   11. lavender 薰衣草 —— 藕紫奶白、压深紫罗兰强调（rare / 5500）
+   ------------------------------------------------------------ */
+html[data-lw-theme="lavender"] {
+  color-scheme: light;
+  --lw-deco-1: rgba(150, 120, 220, 0.14);
+  --lw-deco-2: rgba(255, 170, 205, 0.12);
+
+  --gh-bg: #f7f4fd;
+  --gh-canvas: #ffffff;
+  --gh-canvas-subtle: #faf8ff;
+  --gh-canvas-inset: rgba(96, 70, 160, 0.08);
+  --gh-fill-2: rgba(96, 70, 160, 0.12);
+  --gh-fill-3: rgba(96, 70, 160, 0.20);
+  --gh-scrim: rgba(40, 26, 66, 0.32);
+
+  --gh-border: rgba(96, 70, 160, 0.14);
+  --gh-border-muted: rgba(96, 70, 160, 0.08);
+  --gh-border-strong: rgba(96, 70, 160, 0.24);
+
+  --gh-text: #211a33;
+  --gh-text-secondary: #4e4268;
+  --gh-text-tertiary: #6a5d85;
+  --gh-text-placeholder: #7a6d95;
+  --gh-text-disabled: rgba(33, 26, 51, 0.32);
+
+  --gh-accent: #6d4bc4;
+  --gh-accent-hover: #5a3ba8;
+  --gh-accent-emphasis: #7c58d6;
+  --gh-accent-soft: rgba(109, 75, 196, 0.12);
+  --gh-on-accent: #ffffff;
+  --gh-accent-button: #6a48bf;
+  --gh-accent-button-hover: #56379f;
+
+  --gh-success: #1c6b45;
+  --gh-success-emphasis: #1c6b45;
+  --gh-success-soft: rgba(28, 107, 69, 0.12);
+  --gh-danger: #b31f3f;
+  --gh-danger-soft: rgba(179, 31, 63, 0.10);
+  --gh-warning: #7d5300;
+  --gh-warning-soft: rgba(125, 83, 0, 0.12);
+
+  --gh-btn-hover: rgba(33, 26, 51, 0.05);
+  --gh-btn-active: rgba(33, 26, 51, 0.09);
+
+  --gh-material-chrome: rgba(255, 255, 255, 0.78);
+  --gh-material-sidebar: rgba(250, 247, 255, 0.82);
+
+  --gh-shadow-sm: 0 1px 2px rgba(52, 38, 86, 0.07);
+  --gh-shadow-md: 0 6px 18px -8px rgba(52, 38, 86, 0.18);
+  --gh-shadow-lg: 0 16px 38px -12px rgba(52, 38, 86, 0.22);
+  --gh-shadow-xl: 0 28px 64px -22px rgba(52, 38, 86, 0.28);
+  --gh-shadow-card: 0 1px 2px rgba(52, 38, 86, 0.06), 0 12px 30px -18px rgba(52, 38, 86, 0.24);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(124, 88, 214, 0.28);
+}
+
+html[data-lw-theme="lavender"][data-theme="dark"] {
+  color-scheme: dark;
+  --lw-deco-1: rgba(190, 160, 255, 0.18);
+  --lw-deco-2: rgba(255, 160, 220, 0.14);
+
+  --gh-bg: #130e22;
+  --gh-canvas: #1c1530;
+  --gh-canvas-subtle: #241b3d;
+  --gh-canvas-inset: rgba(190, 160, 255, 0.14);
+  --gh-fill-2: rgba(190, 160, 255, 0.18);
+  --gh-fill-3: rgba(190, 160, 255, 0.28);
+  --gh-scrim: rgba(0, 0, 0, 0.66);
+
+  --gh-border: rgba(190, 160, 255, 0.24);
+  --gh-border-muted: rgba(190, 160, 255, 0.12);
+  --gh-border-strong: rgba(190, 160, 255, 0.38);
+
+  --gh-text: #f0eaff;
+  --gh-text-secondary: #c8bce6;
+  --gh-text-tertiary: #b0a4d0;
+  --gh-text-placeholder: #b0a4d0;
+  --gh-text-disabled: rgba(240, 234, 255, 0.30);
+
+  --gh-accent: #c9b4ff;
+  --gh-accent-hover: #ded0ff;
+  --gh-accent-emphasis: #b49bfa;
+  --gh-accent-soft: rgba(180, 150, 255, 0.18);
+  --gh-on-accent: #1a1030;
+  --gh-accent-button: #b49bfa;
+  --gh-accent-button-hover: #c9b4ff;
+
+  --gh-success: #6fd6a0;
+  --gh-success-emphasis: #6fd6a0;
+  --gh-success-soft: rgba(111, 214, 160, 0.16);
+  --gh-danger: #ff7a8a;
+  --gh-danger-soft: rgba(255, 122, 138, 0.16);
+  --gh-warning: #ffd166;
+  --gh-warning-soft: rgba(255, 209, 102, 0.16);
+
+  --gh-btn-hover: rgba(255, 255, 255, 0.06);
+  --gh-btn-active: rgba(255, 255, 255, 0.10);
+
+  --gh-material-chrome: rgba(20, 14, 34, 0.78);
+  --gh-material-sidebar: rgba(12, 8, 24, 0.82);
+
+  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --gh-shadow-md: 0 6px 22px -8px rgba(0, 0, 0, 0.65);
+  --gh-shadow-lg: 0 16px 44px -12px rgba(0, 0, 0, 0.72);
+  --gh-shadow-xl: 0 28px 72px -24px rgba(0, 0, 0, 0.82);
+  --gh-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.42), 0 14px 36px -20px rgba(190, 160, 255, 0.16);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(180, 150, 255, 0.30);
+}
+
+/* ------------------------------------------------------------
+   12. midnight 午夜 —— 深海军蓝 + 唯一暖黄强调（epic / 11000）
+   ------------------------------------------------------------ */
+html[data-lw-theme="midnight"] {
+  color-scheme: light;
+  --lw-deco-1: rgba(43, 74, 143, 0.14);
+  --lw-deco-2: rgba(240, 184, 76, 0.12);
+
+  --gh-bg: #eef2fb;
+  --gh-canvas: #ffffff;
+  --gh-canvas-subtle: #f5f8ff;
+  --gh-canvas-inset: rgba(43, 74, 143, 0.08);
+  --gh-fill-2: rgba(43, 74, 143, 0.12);
+  --gh-fill-3: rgba(43, 74, 143, 0.20);
+  --gh-scrim: rgba(10, 20, 44, 0.34);
+
+  --gh-border: rgba(43, 74, 143, 0.14);
+  --gh-border-muted: rgba(43, 74, 143, 0.08);
+  --gh-border-strong: rgba(43, 74, 143, 0.24);
+
+  --gh-text: #101a2f;
+  --gh-text-secondary: #33456b;
+  --gh-text-tertiary: #4d5f85;
+  --gh-text-placeholder: #5d6f95;
+  --gh-text-disabled: rgba(16, 26, 47, 0.32);
+
+  --gh-accent: #2b4a8f;
+  --gh-accent-hover: #213a73;
+  --gh-accent-emphasis: #33559f;
+  --gh-accent-soft: rgba(43, 74, 143, 0.12);
+  --gh-on-accent: #ffffff;
+  --gh-accent-button: #2a478a;
+  --gh-accent-button-hover: #203a71;
+
+  --gh-success: #1c6b45;
+  --gh-success-emphasis: #1c6b45;
+  --gh-success-soft: rgba(28, 107, 69, 0.12);
+  --gh-danger: #b31f3f;
+  --gh-danger-soft: rgba(179, 31, 63, 0.10);
+  --gh-warning: #7d5300;
+  --gh-warning-soft: rgba(125, 83, 0, 0.12);
+
+  --gh-btn-hover: rgba(16, 26, 47, 0.05);
+  --gh-btn-active: rgba(16, 26, 47, 0.09);
+
+  --gh-material-chrome: rgba(255, 255, 255, 0.78);
+  --gh-material-sidebar: rgba(243, 247, 255, 0.82);
+
+  --gh-shadow-sm: 0 1px 2px rgba(12, 26, 56, 0.07);
+  --gh-shadow-md: 0 6px 18px -8px rgba(12, 26, 56, 0.18);
+  --gh-shadow-lg: 0 16px 38px -12px rgba(12, 26, 56, 0.22);
+  --gh-shadow-xl: 0 28px 64px -22px rgba(12, 26, 56, 0.28);
+  --gh-shadow-card: 0 1px 2px rgba(12, 26, 56, 0.06), 0 12px 30px -18px rgba(12, 26, 56, 0.24);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(51, 85, 159, 0.28);
+}
+
+html[data-lw-theme="midnight"][data-theme="dark"] {
+  color-scheme: dark;
+  --lw-deco-1: rgba(240, 184, 76, 0.14);
+  --lw-deco-2: rgba(80, 130, 230, 0.18);
+
+  --gh-bg: #050a16;
+  --gh-canvas: #0b1324;
+  --gh-canvas-subtle: #111b31;
+  --gh-canvas-inset: rgba(240, 184, 76, 0.10);
+  --gh-fill-2: rgba(120, 160, 255, 0.14);
+  --gh-fill-3: rgba(120, 160, 255, 0.24);
+  --gh-scrim: rgba(0, 0, 0, 0.70);
+
+  --gh-border: rgba(120, 160, 255, 0.22);
+  --gh-border-muted: rgba(120, 160, 255, 0.12);
+  --gh-border-strong: rgba(120, 160, 255, 0.36);
+
+  --gh-text: #e8f0ff;
+  --gh-text-secondary: #b6c6e6;
+  --gh-text-tertiary: #9fb0d4;
+  --gh-text-placeholder: #9fb0d4;
+  --gh-text-disabled: rgba(232, 240, 255, 0.30);
+
+  --gh-accent: #f0b84c;
+  --gh-accent-hover: #f7cd7a;
+  --gh-accent-emphasis: #d9a437;
+  --gh-accent-soft: rgba(240, 184, 76, 0.16);
+  --gh-on-accent: #1a1206;
+  --gh-accent-button: #d9a437;
+  --gh-accent-button-hover: #f0b84c;
+
+  --gh-success: #6fd6a0;
+  --gh-success-emphasis: #6fd6a0;
+  --gh-success-soft: rgba(111, 214, 160, 0.16);
+  --gh-danger: #ff7a8a;
+  --gh-danger-soft: rgba(255, 122, 138, 0.16);
+  --gh-warning: #ffd166;
+  --gh-warning-soft: rgba(255, 209, 102, 0.16);
+
+  --gh-btn-hover: rgba(255, 255, 255, 0.06);
+  --gh-btn-active: rgba(255, 255, 255, 0.10);
+
+  --gh-material-chrome: rgba(8, 14, 26, 0.78);
+  --gh-material-sidebar: rgba(5, 9, 18, 0.84);
+
+  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --gh-shadow-md: 0 6px 22px -8px rgba(0, 0, 0, 0.65);
+  --gh-shadow-lg: 0 16px 44px -12px rgba(0, 0, 0, 0.72);
+  --gh-shadow-xl: 0 28px 72px -24px rgba(0, 0, 0, 0.82);
+  --gh-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.42), 0 14px 36px -20px rgba(240, 184, 76, 0.14);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(240, 184, 76, 0.30);
+}
+
+/* ------------------------------------------------------------
+   13. meadow 草原 —— 嫩绿奶油、鲜活成功色（epic / 14000）
+   ------------------------------------------------------------ */
+html[data-lw-theme="meadow"] {
+  color-scheme: light;
+  --lw-deco-1: rgba(110, 180, 80, 0.16);
+  --lw-deco-2: rgba(255, 210, 90, 0.14);
+
+  --gh-bg: #f0f7ec;
+  --gh-canvas: #ffffff;
+  --gh-canvas-subtle: #f6fbf2;
+  --gh-canvas-inset: rgba(58, 125, 44, 0.08);
+  --gh-fill-2: rgba(58, 125, 44, 0.12);
+  --gh-fill-3: rgba(58, 125, 44, 0.20);
+  --gh-scrim: rgba(18, 40, 14, 0.32);
+
+  --gh-border: rgba(58, 125, 44, 0.14);
+  --gh-border-muted: rgba(58, 125, 44, 0.08);
+  --gh-border-strong: rgba(58, 125, 44, 0.24);
+
+  --gh-text: #1b2a16;
+  --gh-text-secondary: #3b5230;
+  --gh-text-tertiary: #556b49;
+  --gh-text-placeholder: #657a59;
+  --gh-text-disabled: rgba(27, 42, 22, 0.32);
+
+  --gh-accent: #3a7d2c;
+  --gh-accent-hover: #2f6823;
+  --gh-accent-emphasis: #438f33;
+  --gh-accent-soft: rgba(58, 125, 44, 0.12);
+  --gh-on-accent: #ffffff;
+  --gh-accent-button: #38802b;
+  --gh-accent-button-hover: #2d6a22;
+
+  --gh-success: #1c6b45;
+  --gh-success-emphasis: #1c6b45;
+  --gh-success-soft: rgba(28, 107, 69, 0.12);
+  --gh-danger: #b31f3f;
+  --gh-danger-soft: rgba(179, 31, 63, 0.10);
+  --gh-warning: #7d5300;
+  --gh-warning-soft: rgba(125, 83, 0, 0.12);
+
+  --gh-btn-hover: rgba(27, 42, 22, 0.05);
+  --gh-btn-active: rgba(27, 42, 22, 0.09);
+
+  --gh-material-chrome: rgba(255, 255, 255, 0.78);
+  --gh-material-sidebar: rgba(246, 251, 242, 0.82);
+
+  --gh-shadow-sm: 0 1px 2px rgba(26, 52, 20, 0.07);
+  --gh-shadow-md: 0 6px 18px -8px rgba(26, 52, 20, 0.18);
+  --gh-shadow-lg: 0 16px 38px -12px rgba(26, 52, 20, 0.22);
+  --gh-shadow-xl: 0 28px 64px -22px rgba(26, 52, 20, 0.28);
+  --gh-shadow-card: 0 1px 2px rgba(26, 52, 20, 0.06), 0 12px 30px -18px rgba(26, 52, 20, 0.24);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(67, 143, 51, 0.28);
+}
+
+html[data-lw-theme="meadow"][data-theme="dark"] {
+  color-scheme: dark;
+  --lw-deco-1: rgba(155, 227, 122, 0.16);
+  --lw-deco-2: rgba(255, 210, 90, 0.12);
+
+  --gh-bg: #0d150e;
+  --gh-canvas: #142016;
+  --gh-canvas-subtle: #1a2a1c;
+  --gh-canvas-inset: rgba(155, 227, 122, 0.12);
+  --gh-fill-2: rgba(155, 227, 122, 0.16);
+  --gh-fill-3: rgba(155, 227, 122, 0.26);
+  --gh-scrim: rgba(0, 0, 0, 0.68);
+
+  --gh-border: rgba(155, 227, 122, 0.22);
+  --gh-border-muted: rgba(155, 227, 122, 0.12);
+  --gh-border-strong: rgba(155, 227, 122, 0.36);
+
+  --gh-text: #e9f6e2;
+  --gh-text-secondary: #bfd8b3;
+  --gh-text-tertiary: #a8c79b;
+  --gh-text-placeholder: #a8c79b;
+  --gh-text-disabled: rgba(233, 246, 226, 0.30);
+
+  --gh-accent: #9be37a;
+  --gh-accent-hover: #b6ef9b;
+  --gh-accent-emphasis: #84d164;
+  --gh-accent-soft: rgba(155, 227, 122, 0.16);
+  --gh-on-accent: #10200c;
+  --gh-accent-button: #84d164;
+  --gh-accent-button-hover: #9be37a;
+
+  --gh-success: #6fd6a0;
+  --gh-success-emphasis: #6fd6a0;
+  --gh-success-soft: rgba(111, 214, 160, 0.16);
+  --gh-danger: #ff7a8a;
+  --gh-danger-soft: rgba(255, 122, 138, 0.16);
+  --gh-warning: #ffd166;
+  --gh-warning-soft: rgba(255, 209, 102, 0.16);
+
+  --gh-btn-hover: rgba(255, 255, 255, 0.06);
+  --gh-btn-active: rgba(255, 255, 255, 0.10);
+
+  --gh-material-chrome: rgba(10, 20, 12, 0.78);
+  --gh-material-sidebar: rgba(7, 14, 8, 0.84);
+
+  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --gh-shadow-md: 0 6px 22px -8px rgba(0, 0, 0, 0.65);
+  --gh-shadow-lg: 0 16px 44px -12px rgba(0, 0, 0, 0.72);
+  --gh-shadow-xl: 0 28px 72px -24px rgba(0, 0, 0, 0.82);
+  --gh-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.42), 0 14px 36px -20px rgba(155, 227, 122, 0.14);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(155, 227, 122, 0.28);
+}
+
+/* ------------------------------------------------------------
+   14. obsidian 黑曜 —— 石墨黑层叠 + 冰青高光（legendary / 22000）
+   ------------------------------------------------------------ */
+html[data-lw-theme="obsidian"] {
+  color-scheme: light;
+  --lw-deco-1: rgba(15, 23, 32, 0.10);
+  --lw-deco-2: rgba(11, 111, 122, 0.12);
+
+  --gh-bg: #eef1f4;
+  --gh-canvas: #ffffff;
+  --gh-canvas-subtle: #f5f7f9;
+  --gh-canvas-inset: rgba(15, 23, 32, 0.08);
+  --gh-fill-2: rgba(15, 23, 32, 0.12);
+  --gh-fill-3: rgba(15, 23, 32, 0.20);
+  --gh-scrim: rgba(5, 10, 14, 0.36);
+
+  --gh-border: rgba(15, 23, 32, 0.14);
+  --gh-border-muted: rgba(15, 23, 32, 0.08);
+  --gh-border-strong: rgba(15, 23, 32, 0.24);
+
+  --gh-text: #0f1720;
+  --gh-text-secondary: #33424f;
+  --gh-text-tertiary: #4c5c6b;
+  --gh-text-placeholder: #5d6d7c;
+  --gh-text-disabled: rgba(15, 23, 32, 0.32);
+
+  --gh-accent: #0b6f7a;
+  --gh-accent-hover: #095a63;
+  --gh-accent-emphasis: #0d808d;
+  --gh-accent-soft: rgba(11, 111, 122, 0.12);
+  --gh-on-accent: #ffffff;
+  --gh-accent-button: #0a6a74;
+  --gh-accent-button-hover: #08565e;
+
+  --gh-success: #1c6b45;
+  --gh-success-emphasis: #1c6b45;
+  --gh-success-soft: rgba(28, 107, 69, 0.12);
+  --gh-danger: #b31f3f;
+  --gh-danger-soft: rgba(179, 31, 63, 0.10);
+  --gh-warning: #7d5300;
+  --gh-warning-soft: rgba(125, 83, 0, 0.12);
+
+  --gh-btn-hover: rgba(15, 23, 32, 0.05);
+  --gh-btn-active: rgba(15, 23, 32, 0.09);
+
+  --gh-material-chrome: rgba(255, 255, 255, 0.80);
+  --gh-material-sidebar: rgba(245, 247, 249, 0.84);
+
+  --gh-shadow-sm: 0 1px 2px rgba(8, 14, 20, 0.08);
+  --gh-shadow-md: 0 6px 18px -8px rgba(8, 14, 20, 0.20);
+  --gh-shadow-lg: 0 16px 38px -12px rgba(8, 14, 20, 0.24);
+  --gh-shadow-xl: 0 28px 64px -22px rgba(8, 14, 20, 0.30);
+  --gh-shadow-card: 0 1px 2px rgba(8, 14, 20, 0.07), 0 12px 30px -18px rgba(8, 14, 20, 0.26);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(13, 128, 141, 0.28);
+}
+
+html[data-lw-theme="obsidian"][data-theme="dark"] {
+  color-scheme: dark;
+  --lw-deco-1: rgba(127, 227, 240, 0.14);
+  --lw-deco-2: rgba(180, 210, 230, 0.08);
+  /* 极淡的斜向拉丝：像黑曜石被打磨过的表面 */
+  --lw-deco-pattern:
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 9px);
+
+  --gh-bg: #07090c;
+  --gh-canvas: #0d1116;
+  --gh-canvas-subtle: #141a21;
+  --gh-canvas-inset: rgba(127, 227, 240, 0.12);
+  --gh-fill-2: rgba(127, 227, 240, 0.16);
+  --gh-fill-3: rgba(127, 227, 240, 0.26);
+  --gh-scrim: rgba(0, 0, 0, 0.74);
+
+  --gh-border: rgba(160, 190, 210, 0.22);
+  --gh-border-muted: rgba(160, 190, 210, 0.12);
+  --gh-border-strong: rgba(160, 190, 210, 0.38);
+
+  --gh-text: #e7eef5;
+  --gh-text-secondary: #b9c8d6;
+  --gh-text-tertiary: #9fb0bf;
+  --gh-text-placeholder: #9fb0bf;
+  --gh-text-disabled: rgba(231, 238, 245, 0.30);
+
+  --gh-accent: #7fe3f0;
+  --gh-accent-hover: #a5edf7;
+  --gh-accent-emphasis: #5ed3e2;
+  --gh-accent-soft: rgba(127, 227, 240, 0.16);
+  --gh-on-accent: #04181c;
+  --gh-accent-button: #5ed3e2;
+  --gh-accent-button-hover: #7fe3f0;
+
+  --gh-success: #6fd6a0;
+  --gh-success-emphasis: #6fd6a0;
+  --gh-success-soft: rgba(111, 214, 160, 0.16);
+  --gh-danger: #ff7a8a;
+  --gh-danger-soft: rgba(255, 122, 138, 0.16);
+  --gh-warning: #ffd166;
+  --gh-warning-soft: rgba(255, 209, 102, 0.16);
+
+  --gh-btn-hover: rgba(255, 255, 255, 0.06);
+  --gh-btn-active: rgba(255, 255, 255, 0.10);
+
+  --gh-material-chrome: rgba(10, 14, 18, 0.80);
+  --gh-material-sidebar: rgba(7, 10, 13, 0.86);
+
+  --gh-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.55);
+  --gh-shadow-md: 0 6px 22px -8px rgba(0, 0, 0, 0.72);
+  --gh-shadow-lg: 0 16px 44px -12px rgba(0, 0, 0, 0.78);
+  --gh-shadow-xl: 0 28px 72px -24px rgba(0, 0, 0, 0.86);
+  --gh-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.50), 0 14px 36px -20px rgba(127, 227, 240, 0.12);
+  --gh-focus-ring: 0 0 0 1px var(--gh-accent-emphasis), 0 0 0 4px rgba(127, 227, 240, 0.28);
+}
+
 /* =============================================================
    商店页面（/themes）— .gh-themes-*
    ============================================================= */

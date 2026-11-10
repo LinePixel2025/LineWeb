@@ -46,8 +46,8 @@ const DEFAULT_MODES = ['light', 'dark']
    ============================================================ */
 
 assertEqual(THEMES[0].key, DEFAULT_THEME_KEY, '默认主题排在目录首位')
-assertEqual(THEMES.length, 11, '目录共 11 个主题（1 默认 + 10 付费）')
-assertEqual(PAID_THEMES.length, 10, '付费主题 10 个')
+assertEqual(THEMES.length, 15, '目录共 15 个主题（1 默认 + 14 付费）')
+assertEqual(PAID_THEMES.length, 14, '付费主题 14 个')
 assertEqual(THEME_KEYS.length, THEMES.length, 'THEME_KEYS 与 THEMES 数量一致')
 assertEqual(new Set(THEME_KEYS).size, THEME_KEYS.length, '主题 key 唯一')
 assertEqual(new Set(THEMES.map((theme) => theme.name)).size, THEMES.length, '主题名称唯一')

@@ -3,7 +3,7 @@
  *
  * 口径：
  * - `default` 是免费主题，代表站点原生的 Apple 视觉，不落库、不可购买、永远「已拥有」；
- * - 其余 10 个主题用积分兑换，价格区间 5000–38000，最低一档也明显高于日常签到 / 单局游戏的收益，
+ * - 其余 14 个主题用积分兑换，价格区间 5000–38000，最低一档也明显高于日常签到 / 单局游戏的收益，
  *   保持「不廉价」的稀缺感（兑换过一次即永久拥有）；
  * - 本文件只描述商店元数据（名称 / 文案 / 价格 / 色板 / 预览渐变）。真正的视觉定义在
  *   `client/src/styles/themes.css` 里按 `html[data-lw-theme="<key>"]` 覆盖设计令牌，
@@ -172,6 +172,54 @@ export const PAID_THEMES: readonly ThemeDef[] = [
     rarity: 'legendary',
     swatches: ['#0d0718', '#170d29', '#d9b45a', '#f3ebff'],
     previewGradient: 'linear-gradient(135deg, #0d0718 0%, #170d29 46%, #d9b45a 100%)',
+    defaultMode: 'dark',
+  },
+  {
+    key: 'lavender',
+    name: '薰衣草',
+    tagline: '柔紫奶白，安静的花田',
+    description:
+      '藕紫与奶白的主调，按钮是压深的紫罗兰色，卡片像被晒过太阳的棉纸。适合日记与长文阅读。',
+    price: 5500,
+    rarity: 'rare',
+    swatches: ['#f7f4fd', '#ffffff', '#6d4bc4', '#211a33'],
+    previewGradient: 'linear-gradient(135deg, #f7f4fd 0%, #ffffff 50%, #6d4bc4 100%)',
+    defaultMode: 'light',
+  },
+  {
+    key: 'midnight',
+    name: '午夜',
+    tagline: '深海军蓝，一盏暖黄台灯',
+    description:
+      '近乎黑蓝的底与冷色分栏，唯一的暖色留给强调按钮与链接——像深夜里只开着一盏台灯的书桌。',
+    price: 11000,
+    rarity: 'epic',
+    swatches: ['#050a16', '#0b1324', '#f0b84c', '#e8f0ff'],
+    previewGradient: 'linear-gradient(140deg, #050a16 0%, #0b1324 52%, #f0b84c 100%)',
+    defaultMode: 'dark',
+  },
+  {
+    key: 'meadow',
+    name: '草原',
+    tagline: '青草与奶油，风吹过原野',
+    description:
+      '嫩绿与奶油白的组合，侧边栏像一张晒得暖暖的木桌，成功的绿比默认主题更鲜活。',
+    price: 14000,
+    rarity: 'epic',
+    swatches: ['#f0f7ec', '#ffffff', '#3a7d2c', '#1b2a16'],
+    previewGradient: 'linear-gradient(130deg, #f0f7ec 0%, #ffffff 46%, #3a7d2c 100%)',
+    defaultMode: 'light',
+  },
+  {
+    key: 'obsidian',
+    name: '黑曜',
+    tagline: '黑曜石底，一道冷青反光',
+    description:
+      '纯黑到石墨的层叠，唯一的高光是冰青色——像打磨过的黑曜石表面。适合长时间盯屏幕的深夜工作。',
+    price: 22000,
+    rarity: 'legendary',
+    swatches: ['#07090c', '#0d1116', '#7fe3f0', '#e7eef5'],
+    previewGradient: 'linear-gradient(145deg, #07090c 0%, #0d1116 54%, #7fe3f0 100%)',
     defaultMode: 'dark',
   },
 ]
