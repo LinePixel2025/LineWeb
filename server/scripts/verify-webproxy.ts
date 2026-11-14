@@ -933,6 +933,38 @@ async function main(): Promise<void> {
   assert(playbackSyntaxOk, '播放适配：抖音 legacy 变体语法可解析')
 
   // ============================================================
+  // 6.10 字节 WAF "Please wait" 挑战服务端求解
+  // ============================================================
+  const waf = await import('../src/services/webProxyWaf.js')
+  const { createHash } = await import('crypto')
+  // 真实捕获的挑战串（服务端预选 i=7）
+  const wafCs = 'eyJ2Ijp7ImEiOiJYbXYvV0t2cmd4VjM5ZzNRZHg0OXlOcGJ1L2habzN0N3psTytlY2lHU2JZPSIsImIiOjE3OTQ2NzI4MDQsImMiOiJNaFJYQjFhbEtLZVQ5bCtaT3lBRHBka0laaVRXemtVY1UxY1lJcHQzNzlFPSJ9LCJzIjoiWTVZQStraHYycWkrdkl6bXYxT1hoZlJNVDlNRzNOeExVUHZNQU9hd0tkUT0ifQ'
+  const wafHtml = `<html><head><script src="https://lf-waf-js.byted-static.com/obj/waf-jschallenge/out-sha256.js"></script></head><body onload="readygo()"><script>var cs="${wafCs}";expect===s256(prefix,""+i)</script>Please wait...</body></html>`
+  assert(waf.isWafChallenge(wafHtml), 'WAF：识别挑战页')
+  assert(!waf.isWafChallenge('<html><body>normal page</body></html>'), 'WAF：正常页不误判')
+  assertEqual(waf.extractWafChallenge(wafHtml), wafCs, 'WAF：提取 cs 挑战串')
+  const wafCookie = waf.solveWafChallenge(wafCs)
+  assert(!!wafCookie, 'WAF：PoW 求解成功')
+  const wafDecoded = JSON.parse(Buffer.from(wafCookie!, 'base64').toString('utf8'))
+  assertEqual(Buffer.from(wafDecoded.d, 'base64').toString('utf8'), '7', 'WAF：解为 i=7')
+  const wafPrefix = Buffer.from(wafDecoded.v.a, 'base64')
+  const wafExpect = Buffer.from(wafDecoded.v.c, 'base64').toString('hex')
+  assertEqual(createHash('sha256').update(wafPrefix).update(Buffer.from('7', 'utf8')).digest('hex'), wafExpect, 'WAF：解答哈希与 expect 匹配')
+  assertEqual(waf.solveWafChallenge('bm90LWpzb24'), null, 'WAF：非法挑战返回 null')
+  assertEqual(waf.WAF_COOKIE_NAME, '_wafchallengeid', 'WAF：Cookie 名常量')
+  // 档案补齐挑战域名
+  assert(profiles.classifyProfileHost(dyProfile!, 'lf-waf-js.byted-static.com') === 'resource', 'WAF：挑战脚本域归资源类')
+  assert(profiles.classifyProfileHost(dyProfile!, 'lf3-short.ibytedapm.com') === 'resource', 'WAF：Slardar 域归资源类')
+  assert(profiles.classifyProfileHost(dyProfile!, 'mssdk.zijieapi.com') === 'page', 'WAF：风控接口域归 page 类')
+  // 虚拟罐 Cookie 镜像（导航携带，破解 acrawler reload 死循环）
+  assert(boot.includes('mirrorRealCookie'), 'Cookie 镜像：引导脚本含镜像函数')
+  assert(boot.includes('__lwp_'), 'Cookie 镜像：命名空间前缀')
+  assert(boot.includes('nativeCookieSet'), 'Cookie 镜像：捕获原生 cookie setter')
+  let mirrorSyntaxOk = true
+  try { new Function(boot) } catch { mirrorSyntaxOk = false }
+  assert(mirrorSyntaxOk, 'Cookie 镜像：引导脚本语法可解析')
+
+  // ============================================================
   // 7. 错误页 / 登录页
   // ============================================================
   const errorPage = proxy.buildProxyErrorPage('无法连接目标网站', '请稍后重试', { retry: true })

@@ -49,9 +49,13 @@ const DOUYIN_PROFILE: SiteProfile = {
   families: ['douyin.com'],
   pageHosts: [
     'douyin.com', 'snssdk.com', 'amemv.com', 'bytedance.com', 'toutiao.com',
-    'bytegoofy.com', 'bytedns.net', 'volces.com',
+    'bytegoofy.com', 'bytedns.net', 'volces.com', 'zijieapi.com',
   ],
-  resourceHosts: ['douyinpic.com', 'douyinstatic.com', 'bytecdn.cn', 'byteimg.com', 'pstatp.com'],
+  resourceHosts: [
+    'douyinpic.com', 'douyinstatic.com', 'bytecdn.cn', 'byteimg.com', 'pstatp.com',
+    // WAF 挑战 / Slardar 监控 / 静态 SDK 域名（please wait 挑战脚本所在）
+    'byted-static.com', 'ibytedapm.com', 'bytedapm.com', 'bytetos.com', 'byteoversea.com',
+  ],
   mediaHosts: ['douyinvod.com', 'zjcdn.com', 'ixigua.com', 'douyinliving.com', 'douyincdn.com'],
   mediaPathPatterns: [/\/aweme\/v1\/play\//i, /[?&]video_id=/i],
 }

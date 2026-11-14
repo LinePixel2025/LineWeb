@@ -39,6 +39,7 @@ import { rewriteJsonBody, rewriteJsonpBody } from '../services/webProxyBody.js'
 import { resolveCompatMode, type EffectiveCompat } from '../services/webProxyCompat.js'
 import { transpileToEs5, MAX_TRANSPILE_BYTES } from '../services/webProxyTranspile.js'
 import { POLYFILL_BUNDLE, POLYFILL_SEGMENT } from '../services/webProxyPolyfills.js'
+import { isWafChallenge, extractWafChallenge, solveWafChallenge, WAF_COOKIE_NAME } from '../services/webProxyWaf.js'
 import { hostMatchesSuffix } from '../services/webProxyHosts.js'
 import { classifyProfileHost, profileForOrigin, profilePageSuffixes } from '../services/webProxyProfiles.js'
 
@@ -196,6 +197,28 @@ function getSetCookies(headers: Headers): string[] {
   if (!raw) return []
   // 兼容没有 getSetCookie 的运行时：按 Expires 里的逗号做粗略切分
   return raw.split(/,(?=\s*[^;,=]+=[^;,]*)/).map((s) => s.trim()).filter(Boolean)
+}
+
+/**
+ * 从浏览器 Cookie 头提取引导脚本镜像的反代 Cookie（`__lwp_<name>`），剥前缀还原为上游 Cookie。
+ * 风控挑战（WAF/acrawler）写 document.cookie 后 reload 走文档导航，镜像 Cookie 随导航送达，
+ * 这里还原后并入上游请求。只认 __lwp_ 前缀，避免把 LineWeb 自身的 Cookie 泄漏给上游。
+ */
+function mirroredClientCookies(cookieHeader: string | undefined): string {
+  if (!cookieHeader) return ''
+  const pairs: string[] = []
+  for (const segment of cookieHeader.split(';')) {
+    const item = segment.trim()
+    if (!item.startsWith('__lwp_')) continue
+    const eq = item.indexOf('=')
+    if (eq <= 6) continue
+    const name = item.slice(6, eq).trim()
+    const value = item.slice(eq + 1)
+    if (!name || /[\s,;]/.test(name)) continue
+    pairs.push(`${name}=${value}`)
+    if (pairs.length >= 100) break
+  }
+  return pairs.join('; ')
 }
 
 function siteDto(site: {
@@ -1034,7 +1057,11 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
 
   const cookiesBefore = site.cookies
   let jar = readCookieJar(site.cookies)
-  const clientCookies = sanitizeClientCookies(req.headers['x-lw-cookie'] as string | undefined)
+  // 客户端 Cookie 两路合并：fetch/XHR 的 x-lw-cookie 头 + 导航携带的镜像 Cookie（__lwp_ 前缀）
+  const clientCookies = mergeCookieHeaders(
+    sanitizeClientCookies(req.headers['x-lw-cookie'] as string | undefined),
+    mirroredClientCookies(req.headers.cookie),
+  )
 
   // 同源静态资源代理：CDN 上的 CSS / JS / 图片 / 字体，不走 HTML 重写，直接回传（CSS 会改写内部 url()）
   if (upstreamPath.startsWith(`/${RES_SEGMENT}/`)) {
@@ -1132,6 +1159,10 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
   let currentUrl = target
   let upstream: globalThis.Response | null = null
   let hops = 0
+  /** WAF 挑战已服务端求解（防重复求解死循环） */
+  let wafSolved = false
+  /** 循环内为检测 WAF 预读的 HTML body（非挑战时下游复用，避免二次读取） */
+  let bufferedBody: Buffer | null = null
 
   // 只给「响应头」设超时：大文件 / 视频的响应体可能持续很久，不能被整体超时打断
   const upstreamController = new AbortController()
@@ -1197,6 +1228,33 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
       }
 
       upstream = response
+      // 字节 WAF "Please wait" 挑战：服务端解 PoW，带 _wafchallengeid 重取上游。
+      // 仅对小体量 HTML 文档预读检测（挑战页约 2KB），避免大文档在头超时内被整体读入。
+      const respType = response.headers.get('content-type') || ''
+      const respLength = Number(response.headers.get('content-length') || '0')
+      if (!wafSolved && method === 'GET' && /text\/html/i.test(respType) && respLength > 0 && respLength < 256 * 1024) {
+        const peekBuffer = Buffer.from(await response.arrayBuffer())
+        const peekText = decodeBody(peekBuffer, charsetOf(respType, peekBuffer))
+        if (isWafChallenge(peekText)) {
+          const cs = extractWafChallenge(peekText)
+          const cookieValue = cs ? solveWafChallenge(cs) : null
+          if (cookieValue) {
+            jar = mergeCookieJar(jar, [{
+              name: WAF_COOKIE_NAME,
+              value: cookieValue,
+              domain: currentUrl.hostname,
+              path: '/',
+              hostOnly: true,
+              expires: Date.now() + 60_000,
+            }])
+            await persistCookies(site.id, cookiesBefore, jar)
+            wafSolved = true
+            continue
+          }
+        }
+        // 非挑战（或无解）：保留预读 body 供下游改写复用
+        bufferedBody = peekBuffer
+      }
       break
     }
   } finally {
@@ -1238,15 +1296,20 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
 
   if (isHtml || isCss || isJson || isJsonp) {
     let buffer: Buffer
-    // 文本要整体读入才能改写，这一段保留 30 秒兜底超时
-    const bodyTimer = setTimeout(() => upstreamController.abort(), MAX_UPSTREAM_TIMEOUT_MS)
-    try {
-      buffer = Buffer.from(await upstream.arrayBuffer())
-    } catch {
-      res.end()
-      return
-    } finally {
-      clearTimeout(bodyTimer)
+    if (bufferedBody) {
+      // 循环内为检测 WAF 已预读，直接复用
+      buffer = bufferedBody
+    } else {
+      // 文本要整体读入才能改写，这一段保留 30 秒兜底超时
+      const bodyTimer = setTimeout(() => upstreamController.abort(), MAX_UPSTREAM_TIMEOUT_MS)
+      try {
+        buffer = Buffer.from(await upstream.arrayBuffer())
+      } catch {
+        res.end()
+        return
+      } finally {
+        clearTimeout(bodyTimer)
+      }
     }
     const rewriteCap = isJson || isJsonp ? MAX_JSON_REWRITE_BYTES : MAX_REWRITE_BYTES
     if (buffer.byteLength > rewriteCap) {
