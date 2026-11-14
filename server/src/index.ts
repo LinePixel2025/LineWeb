@@ -48,6 +48,7 @@ import { featuresRouter, adminFeaturesRouter } from './routes/features.js'
 import { announcementsRouter, adminAnnouncementsRouter } from './routes/announcements.js'
 import { proxyApiRouter, proxyHttpRouter } from './routes/webProxy.js'
 import { proxyAdminRouter } from './routes/proxyAdmin.js'
+import { webProxyWsHttpRouter } from './services/webProxyWsHttp.js'
 import { startProxyStatsFlusher } from './services/proxyStats.js'
 import { refreshProxyBlacklist } from './services/proxyBlacklist.js'
 import { authenticate } from './middleware/auth.js'
@@ -289,6 +290,9 @@ app.use('/api/proxy/admin', requireFeature('webProxy'), proxyAdminRouter)
 
 // === 网页反代（同源代理，Cookie 会话认证）— 必须在静态资源 / SPA fallback 之前 ===
 app.use('/proxy', proxyHttpRouter)
+// 网页反代 WebSocket over HTTP 桥（无 WS / WS 被阻断设备的降级通道，同样 Cookie 会话认证）
+// 路径含 /proxy，compression 过滤器已自动跳过；body 由路由自读（不挂 /api 解析）
+app.use('/proxy-ws-http', webProxyWsHttpRouter)
 
 // API 自描述端点 — 列出所有可用路由
 app.get('/api', (_req, res) => {

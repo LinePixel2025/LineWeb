@@ -7,6 +7,9 @@ import api from './api'
  * `lw_proxy` 会话 Cookie，真正的站点登录 Cookie 始终留在服务端。
  */
 
+/** 兼容模式：auto 按设备 UA 自动判定 / legacy 老旧设备兼容 / modern 现代浏览器 */
+export type ProxyCompatMode = 'auto' | 'legacy' | 'modern'
+
 export interface ProxySite {
   id: number
   name: string
@@ -17,6 +20,8 @@ export interface ProxySite {
   cookieCount: number
   /** 是否强制使用桌面浏览器 UA 打开上游站点 */
   forceDesktop: boolean
+  /** 兼容模式（老旧 WebView / 无 WebSocket 设备） */
+  compatMode: ProxyCompatMode
   lastVisitedAt: string | null
   /** 累计反代请求数（含子资源，服务端每 15 秒批量落库） */
   requestCount?: number
@@ -40,16 +45,19 @@ export interface ProxyOpenResponse {
 
 export const webProxyApi = {
   list: () => api.get<ProxySiteListResponse>('/proxy/sites'),
-  create: (url: string, name?: string, forceDesktop?: boolean) =>
+  create: (url: string, name?: string, forceDesktop?: boolean, compatMode?: ProxyCompatMode) =>
     api.post<{ site: ProxySite }>('/proxy/sites', {
       url,
       name: name?.trim() || undefined,
       forceDesktop: forceDesktop ? true : undefined,
+      compatMode: compatMode && compatMode !== 'auto' ? compatMode : undefined,
     }),
   rename: (siteId: number, name: string) =>
     api.patch<{ site: ProxySite }>(`/proxy/sites/${siteId}`, { name }),
   setDesktop: (siteId: number, forceDesktop: boolean) =>
     api.patch<{ site: ProxySite }>(`/proxy/sites/${siteId}`, { forceDesktop }),
+  setCompat: (siteId: number, compatMode: ProxyCompatMode) =>
+    api.patch<{ site: ProxySite }>(`/proxy/sites/${siteId}`, { compatMode }),
   remove: (siteId: number) => api.delete<void>(`/proxy/sites/${siteId}`),
   clearCookies: (siteId: number) => api.delete<{ ok: boolean }>(`/proxy/sites/${siteId}/cookies`),
   open: (siteId: number) => api.post<ProxyOpenResponse>(`/proxy/sites/${siteId}/open`),

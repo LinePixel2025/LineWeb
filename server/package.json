@@ -43,6 +43,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@babel/standalone": "^8.1.2",
     "@neteasecloudmusicapienhanced/api": "^4.41.1",
     "@prisma/client": "^6.0.0",
     "@types/compression": "^1.8.1",
@@ -57,6 +58,7 @@
     "jszip": "^3.10.2",
     "openai": "^6.48.0",
     "prisma": "^6.0.0",
+    "regenerator-runtime": "^0.14.1",
     "sharp": "^0.33.5",
     "tsx": "^4.19.0",
     "ws": "^8.21.0",

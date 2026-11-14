@@ -4,6 +4,7 @@ import { WebSocket, WebSocketServer } from 'ws'
 import prisma from '../lib/prisma.js'
 import { assertPublicHost, siteFamilyOf } from './webProxyService.js'
 import { hostMatchesSuffix } from './webProxyHosts.js'
+import { classifyProfileHost, profileForOrigin } from './webProxyProfiles.js'
 import { cookieHeaderForUrl, readCookieJar } from './proxyCookies.js'
 import { acquireProxyWsSlot } from './proxyQueue.js'
 import { resolveProxySessionInfo } from './proxySession.js'
@@ -47,6 +48,38 @@ function parseSubProtocols(req: IncomingMessage): string[] {
 
 export interface WebProxyWsHandle {
   close(): void
+}
+
+/**
+ * 解析反代 WS 路径 → 上游 URL（HTTP 中继与 WS-over-HTTP 桥共用）。
+ * 支持同族子域与档案 page 主机的内嵌主机形态；逐跳 SSRF / 黑名单校验。
+ * 非法或内网地址返回 null。
+ */
+export async function resolveProxyWsTarget(
+  site: { origin: string },
+  rest: string,
+  search: string,
+): Promise<{ url: URL; baseOrigin: string } | null> {
+  let baseOrigin = site.origin
+  let restPath = rest
+  const embedded = /^\/(https?)\/([^/?#]+)(\/.*)?$/i.exec(rest)
+  if (embedded) {
+    const host = embedded[2].toLowerCase()
+    const family = siteFamilyOf(site.origin)
+    const profile = profileForOrigin(site.origin)
+    if ((family && hostMatchesSuffix(host, family)) || (profile && classifyProfileHost(profile, host) === 'page')) {
+      baseOrigin = `${embedded[1].toLowerCase()}://${host}`
+      restPath = embedded[3] || '/'
+    }
+  }
+  try {
+    const url = new URL(`${baseOrigin}${restPath}${search}`)
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    await assertPublicHost(url.hostname)
+    return { url, baseOrigin }
+  } catch {
+    return null
+  }
 }
 
 export function initWebProxyWs(server: HttpServer): WebProxyWsHandle {
@@ -103,27 +136,13 @@ export function initWebProxyWs(server: HttpServer): WebProxyWsHandle {
 
     const rest = match[2] || '/'
     const search = (req.url ?? '').includes('?') ? `?${(req.url ?? '').split('?').slice(1).join('?')}` : ''
-    // 同族子域内嵌主机形态：/proxy-ws/<id>/<https|http>/<host>/<path>（与 HTTP 反代一致）
-    let baseOrigin = site.origin
-    let restPath = rest
-    const embedded = /^\/(https?)\/([^/?#]+)(\/.*)?$/i.exec(rest)
-    if (embedded) {
-      const host = embedded[2].toLowerCase()
-      const family = siteFamilyOf(site.origin)
-      if (family && hostMatchesSuffix(host, family)) {
-        baseOrigin = `${embedded[1].toLowerCase()}://${host}`
-        restPath = embedded[3] || '/'
-      }
-    }
-    let upstreamUrl: URL
-    try {
-      upstreamUrl = new URL(`${baseOrigin}${restPath}${search}`)
-      upstreamUrl.protocol = upstreamUrl.protocol === 'https:' ? 'wss:' : 'ws:'
-      await assertPublicHost(upstreamUrl.hostname)
-    } catch {
+    // 同族子域 / 档案 page 主机的内嵌主机形态（与 HTTP 反代一致），逐跳 SSRF / 黑名单
+    const resolved = await resolveProxyWsTarget(site, rest, search)
+    if (!resolved) {
       rejectUpgrade(socket, '400 Bad Request')
       return
     }
+    const { url: upstreamUrl, baseOrigin } = resolved
 
     const jar = readCookieJar(site.cookies)
     const cookie = cookieHeaderForUrl(jar, upstreamUrl)

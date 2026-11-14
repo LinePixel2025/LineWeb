@@ -34,8 +34,15 @@ export function defaultCookiePath(pathname: string): string {
   return pathname.slice(0, idx)
 }
 
-/** 解析单条 Set-Cookie（不做 URL 之外的外部依赖） */
-export function parseSetCookie(header: string, requestUrl: URL): ProxyCookie | null {
+/**
+ * 解析单条 Set-Cookie（不做 URL 之外的外部依赖）
+ *
+ * `allowedDomainSuffixes`：站点档案的可信 page 主机后缀（如 douyin.com / bytedance.com）。
+ * 默认只接受「当前主机或其父域」的 Domain 属性（防伪造）；传入档案后缀后，
+ * 额外允许生态内跨域写 Cookie（如 ttwid.bytedance.com 响应写 Domain=.douyin.com），
+ * 仍拒绝档案之外的任意域。通用站点不传，保持严格语义。
+ */
+export function parseSetCookie(header: string, requestUrl: URL, allowedDomainSuffixes?: string[]): ProxyCookie | null {
   if (!header) return null
   const parts = header.split(';')
   const first = parts.shift()?.trim() ?? ''
@@ -68,8 +75,17 @@ export function parseSetCookie(header: string, requestUrl: URL): ProxyCookie | n
     switch (key) {
       case 'domain': {
         const d = val.replace(/^\./, '').toLowerCase()
-        // 只接受当前主机或其父域，防止上游把 Cookie 写到无关域名
-        if (d && (host === d || host.endsWith('.' + d))) {
+        // 只接受当前主机或其父域，防止上游把 Cookie 写到无关域名；
+        // 档案可信后缀（allowedDomainSuffixes）额外放行生态内跨域写 Cookie
+        const trusted = !!d && (
+          host === d
+          || host.endsWith('.' + d)
+          || (allowedDomainSuffixes ?? []).some((suffix) => {
+            const s = String(suffix || '').toLowerCase().replace(/^\./, '')
+            return !!s && (d === s || d.endsWith('.' + s))
+          })
+        )
+        if (trusted) {
           domain = d
           hostOnly = false
         }

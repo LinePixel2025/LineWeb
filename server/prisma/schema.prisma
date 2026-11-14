@@ -608,6 +608,10 @@ model ProxySite {
    * 强制用桌面浏览器 UA 访问上游（手机打开只服务桌面端的站点时使用）
    */
   forceDesktop   Boolean   @default(false) @map("force_desktop")
+  /**
+   * 兼容模式：auto（按客户端 UA 自动判定）/ legacy（强制 ES5 转译 + polyfill + 原生播放适配）/ modern
+   */
+  compatMode     String    @default("auto") @map("compat_mode")
   lastVisitedAt  DateTime? @map("last_visited_at")
   /**
    * 访问统计（累计值，由 proxyStats 定时批量累加，不逐请求写库）

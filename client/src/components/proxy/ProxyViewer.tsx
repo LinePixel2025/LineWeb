@@ -119,6 +119,7 @@ export default function ProxyViewer({ site, embedUrl }: Props) {
                 {site.host}
               </span>
               {site.forceDesktop && <span className="gh-proxy-badge-mode">桌面版</span>}
+              {site.compatMode === 'legacy' && <span className="gh-proxy-badge-mode">兼容模式</span>}
               <button
                 type="button"
                 className="gh-proxy-badge-collapse"

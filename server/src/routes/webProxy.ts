@@ -28,13 +28,19 @@ import {
   initialVisibleCookies,
   normalizeSiteOrigin,
   prettySiteName,
+  mapUrlToProxy,
   proxyUrlToUpstream,
   rewriteCss,
   rewriteHtml,
   siteFamilyOf,
   type RewriteContext,
 } from '../services/webProxyService.js'
+import { rewriteJsonBody, rewriteJsonpBody } from '../services/webProxyBody.js'
+import { resolveCompatMode, type EffectiveCompat } from '../services/webProxyCompat.js'
+import { transpileToEs5, MAX_TRANSPILE_BYTES } from '../services/webProxyTranspile.js'
+import { POLYFILL_BUNDLE, POLYFILL_SEGMENT } from '../services/webProxyPolyfills.js'
 import { hostMatchesSuffix } from '../services/webProxyHosts.js'
+import { classifyProfileHost, profileForOrigin, profilePageSuffixes } from '../services/webProxyProfiles.js'
 
 /**
  * 网页反代路由
@@ -54,6 +60,7 @@ import {
   looksLikePlaylist,
   mediaReferer,
   parseMediaTarget,
+  rewriteDashManifest,
   rewritePlaylist,
 } from '../services/webProxyMedia.js'
 import {
@@ -80,6 +87,8 @@ const MEDIA_PEEK_BYTES = 8 * 1024
 const MAX_PLAYLIST_BYTES = 4 * 1024 * 1024
 /** 资源代理里 CSS 需要整体读入才能改写 */
 const MAX_RES_REWRITE_BYTES = 8 * 1024 * 1024
+/** JSON / JSONP 响应体改写上限（playurl / 信息流响应通常几百 KB） */
+const MAX_JSON_REWRITE_BYTES = 8 * 1024 * 1024
 
 /** 媒体请求允许透传的请求头（其余一律不转发，避免把 LineWeb 的头部带出去） */
 const MEDIA_REQUEST_HEADERS = new Set([
@@ -195,6 +204,7 @@ function siteDto(site: {
   origin: string
   cookies: string
   forceDesktop: boolean
+  compatMode?: string
   lastVisitedAt: Date | null
   requestCount?: number
   errorCount?: number
@@ -211,6 +221,7 @@ function siteDto(site: {
     host: prettySiteName(site.origin),
     cookieCount: countSessionCookies(jar),
     forceDesktop: site.forceDesktop,
+    compatMode: site.compatMode ?? 'auto',
     lastVisitedAt: site.lastVisitedAt,
     requestCount: site.requestCount ?? 0,
     errorCount: site.errorCount ?? 0,
@@ -264,6 +275,7 @@ proxyApiRouter.post('/sites', asyncHandler(async (req, res) => {
       origin,
       name: data.name?.trim() || prettySiteName(origin),
       forceDesktop: data.forceDesktop ?? false,
+      compatMode: data.compatMode ?? 'auto',
     },
   })
   res.status(201).json({ site: siteDto(site) })
@@ -276,9 +288,10 @@ proxyApiRouter.patch('/sites/:id', asyncHandler(async (req, res) => {
   const data = proxySiteUpdateSchema.parse(req.body ?? {})
   const site = await prisma.proxySite.findFirst({ where: { id: siteId, userId } })
   if (!site) throw new AppError('站点不存在', 404)
-  const updates: { name?: string; forceDesktop?: boolean } = {}
+  const updates: { name?: string; forceDesktop?: boolean; compatMode?: string } = {}
   if (data.name !== undefined) updates.name = data.name.trim()
   if (data.forceDesktop !== undefined) updates.forceDesktop = data.forceDesktop
+  if (data.compatMode !== undefined) updates.compatMode = data.compatMode
   const updated = await prisma.proxySite.update({ where: { id: site.id }, data: updates })
   res.json({ site: siteDto(updated) })
 }))
@@ -418,6 +431,10 @@ interface MediaRequestOptions {
   /** 去掉 /proxy/<siteId> 后的路径（含 __lw_media__ 段） */
   pathname: string
   search: string
+  /** 档案可信 page 后缀（跨域 Set-Cookie 放松）；通用站点为空数组 */
+  cookieDomainSuffixes: string[]
+  /** 有效兼容模式（legacy 转译 JS） */
+  compat: EffectiveCompat
 }
 
 function buildMediaHeaders(
@@ -542,7 +559,7 @@ async function handleMediaRequest(req: Request, res: Response, options: MediaReq
       const setCookies = getSetCookies(response.headers)
       if (setCookies.length > 0) {
         const parsedCookies = setCookies
-          .map((header) => parseSetCookie(header, current))
+          .map((header) => parseSetCookie(header, current, options.cookieDomainSuffixes))
           .filter((item): item is NonNullable<typeof item> => !!item)
         if (parsedCookies.length > 0) {
           jar = mergeCookieJar(jar, parsedCookies)
@@ -613,9 +630,34 @@ async function handleMediaRequest(req: Request, res: Response, options: MediaReq
     return
   }
 
-  // DASH / Smooth 清单：原样透传（媒体地址由页面脚本映射）
+  // DASH 清单：读入改写 BaseURL / SegmentTemplate（≤4MB）；超限或 Smooth 原样透传
   if (kind === 'manifest') {
-    pipeMediaStream(res, Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]))
+    const manifestType = (upstream.headers.get('content-type') || '').toLowerCase()
+    const declaredLength = Number(upstream.headers.get('content-length') || '0')
+    if (!manifestType.includes('dash+xml') || declaredLength > MAX_PLAYLIST_BYTES || !upstream.body) {
+      pipeMediaStream(res, Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]))
+      return
+    }
+    let manifestBuffer: Buffer
+    try {
+      manifestBuffer = Buffer.from(await upstream.arrayBuffer())
+    } catch {
+      res.end()
+      return
+    }
+    if (manifestBuffer.byteLength > MAX_PLAYLIST_BYTES) {
+      res.setHeader('content-length', String(manifestBuffer.byteLength))
+      res.end(manifestBuffer)
+      return
+    }
+    const rewrittenManifest = Buffer.from(
+      rewriteDashManifest(manifestBuffer.toString('utf8'), current, options.siteId),
+      'utf8',
+    )
+    res.setHeader('content-type', 'application/dash+xml; charset=utf-8')
+    res.removeHeader('content-range')
+    res.setHeader('content-length', String(rewrittenManifest.byteLength))
+    res.end(rewrittenManifest)
     return
   }
 
@@ -719,7 +761,7 @@ async function handleResourceRequest(req: Request, res: Response, options: Media
       const setCookies = getSetCookies(response.headers)
       if (setCookies.length > 0) {
         const parsedCookies = setCookies
-          .map((header) => parseSetCookie(header, current))
+          .map((header) => parseSetCookie(header, current, options.cookieDomainSuffixes))
           .filter((item): item is NonNullable<typeof item> => !!item)
         if (parsedCookies.length > 0) {
           jar = mergeCookieJar(jar, parsedCookies)
@@ -825,6 +867,28 @@ async function handleResourceRequest(req: Request, res: Response, options: Media
     res.removeHeader('content-range')
     res.setHeader('content-length', String(rewritten.byteLength))
     res.end(rewritten)
+    return
+  }
+
+  // legacy：CDN 上的 JS 资源同样转译成 ES5
+  const resIsJs = /javascript|ecmascript/i.test(rawType || '') || /\.(m?js)$/i.test(current.pathname)
+  if (options.compat === 'legacy' && resIsJs && upstream.body) {
+    let jsBuf: Buffer
+    try {
+      jsBuf = Buffer.from(await upstream.arrayBuffer())
+    } catch {
+      res.end()
+      return
+    }
+    if (jsBuf.byteLength > MAX_TRANSPILE_BYTES) {
+      res.setHeader('content-length', String(jsBuf.byteLength))
+      res.end(jsBuf)
+      return
+    }
+    const jsOut = Buffer.from(transpileToEs5(decodeBody(jsBuf, charsetOf(rawType || 'application/javascript', jsBuf))), 'utf8')
+    res.removeHeader('content-range')
+    res.setHeader('content-length', String(jsOut.byteLength))
+    res.end(jsOut)
     return
   }
 
@@ -941,23 +1005,32 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
   // B 站这类多子域站点的登录（passport.*）与数据接口（api.*）都靠它落回反代；
   // 仅接受与站点 origin 同注册域的主机，SSRF / 黑名单校验仍按跳逐一执行
   const siteFamily = siteFamilyOf(site.origin)
+  const profile = profileForOrigin(site.origin)
   const embedded = siteFamily ? /^\/(https?)\/([^/?#]+)(\/.*)?$/i.exec(upstreamPath) : null
   let embeddedBaseOrigin: string | null = null
   if (embedded && siteFamily) {
     const host = embedded[2].toLowerCase()
-    if (hostMatchesSuffix(host, siteFamily)) {
+    // 同族子域，或站点档案的 page 主机（抖音 snssdk/amemv/bytedance 等跨注册域接口）
+    if (hostMatchesSuffix(host, siteFamily) || (profile && classifyProfileHost(profile, host) === 'page')) {
       embeddedBaseOrigin = `${embedded[1].toLowerCase()}://${host}`
     }
   }
 
   const target = new URL(`${embeddedBaseOrigin ?? site.origin}${embedded ? embedded[3] || '/' : upstreamPath}${parsed.search}`)
+  // 兼容模式按「原始客户端 UA」判定（forceDesktop 只覆盖上游 UA，不影响这里）；
+  // ?lw_compat=legacy|modern 为测试钩子，站点 compatMode 可显式覆盖自动判定
+  const compat = resolveCompatMode(site.compatMode, req.headers['user-agent'], parsed.searchParams.get('lw_compat'))
   const ctx: RewriteContext = {
     siteId: site.id,
     siteOrigin: site.origin,
     activeOrigin: target.origin,
     forceDesktop: site.forceDesktop,
     pageUrl: target.href,
+    profile,
+    compat,
   }
+  /** 档案可信 page 后缀：允许生态内跨域 Set-Cookie（如 ttwid），通用站点为空 */
+  const cookieDomainSuffixes = profilePageSuffixes(profile)
 
   const cookiesBefore = site.cookies
   let jar = readCookieJar(site.cookies)
@@ -973,6 +1046,8 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
       jar,
       pathname: upstreamPath,
       search: parsed.search,
+      cookieDomainSuffixes,
+      compat,
     })
     return
   }
@@ -987,7 +1062,19 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
       jar,
       pathname: upstreamPath,
       search: parsed.search,
+      cookieDomainSuffixes,
+      compat,
     })
+    return
+  }
+
+  // 老旧设备 polyfill bundle（静态、长缓存；legacy 文档注入的第一个脚本）
+  if (upstreamPath === `/${POLYFILL_SEGMENT}`) {
+    res.setHeader('content-type', 'application/javascript; charset=utf-8')
+    res.setHeader('cache-control', 'public, max-age=86400')
+    res.setHeader('x-content-type-options', 'nosniff')
+    res.setHeader('X-LineWeb-Proxy', '1')
+    res.end(POLYFILL_BUNDLE)
     return
   }
 
@@ -1070,7 +1157,7 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
       const setCookies = getSetCookies(response.headers)
       if (setCookies.length > 0) {
         const parsedCookies = setCookies
-          .map((header) => parseSetCookie(header, currentUrl))
+          .map((header) => parseSetCookie(header, currentUrl, cookieDomainSuffixes))
           .filter((item): item is NonNullable<typeof item> => !!item)
         if (parsedCookies.length > 0) jar = mergeCookieJar(jar, parsedCookies)
       }
@@ -1127,6 +1214,9 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
   const lowerType = contentType.toLowerCase()
   const isHtml = lowerType.includes('text/html') || lowerType.includes('application/xhtml+xml')
   const isCss = lowerType.includes('text/css')
+  const isJson = lowerType.includes('application/json') || lowerType.includes('text/json') || /\+json\b/.test(lowerType)
+  // JSONP 仅在带 callback/jsonp 查询参数时按 JSONP 处理，避免把普通 JS 整体读入
+  const isJsonp = /javascript/.test(lowerType) && /[?&](callback|jsonp)=/i.test(currentUrl.search)
   const headers: Record<string, string> = {}
   for (const name of PASS_RESPONSE_HEADERS) {
     const value = upstream.headers.get(name)
@@ -1146,7 +1236,7 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
     return
   }
 
-  if (isHtml || isCss) {
+  if (isHtml || isCss || isJson || isJsonp) {
     let buffer: Buffer
     // 文本要整体读入才能改写，这一段保留 30 秒兜底超时
     const bodyTimer = setTimeout(() => upstreamController.abort(), MAX_UPSTREAM_TIMEOUT_MS)
@@ -1158,7 +1248,8 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
     } finally {
       clearTimeout(bodyTimer)
     }
-    if (buffer.byteLength > MAX_REWRITE_BYTES) {
+    const rewriteCap = isJson || isJsonp ? MAX_JSON_REWRITE_BYTES : MAX_REWRITE_BYTES
+    if (buffer.byteLength > rewriteCap) {
       // 超大文档不重写，直接原样回传（至少保证能打开）
       res.setHeader('content-type', contentType)
       res.end(buffer)
@@ -1166,14 +1257,55 @@ async function handleProxyRequest(req: Request, res: Response): Promise<void> {
     }
     const charset = charsetOf(contentType, buffer)
     const text = decodeBody(buffer, charset)
-    const rewritten = isHtml
-      ? rewriteHtml(text, ctx, { cookies: initialVisibleCookies(jar, currentUrl), charset })
-      : rewriteCss(text, ctx)
+    const mapUrl = (value: string) => mapUrlToProxy(value, ctx)
+    let rewritten: string
+    let outputType: string
+    if (isHtml) {
+      rewritten = rewriteHtml(text, ctx, { cookies: initialVisibleCookies(jar, currentUrl), charset })
+      outputType = 'text/html; charset=utf-8'
+    } else if (isCss) {
+      rewritten = rewriteCss(text, ctx)
+      outputType = 'text/css; charset=utf-8'
+    } else if (isJson) {
+      // 只改响应体里的上游绝对地址（playurl / 信息流），不触碰请求侧签名
+      rewritten = rewriteJsonBody(text, mapUrl)
+      outputType = contentType
+    } else {
+      rewritten = rewriteJsonpBody(text, mapUrl)
+      outputType = contentType
+    }
     const output = Buffer.from(rewritten, 'utf8')
-    res.setHeader('content-type', isHtml ? 'text/html; charset=utf-8' : 'text/css; charset=utf-8')
+    res.setHeader('content-type', outputType)
     if (isHtml) res.setHeader('cache-control', 'no-store')
+    if (isJson || isJsonp) res.setHeader('x-content-type-options', 'nosniff')
     res.setHeader('content-length', String(output.byteLength))
     res.end(output)
+    return
+  }
+
+  // legacy：外部 JS 转译成 ES5（老引擎解析不了站点自身的 ES2017+ bundle）
+  const isJs = /javascript|ecmascript/.test(lowerType)
+  if (compat === 'legacy' && isJs) {
+    let jsBuffer: Buffer
+    const jsTimer = setTimeout(() => upstreamController.abort(), MAX_UPSTREAM_TIMEOUT_MS)
+    try {
+      jsBuffer = Buffer.from(await upstream.arrayBuffer())
+    } catch {
+      res.end()
+      return
+    } finally {
+      clearTimeout(jsTimer)
+    }
+    if (jsBuffer.byteLength > MAX_TRANSPILE_BYTES) {
+      res.setHeader('content-type', contentType)
+      res.end(jsBuffer)
+      return
+    }
+    const jsCharset = charsetOf(contentType, jsBuffer)
+    const transpiled = Buffer.from(transpileToEs5(decodeBody(jsBuffer, jsCharset)), 'utf8')
+    res.setHeader('content-type', contentType)
+    res.setHeader('content-length', String(transpiled.byteLength))
+    res.end(transpiled)
     return
   }
 

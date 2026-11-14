@@ -543,19 +543,25 @@ export const parkourActionSchema = z.discriminatedUnion('type', [
 // === 网页反代（/api/proxy）Schemas ===
 
 /** 新建反代站点：输入域名或完整地址，name 可省略（默认取主机名） */
+/** 兼容模式：auto 按 UA 自动判定 / legacy 强制老旧设备兼容 / modern 强制现代 */
+export const proxyCompatModeSchema = z.enum(['auto', 'legacy', 'modern'])
+
 export const proxySiteCreateSchema = z.object({
   url: z.string().trim().min(1, '请输入网站地址').max(500),
   name: z.string().trim().min(1).max(60).optional(),
   /** 强制使用桌面浏览器 UA 访问上游 */
   forceDesktop: z.boolean().optional(),
+  /** 兼容模式（老旧 WebView / 无 WebSocket 设备） */
+  compatMode: proxyCompatModeSchema.optional(),
 })
 
-/** 更新站点：重命名与「桌面 UA」开关都是可选字段 */
+/** 更新站点：重命名、「桌面 UA」与「兼容模式」开关都是可选字段 */
 export const proxySiteUpdateSchema = z
   .object({
     name: z.string().trim().min(1, '名称不能为空').max(60).optional(),
     forceDesktop: z.boolean().optional(),
+    compatMode: proxyCompatModeSchema.optional(),
   })
-  .refine((data) => data.name !== undefined || data.forceDesktop !== undefined, {
+  .refine((data) => data.name !== undefined || data.forceDesktop !== undefined || data.compatMode !== undefined, {
     message: '没有需要更新的字段',
   })

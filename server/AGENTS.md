@@ -137,3 +137,18 @@ npm run verify:game   # tsx scripts/verify-game2048.ts —— 2048 引擎 + pres
 - **排行榜**：`lib/gameLeaderboard.ts` 指标白名单；`GET /api/game-stats/leaderboard`；扫雷 bestTimeMs 升序过滤 null；胜负型 wins 降序；单机成绩客户端上报。
 - **联系人备注**：`PUT /api/chat/friends/remark`；LineWeb 好友先 `importFriendships`（neko `/internal/import`）再 `setFriendRemarkOnNeko`，原生好友直接写 neko；≤30 字、仅自己可见。
 - **迁移**：`User.status/apiRateLimit/gameStatsImportedAt`、`GameStat`、`FeatureFlag` 均为 additive；`prisma db push` 时注意 SQLite FTS 影子表冲突（必要时先删 `drive_files_fts*`，启动时 `ensureFTSTable` 重建）。
+
+---
+
+## 2026-11 网页反代重构（抖音 / B 站 + 老旧设备兼容，实现口径）
+
+总体架构不变：`/proxy/<siteId>/*` 同源反代（lw_proxy Cookie 会话）+ 服务端 Cookie 罐 + HTML/CSS 重写 + 注入引导脚本。本次补齐多域名生态、响应体改写、无 WS 降级与老旧设备兼容。
+
+- **站点档案** `services/webProxyProfiles.ts`：单一注册域 family 之外，为 bilibili / douyin 定义多域名档案（`pageHosts`/`resourceHosts`/`mediaHosts` + `mediaPathPatterns`）。`profileForOrigin` 命中后，`mapUrlToProxy`/`mapResourceUrl`/`mapWsUrlToProxy` 与内嵌主机白名单（`routes/webProxy.ts`、`webProxyWs.ts` 的 `resolveProxyWsTarget`）按档案分类路由。抖音 `ttwid.bytedance.com` 等跨注册域接口靠档案落回反代。通用站点无档案，行为不变。
+- **跨域 Cookie**：`proxyCookies.parseSetCookie(header, url, allowedDomainSuffixes?)` 第三参为档案 page 后缀，允许生态内跨域 Set-Cookie（ttwid 写 `.douyin.com`）；通用站点不传，仍严格拒绝无关 Domain。
+- **响应体改写** `services/webProxyBody.ts`（纯函数，mapper 注入）：`rewriteJsonBody`/`rewriteJsonpBody`（playurl/信息流里的绝对媒体地址）、`rewriteInlineScripts`（`__playinfo__` 等）、`rewriteRenderData`（抖音 URL-encoded JSON）、`transpileInlineScripts`（legacy）。**只改响应、不动请求签名**。DASH 清单改写见 `webProxyMedia.rewriteDashManifest`（BaseURL/SegmentTemplate，相对与 `$Number$` 占位符保留）。
+- **无 WS 降级** `services/webProxyWsHttp.ts`：`/proxy-ws-http/:siteId/{open,send,poll,close}`，照 `chatPolling` 模式（`FrameQueue` 纯队列 + 25s 长轮询 + userId/siteId 绑定 + 复用 `acquireProxyWsSlot` + 90s 空闲回收）。引导脚本 `LWWebSocket` polyfill：无原生 WS 或 `?lw_ws=poll` 直接走桥；有原生 WS 时 open 前失败自动降级。无 EventSource 时 `LWSSE`（XHR 流式）兜底。
+- **兼容管线**：`ProxySite.compatMode`（auto/legacy/modern，additive 列）。`webProxyCompat.resolveCompatMode` 按**原始客户端 UA**判定（forceDesktop 不影响），`?lw_compat=` 测试钩子优先。legacy 时：`webProxyTranspile.transpileToEs5`（**@babel/standalone**，非 preset-env——后者 polyfill-provider 在 tsx CJS 下 `createRequire(import.meta.url)` 崩溃；sha1 LRU 缓存）转译外部 JS + 内联脚本；`webProxyPolyfills.POLYFILL_BUNDLE`（内联 regenerator-runtime + Promise/fetch/URL 等）经 `/proxy/<id>/__lw_polyfill__.js` 下发并先于引导脚本注入。
+- **无 MSE 播放适配** `services/webProxyPlayback.ts`：`!window.MediaSource` 时按 `cfg.profileId` 启用——B 站非 WBI playurl 强制 `fnval=1&platform=html5` + `__playinfo__` dash-only 异步回填 mp4（WBI 请求不动以免破坏 w_rid）；抖音读 RENDER_DATA 用原生 `<video>` 替换播放器 + 信息流地址缓存。全部 best-effort，失败静默回退。
+- **自检**：`npm run verify:webproxy`（300+ 断言，含档案/改写/帧队列/转译/polyfill/播放适配 + 引导脚本 `new Function` 语法校验）。前端：`WebProxyPage` 兼容模式三态切换、`ProxyViewer` 徽标。
+- **已知限制**：legacy 基线 ES5（Android 4.4+/iOS 8+）；站点 WASM/Worker/ES module 不转译；抖音 legacy 可能遇风控墙（登录 Cookie 罐可提高成功率）；直播 FLV 无 MSE 不可原生播放（HLS 可）。

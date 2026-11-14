@@ -5,8 +5,18 @@ import { buildBootstrapScript } from './webProxyBootstrap.js'
 import { publicCookiesForUrl, type ProxyCookie } from './proxyCookies.js'
 import { buildMediaProxyPath, isMediaProxyPath } from './webProxyMedia.js'
 import { buildResProxyPath, isResProxyPath } from './webProxyRes.js'
+import { rewriteInlineScripts, rewriteRenderData, transpileInlineScripts } from './webProxyBody.js'
+import { transpileToEs5 } from './webProxyTranspile.js'
+import { polyfillPath } from './webProxyPolyfills.js'
 import { RESOURCE_CDN_SUFFIXES, hostMatchesSuffix, isResourceCdnHost } from './webProxyHosts.js'
 import { isProxyHostBlacklisted } from './proxyBlacklist.js'
+import {
+  classifyProfileHost,
+  isProfileMediaPath,
+  profileForOrigin,
+  type ProfileHostClass,
+  type SiteProfile,
+} from './webProxyProfiles.js'
 
 /**
  * 网页反代核心（纯函数 + 少量网络探测）
@@ -143,6 +153,16 @@ export interface RewriteContext {
   forceDesktop?: boolean
   /** 本次文档的实际地址（用于解析相对媒体地址，如 media/rabbit.mp4） */
   pageUrl?: string
+  /** 站点档案（抖音 / B 站等多域名生态）；通用站点为 null */
+  profile?: SiteProfile | null
+  /** 有效兼容模式：legacy 注入 polyfill + 转译内联脚本 */
+  compat?: 'modern' | 'legacy'
+}
+
+/** 主机在档案中的类别（无档案返回 null） */
+function profileHostClass(host: string, ctx: RewriteContext): ProfileHostClass | null {
+  if (!ctx.profile) return null
+  return classifyProfileHost(ctx.profile, host)
 }
 
 /** 把用户输入规范化为 origin（协议 + 主机 + 端口），非法输入抛 AppError */
@@ -306,12 +326,31 @@ function activeEmbeddedPrefix(ctx: RewriteContext): string | null {
 }
 
 /**
+ * 绝对 / 协议相对 URL 的统一映射（档案优先）。
+ * 顺序：档案媒体路径 → 站点主机 → 同族子域 → 档案主机类别 → 已知 CDN。
+ * 都不命中返回 null（族外第三方保持直连）。通用站点（无档案）行为与旧版一致。
+ */
+function mapAbsoluteUrl(url: URL, ctx: RewriteContext): string | null {
+  const prefix = `/proxy/${ctx.siteId}`
+  if (ctx.profile && isProfileMediaPath(ctx.profile, url)) return buildMediaProxyPath(url, ctx.siteId)
+  if (url.host === siteHostOf(ctx)) return `${prefix}${url.pathname}${url.search}${url.hash}`
+  if (isFamilyHost(url.host, ctx)) return embeddedProxyPath(url, ctx.siteId)
+  const cls = profileHostClass(url.host, ctx)
+  if (cls === 'page') return embeddedProxyPath(url, ctx.siteId)
+  if (cls === 'resource') return buildResProxyPath(url, ctx.siteId)
+  if (cls === 'media') return buildMediaProxyPath(url, ctx.siteId)
+  if (isResourceCdnHost(url.host)) return buildResProxyPath(url, ctx.siteId)
+  return null
+}
+
+/**
  * 把 HTML/CSS 中的一个 URL 映射到反代路径。
  *
  * 改写四类：根路径、与站点 origin 同主机的绝对 URL、同注册域的兄弟子域（内嵌主机形态）、
  * 协议相对且同源的 URL。文档来自兄弟子域时，根相对 URL 与活动主机绝对 URL 也映射到
  * 内嵌主机形态（根相对属于活动主机，而不是站点 origin）。
- * 族外域名原样保留（脚本、字体、CDN 直连，避免代理一切流量）。
+ * 族外域名原样保留（脚本、字体、CDN 直连，避免代理一切流量）；
+ * 站点档案（抖音 / B 站）会把其多域名生态按类别落回反代。
  */
 export function mapUrlToProxy(value: string, ctx: RewriteContext): string {
   const prefix = `/proxy/${ctx.siteId}`
@@ -341,12 +380,10 @@ export function mapUrlToProxy(value: string, ctx: RewriteContext): string {
   }
   if (trimmed.startsWith('//')) {
     try {
-      const url = new URL(`https:${trimmed}`)
-      if (url.host === siteHostOf(ctx)) return `${prefix}${url.pathname}${url.search}${url.hash}`
-      if (isFamilyHost(url.host, ctx)) return embeddedProxyPath(url, ctx.siteId)
-      // 懒加载属性（data-src / data-original 等）里的已知 CDN 资源同样走同源资源代理，
+      // 懒加载属性（data-src / data-original 等）里的已知 CDN / 档案资源同样走同源代理，
       // 否则脚本把原地址写回 src 后，浏览器仍会带 LineWeb 的 Referer 直连 CDN
-      if (isResourceCdnHost(url.host)) return buildResProxyPath(url, ctx.siteId)
+      const mapped = mapAbsoluteUrl(new URL(`https:${trimmed}`), ctx)
+      if (mapped !== null) return mapped
     } catch {
       /* ignore */
     }
@@ -354,10 +391,8 @@ export function mapUrlToProxy(value: string, ctx: RewriteContext): string {
   }
   if (/^https?:\/\//i.test(trimmed)) {
     try {
-      const url = new URL(trimmed)
-      if (url.host === siteHostOf(ctx)) return `${prefix}${url.pathname}${url.search}${url.hash}`
-      if (isFamilyHost(url.host, ctx)) return embeddedProxyPath(url, ctx.siteId)
-      if (isResourceCdnHost(url.host)) return buildResProxyPath(url, ctx.siteId)
+      const mapped = mapAbsoluteUrl(new URL(trimmed), ctx)
+      if (mapped !== null) return mapped
     } catch {
       /* ignore */
     }
@@ -451,6 +486,10 @@ export function mapResourceUrl(value: string, ctx: RewriteContext): string {
   if (url.host === siteHostOf(ctx)) return mapUrlToProxy(trimmed, ctx)
   // 族内兄弟子域（含文档所在的活动主机）：走内嵌主机反代（与页面同一条链路）
   if (isFamilyHost(url.host, ctx)) return embeddedProxyPath(url, ctx.siteId)
+  // 档案主机：视频 CDN 走媒体代理，接口域走内嵌主机，其余（静态）走资源代理
+  const cls = profileHostClass(url.host, ctx)
+  if (cls === 'media') return buildMediaProxyPath(url, ctx.siteId)
+  if (cls === 'page') return embeddedProxyPath(url, ctx.siteId)
   // 族外静态资源：交给同源资源代理
   return buildResProxyPath(url, ctx.siteId)
 }
@@ -485,6 +524,11 @@ export function mapWsUrlToProxy(value: string, ctx: RewriteContext, pageHost: st
       }
       // 族内兄弟子域的 WS（如 broadcast-msg.bilibili.com）也走中继
       if (isFamilyHost(url.host, ctx)) {
+        const marker = url.protocol === 'ws:' ? 'http' : 'https'
+        return `${scheme}${pageHost}${prefix}/${marker}/${url.host}${url.pathname}${url.search}${url.hash}`
+      }
+      // 档案 page 主机（如抖音 frontier.snssdk.com / webcast.amemv.com）的 WS 也走中继
+      if (profileHostClass(url.host, ctx) === 'page') {
         const marker = url.protocol === 'ws:' ? 'http' : 'https'
         return `${scheme}${pageHost}${prefix}/${marker}/${url.host}${url.pathname}${url.search}${url.hash}`
       }
@@ -698,6 +742,15 @@ export function rewriteHtml(
     return mapped === body ? match : `${head}${mapped}${tail}`
   })
 
+  // 内联状态脚本（__playinfo__ / __INITIAL_STATE__）与抖音 RENDER_DATA 里的上游绝对地址
+  const mapUrl = (value: string) => mapUrlToProxy(value, ctx)
+  out = rewriteInlineScripts(out, mapUrl)
+  out = rewriteRenderData(out, mapUrl)
+  // legacy：内联脚本转译成 ES5（老引擎跑不动站点自身的 ES2017+ 代码）
+  if (ctx.compat === 'legacy') {
+    out = transpileInlineScripts(out, transpileToEs5)
+  }
+
   const script = `<script data-lineweb-proxy="${ctx.siteId}">${buildBootstrapScript({
     siteId: ctx.siteId,
     origin: ctx.siteOrigin,
@@ -708,18 +761,29 @@ export function rewriteHtml(
     forceDesktop: !!ctx.forceDesktop,
     desktopUserAgent: DESKTOP_USER_AGENT,
     cdnHosts: RESOURCE_CDN_SUFFIXES,
+    hostRules: ctx.profile
+      ? { page: ctx.profile.pageHosts, res: ctx.profile.resourceHosts, media: ctx.profile.mediaHosts }
+      : undefined,
+    mediaPatterns: ctx.profile ? ctx.profile.mediaPathPatterns.map((re) => re.source) : undefined,
+    compat: ctx.compat === 'legacy' ? 'legacy' : 'modern',
+    profileId: ctx.profile?.id || '',
   })}</script>`
+  // legacy：polyfill 必须先于引导脚本与站点脚本加载
+  const polyfill = ctx.compat === 'legacy'
+    ? `<script src="${polyfillPath(ctx.siteId)}" data-lw-polyfill="1"></script>`
+    : ''
+  const inject = `${polyfill}${script}`
   const headMatch = /<head\b[^>]*>/i.exec(out)
   if (headMatch) {
     const at = (headMatch.index ?? 0) + headMatch[0].length
-    out = `${out.slice(0, at)}${script}${out.slice(at)}`
+    out = `${out.slice(0, at)}${inject}${out.slice(at)}`
   } else {
     const htmlMatch = /<html\b[^>]*>/i.exec(out)
     if (htmlMatch) {
       const at = (htmlMatch.index ?? 0) + htmlMatch[0].length
-      out = `${out.slice(0, at)}${script}${out.slice(at)}`
+      out = `${out.slice(0, at)}${inject}${out.slice(at)}`
     } else {
-      out = `${script}${out}`
+      out = `${inject}${out}`
     }
   }
   return out

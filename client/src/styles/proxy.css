@@ -285,6 +285,43 @@
   background: var(--gh-accent);
 }
 
+/* ===== 兼容模式选择 ===== */
+.gh-proxy-compat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--gh-text-tertiary);
+  font-size: 11px;
+}
+
+.gh-proxy-compat-label {
+  white-space: nowrap;
+}
+
+.gh-proxy-compat-select {
+  width: auto;
+  min-width: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.gh-proxy-compat--form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.gh-proxy-compat--form .gh-proxy-compat-select {
+  padding: 6px 12px;
+  border-radius: var(--gh-radius-sm, 8px);
+  font-size: 13px;
+}
+
 /* ===== 空状态 / 加载状态 ===== */
 .gh-proxy-state,
 .gh-proxy-empty {

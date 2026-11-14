@@ -5,8 +5,15 @@ import {
   clearProxyLocalData,
   normalizeProxyInput,
   webProxyApi,
+  type ProxyCompatMode,
   type ProxySite,
 } from '../lib/webProxy'
+
+const COMPAT_OPTIONS: Array<{ value: ProxyCompatMode; label: string }> = [
+  { value: 'auto', label: '自动' },
+  { value: 'legacy', label: '兼容（老旧设备）' },
+  { value: 'modern', label: '现代浏览器' },
+]
 import Icon from '../components/ui/Icon'
 
 function formatWhen(value: string | null): string {
@@ -37,6 +44,7 @@ interface SiteCardProps {
   onSaveName: () => void
   onOpen: () => void
   onToggleDesktop: () => void
+  onCompatChange: (mode: ProxyCompatMode) => void
   onClearCookies: () => void
   onRemove: () => void
 }
@@ -52,6 +60,7 @@ function SiteCard({
   onSaveName,
   onOpen,
   onToggleDesktop,
+  onCompatChange,
   onClearCookies,
   onRemove,
 }: SiteCardProps) {
@@ -107,6 +116,19 @@ function SiteCard({
               <span className="gh-proxy-desktop-dot" aria-hidden="true" />
               桌面 UA {site.forceDesktop ? '开' : '关'}
             </button>
+            <label className="gh-proxy-compat" title="老旧 WebView / 无 WebSocket 设备选「兼容」：服务端转译 ES5 + 补齐 API + 原生播放降级">
+              <span className="gh-proxy-compat-label">兼容模式</span>
+              <select
+                className="gh-input gh-proxy-compat-select"
+                value={site.compatMode ?? 'auto'}
+                disabled={busy}
+                onChange={(event) => onCompatChange(event.target.value as ProxyCompatMode)}
+              >
+                {COMPAT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
       </div>
@@ -146,6 +168,7 @@ export default function WebProxyPage() {
   const [url, setUrl] = useState('')
   const [name, setName] = useState('')
   const [forceDesktop, setForceDesktop] = useState(false)
+  const [compatMode, setCompatMode] = useState<ProxyCompatMode>('auto')
   const [formError, setFormError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [busyId, setBusyId] = useState<number | null>(null)
@@ -193,10 +216,11 @@ export default function WebProxyPage() {
     setSubmitting(true)
     setFormError('')
     try {
-      const { site } = await webProxyApi.create(normalized, name, forceDesktop)
+      const { site } = await webProxyApi.create(normalized, name, forceDesktop, compatMode)
       setUrl('')
       setName('')
       setForceDesktop(false)
+      setCompatMode('auto')
       await sitesQuery.refetch()
       navigate(`/webproxy/${site.id}`)
     } catch (err) {
@@ -248,6 +272,19 @@ export default function WebProxyPage() {
     setBusyId(site.id)
     try {
       await webProxyApi.setDesktop(site.id, !site.forceDesktop)
+      await sitesQuery.refetch()
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : '切换失败，请稍后再试')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleCompatChange = async (site: ProxySite, mode: ProxyCompatMode) => {
+    if (mode === (site.compatMode ?? 'auto')) return
+    setBusyId(site.id)
+    try {
+      await webProxyApi.setCompat(site.id, mode)
       await sitesQuery.refetch()
     } catch (err) {
       window.alert(err instanceof Error ? err.message : '切换失败，请稍后再试')
@@ -332,6 +369,19 @@ export default function WebProxyPage() {
           <span className="gh-proxy-desktop-check-label">强制桌面版 UA</span>
           <span className="gh-text-tertiary">手机上打开只支持电脑端的网站时使用，可能影响响应式排版</span>
         </label>
+        <label className="gh-proxy-compat gh-proxy-compat--form">
+          <span className="gh-proxy-compat-label">兼容模式</span>
+          <select
+            className="gh-input gh-proxy-compat-select"
+            value={compatMode}
+            onChange={(event) => setCompatMode(event.target.value as ProxyCompatMode)}
+          >
+            {COMPAT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+          <span className="gh-text-tertiary">老旧 WebView / 无 WebSocket 设备选「兼容」，抖音 / B 站会自动适配多域名与原生播放</span>
+        </label>
         <div className="gh-proxy-form-foot">
           <button type="submit" className="gh-btn gh-btn--primary gh-btn--md" disabled={submitting}>
             {submitting ? '正在创建…' : '添加并打开'}
@@ -389,6 +439,7 @@ export default function WebProxyPage() {
                 onSaveName={() => void handleSaveName(site)}
                 onOpen={() => handleOpen(site)}
                 onToggleDesktop={() => void handleToggleDesktop(site)}
+                onCompatChange={(mode) => void handleCompatChange(site, mode)}
                 onClearCookies={() => void handleClearCookies(site)}
                 onRemove={() => void handleRemove(site)}
               />
@@ -408,7 +459,7 @@ export default function WebProxyPage() {
         </div>
         <div className="gh-proxy-note">
           <strong>实时与降级</strong>
-          <span>站点使用 WebSocket 时走中继实时连接；不支持时页面会自动使用自身的轮询降级方案。</span>
+          <span>WebSocket 走中继实时连接；设备不支持或网络阻断时自动降级到 HTTP 长轮询桥，弹幕 / 直播仍可用。</span>
         </div>
       </section>
     </div>

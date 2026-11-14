@@ -28,7 +28,10 @@ interface HostRule extends RefererRule {
 }
 
 const BILIBILI_REFERER = 'https://www.bilibili.com/'
-const BILIBILI_ACCEPTED = ['bilibili.com', 'bilibili.tv', 'hdslb.com']
+const BILIBILI_ACCEPTED = ['bilibili.com', 'bilibili.tv', 'hdslb.com', 'bilivideo.com', 'bilivideo.cn', 'acgvideo.com']
+
+const DOUYIN_REFERER = 'https://www.douyin.com/'
+const DOUYIN_ACCEPTED = ['douyin.com', 'ixigua.com', 'douyinvod.com', 'zjcdn.com']
 
 /** 按 Referer 防盗链的资源 CDN 规则表（顺序敏感：先匹配先返回） */
 const HOST_RULES: HostRule[] = [
@@ -39,10 +42,22 @@ const HOST_RULES: HostRule[] = [
     acceptedRefererSuffixes: BILIBILI_ACCEPTED,
   },
   {
-    // B 站视频切片 CDN（upos-*.bilivideo.com 等）
-    suffixes: ['bilivideo.com'],
+    // B 站视频切片 CDN（upos-*.bilivideo.com / *.bilivideo.cn / *.acgvideo.com 等）
+    suffixes: ['bilivideo.com', 'bilivideo.cn', 'acgvideo.com'],
     referer: BILIBILI_REFERER,
     acceptedRefererSuffixes: BILIBILI_ACCEPTED,
+  },
+  {
+    // 抖音视频 CDN（v26-*.douyinvod.com / *.zjcdn.com / 直播 *.douyinliving.com）
+    suffixes: ['douyinvod.com', 'zjcdn.com', 'douyinliving.com'],
+    referer: DOUYIN_REFERER,
+    acceptedRefererSuffixes: DOUYIN_ACCEPTED,
+  },
+  {
+    // 抖音图床 / 静态资源 CDN（*.douyinpic.com / *.byteimg.com / *.pstatp.com）
+    suffixes: ['douyinpic.com', 'douyinstatic.com', 'byteimg.com', 'pstatp.com'],
+    referer: DOUYIN_REFERER,
+    acceptedRefererSuffixes: DOUYIN_ACCEPTED,
   },
 ]
 

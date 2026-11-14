@@ -138,6 +138,36 @@ export function rewritePlaylist(text: string, baseUrl: URL, siteId: number): str
     .join('\n')
 }
 
+/**
+ * 改写 DASH 清单（application/dash+xml）：
+ *  - `<BaseURL>` / `<Location>` 元素文本里的绝对 / 根路径地址 → 媒体代理；
+ *  - SegmentTemplate / SegmentURL 的 media / initialization / sourceURL / index 属性同样处理；
+ *  - 相对地址与 `$Number$` 等模板占位符原样保留（媒体路径保留上游目录，解析天然正确；
+ *    绝对模板映射后占位符仍在代理路径里，播放器替换后落到正确的代理地址）。
+ */
+export function rewriteDashManifest(text: string, baseUrl: URL, siteId: number): string {
+  let out = String(text || '')
+  out = out.replace(
+    /(<(BaseURL|Location)\b[^>]*>)([\s\S]*?)(<\/\2>)/gi,
+    (match, open: string, _tag: string, inner: string, close: string) => {
+      const trimmed = inner.trim()
+      const mapped = mapPlaylistUri(trimmed, baseUrl, siteId)
+      return mapped === trimmed ? match : `${open}${mapped}${close}`
+    },
+  )
+  out = out.replace(
+    /\b(media|initialization|sourceURL|index)\s*=\s*("([^"]*)"|'([^']*)')/gi,
+    (match, attr: string, _quoted: string, dq?: string, sq?: string) => {
+      const value = dq ?? sq ?? ''
+      const mapped = mapPlaylistUri(value, baseUrl, siteId)
+      if (mapped === value) return match
+      const quote = match.includes('"') ? '"' : "'"
+      return `${attr}=${quote}${mapped}${quote}`
+    },
+  )
+  return out
+}
+
 /** 媒体请求的 Referer：页面地址还原成上游地址；媒体路径本身则退回站点根 */
 export function mediaReferer(referer: string | undefined, siteOrigin: string, siteId: number): string {
   const prefix = `/proxy/${siteId}`

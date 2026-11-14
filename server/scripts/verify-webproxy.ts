@@ -26,12 +26,18 @@ type CookiesModule = typeof import('../src/services/proxyCookies.js')
 type ProxyServiceModule = typeof import('../src/services/webProxyService.js')
 type BootstrapModule = typeof import('../src/services/webProxyBootstrap.js')
 type MediaModule = typeof import('../src/services/webProxyMedia.js')
+type ProfilesModule = typeof import('../src/services/webProxyProfiles.js')
+type HostsModule = typeof import('../src/services/webProxyHosts.js')
+type BodyModule = typeof import('../src/services/webProxyBody.js')
 type ProxyCookie = import('../src/services/proxyCookies.js').ProxyCookie
 
 let cookies: CookiesModule
 let proxy: ProxyServiceModule
 let bootstrap: BootstrapModule
 let media: MediaModule
+let profiles: ProfilesModule
+let hosts: HostsModule
+let body: BodyModule
 
 let passed = 0
 
@@ -82,6 +88,9 @@ async function main(): Promise<void> {
   proxy = await import('../src/services/webProxyService.js')
   bootstrap = await import('../src/services/webProxyBootstrap.js')
   media = await import('../src/services/webProxyMedia.js')
+  profiles = await import('../src/services/webProxyProfiles.js')
+  hosts = await import('../src/services/webProxyHosts.js')
+  body = await import('../src/services/webProxyBody.js')
 
   // ============================================================
   // 1. Cookie：默认 Path 与 Set-Cookie 解析
@@ -568,7 +577,10 @@ async function main(): Promise<void> {
   assert(boot.includes('serviceWorker'), '引导脚本：禁用 Service Worker')
   assert(boot.includes("var MEDIA_PREFIX=PREFIX+'/__lw_media__/'"), '引导脚本：媒体代理前缀')
   assert(boot.includes('function mapMediaUrl'), '引导脚本：媒体 URL 映射')
-  assert(boot.includes('if(isMediaFile(p))return toMediaPath(p)'), '引导脚本：fetch/XHR 媒体后缀走媒体代理')
+  assert(boot.includes('function mapAbsUrl'), '引导脚本：绝对 URL 统一映射（档案优先）')
+  assert(boot.includes('if(isMediaFile(u))return toMediaPath(u)'), '引导脚本：fetch/XHR 媒体后缀走媒体代理')
+  assert(boot.includes('function profileClass'), '引导脚本：档案主机分类')
+  assert(boot.includes('function hitMediaPattern'), '引导脚本：无扩展名媒体路径匹配')
   assert(boot.includes("defineProperty(HTMLMediaElement.prototype,'src'"), '引导脚本：media.src 改写')
   assert(boot.includes("defineProperty(sourceProto,'src'"), '引导脚本：source.src 改写')
   assert(boot.includes("defineProperty(HTMLScriptElement.prototype,'src'"), '引导脚本：script.src 改写')
@@ -616,6 +628,309 @@ async function main(): Promise<void> {
   assert(siblingHtml.includes('"pageOrigin":"https://passport.example.com"'), 'HTML 重写：兄弟子域文档注入页面来源')
   assert(siblingHtml.includes('"family":"example.com"'), 'HTML 重写：注入站点族注册域')
   assert(siblingHtml.includes('href="/proxy/7/https/passport.example.com/oauth"'), 'HTML 重写：兄弟子域根相对链接走内嵌主机')
+
+  // ============================================================
+  // 6.5 站点档案（抖音 / B 站多域名生态）
+  // ============================================================
+  const biliProfile = profiles.profileForOrigin('https://www.bilibili.com')
+  const dyProfile = profiles.profileForOrigin('https://www.douyin.com')
+  assert(!!biliProfile && biliProfile.id === 'bilibili', '档案：B 站命中')
+  assert(!!dyProfile && dyProfile.id === 'douyin', '档案：抖音命中')
+  assert(profiles.profileForOrigin('https://example.com') === null, '档案：通用站点无档案')
+  assert(profiles.classifyProfileHost(dyProfile!, 'lf-douyin-pc.douyinpic.com') === 'resource', '档案：抖音静态域→资源')
+  assert(profiles.classifyProfileHost(dyProfile!, 'v26-web.douyinvod.com') === 'media', '档案：抖音视频域→媒体')
+  assert(profiles.classifyProfileHost(dyProfile!, 'ttwid.bytedance.com') === 'page', '档案：ttwid 域→page')
+  assert(profiles.classifyProfileHost(dyProfile!, 'webcast.amemv.com') === 'page', '档案：直播 WS 域→page')
+  assert(profiles.classifyProfileHost(biliProfile!, 'upos-sz-mirrorcos.bilivideo.com') === 'media', '档案：B 站视频域→媒体')
+  assert(profiles.classifyProfileHost(biliProfile!, 'i0.hdslb.com') === 'resource', '档案：B 站图床→资源')
+  assert(profiles.classifyProfileHost(dyProfile!, 'evil.com') === null, '档案：无关域不命中')
+  assert(
+    profiles.isProfileMediaPath(dyProfile!, new URL('https://www.douyin.com/aweme/v1/play/?video_id=v0d&ratio=1080p')),
+    '档案：抖音无扩展名播放路径命中媒体',
+  )
+  assert(!profiles.isProfileMediaPath(dyProfile!, new URL('https://www.douyin.com/aweme/v1/web/feed/')), '档案：信息流接口不算媒体')
+
+  // 档案驱动的 URL 重写
+  const dyCtx = { siteId: 7, siteOrigin: 'https://www.douyin.com', activeOrigin: 'https://www.douyin.com', profile: dyProfile }
+  assertEqual(
+    proxy.mapUrlToProxy('https://ttwid.bytedance.com/ttwid/union/register/', dyCtx),
+    '/proxy/7/https/ttwid.bytedance.com/ttwid/union/register/',
+    '档案重写：ttwid 接口走内嵌主机',
+  )
+  assertEqual(
+    proxy.mapUrlToProxy('https://www.douyin.com/aweme/v1/play/?video_id=v0d', dyCtx),
+    '/proxy/7/__lw_media__/https/www.douyin.com/aweme/v1/play/?video_id=v0d',
+    '档案重写：同站无扩展名播放路径走媒体代理',
+  )
+  assertEqual(
+    proxy.mapUrlToProxy('https://p3-pc.douyinpic.com/img/cover.jpeg', dyCtx),
+    '/proxy/7/__lw_res__/https/p3-pc.douyinpic.com/img/cover.jpeg',
+    '档案重写：抖音图床走资源代理',
+  )
+  assertEqual(
+    proxy.mapResourceUrl('https://v26-web.douyinvod.com/video/tos/cn/tos-cn-ve-15/o0.mp4', dyCtx),
+    '/proxy/7/__lw_media__/https/v26-web.douyinvod.com/video/tos/cn/tos-cn-ve-15/o0.mp4',
+    '档案重写：抖音视频 CDN 走媒体代理',
+  )
+  assertEqual(
+    proxy.mapWsUrlToProxy('wss://webcast.amemv.com/webcast/im/push/v2/', dyCtx, 'lineweb.test', true),
+    'wss://lineweb.test/proxy-ws/7/https/webcast.amemv.com/webcast/im/push/v2/',
+    '档案重写：抖音直播 WS 走中继',
+  )
+  const biliCtx = { siteId: 7, siteOrigin: 'https://www.bilibili.com', activeOrigin: 'https://www.bilibili.com', profile: biliProfile }
+  assertEqual(
+    proxy.mapResourceUrl('https://upos-sz-mirrorcos.bilivideo.com/upgcxcode/a/b.m4s', biliCtx),
+    '/proxy/7/__lw_media__/https/upos-sz-mirrorcos.bilivideo.com/upgcxcode/a/b.m4s',
+    '档案重写：B 站视频切片走媒体代理',
+  )
+  // 通用站点不受档案影响（同站媒体仍走普通前缀，与旧版一致）
+  assertEqual(proxy.mapUrlToProxy('https://example.com/a.mp4', ctx), '/proxy/7/a.mp4', '档案：通用站点同站媒体保持普通前缀')
+
+  // 档案注入引导脚本
+  const dyBoot = bootstrap.buildBootstrapScript({
+    siteId: 7,
+    origin: 'https://www.douyin.com',
+    cookies: [],
+    hostRules: { page: dyProfile!.pageHosts, res: dyProfile!.resourceHosts, media: dyProfile!.mediaHosts },
+    mediaPatterns: dyProfile!.mediaPathPatterns.map((re) => re.source),
+  })
+  assert(dyBoot.includes('"hostRules"'), '引导脚本：档案主机规则注入')
+  assert(dyBoot.includes('ttwid.bytedance.com') || dyBoot.includes('bytedance.com'), '引导脚本：ttwid 域在 page 规则')
+  assert(dyBoot.includes('"mediaPatterns"'), '引导脚本：媒体路径模式注入')
+  const dyHtml = proxy.rewriteHtml('<html><head></head><body></body></html>', dyCtx, { cookies: [] })
+  assert(dyHtml.includes('"hostRules"'), 'HTML 重写：档案随引导脚本注入')
+
+  // 跨域 Set-Cookie（ttwid）：档案放松 vs 通用严格
+  const ttwidUrl = new URL('https://ttwid.bytedance.com/ttwid/union/register/')
+  const ttwidStrict = cookies.parseSetCookie('ttwid=1%7Cabc; Domain=.douyin.com; Path=/', ttwidUrl)!
+  assertEqual(ttwidStrict.domain, 'ttwid.bytedance.com', '跨域 Cookie：通用严格拒绝无关 Domain')
+  assertEqual(ttwidStrict.hostOnly, true, '跨域 Cookie：严格模式保持 hostOnly')
+  const ttwidTrusted = cookies.parseSetCookie('ttwid=1%7Cabc; Domain=.douyin.com; Path=/', ttwidUrl, dyProfile!.pageHosts)!
+  assertEqual(ttwidTrusted.domain, 'douyin.com', '跨域 Cookie：档案放松接受生态内 Domain')
+  assertEqual(ttwidTrusted.hostOnly, false, '跨域 Cookie：放松后非 hostOnly')
+  const ttwidEvil = cookies.parseSetCookie('x=1; Domain=evil.com; Path=/', ttwidUrl, dyProfile!.pageHosts)!
+  assertEqual(ttwidEvil.domain, 'ttwid.bytedance.com', '跨域 Cookie：档案外域仍拒绝')
+  assert(
+    cookies.cookieHeaderForUrl([ttwidTrusted], new URL('https://www.douyin.com/aweme/v1/web/feed/')).includes('ttwid=1%7Cabc'),
+    '跨域 Cookie：ttwid 可发往抖音接口',
+  )
+
+  // Referer 防盗链规则
+  assertEqual(hosts.refererRuleForHost('v26-web.douyinvod.com')?.referer, 'https://www.douyin.com/', 'Referer：抖音视频 CDN')
+  assertEqual(hosts.refererRuleForHost('p3-pc.douyinpic.com')?.referer, 'https://www.douyin.com/', 'Referer：抖音图床')
+  assertEqual(hosts.refererRuleForHost('upos-sz-mirrorcos.bilivideo.com')?.referer, 'https://www.bilibili.com/', 'Referer：B 站视频 CDN')
+  assert(hosts.refererOverrideFor('v26-web.douyinvod.com', 'https://web.linetech.online/proxy/7/') !== null, 'Referer：LineWeb 来源触发改写')
+  assert(hosts.refererOverrideFor('v26-web.douyinvod.com', 'https://www.douyin.com/video/1') === null, 'Referer：抖音来源保持原样')
+
+  // ============================================================
+  // 6.6 响应体改写（JSON / JSONP / 内联 / RENDER_DATA / DASH）
+  // ============================================================
+  const dyMap = (v: string) => proxy.mapUrlToProxy(v, dyCtx)
+  const playurl = JSON.stringify({
+    code: 0,
+    data: {
+      dash: {
+        video: [{ id: 80, baseUrl: 'https://upos-sz-mirrorcos.bilivideo.com/upgcxcode/a/v.m4s', backupUrl: ['https://upos-sz-mirrorcos.bilivideo.com/upgcxcode/a/v.m4s'] }],
+        audio: [{ id: 30280, baseUrl: 'https://upos-sz-mirrorcos.bilivideo.com/upgcxcode/a/a.m4s' }],
+      },
+    },
+  })
+  const biliMap = (v: string) => proxy.mapUrlToProxy(v, biliCtx)
+  const playurlOut = JSON.parse(body.rewriteJsonBody(playurl, biliMap))
+  assert(
+    playurlOut.data.dash.video[0].baseUrl.startsWith('/proxy/7/__lw_media__/https/upos-sz-mirrorcos.bilivideo.com/'),
+    'JSON 改写：playurl baseUrl 走媒体代理',
+  )
+  assert(
+    playurlOut.data.dash.video[0].backupUrl[0].startsWith('/proxy/7/__lw_media__/'),
+    'JSON 改写：backupUrl 数组逐项改写',
+  )
+  assertEqual(playurlOut.code, 0, 'JSON 改写：非 URL 字段保持')
+  assertEqual(body.rewriteJsonBody('not json', dyMap), 'not json', 'JSON 改写：非法 JSON 原样返回')
+  const dyFeed = JSON.stringify({ aweme_list: [{ video: { play_addr: { url_list: ['https://www.douyin.com/aweme/v1/play/?video_id=v0d&ratio=1080p'] }, cover: { url_list: ['https://p3-pc.douyinpic.com/img/c.jpeg'] } } }] })
+  const dyFeedOut = JSON.parse(body.rewriteJsonBody(dyFeed, dyMap))
+  assert(dyFeedOut.aweme_list[0].video.play_addr.url_list[0].startsWith('/proxy/7/__lw_media__/https/www.douyin.com/aweme/v1/play/'), 'JSON 改写：抖音 play_addr 走媒体代理')
+  assert(dyFeedOut.aweme_list[0].video.cover.url_list[0].startsWith('/proxy/7/__lw_res__/https/p3-pc.douyinpic.com/'), 'JSON 改写：抖音封面走资源代理')
+  // 未知第三方域保持
+  const thirdParty = JSON.stringify({ u: 'https://other.com/a.mp4', t: 'hello' })
+  assertEqual(JSON.parse(body.rewriteJsonBody(thirdParty, dyMap)).u, 'https://other.com/a.mp4', 'JSON 改写：档案外域保持')
+
+  const jsonp = 'jQuery123({"url":"https://www.douyin.com/aweme/v1/play/?video_id=v0d"})'
+  const jsonpOut = body.rewriteJsonpBody(jsonp, dyMap)
+  assert(jsonpOut.startsWith('jQuery123(') && jsonpOut.includes('/proxy/7/__lw_media__/'), 'JSONP 改写：回调包裹保留 + 内部改写')
+  assertEqual(body.rewriteJsonpBody('var x = 1', dyMap), 'var x = 1', 'JSONP 改写：非 JSONP 原样')
+
+  const inlineHtml = '<html><head><script>window.__playinfo__={"data":{"dash":{"video":[{"baseUrl":"https://upos-sz-mirrorcos.bilivideo.com/v.m4s"}]}}}</script><script src="/app.js"></script></head><body></body></html>'
+  const inlineOut = proxy.rewriteHtml(inlineHtml, biliCtx, { cookies: [] })
+  assert(inlineOut.includes('/proxy/7/__lw_media__/https/upos-sz-mirrorcos.bilivideo.com/v.m4s'), '内联改写：__playinfo__ 媒体地址')
+  assert(inlineOut.includes('src="/proxy/7/app.js"'), '内联改写：外链脚本仍走属性重写')
+
+  const renderRaw = { aweme: { detail: { video: { playAddr: [{ src: 'https://www.douyin.com/aweme/v1/play/?video_id=v0d' }] } } } }
+  const renderHtml = `<html><head><script id="RENDER_DATA" type="application/json">${encodeURIComponent(JSON.stringify(renderRaw))}</script></head><body></body></html>`
+  const renderOut = proxy.rewriteHtml(renderHtml, dyCtx, { cookies: [] })
+  const renderMatch = /<script id="RENDER_DATA"[^>]*>([\s\S]*?)<\/script>/i.exec(renderOut)!
+  const renderDecoded = JSON.parse(decodeURIComponent(renderMatch[1]))
+  assert(renderDecoded.aweme.detail.video.playAddr[0].src.startsWith('/proxy/7/__lw_media__/'), 'RENDER_DATA：解码改写后回填')
+  assert(renderOut.includes('RENDER_DATA'), 'RENDER_DATA：脚本保留')
+
+  // DASH 清单改写
+  const dashBase = new URL('https://cdn.example.com/dash/manifest.mpd')
+  const dash = [
+    '<?xml version="1.0"?>',
+    '<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static">',
+    '  <Period>',
+    '    <BaseURL>https://cdn.example.com/dash/</BaseURL>',
+    '    <AdaptationSet mimeType="video/mp4">',
+    '      <SegmentTemplate initialization="init-$RepresentationID$.m4s" media="seg-$RepresentationID$-$Number$.m4s" startNumber="1"/>',
+    '      <Representation id="v1" bandwidth="1000"/>',
+    '    </AdaptationSet>',
+    '    <AdaptationSet mimeType="audio/mp4">',
+    '      <SegmentTemplate initialization="https://other.cdn.com/a/init.m4s" media="https://other.cdn.com/a/seg-$Number$.m4s"/>',
+    '    </AdaptationSet>',
+    '  </Period>',
+    '  <Location>https://cdn.example.com/dash/manifest.mpd</Location>',
+    '</MPD>',
+  ].join('\n')
+  const dashOut = media.rewriteDashManifest(dash, dashBase, 7)
+  assert(dashOut.includes('<BaseURL>/proxy/7/__lw_media__/https/cdn.example.com/dash/</BaseURL>'), 'DASH：BaseURL 绝对地址改写')
+  assert(dashOut.includes('initialization="init-$RepresentationID$.m4s"'), 'DASH：相对模板占位符保持')
+  assert(dashOut.includes('media="seg-$RepresentationID$-$Number$.m4s"'), 'DASH：相对 media 模板保持')
+  assert(dashOut.includes('initialization="/proxy/7/__lw_media__/https/other.cdn.com/a/init.m4s"'), 'DASH：绝对 initialization 改写')
+  assert(dashOut.includes('media="/proxy/7/__lw_media__/https/other.cdn.com/a/seg-$Number$.m4s"'), 'DASH：绝对 media 模板改写（占位符保留）')
+  assert(dashOut.includes('<Location>/proxy/7/__lw_media__/https/cdn.example.com/dash/manifest.mpd</Location>'), 'DASH：Location 改写')
+
+  // ============================================================
+  // 6.7 WebSocket over HTTP 桥：帧队列 + 引导脚本 polyfill
+  // ============================================================
+  const wsHttp = await import('../src/services/webProxyWsHttp.js')
+  const FQ = wsHttp.FrameQueue
+  const frame = (s: string, binary = false) => ({ data: Buffer.from(s).toString('base64'), binary })
+  // push → poll 立即取批
+  const q1 = new FQ()
+  q1.push(frame('a'))
+  q1.push(frame('b'))
+  assertEqual((await q1.poll(50))!.length, 2, '桥队列：push 后 poll 取批')
+  // poll 挂起 → push 唤醒
+  const q2 = new FQ()
+  const pending = q2.poll(2000)
+  q2.push(frame('x'))
+  assertEqual((await pending)!.map((f) => Buffer.from(f.data, 'base64').toString())[0], 'x', '桥队列：挂起 poll 被 push 唤醒')
+  // poll 超时返回空批
+  const q3 = new FQ()
+  assertEqual((await q3.poll(20))!.length, 0, '桥队列：超时返回空批')
+  // close 投递剩余帧 + closed 标志
+  const q4 = new FQ()
+  q4.push(frame('last'))
+  q4.close(1001, 'bye')
+  assertEqual((await q4.poll(50))!.length, 1, '桥队列：close 后仍可取剩余帧')
+  assert(q4.closed && q4.closeCode === 1001, '桥队列：close 标志与 code')
+  // 溢出 → 1011 关闭
+  const q5 = new FQ(2, 1024)
+  q5.push(frame('1'))
+  q5.push(frame('2'))
+  q5.push(frame('3'))
+  assert(q5.closed && q5.closeCode === 1011, '桥队列：帧数溢出以 1011 关闭')
+  // cancelPoll 提前结束挂起（不关闭会话）
+  const q6 = new FQ()
+  const cancelled = q6.poll(2000)
+  q6.cancelPoll()
+  assertEqual((await cancelled)!.length, 0, '桥队列：cancelPoll 结束挂起')
+  assert(!q6.closed, '桥队列：cancelPoll 不关闭会话')
+
+  // 引导脚本 polyfill 标记 + 整体语法可解析
+  assert(boot.includes('LWWebSocket'), '引导脚本：WS polyfill 类')
+  assert(boot.includes('WS_HTTP_PREFIX'), '引导脚本：WS HTTP 桥前缀')
+  assert(boot.includes('_fallback'), '引导脚本：原生 WS 失败自动降级')
+  assert(boot.includes('FORCE_WS_POLL'), '引导脚本：?lw_ws=poll 强制桥')
+  assert(boot.includes('LWSSE'), '引导脚本：SSE polyfill')
+  assert(boot.includes('window.WebSocket=LWWebSocket'), '引导脚本：安装 WS polyfill')
+  // 用 new Function 解析（不执行）验证引导脚本无语法错误
+  let bootSyntaxOk = true
+  try { new Function(boot) } catch { bootSyntaxOk = false }
+  assert(bootSyntaxOk, '引导脚本：整体语法可解析')
+  let familySyntaxOk = true
+  try { new Function(familyBoot) } catch { familySyntaxOk = false }
+  assert(familySyntaxOk, '引导脚本：档案变体语法可解析')
+  let desktopSyntaxOk = true
+  try { new Function(desktopBoot) } catch { desktopSyntaxOk = false }
+  assert(desktopSyntaxOk, '引导脚本：桌面变体语法可解析')
+
+  // ============================================================
+  // 6.8 兼容管线（compat 判定 / ES5 转译 / polyfill / legacy 注入）
+  // ============================================================
+  const compat = await import('../src/services/webProxyCompat.js')
+  const transpile = await import('../src/services/webProxyTranspile.js')
+  const polyfills = await import('../src/services/webProxyPolyfills.js')
+
+  const oldAndroid = 'Mozilla/5.0 (Linux; Android 4.4.2; Nexus 5 Build/KOT49H) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/30.0.0.0 Mobile Safari/537.36'
+  const oldIOS = 'Mozilla/5.0 (iPhone; CPU iPhone OS 9_3_5 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13G36 Safari/601.1'
+  const modernChrome = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+  const modernIOS = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+  assert(compat.isLegacyUserAgent(oldAndroid), 'compat：老 Android 判 legacy')
+  assert(compat.isLegacyUserAgent(oldIOS), 'compat：老 iOS 判 legacy')
+  assert(!compat.isLegacyUserAgent(modernChrome), 'compat：现代 Chrome 判 modern')
+  assert(!compat.isLegacyUserAgent(modernIOS), 'compat：现代 iOS 判 modern')
+  assert(!compat.isLegacyUserAgent(undefined), 'compat：无 UA 按 modern')
+  assertEqual(compat.resolveCompatMode('auto', oldAndroid), 'legacy', 'compat：auto + 老 UA → legacy')
+  assertEqual(compat.resolveCompatMode('auto', modernChrome), 'modern', 'compat：auto + 现代 UA → modern')
+  assertEqual(compat.resolveCompatMode('legacy', modernChrome), 'legacy', 'compat：站点强制 legacy')
+  assertEqual(compat.resolveCompatMode('modern', oldAndroid), 'modern', 'compat：站点强制 modern')
+  assertEqual(compat.resolveCompatMode('auto', modernChrome, 'legacy'), 'legacy', 'compat：查询钩子优先')
+
+  // ES5 转译：async/await + 箭头降级
+  const es6 = 'const f = async (x) => { await g(x); return x + 1; }; class A { m() { return 1; } }'
+  const es5 = transpile.transpileToEs5(es6)
+  assert(!es5.includes('=>'), '转译：箭头函数已降级')
+  assert(!/\basync\b/.test(es5), '转译：async 已降级')
+  assert(es5.includes('regeneratorRuntime'), '转译：async 降级为 regenerator')
+  assert(!/\bclass\b/.test(es5), '转译：class 已降级')
+  // 缓存命中
+  transpile.transpileToEs5(es6)
+  assert(transpile.transpileCacheSize() >= 1, '转译：缓存生效')
+  // 非法输入回退原文
+  assertEqual(transpile.transpileToEs5('this is not valid js {{{'), 'this is not valid js {{{', '转译：失败回退原文')
+  assertEqual(transpile.transpileToEs5(''), '', '转译：空输入原样')
+
+  // polyfill bundle 可解析 + 关键 API
+  let polyfillSyntaxOk = true
+  try { new Function(polyfills.POLYFILL_BUNDLE) } catch { polyfillSyntaxOk = false }
+  assert(polyfillSyntaxOk, 'polyfill：bundle 语法可解析')
+  assert(polyfills.POLYFILL_BUNDLE.includes('regeneratorRuntime'), 'polyfill：内联 regenerator')
+  assert(polyfills.POLYFILL_BUNDLE.includes('Promise'), 'polyfill：Promise')
+  assert(polyfills.POLYFILL_BUNDLE.includes('fetch'), 'polyfill：fetch')
+  assert(polyfills.POLYFILL_BUNDLE.includes('URLSearchParams'), 'polyfill：URLSearchParams')
+  assertEqual(polyfills.polyfillPath(7), '/proxy/7/__lw_polyfill__.js', 'polyfill：路径')
+
+  // legacy HTML：polyfill 先注入 + 内联脚本转译
+  const legacyCtx = { ...ctx, compat: 'legacy' as const }
+  const legacyHtml = proxy.rewriteHtml(
+    '<html><head><script>const x = () => 1;</script></head><body></body></html>',
+    legacyCtx,
+    { cookies: [] },
+  )
+  assert(legacyHtml.includes('src="/proxy/7/__lw_polyfill__.js"'), 'legacy HTML：注入 polyfill')
+  const polyfillAt = legacyHtml.indexOf('__lw_polyfill__.js')
+  const bootAt = legacyHtml.indexOf('data-lineweb-proxy')
+  assert(polyfillAt >= 0 && polyfillAt < bootAt, 'legacy HTML：polyfill 先于引导脚本')
+  assert(!legacyHtml.includes('() => 1'), 'legacy HTML：内联箭头脚本已转译')
+  assert(legacyHtml.includes('"compat":"legacy"'), 'legacy HTML：引导脚本携带 compat')
+  // modern HTML 不注入 polyfill
+  const modernHtml = proxy.rewriteHtml('<html><head></head><body></body></html>', ctx, { cookies: [] })
+  assert(!modernHtml.includes('__lw_polyfill__.js'), 'modern HTML：不注入 polyfill')
+
+  // ============================================================
+  // 6.9 无 MSE 原生播放适配
+  // ============================================================
+  assert(boot.includes('lwBiliNoMse'), '播放适配：B 站 no-MSE 适配器')
+  assert(boot.includes('lwDouyinNoMse'), '播放适配：抖音 no-MSE 适配器')
+  assert(boot.includes('window.MediaSource'), '播放适配：MSE 检测门控')
+  assert(boot.includes('fnval=1'), '播放适配：B 站 mp4 降级')
+  assert(boot.includes('RENDER_DATA'), '播放适配：抖音读取 RENDER_DATA')
+  const dyProfileBoot = bootstrap.buildBootstrapScript({ siteId: 7, origin: 'https://www.douyin.com', cookies: [], profileId: 'douyin', compat: 'legacy' })
+  assert(dyProfileBoot.includes('"profileId":"douyin"'), '播放适配：profileId 注入')
+  let playbackSyntaxOk = true
+  try { new Function(dyProfileBoot) } catch { playbackSyntaxOk = false }
+  assert(playbackSyntaxOk, '播放适配：抖音 legacy 变体语法可解析')
 
   // ============================================================
   // 7. 错误页 / 登录页
