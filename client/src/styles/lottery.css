@@ -38,6 +38,13 @@
   --lw-rarity-glow: rgba(242, 201, 76, 0.55);
   --lw-rarity-ink: #9a6700;
 }
+/* 秘藏：比传说更稀有的第五档（藏品 / 隐藏称号 / 神话战利品） */
+.gh-lottery-rarity--mythic {
+  --lw-rarity: #e5484d;
+  --lw-rarity-soft: rgba(229, 72, 77, 0.18);
+  --lw-rarity-glow: rgba(229, 72, 77, 0.58);
+  --lw-rarity-ink: #b42318;
+}
 
 [data-theme="dark"] .gh-lottery-rarity--common {
   --lw-rarity: #aeaeb2;
@@ -62,6 +69,12 @@
   --lw-rarity-soft: rgba(255, 215, 90, 0.18);
   --lw-rarity-glow: rgba(255, 215, 90, 0.6);
   --lw-rarity-ink: #ffd75a;
+}
+[data-theme="dark"] .gh-lottery-rarity--mythic {
+  --lw-rarity: #ff7b81;
+  --lw-rarity-soft: rgba(255, 123, 129, 0.18);
+  --lw-rarity-glow: rgba(255, 123, 129, 0.6);
+  --lw-rarity-ink: #ff9aa0;
 }
 
 /* ---------- 页头 ---------- */
@@ -198,6 +211,24 @@
   color: var(--gh-text-tertiary);
 }
 .gh-lottery-pity-card p strong { color: var(--gh-text); }
+
+/* 每日 30 抽额度 */
+.gh-lottery-quota-card {
+  padding: 12px 16px 13px;
+  border-radius: 18px;
+  border: 1px solid var(--gh-border);
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-sm);
+}
+.gh-lottery-quota-fill {
+  background: linear-gradient(90deg, #30a46c 0%, #f2c94c 62%, #e5484d 100%);
+  box-shadow: 0 0 10px rgba(242, 201, 76, 0.45);
+}
+.gh-lottery-quota-card p {
+  margin: 0;
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+}
 
 /* ---------- 提示条 ---------- */
 
@@ -751,11 +782,17 @@
 .gh-lottery-type-icon--seed { color: #1d7c3d; background: rgba(52, 199, 89, 0.14); }
 .gh-lottery-type-icon--fertilizer { color: #0066cc; background: rgba(10, 132, 255, 0.13); }
 .gh-lottery-type-icon--outfit { color: #8250df; background: rgba(191, 90, 242, 0.14); }
+.gh-lottery-type-icon--raid_item { color: #8a5a1f; background: rgba(201, 163, 107, 0.18); }
+.gh-lottery-type-icon--collectible { color: #7a3e9d; background: rgba(229, 72, 77, 0.13); }
+.gh-lottery-type-icon--title { color: #9a6700; background: rgba(201, 163, 107, 0.2); }
 
 [data-theme="dark"] .gh-lottery-type-icon--points { color: #ffd75a; background: rgba(255, 215, 90, 0.16); }
 [data-theme="dark"] .gh-lottery-type-icon--seed { color: #7ee08a; background: rgba(126, 224, 138, 0.14); }
 [data-theme="dark"] .gh-lottery-type-icon--fertilizer { color: #8ccbff; background: rgba(140, 203, 255, 0.14); }
 [data-theme="dark"] .gh-lottery-type-icon--outfit { color: #e3bdff; background: rgba(227, 189, 255, 0.14); }
+[data-theme="dark"] .gh-lottery-type-icon--raid_item { color: #e5c69a; background: rgba(201, 163, 107, 0.16); }
+[data-theme="dark"] .gh-lottery-type-icon--collectible { color: #ff9aa0; background: rgba(229, 72, 77, 0.16); }
+[data-theme="dark"] .gh-lottery-type-icon--title { color: #ffd75a; background: rgba(201, 163, 107, 0.18); }
 
 /* ---------- 历史 ---------- */
 
@@ -1016,6 +1053,34 @@
   pointer-events: none;
 }
 
+.gh-lottery-result-card.gh-lottery-rarity--mythic {
+  border-color: rgba(229, 72, 77, 0.7);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 150, 150, 0.36), transparent 62%),
+    linear-gradient(172deg, rgba(229, 72, 77, 0.24), transparent 70%),
+    var(--gh-canvas-subtle);
+  box-shadow:
+    0 0 0 1px rgba(229, 72, 77, 0.34),
+    0 0 32px -8px var(--lw-rarity-glow),
+    0 0 64px -24px rgba(229, 72, 77, 0.9);
+  animation:
+    gh-lottery-card-in 0.42s var(--gh-ease-out) both,
+    gh-lottery-legendary-pulse 2.2s ease-in-out infinite;
+}
+.gh-lottery-result-card.gh-lottery-rarity--mythic::before {
+  content: '';
+  position: absolute;
+  inset: -42%;
+  z-index: 0;
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(255, 123, 129, 0.28) 0deg 5deg,
+    transparent 5deg 24deg
+  );
+  animation: gh-lottery-rays 6s linear infinite;
+  pointer-events: none;
+}
+
 .gh-lottery-result-rarity {
   font-size: 9px;
   font-weight: 700;
@@ -1068,6 +1133,12 @@
   font-size: 10px;
   font-weight: 600;
   color: var(--gh-warning);
+}
+.gh-lottery-result-extra {
+  margin: 2px 0 0;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--lw-rarity-ink);
 }
 
 .gh-lottery-result-sparks {
@@ -1308,6 +1379,8 @@
   .gh-lottery-result-card,
   .gh-lottery-result-card.gh-lottery-rarity--legendary,
   .gh-lottery-result-card.gh-lottery-rarity--legendary::before,
+  .gh-lottery-result-card.gh-lottery-rarity--mythic,
+  .gh-lottery-result-card.gh-lottery-rarity--mythic::before,
   .gh-lottery-result-sparks i,
   .gh-lottery-modal-backdrop,
   .gh-lottery-modal-panel,

@@ -13,9 +13,11 @@ export interface DefaultShopItem {
   name: string
   description: string
   cost: number
-  rarity: 'common' | 'rare' | 'epic' | 'legendary' | 'mythic' | 'transcendent'
+  rarity: 'common' | 'rare' | 'epic' | 'legendary' | 'mythic' | 'transcendent' | 'origin'
   payload: Record<string, unknown>
   sortOrder: number
+  /** 仅抽奖等系统途径发放：商店列表只对已拥有者可见，不可购买 */
+  hidden?: boolean
 }
 
 /**
@@ -61,4 +63,21 @@ export const DEFAULT_TITLE_ITEMS_V5: readonly DefaultShopItem[] = [
   { key: 'title_v5_genesis', type: 'title', name: '创世者', description: '一圈金白色的创世星环绕名旋转，星环内侧不断诞生又熄灭微小的恒星。', cost: 30000, rarity: 'transcendent', payload: { icon: '🌐', color: '#ffd76a', effect: 'genesis' }, sortOrder: 115 },
   { key: 'title_v5_oblivion', type: 'title', name: '湮灭之主', description: '名字周围的空间被缓慢抹去又重写，紫黑色的湮灭奇点像一只不肯闭上的眼睛。', cost: 36000, rarity: 'transcendent', payload: { icon: '♾️', color: '#c084fc', effect: 'oblivion' }, sortOrder: 116 },
   { key: 'title_v5_zenith_of_all', type: 'title', name: '万象归一', description: '整片星海、极光与潮汐同时在你名字背后归位——LineWeb 称号的最高一档。', cost: 50000, rarity: 'transcendent', payload: { icon: '🌠', color: '#7aa7ff', effect: 'firmament' }, sortOrder: 117 },
+]
+
+/**
+ * 源初系列称号（第六批，2026-11-15）。
+ *
+ * 新增最高稀有度 `origin`（源初）——比至臻再高一档。徽章刻意**不再使用**光环 / 旋转锥形 /
+ * 粒子爆发，改为角切铭牌 + 表面工艺：etch（蚀刻）/ holo（全息箔）/ monolith（黑碑）。
+ * 后三件 hidden = true：商店不出售，只能通过积分抽奖的「隐藏称号」奖品获得。
+ */
+export const DEFAULT_TITLE_ITEMS_V6: readonly DefaultShopItem[] = [
+  { key: 'title_v6_etch', type: 'title', name: '蚀刻者', description: '名字被慢慢蚀进一块旧金属里，斜纹一遍遍扫过字口，像一件不肯褪色的证物。', cost: 80000, rarity: 'origin', payload: { icon: '🪶', color: '#c9a36b', effect: 'etch' }, sortOrder: 118 },
+  { key: 'title_v6_holo', type: 'title', name: '全息黎明', description: '一层全息箔贴在名字背面，光扫过时整块铭牌泛起冷白的虹彩。', cost: 120000, rarity: 'origin', payload: { icon: '🌐', color: '#7ee7ff', effect: 'holo' }, sortOrder: 119 },
+  { key: 'title_v6_monolith', type: 'title', name: '黑碑', description: '一块哑光的黑色碑面，只有一道竖直光缝在呼吸——不旋转，也不溅出任何粒子。', cost: 180000, rarity: 'origin', payload: { icon: '🗿', color: '#d6d3d1', effect: 'monolith' }, sortOrder: 120 },
+  { key: 'title_v6_origin', type: 'title', name: '源初', description: '所有称号之前的第一块铭牌。名字不是被照亮，而是被刻在光里。', cost: 300000, rarity: 'origin', payload: { icon: '✴️', color: '#f5e6c8', effect: 'holo' }, sortOrder: 121 },
+  { key: 'title_hidden_ash', type: 'title', name: '无光之刻', description: '抽奖池里才能遇见的隐藏称号。字口里没有光，只有一块黑碑把名字压住。', cost: 0, rarity: 'origin', payload: { icon: '🌑', color: '#a8a29e', effect: 'monolith' }, sortOrder: 122, hidden: true },
+  { key: 'title_hidden_star', type: 'title', name: '纸上星河', description: '抽奖池里才能遇见的隐藏称号。整条星河被压进一张薄薄的箔纸，翻面时才闪一下。', cost: 0, rarity: 'origin', payload: { icon: '🌌', color: '#a5b4fc', effect: 'holo' }, sortOrder: 123, hidden: true },
+  { key: 'title_hidden_crown', type: 'title', name: '锈蚀的冠冕', description: '抽奖池里才能遇见的隐藏称号。冠冕早就锈了，刻痕却比任何新王冠都深。', cost: 0, rarity: 'origin', payload: { icon: '👑', color: '#b08968', effect: 'etch' }, sortOrder: 124, hidden: true },
 ]

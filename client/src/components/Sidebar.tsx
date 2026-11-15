@@ -40,6 +40,7 @@ const sections: { title: string; requireAuth?: boolean; items: SidebarItem[] }[]
       { path: '/games', label: '游戏', icon: 'gamepad' },
       { path: '/pets', label: '宠物', icon: 'paw' },
       { path: '/raid/shop', label: '搜打撤商店', icon: 'tag' },
+      { path: '/pets/raid/collection', label: '藏品室', icon: 'archive' },
       { path: '/lottery', label: '积分抽奖', icon: 'gift' },
       { path: '/stocks', label: '模拟股市', icon: 'chart' },
       { path: '/bank', label: '银行', icon: 'bank' },

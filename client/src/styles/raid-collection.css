@@ -1,0 +1,345 @@
+/* ============================================================
+   搜打撤藏品室（/pets/raid/collection）
+   角切铭牌语言与称号 origin 档一致：不用圆形光晕，用细边 / 展台 / 剪影。
+   ============================================================ */
+
+.gh-raid-collection-page {
+  --lw-collector-gold: #c9a36b;
+  --lw-collector-ink: #f4e9d0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-space-5);
+}
+
+.gh-raid-collection-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--gh-space-4);
+  flex-wrap: wrap;
+}
+
+.gh-raid-collection-eyebrow {
+  margin: 0 0 6px;
+  font-size: var(--gh-text-xs);
+  letter-spacing: .16em;
+  color: var(--gh-text-tertiary);
+}
+
+.gh-raid-collection-head h1 {
+  margin: 0;
+  font-size: var(--gh-text-2xl);
+  letter-spacing: .02em;
+}
+
+.gh-raid-collection-sub {
+  margin: 6px 0 0;
+  max-width: 62ch;
+  color: var(--gh-text-secondary);
+  font-size: var(--gh-text-sm);
+  line-height: 1.6;
+}
+
+.gh-raid-collection-owner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-raid-collection-owner-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, rgba(201, 163, 107, .2), rgba(126, 231, 255, .12));
+  box-shadow: inset 0 0 0 1px rgba(201, 163, 107, .35);
+}
+
+.gh-raid-collection-private,
+.gh-raid-collection-visits {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: var(--gh-text-xs);
+  background: var(--gh-canvas-inset);
+  color: var(--gh-text-tertiary);
+}
+
+.gh-raid-collection-private {
+  color: var(--gh-danger);
+  background: color-mix(in srgb, var(--gh-danger) 12%, transparent);
+}
+
+.gh-raid-collection-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gh-raid-collection-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: var(--gh-space-3);
+}
+
+.gh-raid-collection-section-head h2 {
+  margin: 0;
+  font-size: var(--gh-text-base);
+}
+
+.gh-raid-collection-section-head span {
+  color: var(--gh-text-tertiary);
+  font-size: var(--gh-text-xs);
+}
+
+.gh-raid-collection-room,
+.gh-raid-collection-catalog,
+.gh-raid-collection-tour,
+.gh-raid-collection-warehouse,
+.gh-raid-collection-editor {
+  padding: var(--gh-space-4);
+}
+
+/* 12 个展位：4×3；移动端 3×4 */
+.gh-raid-collection-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.gh-raid-collection-slot {
+  position: relative;
+  min-height: 132px;
+  padding: 10px;
+  border: 1px solid var(--gh-border);
+  border-radius: 4px;
+  background:
+    linear-gradient(180deg, var(--gh-canvas-subtle), var(--gh-canvas)),
+    var(--gh-canvas);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .02);
+  overflow: hidden;
+}
+
+.gh-raid-collection-slot::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 12px;
+  height: 12px;
+  border-left: 1px solid currentColor;
+  border-top: 1px solid currentColor;
+  opacity: .35;
+}
+
+.gh-raid-collection-slot-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+  min-height: 108px;
+  color: var(--gh-text-tertiary);
+  border: 1px dashed var(--gh-border-muted);
+  border-radius: 3px;
+  font-size: var(--gh-text-sm);
+}
+
+.gh-raid-collection-slot-empty span { font-size: 1.4rem; opacity: .5; }
+
+.gh-raid-collection-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 100%;
+}
+
+.gh-raid-collection-item-emoji {
+  font-size: 2rem;
+  line-height: 1.1;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .25));
+}
+
+.gh-raid-collection-item strong { font-size: var(--gh-text-sm); }
+.gh-raid-collection-item small { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); line-height: 1.45; }
+
+.gh-raid-collection-rarity {
+  align-self: flex-start;
+  margin-top: auto;
+  padding: 1px 7px;
+  border-radius: 2px;
+  font-size: 10px;
+  letter-spacing: .06em;
+  color: var(--gh-text-secondary);
+  background: var(--gh-canvas-inset);
+}
+
+/* 稀有度只改左侧细边与胶囊颜色，不做大面积发光 */
+.gh-raid-collection-slot--uncommon { border-left: 2px solid #30a46c; }
+.gh-raid-collection-slot--rare { border-left: 2px solid #0a84ff; }
+.gh-raid-collection-slot--epic { border-left: 2px solid #bf5af2; }
+.gh-raid-collection-slot--legendary { border-left: 2px solid #f2c94c; }
+.gh-raid-collection-slot--mythic { border-left: 2px solid #e5484d; }
+
+.gh-raid-collection-display-editor {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: var(--gh-space-4);
+  padding-top: var(--gh-space-4);
+  border-top: 1px dashed var(--gh-border-muted);
+}
+
+.gh-raid-collection-slot-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--gh-text-xs);
+  color: var(--gh-text-tertiary);
+}
+
+.gh-raid-collection-display-editor > .gh-btn {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.gh-raid-collection-candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gh-raid-collection-candidate {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--gh-border);
+  border-radius: 4px;
+  background: var(--gh-canvas);
+}
+
+.gh-raid-collection-candidate-emoji { font-size: 1.6rem; }
+.gh-raid-collection-candidate > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.gh-raid-collection-candidate small { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+
+.gh-raid-collection-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.gh-raid-collection-catalog-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--gh-border);
+  border-radius: 4px;
+  background: var(--gh-canvas);
+  min-height: 156px;
+}
+
+.gh-raid-collection-catalog-card.is-locked {
+  opacity: .62;
+  background:
+    repeating-linear-gradient(135deg, transparent 0 6px, var(--gh-canvas-subtle) 6px 7px),
+    var(--gh-canvas);
+}
+
+.gh-raid-collection-catalog-emoji { font-size: 1.8rem; }
+.gh-raid-collection-catalog-card strong { font-size: var(--gh-text-sm); }
+.gh-raid-collection-catalog-card small { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); line-height: 1.45; }
+
+.gh-raid-collection-tour-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.gh-raid-collection-tour-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--gh-border);
+  border-radius: 4px;
+  background: var(--gh-canvas);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color .18s ease, transform .18s ease;
+}
+
+.gh-raid-collection-tour-card:hover {
+  border-color: var(--lw-collector-gold);
+  transform: translateY(-2px);
+}
+
+.gh-raid-collection-tour-covers { display: flex; gap: 4px; font-size: 1.5rem; }
+.gh-raid-collection-tour-card strong { font-size: var(--gh-text-sm); }
+.gh-raid-collection-tour-card small { color: var(--gh-text-tertiary); font-size: var(--gh-text-xs); }
+.gh-raid-collection-tour-card p { margin: 2px 0 0; color: var(--gh-text-secondary); font-size: var(--gh-text-xs); line-height: 1.45; }
+
+.gh-raid-collection-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-secondary);
+}
+
+.gh-raid-collection-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gh-raid-collection-editor h2 { margin: 0; font-size: var(--gh-text-base); }
+.gh-raid-collection-editor-actions { display: flex; gap: 8px; }
+
+.gh-raid-collection-toast {
+  position: sticky;
+  top: 12px;
+  z-index: 5;
+  padding: 10px 14px;
+  border: 1px solid var(--gh-border);
+  border-radius: 12px;
+  background: var(--gh-canvas);
+  box-shadow: var(--gh-shadow-md);
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text);
+}
+
+.gh-raid-collection-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 48px 0;
+  color: var(--gh-text-secondary);
+}
+
+.gh-raid-collection-error-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+@media (max-width: 900px) {
+  .gh-raid-collection-grid,
+  .gh-raid-collection-catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .gh-raid-collection-tour-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gh-raid-collection-display-editor { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 620px) {
+  .gh-raid-collection-grid,
+  .gh-raid-collection-catalog-grid,
+  .gh-raid-collection-tour-grid,
+  .gh-raid-collection-display-editor { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gh-raid-collection-head { align-items: flex-start; flex-direction: column; }
+  .gh-raid-collection-slot { min-height: 114px; }
+}

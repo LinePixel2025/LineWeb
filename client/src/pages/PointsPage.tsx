@@ -39,6 +39,7 @@ const RARITY_LABELS: Record<string, string> = {
   legendary: '传说',
   mythic: '神话',
   transcendent: '至臻',
+  origin: '源初',
 }
 
 const REASON_LABELS: Record<string, string> = {
@@ -78,6 +79,7 @@ const REASON_LABELS: Record<string, string> = {
   raid_market_sell: '搜打撤交易行出售',
   raid_market_buy: '搜打撤交易行购买',
   raid_storage_upgrade: '搜打撤仓库升级',
+  raid_collectible_duplicate: '藏品重复折算',
   pet_summon: '召唤宠物',
   pet_feed: '宠物喂食',
   pet_bathe: '宠物洗澡',
@@ -348,7 +350,10 @@ function ShopTab({
 
   useEffect(() => { void load() }, [load])
 
-  const items = useMemo(() => (data?.items ?? []).filter((item) => item.type === type), [data, type])
+  const items = useMemo(
+    () => (data?.items ?? []).filter((item) => item.type === type && !item.hidden),
+    [data, type],
+  )
   const ownedTitles = useMemo(
     () => (data?.items ?? []).filter((item) => item.type === 'title' && item.owned),
     [data],
@@ -487,13 +492,15 @@ function ShopTab({
                 <h3 className={`gh-points-shop-card-name ${
                   item.type !== 'title'
                     ? ''
-                    : item.rarity === 'transcendent'
-                      ? 'gh-points-shop-name--transcendent'
-                      : item.rarity === 'mythic'
-                        ? 'gh-points-shop-name--mythic'
-                        : item.rarity === 'legendary'
-                          ? 'gh-points-shop-name--legendary'
-                          : ''
+                    : item.rarity === 'origin'
+                      ? 'gh-points-shop-name--origin'
+                      : item.rarity === 'transcendent'
+                        ? 'gh-points-shop-name--transcendent'
+                        : item.rarity === 'mythic'
+                          ? 'gh-points-shop-name--mythic'
+                          : item.rarity === 'legendary'
+                            ? 'gh-points-shop-name--legendary'
+                            : ''
                 }`}>
                   {item.type === 'title' ? (
                     <span style={{ color: typeof item.payload.color === 'string' ? item.payload.color : undefined }}>
@@ -568,6 +575,7 @@ function ShopTab({
                   }}
                   size="md"
                 />
+                {item.hidden && <span className="gh-points-rarity gh-points-rarity--hidden">秘藏</span>}
                 {item.equipped ? (
                   <span className="gh-badge gh-badge--success">佩戴中</span>
                 ) : (

@@ -5,6 +5,7 @@ import Sidebar from './Sidebar'
 import SiteAnnouncementBar from './SiteAnnouncementBar'
 import SiteAnnouncementAckGate from './SiteAnnouncementAckGate'
 import CrisisGate from './CrisisGate'
+import RaidResumeDock from './raid/RaidResumeDock'
 import { SiteAnnouncementProvider } from '../contexts/SiteAnnouncementContext'
 import { useFeature } from '../contexts/FeatureContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -90,6 +91,7 @@ export default memo(function Layout() {
             </footer>
           )}
         </main>
+        <RaidResumeDock />
       </div>
     </SiteAnnouncementProvider>
   )

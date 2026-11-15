@@ -29,6 +29,14 @@ import {
 } from '../lib/petBattle.js'
 import { awardPointsTx, spendPointsTx } from './pointsService.js'
 import { ensureStarterEquipment, getPetView } from './petService.js'
+import { sendToUser } from './chatHub.js'
+import { markGamePresence } from './gamePresence.js'
+import {
+  isGameUserAvailable,
+  isUserBusyInOtherGames,
+  registerGameModule,
+} from './gameService.js'
+import { sendStandaloneInvite, sendStandaloneInviteRemoved } from './gameInviteBridge.js'
 
 const INVITE_TTL_MS = 10 * 60_000
 const TURN_MS = 30_000
@@ -39,6 +47,33 @@ const STAKE_MIN = 10
 const STAKE_MAX = 300
 const HISTORY_LIMIT = 20
 const SWEEPER_INTERVAL_MS = 5_000
+const MAX_INCOMING_INVITES = 5
+
+/**
+ * 跨游戏忙碌探针：PetBattle 状态在 DB 里，但 gameService 的 isUserInMatch 是同步钩子，
+ * 因此维护一份进程内 Set（邀请 / 应战 / 结算 / 取消 / 过期时增删，启动时从 DB 恢复）。
+ */
+const petBattleBusy = new Set<number>()
+
+function markBusy(userId: number): void {
+  petBattleBusy.add(userId)
+}
+
+function clearBusy(userId: number): void {
+  petBattleBusy.delete(userId)
+}
+
+/** 启动时把 pending / active / settling 的参与者放回忙碌集合 */
+export async function initPetBattleBusy(): Promise<void> {
+  const rows = await prisma.petBattle.findMany({
+    where: { status: { in: ['pending', 'active', 'settling'] } },
+    select: { challengerId: true, opponentId: true },
+  })
+  for (const row of rows) {
+    petBattleBusy.add(row.challengerId)
+    petBattleBusy.add(row.opponentId)
+  }
+}
 
 export interface BattleParticipantDto {
   userId: number
@@ -121,6 +156,8 @@ export interface PetBattleOverviewDto {
     level: number
     /** 今日与该用户剩余可挑战次数 */
     remainingToday: number
+    /** 聊天 WS 在线或游戏 presence 未过期 */
+    online: boolean
   }>
   stakeRule: { rate: number; min: number; max: number }
 }
@@ -315,6 +352,23 @@ async function loadCombatInput(userId: number): Promise<PetCombatInput> {
   }
 }
 
+function inviteEnvelope(
+  row: BattleRow,
+  participants: Map<number, BattleParticipantDto>,
+  now: number = Date.now(),
+): Parameters<typeof sendStandaloneInvite>[1] {
+  return {
+    id: row.id,
+    game: 'petbattle',
+    kind: 'match',
+    matchId: row.id,
+    from: { id: row.challengerId, username: participants.get(row.challengerId)?.username ?? '玩家' },
+    to: { id: row.opponentId, username: participants.get(row.opponentId)?.username ?? '玩家' },
+    createdAt: row.createdAt.toISOString(),
+    expiresAt: (row.expiresAt ?? new Date(now + INVITE_TTL_MS)).toISOString(),
+  }
+}
+
 /** 邀请对战 */
 export async function inviteBattle(
   challengerId: number,
@@ -324,6 +378,27 @@ export async function inviteBattle(
   const now = Date.now()
   await loadCombatInput(challengerId)
   await loadCombatInput(opponentId)
+
+  if (!isGameUserAvailable(opponentId)) {
+    throw new AppError('对方当前不在线，等 TA 上线再挑战吧', 409, 'PET_BATTLE_OFFLINE')
+  }
+  if (isUserBusyInOtherGames(challengerId, 'petbattle')) {
+    throw new AppError('你正在其他游戏里，先结束那边再来挑战', 409, 'PET_BATTLE_SELF_BUSY')
+  }
+  if (isUserBusyInOtherGames(opponentId, 'petbattle')) {
+    throw new AppError('对方正在其他游戏里，晚点再挑战吧', 409, 'PET_BATTLE_TARGET_BUSY')
+  }
+
+  const incomingCount = await prisma.petBattle.count({
+    where: {
+      opponentId,
+      status: 'pending',
+      expiresAt: { gt: new Date(now) },
+    },
+  })
+  if (incomingCount >= MAX_INCOMING_INVITES) {
+    throw new AppError('对方待处理的挑战太多了，晚点再试', 409, 'PET_BATTLE_INVITE_FULL')
+  }
 
   const busy = await prisma.petBattle.count({
     where: {
@@ -356,6 +431,9 @@ export async function inviteBattle(
     },
   })
   const participants = await loadParticipantMap([row])
+  markBusy(challengerId)
+  markBusy(opponentId)
+  sendStandaloneInvite(opponentId, inviteEnvelope(row, participants, now))
   return battleSummary(row, participants)
 }
 
@@ -374,11 +452,27 @@ export async function respondBattle(
       where: { id: battleId, status: 'pending' },
       data: { status: 'expired' },
     })
+    sendStandaloneInviteRemoved(
+      [row.challengerId, row.opponentId],
+      battleId,
+      'petbattle',
+      'expired',
+    )
+    clearBusy(row.challengerId)
+    clearBusy(row.opponentId)
     throw new AppError('邀请已经过期', 409)
   }
 
   if (!accept) {
     await prisma.petBattle.update({ where: { id: battleId }, data: { status: 'declined' } })
+    sendStandaloneInviteRemoved(
+      [row.challengerId, row.opponentId],
+      battleId,
+      'petbattle',
+      'declined',
+    )
+    clearBusy(row.challengerId)
+    clearBusy(row.opponentId)
     const participants = await loadParticipantMap([row])
     return battleSummary({ ...row, status: 'declined' }, participants)
   }
@@ -423,6 +517,18 @@ export async function respondBattle(
     },
   })
   if (updated.count === 0) throw new AppError('邀请已经失效', 409)
+  sendStandaloneInviteRemoved(
+    [row.challengerId, row.opponentId],
+    battleId,
+    'petbattle',
+    'accepted',
+  )
+  markBusy(row.challengerId)
+  markBusy(row.opponentId)
+  sendToUser(row.challengerId, { type: 'petbattle:started', battleId })
+  sendToUser(row.opponentId, { type: 'petbattle:started', battleId })
+  sendToUser(row.challengerId, { type: 'petbattle:update', battleId, version: 1 })
+  sendToUser(row.opponentId, { type: 'petbattle:update', battleId, version: 1 })
   const fresh = await prisma.petBattle.findUnique({ where: { id: battleId } })
   const participants = await loadParticipantMap([fresh ?? row])
   return battleSummary(fresh ?? { ...row, status: 'active' }, participants)
@@ -435,6 +541,14 @@ export async function cancelBattle(userId: number, battleId: number): Promise<vo
   if (row.challengerId !== userId) throw new AppError('只有发起方可以取消邀请', 403)
   if (row.status !== 'pending') throw new AppError('邀请已经失效', 409)
   await prisma.petBattle.update({ where: { id: battleId }, data: { status: 'cancelled' } })
+  sendStandaloneInviteRemoved(
+    [row.challengerId, row.opponentId],
+    battleId,
+    'petbattle',
+    'cancelled',
+  )
+  clearBusy(row.challengerId)
+  clearBusy(row.opponentId)
 }
 
 /** 读取对战详情（参与者） */
@@ -538,6 +652,17 @@ export async function performBattleAction(
   })
   if (updated.count === 0) throw new AppError('对战状态已更新，请刷新后重试', 409)
   if (next.finished) await settleBattle(battleId)
+  for (const participantId of [row.challengerId, row.opponentId]) {
+    sendToUser(participantId, {
+      type: 'petbattle:update',
+      battleId,
+      version: next.version,
+    })
+  }
+  if (next.finished) {
+    clearBusy(row.challengerId)
+    clearBusy(row.opponentId)
+  }
   return getBattle(userId, battleId)
 }
 
@@ -759,6 +884,17 @@ async function settleBattle(battleId: number): Promise<void> {
     })
     throw error
   }
+  const settled = await prisma.petBattle.findUnique({
+    where: { id: battleId },
+    select: { challengerId: true, opponentId: true },
+  })
+  if (settled) {
+    for (const participantId of [settled.challengerId, settled.opponentId]) {
+      sendToUser(participantId, { type: 'petbattle:update', battleId })
+    }
+    clearBusy(settled.challengerId)
+    clearBusy(settled.opponentId)
+  }
 }
 
 /** 概览：进行中 / 收到邀请 / 发出邀请 / 历史 / 战绩 / 可挑战对手 */
@@ -865,7 +1001,9 @@ export async function getBattleOverview(userId: number): Promise<PetBattleOvervi
         petName: pet.name,
         level: pet.level,
         remainingToday: Math.max(0, PAIR_DAILY_LIMIT - countFor(pet.user.id)),
-      })),
+        online: isGameUserAvailable(pet.user.id),
+      }))
+      .sort((a, b) => Number(b.online) - Number(a.online)),
     stakeRule: { rate: STAKE_RATE, min: STAKE_MIN, max: STAKE_MAX },
   }
 }
@@ -873,10 +1011,25 @@ export async function getBattleOverview(userId: number): Promise<PetBattleOvervi
 /** 后台清理：过期邀请、回合超时、掉线判负、卡住的结算 */
 export async function processPetBattleTimeouts(now = Date.now()): Promise<number> {
   const nowDate = new Date(now)
-  const expired = await prisma.petBattle.updateMany({
+  const expiredRows = await prisma.petBattle.findMany({
     where: { status: 'pending', expiresAt: { lt: nowDate } },
+    select: { id: true, challengerId: true, opponentId: true },
+    take: 200,
+  })
+  const expired = await prisma.petBattle.updateMany({
+    where: { id: { in: expiredRows.map((row) => row.id) }, status: 'pending' },
     data: { status: 'expired' },
   })
+  for (const row of expiredRows) {
+    sendStandaloneInviteRemoved(
+      [row.challengerId, row.opponentId],
+      row.id,
+      'petbattle',
+      'expired',
+    )
+    clearBusy(row.challengerId)
+    clearBusy(row.opponentId)
+  }
   // 进程在 claim 之后、事务提交之前退出会把对局留在 settling；超过 5 分钟回收重试
   const recovered = await prisma.petBattle.updateMany({
     where: { status: 'settling', updatedAt: { lt: new Date(now - 5 * 60_000) } },
@@ -945,3 +1098,40 @@ export function stopPetBattleSweeper(): void {
     sweeperTimer = null
   }
 }
+
+/** 轻量邀请列表：供全局 GameInviteToast 在 WS 不可用时轮询 */
+export async function getBattleInvites(userId: number): Promise<{
+  incoming: PetBattleSummaryDto[]
+  outgoing: PetBattleSummaryDto[]
+}> {
+  const now = new Date()
+  const [incomingRows, outgoingRows] = await Promise.all([
+    prisma.petBattle.findMany({
+      where: { opponentId: userId, status: 'pending', expiresAt: { gt: now } },
+      orderBy: { id: 'desc' },
+      take: 20,
+    }),
+    prisma.petBattle.findMany({
+      where: { challengerId: userId, status: 'pending', expiresAt: { gt: now } },
+      orderBy: { id: 'desc' },
+      take: 20,
+    }),
+  ])
+  const participants = await loadParticipantMap([...incomingRows, ...outgoingRows])
+  return {
+    incoming: incomingRows.map((row) => battleSummary(row, participants)),
+    outgoing: outgoingRows.map((row) => battleSummary(row, participants)),
+  }
+}
+
+/** 宠物大厅在线心跳：让其他玩家在邀请列表里看到「在线」 */
+export function markPetBattlePresence(userId: number): void {
+  markGamePresence(userId)
+}
+
+/** 跨游戏互斥探针：在邀请 / 对局中的玩家会被棋盘游戏判为忙碌 */
+registerGameModule({
+  name: 'petbattle',
+  isUserInMatch: (userId) => petBattleBusy.has(userId),
+  sweep: () => {},
+})

@@ -64,6 +64,7 @@ const PetBattlePage = lazy(() => import('./pages/PetBattlePage'))
 const PetMarketPage = lazy(() => import('./pages/PetMarketPage'))
 const PetRaidPage = lazy(() => import('./pages/PetRaidPage'))
 const RaidStoragePage = lazy(() => import('./pages/RaidStoragePage'))
+const RaidCollectionPage = lazy(() => import('./pages/RaidCollectionPage'))
 const RaidShopPage = lazy(() => import('./pages/RaidShopPage'))
 const LotteryPage = lazy(() => import('./pages/LotteryPage'))
 const ThemesPage = lazy(() => import('./pages/ThemesPage'))
@@ -225,6 +226,10 @@ export default function App() {
                         <Route path="/pets/battle" element={
                           <ProtectedRoute><PetBattlePage /></ProtectedRoute>
                         } />
+                        {/* 邀请 / 全局提示深链：直接打开指定对局 */}
+                        <Route path="/pets/battle/:battleId" element={
+                          <ProtectedRoute><PetBattlePage /></ProtectedRoute>
+                        } />
                         <Route path="/pets/market" element={
                           <ProtectedRoute><PetMarketPage /></ProtectedRoute>
                         } />
@@ -233,6 +238,13 @@ export default function App() {
                         } />
                         <Route path="/pets/raid/storage" element={
                           <ProtectedRoute><RaidStoragePage /></ProtectedRoute>
+                        } />
+                        {/* 搜打撤藏品室：自己的 / 参观别人的 */}
+                        <Route path="/pets/raid/collection" element={
+                          <ProtectedRoute><RaidCollectionPage /></ProtectedRoute>
+                        } />
+                        <Route path="/pets/raid/collection/:userId" element={
+                          <ProtectedRoute><RaidCollectionPage /></ProtectedRoute>
                         } />
                         {/* 搜打撤官方商店：从仓库页拆出的独立页（2026-11-05 全站化） */}
                         <Route path="/raid/shop" element={

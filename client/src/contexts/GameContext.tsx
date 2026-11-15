@@ -15,6 +15,7 @@ import { useAuth } from './AuthContext'
 import { useFeature } from './FeatureContext'
 import { usePoints } from './PointsContext'
 import { useChat } from './ChatContext'
+import { inviteKey } from '../lib/invites'
 import type {
   AnyGameMatch,
   GameInvite,
@@ -22,7 +23,9 @@ import type {
   GameInviteResponse,
   GameInvitesResponse,
   GameKind,
+  InviteGameKind,
 } from '../types/game'
+import type { PetBattleSummary } from '../types/petBattle'
 
 /** 邀请过期清理间隔：前端按时剔除已过期邀请，避免弹窗/列表残留 */
 const INVITE_SWEEP_MS = 1_000
@@ -65,12 +68,14 @@ interface AnyGameSyncPayload {
 }
 
 export interface GameContextValue {
-  /** 收到的邀请（2048 + 斗地主合并，按创建时间升序，已剔除过期项） */
+  /** 收到的邀请（棋盘 + 宠物对决 + 搜打撤组队合并，按创建时间升序，已剔除过期项） */
   incomingInvites: GameInvite[]
   /** 自己发出、仍有效的邀请 */
   outgoingInvites: GameInvite[]
-  /** 刚开局、需要提示用户进入的对局（由 WS game:match:started 或轮询 sync 发现） */
+  /** 刚开局、需要提示用户进入的棋盘对局（由 WS game:match:started 或轮询 sync 发现） */
   startedMatch: AnyGameMatch | null
+  /** 宠物对决 / 搜打撤组队的「对局已开始」提示（与棋盘 startedMatch 分开，避免类型污染） */
+  externalMatch: { game: 'petbattle' | 'raid'; id: number | string; label: string; path: string } | null
   /** 首次加载邀请列表 */
   loading: boolean
   /** 最近一次主动拉取邀请列表的错误 */
@@ -79,12 +84,13 @@ export interface GameContextValue {
   refreshInvites: () => Promise<void>
   /** 向好友发起对战邀请；同时返回邀请加入的等待房间 */
   createInvite: (friendId: number, game?: GameKind) => Promise<{ invite: GameInvite; match?: AnyGameMatch }>
+  /** 接受 / 拒绝收到的邀请；接受成功时返回新对局（棋盘）或 null（宠物 / 搜打撤走跳转） */
+  respondInvite: (inviteId: number, action: 'accept' | 'decline', game?: InviteGameKind) => Promise<AnyGameMatch | null>
   /** 取消自己发出的邀请 */
-  cancelInvite: (inviteId: number, game?: GameKind) => Promise<void>
-  /** 接受 / 拒绝收到的邀请；接受成功时返回新对局 */
-  respondInvite: (inviteId: number, action: 'accept' | 'decline', game?: GameKind) => Promise<AnyGameMatch | null>
+  cancelInvite: (inviteId: number, game?: InviteGameKind) => Promise<void>
   /** 关闭“对局已开始”提示（同一对局不会再次弹出） */
   dismissStartedMatch: () => void
+  dismissExternalMatch: () => void
 }
 
 const GameContext = createContext<GameContextValue | null>(null)
@@ -104,6 +110,67 @@ function tagInvites(list: GameInvite[], game: GameKind): GameInvite[] {
   return list.map((invite) => ({ ...invite, game: invite.game ?? game }))
 }
 
+/* ---------- 宠物对决 / 搜打撤：统一邀请适配 ---------- */
+
+interface RaidSquadInviteRow {
+  id: number
+  fromUserId: number
+  fromName: string
+  toUserId: number
+  squadId: string
+  createdAt: string
+  expiresAt: string
+}
+
+function petBattleToInvite(row: PetBattleSummary): GameInvite {
+  return {
+    id: row.id,
+    game: 'petbattle',
+    kind: 'match',
+    matchId: row.id,
+    from: { id: row.challenger.userId, username: row.challenger.username },
+    to: { id: row.opponent.userId, username: row.opponent.username },
+    createdAt: row.createdAt,
+    expiresAt: row.expiresAt ?? new Date(Date.now() + 10 * 60_000).toISOString(),
+  }
+}
+
+function raidSquadToInvite(row: RaidSquadInviteRow): GameInvite {
+  return {
+    id: row.id,
+    game: 'raid',
+    kind: 'squad',
+    squadId: row.squadId,
+    from: { id: row.fromUserId, username: row.fromName },
+    to: { id: row.toUserId, username: '队友' },
+    createdAt: row.createdAt,
+    expiresAt: row.expiresAt,
+  }
+}
+
+interface StandaloneInviteList {
+  incoming: GameInvite[]
+  outgoing: GameInvite[]
+}
+
+async function fetchStandaloneInvites(): Promise<StandaloneInviteList> {
+  const [petBattle, raid] = await Promise.allSettled([
+    api.get<{ incoming: PetBattleSummary[]; outgoing: PetBattleSummary[] }>('/pets/battle/invites'),
+    api.get<{ incoming: RaidSquadInviteRow[]; outgoing: RaidSquadInviteRow[] }>('/pets/raid/squad/invites'),
+  ])
+  const incoming: GameInvite[] = []
+  const outgoing: GameInvite[] = []
+  if (petBattle.status === 'fulfilled') {
+    incoming.push(...(petBattle.value.incoming ?? []).map(petBattleToInvite))
+    outgoing.push(...(petBattle.value.outgoing ?? []).map(petBattleToInvite))
+  }
+  if (raid.status === 'fulfilled') {
+    incoming.push(...(raid.value.incoming ?? []).map(raidSquadToInvite))
+    outgoing.push(...(raid.value.outgoing ?? []).map(raidSquadToInvite))
+  }
+  return { incoming, outgoing }
+}
+
 function sortByCreatedAt(list: GameInvite[]): GameInvite[] {
   return [...list].sort((a, b) => {
     const timeA = Date.parse(a.createdAt)
@@ -114,15 +181,20 @@ function sortByCreatedAt(list: GameInvite[]): GameInvite[] {
 }
 
 function upsertById(list: GameInvite[], invite: GameInvite): GameInvite[] {
-  const index = list.findIndex((item) => item.id === invite.id)
+  const key = inviteKey(invite)
+  const index = list.findIndex((item) => inviteKey(item) === key)
   if (index === -1) return sortByCreatedAt([...list, invite])
   const next = [...list]
   next[index] = invite
   return next
 }
 
-function removeById(list: GameInvite[], inviteId: number): GameInvite[] {
-  return list.filter((item) => item.id !== inviteId)
+function removeById(list: GameInvite[], inviteId: number, game?: InviteGameKind): GameInvite[] {
+  // 旧棋盘游戏的 removed 事件不带 game（历史口径），此时按 id 全量移除；
+  // 宠物 / 搜打撤的 removed 带 game，只移除对应来源，避免自增 id 碰撞。
+  if (!game) return list.filter((item) => item.id !== inviteId)
+  const key = `${game}:${inviteId}`
+  return list.filter((item) => inviteKey(item) !== key)
 }
 
 function aliveOnly(list: GameInvite[], now = Date.now()): GameInvite[] {
@@ -151,8 +223,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [incomingInvites, setIncomingInvites] = useState<GameInvite[]>([])
   const [outgoingInvites, setOutgoingInvites] = useState<GameInvite[]>([])
   const [startedMatch, setStartedMatch] = useState<AnyGameMatch | null>(null)
+  const [externalMatch, setExternalMatch] = useState<GameContextValue['externalMatch']>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // 已经进入对应游戏页后撤掉「对局已开始」提示，避免回到大厅又弹一次
+  useEffect(() => {
+    setExternalMatch((prev) => (prev && prev.path === location.pathname ? null : prev))
+  }, [location.pathname])
 
   /** 用户已关闭提示的对局 id —— 轮询再次同步到同一对局时不再弹出 */
   const dismissedMatchIdRef = useRef<number | null>(null)
@@ -173,19 +251,27 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const { isEnabled } = useFeature()
   const gamesOnline = isEnabled('gamesOnline')
+  const petEnabled = isEnabled('pet')
+  const anyInviteSource = gamesOnline || petEnabled
 
   const refreshInvites = useCallback(async () => {
-    if (!userId || !gamesOnline) return
+    if (!userId || !anyInviteSource) return
     if (!loadedRef.current) setLoading(true)
     try {
-      // 五款游戏的邀请各自独立存放；用 allSettled，某个游戏端点异常不影响其余展示
-      const results = await Promise.allSettled(
-        ALL_GAME_KINDS.map((game) => api.get<GameInvitesResponse>(`${gameApiBase(game)}/invites`)),
-      )
+      // 11 款棋盘游戏的邀请各自独立存放；宠物 / 搜打撤用统一桥的轻量端点。
+      // 全部 allSettled：某个来源异常不影响其余展示。
+      const [boardResults, standalone] = await Promise.all([
+        gamesOnline
+          ? Promise.allSettled(
+              ALL_GAME_KINDS.map((game) => api.get<GameInvitesResponse>(`${gameApiBase(game)}/invites`)),
+            )
+          : Promise.resolve([]),
+        petEnabled ? fetchStandaloneInvites() : Promise.resolve({ incoming: [], outgoing: [] }),
+      ])
       const now = Date.now()
-      const incoming: GameInvite[] = []
-      const outgoing: GameInvite[] = []
-      results.forEach((result, index) => {
+      const incoming: GameInvite[] = [...standalone.incoming]
+      const outgoing: GameInvite[] = [...standalone.outgoing]
+      boardResults.forEach((result, index) => {
         if (result.status !== 'fulfilled') return
         const game = ALL_GAME_KINDS[index]
         incoming.push(...tagInvites(result.value.incoming ?? [], game))
@@ -200,14 +286,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }, [userId, gamesOnline])
+  }, [userId, gamesOnline, petEnabled, anyInviteSource])
 
   // 登录 / 登出 / 联机功能关闭：初始化或清空
   useEffect(() => {
-    if (!userId || !gamesOnline) {
+    if (!userId || !anyInviteSource) {
       setIncomingInvites([])
       setOutgoingInvites([])
       setStartedMatch(null)
+      setExternalMatch(null)
       setError(null)
       setLoading(false)
       dismissedMatchIdRef.current = null
@@ -216,16 +303,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
       return
     }
     void refreshInvites()
-  }, [userId, gamesOnline, refreshInvites])
+  }, [userId, anyInviteSource, refreshInvites])
 
   // WS 建立后补拉一次邀请（登录后 WS 尚未 open 时可能错过事件）
   useEffect(() => {
-    if (userId && gamesOnline && connectionState === 'open') void refreshInvites()
-  }, [userId, gamesOnline, connectionState, refreshInvites])
+    if (userId && anyInviteSource && connectionState === 'open') void refreshInvites()
+  }, [userId, anyInviteSource, connectionState, refreshInvites])
 
   // 窗口重新可见 / 获得焦点时刷新，避免离开期间错过邀请
   useEffect(() => {
-    if (!userId || !gamesOnline) return
+    if (!userId || !anyInviteSource) return
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') void refreshInvites()
     }
@@ -238,11 +325,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
       document.removeEventListener('visibilitychange', handleVisibility)
       window.removeEventListener('focus', handleFocus)
     }
-  }, [userId, gamesOnline, refreshInvites])
+  }, [userId, anyInviteSource, refreshInvites])
 
   // WebSocket 推送：邀请新增 / 移除 / 对局开始（2048 与斗地主共用事件名，按 match.game 区分）
   useEffect(() => {
-    if (!userId || !gamesOnline) return
+    if (!userId || !anyInviteSource) return
     const unsubscribe = subscribe((event) => {
       switch (event.type) {
         case 'game:invite':
@@ -251,8 +338,28 @@ export function GameProvider({ children }: { children: ReactNode }) {
           }
           break
         case 'game:invite:removed':
-          setIncomingInvites((prev) => removeById(prev, event.inviteId))
-          setOutgoingInvites((prev) => removeById(prev, event.inviteId))
+          setIncomingInvites((prev) => removeById(prev, event.inviteId, event.game))
+          setOutgoingInvites((prev) => removeById(prev, event.inviteId, event.game))
+          break
+        case 'petbattle:started':
+          if (pathnameRef.current !== `/pets/battle/${event.battleId}`) {
+            setExternalMatch({
+              game: 'petbattle',
+              id: event.battleId,
+              label: '宠物对决',
+              path: `/pets/battle/${event.battleId}`,
+            })
+          }
+          break
+        case 'raid:squad:started':
+          if (pathnameRef.current !== '/pets/raid') {
+            setExternalMatch({
+              game: 'raid',
+              id: event.squad.id,
+              label: '搜打撤组队',
+              path: '/pets/raid',
+            })
+          }
           break
         case 'game:match:started':
           // 邀请通过后房主开始游戏：所有参与者直接进入对应游戏的对局页
@@ -274,18 +381,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
     })
     return unsubscribe
-  }, [userId, gamesOnline, subscribe, acceptStartedMatch, goToMatch, pointsRefresh])
+  }, [userId, anyInviteSource, subscribe, acceptStartedMatch, goToMatch, pointsRefresh])
 
   // 无 WebSocket（transport === 'polling'）时：presence 心跳 + 两个游戏的全量 sync
   useEffect(() => {
-    if (!userId || !gamesOnline || transport !== 'polling') return
+    if (!userId || !anyInviteSource || transport !== 'polling') return
 
     let disposed = false
 
     const pingPresence = async () => {
       try {
-        // presence 存储跨游戏共享，报一个游戏即可
-        await api.post('/games/2048/presence')
+        // presence 存储跨游戏共享，报一个游戏即可；宠物大厅另有轻量心跳
+        if (gamesOnline) await api.post('/games/2048/presence')
+        if (petEnabled) await api.post('/pets/battle/presence')
       } catch {
         // presence 失败由下一轮重试，不打断轮询
       }
@@ -293,15 +401,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     const sync = async () => {
       try {
-        const results = await Promise.allSettled(
-          ALL_GAME_KINDS.map((game) => api.get<AnyGameSyncPayload>(`${gameApiBase(game)}/sync`)),
-        )
+        const [boardResults, standalone] = await Promise.all([
+          gamesOnline
+            ? Promise.allSettled(
+                ALL_GAME_KINDS.map((game) => api.get<AnyGameSyncPayload>(`${gameApiBase(game)}/sync`)),
+              )
+            : Promise.resolve([]),
+          petEnabled ? fetchStandaloneInvites() : Promise.resolve({ incoming: [], outgoing: [] }),
+        ])
         if (disposed) return
         const now = Date.now()
-        const incoming: GameInvite[] = []
-        const outgoing: GameInvite[] = []
+        const incoming: GameInvite[] = [...standalone.incoming]
+        const outgoing: GameInvite[] = [...standalone.outgoing]
         const active: AnyGameMatch[] = []
-        results.forEach((result, index) => {
+        boardResults.forEach((result, index) => {
           if (result.status !== 'fulfilled') return
           const game = ALL_GAME_KINDS[index]
           incoming.push(...tagInvites(result.value.invites?.incoming ?? [], game))
@@ -348,7 +461,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       clearInterval(syncTimer)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [userId, gamesOnline, transport, acceptStartedMatch, goToMatch])
+  }, [userId, anyInviteSource, gamesOnline, petEnabled, transport, acceptStartedMatch, goToMatch])
 
   // 每秒剔除过期邀请（倒计时弹窗与列表保持一致）
   useEffect(() => {
@@ -380,11 +493,17 @@ export function GameProvider({ children }: { children: ReactNode }) {
     []
   )
 
-  const cancelInvite = useCallback(async (inviteId: number, game?: GameKind): Promise<void> => {
+  const cancelInvite = useCallback(async (inviteId: number, game?: InviteGameKind): Promise<void> => {
     try {
-      // 邀请所在游戏由调用方提供（列表项带 game 字段）；缺省按 2048 兼容
-      await api.delete(`${gameApiBase(game ?? '2048')}/invites/${inviteId}`)
-      setOutgoingInvites((prev) => removeById(prev, inviteId))
+      if (game === 'petbattle') {
+        await api.post(`/pets/battle/${inviteId}/cancel`)
+      } else if (game === 'raid') {
+        await api.post('/pets/raid/squad/cancel', { inviteId })
+      } else {
+        // 邀请所在游戏由调用方提供（列表项带 game 字段）；缺省按 2048 兼容
+        await api.delete(`${gameApiBase((game ?? '2048') as GameKind)}/invites/${inviteId}`)
+      }
+      setOutgoingInvites((prev) => removeById(prev, inviteId, game ?? '2048'))
       setError(null)
     } catch (err) {
       setError(errorMessage(err, '取消对战邀请失败'))
@@ -396,20 +515,33 @@ export function GameProvider({ children }: { children: ReactNode }) {
     async (
       inviteId: number,
       action: 'accept' | 'decline',
-      game: GameKind = '2048'
+      game: InviteGameKind = '2048'
     ): Promise<AnyGameMatch | null> => {
       try {
-        const data = await api.post<GameInviteRespondResponse>(
-          `${gameApiBase(game)}/invites/${inviteId}/respond`,
-          { action }
-        )
-        setIncomingInvites((prev) => removeById(prev, inviteId))
-        if (action === 'accept' && data.match) {
-          // 响应类型按 2048 声明，实际载荷由 game 参数对应的端点决定
-          acceptStartedMatch(data.match as unknown as AnyGameMatch)
+        let match: AnyGameMatch | null = null
+        if (game === 'petbattle') {
+          await api.post<PetBattleSummary>(`/pets/battle/${inviteId}/respond`, {
+            accept: action === 'accept',
+          })
+        } else if (game === 'raid') {
+          await api.post('/pets/raid/squad/respond', {
+            inviteId,
+            accept: action === 'accept',
+          })
+        } else {
+          const data = await api.post<GameInviteRespondResponse>(
+            `${gameApiBase(game)}/invites/${inviteId}/respond`,
+            { action },
+          )
+          match = (data.match as unknown as AnyGameMatch) ?? null
+          if (action === 'accept' && match) {
+            // 响应类型按 2048 声明，实际载荷由 game 参数对应的端点决定
+            acceptStartedMatch(match)
+          }
         }
+        setIncomingInvites((prev) => removeById(prev, inviteId, game))
         setError(null)
-        return (data.match as unknown as AnyGameMatch) ?? null
+        return match
       } catch (err) {
         setError(errorMessage(err, action === 'accept' ? '接受邀请失败' : '拒绝邀请失败'))
         throw err
@@ -425,11 +557,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setStartedMatch(null)
   }, [])
 
+  const dismissExternalMatch = useCallback(() => {
+    setExternalMatch(null)
+  }, [])
+
   const value = useMemo<GameContextValue>(
     () => ({
       incomingInvites,
       outgoingInvites,
       startedMatch,
+      externalMatch,
       loading,
       error,
       refreshInvites,
@@ -437,11 +574,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
       cancelInvite,
       respondInvite,
       dismissStartedMatch,
+      dismissExternalMatch,
     }),
     [
       incomingInvites,
       outgoingInvites,
       startedMatch,
+      externalMatch,
       loading,
       error,
       refreshInvites,
@@ -449,6 +588,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       cancelInvite,
       respondInvite,
       dismissStartedMatch,
+      dismissExternalMatch,
     ]
   )
 

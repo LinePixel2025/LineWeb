@@ -51,11 +51,12 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 function dedupeInvites(list: GameInvite[]): GameInvite[] {
-  const seen = new Set<number>()
+  const seen = new Set<string>()
   const result: GameInvite[] = []
   for (const invite of list) {
-    if (seen.has(invite.id)) continue
-    seen.add(invite.id)
+    const key = `${invite.game ?? '2048'}:${invite.id}`
+    if (seen.has(key)) continue
+    seen.add(key)
     result.push(invite)
   }
   return result

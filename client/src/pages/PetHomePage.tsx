@@ -338,6 +338,9 @@ export default function PetHomePage() {
                 </p>
               </>
             )}
+            <Link className="gh-btn gh-btn--secondary gh-btn--md" to={`/pets/raid/collection/${owner.userId}`}>
+              🏛️ {isSelf ? '我的藏品室' : '参观 TA 的藏品室'}
+            </Link>
           </div>
 
           <p className="gh-pet-home-tip">

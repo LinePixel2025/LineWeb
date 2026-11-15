@@ -178,7 +178,7 @@ export default function GameFriendPicker({
                 <UserAvatar userId={invite.from.id} username={invite.from.username} size="md" />
                 <span className="gh-game-friend-copy">
                   <span className="gh-game-friend-name">{invite.from.username}</span>
-                  <span className="gh-game-friend-meta">邀请你进行 {gameNameOf(invite.game)} 对战</span>
+                  <span className="gh-game-friend-meta">邀请你进行 {gameNameOf(invite.game as GameKind | undefined)} 对战</span>
                 </span>
                 <span className="gh-game-friend-actions">
                   <button

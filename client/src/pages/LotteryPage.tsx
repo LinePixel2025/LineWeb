@@ -18,7 +18,7 @@ import type {
    常量 / 工具
    ============================================================ */
 
-const RARITY_ORDER: readonly LotteryRarity[] = ['common', 'rare', 'epic', 'legendary']
+const RARITY_ORDER: readonly LotteryRarity[] = ['common', 'rare', 'epic', 'legendary', 'mythic']
 
 /** 服务端未下发 rarities（旧数据 / 滚动发布）时的兜底，颜色与设计系统一致 */
 const RARITY_FALLBACK: Readonly<Record<LotteryRarity, LotteryRarityMeta>> = {
@@ -26,6 +26,7 @@ const RARITY_FALLBACK: Readonly<Record<LotteryRarity, LotteryRarityMeta>> = {
   rare: { key: 'rare', label: '稀有', color: '#0a84ff', description: '稳健回报。' },
   epic: { key: 'epic', label: '史诗', color: '#bf5af2', description: '高阶奖励。' },
   legendary: { key: 'legendary', label: '传说', color: '#d4a72c', description: '顶级奖励。' },
+  mythic: { key: 'mythic', label: '秘藏', color: '#e5484d', description: '藏品 / 隐藏称号 / 神话战利品。' },
 }
 
 const TYPE_HINTS: Readonly<Record<LotteryPrizeType, string>> = {
@@ -33,6 +34,9 @@ const TYPE_HINTS: Readonly<Record<LotteryPrizeType, string>> = {
   seed: '已放入农场仓库',
   fertilizer: '已放入农场仓库',
   outfit: '已放入宠物衣柜',
+  raid_item: '已存入搜打撤仓库',
+  collectible: '已收入藏品室',
+  title: '已加入我的称号',
 }
 
 function formatNumber(value: number): string {
@@ -67,7 +71,9 @@ function bestRarityOf(results: readonly LotteryResultItem[]): LotteryRarity {
 }
 
 function amountLabel(item: { type: LotteryPrizeType; amount: number }): string {
-  return item.type === 'points' ? `+${formatNumber(item.amount)}` : `×${formatNumber(item.amount)}`
+  if (item.type === 'points') return `+${formatNumber(item.amount)}`
+  if (item.type === 'raid_item' || item.type === 'collectible' || item.type === 'title') return '×1'
+  return `×${formatNumber(item.amount)}`
 }
 
 function prefersReducedMotion(): boolean {
@@ -111,6 +117,7 @@ function applyDrawToView(
     ...view,
     balance: data.balance,
     pity: data.pity,
+    daily: data.daily,
     dailyFreeAvailable: data.dailyFreeUsed ? false : view.dailyFreeAvailable,
     totalDraws: view.totalDraws + data.results.length,
     stats,
@@ -159,6 +166,31 @@ function PrizeTypeIcon({ type }: { type: LotteryPrizeType }) {
       <svg {...ICON_PROPS}>
         <path d="M12 3.4c3.1 3.7 5.3 6.6 5.3 9.3A5.3 5.3 0 0 1 12 18a5.3 5.3 0 0 1-5.3-5.3c0-2.7 2.2-5.6 5.3-9.3z" />
         <path d="M9.7 12.7c0 1.3 1 2.3 2.3 2.3" />
+      </svg>
+    )
+  }
+  if (type === 'raid_item') {
+    return (
+      <svg {...ICON_PROPS}>
+        <path d="M6.2 8.4h11.6l1.2 11H5l1.2-11z" />
+        <path d="M9 8.4V6.8a3 3 0 0 1 6 0v1.6" />
+        <path d="M8.4 13.2h7.2" />
+      </svg>
+    )
+  }
+  if (type === 'collectible') {
+    return (
+      <svg {...ICON_PROPS}>
+        <path d="M4.5 9.5 12 4l7.5 5.5v9.2a1.3 1.3 0 0 1-1.3 1.3H5.8a1.3 1.3 0 0 1-1.3-1.3V9.5z" />
+        <path d="m12 8.2 1.3 2.4 2.7.4-2 1.9.5 2.7-2.5-1.3-2.5 1.3.5-2.7-2-1.9 2.7-.4L12 8.2z" />
+      </svg>
+    )
+  }
+  if (type === 'title') {
+    return (
+      <svg {...ICON_PROPS}>
+        <path d="m4.4 8.4 3.1 2.4L12 5.8l4.5 5 3.1-2.4-1.7 9.4a1.4 1.4 0 0 1-1.4 1.2H7.5a1.4 1.4 0 0 1-1.4-1.2L4.4 8.4z" />
+        <path d="M8.2 13.6h7.6" />
       </svg>
     )
   }
@@ -316,6 +348,17 @@ function LotteryMachine({ spinning }: { spinning: boolean }) {
    结果卡 / 奖池卡 / 历史行
    ============================================================ */
 
+function resultExtra(item: LotteryResultItem): string | null {
+  if (item.converted) return null
+  if (item.type === 'collectible') return '已收入藏品室，可去布展或等待他人参观'
+  if (item.type === 'title') return '隐藏称号已加入「我的称号」，可直接佩戴'
+  if (item.type === 'raid_item') {
+    const name = String(item.payload.itemName ?? '')
+    return name ? `${name} 已存入搜打撤仓库` : '已存入搜打撤仓库'
+  }
+  return null
+}
+
 function ResultCard({
   item,
   meta,
@@ -326,16 +369,24 @@ function ResultCard({
   index: number
 }) {
   const style: CSSProperties = { animationDelay: `${index * 70}ms` }
+  const extra = resultExtra(item)
+  const emoji = typeof item.payload.itemEmoji === 'string'
+    ? item.payload.itemEmoji
+    : typeof item.payload.collectibleEmoji === 'string'
+      ? item.payload.collectibleEmoji
+      : typeof item.payload.titleIcon === 'string'
+        ? item.payload.titleIcon
+        : ''
   return (
     <article className={`gh-lottery-result-card gh-lottery-rarity--${item.rarity}`} style={style}>
-      {item.rarity === 'legendary' && (
+      {(item.rarity === 'legendary' || item.rarity === 'mythic') && (
         <span className="gh-lottery-result-sparks" aria-hidden="true">
           <i /><i /><i /><i /><i /><i />
         </span>
       )}
       <span className="gh-lottery-result-rarity">{meta.label}</span>
       <span className={`gh-lottery-result-icon gh-lottery-type-icon--${item.type}`}>
-        <PrizeTypeIcon type={item.type} />
+        {emoji ? <span aria-hidden="true">{emoji}</span> : <PrizeTypeIcon type={item.type} />}
       </span>
       <h3>{item.name}</h3>
       <p className="gh-lottery-result-amount">{amountLabel(item)}</p>
@@ -344,6 +395,7 @@ function ResultCard({
       ) : (
         <p className="gh-lottery-result-kind">{TYPE_HINTS[item.type]}</p>
       )}
+      {extra && <p className="gh-lottery-result-extra">{extra}</p>}
     </article>
   )
 }
@@ -471,6 +523,12 @@ export default function LotteryPage() {
   const handleDraw = useCallback(async (count: 1 | 10) => {
     if (!view || busy || spinning || drawLockRef.current) return
 
+    if (view.daily.remaining < count) {
+      setError(`今日只剩 ${view.daily.remaining} 抽（每日 ${view.daily.limit} 抽），明日 0 点刷新。`)
+      setNotice('')
+      return
+    }
+
     const free = count === 1 && view.dailyFreeAvailable
     const cost = free ? 0 : count === 1 ? view.costs.single : view.costs.ten
     if (view.balance < cost) {
@@ -500,7 +558,10 @@ export default function LotteryPage() {
       tempHistoryRef.current = tempBase
       const nowIso = new Date().toISOString()
       setView((prev) => (prev ? applyDrawToView(prev, data, tempBase, nowIso) : prev))
-      setNotice(data.dailyFreeUsed ? '本次使用每日免费抽，奖励已发放。' : `本次消耗 ${formatNumber(data.cost)} 积分，奖励已发放。`)
+      setNotice(
+        `${data.dailyFreeUsed ? '本次使用每日免费抽' : `本次消耗 ${formatNumber(data.cost)} 积分`}，奖励已发放。` +
+        `今日剩余 ${data.daily.remaining} 抽。`,
+      )
       // 乐观更新只负责秒开；历史 / 统计以服务端为准
       void loadView(true)
       void refreshPoints()
@@ -547,6 +608,10 @@ export default function LotteryPage() {
   const resultCount = result?.results.length ?? 0
   const insufficient = error.includes('积分不足')
   const tenSaved = view.costs.single * view.tenCount - view.costs.ten
+  const dailyRemaining = Math.max(0, view.daily.remaining)
+  const dailyPct = Math.min(100, Math.round((view.daily.used / Math.max(1, view.daily.limit)) * 100))
+  const dailyExhausted = dailyRemaining <= 0
+  const tenBlocked = dailyRemaining < view.tenCount
 
   return (
     <div className="gh-page-container gh-lottery-page">
@@ -555,8 +620,8 @@ export default function LotteryPage() {
           <p className="gh-lottery-eyebrow">LINEWEB LOTTERY</p>
           <h1 className="gh-lottery-title">积分抽奖</h1>
           <p className="gh-lottery-sub">
-            花积分转动抽奖机：种子、肥料、积分与宠物装扮随机掉落。每日首抽免费，十连 9 折，
-            连续 {view.pity.limit} 抽未出史诗则保底史诗及以上。
+            花积分转动抽奖机：种子、肥料、积分、搜打撤物资与藏品随机掉落。
+            每日 30 抽（含免费首抽），十连 9 折，连续 {view.pity.limit} 抽未出史诗则保底史诗及以上。
           </p>
         </div>
         <div className="gh-lottery-head-side">
@@ -582,6 +647,23 @@ export default function LotteryPage() {
             </div>
             <p>距保底还差 <strong>{view.pity.remaining}</strong> 抽</p>
           </div>
+          <div className="gh-lottery-quota-card" aria-label="每日抽奖额度">
+            <div className="gh-lottery-pity-head">
+              <span>今日额度</span>
+              <span>{view.daily.used} / {view.daily.limit}</span>
+            </div>
+            <div
+              className="gh-lottery-pity-bar"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={view.daily.limit}
+              aria-valuenow={view.daily.used}
+              aria-label="每日抽奖额度"
+            >
+              <span className="gh-lottery-pity-fill gh-lottery-quota-fill" style={{ width: `${dailyPct}%` }} />
+            </div>
+            <p>{dailyExhausted ? '今日已抽满，明日 0 点刷新' : `今日还可抽 ${dailyRemaining} 次`}</p>
+          </div>
         </div>
       </header>
 
@@ -606,7 +688,8 @@ export default function LotteryPage() {
             <h2>转动命运的齿轮</h2>
             <p>
               单抽 {view.costs.single} 积分，十连 {view.costs.ten} 积分（省 {tenSaved}）。
-              种子与肥料会直接进入农场仓库；没有农场时自动为你开一块 6 格小农场。
+              种子与肥料会直接进入农场仓库；搜打撤物资进仓库，藏品直接收入藏品室。
+              今日已抽 {view.daily.used} / {view.daily.limit} 次，每日 0 点（Asia/Shanghai）刷新。
             </p>
           </div>
 
@@ -614,37 +697,43 @@ export default function LotteryPage() {
             <button
               type="button"
               className="gh-lottery-draw-btn gh-lottery-draw-btn--single"
-              disabled={busy !== null}
+              disabled={busy !== null || dailyExhausted}
+              title={dailyExhausted ? '今日 30 抽已用完' : undefined}
               onClick={() => void handleDraw(1)}
             >
               <span className="gh-lottery-draw-glow" aria-hidden="true" />
               <span className="gh-lottery-draw-main">
-                {busy === 1 ? '抽奖中…' : view.dailyFreeAvailable ? '今日免费抽' : '单抽一次'}
+                {busy === 1 ? '抽奖中…' : dailyExhausted ? '今日已抽满' : view.dailyFreeAvailable ? '今日免费抽' : '单抽一次'}
               </span>
               <span className="gh-lottery-draw-sub">
-                {view.dailyFreeAvailable ? '免费 1 次 · 每日 0 点刷新' : `${view.costs.single} 积分`}
+                {dailyExhausted
+                  ? '明日 0 点刷新'
+                  : view.dailyFreeAvailable
+                    ? '免费 1 次 · 仍计入每日 30 抽'
+                    : `${view.costs.single} 积分 · 今日剩 ${dailyRemaining} 次`}
               </span>
             </button>
             <button
               type="button"
               className="gh-lottery-draw-btn gh-lottery-draw-btn--ten"
-              disabled={busy !== null}
+              disabled={busy !== null || tenBlocked}
+              title={tenBlocked ? `今日只剩 ${dailyRemaining} 次，不够十连` : undefined}
               onClick={() => void handleDraw(10)}
             >
               <span className="gh-lottery-draw-glow" aria-hidden="true" />
               <span className="gh-lottery-draw-main">
-                {busy === 10 ? '十连抽奖中…' : '十连抽 · 9 折'}
+                {busy === 10 ? '十连抽奖中…' : tenBlocked ? '今日次数不足十连' : '十连抽 · 9 折'}
               </span>
               <span className="gh-lottery-draw-sub">
-                {view.costs.ten} 积分 · 省 {tenSaved} 积分
+                {tenBlocked ? `今日剩 ${dailyRemaining} 次` : `${view.costs.ten} 积分 · 省 ${tenSaved} 积分`}
               </span>
             </button>
           </div>
 
           <p className="gh-lottery-free-note">
             {view.dailyFreeAvailable
-              ? '免费抽仅限单抽；十连不消耗免费次数，同样累计保底。'
-              : '今日免费抽已用完，明日 0 点（Asia/Shanghai）刷新。'}
+              ? '免费抽仅限单抽，仍计入每日 30 抽；十连不消耗免费次数，同样累计保底。'
+              : '今日免费抽已用完；每日 30 抽上限在 0 点（Asia/Shanghai）重置。'}
           </p>
 
           <dl className="gh-lottery-quick-stats">
@@ -654,11 +743,11 @@ export default function LotteryPage() {
             </div>
             <div>
               <dt>史诗及以上</dt>
-              <dd>{formatNumber(view.stats.epic + view.stats.legendary)}</dd>
+              <dd>{formatNumber(view.stats.epic + view.stats.legendary + view.stats.mythic)}</dd>
             </div>
             <div>
-              <dt>传说</dt>
-              <dd>{formatNumber(view.stats.legendary)}</dd>
+              <dt>秘藏</dt>
+              <dd>{formatNumber(view.stats.mythic)}</dd>
             </div>
           </dl>
         </div>

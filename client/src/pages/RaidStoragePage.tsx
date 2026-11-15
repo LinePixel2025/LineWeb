@@ -19,6 +19,7 @@ import type {
   RaidRecycleBatchItemInput,
   RaidRecycleBatchResult,
   RaidRecycleResult,
+  RaidCollectResult,
   RaidStorageItem,
   RaidStorageView,
 } from '../types/petRaid'
@@ -70,6 +71,7 @@ const ITEM_KIND_LABELS: Record<string, string> = {
   treasure: '珍宝',
   gear_cache: '装备箱',
   skill_cache: '技能卷轴',
+  collectible: '藏品',
 }
 
 const REPAIR_KIT_KEYS: Partial<Record<RaidGearSlot, string>> = {
@@ -491,6 +493,19 @@ export default function RaidStoragePage() {
     }
   }
 
+  /** 把仓库里的藏品收入藏品室（重复获得会折算积分） */
+  const collectItem = async (item: RaidStorageItem) => {
+    await runAction('收入藏品室失败', async () => {
+      const result = await api.post<RaidCollectResult>('/pets/raid/collection/collect', {
+        itemKey: item.itemKey,
+      })
+      await loadStorage(true)
+      return result.duplicate
+        ? `重复藏品「${result.item.name}」已折算 ${result.points.toLocaleString('zh-CN')} 积分`
+        : `「${result.item.name}」已收入藏品室`
+    })
+  }
+
   /* ---------- 仓库：回收 / 升级 / 开箱 ---------- */
 
   /** 一键回收整个仓库（可选保留升级材料，服务端按官方价逐行结算） */
@@ -508,7 +523,8 @@ export default function RaidStoragePage() {
       setRecycleAllError(null)
       setToast({
         tone: 'success',
-        text: `已一键回收 ${result.count} 件物品，+${result.points.toLocaleString('zh-CN')} 积分`,
+        text: `已一键回收 ${result.count} 件物品，+${result.points.toLocaleString('zh-CN')} 积分` +
+          (result.skippedCollectibles > 0 ? `；${result.skippedCollectibles} 件藏品已保留` : ''),
       })
     } catch (err) {
       setRecycleAllError(errMessage(err, '一键回收失败'))
@@ -706,7 +722,9 @@ export default function RaidStoragePage() {
   /** 全选仓库 Tab 里可见的可回收项（物品整行 + 未穿戴的备用装备） */
   const selectAllInStorageTab = (view: RaidStorageView) => {
     const keys = new Set<string>()
-    for (const item of view.items) keys.add(`item:${item.itemKey}:warehouse`)
+    for (const item of view.items) {
+      if (!item.collectible) keys.add(`item:${item.itemKey}:warehouse`)
+    }
     for (const gear of view.gear) {
       if (!gear.equipped) keys.add(`gear:${gear.id}`)
     }
@@ -724,7 +742,7 @@ export default function RaidStoragePage() {
         if (sep <= 5) continue
         const itemKey = key.slice(5, sep)
         const row = view.items.find((entry) => entry.itemKey === itemKey)
-        if (row) items.push({ key: itemKey, amount: row.amount, from: 'warehouse' })
+        if (row && !row.collectible) items.push({ key: itemKey, amount: row.amount, from: 'warehouse' })
       } else if (key.startsWith('gear:')) {
         const gearId = Number(key.slice(5))
         if (Number.isInteger(gearId) && gearId > 0) gearIds.push(gearId)
@@ -849,6 +867,7 @@ export default function RaidStoragePage() {
           <span className="gh-raid-storage-points" title="当前积分">
             🪙 {points.toLocaleString('zh-CN')}
           </span>
+          <Link className="gh-btn gh-btn--secondary gh-btn--sm" to="/pets/raid/collection">🏛️ 藏品室 →</Link>
           <Link className="gh-btn gh-btn--secondary gh-btn--sm" to="/raid/shop">🛒 前往官方商店 →</Link>
           <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets/raid">← 返回搜打撤</Link>
         </div>
@@ -1005,7 +1024,7 @@ export default function RaidStoragePage() {
               <div className="gh-raid-storage-grid">
                 {storage.items.map((item) => {
                   const pickKey = `item:${item.itemKey}:warehouse`
-                  const isPicked = selectMode && picked.has(pickKey)
+                  const isPicked = selectMode && !item.collectible && picked.has(pickKey)
                   return (
                   <article
                     key={item.itemKey}
@@ -1013,7 +1032,7 @@ export default function RaidStoragePage() {
                     title={item.description}
                   >
                     <div className="gh-raid-storage-item-head">
-                      {selectMode && (
+                      {selectMode && !item.collectible && (
                         <input
                           type="checkbox"
                           className="gh-raid-storage-pick"
@@ -1030,55 +1049,71 @@ export default function RaidStoragePage() {
                         </span>
                       </div>
                       <b className="gh-raid-storage-item-value">
-                        {item.sellUnit.toLocaleString('zh-CN')} 积分/件
+                        {item.collectible
+                          ? `收藏估值 ${item.value.toLocaleString('zh-CN')}`
+                          : `${item.sellUnit.toLocaleString('zh-CN')} 积分/件`}
                       </b>
                     </div>
                     <div className="gh-raid-storage-item-meta">
                       <span>持有 {item.amount}</span>
-                      <span>目录价 {item.value.toLocaleString('zh-CN')}</span>
+                      <span>{item.collectible ? '绑定藏品' : `目录价 ${item.value.toLocaleString('zh-CN')}`}</span>
                       <span>{itemKindLabel(item.kind)}</span>
                       {isOpenable(item) && <span className="gh-raid-storage-item-tag">可开启</span>}
+                      {item.collectible && <span className="gh-raid-storage-item-tag">不可回收</span>}
                     </div>
-                    <div className="gh-raid-storage-item-actions">
-                      <button
-                        type="button"
-                        className="gh-btn gh-btn--secondary gh-btn--sm"
-                        disabled={busy || storage.backpackSlots <= 0}
-                        title={storage.backpackSlots <= 0 ? '先装备背包' : '取出 1 件到背包'}
-                        onClick={() => withdrawToContainer(item, 'backpack')}
-                      >
-                        🎒 取到背包
-                      </button>
-                      {item.kind === 'consumable' && (
+                    {item.collectible ? (
+                      <div className="gh-raid-storage-item-actions">
                         <button
                           type="button"
-                          className="gh-btn gh-btn--secondary gh-btn--sm"
-                          disabled={busy || storage.rigSlots <= 0}
-                          title={storage.rigSlots <= 0 ? '先装备胸挂' : '取出 1 件到胸挂'}
-                          onClick={() => withdrawToContainer(item, 'rig')}
-                        >
-                          🎽 取到胸挂
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="gh-btn gh-btn--ghost gh-btn--sm"
-                        disabled={busy}
-                        onClick={() => openSellFromWarehouse(item)}
-                      >
-                        ♻️ 回收
-                      </button>
-                      {isOpenable(item) && (
-                        <button
-                          type="button"
-                          className="gh-btn gh-btn--secondary gh-btn--sm"
+                          className="gh-btn gh-btn--primary gh-btn--sm"
                           disabled={busy}
-                          onClick={() => void openCache(item)}
+                          onClick={() => void collectItem(item)}
                         >
-                          🎁 开启
+                          🏛️ 收入藏品室
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    ) : (
+                      <div className="gh-raid-storage-item-actions">
+                        <button
+                          type="button"
+                          className="gh-btn gh-btn--secondary gh-btn--sm"
+                          disabled={busy || storage.backpackSlots <= 0}
+                          title={storage.backpackSlots <= 0 ? '先装备背包' : '取出 1 件到背包'}
+                          onClick={() => withdrawToContainer(item, 'backpack')}
+                        >
+                          🎒 取到背包
+                        </button>
+                        {item.kind === 'consumable' && (
+                          <button
+                            type="button"
+                            className="gh-btn gh-btn--secondary gh-btn--sm"
+                            disabled={busy || storage.rigSlots <= 0}
+                            title={storage.rigSlots <= 0 ? '先装备胸挂' : '取出 1 件到胸挂'}
+                            onClick={() => withdrawToContainer(item, 'rig')}
+                          >
+                            🎽 取到胸挂
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="gh-btn gh-btn--ghost gh-btn--sm"
+                          disabled={busy}
+                          onClick={() => openSellFromWarehouse(item)}
+                        >
+                          ♻️ 回收
+                        </button>
+                        {isOpenable(item) && (
+                          <button
+                            type="button"
+                            className="gh-btn gh-btn--secondary gh-btn--sm"
+                            disabled={busy}
+                            onClick={() => void openCache(item)}
+                          >
+                            🎁 开启
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </article>
                   )
                   })}

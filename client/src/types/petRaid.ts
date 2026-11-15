@@ -214,6 +214,8 @@ export interface RaidItemInfo {
   sellUnit: number
   stackMax: number
   description: string
+  /** 绑定藏品：不可回收 / 不可取出 / 不能进公司货栈 */
+  collectible: boolean
 }
 
 export interface RaidStorageItem extends RaidItemInfo {
@@ -318,6 +320,8 @@ export interface RaidRecycleResult {
 export interface RaidRecycleAllResult {
   points: number
   count: number
+  /** 因是绑定藏品而跳过的件数 */
+  skippedCollectibles: number
   balance: number
   view: RaidStorageView
 }
@@ -398,4 +402,94 @@ export interface RaidOpenCacheResult {
   emoji: string
   duplicatePoints: number
   view: RaidStorageView
+}
+
+/* ---------- 藏品室 ---------- */
+
+export interface RaidCollectible {
+  itemKey: string
+  name: string
+  emoji: string
+  rarity: string
+  value: number
+  description: string
+  source: string
+  displaySlot: number | null
+  note: string
+  obtainedAt: string
+  duplicatePoints: number
+}
+
+export interface RaidCollectionCatalogEntry {
+  itemKey: string
+  name: string
+  emoji: string
+  rarity: string
+  value: number
+  description: string
+  owned: boolean
+  obtainedAt: string | null
+}
+
+export interface RaidCollectionWarehouseCandidate {
+  itemKey: string
+  name: string
+  emoji: string
+  rarity: string
+  amount: number
+  duplicate: boolean
+  duplicatePoints: number
+}
+
+export interface RaidCollectionView {
+  exists: boolean
+  owner: {
+    userId: number
+    username: string
+    avatarVersion: number | null
+    title: import('./points').UserTitleDto | null
+  }
+  room: {
+    title: string
+    intro: string
+    isPublic: boolean
+    visits: number
+    updatedAt: string | null
+  }
+  viewer: { userId: number; isSelf: boolean }
+  items: RaidCollectible[]
+  slots: Array<RaidCollectible | null>
+  catalog: RaidCollectionCatalogEntry[]
+  stats: {
+    total: number
+    displayed: number
+    catalogTotal: number
+    completionPct: number
+    byRarity: Record<string, number>
+  }
+  warehouseCandidates: RaidCollectionWarehouseCandidate[]
+}
+
+export interface RaidCollectionSummary {
+  userId: number
+  username: string
+  avatarVersion: number | null
+  title: string
+  intro: string
+  visits: number
+  total: number
+  completionPct: number
+  cover: Array<{ itemKey: string; name: string; emoji: string; rarity: string }>
+  isSelf: boolean
+}
+
+export interface RaidCollectionList {
+  rooms: RaidCollectionSummary[]
+}
+
+export interface RaidCollectResult {
+  duplicate: boolean
+  points: number
+  item: RaidCollectible
+  view: RaidCollectionView
 }

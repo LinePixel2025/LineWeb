@@ -41,7 +41,7 @@ function itemId(raw: string): number {
   return id
 }
 
-const raritySchema = z.enum(['common', 'rare', 'epic', 'legendary', 'mythic', 'transcendent'])
+const raritySchema = z.enum(['common', 'rare', 'epic', 'legendary', 'mythic', 'transcendent', 'origin'])
 
 const payloadSchema = z.object({
   icon: z.string().max(8).optional(),
@@ -60,6 +60,7 @@ const shopCreateSchema = z.object({
   rarity: raritySchema.optional().default('common'),
   payload: payloadSchema,
   isActive: z.boolean().optional().default(true),
+  hidden: z.boolean().optional().default(false),
   sortOrder: z.number().int().min(0).max(100_000).optional().default(100),
 })
 
@@ -70,6 +71,7 @@ const shopPatchSchema = z.object({
   rarity: raritySchema.optional(),
   payload: payloadSchema,
   isActive: z.boolean().optional(),
+  hidden: z.boolean().optional(),
   sortOrder: z.number().int().min(0).max(100_000).optional(),
 })
 
@@ -200,6 +202,7 @@ router.post('/shop', asyncHandler(async (req: Request, res: Response) => {
       rarity: input.rarity,
       payload: normalizePayload(input.type, input.payload),
       isActive: input.isActive,
+      hidden: input.hidden,
       sortOrder: input.sortOrder,
     },
     include: { _count: { select: { owners: true } } },
@@ -220,6 +223,7 @@ router.patch('/shop/:id', asyncHandler(async (req: Request, res: Response) => {
   if (input.cost !== undefined) data.cost = input.cost
   if (input.rarity !== undefined) data.rarity = input.rarity
   if (input.isActive !== undefined) data.isActive = input.isActive
+  if (input.hidden !== undefined) data.hidden = input.hidden
   if (input.sortOrder !== undefined) data.sortOrder = input.sortOrder
   if (input.payload !== undefined) {
     // 表情包商品允许只改 icon/color 之外的字段；pack 必须合法

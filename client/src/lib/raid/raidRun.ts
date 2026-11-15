@@ -33,7 +33,7 @@ export const RAID_LOOT_MODES: readonly RaidLootMode[] = ['normal', 'pvp']
 
 export type RaidRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'mythic'
 
-export type RaidItemKind = 'material' | 'consumable' | 'treasure' | 'gear_cache' | 'skill_cache'
+export type RaidItemKind = 'material' | 'consumable' | 'treasure' | 'gear_cache' | 'skill_cache' | 'collectible'
 
 export type RaidContainerKind = 'backpack' | 'rig' | 'safe'
 
@@ -120,6 +120,12 @@ export interface RaidItemDef {
    * 非洲之心设为 false，避免保底池把它的实际出货率放大到不可控。
    */
   pityEligible?: boolean
+  /** 藏品：不进普通掉落池 / 商店 / 回收 / 公司货栈，只走独立低概率掉落与藏品室 */
+  collectible?: boolean
+  /** 藏品最低地图档次（1–5），缺省 1 */
+  minLootTier?: number
+  /** 藏品重复获得时的折算积分（仅 collectible 使用） */
+  duplicatePoints?: number
 }
 
 export const RAID_ITEMS: readonly RaidItemDef[] = [
@@ -187,6 +193,16 @@ export const RAID_ITEMS: readonly RaidItemDef[] = [
   { key: 'heart_of_africa', name: '非洲之心', emoji: '💎', rarity: 'mythic', kind: 'material', value: 30000, weight: 0.25, stackMax: 1, description: '传说中的巨钻，全游戏最高价值的战利品；只在最高档地图的最深处出现。', pityEligible: false },
   { key: 'abyss_core', name: '深渊核心', emoji: '🌌', rarity: 'mythic', kind: 'material', value: 6800, weight: 1, stackMax: 1, description: '不断吞噬光线的黑色球体。' },
 
+  // ---------- 藏品（2026-11-15，独立低概率掉落；不可回收 / 不可取出 / 不可托管） ----------
+  { key: 'col_first_coin', name: '第一枚硬币', emoji: '🪙', rarity: 'uncommon', kind: 'collectible', value: 600, weight: 30, stackMax: 1, description: '边缘磨得发亮的第一枚硬币，正面的人像已经看不清了。', collectible: true, minLootTier: 1, duplicatePoints: 40 },
+  { key: 'col_brass_compass', name: '黄铜罗盘', emoji: '🧭', rarity: 'uncommon', kind: 'collectible', value: 720, weight: 26, stackMax: 1, description: '指针永远偏向同一个方向，哪怕你把它转过来。', collectible: true, minLootTier: 1, duplicatePoints: 50 },
+  { key: 'col_field_camera', name: '战地相机', emoji: '📷', rarity: 'rare', kind: 'collectible', value: 1200, weight: 20, stackMax: 1, description: '胶卷早就曝光了，取景框里还留着一道没擦掉的划痕。', collectible: true, minLootTier: 2, duplicatePoints: 80 },
+  { key: 'col_music_box', name: '八音盒', emoji: '🎵', rarity: 'rare', kind: 'collectible', value: 1500, weight: 16, stackMax: 1, description: '上发条还能响，只是旋律缺了最后两个音。', collectible: true, minLootTier: 2, duplicatePoints: 100 },
+  { key: 'col_jade_seal', name: '断裂玉玺', emoji: '🪭', rarity: 'epic', kind: 'collectible', value: 2600, weight: 10, stackMax: 1, description: '断口很旧，印面却还完整，像是有人故意把它掰开的。', collectible: true, minLootTier: 3, duplicatePoints: 180 },
+  { key: 'col_star_chart', name: '星图残卷', emoji: '🗺️', rarity: 'epic', kind: 'collectible', value: 3200, weight: 7, stackMax: 1, description: '只画了北天一小块，却标出了三颗不存在的星。', collectible: true, minLootTier: 4, duplicatePoints: 220 },
+  { key: 'col_abyss_eye', name: '深渊之眼', emoji: '👁️', rarity: 'legendary', kind: 'collectible', value: 6800, weight: 4, stackMax: 1, description: '一块黑色晶体，深处有一个会跟着你移动的亮点。', collectible: true, minLootTier: 4, duplicatePoints: 400 },
+  { key: 'col_moon_tear', name: '月泪', emoji: '🌙', rarity: 'mythic', kind: 'collectible', value: 12000, weight: 1, stackMax: 1, description: '据说只在最高档地图最深处的容器里出现，摸起来像一滴冻住的光。', collectible: true, minLootTier: 5, duplicatePoints: 800 },
+
   // ---------- 特殊（已停产的撤离信号弹） ----------
   { key: 'extract_flare', name: '撤离信号弹', emoji: '🧨', rarity: 'rare', kind: 'consumable', value: 300, weight: 5, stackMax: 2, description: '已停产的旧型号撤离信号弹，现在只能卖给官方商店。', retired: true },
 ]
@@ -209,6 +225,8 @@ export function raidItemValue(itemKey: string): number {
 export function raidSellPrice(itemKey: string, amount: number): number {
   const def = RAID_ITEM_MAP.get(itemKey)
   if (!def) return 0
+  // 藏品是绑定收集品：官方商店不回收，只能放进藏品室或重复折算
+  if (def.kind === 'collectible') return 0
   const clean = Number.isFinite(amount) ? Math.max(0, Math.trunc(amount)) : 0
   const rate = def.kind === 'material' || def.kind === 'treasure'
     ? 1
@@ -260,7 +278,8 @@ export function raidGearStorageGate(gearKey: string): number {
 
 /** 该物品是否还能进任何掉落池（退役物品只为旧库存保留目录数据） */
 export function raidItemDropEligible(def: RaidItemDef): boolean {
-  return def.retired !== true
+  // 藏品有独立的低概率掉落流，不参与普通品质池 / 首领保底池
+  return def.retired !== true && def.kind !== 'collectible'
 }
 
 /* ============================================================
@@ -959,6 +978,45 @@ export function raidContainerLootSegments(bossRoom: boolean, mode: RaidLootMode)
 }
 
 /**
+ * 单容器出藏品的概率（2026-11-15）。
+ *
+ * 设计目标：低但不至于不存在——普通容器 T1 0.6% / T5 1.08%，Boss 容器 +0.8%，
+ * PvP +0.1%。按每局约 6 个容器，约 4%–8% 出一件；八件藏品集齐需要相当多局。
+ */
+export function raidCollectibleDropChance(
+  lootTier: number,
+  bossRoom: boolean,
+  mode: RaidLootMode = 'normal',
+): number {
+  const tier = clampInt(lootTier, 1, 5)
+  return 0.006 + (tier - 1) * 0.0012 + (bossRoom ? 0.008 : 0) + (mode === 'pvp' ? 0.001 : 0)
+}
+
+/**
+ * 独立藏品掉落流：使用单独的 sub-seed，不消耗主战利品 rng，
+ * 因此给旧 seed 追加藏品不会改变原有普通战利品。
+ */
+export function rollRaidCollectibleDrop(
+  seed: number,
+  containerId: string,
+  lootTier: number,
+  bossRoom: boolean,
+  mode: RaidLootMode = 'normal',
+): RaidLootStack | null {
+  const rng = createRaidRng(raidSubSeed(seed, `collectible:${containerId}`))
+  if (rng() >= raidCollectibleDropChance(lootTier, bossRoom, mode)) return null
+  const tier = clampInt(lootTier, 1, 5)
+  const pool = RAID_ITEMS.filter(
+    (item) => item.kind === 'collectible'
+      && item.weight > 0
+      && (item.minLootTier ?? 1) <= tier,
+  )
+  if (pool.length === 0) return null
+  const picked = rngPickWeighted(rng, pool)
+  return { id: 'collectible', itemKey: picked.key, amount: 1 }
+}
+
+/**
  * 开箱掉落。段数与保底都按模式分档：
  *   normal —— 非 Boss 1–3 段、Boss 2–4 段，首段保底稀有+（tier≥4 图史诗+）；
  *   pvp    —— 同样的段数，但品质表更偏高阶。
@@ -993,6 +1051,9 @@ export function rollRaidContainerLoot(
     const amount = stackMax > 1 ? rngInt(rng, 1, Math.min(3, stackMax)) : 1
     stacks.push({ id: `loot-${i}`, itemKey, amount })
   }
+  // 藏品走独立 rng 追加在最后：旧 seed 的普通战利品保持不变
+  const collectible = rollRaidCollectibleDrop(seed, containerId, lootTier, bossRoom, mode)
+  if (collectible) stacks.push(collectible)
   return stacks
 }
 
@@ -2307,7 +2368,11 @@ export function raidKeptContainers(state: RaidRunState): {
 }
 
 export function raidLootValue(stacks: readonly RaidItemStack[]): number {
-  return stacks.reduce((sum, stack) => sum + raidItemValue(stack.itemKey) * stack.amount, 0)
+  return stacks.reduce((sum, stack) => {
+    // 藏品不计入撤离价值 / 契约进度：它不是可回收物资
+    if (RAID_ITEM_MAP.get(stack.itemKey)?.kind === 'collectible') return sum
+    return sum + raidItemValue(stack.itemKey) * stack.amount
+  }, 0)
 }
 
 export function raidTotalUnits(stacks: readonly RaidItemStack[]): number {

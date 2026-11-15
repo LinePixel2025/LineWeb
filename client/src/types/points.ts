@@ -1,9 +1,10 @@
 /**
- * 传说称号动态特效白名单（与服务端 TITLE_EFFECT_STYLES 一致，顺序一致，共 17 种）。
+ * 传说称号动态特效白名单（与服务端 TITLE_EFFECT_STYLES 一致，顺序一致，共 20 种）。
  * 炸裂系列：nova 超新星 / prism 棱镜虹光 / void 虚空黑洞 / singularity 奇点坍缩。
  * 幻彩系列：meteor 流星拖尾 / blossom 花瓣飘落 / zenith 极巅光柱 / eternity 永恒之环 /
  *          chaos 混沌碎片 / firmament 苍穹星海。
  * 至臻系列：genesis 创世星环 / oblivion 湮灭奇点（只给至臻稀有度称号使用）。
+ * 源初系列：etch 蚀刻 / holo 全息箔 / monolith 黑碑（只给 origin 源初档使用，不使用光环与粒子）。
  */
 export const TITLE_EFFECTS = [
   'classic',
@@ -23,6 +24,9 @@ export const TITLE_EFFECTS = [
   'firmament',
   'genesis',
   'oblivion',
+  'etch',
+  'holo',
+  'monolith',
 ] as const
 export type TitleEffectStyle = typeof TITLE_EFFECTS[number]
 
@@ -35,9 +39,9 @@ export interface UserTitleDto {
   name: string
   color: string
   icon: string
-  /** 商品稀有度：legendary / mythic / transcendent 都会触发炸裂特效 */
+  /** 商品稀有度：legendary / mythic / transcendent / origin；origin 走独立角切铭牌，不触发炸裂层 */
   rarity: string
-  /** 传说特效（legendary / mythic / transcendent 时的动态特效 key，其余稀有度忽略；非法值回退 classic） */
+  /** 称号特效 key（origin 使用 etch/holo/monolith，其余稀有度非法值回退 classic） */
   effect: string
 }
 
@@ -92,7 +96,7 @@ export interface LeaderTitleDto {
 }
 
 export type ShopItemType = 'title' | 'emoji' | 'avatar_frame'
-export type ShopRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic' | 'transcendent'
+export type ShopRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic' | 'transcendent' | 'origin'
 
 /**
  * 头像框样式白名单（与服务端 AVATAR_FRAME_STYLES 一致，顺序一致，共 16 种）。
@@ -145,6 +149,8 @@ export interface ShopItem {
   rarity: ShopRarity
   payload: Record<string, unknown>
   isActive: boolean
+  /** 仅抽奖等系统途径获得：商店只对已拥有者展示，不可购买 */
+  hidden: boolean
   sortOrder: number
   owned: boolean
   equipped: boolean
@@ -262,6 +268,7 @@ export interface AdminShopItem {
   rarity: ShopRarity
   payload: Record<string, unknown>
   isActive: boolean
+  hidden: boolean
   sortOrder: number
   ownerCount: number
   createdAt: string

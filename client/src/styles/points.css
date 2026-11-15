@@ -1512,12 +1512,140 @@
   100% { background-position: 190% 50%; opacity: 0; }
 }
 
+/* ===== 源初稀有度 origin（2026-11-15 新增最高档） =====
+   设计语言刻意与既有「光环 + 旋转锥形 + 粒子」切开：
+   不再渲染 aura / sparks / burst / 旋转 ring，改用角切铭牌 + 表面工艺。
+   etch / holo / monolith 三个特效只作用于铭牌表面与字口。 */
+.gh-title-badge--origin {
+  border-radius: 3px;
+  border-color: color-mix(in srgb, currentColor 55%, transparent);
+  background:
+    linear-gradient(112deg, rgba(18, 16, 13, .96) 0%, rgba(44, 38, 30, .94) 38%, rgba(20, 18, 15, .98) 100%);
+  color: #f4e9d0 !important;
+  letter-spacing: .08em;
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 240, 210, .18),
+    inset 0 1px 0 rgba(255, 250, 235, .22),
+    0 2px 10px rgba(20, 14, 8, .45);
+  animation: gh-title-badge-origin-breathe 6.4s ease-in-out infinite;
+}
+.gh-title-badge--origin::before {
+  display: none;
+}
+.gh-title-badge-origin {
+  position: absolute;
+  inset: -3px;
+  pointer-events: none;
+  border-radius: 4px;
+  background:
+    linear-gradient(currentColor, currentColor) left top / 9px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) left top / 1px 9px no-repeat,
+    linear-gradient(currentColor, currentColor) right top / 9px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) right top / 1px 9px no-repeat,
+    linear-gradient(currentColor, currentColor) left bottom / 9px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) left bottom / 1px 9px no-repeat,
+    linear-gradient(currentColor, currentColor) right bottom / 9px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) right bottom / 1px 9px no-repeat;
+  opacity: .72;
+}
+.gh-title-badge-origin::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 3px,
+    rgba(255, 244, 220, .055) 3px 4px
+  );
+  mix-blend-mode: overlay;
+}
+@keyframes gh-title-badge-origin-breathe {
+  0%, 100% { box-shadow: inset 0 0 0 1px rgba(255, 240, 210, .16), 0 2px 10px rgba(20, 14, 8, .45); }
+  50% { box-shadow: inset 0 0 0 1px rgba(255, 246, 224, .38), 0 2px 16px rgba(120, 92, 52, .35); }
+}
+
+/* fx-etch：斜向蚀刻纹缓慢流动 + 字口压印 */
+.gh-title-badge--origin.gh-title-badge--fx-etch {
+  background:
+    repeating-linear-gradient(118deg, rgba(255, 232, 190, .055) 0 2px, transparent 2px 7px),
+    linear-gradient(112deg, #1b1712 0%, #4a3a26 42%, #17130f 100%);
+  color: #f2dfb8 !important;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, .8), 0 -1px 0 rgba(255, 240, 205, .18);
+  animation: gh-title-badge-fx-etch-scan 9s linear infinite;
+}
+@keyframes gh-title-badge-fx-etch-scan {
+  0% { background-position: 0 0, 0 0; }
+  100% { background-position: 42px 0, 0 0; }
+}
+
+/* fx-holo：全息箔横向扫光 + 细扫描线，不旋转 */
+.gh-title-badge--origin.gh-title-badge--fx-holo {
+  background:
+    repeating-linear-gradient(0deg, transparent 0 3px, rgba(126, 231, 255, .045) 3px 4px),
+    linear-gradient(105deg, #0d1c24 0%, #164b5e 24%, #9defff 47%, #1d6b82 58%, #0b1720 100%);
+  background-size: 100% 100%, 260% 100%;
+  color: #e4fbff !important;
+  text-shadow: 0 0 8px rgba(126, 231, 255, .65);
+  animation: gh-title-badge-fx-holo-sweep 7.5s ease-in-out infinite;
+}
+.gh-title-badge--origin.gh-title-badge--fx-holo .gh-title-badge-origin {
+  background:
+    linear-gradient(115deg, transparent 30%, rgba(220, 252, 255, .32) 48%, transparent 66%),
+    linear-gradient(currentColor, currentColor) left top / 9px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) right bottom / 9px 1px no-repeat;
+  background-size: 240% 100%, 9px 1px, 9px 1px;
+  animation: gh-title-badge-fx-holo-glint 5.2s ease-in-out infinite;
+}
+@keyframes gh-title-badge-fx-holo-sweep {
+  0%, 100% { background-position: 0 0, -40% 50%; }
+  50% { background-position: 0 0, 150% 50%; }
+}
+@keyframes gh-title-badge-fx-holo-glint {
+  0%, 100% { background-position: -60% 50%, 0 0, 0 0; opacity: .6; }
+  50% { background-position: 160% 50%, 0 0, 0 0; opacity: .95; }
+}
+
+/* fx-monolith：哑光黑板 + 单条竖向光缝呼吸 */
+.gh-title-badge--origin.gh-title-badge--fx-monolith {
+  background:
+    linear-gradient(90deg, #08080a 0%, #151517 48%, #0a0a0c 100%);
+  color: #e7e5e4 !important;
+  text-shadow: 0 1px 0 #000, 0 0 10px rgba(255, 255, 255, .18);
+  animation: gh-title-badge-fx-monolith-seam 5.8s ease-in-out infinite;
+}
+.gh-title-badge--origin.gh-title-badge--fx-monolith .gh-title-badge-origin::after {
+  content: '';
+  position: absolute;
+  top: 15%;
+  bottom: 15%;
+  left: 50%;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, .85), transparent);
+  box-shadow: 0 0 12px rgba(255, 255, 255, .5);
+  transform: translateX(-50%) scaleY(.55);
+  opacity: .55;
+  animation: gh-title-badge-fx-monolith-line 5.8s ease-in-out infinite;
+}
+@keyframes gh-title-badge-fx-monolith-seam {
+  0%, 100% { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08), 0 2px 10px rgba(0, 0, 0, .6); }
+  50% { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .24), 0 2px 18px rgba(0, 0, 0, .8); }
+}
+@keyframes gh-title-badge-fx-monolith-line {
+  0%, 100% { transform: translateX(-50%) scaleY(.45); opacity: .28; }
+  50% { transform: translateX(-50%) scaleY(1); opacity: .9; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   /* fx 双类特异性高于单类基础规则，必须逐个显式关闭，否则会绕过降级；
      动画关闭后各特效的静态底色渐变保留（辨识度），粒子与光环直接隐藏 */
   .gh-title-badge--legendary,
   .gh-title-badge--mythic,
   .gh-title-badge--transcendent,
+  .gh-title-badge--origin,
+  .gh-title-badge--origin.gh-title-badge--fx-etch,
+  .gh-title-badge--origin.gh-title-badge--fx-holo,
+  .gh-title-badge--origin.gh-title-badge--fx-monolith,
   .gh-title-badge--legendary.gh-title-badge--fx-stardust,
   .gh-title-badge--legendary.gh-title-badge--fx-flame,
   .gh-title-badge--legendary.gh-title-badge--fx-aurora,
@@ -1539,6 +1667,10 @@
   .gh-title-badge--legendary::before,
   .gh-title-badge--mythic::before,
   .gh-title-badge--transcendent::before,
+  .gh-title-badge--origin::before,
+  .gh-title-badge--origin.gh-title-badge--fx-etch,
+  .gh-title-badge--origin.gh-title-badge--fx-holo,
+  .gh-title-badge--origin.gh-title-badge--fx-monolith,
   .gh-title-badge--legendary.gh-title-badge--fx-stardust::before,
   .gh-title-badge--legendary.gh-title-badge--fx-flame::before,
   .gh-title-badge--legendary.gh-title-badge--fx-aurora::before,
@@ -1559,6 +1691,7 @@
   .gh-title-badge-burst,
   .gh-title-badge-mythic,
   .gh-title-badge-transcendent,
+  .gh-title-badge-origin,
   .gh-title-badge-sparks {
     display: none;
   }
@@ -2394,10 +2527,30 @@
   filter: drop-shadow(0 0 8px rgba(180, 137, 255, .65));
   animation: gh-title-badge-shine 5.6s linear infinite;
 }
+/* 源初档：角切铭牌卡边 + 米金 / 冷白扫光，和至臻的紫白星野区分开 */
+.gh-points-shop-card--origin {
+  border-left-color: #c9a36b;
+  border-radius: 3px;
+  background:
+    linear-gradient(135deg, rgba(201, 163, 107, 0.13), transparent 44%),
+    linear-gradient(315deg, rgba(126, 231, 255, 0.08), transparent 52%),
+    var(--gh-canvas);
+  box-shadow: inset 0 0 0 1px rgba(201, 163, 107, 0.28);
+}
+.gh-points-shop-name--origin {
+  background: linear-gradient(100deg, #f7ecd4, #c9a36b 26%, #7ee7ff 50%, #f5e6c8 72%, #f7ecd4 92%);
+  background-size: 280% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent !important;
+  filter: drop-shadow(0 0 8px rgba(201, 163, 107, .55));
+  animation: gh-title-badge-shine 6.6s linear infinite;
+}
 @media (prefers-reduced-motion: reduce) {
   .gh-points-shop-name--legendary,
   .gh-points-shop-name--mythic,
-  .gh-points-shop-name--transcendent { animation: none; }
+  .gh-points-shop-name--transcendent,
+  .gh-points-shop-name--origin { animation: none; }
 }
 .gh-points-shop-card-desc { margin: 0; min-height: 2.4em; font-size: var(--gh-text-xs); color: var(--gh-text-secondary); line-height: 1.5; }
 .gh-points-shop-card-foot {
@@ -2430,6 +2583,17 @@
   background: linear-gradient(100deg, rgba(180, 137, 255, 0.3), rgba(255, 215, 90, 0.26), rgba(154, 216, 255, 0.3));
   color: color-mix(in srgb, #9a6bff 58%, var(--gh-text));
   box-shadow: inset 0 0 0 1px rgba(180, 137, 255, 0.55);
+}
+.gh-points-rarity--origin {
+  background: linear-gradient(100deg, rgba(201, 163, 107, 0.3), rgba(126, 231, 255, 0.18), rgba(245, 230, 200, 0.28));
+  color: color-mix(in srgb, #a8793f 55%, var(--gh-text));
+  box-shadow: inset 0 0 0 1px rgba(201, 163, 107, 0.55);
+}
+.gh-points-rarity--hidden {
+  margin-left: auto;
+  background: linear-gradient(100deg, rgba(229, 72, 77, 0.18), rgba(201, 163, 107, 0.18));
+  color: color-mix(in srgb, #e5484d 55%, var(--gh-text));
+  box-shadow: inset 0 0 0 1px rgba(229, 72, 77, 0.35);
 }
 
 .gh-points-titles { margin-top: var(--gh-space-5); padding: var(--gh-space-4); }
@@ -2685,15 +2849,16 @@
 .gh-title-badge--compact { animation: none; }
 .gh-title-badge--compact.gh-title-badge--legendary { animation: none; }
 .gh-title-badge--compact::before { display: none; }
-/* fx 变体的 animation 声明是双类特异性，必须逐个显式关闭（本条位于文件末尾，后写覆盖） */
-.gh-title-badge--compact.gh-title-badge--fx-stardust,
-.gh-title-badge--compact.gh-title-badge--fx-flame,
-.gh-title-badge--compact.gh-title-badge--fx-aurora,
-.gh-title-badge--compact.gh-title-badge--fx-thunder,
-.gh-title-badge--compact.gh-title-badge--fx-nova,
-.gh-title-badge--compact.gh-title-badge--fx-prism,
-.gh-title-badge--compact.gh-title-badge--fx-void,
-.gh-title-badge--compact.gh-title-badge--fx-meteor,
-.gh-title-badge--compact.gh-title-badge--fx-blossom {
+/* fx 变体的 animation 声明是双类特异性，用属性选择器一次覆盖全部（含 2026-11 新增的
+   singularity…oblivion / etch / holo / monolith），避免每次加特效都漏掉聊天降级。 */
+.gh-title-badge--compact[class*="gh-title-badge--fx-"] {
   animation: none;
+}
+.gh-title-badge--compact .gh-title-badge-origin,
+.gh-title-badge--compact .gh-title-badge-aura,
+.gh-title-badge--compact .gh-title-badge-burst,
+.gh-title-badge--compact .gh-title-badge-mythic,
+.gh-title-badge--compact .gh-title-badge-transcendent,
+.gh-title-badge--compact .gh-title-badge-sparks {
+  display: none;
 }

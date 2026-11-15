@@ -47,10 +47,13 @@ const BURST_EFFECTS: ReadonlySet<TitleEffectStyle> = new Set<TitleEffectStyle>([
  * `gh-title-badge--legendary`：金色流光 + 旋转光晕 + 8 颗火花粒子；
  * mythic 再追加 `gh-title-badge--mythic` 换一套黑金配色，并渲染 `.gh-title-badge-mythic`
  * 专属翼饰层（一对金色羽翼 + 中心光环），比 legendary 更高一档但仍复用同一套节点预算；
- * transcendent（至臻，最高档）改用 `gh-title-badge--transcendent` 紫白星野配色，并渲染
+ * transcendent（至臻）改用 `gh-title-badge--transcendent` 紫白星野配色，并渲染
  * `.gh-title-badge-transcendent` 至臻星环（双环 + 四向星芒），节点预算与 mythic 相同；
+ * origin（源初，2026-11-15 新增最高档）**刻意不复用**光环 / 旋转锥形 / 粒子，
+ * 改为挂 `gh-title-badge--origin` 与 `.gh-title-badge-origin` 角切铭牌，
+ * 由 fx-etch / fx-holo / fx-monolith 在铭牌表面做蚀刻 / 全息箔 / 黑碑光缝。
  * `effect` 非 classic 时追加 `gh-title-badge--fx-<key>` 切换星尘 / 烈焰 /
- * 极光 / 雷霆 / 超新星 / 棱镜 / 虚空 / 奇点 / 极巅 / 永恒 / 混沌 / 苍穹 / 创世 / 湮灭等动态特效
+ * 极光 / 雷霆 / 超新星 / 棱镜 / 虚空 / 奇点 / 极巅 / 永恒 / 混沌 / 苍穹 / 创世 / 湮灭 / 蚀刻 / 全息 / 黑碑
  * （样式见 points.css）；nova/prism/void/singularity 额外渲染 `.gh-title-badge-burst` 爆发层。
  * 非法或缺省回退 classic，`prefers-reduced-motion` / 低性能模式下动画降级，
  * 粒子与光环隐藏，静态底色保留。
@@ -63,12 +66,13 @@ const BURST_EFFECTS: ReadonlySet<TitleEffectStyle> = new Set<TitleEffectStyle>([
 function UserTitleBadge({ title, size = 'sm', className = '', variant = 'full' }: Props) {
   if (!title) return null
   const compact = variant === 'compact'
-  const transcendent = title.rarity === 'transcendent'
-  const mythic = !transcendent && title.rarity === 'mythic'
-  const legendary = transcendent || mythic || title.rarity === 'legendary'
+  const origin = title.rarity === 'origin'
+  const transcendent = !origin && title.rarity === 'transcendent'
+  const mythic = !origin && !transcendent && title.rarity === 'mythic'
+  const legendary = !origin && (transcendent || mythic || title.rarity === 'legendary')
   const gameName = (title as BadgeTitle).gameName
   const label = gameName ? `${title.name}（${gameName}单机榜一）` : title.name
-  const effect = legendary ? legendaryEffectOf(title) : null
+  const effect = (origin || legendary) ? legendaryEffectOf(title) : null
   const burst = legendary && effect !== null && BURST_EFFECTS.has(effect)
   const classes = [
     'gh-title-badge',
@@ -76,7 +80,8 @@ function UserTitleBadge({ title, size = 'sm', className = '', variant = 'full' }
     legendary ? 'gh-title-badge--legendary' : '',
     mythic ? 'gh-title-badge--mythic' : '',
     transcendent ? 'gh-title-badge--transcendent' : '',
-    legendary && effect !== 'classic' ? `gh-title-badge--fx-${effect}` : '',
+    origin ? 'gh-title-badge--origin' : '',
+    (origin || legendary) && effect !== 'classic' ? `gh-title-badge--fx-${effect}` : '',
     compact ? 'gh-title-badge--compact' : '',
     className,
   ].filter(Boolean).join(' ')
@@ -85,9 +90,10 @@ function UserTitleBadge({ title, size = 'sm', className = '', variant = 'full' }
       className={classes}
       style={{ color: title.color, borderColor: title.color }}
       title={`称号：${label}`}
-      data-rarity={legendary ? (transcendent ? 'transcendent' : mythic ? 'mythic' : 'legendary') : undefined}
+      data-rarity={origin ? 'origin' : legendary ? (transcendent ? 'transcendent' : mythic ? 'mythic' : 'legendary') : undefined}
       data-variant={compact ? 'compact' : undefined}
     >
+      {origin && !compact && <span className="gh-title-badge-origin" aria-hidden />}
       {legendary && !compact && <span className="gh-title-badge-aura" aria-hidden />}
       {legendary && !compact && burst && <span className="gh-title-badge-burst" aria-hidden />}
       {mythic && !compact && <span className="gh-title-badge-mythic" aria-hidden />}

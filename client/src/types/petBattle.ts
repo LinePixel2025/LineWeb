@@ -157,6 +157,8 @@ export interface PetBattleOpponent {
   petName: string
   level: number
   remainingToday: number
+  /** 聊天 WS 在线或游戏 presence 未过期 */
+  online: boolean
 }
 
 export interface PetBattleOverview {

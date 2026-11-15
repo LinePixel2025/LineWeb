@@ -28,6 +28,7 @@
     "verify:pet": "tsx scripts/verify-pet.ts",
     "verify:raid": "tsx scripts/verify-raid.ts",
     "verify:raidstorage": "tsx scripts/verify-raid-storage.ts",
+    "verify:raidcollection": "tsx scripts/verify-raid-collection.ts",
     "verify:stocks": "tsx scripts/verify-stocks.ts",
     "verify:bank": "tsx scripts/verify-bank.ts",
     "verify:crisis": "tsx scripts/verify-crisis.ts",

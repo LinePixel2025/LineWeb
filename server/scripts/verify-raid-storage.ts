@@ -239,4 +239,19 @@ assertEqual(gearStorageGate(6), 5, '6 级需仓库 Lv.5')
 assertEqual(gearStorageGate(7), 6, 't7 巨型背包需仓库 Lv.6')
 assertEqual(gearStorageGate(8), 6, 't8 巨型背包需仓库 Lv.6（仓库满级）')
 
+/* ---------- 藏品（2026-11-15）：绑定 / 不可回收 / 不入商店 ---------- */
+
+{
+  const collectibles = RAID_ITEMS.filter((item) => item.kind === 'collectible')
+  assertEqual(collectibles.length, 8, '藏品 8 件')
+  assert(collectibles.every((item) => raidSellPrice(item.key, 1) === 0), '藏品官方回收价恒为 0')
+  assert(collectibles.every((item) => (item.duplicatePoints ?? 0) > 0), '藏品都有重复折算积分')
+  assert(collectibles.every((item) => item.stackMax === 1), '藏品不可堆叠')
+  assert(
+    collectibles.every((item) => !['consumable', 'gear_cache', 'skill_cache'].includes(item.kind)),
+    '藏品不在官方商店售卖',
+  )
+  assertEqual(raidSellPrice('col_first_coin', 3), 0, '多件藏品同样是 0 回收价')
+}
+
 console.log(`✅ 搜打撤仓库 / 官方商店自检：${passed} 个断言`)

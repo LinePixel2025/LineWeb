@@ -5,9 +5,9 @@
  * 这里只保留与服务端 DTO 对齐的结构定义。
  */
 
-export type LotteryRarity = 'common' | 'rare' | 'epic' | 'legendary'
+export type LotteryRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic'
 
-export type LotteryPrizeType = 'points' | 'seed' | 'fertilizer' | 'outfit'
+export type LotteryPrizeType = 'points' | 'seed' | 'fertilizer' | 'outfit' | 'raid_item' | 'collectible' | 'title'
 
 /** 稀有度元数据（名称 / 主色 / 说明，服务端 LOTTERY_RARITY_META 下发） */
 export interface LotteryRarityMeta {
@@ -67,6 +67,17 @@ export interface LotteryStats {
   rare: number
   epic: number
   legendary: number
+  mythic: number
+}
+
+/** 每日 30 抽额度（服务端按上海时区重置） */
+export interface LotteryDaily {
+  limit: number
+  used: number
+  remaining: number
+  dateKey: string
+  /** 次日 0 点的 ISO 时间 */
+  resetsAt: string
 }
 
 /** GET /api/lottery */
@@ -75,6 +86,7 @@ export interface LotteryView {
   costs: { single: number; ten: number }
   tenCount: number
   pity: LotteryPity
+  daily: LotteryDaily
   dailyFreeAvailable: boolean
   lastFreeDate: string | null
   totalDraws: number
@@ -102,6 +114,7 @@ export interface LotteryDrawResponse {
   balance: number
   results: LotteryResultItem[]
   pity: LotteryPity
+  daily: LotteryDaily
   dailyFreeUsed: boolean
   cost: number
 }

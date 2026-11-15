@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import PetBattleStage from '../components/pets/PetBattleStage'
+import GameImmersiveBar from '../components/games/GameImmersiveBar'
+import { useGameImmersive } from '../hooks/useGameImmersive'
 import { usePoints } from '../contexts/PointsContext'
+import { useChat } from '../contexts/ChatContext'
 import api from '../lib/api'
 import type { PetBattleOverview, PetBattleSummary, PetBattleView } from '../types/petBattle'
 
@@ -21,15 +24,24 @@ function formatTime(iso: string): string {
 
 export default function PetBattlePage() {
   const { refresh: refreshPoints } = usePoints()
+  const { subscribe } = useChat()
+  const params = useParams<{ battleId?: string }>()
+  const navigate = useNavigate()
+  const routeBattleId = params.battleId && /^\d+$/.test(params.battleId)
+    ? Number.parseInt(params.battleId, 10)
+    : null
   const [overview, setOverview] = useState<PetBattleOverview | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [battleId, setBattleId] = useState<number | null>(null)
+  const [battleId, setBattleId] = useState<number | null>(routeBattleId)
   const [battle, setBattle] = useState<PetBattleView | null>(null)
   const [busy, setBusy] = useState(false)
   const [toast, setToast] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const finishedNotifiedRef = useRef<number | null>(null)
+  const stageRef = useRef<HTMLDivElement>(null)
+  const { immersive, toggle: toggleImmersive, exit: exitImmersive } = useGameImmersive(stageRef)
+  const [leaveConfirm, setLeaveConfirm] = useState(false)
 
   /** 只接受同一场对战中版本不倒退的响应（轮询与行动响应可能交错到达） */
   const applyBattle = useCallback((data: PetBattleView) => {
@@ -56,6 +68,36 @@ export default function PetBattlePage() {
   useEffect(() => {
     void loadOverview()
   }, [loadOverview])
+
+  // 深链：/pets/battle/:battleId（邀请接受 / 全局提示跳转）
+  useEffect(() => {
+    if (routeBattleId && routeBattleId !== battleId) setBattleId(routeBattleId)
+  }, [routeBattleId, battleId])
+
+  // WS：对手应战 / 每回合更新（无 WS 时仍由下面的轮询兜底）
+  useEffect(() => {
+    const unsubscribe = subscribe((event) => {
+      if (event.type === 'petbattle:started') {
+        setBattleId(event.battleId)
+        return
+      }
+      if (event.type !== 'petbattle:update') return
+      void api.get<PetBattleView>(`/pets/battle/${event.battleId}`)
+        .then((data) => applyBattle(data))
+        .catch(() => {})
+    })
+    return unsubscribe
+  }, [subscribe, applyBattle])
+
+  // 在线心跳：页面打开期间每 20 秒标记一次 presence，让好友在大厅看到在线
+  useEffect(() => {
+    const ping = () => {
+      void api.post('/pets/battle/presence').catch(() => {})
+    }
+    ping()
+    const timer = window.setInterval(ping, 20_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     if (!toast) return undefined
@@ -156,6 +198,7 @@ export default function PetBattlePage() {
       setBattleId(id)
       setBattle(null)
       finishedNotifiedRef.current = null
+      navigate(`/pets/battle/${id}`, { replace: true })
     }
   }
 
@@ -191,7 +234,19 @@ export default function PetBattlePage() {
     setBattleId(null)
     setBattle(null)
     finishedNotifiedRef.current = null
+    exitImmersive()
+    navigate('/pets/battle', { replace: true })
     void loadOverview(true)
+  }
+
+  /** 回到 LineWeb：未结束的对局要先确认（离开页面 90 秒无心跳会判负） */
+  const exitToSite = () => {
+    if (battle?.status === 'active' && !battle.finished) {
+      setLeaveConfirm(true)
+      return
+    }
+    exitImmersive()
+    navigate('/pets')
   }
 
   if (loading && !overview && !battle) {
@@ -236,6 +291,16 @@ export default function PetBattlePage() {
   if (battle) {
     return (
       <div className="gh-page-container gh-pet-battle-page">
+        <div ref={stageRef} className={`gh-immerse-stage${immersive ? ' is-immersive' : ''}`}>
+        <GameImmersiveBar
+          title="宠物对决"
+          subtitle={battle.status === 'pending' ? '等待对方应战' : `第 ${battle.round} 回合`}
+          immersive={immersive}
+          onToggleImmersive={toggleImmersive}
+          onExitSite={exitToSite}
+          onBack={leaveBattle}
+          backLabel="返回竞技场"
+        />
         {toast && <div className={`gh-pet-toast gh-pet-toast--${toast.tone}`} role="status">{toast.text}</div>}
         <header className="gh-pet-gear-top">
           <button type="button" className="gh-pet-home-back" onClick={leaveBattle}>
@@ -292,6 +357,31 @@ export default function PetBattlePage() {
             </ol>
           )}
         </section>
+        {leaveConfirm && (
+          <div className="gh-immerse-confirm" role="dialog" aria-modal="true" aria-label="离开对战确认">
+            <div className="gh-immerse-confirm-panel">
+              <strong>返回 LineWeb？</strong>
+              <p>离开对战页面后，90 秒内没有心跳会被判负。确定现在离开吗？</p>
+              <div className="gh-immerse-confirm-actions">
+                <button type="button" className="gh-btn gh-btn--secondary gh-btn--sm" onClick={() => setLeaveConfirm(false)}>
+                  继续对战
+                </button>
+                <button
+                  type="button"
+                  className="gh-btn gh-btn--danger gh-btn--sm"
+                  onClick={() => {
+                    setLeaveConfirm(false)
+                    exitImmersive()
+                    navigate('/pets')
+                  }}
+                >
+                  返回 LineWeb
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        </div>
       </div>
     )
   }
@@ -381,14 +471,20 @@ export default function PetBattlePage() {
             {(overview?.opponents ?? []).map((opponent) => (
               <div key={opponent.userId} className="gh-pet-battle-opponent">
                 <div className="gh-pet-battle-opponent-main">
-                  <strong>{opponent.username}</strong>
+                  <strong>
+                    {opponent.username}
+                    <span className={`gh-pet-battle-online${opponent.online ? ' is-online' : ''}`}>
+                      {opponent.online ? '在线' : '离线'}
+                    </span>
+                  </strong>
                   <span>{opponent.petName} · Lv.{opponent.level} · {opponent.speciesName}</span>
                 </div>
                 <span className="gh-pet-battle-remain">今日还可挑战 {opponent.remainingToday} 次</span>
                 <button
                   type="button"
                   className="gh-btn gh-btn--primary gh-btn--sm"
-                  disabled={busy || opponent.remainingToday <= 0}
+                  disabled={busy || opponent.remainingToday <= 0 || !opponent.online}
+                  title={opponent.online ? undefined : '对方不在线'}
                   onClick={() => invite(opponent.userId, opponent.username)}
                 >
                   发起挑战

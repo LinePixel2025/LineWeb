@@ -25,6 +25,10 @@
 html[data-perf='low'] .gh-title-badge--legendary,
 html[data-perf='low'] .gh-title-badge--mythic,
 html[data-perf='low'] .gh-title-badge--transcendent,
+html[data-perf='low'] .gh-title-badge--origin,
+html[data-perf='low'] .gh-title-badge--origin.gh-title-badge--fx-etch,
+html[data-perf='low'] .gh-title-badge--origin.gh-title-badge--fx-holo,
+html[data-perf='low'] .gh-title-badge--origin.gh-title-badge--fx-monolith,
 html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-stardust,
 html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-flame,
 html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-aurora,
@@ -45,11 +49,13 @@ html[data-perf='low'] .gh-title-badge--legendary.gh-title-badge--fx-oblivion {
 }
 html[data-perf='low'] .gh-title-badge--legendary::before,
 html[data-perf='low'] .gh-title-badge--mythic::before,
-html[data-perf='low'] .gh-title-badge--transcendent::before { display: none; }
+html[data-perf='low'] .gh-title-badge--transcendent::before,
+html[data-perf='low'] .gh-title-badge--origin::before { display: none; }
 html[data-perf='low'] .gh-title-badge-sparks,
 html[data-perf='low'] .gh-title-badge-burst,
 html[data-perf='low'] .gh-title-badge-mythic,
-html[data-perf='low'] .gh-title-badge-transcendent { display: none; }
+html[data-perf='low'] .gh-title-badge-transcendent,
+html[data-perf='low'] .gh-title-badge-origin { display: none; }
 /* 内层扫光只保留 opacity 呼吸：合成器动画，代价远低于背景位移 / 阴影脉冲。
    各 fx 变体的 aura 动画是「双类 + 后代类」特异性，这里用 !important 统一压成呼吸，
    但保留各自的扫光配色渐变（辨识度不变）。 */

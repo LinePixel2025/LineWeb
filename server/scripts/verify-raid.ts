@@ -44,6 +44,7 @@ import {
   getRaidGear,
   getRaidItem,
   getRaidMap,
+  raidCollectibleDropChance,
   raidContainerLootSegments,
   raidExpired,
   raidGearStorageGate,
@@ -60,6 +61,7 @@ import {
   repairRaidGear,
   resolveDropPosition,
   resolveRaidDamage,
+  rollRaidCollectibleDrop,
   rollRaidContainerLoot,
   rollRaidItemKey,
   tickRaidRun,
@@ -96,7 +98,7 @@ function assertClose(actual: number, expected: number, tolerance: number, messag
    目录不变量
    ============================================================ */
 
-assertEqual(RAID_ITEMS.length, 53, '物品目录 53 种（含神话 3 种与停产的撤离信号弹）')
+assertEqual(RAID_ITEMS.length, 61, '物品目录 61 种（53 种原目录 + 8 件藏品）')
 assertEqual(new Set(RAID_ITEMS.map((item) => item.key)).size, RAID_ITEMS.length, '物品 key 唯一')
 assertEqual(RAID_ITEM_MAP.size, RAID_ITEMS.length, '物品索引与目录同规模')
 assert(RAID_ITEMS.every((item) => item.value > 0), '所有物品目录价值 > 0')
@@ -107,7 +109,21 @@ for (const rarity of RAID_RARITY_ORDER) {
   assert(RAID_ITEMS.some((item) => item.rarity === rarity), `品质 ${rarity} 至少有一种物品`)
 }
 assertEqual(RAID_RARITY_ORDER.length, 6, '六档品质')
-assertEqual(RAID_ITEMS.filter((item) => item.rarity === 'mythic').length, 3, '神话物品 3 种（深渊装备箱 / 非洲之心 / 深渊核心）')
+assertEqual(
+  RAID_ITEMS.filter((item) => item.rarity === 'mythic' && item.kind !== 'collectible').length,
+  3,
+  '非藏品神话物品 3 种（深渊装备箱 / 非洲之心 / 深渊核心）',
+)
+assertEqual(RAID_ITEMS.filter((item) => item.kind === 'collectible').length, 8, '藏品 8 件')
+assert(
+  RAID_ITEMS.filter((item) => item.kind === 'collectible').every(
+    (item) => item.collectible === true
+      && item.stackMax === 1
+      && (item.duplicatePoints ?? 0) > 0
+      && (item.minLootTier ?? 1) >= 1,
+  ),
+  '藏品标记 / 堆叠 1 / 重复折算 / 最低地图档完整',
+)
 assertEqual(RAID_ITEMS.filter((item) => item.kind === 'gear_cache').length, 5, '装备箱共 5 种（含神话档）')
 assertEqual(RAID_ITEMS.filter((item) => item.kind === 'skill_cache').length, 3, '技能卷轴共 3 种')
 assert(RAID_ITEMS.filter((item) => item.kind === 'consumable').length >= 9, '消耗品至少 9 种（含撤离信号弹）')
@@ -141,7 +157,15 @@ assertEqual(
   '没有 PvP 模式限定物品',
 )
 assertEqual(RAID_ITEMS.filter((item) => item.shopPrice !== undefined).length, 0, '目录里不再有一口价商品（门票机制已下线）')
-assert(RAID_ITEMS.filter((item) => !item.retired).every((item) => raidItemDropEligible(item)), '未停产物品都可入池')
+assert(
+  RAID_ITEMS.filter((item) => !item.retired && item.kind !== 'collectible')
+    .every((item) => raidItemDropEligible(item)),
+  '未停产的普通物品都可入池',
+)
+assert(
+  RAID_ITEMS.filter((item) => item.kind === 'collectible').every((item) => !raidItemDropEligible(item)),
+  '藏品不进普通掉落池 / 首领保底池',
+)
 assertEqual(getRaidItem('nope'), null, '不存在的物品返回 null')
 
 assertEqual(RAID_GEARS.length, 32, '装备目录 32 件（头/甲/鞋/胸挂 × 6 级 + 背包 × 8 级）')
@@ -232,9 +256,14 @@ assertEqual(raidSellPrice(RAID_EXTRACT_FLARE_KEY, 1), 180, '撤离信号弹按�
 assert(
   RAID_ITEMS.every(
     (item) => item.kind === 'consumable' || item.kind === 'gear_cache' || item.kind === 'skill_cache'
+      || item.kind === 'collectible'
       || raidSellPrice(item.key, 1) === item.value,
   ),
   '材料 / 珍宝回收价 100% 等于目录价值',
+)
+assert(
+  RAID_ITEMS.filter((item) => item.kind === 'collectible').every((item) => raidSellPrice(item.key, 1) === 0),
+  '藏品不可回收（回收价恒为 0）',
 )
 
 /* ============================================================
@@ -637,11 +666,12 @@ for (const mode of RAID_LOOT_MODES) {
         const [minSegments, maxSegments] = raidContainerLootSegments(room.kind === 'boss', mode)
         for (const container of room.containers) {
           scannedContainers += 1
+          const normalLoot = container.loot.filter((entry) => entry.id !== 'collectible')
           assert(
-            container.loot.length >= minSegments && container.loot.length <= maxSegments,
-            `${def.key}/${mode} ${container.id} 段数 ${container.loot.length} 在 [${minSegments},${maxSegments}]`,
+            normalLoot.length >= minSegments && normalLoot.length <= maxSegments,
+            `${def.key}/${mode} ${container.id} 段数 ${normalLoot.length} 在 [${minSegments},${maxSegments}]`,
           )
-          const first = getRaidItem(container.loot[0]?.itemKey ?? '')
+          const first = getRaidItem(normalLoot[0]?.itemKey ?? '')
           assert(!!first, `${container.id} 首段物品在目录里`)
           if (room.kind === 'boss') {
             assert(
@@ -665,6 +695,7 @@ for (const mode of RAID_LOOT_MODES) {
               loot.amount >= 1 && loot.amount <= (lootDef?.stackMax ?? 1),
               `${container.id} 掉落数量不超堆叠上限`,
             )
+            if (lootDef?.kind === 'collectible') continue
             if (mode === 'normal' && room.kind !== 'boss' && lootDef?.rarity === 'mythic') {
               if (def.lootTier >= 5) normalMythicOutsideBossT5 += 1
               else normalMythicOutsideBossLow += 1
@@ -689,7 +720,16 @@ assert(!pvpMythicKeys.has('heart_of_africa'), 'pvp 首领首段保底池排除�
 const lootA = rollRaidContainerLoot(20261104, 'c-3-1', 4, true, 'normal')
 const lootB = rollRaidContainerLoot(20261104, 'c-3-1', 4, true, 'normal')
 assertEqual(JSON.stringify(lootA), JSON.stringify(lootB), '同参数容器掉落可重放（服务端按 seed 重算的前提）')
-assertEqual(lootA.map((item, index) => item.id).join(','), lootA.map((_, index) => `loot-${index}`).join(','), '掉落 id 连续编号')
+const normalLootA = lootA.filter((item) => item.id !== 'collectible')
+assertEqual(
+  normalLootA.map((item, index) => item.id).join(','),
+  normalLootA.map((_, index) => `loot-${index}`).join(','),
+  '普通掉落 id 连续编号',
+)
+assert(
+  lootA.every((item, index) => item.id !== 'collectible' || index === lootA.length - 1),
+  '藏品追加在普通战利品之后',
+)
 assert(lootA.every((item) => item.amount >= 1), '掉落数量 >= 1')
 for (const mode of RAID_LOOT_MODES) {
   for (const bossRoom of [false, true]) {
@@ -700,9 +740,10 @@ for (const mode of RAID_LOOT_MODES) {
     for (let s = 1; s <= 60; s += 1) {
       for (let c = 0; c < 40; c += 1) {
         const loot = rollRaidContainerLoot(s * 7919 + c, `c-${s}-${c}`, 3, bossRoom, mode)
-        minObserved = Math.min(minObserved, loot.length)
-        maxObserved = Math.max(maxObserved, loot.length)
-        if (getRaidItem(loot[0]?.itemKey ?? '')?.rarity === 'mythic') mythicFirst += 1
+        const normalLoot = loot.filter((entry) => entry.id !== 'collectible')
+        minObserved = Math.min(minObserved, normalLoot.length)
+        maxObserved = Math.max(maxObserved, normalLoot.length)
+        if (getRaidItem(normalLoot[0]?.itemKey ?? '')?.rarity === 'mythic') mythicFirst += 1
       }
     }
     assertEqual(minObserved, minSegments, `${mode} ${bossRoom ? '首领' : '普通'}容器段数下界确实会取到`)
@@ -1398,5 +1439,47 @@ const legacyDone = applyRaidEvent(legacyAtExtract.state, mapA, { type: 'extractD
 assertEqual(legacyDone.state.status, 'extracted', '旧状态走完读条同样必定撤离成功')
 // 装备实例 id 是可选字段：旧状态里的 gear 字面量没有 id 也必须能用
 assertEqual(legacyState.gear.armor?.id, undefined, '旧 gear 字面量没有 id 字段仍可解析')
+
+/* ---------- 藏品掉落（2026-11-15）：独立 rng / 低概率 / 地图档位门槛 ---------- */
+
+{
+  const catalog = RAID_ITEMS.filter((item) => item.kind === 'collectible')
+  assertEqual(catalog.length, 8, '藏品目录 8 件')
+  assert(
+    catalog.every((item) => (item.minLootTier ?? 1) >= 1 && (item.minLootTier ?? 1) <= 5),
+    '藏品最低地图档在 1–5',
+  )
+  assertEqual(raidCollectibleDropChance(1, false, 'normal'), 0.006, 'T1 普通容器藏品概率 0.6%')
+  assertEqual(raidCollectibleDropChance(5, false, 'normal'), 0.0108, 'T5 普通容器藏品概率 1.08%')
+  assertEqual(raidCollectibleDropChance(5, true, 'normal'), 0.0188, 'T5 Boss 容器藏品概率 1.88%')
+  assertEqual(raidCollectibleDropChance(5, true, 'pvp'), 0.0198, 'T5 Boss PvP 容器藏品概率 1.98%')
+  for (let tier = 2; tier <= 5; tier += 1) {
+    assert(
+      raidCollectibleDropChance(tier, false) > raidCollectibleDropChance(tier - 1, false),
+      `藏品概率随地图档位递增（T${tier}）`,
+    )
+  }
+
+  const first = rollRaidCollectibleDrop(20261115, 'c-1-1', 5, true, 'normal')
+  const second = rollRaidCollectibleDrop(20261115, 'c-1-1', 5, true, 'normal')
+  assertEqual(JSON.stringify(first), JSON.stringify(second), '藏品掉落同 seed 可重放')
+  if (first) {
+    const def = getRaidItem(first.itemKey)
+    assertEqual(def?.kind, 'collectible', '掉落物一定是藏品')
+    assertEqual(first.amount, 1, '藏品单次掉 1 件')
+  }
+
+  let hits = 0
+  const samples = 20_000
+  for (let index = 0; index < samples; index += 1) {
+    if (rollRaidCollectibleDrop(index * 7919 + 13, `c-col-${index}`, 1, false, 'normal')) hits += 1
+  }
+  const rate = hits / samples
+  assert(rate > 0.003 && rate < 0.009, `T1 藏品大样本概率 ${(rate * 100).toFixed(2)}% 在 0.3%–0.9%`)
+  assert(
+    RAID_ITEMS.filter((item) => item.kind === 'collectible').every((item) => !raidItemDropEligible(item)),
+    '藏品不进普通掉落池（独立掉落流）',
+  )
+}
 
 console.log(`✅ 搜打撤 v5 引擎自检：${passed} 个断言`)

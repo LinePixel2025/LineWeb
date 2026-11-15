@@ -41,7 +41,7 @@ describe('titleEffects 前后端一致性', () => {
     expect([...TITLE_EFFECTS]).toEqual(serverTitleEffects())
   })
 
-  it('特效白名单共 17 个（8 个既有 + 2 个幻彩 + 5 个神话 + 2 个至臻）且与 CSS fx 类名后缀约定一致', () => {
+  it('特效白名单共 20 个（8 个既有 + 2 个幻彩 + 5 个神话 + 2 个至臻 + 3 个源初）且与 CSS fx 类名后缀约定一致', () => {
     expect([...TITLE_EFFECTS]).toEqual([
       'classic',
       'stardust',
@@ -60,8 +60,11 @@ describe('titleEffects 前后端一致性', () => {
       'firmament',
       'genesis',
       'oblivion',
+      'etch',
+      'holo',
+      'monolith',
     ])
-    expect(TITLE_EFFECTS.length).toBe(17)
+    expect(TITLE_EFFECTS.length).toBe(20)
   })
 
   it('炸裂 / 幻彩 / 神话 / 至臻特效 key 均为小写且可作为 gh-title-badge--fx-<key> 类名后缀', () => {

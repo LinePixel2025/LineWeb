@@ -10,7 +10,7 @@ import type { UnoCard, UnoColor } from '../lib/games/uno'
 import type { LiarDeathCause, LiarTarget } from '../lib/games/liar'
 import type { ParkourLane, ParkourPose } from '../lib/games/parkour'
 
-/** 游戏种类（邀请与对局 DTO 的 game 字段；旧邀请缺省视为 2048） */
+/** 棋盘游戏种类（邀请与对局 DTO 的 game 字段；旧邀请缺省视为 2048） */
 export type GameKind =
   | '2048'
   | 'doudizhu'
@@ -23,6 +23,11 @@ export type GameKind =
   | 'uno'
   | 'xiangqi'
   | 'parkour'
+
+/** 站内其他可邀请玩法：宠物对决 / 搜打撤组队（复用同一套全局邀请事件） */
+export type StandaloneInviteGame = 'petbattle' | 'raid'
+export type InviteGameKind = GameKind | StandaloneInviteGame
+export type InviteKind = 'match' | 'squad'
 
 /** 2048 移动方向 */
 export type Game2048Direction = 'up' | 'down' | 'left' | 'right'
@@ -53,13 +58,17 @@ export interface GameUserBrief {
   username: string
 }
 
-/** 好友对战邀请（2048 与斗地主共用；id 跨游戏唯一） */
+/** 好友对战邀请（棋盘游戏 + 宠物对决 + 搜打撤组队共用；客户端用 game:id 组合键去重） */
 export interface GameInvite {
   id: number
-  /** 邀请加入的房间/对局 id */
-  matchId: number
-  /** 所属游戏（2048 的旧响应可能缺省） */
-  game?: GameKind
+  /** 邀请加入的房间/对局 id（搜打撤组队用 squadId，可不填） */
+  matchId?: number
+  /** 搜打撤队伍 id（字符串） */
+  squadId?: string
+  /** 接受后加入的是对局还是队伍；缺省 match */
+  kind?: InviteKind
+  /** 所属玩法（2048 的旧响应可能缺省） */
+  game?: InviteGameKind
   from: GameUserBrief
   to: GameUserBrief
   createdAt: string

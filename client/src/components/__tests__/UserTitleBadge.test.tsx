@@ -12,6 +12,15 @@ const legendary: UserTitleDto = {
   effect: 'void',
 }
 
+const origin: UserTitleDto = {
+  id: 44,
+  name: '源初',
+  color: '#f5e6c8',
+  icon: '✴️',
+  rarity: 'origin',
+  effect: 'etch',
+}
+
 const mythic: UserTitleDto = {
   id: 33,
   name: '奇点',
@@ -57,6 +66,25 @@ describe('UserTitleBadge', () => {
     expect(badge.querySelector('.gh-title-badge-sparks')).toBeNull()
     expect(badge.querySelector('.gh-title-badge-aura')).toBeNull()
     expect(badge.querySelector('.gh-title-badge-burst')).toBeNull()
+    expect(badge.children).toHaveLength(2)
+  })
+
+  it('源初称号使用角切铭牌，不再渲染光环 / 粒子 / 爆发层', () => {
+    const { container } = render(<UserTitleBadge title={origin} />)
+    const badge = container.querySelector('.gh-title-badge--origin')!
+    expect(badge.classList.contains('gh-title-badge--legendary')).toBe(false)
+    expect(badge.classList.contains('gh-title-badge--fx-etch')).toBe(true)
+    expect(badge.getAttribute('data-rarity')).toBe('origin')
+    expect(badge.querySelector('.gh-title-badge-origin')).not.toBeNull()
+    expect(badge.querySelector('.gh-title-badge-aura')).toBeNull()
+    expect(badge.querySelector('.gh-title-badge-sparks')).toBeNull()
+    expect(badge.querySelector('.gh-title-badge-burst')).toBeNull()
+  })
+
+  it('源初称号 compact 模式不渲染铭牌层', () => {
+    const { container } = render(<UserTitleBadge title={origin} variant="compact" />)
+    const badge = container.querySelector('.gh-title-badge--origin')!
+    expect(badge.querySelector('.gh-title-badge-origin')).toBeNull()
     expect(badge.children).toHaveLength(2)
   })
 

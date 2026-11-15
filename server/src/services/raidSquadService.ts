@@ -13,8 +13,9 @@
 import prisma from '../lib/prisma.js'
 import { AppError } from '../middleware/errorHandler.js'
 import { areFriends, getUserBrief, listFriends } from './chatService.js'
-import { isUserOnline, sendToUser } from './chatHub.js'
-import { isUserBusyInOtherGames, registerGameModule } from './gameService.js'
+import { sendToUser } from './chatHub.js'
+import { isGameUserAvailable, isUserBusyInOtherGames, registerGameModule } from './gameService.js'
+import { sendStandaloneInvite, sendStandaloneInviteRemoved } from './gameInviteBridge.js'
 import { getRaidMap, type RaidGroundStack } from '../lib/raidRun.js'
 
 export const RAID_SQUAD_MAX_MEMBERS = 4
@@ -65,6 +66,7 @@ export interface SquadInvite {
   toUserId: number
   squadId: string
   createdAt: number
+  expiresAt: number
 }
 
 const squads = new Map<string, SquadRoom>()
@@ -150,8 +152,13 @@ export function removeInvite(inviteId: number, reason: 'cancelled' | 'accepted' 
   const invite = invites.get(inviteId)
   if (!invite) return
   invites.delete(inviteId)
-  void reason
   notify([invite.fromUserId, invite.toUserId], 'raid:squad:invite:removed', { inviteId })
+  sendStandaloneInviteRemoved(
+    [invite.fromUserId, invite.toUserId],
+    invite.id,
+    'raid',
+    reason === 'rejected' ? 'declined' : reason,
+  )
 }
 
 /* ============================================================
@@ -265,7 +272,7 @@ export async function toSquadDto(squad: SquadRoom, viewerId: number): Promise<Ra
         species: profile?.species ?? '',
         level: profile?.level ?? 0,
         host: member.userId === squad.hostUserId,
-        online: isUserOnline(member.userId),
+        online: isGameUserAvailable(member.userId),
         hp: member.live.hp,
         maxHp: member.live.maxHp,
         roomId: member.live.roomId,
@@ -330,7 +337,7 @@ export async function getSquadView(userId: number): Promise<RaidSquadViewDto> {
           petName: profile?.petName ?? '',
           species: profile?.species ?? '',
           level: profile?.level ?? 0,
-          online: isUserOnline(friend.id),
+          online: isGameUserAvailable(friend.id),
           inRaid: profile?.raidStatus === 'active' || squadIds.has(friend.id),
           // 只查「其他游戏」：raid 自己的探针会把同队好友也算成忙，需在客户端按 inRaid 区分
           inOtherGame: isUserBusyInOtherGames(friend.id, 'raid'),
@@ -344,6 +351,7 @@ export async function getSquadView(userId: number): Promise<RaidSquadViewDto> {
       toUserId: invite.toUserId,
       squadId: invite.squadId,
       createdAt: iso(invite.createdAt),
+      expiresAt: iso(invite.expiresAt),
     })),
     outgoing: outgoing.map((invite) => ({
       id: invite.id,
@@ -352,8 +360,43 @@ export async function getSquadView(userId: number): Promise<RaidSquadViewDto> {
       toUserId: invite.toUserId,
       squadId: invite.squadId,
       createdAt: iso(invite.createdAt),
+      expiresAt: iso(invite.expiresAt),
     })),
   }
+}
+
+/** 轻量邀请列表：供全局 GameInviteToast 在 WS 不可用时轮询 */
+export function getSquadInvites(userId: number): {
+  incoming: Array<{
+    id: number
+    fromUserId: number
+    fromName: string
+    toUserId: number
+    squadId: string
+    createdAt: string
+    expiresAt: string
+  }>
+  outgoing: Array<{
+    id: number
+    fromUserId: number
+    fromName: string
+    toUserId: number
+    squadId: string
+    createdAt: string
+    expiresAt: string
+  }>
+} {
+  const { incoming, outgoing } = invitesFor(userId)
+  const map = (invite: SquadInvite) => ({
+    id: invite.id,
+    fromUserId: invite.fromUserId,
+    fromName: invite.fromName,
+    toUserId: invite.toUserId,
+    squadId: invite.squadId,
+    createdAt: new Date(invite.createdAt).toISOString(),
+    expiresAt: new Date(invite.expiresAt).toISOString(),
+  })
+  return { incoming: incoming.map(map), outgoing: outgoing.map(map) }
 }
 
 /** 战斗中的轻量轮询（无 WebSocket 时队友状态来源） */
@@ -379,27 +422,46 @@ export async function inviteToSquad(userId: number, targetUserId: number): Promi
   if (targetRaid?.status === 'active') throw new AppError('对方正在行动中，等TA先撤离', 409, 'SQUAD_TARGET_BUSY')
   if (isUserBusyInOtherGames(targetUserId, 'raid')) throw new AppError('对方正在其他游戏对局中', 409, 'SQUAD_TARGET_BUSY')
 
+  const incoming = invitesFor(targetUserId).incoming
+  if (incoming.length >= 5) throw new AppError('对方待处理的组队邀请太多了，晚点再试', 409, 'SQUAD_INVITE_FULL')
+
   const squad = ensureLobby(userId, (await getUserBrief(userId)).username)
   touch(squad)
   if (squad.members.length >= RAID_SQUAD_MAX_MEMBERS) throw new AppError('队伍已满', 409, 'SQUAD_FULL')
 
+  const now = Date.now()
   const invite: SquadInvite = {
     id: inviteSeq,
     fromUserId: userId,
     fromName: squad.members.find((member) => member.userId === userId)?.name ?? `用户 ${userId}`,
     toUserId: targetUserId,
     squadId: squad.id,
-    createdAt: Date.now(),
+    createdAt: now,
+    expiresAt: now + INVITE_TTL_MS,
   }
   inviteSeq += 1
   invites.set(invite.id, invite)
   sendToUser(targetUserId, { type: 'raid:squad:invite', invite })
+  sendStandaloneInvite(targetUserId, {
+    id: invite.id,
+    game: 'raid',
+    kind: 'squad',
+    squadId: invite.squadId,
+    from: { id: invite.fromUserId, username: invite.fromName },
+    to: { id: invite.toUserId, username: (await getUserBrief(invite.toUserId)).username },
+    createdAt: new Date(invite.createdAt).toISOString(),
+    expiresAt: new Date(invite.expiresAt).toISOString(),
+  })
   return toSquadDto(squad, userId)
 }
 
 export async function respondToInvite(userId: number, inviteId: number, accept: boolean): Promise<RaidSquadDto | null> {
   const invite = invites.get(inviteId)
   if (!invite || invite.toUserId !== userId) throw new AppError('邀请不存在', 404)
+  if (invite.expiresAt <= Date.now()) {
+    removeInvite(inviteId, 'expired')
+    throw new AppError('邀请已过期', 410, 'SQUAD_INVITE_EXPIRED')
+  }
   removeInvite(inviteId, accept ? 'accepted' : 'rejected')
   if (!accept) {
     notify([invite.fromUserId], 'raid:squad:update', { squad: await squadSnapshotOrNull(invite.squadId, invite.fromUserId) })

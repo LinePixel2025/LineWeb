@@ -5,15 +5,16 @@ import UserAvatar from '../UserAvatar'
 import { useAuth } from '../../contexts/AuthContext'
 import { useChat } from '../../contexts/ChatContext'
 import { gameMatchPath, useGame } from '../../contexts/GameContext'
-import { getGameCatalogEntry } from '../../lib/games/catalog'
+import { inviteGameLabel, inviteKey, invitePath } from '../../lib/invites'
 import type { GameInvite } from '../../types/game'
 
 const PORTAL_ROOT = document.body
-const INVITE_TTL_SECONDS = 60
 
-/** 提示条里的游戏名（旧邀请缺省 game 时按 2048 处理） */
-function gameNameOf(invite?: Pick<GameInvite, 'game'> | null): string {
-  return getGameCatalogEntry(invite?.game ?? '2048')?.name ?? '2048'
+function countdownText(seconds: number): string {
+  if (seconds <= 0) return '已过期'
+  if (seconds < 60) return `${seconds} 秒后过期`
+  const minutes = Math.floor(seconds / 60)
+  return `${minutes}:${String(seconds % 60).padStart(2, '0')} 后过期`
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -34,11 +35,13 @@ export default function GameInviteToast() {
   const {
     incomingInvites,
     startedMatch,
+    externalMatch,
     respondInvite,
     dismissStartedMatch,
+    dismissExternalMatch,
   } = useGame()
 
-  const [hiddenInviteIds, setHiddenInviteIds] = useState<number[]>([])
+  const [hiddenInviteIds, setHiddenInviteIds] = useState<string[]>([])
   const [now, setNow] = useState(() => Date.now())
   const [busy, setBusy] = useState<'accept' | 'decline' | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -46,7 +49,7 @@ export default function GameInviteToast() {
   // 邀请从列表消失后释放本地隐藏标记，避免服务重启后复用 id 时被错误屏蔽
   useEffect(() => {
     if (hiddenInviteIds.length === 0) return
-    const liveIds = new Set(incomingInvites.map((item) => item.id))
+    const liveIds = new Set(incomingInvites.map((item) => inviteKey(item)))
     setHiddenInviteIds((prev) => {
       const next = prev.filter((id) => liveIds.has(id))
       return next.length === prev.length ? prev : next
@@ -54,14 +57,14 @@ export default function GameInviteToast() {
   }, [incomingInvites, hiddenInviteIds.length])
 
   const invite = useMemo(
-    () => incomingInvites.find((item) => !hiddenInviteIds.includes(item.id)) ?? null,
+    () => incomingInvites.find((item) => !hiddenInviteIds.includes(inviteKey(item))) ?? null,
     [incomingInvites, hiddenInviteIds]
   )
 
-  const matchPath = startedMatch ? gameMatchPath(startedMatch) : null
+  const matchPath = startedMatch ? gameMatchPath(startedMatch) : externalMatch?.path ?? null
   // 已经在对局页面时不再重复提示
   const onStartedMatchPage = matchPath !== null && location.pathname === matchPath
-  const showStarted = Boolean(startedMatch) && !onStartedMatchPage
+  const showStarted = Boolean(startedMatch || externalMatch) && !onStartedMatchPage
 
   // 倒计时每秒刷新（邀请与对局提示都需要最新时间）
   useEffect(() => {
@@ -72,14 +75,11 @@ export default function GameInviteToast() {
   }, [invite?.id, showStarted])
 
   const remainingSeconds = invite
-    ? Math.max(
-        0,
-        Math.min(INVITE_TTL_SECONDS, Math.ceil((Date.parse(invite.expiresAt) - now) / 1_000) || 0)
-      )
+    ? Math.max(0, Math.ceil((Date.parse(invite.expiresAt) - now) / 1_000) || 0)
     : 0
 
-  const hideInvite = useCallback((inviteId: number) => {
-    setHiddenInviteIds((prev) => (prev.includes(inviteId) ? prev : [...prev, inviteId]))
+  const hideInvite = useCallback((key: string) => {
+    setHiddenInviteIds((prev) => (prev.includes(key) ? prev : [...prev, key]))
   }, [])
 
   const handleAccept = useCallback(async () => {
@@ -92,7 +92,9 @@ export default function GameInviteToast() {
         dismissStartedMatch()
         navigate(gameMatchPath(match))
       } else {
-        hideInvite(invite.id)
+        const target = invitePath(invite)
+        if (target) navigate(target)
+        hideInvite(inviteKey(invite))
       }
     } catch (err) {
       setError(errorMessage(err, '接受邀请失败'))
@@ -106,8 +108,8 @@ export default function GameInviteToast() {
     setBusy('decline')
     setError(null)
     try {
-      await respondInvite(invite.id, 'decline')
-      hideInvite(invite.id)
+      await respondInvite(invite.id, 'decline', invite.game ?? '2048')
+      hideInvite(inviteKey(invite))
     } catch (err) {
       setError(errorMessage(err, '拒绝邀请失败'))
     } finally {
@@ -116,10 +118,16 @@ export default function GameInviteToast() {
   }, [invite, respondInvite, hideInvite])
 
   const handleEnterMatch = useCallback(() => {
-    if (!startedMatch) return
-    dismissStartedMatch()
-    navigate(gameMatchPath(startedMatch))
-  }, [startedMatch, dismissStartedMatch, navigate])
+    if (startedMatch) {
+      dismissStartedMatch()
+      navigate(gameMatchPath(startedMatch))
+      return
+    }
+    if (externalMatch) {
+      dismissExternalMatch()
+      navigate(externalMatch.path)
+    }
+  }, [startedMatch, externalMatch, dismissStartedMatch, dismissExternalMatch, navigate])
 
   const opponents = (startedMatch?.players ?? []).filter((player) => player.userId !== meId)
   const opponentNames = opponents.map((player) => player.username).join('、')
@@ -132,7 +140,7 @@ export default function GameInviteToast() {
         <span className="gh-game-toast-eyebrow">
           {showStarted
             ? '对局已开始'
-            : `${gameNameOf(invite)}对战邀请`}
+            : `${inviteGameLabel(invite)}邀请`}
         </span>
         <button
           type="button"
@@ -141,8 +149,9 @@ export default function GameInviteToast() {
           onClick={() => {
             if (showStarted) {
               dismissStartedMatch()
+              dismissExternalMatch()
             } else if (invite) {
-              hideInvite(invite.id)
+              hideInvite(inviteKey(invite))
             }
           }}
         >
@@ -150,12 +159,14 @@ export default function GameInviteToast() {
         </button>
       </div>
 
-      {showStarted && startedMatch ? (
+      {showStarted ? (
         <div className="gh-game-toast-body">
           <p className="gh-game-toast-text">
-            {opponentNames
-              ? `${opponentNames} 与你的${gameNameOf(startedMatch)}对局已开始。`
-              : '你的对局已开始。'}
+            {startedMatch
+              ? opponentNames
+                ? `${opponentNames} 与你的${inviteGameLabel(startedMatch)}对局已开始。`
+                : '你的对局已开始。'
+              : `${externalMatch?.label ?? '对局'}已经开始了。`}
           </p>
           <div className="gh-game-toast-actions">
             <button type="button" className="gh-btn gh-btn--primary gh-btn--md" onClick={handleEnterMatch}>
@@ -164,7 +175,10 @@ export default function GameInviteToast() {
             <button
               type="button"
               className="gh-btn gh-btn--secondary gh-btn--md"
-              onClick={() => dismissStartedMatch()}
+              onClick={() => {
+                dismissStartedMatch()
+                dismissExternalMatch()
+              }}
             >
               稍后
             </button>
@@ -178,12 +192,16 @@ export default function GameInviteToast() {
               <div className="gh-game-toast-user-copy">
                 <strong className="gh-game-toast-username">{invite.from.username}</strong>
                 <span className="gh-game-toast-desc">
-                  邀请你进行 {gameNameOf(invite)} 对战
+                  {invite.game === 'raid'
+                    ? '邀请你组队出击搜打撤'
+                    : invite.game === 'petbattle'
+                      ? '邀请你进行宠物对决'
+                      : `邀请你进行 ${inviteGameLabel(invite)} 对战`}
                 </span>
               </div>
             </div>
             <p className={`gh-game-toast-countdown${remainingSeconds <= 10 ? ' gh-game-toast-countdown--urgent' : ''}`}>
-              {remainingSeconds > 0 ? `${remainingSeconds} 秒后过期` : '邀请已过期'}
+              {countdownText(remainingSeconds)}
             </p>
             <div className="gh-game-toast-actions">
               <button

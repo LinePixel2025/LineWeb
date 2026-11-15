@@ -10,6 +10,7 @@ import type {
   Game2048Match, AnyGameMatch,
   GameInvite,
   GameInviteRemovalReason,
+  InviteGameKind,
   MinecraftEditEvent,
   MinecraftStateEvent,
 } from './game'
@@ -165,7 +166,9 @@ export type ChatServerEvent =
   | { type: 'friend:rejected'; userId: number }
   | { type: 'friend:removed'; userId: number }
   | { type: 'game:invite'; invite: GameInvite }
-  | { type: 'game:invite:removed'; inviteId: number; reason: GameInviteRemovalReason }
+  | { type: 'game:invite:removed'; inviteId: number; reason: GameInviteRemovalReason; game?: InviteGameKind }
+  | { type: 'petbattle:started'; battleId: number }
+  | { type: 'petbattle:update'; battleId: number; version?: number }
   | { type: 'game:match:started'; match: AnyGameMatch }
   | { type: 'game:match:update'; match: AnyGameMatch }
   | { type: 'game:match:ended'; match: AnyGameMatch }

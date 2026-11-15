@@ -24,6 +24,7 @@ import {
   DEFAULT_FRAME_ITEMS_V4,
   DEFAULT_TITLE_ITEMS_V4,
   DEFAULT_TITLE_ITEMS_V5,
+  DEFAULT_TITLE_ITEMS_V6,
   type DefaultShopItem,
 } from '../lib/pointsShopCatalog.js'
 import type { GameKey } from '../lib/gameStatsRules.js'
@@ -138,6 +139,12 @@ const DEFAULT_TITLE_SEED_FLAG_V4 = 'points.shop.titles.v4.seeded'
  * 独立 flag 补种，不复活管理员删掉的旧商品。
  */
 const DEFAULT_TITLE_SEED_FLAG_V5 = 'points.shop.titles.v5.seeded'
+
+/**
+ * 源初系列称号（第六批）：新增最高档 origin + etch / holo / monolith 三种铭牌工艺，
+ * 其中三件 hidden = true 只能由抽奖获得。独立 flag 幂等补种。
+ */
+const DEFAULT_TITLE_SEED_FLAG_V6 = 'points.shop.titles.v6.seeded'
 
 /** 默认商店目录：只在首次初始化时写入一次，之后管理员可自由增删改 */
 const DEFAULT_SHOP_ITEMS: readonly DefaultShopItem[] = [
@@ -279,6 +286,7 @@ async function ensureDefaultShop(): Promise<void> {
   await seedShopItems(DEFAULT_FRAME_SEED_FLAG_V4, DEFAULT_FRAME_ITEMS_V4)
   await seedShopItems(DEFAULT_TITLE_SEED_FLAG_V4, DEFAULT_TITLE_ITEMS_V4)
   await seedShopItems(DEFAULT_TITLE_SEED_FLAG_V5, DEFAULT_TITLE_ITEMS_V5)
+  await seedShopItems(DEFAULT_TITLE_SEED_FLAG_V6, DEFAULT_TITLE_ITEMS_V6)
 }
 
 /** 幂等播种：同一批商品只补一次，已存在（或被管理员删掉）的 key 不受影响 */
@@ -297,6 +305,7 @@ async function seedShopItems(flag: string, items: readonly DefaultShopItem[]): P
           cost: item.cost,
           rarity: item.rarity,
           payload: JSON.stringify(item.payload),
+          hidden: item.hidden ?? false,
           sortOrder: item.sortOrder,
         },
         update: {},
@@ -402,6 +411,7 @@ function itemDto(
     rarity: item.rarity,
     payload: parseShopPayload(item.payload),
     isActive: item.isActive,
+    hidden: item.hidden,
     sortOrder: item.sortOrder,
     owned: ownedIds.has(item.id),
     equipped:
@@ -414,7 +424,13 @@ export async function listShop(userId: number) {
   await ensureDefaultShop()
   const [items, owned, user] = await Promise.all([
     prisma.pointsShopItem.findMany({
-      where: { isActive: true },
+      where: {
+        OR: [
+          { isActive: true, hidden: false },
+          // 隐藏商品（仅抽奖获得）对已拥有者可见，否则无法在「我的称号」里佩戴
+          { hidden: true, owners: { some: { userId } } },
+        ],
+      },
       orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
     }),
     prisma.userPointsItem.findMany({ where: { userId }, select: { itemId: true } }),
@@ -893,6 +909,7 @@ export async function buyShopItem(userId: number, itemId: number) {
     const item = await tx.pointsShopItem.findUnique({ where: { id: itemId } })
     if (!item) throw new AppError('商品不存在', 404)
     if (!item.isActive) throw new AppError('该商品已下架', 400)
+    if (item.hidden) throw new AppError('该称号只能通过抽奖获得', 400, 'TITLE_HIDDEN')
 
     const owned = await tx.userPointsItem.findUnique({
       where: { userId_itemId: { userId, itemId } },

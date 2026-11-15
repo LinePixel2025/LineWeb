@@ -50,6 +50,9 @@ export const apiLimiterSkipPaths = [
   /^\/pets\/battle\/overview\/?$/,
   /^\/pets\/battle\/\d+\/?$/,
   /^\/pets\/battle\/\d+\/presence\/?$/,
+  // 统一邀请桥：无 WebSocket 时 5 秒轮询一次，由 battlePollLimiter 接管
+  /^\/pets\/battle\/invites\/?$/,
+  /^\/pets\/raid\/squad\/invites\/?$/,
   // 音乐中转：<audio> 的 Range 请求与封面图批量加载，由路由内 600/5min 按用户限流接管
   /^\/music\/(stream|image)\/?$/,
 ]

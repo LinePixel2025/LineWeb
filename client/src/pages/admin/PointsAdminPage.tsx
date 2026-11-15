@@ -41,6 +41,7 @@ const RARITY_LABELS: Record<ShopRarity, string> = {
   legendary: '传说',
   mythic: '神话',
   transcendent: '至臻',
+  origin: '源初',
 }
 
 const SHOP_TYPE_LABELS: Record<ShopItemType, string> = {
@@ -88,6 +89,9 @@ const TITLE_EFFECT_OPTIONS: ReadonlyArray<readonly [TitleEffectStyle, string]> =
   ['firmament', '苍穹星海'],
   ['genesis', '创世星环'],
   ['oblivion', '湮灭奇点'],
+  ['etch', '蚀刻（源初专用）'],
+  ['holo', '全息箔（源初专用）'],
+  ['monolith', '黑碑（源初专用）'],
 ]
 
 const RULE_FIELDS: Array<{ key: keyof GamePointRule; label: string; hint?: string }> = [
@@ -114,6 +118,7 @@ interface ShopForm {
   frame: AvatarFrameStyle
   effect: TitleEffectStyle
   isActive: boolean
+  hidden: boolean
   sortOrder: number
 }
 
@@ -130,6 +135,7 @@ const EMPTY_SHOP_FORM: ShopForm = {
   frame: 'gold',
   effect: 'classic',
   isActive: true,
+  hidden: false,
   sortOrder: 100,
 }
 
@@ -678,6 +684,7 @@ function ShopPanel({
         ? item.payload.effect
         : 'classic') as TitleEffectStyle,
       isActive: item.isActive,
+      hidden: item.hidden,
       sortOrder: item.sortOrder,
     })
     setFormOpen(true)
@@ -700,6 +707,7 @@ function ShopPanel({
           rarity: form.rarity,
           payload,
           isActive: form.isActive,
+          hidden: form.hidden,
           sortOrder: form.sortOrder,
         })
         onChanged(`已更新「${form.name}」`)
@@ -713,6 +721,7 @@ function ShopPanel({
           rarity: form.rarity,
           payload,
           isActive: form.isActive,
+          hidden: form.hidden,
           sortOrder: form.sortOrder,
         })
         onChanged(`已创建「${form.name}」`)
@@ -798,6 +807,7 @@ function ShopPanel({
                   <span className={`gh-badge ${item.isActive ? 'gh-badge--success' : ''}`}>
                     {item.isActive ? '上架' : '下架'}
                   </span>
+                  {item.hidden && <span className="gh-badge" style={{ marginLeft: 6 }}>隐藏</span>}
                 </td>
                 <td>{item.ownerCount}</td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -964,10 +974,10 @@ function ShopPanel({
                 </label>
               )}
 
-              {form.type === 'title' && (form.rarity === 'legendary' || form.rarity === 'mythic' || form.rarity === 'transcendent') && (
+              {form.type === 'title' && (form.rarity === 'legendary' || form.rarity === 'mythic' || form.rarity === 'transcendent' || form.rarity === 'origin') && (
                 <div className="gh-points-shop-form-row">
                   <label className="gh-form-field">
-                    {form.rarity === 'transcendent' ? '至臻特效' : form.rarity === 'mythic' ? '神话特效' : '传说特效'}
+                    {form.rarity === 'origin' ? '源初特效' : form.rarity === 'transcendent' ? '至臻特效' : form.rarity === 'mythic' ? '神话特效' : '传说特效'}
                     <select
                       className="gh-input"
                       value={form.effect}
@@ -1003,6 +1013,14 @@ function ShopPanel({
                   onChange={(event) => setForm({ ...form, isActive: event.target.checked })}
                 />
                 上架（用户可见可购买）
+              </label>
+              <label className="gh-points-checkbox">
+                <input
+                  type="checkbox"
+                  checked={form.hidden}
+                  onChange={(event) => setForm({ ...form, hidden: event.target.checked })}
+                />
+                隐藏（仅抽奖获得，商店只对已拥有者展示）
               </label>
             </div>
             <div className="gh-dialog-actions">

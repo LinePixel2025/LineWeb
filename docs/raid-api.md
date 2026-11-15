@@ -130,3 +130,26 @@ WebSocket 事件（复用 `/ws/chat`，`chatHub.sendToUser`）：
 - 头盔 / 护甲维修每次 `耐久上限 × 0.95`，最低初始上限 30%；
 - 行动进行中禁止存取 / 回收 / 穿脱 / 维修 / 开箱，先撤离或放弃；
 - 交易行端点已删除（`/api/pets/raid/market*` 返回 404），表保留仅作历史数据。
+
+## 3. 藏品室（2026-11-15）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/pets/raid/collection` | 自己的藏品室；不存在时 `exists:false` 并返回默认房间 |
+| PUT | `/api/pets/raid/collection` | `{ title?, intro?, isPublic? }` 改房间信息 |
+| POST | `/api/pets/raid/collection/collect` | `{ itemKey }` 从仓库收入 1 件藏品；重复藏品折算积分 |
+| PUT | `/api/pets/raid/collection/display` | `{ slots: [{ slot, itemKey, note? }] }` 0–11 号展位布展 |
+| GET | `/api/pets/raid/collections` | 公开藏品室巡礼列表（含封面、进度、访问数） |
+| GET | `/api/pets/raid/collections/:userId` | 参观别人的藏品室；私密且非本人 → 404 |
+
+规则：
+
+- 藏品共 8 件，`kind: "collectible"`，`stackMax: 1`；**不可回收 / 不可取出 / 不可挂交易行 / 不可作为公司抵押**，只能进藏品室；
+- 掉落是独立随机流（`collectible:<containerId>` 子 seed），概率 `0.6% + (档位-1)×0.12% + Boss 0.8% + PvP 0.1%`，且受物品 `minLootTier` 限制；
+- 重复藏品收入时按 `duplicatePoints` 折算积分，`RaidCollectible` 仍只保留一行（图鉴不重复）；
+- 12 个展位、同一展位 / 同一藏品不可重复；布展只接受已拥有藏品，非法输入 400；
+- 公开房间访问数按 `userId` 30 分钟去重；私密房间只有本人可读。
+
+## 4. 统一邀请
+
+组队邀请仍发 `raid:squad:invite` / `raid:squad:invite:removed`，同时由 `gameInviteBridge` 发统一的 `game:invite` / `game:invite:removed`（`game: "raid"`、`kind: "squad"`、`squadId`、`expiresAt`）。邀请 5 分钟过期；`GET /api/pets/raid/squad/invites` 返回 `{ incoming, outgoing }` 供无 WS 时轮询。

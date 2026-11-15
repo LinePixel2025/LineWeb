@@ -53,6 +53,8 @@ export interface RaidItemInfoDto {
   sellUnit: number
   stackMax: number
   description: string
+  /** 绑定藏品：不可回收 / 不可取出 / 不能进公司货栈 */
+  collectible: boolean
 }
 
 function itemInfo(itemKey: string): RaidItemInfoDto {
@@ -67,6 +69,7 @@ function itemInfo(itemKey: string): RaidItemInfoDto {
     sellUnit: raidSellPrice(itemKey, 1),
     stackMax: def?.stackMax ?? 1,
     description: def?.description ?? '',
+    collectible: def?.kind === 'collectible',
   }
 }
 
@@ -255,7 +258,7 @@ async function upsertWarehouseTx(tx: Db, userId: number, itemKey: string, amount
   })
 }
 
-async function decrementWarehouseTx(
+export async function decrementWarehouseTx(
   tx: Db,
   userId: number,
   itemKey: string,
@@ -296,6 +299,37 @@ async function decrementBagSlotTx(
 export async function getRaidWarehouseUsed(userId: number, tx: Db = prisma): Promise<number> {
   const rows = await tx.raidInventoryItem.findMany({ where: { userId }, select: { amount: true } })
   return rows.reduce((sum, row) => sum + Math.max(0, row.amount), 0)
+}
+
+export interface GrantRaidItemResult {
+  stored: boolean
+  /** 仓库满时按官方回收价折算的积分（未折算为 0） */
+  convertedPoints: number
+}
+
+/**
+ * 系统途径发放搜打撤物品（抽奖 / 活动等）：与商店购买一样直接入仓，但**尊重仓库容量**。
+ * 装不下时按官方回收价折算积分；调用方负责在事务内发积分。
+ * 藏品不走这里（应进入藏品室）。
+ */
+export async function grantRaidItemTx(
+  tx: Db,
+  userId: number,
+  itemKey: string,
+  amount: number = 1,
+): Promise<GrantRaidItemResult> {
+  const def = getRaidItem(itemKey)
+  if (!def) throw new AppError('没有这件物品', 404)
+  if (def.kind === 'collectible') throw new AppError('藏品不能进入普通仓库发放通道', 400)
+  const count = Math.max(1, Math.trunc(amount))
+  const storage = await ensureRaidStorageTx(tx, userId)
+  const info = storageLevelInfo(storage.level)
+  const used = await getRaidWarehouseUsed(userId, tx)
+  if (used + count > info.capacity) {
+    return { stored: false, convertedPoints: Math.max(1, raidSellPrice(itemKey, count)) }
+  }
+  await upsertWarehouseTx(tx, userId, itemKey, count)
+  return { stored: true, convertedPoints: 0 }
 }
 
 /* ============================================================
@@ -381,6 +415,9 @@ export async function withdrawRaidItems(userId: number, input: RaidWithdrawInput
   const amount = Math.max(1, Math.trunc(input.amount))
   const def = getRaidItem(input.itemKey)
   if (!def) throw new AppError('没有这件物品', 404)
+  if (def.kind === 'collectible') {
+    throw new AppError('藏品不能取出，请收入藏品室', 400, 'RAID_COLLECTIBLE_BOUND')
+  }
   await prisma.$transaction(async (tx) => {
     const loadout = await loadRaidLoadoutTx(tx, userId)
     const capacity = input.container === 'rig'
@@ -426,6 +463,9 @@ export async function recycleRaidItems(userId: number, input: RaidRecycleInput):
   const amount = Math.max(1, Math.trunc(input.amount))
   const def = getRaidItem(input.itemKey)
   if (!def) throw new AppError('没有这件物品', 404)
+  if (def.kind === 'collectible') {
+    throw new AppError('藏品不能回收，请收入藏品室', 400, 'RAID_COLLECTIBLE_BOUND')
+  }
   const value = raidSellPrice(input.itemKey, amount)
   if (value <= 0) throw new AppError('这件物品无法回收', 400)
   const result = await prisma.$transaction(async (tx) => {
@@ -460,6 +500,8 @@ export interface RaidRecycleAllInput {
 export interface RaidRecycleAllResult {
   points: number
   count: number
+  /** 因是绑定藏品而跳过的件数（不会被一键回收误卖） */
+  skippedCollectibles: number
   balance: number
   view: RaidStorageViewDto
 }
@@ -478,8 +520,14 @@ export async function recycleAllRaidItems(userId: number, input: RaidRecycleAllI
         for (const item of level.upgradeItems) upgradeKeys.add(item.itemKey)
       }
     }
-    const recyclable = rows.filter((row) => !upgradeKeys.has(row.itemKey))
-    if (recyclable.length === 0) throw new AppError('除升级材料外没有可回收的物品', 400)
+    const recyclable = rows.filter((row) => (
+      !upgradeKeys.has(row.itemKey)
+      && getRaidItem(row.itemKey)?.kind !== 'collectible'
+    ))
+    const skippedCollectibles = rows
+      .filter((row) => getRaidItem(row.itemKey)?.kind === 'collectible')
+      .reduce((sum, row) => sum + row.amount, 0)
+    if (recyclable.length === 0) throw new AppError('除升级材料与藏品外没有可回收的物品', 400)
     let total = 0
     let count = 0
     for (const row of recyclable) {
@@ -495,10 +543,16 @@ export async function recycleAllRaidItems(userId: number, input: RaidRecycleAllI
       reason: 'raid_recycle',
       note: `一键回收 ${count} 件仓库物品`,
     })
-    return { points: total, count, balance: award.balance }
+    return { points: total, count, skippedCollectibles, balance: award.balance }
   })
   const view = await buildStorageView(userId)
-  return { points: result.points, count: result.count, balance: result.balance, view }
+  return {
+    points: result.points,
+    count: result.count,
+    skippedCollectibles: result.skippedCollectibles,
+    balance: result.balance,
+    view,
+  }
 }
 
 /* ============================================================
@@ -569,6 +623,9 @@ export async function recycleRaidItemsBatch(userId: number, input: RaidRecycleBa
     for (const entry of input.items) {
       const def = getRaidItem(entry.key)
       if (!def) throw new AppError(`回收清单里有未知物品：${entry.key}`, 400)
+      if (def.kind === 'collectible') {
+        throw new AppError(`${def.name} 是绑定藏品，不能回收，请收入藏品室`, 400, 'RAID_COLLECTIBLE_BOUND')
+      }
       const from = entry.from ?? 'warehouse'
       const amount = entry.amount === undefined ? null : Math.trunc(entry.amount)
       if (amount !== null && (!Number.isInteger(amount) || amount < 1)) {

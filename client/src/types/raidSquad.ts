@@ -52,6 +52,8 @@ export interface RaidSquadInvite {
   toUserId: number
   squadId: string
   createdAt: string
+  /** 统一邀请桥的过期时间（旧服务端可能不返回） */
+  expiresAt?: string
 }
 
 export interface RaidSquadFriend {

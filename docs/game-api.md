@@ -1045,3 +1045,38 @@ cd client && npx vitest run src/lib/games/__tests__/parkour.test.ts src/lib/game
 ### 12.4 兼容说明
 
 本文件第 1 节「不提供战绩历史、排行榜」为旧口径，现已被本节替代；对局/邀请仍为内存态，重启失效。
+
+# 十三、统一游戏邀请（棋盘 + 宠物对决 + 搜打撤组队，2026-11-15）
+
+## 13.1 事件
+
+所有来源复用同一对事件名，靠 `invite.game` 判别：
+
+| 事件 | 载荷 | 说明 |
+|---|---|---|
+| `game:invite` | `{ invite }` | `invite.game`: `2048`/`doudizhu`/…/`petbattle`/`raid`；`kind`: `match`/`squad`；`matchId` 或 `squadId`；`createdAt` / `expiresAt` |
+| `game:invite:removed` | `{ inviteId, game?, reason? }` | `reason`: `accepted`/`declined`/`cancelled`/`expired` |
+| `petbattle:started` | `{ battleId }` | 宠物对决应战成功 |
+| `petbattle:update` | `{ battleId, version? }` | 每回合 / 结算，客户端按 battleId 刷新 |
+| `raid:squad:started` | `{ squad }` | 搜打撤全员出击 |
+
+客户端 `GameContext` 用 `${game}:${id}` 组合键去重；`GameInviteToast` 的倒计时读 `expiresAt`，拒绝时把 `game` 一起传给 `respondInvite`。
+
+## 13.2 端点
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/pets/battle/invites` | `{ incoming, outgoing }` 宠物对决待处理邀请 |
+| POST | `/api/pets/battle/presence` | 宠物大厅在线心跳（90 秒 TTL） |
+| GET | `/api/pets/raid/squad/invites` | `{ incoming, outgoing }` 组队邀请 |
+| POST | `/api/pets/battle/:id/respond` | `{ accept }` 应战 / 拒绝；接受即 `active` |
+| POST | `/api/pets/battle/:id/cancel` | 发起方撤回 |
+| POST | `/api/pets/raid/squad/respond` | `{ inviteId, accept }` |
+| POST | `/api/pets/raid/squad/cancel` | `{ inviteId }` |
+
+## 13.3 在线与忙碌
+
+- 在线唯一口径 `isGameUserAvailable(userId) = chatHub.isUserOnline || gamePresence.isGamePresent`；
+- 宠物对决的进程内忙碌集合在启动时从 `PetBattle` 的 `pending/active/settling` 恢复，`registerGameModule` 让棋盘游戏判定其为「对局中」；
+- 搜打撤仍用 `raidSquadInUse` 探针，组队邀请与出击会阻止其他游戏邀请；
+- 邀请接受 / 拒绝 / 取消 / 过期都发 `game:invite:removed`，避免客户端只靠本地超时清理。

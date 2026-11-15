@@ -68,7 +68,7 @@ import { startNekoAccountSync, stopNekoAccountSync } from './services/nekoAccoun
 import { startLineWebBigGroupSync, stopLineWebBigGroupSync } from './services/nekoBigGroup.js'
 import { startGameSweeper } from './services/gameService.js'
 import { startStockEventEngine, stopStockEventEngine } from './services/stockEventService.js'
-import { startPetBattleSweeper, stopPetBattleSweeper } from './services/petBattleService.js'
+import { initPetBattleBusy, startPetBattleSweeper, stopPetBattleSweeper } from './services/petBattleService.js'
 import { recomputeAllLeaderTitles } from './services/gameLeaderTitleService.js'
 import { syncDriveFiles } from './services/storageSync.js'
 import { deduplicateDriveFiles } from './services/dedupDriveFiles.js'
@@ -464,6 +464,15 @@ app.get('/api', (_req, res) => {
       battleAction: { method: 'POST', path: '/api/pets/battle/:id/action', auth: true, description: '行动 { skillKey, version }（30 秒回合超时自动普攻，连续 3 次超时判负）' },
       battlePresence: { method: 'POST', path: '/api/pets/battle/:id/presence', auth: true, description: '对战心跳（客户端每 10 秒一次；90 秒无心跳判负）' },
       battleForfeit: { method: 'POST', path: '/api/pets/battle/:id/forfeit', auth: true, description: '认输（结算积分转移与装备掉落）' },
+      battleInvites: { method: 'GET', path: '/api/pets/battle/invites', auth: true, description: '统一邀请桥：宠物对决待处理邀请 { incoming, outgoing }' },
+      battlePresenceLobby: { method: 'POST', path: '/api/pets/battle/presence', auth: true, description: '宠物大厅在线心跳（90 秒 TTL）' },
+      raidSquadInvites: { method: 'GET', path: '/api/pets/raid/squad/invites', auth: true, description: '统一邀请桥：搜打撤组队待处理邀请 { incoming, outgoing }' },
+      raidCollection: { method: 'GET', path: '/api/pets/raid/collection', auth: true, description: '我的藏品室（展位 / 图鉴 / 仓库候选）' },
+      raidCollectionUpdate: { method: 'PUT', path: '/api/pets/raid/collection', auth: true, description: '改藏品室 { title, intro, isPublic }' },
+      raidCollectionCollect: { method: 'POST', path: '/api/pets/raid/collection/collect', auth: true, description: '把仓库藏品收入藏品室 { itemKey }（重复折算积分）' },
+      raidCollectionDisplay: { method: 'PUT', path: '/api/pets/raid/collection/display', auth: true, description: '布展 { slots:[{slot,itemKey,note?}] }（0–11 号展位）' },
+      raidCollections: { method: 'GET', path: '/api/pets/raid/collections', auth: true, description: '公开藏品室巡礼列表' },
+      raidCollectionView: { method: 'GET', path: '/api/pets/raid/collections/:userId', auth: true, description: '参观指定用户藏品室（私密 → 404）' },
       market: { method: 'GET', path: '/api/pets/market', auth: true, description: '交易行：在售挂单 / 我的挂单 / 最近成交 / 参考价' },
       marketList: { method: 'POST', path: '/api/pets/market/list', auth: true, description: '挂单 { itemType, key, price }（价格需在参考价 50%–150%）' },
       marketBuy: { method: 'POST', path: '/api/pets/market/:id/buy', auth: true, description: '购买挂单（买家扣分、卖家到账 95%，所有权转移）' },
@@ -833,6 +842,7 @@ startGameSweeper()
 startStockEventEngine()
 
 // 宠物对战：回合超时 / 掉线判负 / 过期邀请清理（每 5 秒，unref）
+initPetBattleBusy().catch((err) => console.warn('[petBattle] 忙碌集合恢复失败:', err))
 startPetBattleSweeper()
 
 // 网页反代：统计批量落库（每 15 秒）+ 黑名单缓存预热（失败只告警）

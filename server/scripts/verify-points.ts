@@ -32,6 +32,7 @@ import {
   DEFAULT_FRAME_ITEMS_V4,
   DEFAULT_TITLE_ITEMS_V4,
   DEFAULT_TITLE_ITEMS_V5,
+  DEFAULT_TITLE_ITEMS_V6,
 } from '../src/lib/pointsShopCatalog.js'
 import {
   COMPANY_LIMITS,
@@ -244,14 +245,15 @@ assertEqual(sanitizeAvatarFrame('rainbow'), null, '未知头像框样式回退 n
 assertEqual(sanitizeAvatarFrame(''), null, '空头像框样式回退 null')
 assertEqual(sanitizeAvatarFrame(123), null, '非字符串头像框回退 null')
 
-assertEqual(TITLE_EFFECT_STYLES.length, 17, '传说 / 神话 / 至臻特效共 17 种样式')
+assertEqual(TITLE_EFFECT_STYLES.length, 20, '传说 / 神话 / 至臻 / 源初特效共 20 种样式')
 assertEqual(
   [...TITLE_EFFECT_STYLES],
   [
     'classic', 'stardust', 'flame', 'aurora', 'thunder', 'nova', 'prism', 'void', 'meteor', 'blossom',
     'singularity', 'zenith', 'eternity', 'chaos', 'firmament', 'genesis', 'oblivion',
+    'etch', 'holo', 'monolith',
   ],
-  '特效白名单依次为 既有 8 + 幻彩 2 + 神话 5 + 至臻 2',
+  '特效白名单依次为 既有 8 + 幻彩 2 + 神话 5 + 至臻 2 + 源初 3',
 )
 for (const style of TITLE_EFFECT_STYLES) {
   assertEqual(sanitizeTitleEffect(style), style, `特效 ${style} 白名单内原样返回`)
@@ -262,12 +264,15 @@ for (const style of ['singularity', 'zenith', 'eternity', 'chaos', 'firmament'])
 for (const style of ['genesis', 'oblivion']) {
   assertEqual(sanitizeTitleEffect(style), style, `至臻特效 ${style} 合法`)
 }
+for (const style of ['etch', 'holo', 'monolith']) {
+  assertEqual(sanitizeTitleEffect(style), style, `源初特效 ${style} 合法`)
+}
 assertEqual(sanitizeTitleEffect('nope'), null, '未知特效回退 null')
 assertEqual(sanitizeTitleEffect(123), null, '非字符串特效回退 null')
 assertEqual(sanitizeTitleEffect(null), null, 'null 特效回退 null')
 
 /* --- 商店种子 v4（神话系列）：稀有度合法 / 价格区间 / payload 命中新 key --- */
-const SHOP_RARITIES = ['common', 'rare', 'epic', 'legendary', 'mythic', 'transcendent']
+const SHOP_RARITIES = ['common', 'rare', 'epic', 'legendary', 'mythic', 'transcendent', 'origin']
 
 const v4FrameKeys = new Set<string>()
 for (const item of DEFAULT_FRAME_ITEMS_V4) {
@@ -363,6 +368,42 @@ assert(
   DEFAULT_TITLE_ITEMS_V5.every((item) => item.rarity !== 'transcendent' || item.cost >= 20000),
   '至臻称号价格明显高于神话档（≥20000）',
 )
+
+/* --- 商店种子 v6（源初系列）：最高档 origin + etch / holo / monolith + 隐藏称号 --- */
+const v6TitleKeys = new Set<string>()
+const v6TitleEffects = new Set<string>()
+let v6Purchasable = 0
+let v6Hidden = 0
+for (const item of DEFAULT_TITLE_ITEMS_V6) {
+  assert(item.type === 'title', `v6 称号 ${item.key} 类型为 title`)
+  assert(item.key.startsWith('title_'), `v6 称号 ${item.key} 沿用 title_ 前缀`)
+  assert(!v6TitleKeys.has(item.key), `v6 称号 key 唯一：${item.key}`)
+  v6TitleKeys.add(item.key)
+  assert(SHOP_RARITIES.includes(item.rarity), `v6 称号 ${item.key} 稀有度在合法集合内`)
+  assert(item.rarity === 'origin', `v6 称号 ${item.key} 使用最高档 origin`)
+  assert(item.sortOrder >= 118, `v6 称号 ${item.key} 排序接在 v5 之后`)
+  const effect = sanitizeTitleEffect(item.payload.effect)
+  assert(effect !== null, `v6 称号 ${item.key} 的 effect 命中白名单`)
+  v6TitleEffects.add(effect as string)
+  assert(sanitizeTitleIcon(item.payload.icon) !== '', `v6 称号 ${item.key} 有图标`)
+  assert(
+    typeof item.payload.color === 'string' && sanitizeTitleColor(item.payload.color) === item.payload.color,
+    `v6 称号 ${item.key} 颜色合法`,
+  )
+  if (item.hidden) {
+    v6Hidden += 1
+    assertEqual(item.cost, 0, `v6 隐藏称号 ${item.key} 不可购买（cost 0）`)
+  } else {
+    v6Purchasable += 1
+    assert(item.cost >= 80000, `v6 可购买称号 ${item.key} 价格 ≥ 80000`)
+  }
+}
+assertEqual(v6TitleKeys.size, 7, 'v6 新增 7 条称号')
+assertEqual(v6Purchasable, 4, 'v6 有 4 条可购买源初称号')
+assertEqual(v6Hidden, 3, 'v6 有 3 条隐藏称号（仅抽奖获得）')
+for (const effect of ['etch', 'holo', 'monolith']) {
+  assert(v6TitleEffects.has(effect), `v6 称号覆盖源初特效 ${effect}`)
+}
 
 assertEqual(EMOJI_PACK_KEYS, ['nailong', 'felyne', 'twemoji'], '付费表情包 key 与客户端商店一致')
 

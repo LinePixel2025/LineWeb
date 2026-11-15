@@ -30,9 +30,11 @@ import {
   cancelBattle,
   forfeitBattleByUser,
   getBattle,
+  getBattleInvites,
   getBattleOverview,
   heartbeatBattle,
   inviteBattle,
+  markPetBattlePresence,
   performBattleAction,
   respondBattle,
 } from '../services/petBattleService.js'
@@ -45,6 +47,7 @@ import {
 import { startRaid, startSquadRaid } from '../services/raidRunService.js'
 import {
   cancelInvite,
+  getSquadInvites,
   getSquadState,
   getSquadView,
   inviteToSquad,
@@ -70,6 +73,13 @@ import {
 } from '../services/raidStorageService.js'
 import { equipRaidGear, openRaidCache, recycleRaidGear, repairRaidGearForUser } from '../services/raidGearService.js'
 import { buyRaidShopItem, getRaidShopView } from '../services/raidShopService.js'
+import {
+  collectRaidItem,
+  getCollectionView,
+  listPublicCollections,
+  setCollectionDisplay,
+  updateCollectionRoom,
+} from '../services/raidCollectionService.js'
 
 const router = Router()
 router.use(authenticate)
@@ -256,6 +266,20 @@ const raidRecycleBatchSchema = z.object({
   { message: '没有选择任何要回收的东西' },
 )
 const raidStorageUpgradeSchema = z.object({}).strict()
+const raidCollectionCollectSchema = z.object({ itemKey: z.string().min(1).max(40) })
+const raidCollectionDisplaySchema = z.object({
+  slots: z.array(z.object({
+    slot: z.coerce.number().int().min(0).max(11),
+    itemKey: z.string().min(1).max(40),
+    note: z.string().max(40).optional(),
+  })).max(12),
+})
+const raidCollectionRoomSchema = z.object({
+  title: z.string().max(20).optional(),
+  intro: z.string().max(80).optional(),
+  isPublic: z.boolean().optional(),
+})
+const raidCollectionUserParamSchema = z.object({ userId: z.coerce.number().int().positive() })
 const raidGearEquipSchema = z.object({
   slot: z.enum(['helmet', 'armor', 'boots', 'backpack', 'rig']),
   /** 实例 id（推荐）：装备是同一型号也能有多件的实例物品 */
@@ -443,6 +467,11 @@ router.get('/raid/squad/state', battlePollLimiter, asyncHandler(async (req: Requ
   res.json(await getSquadState(currentUserId(req)))
 }))
 
+// GET /api/pets/raid/squad/invites — 统一邀请桥的轻量列表
+router.get('/raid/squad/invites', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(getSquadInvites(currentUserId(req)))
+}))
+
 // POST /api/pets/raid/squad/invite — { userId } 邀请好友（无队伍时自动建队并成为房主）
 router.post('/raid/squad/invite', battleInviteLimiter, asyncHandler(async (req: Request, res: Response) => {
   const input = parseInput(raidSquadInviteSchema, req.body ?? {})
@@ -531,6 +560,43 @@ router.post('/raid/storage/upgrade', marketWriteLimiter, asyncHandler(async (req
   res.json(await upgradeRaidStorage(currentUserId(req)))
 }))
 
+/* ---------- 搜打撤藏品室 ---------- */
+
+// GET /api/pets/raid/collection — 自己的藏品室（含仓库可收入藏品）
+router.get('/raid/collection', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const userId = currentUserId(req)
+  res.json(await getCollectionView(userId, userId))
+}))
+
+// PUT /api/pets/raid/collection — { title?, intro?, isPublic? }
+router.put('/raid/collection', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidCollectionRoomSchema, req.body ?? {})
+  res.json(await updateCollectionRoom(currentUserId(req), input))
+}))
+
+// POST /api/pets/raid/collection/collect — { itemKey } 仓库藏品收入藏品室（重复折算积分）
+router.post('/raid/collection/collect', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidCollectionCollectSchema, req.body ?? {})
+  res.status(201).json(await collectRaidItem(currentUserId(req), input.itemKey))
+}))
+
+// PUT /api/pets/raid/collection/display — { slots: [{ slot, itemKey, note? }] } 布展
+router.put('/raid/collection/display', marketWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const input = parseInput(raidCollectionDisplaySchema, req.body ?? {})
+  res.json(await setCollectionDisplay(currentUserId(req), input.slots))
+}))
+
+// GET /api/pets/raid/collections — 公开藏品室列表
+router.get('/raid/collections', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await listPublicCollections(currentUserId(req)))
+}))
+
+// GET /api/pets/raid/collections/:userId — 参观（私密仅主人可见）
+router.get('/raid/collections/:userId', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const { userId } = parseInput(raidCollectionUserParamSchema, req.params)
+  res.json(await getCollectionView(userId, currentUserId(req)))
+}))
+
 /* ---------- 搜打撤官方商店 / 装备 ---------- */
 
 // GET /api/pets/raid/shop — 官方商店（装备全档上架 + 消耗品 + 箱子；4 级及以上有仓库等级门槛与溢价）
@@ -578,6 +644,17 @@ router.post('/raid/gear/open-cache', marketWriteLimiter, asyncHandler(async (req
 // GET /api/pets/battle/overview — 进行中 / 邀请 / 历史 / 战绩 / 可挑战对手
 router.get('/battle/overview', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
   res.json(await getBattleOverview(currentUserId(req)))
+}))
+
+// GET /api/pets/battle/invites — 统一邀请桥的轻量列表（无 WS 时轮询）
+router.get('/battle/invites', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
+  res.json(await getBattleInvites(currentUserId(req)))
+}))
+
+// POST /api/pets/battle/presence — 大厅在线心跳
+router.post('/battle/presence', battlePollLimiter, asyncHandler(async (req: Request, res: Response) => {
+  markPetBattlePresence(currentUserId(req))
+  res.json({ ok: true })
 }))
 
 // POST /api/pets/battle/invite — { targetUserId }

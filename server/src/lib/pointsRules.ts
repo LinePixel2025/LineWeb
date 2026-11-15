@@ -325,11 +325,13 @@ export function sanitizeAvatarFrame(value: unknown): AvatarFrameStyle | null {
 }
 
 /**
- * 传说称号动态特效（classic＝现有金色流光默认特效；客户端 CSS 类名后缀 gh-title-badge--fx-*，共 17 种）。
+ * 传说称号动态特效（classic＝现有金色流光默认特效；客户端 CSS 类名后缀 gh-title-badge--fx-*，共 20 种）。
  * 炸裂系列：nova（超新星爆发）/ prism（棱镜虹光）/ void（虚空黑洞）/ singularity（奇点坍缩）。
  * 幻彩系列：meteor（流星拖尾）/ blossom（花瓣飘落）/ zenith（极巅光柱）/ eternity（永恒之环）/
  *          chaos（混沌碎片）/ firmament（苍穹星海）。
  * 至臻系列（2026-11-10）：genesis（创世星环）/ oblivion（湮灭奇点）——只给至臻稀有度称号使用。
+ * 源初系列（2026-11-15）：etch（蚀刻）/ holo（全息箔）/ monolith（黑碑）——只给 origin（源初）档使用，
+ *   刻意不使用光环 / 旋转锥形 / 粒子，改用铭牌表面工艺（见 points.css）。
  * 客户端 types/points.ts 保留一份顺序一致的拷贝，titleEffects.test.ts 会断言两边一致。
  */
 export const TITLE_EFFECT_STYLES = [
@@ -337,6 +339,7 @@ export const TITLE_EFFECT_STYLES = [
   'meteor', 'blossom',
   'singularity', 'zenith', 'eternity', 'chaos', 'firmament',
   'genesis', 'oblivion',
+  'etch', 'holo', 'monolith',
 ] as const
 export type TitleEffectStyle = typeof TITLE_EFFECT_STYLES[number]
 

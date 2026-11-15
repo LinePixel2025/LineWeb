@@ -28,6 +28,8 @@ interface RaidCanvasProps {
   onFlush: (events: RaidEvent[]) => void
   /** HUD 浮层（由页面传入，渲染在舞台内、画布之上） */
   children?: ReactNode
+  /** 退出沉浸并回到 LineWeb（对局保留在服务端，可从大厅继续） */
+  onExitToSite?: () => void
 }
 
 interface VirtualStickProps {
@@ -208,6 +210,7 @@ export default function RaidCanvas({
   onSnapshot,
   onFlush,
   children,
+  onExitToSite,
 }: RaidCanvasProps) {
   const stageRef = useRef<HTMLDivElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -587,6 +590,17 @@ export default function RaidCanvas({
         {children}
 
         <div className="gh-raid-toolbar">
+          <button
+            type="button"
+            className="gh-raid-tool gh-raid-tool--home"
+            title="退出沉浸并回到 LineWeb；行动会保留"
+            onClick={() => {
+              if (immersive) toggleImmersive()
+              onExitToSite?.()
+            }}
+          >
+            ⌂ LineWeb
+          </button>
           <button type="button" className="gh-raid-tool" {...onTap(cycleQuality)}>
             {QUALITY_LABELS[quality]}
           </button>

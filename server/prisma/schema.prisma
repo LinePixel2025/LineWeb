@@ -85,6 +85,7 @@ model User {
   raidInventoryItems     RaidInventoryItem[] // 搜打撤仓库物品（按物品聚合）
   raidGears              RaidGear[] // 搜打撤专属装备（头盔 / 护甲 / 战靴 / 背包 / 胸挂）
   raidBagItems           RaidBagItem[] // 搜打撤容器（背包 / 胸挂 / 安全箱）
+  raidCollectionRoom     RaidCollectionRoom? // 搜打撤藏品室（每用户一间）
   raidMarketListingsSold   RaidMarketListing[] @relation("RaidMarketListingSeller") // 已停用（2026-11-03 交易行改为官方商店）
   raidMarketListingsBought RaidMarketListing[] @relation("RaidMarketListingBuyer") // 已停用（2026-11-03 交易行改为官方商店）
   farmSeedListings       FarmSeedListing[]     @relation("FarmSeedSeller") // 我挂出的种子
@@ -810,18 +811,22 @@ model PointsConfig {
 
 /**
  * 积分商店商品：称号（type=title）、专属表情包（type=emoji）与头像框（type=avatar_frame）
- * payload 为 JSON：称号 { color, icon }；表情包 { pack }；头像框 { frame, color }
+ * payload 为 JSON：称号 { color, icon, effect }；表情包 { pack }；头像框 { frame, color }
+ *
+ * hidden = true 的商品只通过抽奖等系统途径发放：商店列表仅对已拥有者可见，
+ * 且 buyShopItem 显式拒绝购买。
  */
 model PointsShopItem {
   id                    Int              @id @default(autoincrement())
   key                   String           @unique // 稳定标识，管理员可改展示名但不改 key
-  type                  String // title | emoji
+  type                  String // title | emoji | avatar_frame
   name                  String
   description           String?
   cost                  Int
-  rarity                String           @default("common") // common | rare | epic | legendary | mythic
+  rarity                String           @default("common") // common | rare | epic | legendary | mythic | transcendent | origin
   payload               String? // JSON
   isActive              Boolean          @default(true) @map("is_active")
+  hidden                Boolean          @default(false) // 仅抽奖获得 / 不在商店出售
   sortOrder             Int              @default(0) @map("sort_order")
   createdAt             DateTime         @default(now()) @map("created_at")
   updatedAt             DateTime         @updatedAt @map("updated_at")
@@ -1559,6 +1564,9 @@ model LotteryAccount {
   pity         Int      @default(0)
   totalDraws   Int      @default(0) @map("total_draws")
   lastFreeDate String?  @map("last_free_date")
+  /** 每日 30 抽上限：上海时区日期键与当日已抽次数（十连按 10 次计） */
+  dailyDateKey String?  @map("daily_date_key")
+  dailyDraws   Int      @default(0) @map("daily_draws")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -1800,6 +1808,46 @@ model RaidBagItem {
   @@unique([userId, container, slotIndex])
   @@index([userId, itemKey])
   @@map("raid_bag_items")
+}
+
+/**
+ * 搜打撤藏品室（每用户一间）。藏品从仓库移入后不再参与回收 / 取出 / 公司货栈，
+ * 只用于布展与参观；isPublic=false 时仅主人可见。
+ */
+model RaidCollectionRoom {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @unique @map("user_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title        String   @default("我的藏品室")
+  intro        String   @default("")
+  isPublic     Boolean  @default(true) @map("is_public")
+  visits       Int      @default(0)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  collectibles RaidCollectible[]
+
+  @@map("raid_collection_rooms")
+}
+
+/**
+ * 藏品实例：每用户每种唯一（同一藏品重复获得只折算积分，不建第二行）。
+ * displaySlot 0..11；null = 未展出。itemKey 指向 lib/raidRun.ts 的 collectible 条目。
+ */
+model RaidCollectible {
+  id          Int      @id @default(autoincrement())
+  roomId      Int      @map("room_id")
+  room        RaidCollectionRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  itemKey     String   @map("item_key")
+  source      String   @default("raid") // raid | lottery
+  displaySlot Int?     @map("display_slot")
+  note        String   @default("")
+  obtainedAt  DateTime @default(now()) @map("obtained_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([roomId, itemKey])
+  @@index([roomId, displaySlot])
+  @@map("raid_collectibles")
 }
 
 // === Lineweb 危机（周期性积分回收 + 公共银行，2026-11-04） ===

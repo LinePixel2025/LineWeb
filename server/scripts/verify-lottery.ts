@@ -9,6 +9,7 @@
 
 import {
   LOTTERY_COSTS,
+  LOTTERY_DAILY_LIMIT,
   LOTTERY_PRIZES,
   LOTTERY_PRIZE_LIST,
   LOTTERY_RARITY_LIST,
@@ -17,9 +18,14 @@ import {
   OUTFIT_FALLBACK_POINTS,
   PITY_LIMIT,
   TEN_DRAW_COUNT,
+  canDrawWithinDaily,
   isEpicOrBetter,
   isRareOrBetter,
+  lotteryCollectiblePool,
   lotteryCost,
+  lotteryRaidItemExpectedValue,
+  lotteryRaidItemPool,
+  resolveDailyQuota,
   nextPityAfterDraw,
   outfitFallbackPoints,
   pickPrize,
@@ -59,7 +65,7 @@ function seededRng(seed: number): () => number {
   }
 }
 
-const ALL_RARITIES: readonly LotteryRarity[] = ['common', 'rare', 'epic', 'legendary']
+const ALL_RARITIES: readonly LotteryRarity[] = ['common', 'rare', 'epic', 'legendary', 'mythic']
 
 /* ============================================================
    奖品目录
@@ -75,8 +81,8 @@ const ALL_RARITIES: readonly LotteryRarity[] = ['common', 'rare', 'epic', 'legen
   assertEqual(LOTTERY_TOTAL_WEIGHT, 100, '导出的 LOTTERY_TOTAL_WEIGHT = 100')
   assertEqual(
     LOTTERY_WEIGHTS_BY_RARITY,
-    { common: 78, rare: 18, epic: 3.5, legendary: 0.5 },
-    '各稀有度权重 78 / 18 / 3.5 / 0.5',
+    { common: 77.6, rare: 18, epic: 3.6, legendary: 0.5, mythic: 0.3 },
+    '各稀有度权重 77.6 / 18 / 3.6 / 0.5 / 0.3',
   )
 
   const keys = new Set(LOTTERY_PRIZES.map((prize) => prize.key))
@@ -89,7 +95,11 @@ const ALL_RARITIES: readonly LotteryRarity[] = ['common', 'rare', 'epic', 'legen
   )
 
   const types = [...new Set(LOTTERY_PRIZES.map((prize) => prize.type))].sort()
-  assertEqual(types, ['fertilizer', 'outfit', 'points', 'seed'], '四种奖品类型齐全')
+  assertEqual(
+    types,
+    ['collectible', 'fertilizer', 'outfit', 'points', 'raid_item', 'seed', 'title'],
+    '七种奖品类型齐全（含搜打撤物资 / 藏品 / 隐藏称号）',
+  )
 
   for (const rarity of ALL_RARITIES) {
     assert(
@@ -98,7 +108,57 @@ const ALL_RARITIES: readonly LotteryRarity[] = ['common', 'rare', 'epic', 'legen
     )
   }
 
-  assertEqual(LOTTERY_RARITY_LIST.length, 4, '稀有度元数据 4 项')
+  assertEqual(LOTTERY_RARITY_LIST.length, 5, '稀有度元数据 5 项（含秘藏）')
+
+  // 搜打撤奖品：物品池必须真实可发、不含藏品 / 退役物品
+  for (const prize of LOTTERY_PRIZES.filter((item) => item.type === 'raid_item')) {
+    const pool = lotteryRaidItemPool(prize)
+    assert(pool.length > 0, `${prize.key} 搜打撤物品池非空`)
+    assert(pool.every((item) => item.kind !== 'collectible' && !item.retired), `${prize.key} 池内不含藏品 / 退役物品`)
+  }
+  assert(lotteryCollectiblePool().length >= 6, `藏品池至少 6 件（实际 ${lotteryCollectiblePool().length}）`)
+  assert(
+    LOTTERY_PRIZES.filter((prize) => prize.type === 'collectible').every(
+      (prize) => Number(prize.payload?.fallbackPoints) > 0,
+    ),
+    '藏品重复折算积分为正',
+  )
+  assert(
+    LOTTERY_PRIZES.filter((prize) => prize.type === 'title').every(
+      (prize) => prize.payload?.hiddenTitle === true && Number(prize.payload?.fallbackPoints) > 0,
+    ),
+    '隐藏称号奖品标记与折算积分合法',
+  )
+
+/* ============================================================
+   每日 30 抽额度（纯函数）
+   ============================================================ */
+
+{
+  assertEqual(LOTTERY_DAILY_LIMIT, 30, '每日上限 30 抽')
+  assertEqual(
+    resolveDailyQuota('2026-11-15', '2026-11-15', 12),
+    { dateKey: '2026-11-15', used: 12, remaining: 18 },
+    '同日保留已抽次数并计算剩余',
+  )
+  assertEqual(
+    resolveDailyQuota('2026-11-14', '2026-11-15', 30),
+    { dateKey: '2026-11-15', used: 0, remaining: 30 },
+    '跨日重置为 0',
+  )
+  assertEqual(
+    resolveDailyQuota(null, '2026-11-15', 9),
+    { dateKey: '2026-11-15', used: 0, remaining: 30 },
+    'NULL 日期视为今日 0 抽',
+  )
+  assert(canDrawWithinDaily(29, 1), '剩余 1 次可以单抽')
+  assert(!canDrawWithinDaily(29, 10), '剩余 1 次不能十连')
+  assert(canDrawWithinDaily(20, 10), '剩余 10 次可以十连')
+  assert(!canDrawWithinDaily(21, 10), '剩余 9 次不能十连')
+  assert(canDrawWithinDaily(0, 30), '30 次整额可用')
+  assert(!canDrawWithinDaily(1, 30), '已抽 1 次后不能一次抽 30')
+  assertEqual(resolveDailyQuota('2026-11-15', '2026-11-15', 999).used, 30, '越界已抽次数夹到上限')
+}
   assert(
     LOTTERY_RARITY_LIST.every((meta) => meta.label && meta.color && meta.description),
     '稀有度元数据字段完整',
@@ -183,27 +243,37 @@ function expectedSeedHarvest(prize: LotteryPrize): number {
 
 {
   assertEqual(pickPrize(() => 0).key, 'seed_common', 'rng=0 命中权重表第一项')
-  assertEqual(pickPrize(() => 0.999999).key, 'outfit_legendary', 'rng→1 命中权重表最后一项')
+  assertEqual(pickPrize(() => 0.999999).key, 'raid_supply_mythic', 'rng→1 命中权重表最后一项')
 
   assertEqual(
-    pickPrize(() => 0.7799).key,
+    pickPrize(() => 0.7759).key,
     'points_common_30',
-    '0.7799 仍落在普通最后一项',
+    '0.7759 仍落在普通最后一项',
   )
   assertEqual(
-    pickPrize(() => 0.78).key,
+    pickPrize(() => 0.7761).key,
     'seed_rare',
-    '0.78 是普通 / 稀有边界，落在稀有第一项',
+    '0.776 是普通 / 稀有边界，落在稀有第一项',
   )
   assertEqual(
-    pickPrize(() => 0.96).key,
+    pickPrize(() => 0.9559).key,
+    'raid_supply_rare',
+    '0.9559 仍落在稀有最后一项',
+  )
+  assertEqual(
+    pickPrize(() => 0.9561).key,
     'seed_epic',
-    '0.96 是稀有 / 史诗边界，落在史诗第一项',
+    '0.956 是稀有 / 史诗边界，落在史诗第一项',
   )
   assertEqual(
-    pickPrize(() => 0.995).key,
+    pickPrize(() => 0.9921).key,
     'seed_legendary',
-    '0.995 是史诗 / 传说边界，落在传说第一项',
+    '0.992 是史诗 / 传说边界，落在传说第一项',
+  )
+  assertEqual(
+    pickPrize(() => 0.9971).key,
+    'raid_collectible',
+    '0.997 是传说 / 秘藏边界，落在秘藏第一项',
   )
 
   assertEqual(
@@ -221,12 +291,12 @@ function expectedSeedHarvest(prize: LotteryPrize): number {
   // 大样本分布：各稀有度比例与权重的偏差 < 1.5 个百分点
   const distributionRng = seededRng(42)
   const rounds = 120_000
-  const counts: Record<LotteryRarity, number> = { common: 0, rare: 0, epic: 0, legendary: 0 }
+  const counts: Record<LotteryRarity, number> = { common: 0, rare: 0, epic: 0, legendary: 0, mythic: 0 }
   for (let index = 0; index < rounds; index += 1) {
     counts[pickPrize(distributionRng).rarity] += 1
   }
   assertEqual(
-    counts.common + counts.rare + counts.epic + counts.legendary,
+    counts.common + counts.rare + counts.epic + counts.legendary + counts.mythic,
     rounds,
     '分布统计总数为 120000',
   )
@@ -333,6 +403,9 @@ function simulateDraws(
     if (prize.type === 'fertilizer') return amount * FERTILIZER_COST
     if (prize.type === 'seed') return amount * expectedSeedHarvest(prize)
     if (prize.type === 'outfit') return Number(prize.payload?.fallbackPoints ?? 0)
+    if (prize.type === 'raid_item') return amount * lotteryRaidItemExpectedValue(prize)
+    if (prize.type === 'collectible') return Number(prize.payload?.fallbackPoints ?? 0)
+    if (prize.type === 'title') return Number(prize.payload?.fallbackPoints ?? 0)
     return 0
   }
 
@@ -388,20 +461,19 @@ function simulateDraws(
    ============================================================ */
 
 {
-  assertEqual(LOTTERY_PRIZE_LIST.length, 4, '奖池按 4 个稀有度分组')
+  assertEqual(LOTTERY_PRIZE_LIST.length, 5, '奖池按 5 个稀有度分组')
   assertEqual(
     LOTTERY_PRIZE_LIST.map((group) => group.rarity),
-    ['common', 'rare', 'epic', 'legendary'],
+    ['common', 'rare', 'epic', 'legendary', 'mythic'],
     '奖池分组顺序与稀有度一致',
   )
   assertEqual(
     LOTTERY_PRIZE_LIST.map((group) => group.chancePct),
-    [78, 18, 3.5, 0.5],
-    '奖池概率与权重一致（78 / 18 / 3.5 / 0.5）',
+    [77.6, 18, 3.6, 0.5, 0.3],
+    '奖池概率与权重一致（77.6 / 18 / 3.6 / 0.5 / 0.3）',
   )
-  assertEqual(
-    LOTTERY_PRIZE_LIST.reduce((sum, group) => sum + group.chancePct, 0),
-    100,
+  assert(
+    Math.abs(LOTTERY_PRIZE_LIST.reduce((sum, group) => sum + group.chancePct, 0) - 100) < 1e-9,
     '奖池概率之和 = 100%',
   )
 

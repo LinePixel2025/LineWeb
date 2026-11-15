@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import type { RaidEvent } from '../lib/raid/raidRun'
@@ -94,6 +94,7 @@ function initialSnapshot(run: RaidRun): RaidSnapshot {
 
 export default function PetRaidPage() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const selfUserId = user?.id ?? 0
   const [overview, setOverview] = useState<RaidOverview | null>(null)
   const [loading, setLoading] = useState(true)
@@ -426,6 +427,9 @@ export default function PetRaidPage() {
           <Link className="gh-btn gh-btn--secondary gh-btn--sm" to="/raid/shop">
             商店
           </Link>
+          <Link className="gh-btn gh-btn--secondary gh-btn--sm" to="/pets/raid/collection">
+            🏛️ 藏品室
+          </Link>
           <Link className="gh-btn gh-btn--ghost gh-btn--sm" to="/pets">
             宠物之家
           </Link>
@@ -466,6 +470,7 @@ export default function PetRaidPage() {
             }}
             onSnapshot={(next) => setSnapshot(next)}
             onFlush={flushEvents}
+            onExitToSite={() => navigate('/')}
           >
             {run && snapshot && (
               <RaidHud

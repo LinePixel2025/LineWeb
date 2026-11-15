@@ -13,14 +13,21 @@ import {
 import { PET_OUTFITS, type PetOutfitDef } from '../lib/petCatalog.js'
 import { getTodayDateKey } from '../lib/pointsRules.js'
 import {
+  COLLECTIBLE_FALLBACK_POINTS,
+  HIDDEN_TITLE_FALLBACK_POINTS,
   LOTTERY_COSTS,
+  LOTTERY_DAILY_LIMIT,
   LOTTERY_PRIZE_LIST,
   LOTTERY_RARITY_LIST,
   PITY_LIMIT,
   TEN_DRAW_COUNT,
+  canDrawWithinDaily,
+  lotteryCollectiblePool,
+  lotteryRaidItemPool,
   nextPityAfterDraw,
   outfitFallbackPoints,
   pickPrize,
+  resolveDailyQuota,
   rollPrizeAmount,
   sanitizeDrawCount,
   shouldTriggerPity,
@@ -30,12 +37,17 @@ import {
   type LotteryRarity,
   type LotteryRarityMeta,
 } from '../lib/lottery.js'
-import { awardPointsTx, spendPointsTx } from './pointsService.js'
+import { getRaidItem } from '../lib/raidRun.js'
+import { awardPointsTx, spendPointsTx, toUserTitleDto } from './pointsService.js'
+import { addCollectibleTx, collectibleCatalog } from './raidCollectionService.js'
+import { grantRaidItemTx } from './raidStorageService.js'
 
 type Db = Prisma.TransactionClient
 
-const PRIZE_TYPES: readonly LotteryPrizeType[] = ['points', 'seed', 'fertilizer', 'outfit']
-const RARITY_VALUES: readonly LotteryRarity[] = ['common', 'rare', 'epic', 'legendary']
+const PRIZE_TYPES: readonly LotteryPrizeType[] = [
+  'points', 'seed', 'fertilizer', 'outfit', 'raid_item', 'collectible', 'title',
+]
+const RARITY_VALUES: readonly LotteryRarity[] = ['common', 'rare', 'epic', 'legendary', 'mythic']
 
 /* ============================================================
    DTO
@@ -65,6 +77,16 @@ export interface LotteryStatsDto {
   rare: number
   epic: number
   legendary: number
+  mythic: number
+}
+
+export interface LotteryDailyDto {
+  limit: number
+  used: number
+  remaining: number
+  dateKey: string
+  /** 下一次重置（上海时区次日 0 点）的 ISO 时间 */
+  resetsAt: string
 }
 
 export interface LotteryViewDto {
@@ -72,6 +94,7 @@ export interface LotteryViewDto {
   costs: { single: number; ten: number }
   tenCount: number
   pity: LotteryPityDto
+  daily: LotteryDailyDto
   dailyFreeAvailable: boolean
   lastFreeDate: string | null
   totalDraws: number
@@ -97,6 +120,7 @@ export interface LotteryDrawResultDto {
   balance: number
   results: LotteryResultItemDto[]
   pity: LotteryPityDto
+  daily: LotteryDailyDto
   dailyFreeUsed: boolean
   cost: number
 }
@@ -145,6 +169,69 @@ function pityDto(value: number): LotteryPityDto {
   }
 }
 
+/** 上海时区下一个 0 点的 ISO 时间（前端用于显示重置倒计时） */
+function dailyResetsAt(now: number): string {
+  const today = getTodayDateKey(now)
+  const dayStart = new Date(`${today}T00:00:00+08:00`).getTime()
+  return new Date(dayStart + 24 * 60 * 60 * 1000).toISOString()
+}
+
+function dailyDto(
+  storedDateKey: string | null | undefined,
+  storedDraws: number,
+  now: number,
+): LotteryDailyDto {
+  const quota = resolveDailyQuota(storedDateKey, getTodayDateKey(now), storedDraws)
+  return {
+    limit: LOTTERY_DAILY_LIMIT,
+    used: quota.used,
+    remaining: quota.remaining,
+    dateKey: quota.dateKey,
+    resetsAt: dailyResetsAt(now),
+  }
+}
+
+/**
+ * 事务内原子占位当日 30 抽额度：
+ *   1. 跨日（含 NULL）先把日期键重置为今天、计数归零；
+ *   2. 条件 updateMany 只在剩余次数足够时递增，抢不到即抛 429 回滚整笔。
+ * 返回占位后的当日已抽次数。
+ */
+async function claimDailyQuotaTx(
+  tx: Db,
+  userId: number,
+  today: string,
+  count: number,
+): Promise<number> {
+  await tx.lotteryAccount.updateMany({
+    where: {
+      userId,
+      OR: [{ dailyDateKey: null }, { dailyDateKey: { not: today } }],
+    },
+    data: { dailyDateKey: today, dailyDraws: 0 },
+  })
+  const claimed = await tx.lotteryAccount.updateMany({
+    where: {
+      userId,
+      dailyDateKey: today,
+      dailyDraws: { lte: LOTTERY_DAILY_LIMIT - count },
+    },
+    data: { dailyDraws: { increment: count } },
+  })
+  if (claimed.count === 0) {
+    throw new AppError(
+      `今日抽奖次数已用完（${LOTTERY_DAILY_LIMIT} 抽/天，明日 0 点刷新）`,
+      429,
+      'LOTTERY_DAILY_LIMIT',
+    )
+  }
+  const fresh = await tx.lotteryAccount.findUnique({
+    where: { userId },
+    select: { dailyDraws: true },
+  })
+  return fresh?.dailyDraws ?? count
+}
+
 function historyItemDto(row: LotteryDraw): LotteryHistoryItemDto {
   return {
     id: row.id,
@@ -163,12 +250,20 @@ async function ensureAccount(userId: number): Promise<{
   pity: number
   totalDraws: number
   lastFreeDate: string | null
+  dailyDateKey: string | null
+  dailyDraws: number
 }> {
   const row = await prisma.lotteryAccount.upsert({
     where: { userId },
     create: { userId },
     update: {},
-    select: { pity: true, totalDraws: true, lastFreeDate: true },
+    select: {
+      pity: true,
+      totalDraws: true,
+      lastFreeDate: true,
+      dailyDateKey: true,
+      dailyDraws: true,
+    },
   })
   return row
 }
@@ -181,33 +276,47 @@ export async function getLotteryView(userId: number, now: number = Date.now()): 
   const account = await ensureAccount(userId)
   const today = getTodayDateKey(now)
 
-  const [user, history, common, rare, epic, legendary] = await Promise.all([
+  const [user, history, rarityRows] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { points: true } }),
     prisma.lotteryDraw.findMany({
       where: { userId },
       orderBy: { id: 'desc' },
       take: 30,
     }),
-    prisma.lotteryDraw.count({ where: { userId, rarity: 'common' } }),
-    prisma.lotteryDraw.count({ where: { userId, rarity: 'rare' } }),
-    prisma.lotteryDraw.count({ where: { userId, rarity: 'epic' } }),
-    prisma.lotteryDraw.count({ where: { userId, rarity: 'legendary' } }),
+    prisma.lotteryDraw.groupBy({
+      by: ['rarity'],
+      where: { userId },
+      _count: { _all: true },
+    }),
   ])
 
   if (!user) throw new AppError('用户不存在', 404)
+
+  const stats: LotteryStatsDto = {
+    common: 0,
+    rare: 0,
+    epic: 0,
+    legendary: 0,
+    mythic: 0,
+  }
+  for (const row of rarityRows) {
+    const rarity = asRarity(row.rarity)
+    stats[rarity] += row._count._all
+  }
 
   return {
     balance: user.points,
     costs: { single: LOTTERY_COSTS.single, ten: LOTTERY_COSTS.ten },
     tenCount: TEN_DRAW_COUNT,
     pity: pityDto(account.pity),
+    daily: dailyDto(account.dailyDateKey, account.dailyDraws, now),
     dailyFreeAvailable: account.lastFreeDate !== today,
     lastFreeDate: account.lastFreeDate,
     totalDraws: account.totalDraws,
     prizes: LOTTERY_PRIZE_LIST,
     rarities: LOTTERY_RARITY_LIST,
     history: history.map(historyItemDto),
-    stats: { common, rare, epic, legendary },
+    stats,
   }
 }
 
@@ -334,6 +443,186 @@ async function awardPrizeTx(
     }
   }
 
+  /* ---------- 搜打撤物资 ---------- */
+  if (prize.type === 'raid_item') {
+    const pool = lotteryRaidItemPool(prize)
+    const picked = pickWeighted(pool, (item) => item.weight, rng)
+    if (!picked) throw new AppError('抽奖奖池配置异常：没有可用的搜打撤物资', 500)
+    const def = getRaidItem(picked.key)
+    if (!def) throw new AppError('抽奖奖池配置异常：搜打撤物品不存在', 500)
+    const granted = await grantRaidItemTx(tx, userId, def.key, amount)
+    if (granted.stored) {
+      return {
+        type: 'raid_item',
+        name: `${def.name} ×${amount}`,
+        amount,
+        payload: {
+          itemKey: def.key,
+          itemName: def.name,
+          itemEmoji: def.emoji,
+          raidRarity: def.rarity,
+          stored: true,
+        },
+        converted: false,
+        convertedPoints: 0,
+      }
+    }
+    const fallback = Math.max(1, granted.convertedPoints)
+    await awardPointsTx(tx, userId, {
+      amount: fallback,
+      reason: 'lottery_prize',
+      note: `抽奖·${def.name}（仓库已满折算）`,
+    })
+    return {
+      type: 'points',
+      name: `${def.name}折算`,
+      amount: fallback,
+      payload: {
+        originalPrizeKey: prize.key,
+        originalType: 'raid_item',
+        itemKey: def.key,
+        itemName: def.name,
+        itemEmoji: def.emoji,
+        raidRarity: def.rarity,
+        reason: 'warehouse-full',
+      },
+      converted: true,
+      convertedPoints: fallback,
+    }
+  }
+
+  /* ---------- 搜打撤藏品 ---------- */
+  if (prize.type === 'collectible') {
+    const room = await tx.raidCollectionRoom.findUnique({
+      where: { userId },
+      select: { collectibles: { select: { itemKey: true } } },
+    })
+    const ownedKeys = new Set((room?.collectibles ?? []).map((row) => row.itemKey))
+    const pool = collectibleCatalog().filter((entry) => !ownedKeys.has(entry.key))
+    const fallback = Number(prize.payload?.fallbackPoints) || COLLECTIBLE_FALLBACK_POINTS
+    if (pool.length === 0 || lotteryCollectiblePool().length === 0) {
+      await awardPointsTx(tx, userId, {
+        amount: fallback,
+        reason: 'lottery_prize',
+        note: `抽奖·${prize.name}（已集齐折算）`,
+      })
+      return {
+        type: 'points',
+        name: `${prize.name}折算`,
+        amount: fallback,
+        payload: {
+          originalPrizeKey: prize.key,
+          originalType: 'collectible',
+          reason: 'all-owned',
+        },
+        converted: true,
+        convertedPoints: fallback,
+      }
+    }
+    const picked = pickWeighted(pool, (entry) => entry.weight, rng) ?? pool[0]
+    const result = await addCollectibleTx(tx, userId, picked.key, 'lottery')
+    if (!result.created) {
+      const duplicate = Math.max(1, result.duplicatePoints)
+      await awardPointsTx(tx, userId, {
+        amount: duplicate,
+        reason: 'lottery_prize',
+        note: `抽奖·重复藏品 ${result.def.name}`,
+      })
+      return {
+        type: 'collectible',
+        name: `${result.def.name}（重复）`,
+        amount: 1,
+        payload: {
+          collectibleKey: result.def.key,
+          collectibleName: result.def.name,
+          collectibleEmoji: result.def.emoji,
+          raidRarity: result.def.rarity,
+          duplicate: true,
+          duplicatePoints: duplicate,
+        },
+        converted: true,
+        convertedPoints: duplicate,
+      }
+    }
+    return {
+      type: 'collectible',
+      name: result.def.name,
+      amount: 1,
+      payload: {
+        collectibleKey: result.def.key,
+        collectibleName: result.def.name,
+        collectibleEmoji: result.def.emoji,
+        raidRarity: result.def.rarity,
+        duplicate: false,
+      },
+      converted: false,
+      convertedPoints: 0,
+    }
+  }
+
+  /* ---------- 隐藏称号（不在商店出售） ---------- */
+  if (prize.type === 'title') {
+    const fallback = Number(prize.payload?.fallbackPoints) || HIDDEN_TITLE_FALLBACK_POINTS
+    const candidates = await tx.pointsShopItem.findMany({
+      where: {
+        type: 'title',
+        hidden: true,
+        owners: { none: { userId } },
+      },
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+    })
+    if (candidates.length === 0) {
+      await awardPointsTx(tx, userId, {
+        amount: fallback,
+        reason: 'lottery_prize',
+        note: `抽奖·${prize.name}（已集齐折算）`,
+      })
+      return {
+        type: 'points',
+        name: `${prize.name}折算`,
+        amount: fallback,
+        payload: {
+          originalPrizeKey: prize.key,
+          originalType: 'title',
+          reason: 'all-owned',
+        },
+        converted: true,
+        convertedPoints: fallback,
+      }
+    }
+    const index = Math.min(candidates.length - 1, Math.floor(clampUnit(rng()) * candidates.length))
+    const item = candidates[index]
+    const title = toUserTitleDto(item)
+    await tx.userPointsItem.create({ data: { userId, itemId: item.id } })
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: { equippedTitleId: true },
+    })
+    if (!user?.equippedTitleId) {
+      await tx.user.update({
+        where: { id: userId },
+        data: { equippedTitleId: item.id, equippedLeaderTitleId: null },
+      })
+    }
+    return {
+      type: 'title',
+      name: `隐藏称号·${item.name}`,
+      amount: 1,
+      payload: {
+        titleKey: item.key,
+        titleId: item.id,
+        titleName: item.name,
+        titleIcon: title?.icon ?? '',
+        titleColor: title?.color ?? '#57606a',
+        titleRarity: item.rarity,
+        titleEffect: title?.effect ?? 'classic',
+        hidden: true,
+      },
+      converted: false,
+      convertedPoints: 0,
+    }
+  }
+
   /* ---------- 宠物装扮 ---------- */
   const configuredFallback = Number(prize.payload?.fallbackPoints)
   const fallback = Number.isFinite(configuredFallback) && configuredFallback > 0
@@ -419,8 +708,16 @@ export async function drawLottery(
       where: { userId },
       create: { userId },
       update: {},
-      select: { pity: true, lastFreeDate: true },
+      select: {
+        pity: true,
+        lastFreeDate: true,
+        dailyDateKey: true,
+        dailyDraws: true,
+      },
     })
+
+    // 每日 30 抽：先把本笔完整占位；不足即 429 并回滚整笔（不扣费 / 不占免费）
+    const dailyUsed = await claimDailyQuotaTx(tx, userId, today, count)
 
     // 免费只对单抽生效；十连永远付费。
     // 用条件 updateMany 原子「抢占」当日免费次数，避免两个并发请求都读到未使用状态。
@@ -508,6 +805,13 @@ export async function drawLottery(
       balance: user?.points ?? 0,
       results,
       pity: pityDto(pity),
+      daily: {
+        limit: LOTTERY_DAILY_LIMIT,
+        used: dailyUsed,
+        remaining: Math.max(0, LOTTERY_DAILY_LIMIT - dailyUsed),
+        dateKey: today,
+        resetsAt: dailyResetsAt(now),
+      },
       dailyFreeUsed: freeEligible,
       cost,
     }

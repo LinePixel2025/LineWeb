@@ -347,6 +347,8 @@ export function resolveCatalog(source: CompanyListingSource, itemKey: string): C
   if (source === COMPANY_LISTING_SOURCE_RAID) {
     const def = RAID_ITEM_MAP.get(itemKey)
     if (!def) return null
+    // 绑定藏品不进公司货栈：只能放进藏品室或重复折算
+    if (def.kind === 'collectible') return null
     // 参考价取「官方商店回收单价」：玩家自己能卖给系统的价格就是这件货的地板价
     const reference = raidSellPrice(itemKey, 1)
     return {
