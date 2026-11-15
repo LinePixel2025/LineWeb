@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { PARKOUR_ROAD_TEXTURE_REPEAT_Y } from './parkourRoad'
 
 /** 霓虹跑酷的程序化 Canvas 纹理（无外部图片资源） */
 
@@ -42,7 +43,7 @@ export function createAsphaltTexture(): THREE.CanvasTexture {
   ctx.moveTo(0, 256)
   ctx.lineTo(256, 256)
   ctx.stroke()
-  return finishTexture(ctx, 2, 1800)
+  return finishTexture(ctx, 2, PARKOUR_ROAD_TEXTURE_REPEAT_Y)
 }
 
 /** 霓虹楼体窗灯（两种色温） */

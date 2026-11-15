@@ -42,6 +42,12 @@ export const JUMP_MAX_SCORE_GAIN = 32
 
 /** 单机会话预生成的盒子数量（跳完会自动按同一种子续生成，前缀序列不变） */
 export const JUMP_SOLO_COURSE_SIZE = 240
+/**
+ * 单机预生成冗余：始终保证当前盒子之后还有这么多格已生成。
+ * 否则跳到预生成序列最后一格的那一步，画面里下一盒还没生成（「下一盒间距 —」），
+ * 玩家只能盲跳；留出冗余后，远端盒子在任何时刻都不会消失。
+ */
+export const JUMP_SOLO_COURSE_LOOKAHEAD = 24
 
 /** 联机房间人数上下限（2–6 人轮流各跳一次，同一条盒子路线） */
 export const JUMP_MIN_PLAYERS = 2
@@ -297,7 +303,8 @@ export function finishJump(session: JumpSession, chargeMs: number): JumpSoloResu
   }
 
   const targetIndex = session.boxIndex + 1
-  ensureJumpCourse(session, targetIndex + 1)
+  // 不只补到目标盒：再留一段冗余，保证落地后下一格盒子已经存在（渲染与间距提示都能读到）。
+  ensureJumpCourse(session, targetIndex + 1 + JUMP_SOLO_COURSE_LOOKAHEAD)
   const target = session.course[targetIndex]
   if (!target) return snapshot('off')
 

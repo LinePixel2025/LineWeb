@@ -25,6 +25,11 @@ import {
   createSkyTexture,
   createTrainTexture,
 } from './parkourTextures'
+import {
+  PARKOUR_ROAD_CENTER_Z,
+  PARKOUR_ROAD_LENGTH_M,
+  parkourRoadGroupZ,
+} from './parkourRoad'
 
 /** 幽灵跑者的视图数据（由联机页从 DTO 映射，2Hz 更新，场景内插值） */
 export interface ParkourGhostView {
@@ -85,6 +90,7 @@ export class ParkourScene {
   private readonly shieldGroup: THREE.Group
   private readonly magnetRing: THREE.Mesh
   private readonly dashTrail: THREE.Group
+  private readonly roadGroup = new THREE.Group()
   private readonly obstacleRoot = new THREE.Group()
   private readonly obstacleMeshes = new Map<number, THREE.Object3D>()
   private readonly coinMesh: THREE.InstancedMesh
@@ -264,34 +270,39 @@ export class ParkourScene {
     this.sky.renderOrder = -100
     this.scene.add(this.sky)
 
-    // 赛道
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 30_040), asphaltMaterial)
+    // 赛道：整块路面放进 roadGroup，随进度按 1/4 长度前移（见 parkourRoad.ts）
+    const roadGroup = this.roadGroup
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(7.2, PARKOUR_ROAD_LENGTH_M),
+      asphaltMaterial,
+    )
     ground.rotation.x = -Math.PI / 2
-    ground.position.set(0, 0, -14_980)
-    this.scene.add(ground)
+    ground.position.set(0, 0, PARKOUR_ROAD_CENTER_Z)
+    roadGroup.add(ground)
     this.sharedGeometries.push(ground.geometry)
 
-    const laneLineGeometry = new THREE.BoxGeometry(0.055, 0.012, 30_040)
+    const laneLineGeometry = new THREE.BoxGeometry(0.055, 0.012, PARKOUR_ROAD_LENGTH_M)
     this.sharedGeometries.push(laneLineGeometry)
     for (const x of [-PARKOUR_LANE_WIDTH / 2, PARKOUR_LANE_WIDTH / 2]) {
       const line = new THREE.Mesh(laneLineGeometry, laneMaterial)
-      line.position.set(x, 0.018, -14_980)
-      this.scene.add(line)
+      line.position.set(x, 0.018, PARKOUR_ROAD_CENTER_Z)
+      roadGroup.add(line)
     }
-    const edgeGeometry = new THREE.BoxGeometry(0.05, 0.018, 30_040)
+    const edgeGeometry = new THREE.BoxGeometry(0.05, 0.018, PARKOUR_ROAD_LENGTH_M)
     this.sharedGeometries.push(edgeGeometry)
     for (const x of [-3.62, 3.62]) {
       const edge = new THREE.Mesh(edgeGeometry, laneEdgeMaterial)
-      edge.position.set(x, 0.02, -14_980)
-      this.scene.add(edge)
+      edge.position.set(x, 0.02, PARKOUR_ROAD_CENTER_Z)
+      roadGroup.add(edge)
     }
-    const sidewalkGeometry = new THREE.BoxGeometry(1.7, 0.13, 30_040)
+    const sidewalkGeometry = new THREE.BoxGeometry(1.7, 0.13, PARKOUR_ROAD_LENGTH_M)
     this.sharedGeometries.push(sidewalkGeometry)
     for (const x of [-4.5, 4.5]) {
       const sidewalk = new THREE.Mesh(sidewalkGeometry, sidewalkMaterial)
-      sidewalk.position.set(x, 0.065, -14_980)
-      this.scene.add(sidewalk)
+      sidewalk.position.set(x, 0.065, PARKOUR_ROAD_CENTER_Z)
+      roadGroup.add(sidewalk)
     }
+    this.scene.add(roadGroup)
 
     // 灯光
     this.scene.add(new THREE.HemisphereLight(0x9fc6ff, 0x160e26, 1.25))
@@ -464,6 +475,10 @@ export class ParkourScene {
     const safeDt = Math.min(0.1, Math.max(0, dt))
     this.animationTime += safeDt
     const playerZ = -run.distanceM
+
+    // 道路循环：每前进 1/4 条道路（450 个完整纹理周期）整段前移一次。
+    // 沥青花纹按周期重合，所以看不出跳变；30km 长的硬终点再也不会出现在玩家眼前。
+    this.roadGroup.position.z = parkourRoadGroupZ(run.distanceM)
 
     // 玩家
     const pose = run.alive ? parkourPose(run) : 'run'

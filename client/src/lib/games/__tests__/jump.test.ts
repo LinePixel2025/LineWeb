@@ -18,6 +18,7 @@ import {
   JUMP_MAX_SCORE_GAIN,
   JUMP_SIZE_MAX,
   JUMP_SIZE_MIN,
+  JUMP_SOLO_COURSE_LOOKAHEAD,
   JUMP_BEST_STORAGE_KEY,
   JUMP_STATS_STORAGE_KEY,
   beginJumpCharge,
@@ -340,6 +341,39 @@ describe('单机会话 finishJump', () => {
       grown[1].gap + grown[2].gap + grown[3].gap,
       6
     )
+  })
+})
+
+describe('单机预生成冗余（远端下一盒不消失）', () => {
+  it('跳到预生成序列最后一格时自动续写，落地后下一盒已经存在', () => {
+    const session = createJumpSession(4242)
+    session.boxIndex = session.course.length - 2
+    const targetIndex = session.boxIndex + 1
+    const target = session.course[targetIndex]
+    const result = finishJump(session, chargeForOffset(target.gap, 0))
+    expect(result.dead).toBe(false)
+    expect(session.boxIndex).toBe(targetIndex)
+    expect(session.course.length - (targetIndex + 1)).toBeGreaterThanOrEqual(
+      JUMP_SOLO_COURSE_LOOKAHEAD,
+    )
+    expect(session.course[targetIndex + 1]).toBeDefined()
+  })
+
+  it('连续跨过多个预生成边界后前缀稳定、前方始终留有下一盒', () => {
+    const session = createJumpSession(777)
+    for (const boundary of [238, 478, 958]) {
+      ensureJumpCourse(session, boundary + 2)
+      session.boxIndex = boundary
+      const target = session.course[boundary + 1]
+      const prefix = session.course.slice(0, boundary + 1)
+      const result = finishJump(session, chargeForOffset(target.gap, 0))
+      expect(result.dead).toBe(false)
+      expect(session.course.slice(0, boundary + 1)).toEqual(prefix)
+      expect(session.course[boundary + 2]).toBeDefined()
+      expect(session.course.length - (session.boxIndex + 1)).toBeGreaterThanOrEqual(
+        JUMP_SOLO_COURSE_LOOKAHEAD,
+      )
+    }
   })
 })
 
